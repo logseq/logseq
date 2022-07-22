@@ -94,6 +94,7 @@
           [_original-page-name page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
           blocks (->> (gp-block/extract-blocks ast content false format (dissoc options :page-name-order))
                       (gp-block/with-parent-and-left {:block/name page-name}))
+          blocks (map (fn [b] (update b :block/refs conj {:block/name page-name})) blocks)
           ref-pages (atom #{})
           ref-tags (atom #{})
           blocks (map (fn [block]
