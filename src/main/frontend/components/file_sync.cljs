@@ -55,7 +55,9 @@
                                  :else
                                  nil)
                                (.then #(do
-                                         (notifications/show! (str "Cloned to => " dest-dir) :success)
+                                         (notifications/show! (str "Cloned to => "
+                                                                   (js/decodeURIComponent dest-dir))
+                                                              :success)
                                          (web-nfs/ls-dir-files-with-path! dest-dir)
                                          (close-fn)))
                                (.catch #(js/console.error %)))))]
@@ -72,7 +74,7 @@
 
      [:div.folder-tip.flex.flex-col.items-center
       [:h3
-       [:span (ui/icon "folder") [:label.pl-0.5 graph-name]]]
+       [:span (ui/icon "folder") [:label.pl-0.5 (js/decodeURIComponent graph-name)]]]
       [:h4.px-6 graph-dir]
 
       (when (not (string/blank? selected-path))
