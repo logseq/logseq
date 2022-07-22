@@ -500,7 +500,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             for filePath in filePaths {
                 // NOTE: filePath from js may contain spaces
                 let fileURL = baseURL.appendingPathComponent(filePath)
-                files[filePath]x = fileURL
+                files[filePath] = fileURL
             }
 
             // 2. upload_temp_file
