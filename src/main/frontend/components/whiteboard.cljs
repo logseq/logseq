@@ -5,8 +5,9 @@
             [frontend.db.model :as model]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :refer [create-new-whiteboard-page!
+                                                 get-whiteboard-entity
                                                  page-name->tldr
-                                                 get-whiteboard-entity]]
+                                                 get-tldr-api]]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -81,6 +82,13 @@
                        (when new? (create-new-whiteboard-page! name))
                        nil)
                      [name])
+
+    (rum/use-effect! (fn [] 
+                       (let [api (get-tldr-api)]
+                         (.selectShapes api block-id)
+                         (.zoomToSelection api))
+                       nil)
+                     [block-id])
 
     [:div.absolute.w-full.h-full
 

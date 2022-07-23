@@ -191,7 +191,11 @@
 
 (defn- with-whiteboard-content
   [shape]
-  {:block/content (or (:text shape) "")})
+  {:block/content (case (:type shape)
+                    "text" (:text shape)
+                    "logseq-portal" (str "[[" (:pageId shape) "]]")
+                    "line" (str "arrow:" (:label shape))
+                    "")})
 
 (defn with-whiteboard-block-props
   [shape]

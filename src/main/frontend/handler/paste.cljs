@@ -59,12 +59,19 @@
       (notification/show! (util/format "No macro is available for %s" url) :warning)
       nil)))
 
+(defn- try-parse-as-json
+  [text]
+  (try (js/JSON.parse text)
+       (catch js/Object _ #js{})))
+
 (defn- paste-copied-blocks-or-text
   [text e html]
   (util/stop e)
   (let [copied-blocks (state/get-copied-blocks)
         input (state/get-input)
         text (string/replace text "\r\n" "\n") ;; Fix for Windows platform
+        whiteboard-shape? (= "logseq/whiteboard-shapes" (gobj/get (try-parse-as-json text) "type"))
+        text (when whiteboard-shape? (str "((" (gobj/getValueByKeys (try-parse-as-json text) "shapes" 0 "id") "))"))
         internal-paste? (and
                          (seq (:copy/blocks copied-blocks))
                          ;; not copied from the external clipboard
