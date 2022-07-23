@@ -59,6 +59,20 @@
                                            "externs.js"]
                                 :warnings {:fn-deprecated false
                                            :redef false}}}
+  :exporter {:target           :node-script
+             :output-to        "dist/exporter.js"
+             :main             exporter.core/main
+             :devtools        {:enabled false}
+             :closure-defines {frontend.util/EXPORTER true}
+             :compiler-options {:infer-externs                      :auto
+                                :source-map                         true
+                                :source-map-include-sources-content true
+                                :source-map-detail-level            :all
+
+                                :externs  ["datascript/externs.js"
+                                           "externs.js"]
+                                :warnings {:fn-deprecated false
+                                           :redef false}}}
 
   :test {:target          :node-test
          :output-to       "static/tests.js"

@@ -88,7 +88,7 @@
   #{:adoc :asciidoc})
 
 (def mobile?
-  (when-not util/node-test?
+  (when-not (or util/node-test? util/exporter?)
     (util/safe-re-find #"Mobi" js/navigator.userAgent)))
 
 ;; TODO: protocol design for future formats support

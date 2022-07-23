@@ -29,6 +29,10 @@
    :clj (def NODETEST false))
 (defonce node-test? NODETEST)
 
+#?(:cljs (goog-define EXPORTER false)
+   :clj (def EXPORTER false))
+(defonce exporter? EXPORTER)
+
 #?(:cljs
    (extend-protocol IPrintWithWriter
      js/Symbol
@@ -71,7 +75,7 @@
 #?(:cljs
    (defn mobile?
      []
-     (when-not node-test?
+     (when-not (or node-test? exporter?)
        (safe-re-find #"Mobi" js/navigator.userAgent))))
 
 #?(:cljs
@@ -255,7 +259,7 @@
     (nth c i)))
 
 #?(:cljs
-   (when-not node-test?
+   (when-not (or node-test? exporter?)
      (extend-type js/NodeList
        ISeqable
        (-seq [array] (array-seq array 0)))))

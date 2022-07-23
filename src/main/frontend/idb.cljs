@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.storage :as storage]
+            [frontend.util :as util]
             [goog.object :as gobj]
             [promesa.core :as p]))
 
@@ -12,7 +13,7 @@
 ;; To maintain backward compatibility
 
 
-(defonce store (Store. "localforage" "keyvaluepairs" 2))
+(defonce store (when-not util/exporter? (Store. "localforage" "keyvaluepairs" 2)))
 
 (defn clear-idb!
   []

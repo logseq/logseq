@@ -40,6 +40,7 @@ charlie/
 docker
 android/app/src/main/assets/capacitor.plugin.json
 ios/App/App/capacitor.config.json
+/dist/*.js*
 
 startup.png
 
