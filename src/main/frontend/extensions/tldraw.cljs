@@ -17,6 +17,7 @@
 
 (rum/defc page
   [props]
+          ;; (println props)
   (page/page {:page-name (gobj/get props "pageName")}))
 
 (rum/defc breadcrumb

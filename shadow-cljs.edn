@@ -32,7 +32,7 @@
         :release          {:asset-path "https://asset.logseq.com/static/js"}
         :compiler-options {:infer-externs      :auto
                            :output-feature-set :es-next-in
-                           :source-map-inline  true
+                           :source-map         true
                            :externs            ["datascript/externs.js"
                                                 "externs.js"]
                            :warnings           {:fn-deprecated false
@@ -57,7 +57,7 @@
              :devtools         {:before-load electron.core/stop
                                 :after-load  electron.core/start}
              :compiler-options {:infer-externs                      :auto
-                                :source-map-inline  true
+                                :source-map                         true
                                 :source-map-include-sources-content true
                                 :source-map-detail-level            :all
 

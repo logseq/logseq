@@ -86,9 +86,9 @@
 
 (defn transact-tldr! [page-name tldr]
   (let [{:keys [pages assets]} (js->clj tldr :keywordize-keys true)
-        tx (tldr-page->blocks-tx page-name (assoc (first pages) :assets assets))]
+        page (first pages)
+        tx (tldr-page->blocks-tx page-name (assoc page :assets assets))]
     (db-utils/transact! tx)))
-
 
 (defn get-default-tldr
   [page-id]

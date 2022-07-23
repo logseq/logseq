@@ -319,7 +319,6 @@
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   [state {:keys [repo page-name] :as option}]
-           (println option)
   (when-let [path-page-name (or page-name
                                 (get-page-name state)
                                 (state/get-current-page))]
