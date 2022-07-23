@@ -180,7 +180,9 @@
 
 (defn get-shape-refs [shape]
   (when (= "logseq-portal" (:type shape))
-    [{:block/name (:pageId shape)}]))
+    [(if (= (:blockType shape) "P")
+       {:block/name (:pageId shape)}
+       {:block/uuid (uuid (:pageId shape))})]))
 
 (defn- with-whiteboard-block-refs
   [shape]

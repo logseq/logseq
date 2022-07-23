@@ -124,7 +124,7 @@
 (defn ->logseq-portal-shape
   [block-id point]
   {:blockType "B"
-   :id (d/squuid)
+   :id (str (d/squuid))
    :pageId (str block-id)
    :point point
    :size [600, 400]
