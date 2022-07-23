@@ -6,7 +6,7 @@ import {
   AppProvider,
   TLReactCallbacks,
   TLReactComponents,
-  TLReactToolConstructor,
+  TLReactToolConstructor
 } from '@tldraw/react'
 import * as React from 'react'
 import { AppUI } from '~components/AppUI'
@@ -17,17 +17,12 @@ import { useQuickAdd } from '~hooks/useQuickAdd'
 import { LogseqContext } from '~lib/logseq-context'
 import { Shape, shapes } from '~lib/shapes'
 import {
-  BoxTool,
-  DotTool,
-  EllipseTool,
   HighlighterTool,
   LineTool,
   LogseqPortalTool,
   NuEraseTool,
-  PencilTool,
-  PolygonTool,
-  TextTool,
-  YouTubeTool,
+  PencilTool, TextTool,
+  YouTubeTool
 } from '~lib/tools'
 
 const components: TLReactComponents<Shape> = {
@@ -49,25 +44,31 @@ const tools: TLReactToolConstructor<Shape>[] = [
 ]
 
 interface LogseqTldrawProps {
-  PageComponent: any
+  renderers: {
+    Page: React.FC
+    Breadcrumb: React.FC
+  }
   searchHandler: (query: string) => string[]
   model?: TLDocumentModel<Shape>
   onMount?: TLReactCallbacks<Shape>['onMount']
   onPersist?: TLReactCallbacks<Shape>['onPersist']
 }
 
-export const App = function App({
-  searchHandler,
-  PageComponent,
-  ...props
-}: LogseqTldrawProps): JSX.Element {
+export const App = function App({ searchHandler, ...props }: LogseqTldrawProps): JSX.Element {
   const onFileDrop = useFileDrop()
   const onPaste = usePaste()
   const onQuickAdd = useQuickAdd()
 
-  const Page = React.useMemo(() => React.memo(PageComponent), [])
+  const renderers: any = React.useMemo(() => {
+    return Object.fromEntries(
+      Object.entries(props.renderers).map(([key, comp]) => {
+        return [key, React.memo(comp)]
+      })
+    )
+  }, [])
+
   return (
-    <LogseqContext.Provider value={{ Page, search: searchHandler }}>
+    <LogseqContext.Provider value={{ renderers, search: searchHandler }}>
       <AppProvider
         Shapes={shapes}
         Tools={tools}

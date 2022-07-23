@@ -319,8 +319,8 @@
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   [state {:keys [repo page-name] :as option}]
+           (println option)
   (when-let [path-page-name (or page-name
-                                (gobj/get option "pageId") ;; FIXME: tldraw-logseq hack
                                 (get-page-name state)
                                 (state/get-current-page))]
     (let [current-repo (state/sub :git/current-repo)
@@ -384,7 +384,7 @@
                 (plugins/hook-ui-slot :page-head-actions-slotted nil)
                 (plugins/hook-ui-items :pagebar))])])
         [:div
-         (when (and block? (not sidebar?))
+         (when (and block? (not sidebar?) (not whiteboard?))
            (let [config {:id "block-parent"
                          :block? true}]
              [:div.mb-4

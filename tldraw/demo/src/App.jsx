@@ -23,10 +23,34 @@ const documentModel = onLoad() ?? {
       shapes: [
         {
           scale: [1, 1],
+          blockType: 'P',
           id: 'p6bv7EfoQPIF1eZB1RRO6',
           type: 'logseq-portal',
           parentId: 'page1',
           point: [769.109375, 170.5546875],
+          size: [390.671875, 295.3671875],
+          stroke: '#000000',
+          fill: '#ffffff',
+          strokeWidth: 2,
+          opacity: 1,
+          pageId: '',
+          nonce: 1,
+        },
+      ],
+      bindings: {},
+      nonce: 2,
+    },
+    {
+      id: 'page1',
+      name: 'Page',
+      shapes: [
+        {
+          scale: [1, 1],
+          blockType: 'B',
+          id: 'p6bv7EfoQPIF1eZB1RRO6',
+          type: 'logseq-portal',
+          parentId: 'page1',
+          point: [369.109375, 170.5546875],
           size: [390.671875, 295.3671875],
           stroke: '#000000',
           fill: '#ffffff',
@@ -50,6 +74,17 @@ const Page = props => {
     <textarea
       className="whitespace-pre w-full h-full font-mono"
       style={{ minHeight: '64px' }}
+      value={value}
+      onChange={e => setValue(e.target.value)}
+    />
+  )
+}
+
+const Breadcrumb = props => {
+  const [value, setValue] = React.useState(JSON.stringify(props))
+  return (
+    <input
+      className="whitespace-pre w-full h-full font-mono"
       value={value}
       onChange={e => setValue(e.target.value)}
     />
@@ -104,7 +139,10 @@ export default function App() {
     <div className={`h-screen w-screen`}>
       <ThemeSwitcher theme={theme} setTheme={setTheme} />
       <TldrawApp
-        PageComponent={Page}
+        renderers={{
+          Page,
+          Breadcrumb,
+        }}
         searchHandler={q => (q ? list : [])}
         model={documentModel}
         onPersist={onPersist}

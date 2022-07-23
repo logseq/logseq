@@ -584,6 +584,9 @@
   padding: 0 1rem;
   align-items: center;
   gap: 0.5em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
 
 .logseq-tldraw .tl-logseq-portal-header .type-tag {
@@ -599,7 +602,6 @@
   border-radius: 4px;
   order: 0;
   flex-grow: 0;
-  transform: translateY(-1px);
 }
 
 html[data-theme='light'] .logseq-tldraw .tl-logseq-portal-header {

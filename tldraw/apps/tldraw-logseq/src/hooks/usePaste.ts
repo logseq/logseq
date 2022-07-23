@@ -6,7 +6,9 @@ import {
   TLBinding,
   TLShapeModel,
   uniqueId,
+  validUUID,
 } from '@tldraw/core'
+import { parse as uuidParse, NIL as NIL_UUID } from 'uuid'
 import type { TLReactCallbacks } from '@tldraw/react'
 import * as React from 'react'
 import { LogseqPortalShape, Shape } from '~lib'
@@ -108,18 +110,19 @@ export function usePaste() {
             return true
           }
         } catch {
-          const blockRefEg = '((62af02d0-0443-42e8-a284-946c162b0f89))'
-          if (/^\(\(.*\)\)$/.test(rawText) && rawText.length === blockRefEg.length) {
+          if (/^\(\(.*\)\)$/.test(rawText) && rawText.length === NIL_UUID.length + 4) {
             const blockRef = rawText.slice(2, -2)
-            shapesToCreate.push({
-              ...LogseqPortalShape.defaultProps,
-              id: uniqueId(),
-              parentId: app.currentPageId,
-              point: [point[0], point[1]],
-              size: [600, 400],
-              pageId: blockRef,
-              blockType: 'B',
-            })
+            if (validUUID(blockRef)) {
+              shapesToCreate.push({
+                ...LogseqPortalShape.defaultProps,
+                id: uniqueId(),
+                parentId: app.currentPageId,
+                point: [point[0], point[1]],
+                size: [600, 400],
+                pageId: blockRef,
+                blockType: 'B',
+              })
+            }
           }
         }
       }

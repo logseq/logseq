@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { MagnifyingGlassIcon } from '@radix-ui/react-icons'
-import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
+import { TLBoxShape, TLBoxShapeProps, validUUID } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, TLContextBarProps, useApp } from '@tldraw/react'
 import { makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
@@ -81,11 +81,11 @@ const LogseqQuickSearch = observer(({ onChange }: LogseqQuickSearchProps) => {
 })
 
 const LogseqPortalShapeHeader = observer(
-  ({ type, pageId }: { type: 'P' | 'B'; pageId: string }) => {
+  ({ type, children }: { type: 'P' | 'B'; children: React.ReactNode }) => {
     return (
       <div className="tl-logseq-portal-header">
         <span className="type-tag">{type}</span>
-        {pageId}
+        {children}
       </div>
     )
   }
@@ -180,7 +180,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     const app = useApp<Shape>()
     const isMoving = useCameraMovingRef()
-    const { Page } = React.useContext(LogseqContext)
+    const { renderers } = React.useContext(LogseqContext)
     const isSelected = app.selectedIds.has(this.id)
     const isCreating = app.isIn('logseq-portal.creating') && !pageId
     const tlEventsEnabled =
@@ -217,16 +217,18 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       this.update({
         pageId: id,
         size: [600, 320],
-        blockType: 'P',
+        blockType: validUUID(id) ? 'B' : 'P',
       })
       app.selectTool('select')
       app.history.resume()
       app.history.persist()
     }, [])
 
-    if (!Page) {
+    if (!renderers?.Page || !renderers?.Breadcrumb) {
       return null // not being correctly configured
     }
+
+    const { Page, Breadcrumb } = renderers
 
     return (
       <HTMLContainer
@@ -263,7 +265,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 '--ls-title-text-color': stroke,
               }}
             >
-              <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'} pageId={pageId} />
+              <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'}>
+                {this.props.blockType === 'P' ? pageId : <Breadcrumb blockId={pageId} />}
+              </LogseqPortalShapeHeader>
               {(!this.props.collapsed || isEditing) && (
                 <div
                   style={{
@@ -282,7 +286,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                       cursor: 'default',
                     }}
                   >
-                    <Page pageId={pageId} />
+                    <Page pageName={pageId} />
                   </div>
                 </div>
               )}

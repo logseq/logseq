@@ -1,4 +1,3 @@
-// @ts-expect-error no types for uuid
 import * as uuid from 'uuid'
 export * from './BoundsUtils'
 export * from './PointUtils'
@@ -11,6 +10,15 @@ export * from './TextUtils'
 
 export function uniqueId() {
   return uuid.v1()
+}
+
+export function validUUID(input: string) {
+  try {
+    uuid.parse(input)
+    return true
+  } catch {
+    return false
+  }
 }
 
 // via https://github.com/bameyrick/throttle-typescript
