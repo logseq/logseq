@@ -142,7 +142,7 @@
              _ (create-custom-theme repo-url)]
        (state/pub-event! [:page/create-today-journal repo-url])))))
 
-(defn- load-pages-metadata!
+(defn load-pages-metadata!
   "force?: if set true, skip the metadata timestamp range check"
   ([repo file-paths files]
    (load-pages-metadata! repo file-paths files false))
@@ -182,7 +182,7 @@
         file-paths [path]]
     (load-pages-metadata! repo file-paths files force?)))
 
-(defn- parse-and-load-file!
+(defn parse-and-load-file!
   [repo-url file new-graph?]
   (try
     (file-handler/alter-file repo-url

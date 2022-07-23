@@ -5,11 +5,8 @@
               [frontend.publishing.html :as html]
               [frontend.handler.repo :as repo]
               [frontend.handler.common :as common-handler]
-              [frontend.util :as util]
-              [frontend.util :as util]
               ["/exporter/loader" :as loader]
               [exporter.writer :as writer]
-              [frontend.config :as config]
               [logseq.graph-parser :as graph-parser]))
 
 (defn load-to-db [repo-url files]
@@ -17,15 +14,14 @@
         new-graph? nil]
     (state/set-current-repo! repo-url)
     (state/set-parsing-state! {:total (count supported-files)})
-    (do
-        (doseq [file supported-files]
-          (state/set-parsing-state! (fn [m]
-                                      (assoc m :current-parsing-file (:file/path file))))
-          (repo/parse-and-load-file! repo-url file new-graph?))
+    (doseq [file supported-files]
+      (state/set-parsing-state! (fn [m]
+                                  (assoc m :current-parsing-file (:file/path file))))
+      (repo/parse-and-load-file! repo-url file new-graph?))
         
-        (repo/load-pages-metadata! repo-url (map :file/path files) files true)
-        (state/reset-parsing-state!)
-        (state/set-loading-files! repo-url false))))
+    (repo/load-pages-metadata! repo-url (map :file/path files) files true)
+    (state/reset-parsing-state!)
+    (state/set-loading-files! repo-url false)))
 
 (defn load-files
     [repo]

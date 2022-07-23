@@ -172,7 +172,7 @@
                    (fn [_]
                      (when (= path (config/get-config-path repo))
                        (restore-config! repo true))
-                     (when (and (= path (config/get-custom-css-path repo) (not util/exporter?)))
+                     (when (and (= path (config/get-custom-css-path repo)) (not util/exporter?))
                        (ui-handler/add-style-if-exists!))
                      (when re-render-root? (ui-handler/re-render-root!)))
                    (fn [error]
