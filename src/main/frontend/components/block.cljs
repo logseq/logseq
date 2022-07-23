@@ -97,6 +97,10 @@
 ;; TODO:
 ;; add `key`
 
+(defn get-dragging-block
+  []
+  @*dragging-block)
+
 (defn- remove-nils
   [col]
   (remove nil? col))
@@ -2332,6 +2336,16 @@
   [*move-to]
   (reset! *move-to nil))
 
+(defn block-drag-end
+  ([_event]
+   (block-drag-end _event *move-to))
+  ([_event *move-to]
+   (reset! *dragging? false)
+   (reset! *dragging-block nil)
+   (reset! *drag-to-block nil)
+   (reset! *move-to nil)
+   (editor-handler/unhighlight-blocks!)))
+
 (defn- block-drop
   [event uuid target-block *move-to]
   (util/stop event)
@@ -2341,19 +2355,7 @@
           selected (db/pull-many (state/get-current-repo) '[*] lookup-refs)
           blocks (if (seq selected) selected [@*dragging-block])]
       (dnd/move-blocks event blocks target-block @*move-to)))
-  (reset! *dragging? false)
-  (reset! *dragging-block nil)
-  (reset! *drag-to-block nil)
-  (reset! *move-to nil)
-  (editor-handler/unhighlight-blocks!))
-
-(defn- block-drag-end
-  [_event *move-to]
-  (reset! *dragging? false)
-  (reset! *dragging-block nil)
-  (reset! *drag-to-block nil)
-  (reset! *move-to nil)
-  (editor-handler/unhighlight-blocks!))
+  (block-drag-end event *move-to))
 
 (defn- block-mouse-over
   [e *control-show? block-id doc-mode?]

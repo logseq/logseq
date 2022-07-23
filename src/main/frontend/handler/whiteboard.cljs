@@ -23,9 +23,17 @@
   []
   (= (state/get-current-route) :whiteboard))
 
+(defn get-tldr-app
+  []
+  ^js js/tln)
+
+(defn get-tldr-api
+  []
+  ^js js/tln.api)
+
 (defn create-page!
   [page-title]
-  (when-let [app ^js (state/get-current-whiteboard)]
+  (when-let [app (get-tldr-app)]
     (when-not (string/blank? page-title)
       (.createShapes app (clj->js
                           [{:id (str "logseq-portal-" page-title)
@@ -102,13 +110,29 @@
        :assets #js []})
 
 (defn create-new-whiteboard-page!
-  ([name]
-   (let [uuid (or (parse-uuid name) (d/squuid))]
-     (transact-tldr! name (get-default-tldr (str uuid)))
-     (let [entity (get-whiteboard-entity name)
-           tx (assoc (select-keys entity [:db/id])
-                     :block/uuid uuid)]
-       (db-utils/transact! [tx])
-       (let [page-entity (get-whiteboard-entity name)]
-         (when (and page-entity (nil? (:block/file page-entity)))
-           (outliner-file/sync-to-file page-entity)))))))
+  [name]
+  (let [uuid (or (parse-uuid name) (d/squuid))]
+    (transact-tldr! name (get-default-tldr (str uuid)))
+    (let [entity (get-whiteboard-entity name)
+          tx (assoc (select-keys entity [:db/id])
+                    :block/uuid uuid)]
+      (db-utils/transact! [tx])
+      (let [page-entity (get-whiteboard-entity name)]
+        (when (and page-entity (nil? (:block/file page-entity)))
+          (outliner-file/sync-to-file page-entity))))))
+
+(defn ->logseq-portal-shape
+  [block-id point]
+  {:blockType "B"
+   :id (d/squuid)
+   :pageId (str block-id)
+   :point point
+   :size [600, 400]
+   :type "logseq-portal"})
+
+(defn add-new-block-shape!
+  [block-id client-x client-y]
+  (let [api (get-tldr-api)
+        point (js->clj (.. (get-tldr-app) -viewport (getPagePoint #js[client-x client-y])))
+        shape (->logseq-portal-shape block-id point)]
+    (.createShapes api (clj->js shape))))

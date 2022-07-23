@@ -6,11 +6,11 @@ import {
   TLBinding,
   TLShapeModel,
   uniqueId,
-  validUUID,
+  validUUID
 } from '@tldraw/core'
-import { parse as uuidParse, NIL as NIL_UUID } from 'uuid'
 import type { TLReactCallbacks } from '@tldraw/react'
 import * as React from 'react'
+import { NIL as NIL_UUID } from 'uuid'
 import { LogseqPortalShape, Shape } from '~lib'
 
 export function usePaste() {
