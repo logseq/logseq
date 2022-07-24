@@ -1,5 +1,5 @@
 .dashboard-card {
-  @apply hover:shadow;
+  @apply hover:shadow-lg;
   border: 1px solid var(--ls-border-color);
 }
 
