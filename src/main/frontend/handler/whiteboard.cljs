@@ -19,18 +19,27 @@
 ;;                                 :logseqLink page-or-block-id}])))))))
 
 
+;; (defn inside-whiteboard?
+;;   [el]
+;;   (println el)
+;;   (loop [el el]
+;;     (cond (nil? el) false
+;;           (and (.-classList el) (.. el -classList (contains "whiteboard"))) true
+;;           :else (recur (.-parentElement el)))))
+
 ;; FIXME: embed /draw should be supported too
+;; FIXME: should use current target to see if it is actually inside of whiteboard
 (defn whiteboard-mode?
   []
   (= (state/get-current-route) :whiteboard))
 
 (defn get-tldr-app
   []
-  ^js js/window.tln)
+  js/window.tln)
 
 (defn get-tldr-api
   []
-  (when (get-tldr-app) ^js js/tln.api))
+  (when (get-tldr-app) js/tln.api))
 
 (defn create-page!
   [page-title]

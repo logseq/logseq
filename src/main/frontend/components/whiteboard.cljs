@@ -75,7 +75,7 @@
   (let [name (get-in route-match [:parameters :path :name])
         {:keys [block-id]} (get-in route-match [:parameters :query])]
 
-    [:div.absolute.w-full.h-full
+    [:div.absolute.w-full.h-full.whiteboard-page
 
      ;; makes sure the whiteboard will not cover the borders
      {:key name

@@ -18,7 +18,7 @@
 
 (rum/defc page
   [props]
-  (page/page {:page-name (gobj/get props "pageName")}))
+  (page/page {:page-name (gobj/get props "pageName") :whiteboard? true}))
 
 (rum/defc breadcrumb
   [props]
@@ -36,7 +36,7 @@
   [state name block-id]
   (let [data (page-name->tldr! name block-id)]
     (when (and name (not-empty (gobj/get data "currentPageId")))
-      [:div.draw.tldraw.relative.w-full.h-full
+      [:div.draw.tldraw.whiteboard.relative.w-full.h-full
        {:style {:overscroll-behavior "none"}
         :on-blur #(state/set-block-component-editing-mode! false)
         :on-drop create-block-shape-by-id

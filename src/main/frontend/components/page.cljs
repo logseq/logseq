@@ -334,6 +334,7 @@
           journal? (db/journal-page? page-name)
           fmt-journal? (boolean (date/journal-title->int page-name))
           sidebar? (:sidebar? option)
+          whiteboard? (:whiteboard? option)
           route-page-name path-page-name
           page (if block?
                  (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
@@ -347,7 +348,6 @@
           page-name (:block/name page)
           page-original-name (:block/original-name page)
           title (or page-original-name page-name)
-          whiteboard? (whiteboard-handler/whiteboard-mode?)
           icon (or icon "")
           today? (and
                   journal?
