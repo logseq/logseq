@@ -49,16 +49,42 @@
    [:div.p-4.h-64.flex.justify-center
     (tldraw-preview page-name)]])
 
+;; TODO: move it to util?
+(defn- use-component-rect
+  [ref]
+  (let [[rect set-rect] (rum/use-state nil)]
+    (rum/use-effect!
+     (fn []
+       (let [update-rect #(set-rect (.. ref -current getBoundingClientRect))
+             updator (fn [entries]
+                       (when (.-contentRect (first (js->clj entries))) (update-rect)))
+             observer (js/ResizeObserver. updator)]
+         (update-rect)
+         (.observe observer (.-current ref))
+         #(.disconnect observer)))
+     [])
+    rect))
+
 (rum/defc whiteboard-dashboard
   []
-  (let [whiteboard-names (model/get-all-whiteboard-names (state/get-current-repo))]
+  (let [whiteboard-names (model/get-all-whiteboard-names (state/get-current-repo))
+        ref (rum/use-ref nil)
+        rect (use-component-rect ref)
+        container-width (when rect (.-width rect))
+        cols (cond (< container-width 600) 1
+                   (< container-width 900) 2
+                   (< container-width 1200) 3
+                   :else 4)]
+    (println container-width cols)
     [:div.p-4
+     {:ref ref}
      (ui/button "Create new whiteboard"
                 :small? true
                 :on-click (fn [e]
                             (util/stop e)
-                            (route-handler/redirect-to-whiteboard! (d/squuid) {:new? true})))
-     [:div.gap-8.py-4.grid.grid-rows-auto.md:grid-cols-3.lg:grid-cols-4.grid-cols-1
+                            (route-handler/redirect-to-whiteboard! (d/squuid))))
+     [:div.gap-8.py-4.grid.grid-rows-auto
+      {:style {:grid-template-columns (str "repeat(" cols ", minmax(0, 1fr))")}}
       (for [whiteboard-name whiteboard-names]
         [:<> {:key whiteboard-name} (dashboard-card whiteboard-name)])]]))
 
@@ -85,9 +111,8 @@
     {:style {:z-index 2000}}
     [:span.inline-flex.color-level.text-xl.px-2
      {:style {:color "var(--ls-primary-text-color)"}}
-     (page/page-title name [:<>
-                            [:span.ti.ti-artboard
-                             {:style {:font-size "0.9em"}}]]
+     (page/page-title name [:span.ti.ti-artboard
+                            {:style {:font-size "0.9em"}}]
                       name nil false)]
 
     (whiteboard-references name)]
