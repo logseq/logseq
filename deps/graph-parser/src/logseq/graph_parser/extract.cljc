@@ -195,7 +195,7 @@
   {:block/content (case (:type shape)
                     "text" (:text shape)
                     "logseq-portal" (str "[[" (:pageId shape) "]]")
-                    "line" (str "whiteboard arrow: " (:label shape))
+                    "line" (str "whiteboard arrow" (when-let [label (:label shape)] (str ": " label)))
                     (str "whiteboard " (:type shape)))})
 
 (defn with-whiteboard-block-props
