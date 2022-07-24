@@ -1,7 +1,6 @@
 .dashboard-card {
   @apply hover:shadow;
   border: 1px solid var(--ls-border-color);
-  background-color: var(--color-level-1);
 }
 
 .dashboard-card-title {

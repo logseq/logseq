@@ -33,6 +33,9 @@ export interface TLShapeProps {
   rotation?: number
   handles?: Record<string, TLHandle>
   clipping?: number | number[]
+  fill?: string
+  stroke?: string
+  opacity?: number
   assetId?: string
   children?: string[]
   isGhost?: boolean
@@ -357,8 +360,9 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
     const bounds = this.getBounds()
     return (
       <rect
-        fill="var(--tl-foreground, #000)"
-        fillOpacity={0.2}
+        fill={this.props.fill}
+        stroke={this.props.stroke}
+        fillOpacity={this.props.opacity ?? 0.2}
         width={bounds.width}
         height={bounds.height}
       />
