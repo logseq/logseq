@@ -6,7 +6,7 @@
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.graph-parser.extract :refer [with-whiteboard-block-props]]))
+            [logseq.graph-parser.extract :as gp-extract]))
 
 ;; (defn set-linked-page-or-block!
 ;;   [page-or-block-id]
@@ -58,7 +58,7 @@
         block {:block/page {:block/name (util/page-name-sanity-lc page-name)}
                :block/parent {:block/name page-name}
                :block/properties properties}
-        additional-props (with-whiteboard-block-props block)]
+        additional-props (gp-extract/with-whiteboard-block-props block)]
     (merge block additional-props)))
 
 (defn- tldr-page->blocks-tx [page-name tldr-data]

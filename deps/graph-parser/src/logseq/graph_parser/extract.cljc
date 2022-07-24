@@ -188,15 +188,15 @@
   [shape parent-ref]
   (let [refs (or (get-shape-refs shape) [])]
     (merge {:block/refs refs
-            :block/path-refs (into [] (concat [parent-ref] refs))})))
+            :block/path-refs (into [] (concat refs [parent-ref]))})))
 
 (defn- with-whiteboard-content
   [shape]
   {:block/content (case (:type shape)
                     "text" (:text shape)
                     "logseq-portal" (str "[[" (:pageId shape) "]]")
-                    "line" (str "arrow:" (:label shape))
-                    "")})
+                    "line" (str "whiteboard arrow: " (:label shape))
+                    (str "whiteboard " (:type shape)))})
 
 (defn with-whiteboard-block-props
   [block]
