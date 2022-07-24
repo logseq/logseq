@@ -15,7 +15,7 @@ const getShapeClass = (type: string): TLShapeConstructor<Shape> => {
 
 export class PreviewManager {
   shapes: Shape[] | undefined
-  pageId: string | undefined;
+  pageId: string | undefined
   constructor(serializedApp?: TLDocumentModel<Shape>) {
     if (serializedApp) {
       this.load(serializedApp)
@@ -66,36 +66,35 @@ export class PreviewManager {
           {vBounds && (
             <>
               <rect
-                id={this.pageId + "-camera-rect"}
+                id={this.pageId + '-camera-rect'}
                 transform={`translate(${vx}, ${vy})`}
                 width={vBounds.width}
                 height={vBounds.height}
               />
-              <mask id={this.pageId + "-camera-mask"}>
+              <mask id={this.pageId + '-camera-mask'}>
                 <rect width={commonBounds.width} height={commonBounds.height} fill="white" />
                 <use href={`#${this.pageId}-camera-rect`} fill="black" />
               </mask>
             </>
           )}
-          <g id={this.pageId + "-preview-shapes"}>
-            {this.shapes?.map(s => {
-              const {
-                bounds,
-                props: { rotation },
-              } = s
-              const [tx, ty] = translatePoint([bounds.minX, bounds.minY])
-              const r = +((((rotation ?? 0) + (bounds.rotation ?? 0)) * 180) / Math.PI).toFixed(2)
-              const [rdx, rdy] = [(bounds.width / 2).toFixed(2), (bounds.height / 2).toFixed(2)]
-              const transformArr = [`translate(${tx}, ${ty})`, `rotate(${r}, ${rdx}, ${rdy})`]
-              return (
-                <g transform={transformArr.join(' ')} key={s.id}>
-                  {s.getShapeSVGJsx(true)}
-                </g>
-              )
-            })}
-          </g>
         </defs>
-        <use href={`#${this.pageId}-preview-shapes`} />
+        <g id={this.pageId + '-preview-shapes'}>
+          {this.shapes?.map(s => {
+            const {
+              bounds,
+              props: { rotation },
+            } = s
+            const [tx, ty] = translatePoint([bounds.minX, bounds.minY])
+            const r = +((((rotation ?? 0) + (bounds.rotation ?? 0)) * 180) / Math.PI).toFixed(2)
+            const [rdx, rdy] = [(bounds.width / 2).toFixed(2), (bounds.height / 2).toFixed(2)]
+            const transformArr = [`translate(${tx}, ${ty})`, `rotate(${r}, ${rdx}, ${rdy})`]
+            return (
+              <g transform={transformArr.join(' ')} key={s.id}>
+                {s.getShapeSVGJsx(true)}
+              </g>
+            )
+          })}
+        </g>
         <rect
           mask={vBounds ? `url(#${this.pageId}-camera-mask)` : ''}
           width={commonBounds.width}

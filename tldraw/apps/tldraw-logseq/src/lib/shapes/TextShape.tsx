@@ -277,19 +277,17 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     const bounds = this.getBounds()
 
     return (
-      <text
-        style={{
-          transformOrigin: 'top left',
-        }}
-        transform={`translate(${bounds.width / 2}, ${bounds.height / 2})`}
-        textAnchor="middle"
-        fontFamily={fontFamily}
-        fontSize={fontSize}
-        stroke={stroke}
-        fill={stroke}
-      >
-        {text}
-      </text>
+      <foreignObject width={bounds.width} height={bounds.height}>
+        <div
+          style={{
+            color: stroke,
+            fontSize,
+            fontFamily,
+          }}
+        >
+          {text}
+        </div>
+      </foreignObject>
     )
   }
 }
