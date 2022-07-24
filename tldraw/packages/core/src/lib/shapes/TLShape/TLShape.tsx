@@ -35,6 +35,7 @@ export interface TLShapeProps {
   clipping?: number | number[]
   fill?: string
   stroke?: string
+  strokeWidth?: number
   opacity?: number
   assetId?: string
   children?: string[]
@@ -362,6 +363,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
       <rect
         fill={this.props.fill}
         stroke={this.props.stroke}
+        strokeWidth={this.props.strokeWidth ?? 2}
         fillOpacity={this.props.opacity ?? 0.2}
         width={bounds.width}
         height={bounds.height}

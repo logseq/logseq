@@ -24,7 +24,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
             [frontend.search :as search]
@@ -314,6 +313,8 @@
                          "control-show cursor-pointer" "control-hide")}
     (ui/rotating-arrow @*all-collapsed?)]])
 
+(def get-tldraw-preview #(resolve 'frontend.components.whiteboard/tldraw-preview))
+
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
   (rum/local false ::all-collapsed?)
@@ -335,6 +336,7 @@
           fmt-journal? (boolean (date/journal-title->int page-name))
           sidebar? (:sidebar? option)
           whiteboard? (:whiteboard? option)
+          whiteboard-page? (model/whiteboard-page? page-name)
           route-page-name path-page-name
           page (if block?
                  (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
@@ -363,37 +365,39 @@
               {:key path-page-name
                :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
 
-       [:div.relative
-        (when (and (not sidebar?) (not block?))
-          [:div.flex.flex-row.space-between
-           (when (or (mobile-util/native-platform?) (util/mobile?))
-             [:div.flex.flex-row.pr-2
-              {:style {:margin-left -15}
-               :on-mouse-over (fn [e]
-                                (page-mouse-over e *control-show? *all-collapsed?))
-               :on-mouse-leave (fn [e]
-                                 (page-mouse-leave e *control-show?))}
-              (page-blocks-collapse-control title *control-show? *all-collapsed?)])
-           (when-not whiteboard?
-             [:div.flex-1.flex-row
-              [:h1.title.ls-page-title (page-title page-name icon title format fmt-journal?)]])
-           (when (not config/publishing?)
-             [:div.flex.flex-row
-              (when plugin-handler/lsp-enabled?
-                (plugins/hook-ui-slot :page-head-actions-slotted nil)
-                (plugins/hook-ui-items :pagebar))])])
-        [:div
-         (when (and block? (not sidebar?) (not whiteboard?))
-           (let [config {:id "block-parent"
-                         :block? true}]
-             [:div.mb-4
-              (component-block/breadcrumb config repo block-id {:level-limit 3})]))
+       (if whiteboard-page?
+         [:div ((get-tldraw-preview) page-name)]
+         [:div.relative
+          (when (and (not sidebar?) (not block?))
+            [:div.flex.flex-row.space-between
+             (when (or (mobile-util/native-platform?) (util/mobile?))
+               [:div.flex.flex-row.pr-2
+                {:style {:margin-left -15}
+                 :on-mouse-over (fn [e]
+                                  (page-mouse-over e *control-show? *all-collapsed?))
+                 :on-mouse-leave (fn [e]
+                                   (page-mouse-leave e *control-show?))}
+                (page-blocks-collapse-control title *control-show? *all-collapsed?)])
+             (when-not whiteboard?
+               [:div.flex-1.flex-row
+                [:h1.title.ls-page-title (page-title page-name icon title format fmt-journal?)]])
+             (when (not config/publishing?)
+               [:div.flex.flex-row
+                (when plugin-handler/lsp-enabled?
+                  (plugins/hook-ui-slot :page-head-actions-slotted nil)
+                  (plugins/hook-ui-items :pagebar))])])
+          [:div
+           (when (and block? (not sidebar?) (not whiteboard?))
+             (let [config {:id "block-parent"
+                           :block? true}]
+               [:div.mb-4
+                (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
          ;; blocks
-         (let [page (if block?
-                      (db/entity repo [:block/uuid block-id])
-                      page)]
-           (page-blocks-cp repo page {:sidebar? sidebar?}))]]
+           (let [page (if block?
+                        (db/entity repo [:block/uuid block-id])
+                        page)]
+             (page-blocks-cp repo page {:sidebar? sidebar?}))]])
 
        (when-not block?
          (today-queries repo today? sidebar?))

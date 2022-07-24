@@ -260,9 +260,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                   : 'var(--shadow-medium)',
                 color: stroke,
                 // @ts-expect-error ???
-                '--ls-primary-background-color': fill,
-                '--ls-primary-text-color': stroke,
-                '--ls-title-text-color': stroke,
+                '--ls-primary-background-color': !fill?.startsWith('var') ? fill : undefined,
+                '--ls-primary-text-color': !stroke?.startsWith('var') ? stroke : undefined,
+                '--ls-title-text-color': !stroke?.startsWith('var') ? stroke : undefined,
               }}
             >
               <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'}>
@@ -312,5 +312,43 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       props.size[1] = Math.max(props.size[1], HEADER_HEIGHT)
     }
     return withClampedStyles(props)
+  }
+
+  getShapeSVGJsx(preview = false) {
+    // Do not need to consider the original point here
+    const bounds = this.getBounds()
+    return (
+      <>
+        <rect
+          stroke={this.props.stroke}
+          strokeWidth={this.props.strokeWidth ?? 2}
+          fill="#aaa"
+          width={bounds.width}
+          height={HEADER_HEIGHT}
+        />
+        <rect
+          y={HEADER_HEIGHT}
+          fill={this.props.fill}
+          stroke={this.props.stroke}
+          strokeWidth={this.props.strokeWidth ?? 2}
+          fillOpacity={this.props.opacity ?? 0.2}
+          width={bounds.width}
+          height={bounds.height - HEADER_HEIGHT}
+        />
+        <text
+          style={{
+            transformOrigin: 'top left',
+          }}
+          transform={`translate(${bounds.width / 2}, ${10 + bounds.height / 2})`}
+          textAnchor="middle"
+          fontFamily="var(--ls-font-family)"
+          fontSize="32"
+          fill={this.props.stroke}
+          stroke={this.props.stroke}
+        >
+          {this.props.pageId}
+        </text>
+      </>
+    )
   }
 }

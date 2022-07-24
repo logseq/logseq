@@ -24,7 +24,7 @@
 
    ["/whiteboard/:name"
     {:name :whiteboard
-     :view whiteboard/whiteboard}]
+     :view whiteboard/whiteboard-route}]
 
    ["/whiteboards"
     {:name :whiteboards

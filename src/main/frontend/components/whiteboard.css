@@ -4,5 +4,7 @@
 }
 
 .dashboard-card-title {
+  color: var(--ls-primary-text-color);
   border-bottom: 1px solid var(--ls-border-color);
+  background-color: var(--ls-secondary-background-color);
 }
