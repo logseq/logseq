@@ -11,7 +11,7 @@ import {
 import type { TLReactCallbacks } from '@tldraw/react'
 import * as React from 'react'
 import { NIL as NIL_UUID } from 'uuid'
-import { LogseqPortalShape, Shape } from '~lib'
+import { LogseqPortalShape, Shape, TextShape } from '~lib'
 
 export function usePaste() {
   return React.useCallback<TLReactCallbacks<Shape>['onPaste']>(async (app, { point }) => {
@@ -123,6 +123,15 @@ export function usePaste() {
                 blockType: 'B',
               })
             }
+          } else {
+            // create text shape
+            shapesToCreate.push({
+              ...TextShape.defaultProps,
+              id: uniqueId(),
+              parentId: app.currentPageId,
+              point: [point[0], point[1]],
+              text: rawText,
+            })
           }
         }
       }
