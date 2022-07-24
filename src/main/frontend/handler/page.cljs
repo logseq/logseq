@@ -74,9 +74,11 @@
    (let [p (common-handler/get-page-default-properties title)
          ps (merge p properties)
          content (page-property/insert-properties format "" ps)
-         refs (gp-block/get-page-refs-from-properties format properties
+         refs (gp-block/get-page-refs-from-properties format
+                                                      properties
                                                       (db/get-db (state/get-current-repo))
-                                                      (state/get-date-formatter))]
+                                                      (state/get-date-formatter)
+                                                      (state/get-config))]
      {:block/uuid (db/new-block-id)
       :block/properties ps
       :block/properties-order (keys ps)
