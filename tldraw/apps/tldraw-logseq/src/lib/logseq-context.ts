@@ -8,6 +8,9 @@ export const LogseqContext = React.createContext<
       Breadcrumb: React.FC<{
         blockId: string
       }>
+      PageNameLink: React.FC<{
+        pageName: string
+      }>
     }
     search: (query: string) => string[]
   }>

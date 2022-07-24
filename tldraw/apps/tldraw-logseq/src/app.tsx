@@ -47,6 +47,7 @@ interface LogseqTldrawProps {
   renderers: {
     Page: React.FC
     Breadcrumb: React.FC
+    PageNameLink: React.FC
   }
   searchHandler: (query: string) => string[]
   model?: TLDocumentModel<Shape>

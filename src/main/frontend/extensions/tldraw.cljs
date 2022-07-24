@@ -24,6 +24,10 @@
   [props]
   (block/breadcrumb {} (state/get-current-repo) (uuid (gobj/get props "blockId")) nil))
 
+(rum/defc page-name-link
+  [props]
+  (block/page-cp {:preview? true} {:block/name (gobj/get props "pageName")}))
+
 (defn create-block-shape-by-id [e]
   (when-let [block (block/get-dragging-block)]
     (let [uuid (:block/uuid block)
@@ -43,7 +47,9 @@
         ;; wheel -> overscroll may cause browser navigation
         :on-wheel util/stop-propagation}
 
-       (tldraw {:renderers {:Page page :Breadcrumb breadcrumb}
+       (tldraw {:renderers {:Page page
+                            :Breadcrumb breadcrumb
+                            :PageNameLink page-name-link}
                 :searchHandler (comp clj->js vec search/page-search)
                 :onPersist (fn [app]
                              (let [document (gobj/get app "serialized")]

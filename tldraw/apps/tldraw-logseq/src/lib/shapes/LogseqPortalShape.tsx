@@ -224,11 +224,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       app.history.persist()
     }, [])
 
-    if (!renderers?.Page || !renderers?.Breadcrumb) {
+    if (!renderers?.Page) {
       return null // not being correctly configured
     }
 
-    const { Page, Breadcrumb } = renderers
+    const { Page, Breadcrumb, PageNameLink } = renderers
 
     return (
       <HTMLContainer
@@ -266,7 +266,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               }}
             >
               <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'}>
-                {this.props.blockType === 'P' ? pageId : <Breadcrumb blockId={pageId} />}
+                {this.props.blockType === 'P' ? (
+                  <PageNameLink pageName={pageId} />
+                ) : (
+                  <Breadcrumb blockId={pageId} />
+                )}
               </LogseqPortalShapeHeader>
               {(!this.props.collapsed || isEditing) && (
                 <div

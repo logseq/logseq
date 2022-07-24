@@ -604,6 +604,10 @@
   flex-grow: 0;
 }
 
+.logseq-tldraw .tl-logseq-portal-header .page-ref {
+  color: var(--ls-title-text-color);
+}
+
 html[data-theme='light'] .logseq-tldraw .tl-logseq-portal-header {
   backdrop-filter: brightness(0.9);
 }
