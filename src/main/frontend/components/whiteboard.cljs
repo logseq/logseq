@@ -74,7 +74,7 @@
   [name block-id]
   [:div.absolute.w-full.h-full.whiteboard-page
 
-     ;; makes sure the whiteboard will not cover the borders
+   ;; makes sure the whiteboard will not cover the borders
    {:key name
     :style {:padding "0.5px" :z-index 0
             :transform "translateZ(0)"
