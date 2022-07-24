@@ -127,8 +127,8 @@
            [:div.flex.flex-col
             [:div.flex.flex-row.justify-between
              [:div.flex.flex-row.justify-center
+              {:on-click #(state/sidebar-block-toggle-collapse! db-id)}
               [:a.opacity-50.hover:opacity-100.flex.items-center.pr-1
-               {:on-click #(state/sidebar-block-toggle-collapse! db-id)}
                (ui/rotating-arrow collapse?)]
               [:div.ml-1.font-medium
                title]]
