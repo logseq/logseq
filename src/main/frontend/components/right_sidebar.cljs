@@ -89,7 +89,9 @@
     (when-let [page-name (if (integer? db-id)
                            (:block/name (db/entity db-id))
                            db-id)]
-      [[:a.page-title {:href     (rfe/href :page {:name page-name})
+      [[:a.page-title {:href     (if (db-model/whiteboard-page? page-name)
+                                   (rfe/href :whiteboard {:name page-name})
+                                   (rfe/href :page {:name page-name}))
                        :on-click (fn [e]
                                    (when (gobj/get e "shiftKey")
                                      (.preventDefault e)))}
