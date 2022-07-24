@@ -71,7 +71,9 @@
         input (state/get-input)
         text (string/replace text "\r\n" "\n") ;; Fix for Windows platform
         whiteboard-shape? (= "logseq/whiteboard-shapes" (gobj/get (try-parse-as-json text) "type"))
-        text (when whiteboard-shape? (str "((" (gobj/getValueByKeys (try-parse-as-json text) "shapes" 0 "id") "))"))
+        text (if whiteboard-shape? 
+               (str "((" (gobj/getValueByKeys (try-parse-as-json text) "shapes" 0 "id") "))")
+               text)
         internal-paste? (and
                          (seq (:copy/blocks copied-blocks))
                          ;; not copied from the external clipboard

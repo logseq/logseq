@@ -4,10 +4,7 @@
             [frontend.components.reference :as reference]
             [frontend.db.model :as model]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.whiteboard :refer [create-new-whiteboard-page!
-                                                 get-whiteboard-entity
-                                                 page-name->tldr
-                                                 get-tldr-api]]
+            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -42,7 +39,7 @@
 
 (rum/defc dashboard-card
   [page-name]
-  (let [tldr (page-name->tldr page-name)]
+  (let [tldr (whiteboard-handler/page-name->tldr! page-name)]
     [:div.rounded.text-lg.cursor-pointer.flex.flex-col.gap-1.overflow-hidden.dashboard-card
      {:on-mouse-down
       (fn [e]
@@ -67,7 +64,7 @@
 
 (rum/defc whiteboard-references
   [name]
-  (let [uuid (or (parse-uuid name) (:block/uuid (get-whiteboard-entity name)))
+  (let [uuid (or (parse-uuid name) (:block/uuid (whiteboard-handler/get-whiteboard-entity name)))
         [show set-show] (rum/use-state false)]
     [:div.ml-2
      [:button.border.text-sm.bg-gray-500.text-white.px-2 {:on-click (fn [] (set-show not))} "references"]
@@ -76,19 +73,7 @@
 (rum/defc whiteboard
   [route-match]
   (let [name (get-in route-match [:parameters :path :name])
-        {:keys [new? block-id]} (get-in route-match [:parameters :query])]
-
-    (rum/use-effect! (fn [_]
-                       (when new? (create-new-whiteboard-page! name))
-                       nil)
-                     [name])
-
-    (rum/use-effect! (fn [] 
-                       (let [api (get-tldr-api)]
-                         (.selectShapes api block-id)
-                         (.zoomToSelection api))
-                       nil)
-                     [block-id])
+        {:keys [block-id]} (get-in route-match [:parameters :query])]
 
     [:div.absolute.w-full.h-full
 

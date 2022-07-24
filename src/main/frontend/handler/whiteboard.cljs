@@ -5,6 +5,7 @@
             [frontend.db.utils :as db-utils]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
+            [frontend.util :as util]
             [logseq.graph-parser.extract :refer [with-whiteboard-block-props]]))
 
 ;; (defn set-linked-page-or-block!
@@ -25,11 +26,11 @@
 
 (defn get-tldr-app
   []
-  ^js js/tln)
+  ^js js/window.tln)
 
 (defn get-tldr-api
   []
-  ^js js/tln.api)
+  (when (get-tldr-app) ^js js/tln.api))
 
 (defn create-page!
   [page-title]
@@ -45,13 +46,17 @@
 
 (defn- shape->block [shape page-name]
   (let [properties (assoc shape :ls-type :whiteboard-shape)
-        block {:block/page {:block/name page-name}
+        block {:block/page {:block/name (util/page-name-sanity-lc page-name)}
+               :block/parent {:block/name page-name}
                :block/properties properties}
-        additional-props (with-whiteboard-block-props shape)]
+        additional-props (with-whiteboard-block-props block)]
     (merge block additional-props)))
 
 (defn- tldr-page->blocks-tx [page-name tldr-data]
-  (let [page-block {:block/name page-name
+  (let [original-page-name page-name
+        page-name (util/page-name-sanity-lc page-name)
+        page-block {:block/name page-name
+                    :block/original-name original-page-name
                     :block/whiteboard? true
                     :block/properties (dissoc tldr-data :shapes)}
         existing-blocks (model/get-page-blocks-no-cache page-name)
@@ -64,9 +69,10 @@
     (concat [page-block] blocks delete-shapes-tx)))
 
 (defn- get-whiteboard-clj [page-name]
-  (let [page-block (model/get-page page-name)
-        blocks (model/get-page-blocks-no-cache page-name)]
-    [page-block blocks]))
+  (when (model/page-exists? page-name)
+    (let [page-block (model/get-page page-name)
+          blocks (model/get-page-blocks-no-cache page-name)]
+      [page-block blocks])))
 
 (defn- whiteboard-clj->tldr [page-block blocks shape-id]
   (let [id (str (:block/uuid page-block))
@@ -81,16 +87,6 @@
                              {:id id
                               :name "page"
                               :shapes shapes})]})))
-
-(defn page-name->tldr
-  ([page-name]
-   (page-name->tldr page-name nil))
-  ([page-name shape-id]
-   (let [[page-block blocks] (get-whiteboard-clj page-name)]
-     (whiteboard-clj->tldr page-block blocks shape-id))))
-
-(defn get-whiteboard-entity [page-name]
-  (db-utils/entity [:block/name page-name]))
 
 (defn transact-tldr! [page-name tldr]
   (let [{:keys [pages assets]} (js->clj tldr :keywordize-keys true)
@@ -109,9 +105,13 @@
                         :nonce 1}],
        :assets #js []})
 
+(defn get-whiteboard-entity [page-name]
+  (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)]))
+
 (defn create-new-whiteboard-page!
   [name]
-  (let [uuid (or (parse-uuid name) (d/squuid))]
+  (let [uuid (or (parse-uuid name) (d/squuid))
+        tldr (get-default-tldr (str uuid))]
     (transact-tldr! name (get-default-tldr (str uuid)))
     (let [entity (get-whiteboard-entity name)
           tx (assoc (select-keys entity [:db/id])
@@ -119,7 +119,16 @@
       (db-utils/transact! [tx])
       (let [page-entity (get-whiteboard-entity name)]
         (when (and page-entity (nil? (:block/file page-entity)))
-          (outliner-file/sync-to-file page-entity))))))
+          (outliner-file/sync-to-file page-entity))))
+    tldr))
+
+(defn page-name->tldr!
+  ([page-name]
+   (page-name->tldr! page-name nil))
+  ([page-name shape-id]
+   (if-let [[page-block blocks] (get-whiteboard-clj page-name)]
+     (whiteboard-clj->tldr page-block blocks shape-id)
+     (create-new-whiteboard-page! page-name))))
 
 (defn ->logseq-portal-shape
   [block-id point]

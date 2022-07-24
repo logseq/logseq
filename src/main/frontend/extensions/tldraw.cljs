@@ -2,7 +2,7 @@
   (:require ["/tldraw-logseq" :as TldrawLogseq]
             [frontend.components.block :as block]
             [frontend.components.page :as page]
-            [frontend.handler.whiteboard :refer [page-name->tldr
+            [frontend.handler.whiteboard :refer [page-name->tldr!
                                                  transact-tldr!
                                                  add-new-block-shape!]]
             [frontend.rum :as r]
@@ -18,7 +18,6 @@
 
 (rum/defc page
   [props]
-          ;; (println props)
   (page/page {:page-name (gobj/get props "pageName")}))
 
 (rum/defc breadcrumb
@@ -35,7 +34,7 @@
 (rum/defcs tldraw-app < rum/reactive
   (rum/local false ::view-mode?)
   [state name block-id]
-  (let [data (page-name->tldr name block-id)]
+  (let [data (page-name->tldr! name block-id)]
     (when (and name (not-empty (gobj/get data "currentPageId")))
       [:div.draw.tldraw.relative.w-full.h-full
        {:style {:overscroll-behavior "none"}
