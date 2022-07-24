@@ -122,7 +122,7 @@
                         "copy"
                         (do
                           (util/copy-to-clipboard!
-                            (or (:text content) (.toString selection)))
+                            (or (:text content) (pdf-utils/fix-selection-text-breakline (.toString selection))))
                           (pdf-utils/clear-all-selection))
 
                         "link"
@@ -575,7 +575,7 @@
                              {:id         nil
                               :page       page
                               :position   sc-pos
-                              :content    {:text (.toString selection)}
+                              :content    {:text (pdf-utils/fix-selection-text-breakline (.toString selection))}
                               :properties {}})))]
 
             ;; show ctx menu
