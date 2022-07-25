@@ -85,7 +85,9 @@
                                            (ui/make-confirm-modal
                                             {:title      [:div
                                                           {:style {:max-width 700}}
-                                                          (str "Are you sure to permanently delete graph (" GraphName ") from remote? Note: this operation only delete the remote graph, so you still have a local copy stored in you device.")]
+                                                          (str "Are you sure to permanently delete graph \"" GraphName "\" from remote?")]
+                                             :sub-title   [:div.small.mt-1
+                                                           "Notice that the deleted graph can't be recovered, so we highly recommend you to download it at first before delete it."]
                                              :on-confirm (fn [_ {:keys [close-fn]}]
                                                            (close-fn)
                                                            (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] true)
