@@ -82,7 +82,7 @@
 ;;       1 (count a-ref-blocks)
 ;;       (set ["b" "c"]) (set alias-names))))
 
-(deftest ^:focus get-pages-that-mentioned-page-with-show-journal
+(deftest get-pages-that-mentioned-page-with-show-journal
   (load-test-files [{:file/path "journals/2020_08_15.md"
                      :file/content "link 1 to [[page ONE]] and link to [[generic page]]"}
                     {:file/path "journals/2020_09_18.md"
