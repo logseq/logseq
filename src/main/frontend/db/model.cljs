@@ -15,6 +15,7 @@
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.text :as text]
             [logseq.db.rules :refer [rules]]
             [logseq.db.default :as default-db]
             [frontend.util.drawer :as drawer]))
@@ -1094,9 +1095,10 @@
       (util/safe-page-name-sanity-lc page))
      (distinct))))
 
-; return list of parents namespace
-(defn get-parents-namespace-list [page-namespace & nested-found]
-  (if (string/includes? page-namespace "/") ;isNamespace
+(defn- get-parents-namespace-list
+  "return list of parents namespace"
+  [page-namespace & nested-found]
+  (if (text/namespace-page? page-namespace)
     (let [pre-nested-vec (drop-last (string/split page-namespace #"/"))
           my-nested-found (if (nil? nested-found)
                             []
@@ -1107,18 +1109,19 @@
           (recur pre-nested-str (conj my-nested-found pre-nested-str)))))
     []))
 
-;; return unnecessary namespace from a list of page's name
-(defn get-unnecessary-namespaces-name [pages-list]
+(defn- get-unnecessary-namespaces-name
+  "return unnecessary namespace from a list of page's name"
+  [pages-list]
   (distinct (remove nil? (flatten
                           (for [item pages-list]
                             (if (nil? item)
                               nil
                               (get-parents-namespace-list item)))))))
 
-;; remove relations beetween pages and their nested namaspece
-(defn remove-nested-namespaces-link [pages-relations]
-  (let [
-        pages-relations-to-return (distinct (mapcat
+(defn- remove-nested-namespaces-link 
+  "remove relations beetween pages and their nested namaspece"
+  [pages-relations]
+  (let [pages-relations-to-return (distinct (mapcat
                                              (fn [a] a)
                                              (for [item (for [a-link-from (mapv (fn [a-rel] (first a-rel)) pages-relations)]
                                                           [a-link-from (mapv
@@ -1126,12 +1129,12 @@
                                                                         (filterv
                                                                          (fn [link-target] (=  a-link-from (first link-target)))
                                                                          pages-relations))])
-                                                   :let [list-to (get  item 1)
-                                                         page (get  item 0)
-                                                         namespaces-to-remove  (get-unnecessary-namespaces-name list-to)
-                                                         list-to-without-nested-ns  (filterv (fn [elem] (not (some #{elem} namespaces-to-remove))) list-to)
-                                                         node-links  (for [item-ok list-to-without-nested-ns]
-                                                                       [page item-ok])]]
+                                                   :let [list-to (get item 1)
+                                                         page (get item 0)
+                                                         namespaces-to-remove (get-unnecessary-namespaces-name list-to)
+                                                         list-to-without-nested-ns (filterv (fn [elem] (not (some #{elem} namespaces-to-remove))) list-to)
+                                                         node-links (for [item-ok list-to-without-nested-ns]
+                                                                      [page item-ok])]]
                                                (seq node-links))))]
     pages-relations-to-return))
 
