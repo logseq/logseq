@@ -300,7 +300,14 @@ public class SyncClient {
     public func uploadTempFiles(_ files: [String: URL], credentials: S3Credential, completionHandler: @escaping ([String: String], [String: String], Error?) -> Void) {
         let credentialsProvider = AWSBasicSessionCredentialsProvider(
             accessKey: credentials.AccessKeyId, secretKey: credentials.SecretKey, sessionToken: credentials.SessionToken)
-        let configuration = AWSServiceConfiguration(region: .USEast2, credentialsProvider: credentialsProvider)
+        var region = AWSRegionType.USEast2
+        if REGION == "us-east-2" {
+            region = .USEast2
+        } else if REGION == "us-east-1" {
+            region = .USEast1
+        } // TODO: string to REGION conversion
+        
+        let configuration = AWSServiceConfiguration(region: region, credentialsProvider: credentialsProvider)
         configuration?.timeoutIntervalForRequest = 5.0
         configuration?.timeoutIntervalForResource = 5.0
         
