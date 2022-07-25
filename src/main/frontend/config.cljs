@@ -33,6 +33,20 @@
 (goog-define API-DOMAIN "api.logseq.com")
 (goog-define WS-URL "wss://ws.logseq.com/file-sync?graphuuid=%s")
 
+
+(if dev-release?
+  (do (def FILE-SYNC-PROD? false)
+      (def LOGIN-URL
+        "https://logseq-test2.auth.us-east-2.amazoncognito.com/login?client_id=3ji1a0059hspovjq5fhed3uil8&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
+      (def API-DOMAIN "api.logseq.com")
+      (def WS-URL "wss://ws.logseq.com/file-sync?graphuuid=%s"))
+
+  (do (def FILE-SYNC-PROD? true)
+      (def LOGIN-URL
+        "https://logseq-prod.auth.us-east-1.amazoncognito.com/login?client_id=3c7np6bjtb4r1k1bi9i049ops5&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
+      (def API-DOMAIN "api-prod.logseq.com")
+      (def WS-URL "wss://51y3e3nnk4.execute-api.us-east-1.amazonaws.com/serverless_file_sync_ws_stage?graphuuid=%s")))
+
 ;; feature flags
 (goog-define ENABLE-FILE-SYNC false)
 (defonce enable-file-sync? (or ENABLE-FILE-SYNC dev?)) ;; always enable file-sync when dev
