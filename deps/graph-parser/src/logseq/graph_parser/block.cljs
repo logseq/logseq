@@ -32,6 +32,26 @@
                   "")))
          (string/join))))
 
+(def left-parens "Opening characters for block-ref" "((")
+(def right-parens "Closing characters for block-ref" "))")
+(def left-and-right-parens "Opening and closing characters for block-ref"
+  (str left-parens right-parens))
+
+(defn block-ref-string?
+  [s]
+  (and (string/starts-with? s left-parens)
+       (string/ends-with? s right-parens)))
+
+(defn ->block-ref
+  "Creates block ref string given id"
+  [block-id]
+  (str left-parens block-id right-parens))
+
+(defn block-ref->block-id
+  "Extracts block id from block-ref string e.g. ((123)) -> 123."
+  [s]
+  (subs s 2 (- (count s) 2)))
+
 (defn- get-page-reference
   [block supported-formats]
   (let [page (cond
@@ -111,9 +131,8 @@
                         (let [{:keys [name arguments]} (second block)]
                           (when (and (= name "embed")
                                      (string? (first arguments))
-                                     (string/starts-with? (first arguments) "((")
-                                     (string/ends-with? (first arguments) "))"))
-                            (subs (first arguments) 2 (- (count (first arguments)) 2))))
+                                     (block-ref-string? (first arguments)))
+                            (block-ref->block-id (first arguments))))
 
                         (and (vector? block)
                              (= "Link" (first block))

@@ -11,6 +11,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.block :as gp-block]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -213,7 +214,7 @@
 (defn copy-hl-ref!
   [highlight]
   (when-let [ref-block (create-ref-block! highlight)]
-    (util/copy-to-clipboard! (str "((" (:block/uuid ref-block) "))"))))
+    (util/copy-to-clipboard! (gp-block/->block-ref (:block/uuid ref-block)))))
 
 (defn open-block-ref!
   [block]
