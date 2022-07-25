@@ -87,7 +87,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
         <SVGContainer opacity={isErasing ? 0.2 : opacity} id={id + '_svg'}>
           <LabelMask id={id} bounds={bounds} labelSize={labelSize} offset={offset} scale={scale} />
           <g pointerEvents="none" mask={label || isEditing ? `url(#${id}_clip)` : ``}>
-            {this.getShapeSVGJsx()}
+            {this.getShapeSVGJsx({ preview: false })}
           </g>
         </SVGContainer>
       </div>
@@ -146,7 +146,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     return withClampedStyles(props)
   }
 
-  getShapeSVGJsx(preview = false) {
+  getShapeSVGJsx({ preview }: any) {
     const {
       stroke,
       fill,

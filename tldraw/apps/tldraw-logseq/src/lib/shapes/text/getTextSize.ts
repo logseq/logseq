@@ -78,5 +78,5 @@ export function getTextLabelSize(text: string, font: string) {
     saveCached(text, font, [width, height])
   }
 
-  return getCached(text, font)
+  return getCached(text, font)!
 }

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from 'react'
 import { HTMLContainer, TLComponentProps } from '@tldraw/react'
-import { TLImageShape, TLImageShapeProps } from '@tldraw/core'
+import { TLAsset, TLImageShape, TLImageShapeProps } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import type { CustomStyleProps } from './style-props'
 
@@ -75,4 +75,41 @@ export class ImageShape extends TLImageShape<ImageShapeProps> {
     } = this
     return <rect width={w} height={h} fill="transparent" />
   })
+
+  getShapeSVGJsx({ assets }: { assets: TLAsset[] }) {
+    // Do not need to consider the original point here
+    const bounds = this.getBounds()
+    const {
+      assetId,
+      clipping,
+      size: [w, h],
+    } = this.props
+    const asset = assets.find(ass => ass.id === assetId)
+
+    if (asset) {
+      const [t, r, b, l] = Array.isArray(clipping)
+        ? clipping
+        : [clipping, clipping, clipping, clipping]
+
+      return (
+        <foreignObject width={bounds.width} height={bounds.height}>
+          <img
+            src={asset.src}
+            draggable={false}
+            style={{
+              position: 'relative',
+              top: -t,
+              left: -l,
+              width: w + (l - r),
+              height: h + (t - b),
+              objectFit: this.props.objectFit,
+              pointerEvents: 'all',
+            }}
+          />
+        </foreignObject>
+      )
+    } else {
+      return super.getShapeSVGJsx({})
+    }
+  }
 }

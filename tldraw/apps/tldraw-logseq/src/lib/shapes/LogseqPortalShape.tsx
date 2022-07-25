@@ -314,7 +314,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return withClampedStyles(props)
   }
 
-  getShapeSVGJsx(preview = false) {
+  getShapeSVGJsx({ preview }: any) {
     // Do not need to consider the original point here
     const bounds = this.getBounds()
     return (

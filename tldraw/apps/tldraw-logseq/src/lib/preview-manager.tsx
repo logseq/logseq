@@ -1,4 +1,4 @@
-import { BoundsUtils, TLDocumentModel, TLShapeConstructor, TLViewport } from '@tldraw/core'
+import { BoundsUtils, TLAsset, TLDocumentModel, TLShapeConstructor, TLViewport } from '@tldraw/core'
 import ReactDOMServer from 'react-dom/server'
 import { Shape, shapes } from './shapes'
 
@@ -16,6 +16,7 @@ const getShapeClass = (type: string): TLShapeConstructor<Shape> => {
 export class PreviewManager {
   shapes: Shape[] | undefined
   pageId: string | undefined
+  assets: TLAsset[] | undefined
   constructor(serializedApp?: TLDocumentModel<Shape>) {
     if (serializedApp) {
       this.load(serializedApp)
@@ -25,6 +26,7 @@ export class PreviewManager {
   load(snapshot: TLDocumentModel) {
     const page = snapshot.pages.find(p => snapshot.currentPageId === p.id)
     this.pageId = page?.id
+    this.assets = snapshot.assets
     this.shapes = page?.shapes.map(s => {
       const ShapeClass = getShapeClass(s.type)
       return new ShapeClass(s)
@@ -90,7 +92,10 @@ export class PreviewManager {
             const transformArr = [`translate(${tx}, ${ty})`, `rotate(${r}, ${rdx}, ${rdy})`]
             return (
               <g transform={transformArr.join(' ')} key={s.id}>
-                {s.getShapeSVGJsx(true)}
+                {s.getShapeSVGJsx({
+                  preview: true,
+                  assets: this.assets,
+                })}
               </g>
             )
           })}
