@@ -54,7 +54,7 @@
   [repos]
   (for [{:keys [url remote? GraphUUID GraphName] :as repo} repos
         :let [only-cloud? (and remote? (nil? url))]]
-    [:div.flex.justify-between.mb-4 {:key (or url GraphUUID)}
+    [:div.flex.justify-between.mb-4.items-center {:key (or url GraphUUID)}
      (normalized-graph-label repo #(if only-cloud?
                                      (state/pub-event! [:graph/pick-dest-to-sync repo])
                                      (state/pub-event! [:graph/switch url])))
@@ -77,7 +77,7 @@
                              "Unlink will remove Logseq's access to the local file path of your graph, it'll not remove your files on the disk.")]
                     :class "tippy-hover"
                     :interactive true}
-                   [:a.text-gray-400.ml-4.font-medium.text-sm
+                   [:a.text-gray-400.ml-4.font-medium.text-sm.whitespace-nowrap
                     {:on-click (fn []
                                  (if only-cloud?
                                    (let [confirm-fn
