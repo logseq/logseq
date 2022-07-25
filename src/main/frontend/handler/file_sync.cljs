@@ -145,6 +145,9 @@
   (let [file-id (:db/id (:block/file page))]
     (when-let [path (:file/path (db/entity file-id))]
       (let [base-path (config/get-repo-dir (state/get-current-repo))
+            base-path (if (string/starts-with? base-path "file://")
+                        (js/decodeURIComponent base-path)
+                        base-path)
             path*     (string/replace-first (string/replace-first path base-path "") #"^/" "")]
         (go
           (let [version-list       (:VersionList
