@@ -6,7 +6,7 @@ import {
   getContextBarTranslation,
 } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
-import type { TextShape, PolygonShape, Shape } from '~lib/shapes'
+import type { TextShape, Shape } from '~lib/shapes'
 import { NumberInput } from '~components/inputs/NumberInput'
 import { ColorInput } from '~components/inputs/ColorInput'
 
@@ -29,14 +29,6 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets }) => {
 
   const updateOpacity = React.useCallback<React.ChangeEventHandler<HTMLInputElement>>(e => {
     shapes.forEach(shape => shape.update({ opacity: +e.currentTarget.value }))
-  }, [])
-
-  const updateSides = React.useCallback<React.ChangeEventHandler<HTMLInputElement>>(e => {
-    shapes.forEach(shape => shape.update({ sides: +e.currentTarget.value }))
-  }, [])
-
-  const updateRatio = React.useCallback<React.ChangeEventHandler<HTMLInputElement>>(e => {
-    shapes.forEach(shape => shape.update({ ratio: +e.currentTarget.value }))
   }, [])
 
   const updateFontSize = React.useCallback<React.ChangeEventHandler<HTMLInputElement>>(e => {
@@ -66,8 +58,6 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets }) => {
 
   const textShapes = shapes.filter(shape => shape.type === 'text') as TextShape[]
 
-  const sidesShapes = shapes.filter(shape => 'sides' in shape.props) as PolygonShape[]
-
   const ShapeContent =
     shapes.length === 1 && 'ReactContextBar' in shapes[0] ? shapes[0]['ReactContextBar'] : null
 
@@ -86,25 +76,6 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets }) => {
               onChange={updateStrokeWidth}
               style={{ width: 48 }}
             />
-            {sidesShapes.length > 0 && (
-              <NumberInput
-                label="Sides"
-                value={Math.max(...sidesShapes.map(shape => shape.props.sides))}
-                onChange={updateSides}
-                style={{ width: 40 }}
-              />
-            )}
-            {sidesShapes.length > 0 && (
-              <NumberInput
-                label="Ratio"
-                value={Math.max(...sidesShapes.map(shape => shape.props.ratio))}
-                onChange={updateRatio}
-                step={0.1}
-                min={0}
-                max={2}
-                style={{ width: 40 }}
-              />
-            )}
             <NumberInput
               label="Opacity"
               value={Math.max(...shapes.map(shape => shape.props.opacity))}
