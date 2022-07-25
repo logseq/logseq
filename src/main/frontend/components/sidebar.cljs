@@ -44,13 +44,14 @@
 (rum/defc nav-content-item
   [name {:keys [class]} child]
 
-  [:div.nav-content-item.is-expand
-   {:class class}
+  [:div.nav-content-item
+   {:class (util/classnames [class {:is-expand (not (state/sub [:ui/navigation-item-collapsed? class]))}])}
    [:div.nav-content-item-inner
     [:div.header.items-center.mb-1
      {:on-click (fn [^js/MouseEvent e]
                   (let [^js target (.-target e)
                         ^js parent (.closest target ".nav-content-item")]
+                    (state/toggle-navigation-item-collapsed! class)
                     (.toggle (.-classList parent) "is-expand")))}
 
      [:div.font-medium.fade-link name]
@@ -263,9 +264,9 @@
            :active (and (not srs-open?) (= route-name :all-pages))
            :icon   "files"})]]
 
-      (favorites t)
+      (when (and left-sidebar-open? (not config/publishing?)) (favorites t))
 
-      (when (not config/publishing?) (recent-pages t))
+      (when (and left-sidebar-open? (not config/publishing?)) (recent-pages t))
 
       (when-not (mobile-util/native-platform?)
        [:nav.px-2 {:aria-label "Sidebar"
