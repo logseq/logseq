@@ -787,7 +787,7 @@
                         :delay       [1000, 100]} inner)
              inner)])
         [:span.warning.mr-1 {:title "Block ref invalid"}
-         (util/format "((%s))" id)]))))
+         (gp-block/->block-ref id)]))))
 
 (defn inline-text
   ([format v]
@@ -1120,12 +1120,9 @@
         (when-not (string/blank? page-name)
           (page-embed (assoc config :link-depth (inc link-depth)) page-name)))
 
-      (and (string/starts-with? a "((")
-           (string/ends-with? a "))"))
-      (when-let [s (-> (string/replace a "((" "")
-                       (string/replace "))" "")
-                       string/trim)]
-        (when-let [id (some-> s string/trim parse-uuid)]
+      (gp-block/block-ref-string? a)
+      (when-let [s (-> gp-block/block-ref->block-id string/trim)]
+        (when-let [id (some-> s parse-uuid)]
           (block-embed (assoc config :link-depth (inc link-depth)) id)))
 
       :else                         ;TODO: maybe collections?
@@ -2155,9 +2152,8 @@
         editor-id (str "editor-" edit-input-id)
         slide? (:slide? config)
         trimmed-content (string/trim (:block/content block))
-        block-reference-only? (and (string/starts-with? trimmed-content "((")
-                                   (re-find (re-pattern util/uuid-pattern) trimmed-content)
-                                   (string/ends-with? trimmed-content "))"))]
+        block-reference-only? (and (gp-block/block-ref-string? trimmed-content)
+                                   (re-find (re-pattern util/uuid-pattern) trimmed-content))]
     (if (and edit? editor-box)
       [:div.editor-wrapper {:id editor-id}
        (ui/catch-error

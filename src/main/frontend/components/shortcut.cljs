@@ -7,6 +7,7 @@
             [frontend.ui :as ui]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.highlight :as highlight]
+            [logseq.graph-parser.block :as gp-block]
             [rum.core :as rum]))
 
 (rum/defcs customize-shortcut-dialog-inner <
@@ -100,7 +101,7 @@
      [:td.text-right [:code "[[]]"]]]
     [:tr
      [:td.text-left (t :help/block-reference)]
-     [:td.text-right [:code "(())"]]]
+     [:td.text-right [:code gp-block/left-and-right-parens]]]
     [:tr
      [:td.text-left (t :command.editor/open-link-in-sidebar)]
      [:td.text-right (ui/render-keyboard-shortcut ["shift" "click"])]]

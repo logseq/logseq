@@ -82,7 +82,7 @@
           (editor-handler/html-link-format! text)
 
           (and (text/block-ref? text)
-               (editor-handler/wrapped-by? input "((" "))"))
+               (editor-handler/wrapped-by? input gp-block/left-parens gp-block/right-parens))
           (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil)
 
           :else

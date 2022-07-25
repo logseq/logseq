@@ -22,6 +22,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.block :as gp-block]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -207,7 +208,7 @@
           (ui/menu-link
            {:key      "Copy block ref"
             :on-click (fn [_e]
-                        (editor-handler/copy-block-ref! block-id #(str "((" % "))")))}
+                        (editor-handler/copy-block-ref! block-id gp-block/->block-ref))}
            "Copy block ref")
 
           (ui/menu-link

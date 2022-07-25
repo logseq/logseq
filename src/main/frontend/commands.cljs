@@ -17,6 +17,7 @@
             [frontend.util.property :as property]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.block :as gp-block]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [promesa.core :as p]))
@@ -218,7 +219,7 @@
     [["Page reference" [[:editor/input "[[]]" {:backward-pos 2}]
                         [:editor/search-page]] "Create a backlink to a page"]
      ["Page embed" (embed-page) "Embed a page here"]
-     ["Block reference" [[:editor/input "(())" {:backward-pos 2}]
+     ["Block reference" [[:editor/input gp-block/left-and-right-parens {:backward-pos 2}]
                          [:editor/search-block :reference]] "Create a backlink to a block"]
      ["Block embed" (embed-block) "Embed a block here" "Embed a block here"]
      ["Link" (link-steps) "Create a HTTP link"]
@@ -340,7 +341,7 @@
                                    (or
                                     (and s
                                          (string/ends-with? s "(")
-                                         (or (string/starts-with? last-pattern "((")
+                                         (or (string/starts-with? last-pattern gp-block/left-parens)
                                              (string/starts-with? last-pattern "[[")))
                                     (and s (string/starts-with? s "{{embed"))
                                     (and last-pattern

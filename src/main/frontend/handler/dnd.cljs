@@ -3,8 +3,8 @@
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.transaction :as outliner-tx]
-            [frontend.state :as state]
-            [frontend.util :as util]))
+            [logseq.graph-parser.block :as gp-block]
+            [frontend.state :as state]))
 
 (defn move-blocks
   [^js event blocks target-block move-to]
@@ -23,7 +23,7 @@
                                             :id
                                             (str (:block/uuid first-block)))
         (editor-handler/api-insert-new-block!
-         (util/format "((%s))" (str (:block/uuid first-block)))
+         (gp-block/->block-ref (:block/uuid first-block))
          {:block-uuid (:block/uuid target-block)
           :sibling? (not nested?)
           :before? top?}))

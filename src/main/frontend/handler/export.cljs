@@ -23,6 +23,7 @@
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.block :as gp-block]
             [promesa.core :as p]
             [frontend.handler.notification :as notification])
   (:import
@@ -188,15 +189,9 @@
                                                 (string/lower-case)))
                              (some-> (:arguments (second i))
                                      (first)
-                                     (string/starts-with? "(("))
-                             (some-> (:arguments (second i))
-                                     (first)
-                                     (string/ends-with? "))")))
+                                     gp-block/block-ref-string?))
                         (let [arguments (:arguments (second i))
-                              block-ref (first arguments)
-                              block-uuid (-> block-ref
-                                             (subs 2)
-                                             (#(subs % 0 (- (count %) 2))))]
+                              block-uuid (gp-block/block-ref->block-id (first arguments))]
                           (conj! result block-uuid)
                           i)
                         :else
