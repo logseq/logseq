@@ -168,7 +168,10 @@
   [local]
   (when-let [graph (and local @*wait-syncing-graph)]
     (notification/show!
-     (str "Start syncing the remote graph " (:GraphName graph) " to " (config/get-local-dir local))
+     (str "Start syncing the remote graph "
+          (:GraphName graph)
+          " to "
+          (js/decodeURIComponent (config/get-local-dir local)))
      :warning)
 
     (init-graph (:GraphUUID graph))
