@@ -788,7 +788,6 @@
                                                       :txid local-txid
                                                       :token token
                                                       :fnameEncryption true}))))]
-        (prn ::debug-update-remote-files r)
         (if (instance? ExceptionInfo r)
           r
           (get (js->clj r) "txid")))))
@@ -1298,7 +1297,6 @@
     (when (string/ends-with? current-graph dir)
       (when-not (some-> (state/get-file-sync-state current-graph)
                         sync-state--stopped?)
-        (println :debug :file-watch [type path stat])
         (when (or (:mtime stat) (= type "unlink"))
           (go (>! local-changes-chan (->FileChangeEvent type dir path stat))))))))
 
