@@ -2119,7 +2119,7 @@
     (-stop! sm)))
 
 
-(defn- check-graph-belong-to-current-user
+(defn check-graph-belong-to-current-user
   [current-user-uuid graph-user-uuid]
   (cond
     (nil? current-user-uuid)
