@@ -763,7 +763,7 @@
   (<download-version-files [this graph-uuid base-path filepaths]
     (go
       (let [token (<! (<get-token this))
-            r (<! (<retry-rsapi 
+            r (<! (<retry-rsapi
                    #(p->c (.updateLocalVersionFiles mobile-util/file-sync
                                                                 (clj->js {:graphUUID graph-uuid
                                                                           :basePath base-path
@@ -1095,11 +1095,12 @@
                                      (mapv
                                       #(when (is-journals-or-pages? %)
                                          [% (db/get-file repo (config/get-file-path repo (relative-path %)))]))
-                                     (remove nil?))]
-        (<! (<update-local-files rsapi graph-uuid base-path (map relative-path filetxns)))
+                                     (remove nil?))
+            r (<! (<update-local-files rsapi graph-uuid base-path (map relative-path filetxns)))]
         (doseq [[filetxn origin-db-content] txn->db-content-vec]
           (when (<! (need-add-version-file? filetxn origin-db-content))
-            (add-new-version-file repo (relative-path filetxn) origin-db-content))))
+            (add-new-version-file repo (relative-path filetxn) origin-db-content)))
+        r)
 
       (.-deleted? (first filetxns))
       (let [filetxn (first filetxns)]
@@ -1885,9 +1886,10 @@
                  *txid ^:mutable state ^:mutable _remote-change-chan ^:mutable _*ws *stopped?
                  ^:mutable ops-chan]
     Object
-    (schedule [this next-state args]
+    (schedule [this next-state args reason]
       {:pre [(s/valid? ::state next-state)]}
-      (println "[SyncManager" graph-uuid "]" (and state (name state)) "->" (and next-state (name next-state)))
+      (println "[SyncManager" graph-uuid "]"
+               (and state (name state)) "->" (and next-state (name next-state)) :reason reason :now (tc/to-string (t/now)))
       (set! state next-state)
       (swap! *sync-state sync-state--update-state next-state)
       (go
@@ -1950,7 +1952,7 @@
             (do (util/drain-chan ops-chan)
                 (>! ops-chan {:local->remote-full-sync true})
                 (recur)))))
-      (.schedule this ::need-password nil))
+      (.schedule this ::need-password nil nil))
 
     (need-password
       [this]
@@ -1969,8 +1971,8 @@
             (println :drain-local-changes-chan-at-starting
                      (count (util/drain-chan local-changes-chan))))
           (if @*stopped?
-            (.schedule this ::stop nil)
-            (.schedule this next-state nil)))))
+            (.schedule this ::stop nil nil)
+            (.schedule this next-state nil nil)))))
 
     (idle [this]
       (go
@@ -1978,17 +1980,17 @@
               (<! ops-chan)]
           (cond
             stop
-            (<! (.schedule this ::stop nil))
+            (<! (.schedule this ::stop nil nil))
             remote->local
-            (<! (.schedule this ::remote->local {:remote remote->local}))
+            (<! (.schedule this ::remote->local {:remote remote->local} {:remote-changed remote->local}))
             local->remote
-            (<! (.schedule this ::local->remote {:local local->remote}))
+            (<! (.schedule this ::local->remote {:local local->remote} {:local-changed local->remote}))
             local->remote-full-sync
-            (<! (.schedule this ::local->remote-full-sync nil))
+            (<! (.schedule this ::local->remote-full-sync nil nil))
             remote->local-full-sync
-            (<! (.schedule this ::remote->local-full-sync nil))
+            (<! (.schedule this ::remote->local-full-sync nil nil))
             :else
-            (<! (.schedule this ::stop nil))))))
+            (<! (.schedule this ::stop nil nil))))))
 
     (full-sync [this]
       (go
@@ -1997,18 +1999,18 @@
           (s/assert ::sync-local->remote-all-files!-result r)
           (cond
             succ
-            (.schedule this ::idle nil)
+            (.schedule this ::idle nil nil)
             need-sync-remote
             (do (util/drain-chan ops-chan)
                 (>! ops-chan {:remote->local true})
                 (>! ops-chan {:local->remote-full-sync true})
-                (.schedule this ::idle nil))
+                (.schedule this ::idle nil nil))
             stop
-            (.schedule this ::stop nil)
+            (.schedule this ::stop nil nil)
             unknown
             (do
               (debug/pprint "full-sync" unknown)
-              (.schedule this ::idle nil))))))
+              (.schedule this ::idle nil nil))))))
 
     (remote->local-full-sync [this _next-state]
       (go
@@ -2016,18 +2018,18 @@
               (<! (<sync-remote->local-all-files! remote->local-syncer))]
           (cond
             succ
-            (.schedule this ::idle nil)
+            (.schedule this ::idle nil nil)
             stop
-            (.schedule this ::stop nil)
+            (.schedule this ::stop nil nil)
             unknown
             (do
               (debug/pprint "remote->local-full-sync" unknown)
-              (.schedule this ::idle nil))))))
+              (.schedule this ::idle nil nil))))))
 
     (remote->local [this _next-state {remote-val :remote}]
       (go
         (if (some-> remote-val :txid (<= @*txid))
-          (.schedule this ::idle nil)
+          (.schedule this ::idle nil nil)
           (let [{:keys [succ unknown stop need-remote->local-full-sync] :as r}
                 (<! (<sync-remote->local! remote->local-syncer))]
             (s/assert ::sync-remote->local!-result r)
@@ -2036,14 +2038,14 @@
               (do (util/drain-chan ops-chan)
                   (>! ops-chan {:remote->local-full-sync true})
                   (>! ops-chan {:local->remote-full-sync true})
-                  (.schedule this ::idle nil))
+                  (.schedule this ::idle nil nil))
               succ
-              (.schedule this ::idle nil)
+              (.schedule this ::idle nil nil)
               stop
-              (.schedule this ::stop nil)
+              (.schedule this ::stop nil nil)
               unknown
               (do (prn "remote->local err" unknown)
-                  (.schedule this ::idle nil)))))))
+                  (.schedule this ::idle nil nil)))))))
 
     (local->remote [this {^FileChangeEvents local-changes :local}]
       (assert (some? local-changes) local-changes)
@@ -2064,21 +2066,21 @@
                       (or need-sync-remote unknown) r))))]
           (cond
             succ
-            (.schedule this ::idle nil)
+            (.schedule this ::idle nil nil)
 
             need-sync-remote
             (do (util/drain-chan ops-chan)
                 (>! ops-chan {:remote->local true})
                 (>! ops-chan {:local->remote local-changes})
-                (.schedule this ::idle nil))
+                (.schedule this ::idle nil nil))
 
             stop
-            (.schedule this ::stop nil)
+            (.schedule this ::stop nil nil)
 
             unknown
             (do
               (debug/pprint "local->remote" unknown)
-              (.schedule this ::idle nil))))))
+              (.schedule this ::idle nil nil))))))
     IStoppable
     (-stop! [_]
       (when-not @*stopped?
