@@ -40,10 +40,12 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets }) => {
   }, [])
 
   React.useLayoutEffect(() => {
-    const elm = rContextBar.current
-    if (!elm) return
-    const { offsetWidth, offsetHeight } = elm
-    rSize.current = [offsetWidth, offsetHeight]
+    setTimeout(() => {
+      const elm = rContextBar.current
+      if (!elm) return
+      const { offsetWidth, offsetHeight } = elm
+      rSize.current = [offsetWidth, offsetHeight]
+    })
   })
 
   React.useLayoutEffect(() => {
