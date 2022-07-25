@@ -1,15 +1,18 @@
 (ns frontend.handler
-  (:require [electron.ipc :as ipc]
+  (:require [cljs.reader :refer [read-string]]
+            [electron.ipc :as ipc]
             [electron.listener :as el]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
+            [frontend.components.whiteboard :as whiteboard]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
-            [logseq.db.schema :as db-schema]
             [frontend.db.conn :as conn]
+            [frontend.db.persist :as db-persist]
             [frontend.db.react :as react]
             [frontend.error :as error]
+            [frontend.extensions.srs :as srs]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.events :as events]
             [frontend.handler.file :as file-handler]
@@ -18,21 +21,19 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.extensions.srs :as srs]
-            [frontend.mobile.util :as mobile-util]
             [frontend.idb :as idb]
+            [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
+            [frontend.modules.outliner.datascript :as outliner-db]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
-            [cljs.reader :refer [read-string]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]
-            [frontend.db.persist :as db-persist]
-            [frontend.modules.outliner.datascript :as outliner-db]))
+            [logseq.db.schema :as db-schema]
+            [promesa.core :as p]))
 
 (defn set-global-error-notification!
   []
@@ -172,6 +173,7 @@
   []
   (state/set-page-blocks-cp! page/page-blocks-cp)
   (state/set-component! :block/linked-references reference/block-linked-references)
+  (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
   (command-palette/register-global-shortcut-commands))
 
 (reset! db/*db-listener outliner-db/after-transact-pipelines)

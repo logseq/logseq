@@ -483,6 +483,7 @@
   [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open? manual?] :as config} page-name]
   (let [*tippy-ref (rum/create-ref)
         page-name (util/page-name-sanity-lc page-name)
+        whiteboard-page? (model/whiteboard-page? page-name)
         redirect-page-name (or (model/get-redirect-page-name page-name (:block/alias? config))
                                page-name)
         page-original-name (model/get-page-original-name redirect-page-name)
@@ -527,8 +528,11 @@
                                                          page-original-name])])
                              (let [page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
                                (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name {:redirect? false})
-                               (when-let [f (state/get-page-blocks-cp)]
-                                 (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))])))]
+                               (let [page-blocks-cp (state/get-page-blocks-cp)
+                                     tldraw-preview (state/get-component :whiteboard/tldraw-preview)]
+                                 (if whiteboard-page?
+                                   (tldraw-preview page-name)
+                                   (page-blocks-cp (state/get-current-repo) page {:sidebar? sidebar? :preview? true}))))])))]
 
     (if (or (not manual?) open?)
       (ui/tippy {:ref             *tippy-ref

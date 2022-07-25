@@ -313,11 +313,8 @@
                          "control-show cursor-pointer" "control-hide")}
     (ui/rotating-arrow @*all-collapsed?)]])
 
-(defn resolve-tldraw-preview []
-  (resolve 'frontend.components.whiteboard/tldraw-preview))
-
 (defn get-tldraw-preview [page-name]
-  ((resolve-tldraw-preview) page-name))
+  ((state/get-component :whiteboard/tldraw-preview) page-name))
 
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
