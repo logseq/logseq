@@ -13,7 +13,8 @@ export function ColorInput({ label, value, onChange, ...rest }: ColorInputProps)
     if (value?.toString().startsWith('var') && ref.current) {
       const varName = /var\((.*)\)/.exec(value.toString())?.[1]
       if (varName) {
-        setComputedValue(getComputedStyle(ref.current).getPropertyValue(varName).trim())
+        const [v, d] = varName.split(',').map(s => s.trim())
+        setComputedValue(getComputedStyle(ref.current).getPropertyValue(v).trim() ?? d ?? '#000')
       }
     }
   }, [value])
