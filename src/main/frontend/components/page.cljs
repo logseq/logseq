@@ -642,7 +642,6 @@
                            (fn []
                              (let [value (not show-journals-in-page-graph?)]
                                (reset! *show-journals-in-page-graph? value)
-                              ;(set-setting! :show-journals-in-page-graph? value)
                                ))
                           true)]
               ]
