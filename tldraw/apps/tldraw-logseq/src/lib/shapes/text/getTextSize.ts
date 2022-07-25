@@ -38,12 +38,21 @@ if (typeof window !== 'undefined') {
   melm = getMeasurementDiv()
 }
 
-let prevText = ''
-let prevFont = ''
-let prevSize = [0, 0]
-
-export function clearPrevSize() {
-  prevText = ''
+const cache = new Map<string, [number, number]>()
+const getKey = (text: string, font: string) => {
+  return `${text}-${font}`
+}
+const hasCached = (text: string, font: string) => {
+  const key = getKey(text, font)
+  return cache.has(key)
+}
+const getCached = (text: string, font: string) => {
+  const key = getKey(text, font)
+  return cache.get(key)
+}
+const saveCached = (text: string, font: string, size: [number, number]) => {
+  const key = getKey(text, font)
+  cache.set(key, size)
 }
 
 export function getTextLabelSize(text: string, font: string) {
@@ -51,27 +60,23 @@ export function getTextLabelSize(text: string, font: string) {
     return [16, 32]
   }
 
-  if (!melm) {
-    // We're in SSR
-    return [10, 10]
+  if (!hasCached(text, font)) {
+    if (!melm) {
+      // We're in SSR
+      return [10, 10]
+    }
+
+    if (!melm.parent) document.body.appendChild(melm)
+
+    melm.textContent = text
+    melm.style.font = font
+
+    // In tests, offsetWidth and offsetHeight will be 0
+    const width = melm.offsetWidth || 1
+    const height = melm.offsetHeight || 1
+
+    saveCached(text, font, [width, height])
   }
 
-  if (!melm.parent) document.body.appendChild(melm)
-
-  if (text === prevText && font === prevFont) {
-    return prevSize
-  }
-
-  prevText = text
-  prevFont = font
-
-  melm.textContent = text
-  melm.style.font = font
-
-  // In tests, offsetWidth and offsetHeight will be 0
-  const width = melm.offsetWidth || 1
-  const height = melm.offsetHeight || 1
-
-  prevSize = [width, height]
-  return prevSize
+  return getCached(text, font)
 }
