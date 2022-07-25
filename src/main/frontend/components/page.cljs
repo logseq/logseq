@@ -313,7 +313,11 @@
                          "control-show cursor-pointer" "control-hide")}
     (ui/rotating-arrow @*all-collapsed?)]])
 
-(def get-tldraw-preview #(resolve 'frontend.components.whiteboard/tldraw-preview))
+(defn resolve-tldraw-preview []
+  (resolve 'frontend.components.whiteboard/tldraw-preview))
+
+(defn get-tldraw-preview [page-name]
+  ((resolve-tldraw-preview) page-name))
 
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
@@ -366,7 +370,7 @@
                :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
 
        (if whiteboard-page?
-         [:div ((get-tldraw-preview) page-name)]
+         [:div (get-tldraw-preview page-name)]
          [:div.relative
           (when (and (not sidebar?) (not block?))
             [:div.flex.flex-row.space-between

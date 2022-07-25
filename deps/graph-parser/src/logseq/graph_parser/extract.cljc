@@ -202,9 +202,10 @@
   [block]
   (let [shape (:block/properties block)
         parent (select-keys (:block/page block) [:block/name])]
-    (merge {:block/uuid (uuid (:id shape))}
-           (with-whiteboard-block-refs shape parent)
-           (with-whiteboard-content shape))))
+    (when (= :whiteboard-shape (:ls-type shape))
+      (merge {:block/uuid (uuid (:id shape))}
+             (with-whiteboard-block-refs shape parent)
+             (with-whiteboard-content shape)))))
 
 (defn extract-whiteboard-edn
   "Extracts whiteboard page from given edn file

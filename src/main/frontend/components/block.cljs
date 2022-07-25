@@ -434,15 +434,15 @@
       (fn [e]
         (util/stop e)
         (cond
-          whiteboard-page?
-          (route-handler/redirect-to-whiteboard! page-name)
-
           (gobj/get e "shiftKey")
           (when-let [page-entity (db/entity [:block/name redirect-page-name])]
             (state/sidebar-add-block!
              (state/get-current-repo)
              (:db/id page-entity)
              :page))
+
+          whiteboard-page?
+          (route-handler/redirect-to-whiteboard! page-name)
 
           (not= redirect-page-name page-name)
           (route-handler/redirect-to-page! redirect-page-name)
@@ -567,8 +567,7 @@
             (:block/name page))
 
         (and (not (util/mobile?))
-             (not preview?)
-             (not whiteboard-page?)) ;; TODO: support preview for whiteboard
+             (not preview?)) ;; TODO: support preview for whiteboard
         (page-preview-trigger (assoc config :children inner) page-name)
 
         :else

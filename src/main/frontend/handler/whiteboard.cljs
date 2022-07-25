@@ -69,7 +69,8 @@
                     :block/whiteboard? true
                     :block/properties (dissoc tldr-data :shapes)}
         existing-blocks (model/get-page-blocks-no-cache page-name)
-        blocks (mapv #(shape->block % page-name) (:shapes tldr-data))
+        shapes (:shapes tldr-data)
+        blocks (mapv #(shape->block % page-name) shapes)
         block-ids (set (map :block/uuid blocks))
         delete-shapes (filter (fn [shape]
                                 (not (block-ids (:block/uuid shape))))
@@ -85,7 +86,9 @@
 
 (defn- whiteboard-clj->tldr [page-block blocks shape-id]
   (let [id (str (:block/uuid page-block))
-        shapes (map block->shape blocks)
+        shapes (->> blocks 
+                    (map block->shape)
+                    (filter #(= :whiteboard-shape (:ls-type %))))
         page-properties (:block/properties page-block)
         assets (:assets page-properties)
         page-properties (dissoc page-properties :assets)]
