@@ -165,6 +165,7 @@
         sync-state         (state/sub [:file-sync/sync-state current-repo])
         _                  (rum/react file-sync-handler/refresh-file-sync-component)
         synced-file-graph? (file-sync-handler/synced-file-graph? current-repo)
+        graph-uuid         (second @fs-sync/graphs-txid)
         uploading-files    (:current-local->remote-files sync-state)
         downloading-files  (:current-remote->local-files sync-state)
         queuing-files      (:queued-local->remote-files sync-state)
@@ -178,18 +179,32 @@
         need-password?     (contains? #{:need-password} status)
         queuing?           (and idle? (boolean (seq queuing-files)))
         no-active-files?   (empty? (concat downloading-files queuing-files uploading-files))
-        turn-on            #(if-not synced-file-graph?
-                              (let [repo (state/get-current-repo)]
-                                (when (and repo (not (config/demo-graph? repo)))
-                                  (let [graph-name
-                                        (js/decodeURI (util/node-path.basename repo))
+        create-remote-graph-fn #(when (and current-repo (not (config/demo-graph? current-repo)))
+                                    (let [graph-name
+                                          (js/decodeURI (util/node-path.basename current-repo))
 
-                                        confirm-fn
-                                        (fn [close-fn]
-                                          (create-remote-graph-panel repo graph-name close-fn))]
+                                          confirm-fn
+                                          (fn [close-fn]
+                                            (create-remote-graph-panel current-repo graph-name close-fn))]
 
-                                    (state/set-modal! confirm-fn {:center? true :close-btn? false}))))
-                              (fs-sync/sync-start))]
+                                      (state/set-modal! confirm-fn {:center? true :close-btn? false})))
+        turn-on            #(async/go
+                              (cond
+                                (and synced-file-graph? (async/<! (fs-sync/<check-remote-graph-exists graph-uuid)))
+                                (fs-sync/sync-start)
+
+                                ;; remote graph already has been deleted, clear repos first, then create-remote-graph
+                                synced-file-graph? ; <check-remote-graph-exists -> false
+                                (do (state/set-repos!
+                                     (map (fn [r]
+                                            (if (= (:url r) current-repo)
+                                              (dissoc r :GraphUUID :GraphName :remote?)
+                                              r))
+                                          (state/get-repos)))
+                                    (create-remote-graph-fn))
+
+                                :else
+                                (create-remote-graph-fn)))]
 
     [:div.cp__file-sync-indicator
      (when (and (not config/publishing?)
