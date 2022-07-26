@@ -30,6 +30,8 @@
 (declare maybe-onboarding-show)
 (declare open-icloud-graph-clone-picker)
 
+(def *beta-unavailable? (volatile! false))
+
 (rum/defc clone-local-icloud-graph-panel
   [repo graph-name close-fn]
 
@@ -191,6 +193,9 @@
                                     (state/set-modal! confirm-fn {:center? true :close-btn? false})))
         turn-on #(async/go
                    (cond
+                     @*beta-unavailable?
+                     (state/pub-event! [:file-sync/onboarding-tip :unavailable])
+
                      ;; current graph belong to other user, do nothing
                      (and graph-user-uuid
                           (not (fs-sync/check-graph-belong-to-current-user (user/user-uuid) graph-user-uuid)))
@@ -484,25 +489,40 @@
 (rum/defc onboarding-welcome-logseq-sync
   [close-fn]
 
-  [:div.cp__file-sync-welcome-logseq-sync
-   [:span.head-bg
+  (let [[loading? set-loading?] (rum/use-state false)]
+    [:div.cp__file-sync-welcome-logseq-sync
+     [:span.head-bg
 
-    [:strong "CLOSED BETA"]]
+      [:strong "CLOSED BETA"]]
 
-   [:h1.text-2xl.font-bold
-    [:span.opacity-80 "Welcome to "]
-    [:span.pl-2.dark:text-white.text-gray-800 "Logseq Sync! 👋"]]
+     [:h1.text-2xl.font-bold
+      [:span.opacity-80 "Welcome to "]
+      [:span.pl-2.dark:text-white.text-gray-800 "Logseq Sync! 👋"]]
 
-   [:h2
-    "No more cloud storage worries. With Logseq's encrypted file syncing, "
-    [:br]
-    "you'll always have your notes backed up and available in real-time on any device."]
+     [:h2
+      "No more cloud storage worries. With Logseq's encrypted file syncing, "
+      [:br]
+      "you'll always have your notes backed up and available in real-time on any device."]
 
-   [:div.pt-6.flex.justify-end.space-x-2
-    (ui/button "Later" :on-click close-fn :background "gray" :class "opacity-60")
-    (ui/button "Start syncing" :on-click (fn []
-                                           (close-fn)
-                                           (maybe-onboarding-show :sync-initiate)))]])
+     [:div.pt-6.flex.justify-end.space-x-2
+      (ui/button "Later" :on-click close-fn :background "gray" :class "opacity-60")
+      (ui/button "Start syncing"
+                 :disabled loading?
+                 :on-click (fn []
+                             (async/go
+                               (set-loading? true)
+                               (let [ex-time (get (async/<! (fs-sync/<user-info fs-sync/remoteapi)) :ExpireTime)]
+                                 (if (and (number? ex-time)
+                                          (< ex-time (js/Date.now)))
+                                   (do
+                                     (vreset! *beta-unavailable? true)
+                                     (maybe-onboarding-show :unavailable))
+
+                                   ;; Logseq sync available
+                                   (maybe-onboarding-show :sync-initiate))
+                                 (close-fn)
+                                 (set-loading? false)))
+                             ))]]))
 
 (rum/defc onboarding-unavailable-file-sync
   [close-fn]
@@ -522,8 +542,7 @@
     "charitable OpenCollective backers. We can notify you once it becomes available for you."]
 
    [:div.pt-6.flex.justify-end.space-x-2
-    (ui/button "Close" :on-click close-fn :background "gray" :class "opacity-60")
-    (ui/button "Send email notification")]])
+    (ui/button "Close" :on-click close-fn :background "gray" :class "opacity-60")]])
 
 (rum/defc onboarding-congrats-successful-sync
   [close-fn]
