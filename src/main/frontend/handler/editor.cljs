@@ -660,9 +660,11 @@
 (defn properties-block
   [properties format page]
   (let [content (property/insert-properties format "" properties)
-        refs (gp-block/get-page-refs-from-properties format properties
+        refs (gp-block/get-page-refs-from-properties format
+                                                     properties
                                                      (db/get-db (state/get-current-repo))
-                                                     (state/get-date-formatter))]
+                                                     (state/get-date-formatter)
+                                                     (state/get-config))]
     {:block/pre-block? true
      :block/uuid (db/new-block-id)
      :block/properties properties
@@ -1252,7 +1254,8 @@
 
       ;; if different direction, keep clear until one left
     (state/selection?)
-    (clear-last-selected-block!)))
+    (clear-last-selected-block!))
+  nil)
 
 (defn on-select-block
   [direction]
@@ -3053,7 +3056,8 @@
         (select-up-down direction)
 
         :else
-        (select-first-last direction)))))
+        (select-first-last direction)))
+    nil))
 
 (defn shortcut-select-up-down [direction]
   (fn [e]

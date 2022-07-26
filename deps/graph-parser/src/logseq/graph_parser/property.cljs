@@ -2,6 +2,7 @@
   "Property fns needed by graph-parser"
   (:require [logseq.graph-parser.util :as gp-util]
             [clojure.string :as string]
+            [clojure.set :as set]
             [goog.string :as gstring]
             [goog.string.format]))
 
@@ -11,6 +12,40 @@
    (vector? block)
    (contains? #{"Property_Drawer" "Properties"}
               (first block))))
+
+(def markers
+  #{"now" "later" "todo" "doing" "done" "wait" "waiting"
+    "canceled" "cancelled" "started" "in-progress"})
+
+;; Built-in properties are properties that logseq uses for its features. Most of
+;; these properties are hidden from the user but a few like the editable ones
+;; are visible for the user to edit.
+
+(def built-in-extended-properties (atom #{}))
+(defn register-built-in-properties
+  [props]
+  (reset! built-in-extended-properties (set/union @built-in-extended-properties props)))
+
+(def editable-linkable-built-in-properties
+  "Properties used by logseq that user can edit and that can have linkable property values"
+  #{:alias :aliases :tags})
+
+(defn editable-built-in-properties
+  "Properties used by logseq that user can edit"
+  []
+  (into #{:title :icon :template :template-including-parent :public :filters :exclude-from-graph-view}
+        editable-linkable-built-in-properties))
+
+(defn hidden-built-in-properties
+  "Properties used by logseq that user can't edit or see"
+  []
+  (set/union
+   #{:id :custom-id :background-color :background_color :heading :collapsed
+     :created-at :updated-at :last-modified-at :created_at :last_modified_at
+     :query-table :query-properties :query-sort-by :query-sort-desc :ls-type
+     :hl-type :hl-page :hl-stamp}
+   (set (map keyword markers))
+   @built-in-extended-properties))
 
 (defonce properties-start ":PROPERTIES:")
 (defonce properties-end ":END:")

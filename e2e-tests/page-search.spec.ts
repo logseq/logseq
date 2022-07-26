@@ -161,6 +161,6 @@ async function alias_test(page: Page, page_name: string, search_kws: string[]) {
   // TODO: search clicking (alias property)
 }
 
-test('page diacritic alias', async ({ page }) => {
+test.skip('page diacritic alias', async ({ page }) => {
   await alias_test(page, "ü", ["ü", "ü", "Ü"])
 })

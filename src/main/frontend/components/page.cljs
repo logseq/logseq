@@ -433,17 +433,21 @@
 (defonce *journal? (atom nil))
 (defonce *orphan-pages? (atom true))
 (defonce *builtin-pages? (atom nil))
+(defonce *excluded-pages? (atom true))
+(defonce *show-journals-in-page-graph? (atom nil))
 
 (rum/defc ^:large-vars/cleanup-todo graph-filters < rum/reactive
   [graph settings n-hops]
-  (let [{:keys [journal? orphan-pages? builtin-pages?]
+  (let [{:keys [journal? orphan-pages? builtin-pages? excluded-pages?]
          :or {orphan-pages? true}} settings
         journal?' (rum/react *journal?)
         orphan-pages?' (rum/react *orphan-pages?)
         builtin-pages?' (rum/react *builtin-pages?)
+        excluded-pages?' (rum/react *excluded-pages?)
         journal? (if (nil? journal?') journal? journal?')
         orphan-pages? (if (nil? orphan-pages?') orphan-pages? orphan-pages?')
         builtin-pages? (if (nil? builtin-pages?') builtin-pages? builtin-pages?')
+        excluded-pages? (if (nil? excluded-pages?') excluded-pages? excluded-pages?')
         set-setting! (fn [key value]
                        (let [new-settings (assoc settings key value)]
                          (config-handler/set-config! :graph/settings new-settings)))
@@ -509,6 +513,15 @@
                                (reset! *builtin-pages? value)
                                (set-setting! :builtin-pages? value)))
                            true)]]
+              [:div.flex.items-center.justify-between.mb-2
+               [:span "Excluded pages"]
+               [:div.mt-1
+                (ui/toggle excluded-pages?
+                           (fn []
+                             (let [value (not excluded-pages?)]
+                               (reset! *excluded-pages? value)
+                               (set-setting! :excluded-pages? value)))
+                           true)]]              
               (when (seq focus-nodes)
                 [:div.flex.flex-col.mb-2
                  [:p {:title "N hops from selected nodes"}
@@ -618,9 +631,21 @@
         graph (update graph :nodes #(filter-graph-nodes % search-graph-filters))]
     (global-graph-inner graph settings theme)))
 
-(rum/defc page-graph-inner < rum/static
+(rum/defc page-graph-inner < rum/reactive
   [_page graph dark?]
+   (let [ show-journals-in-page-graph? (rum/react *show-journals-in-page-graph?) ]
   [:div.sidebar-item.flex-col
+             [:div.flex.items-center.justify-between.mb-0
+              [:span (t :right-side-bar/show-journals)]
+              [:div.mt-1
+               (ui/toggle show-journals-in-page-graph? ;my-val;
+                           (fn []
+                             (let [value (not show-journals-in-page-graph?)]
+                               (reset! *show-journals-in-page-graph? value)
+                               ))
+                          true)]
+              ]
+
    (graph/graph-2d {:nodes (:nodes graph)
                     :links (:links graph)
                     :width 600
@@ -628,7 +653,7 @@
                     :dark? dark?
                     :register-handlers-fn
                     (fn [graph]
-                      (graph-register-handlers graph (atom nil) (atom nil) dark?))})])
+                      (graph-register-handlers graph (atom nil) (atom nil) dark?))})]))
 
 (rum/defc page-graph < db-mixins/query rum/reactive
   []
@@ -638,9 +663,10 @@
               (date/today))
         theme (:ui/theme @state/state)
         dark? (= theme "dark")
+        show-journals-in-page-graph (rum/react *show-journals-in-page-graph?)
         graph (if (util/uuid-string? page)
                 (graph-handler/build-block-graph (uuid page) theme)
-                (graph-handler/build-page-graph page theme))]
+                (graph-handler/build-page-graph page theme show-journals-in-page-graph))]
     (when (seq (:nodes graph))
       (page-graph-inner page graph dark?))))
 
