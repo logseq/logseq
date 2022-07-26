@@ -34,7 +34,7 @@
 (goog-define WS-URL "wss://ws.logseq.com/file-sync?graphuuid=%s")
 
 
-(if dev-release?
+(if dev?
   (do (def FILE-SYNC-PROD? false)
       (def LOGIN-URL
         "https://logseq-test2.auth.us-east-2.amazoncognito.com/login?client_id=3ji1a0059hspovjq5fhed3uil8&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
