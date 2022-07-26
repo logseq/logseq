@@ -33,6 +33,7 @@
             [frontend.template :as template]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
+            [logseq.graph-parser.property :as gp-property]
             [frontend.util :as util :refer [profile]]
             [frontend.util.clock :as clock]
             [frontend.util.cursor :as cursor]
@@ -1852,9 +1853,10 @@
 
       (and
        (not= :property-search (state/get-editor-action))
-       (let [current-line (text-util/get-current-line-by-pos (.-value input) (dec pos))]
-         (or (text-util/wrapped-by? current-line (dec pos) "" "::")
-             (text-util/wrapped-by? current-line (dec pos) "\n" "::"))))
+       (when-let [current-line (text-util/get-current-line-by-pos (.-value input) (dec pos))]
+         (or (wrapped-by? current-line "" gp-property/colons)
+             (wrapped-by? current-line "\n" gp-property/colons))))
+
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (state/set-editor-action! :property-search))
@@ -2071,7 +2073,7 @@
   (let [value (.-value input)
         pos (util/get-selection-start input)
         postfix (subs value pos)
-        end-index (when-let [idx (string/index-of postfix "::")]
+        end-index (when-let [idx (string/index-of postfix gp-property/colons)]
                     (+ (max 0 (count (subs value 0 pos))) idx))
         start-index (or (when-let [p (string/last-index-of (subs value 0 pos) "\n")]
                           (inc p))
@@ -2086,8 +2088,8 @@
     (when-let [input (gdom/getElement element-id)]
       (let [{:keys [end-index searching-property]} (get-searching-property input)]
         (cursor/move-cursor-to input (+ end-index 2))
-        (commands/insert! element-id (str (or property q) ":: ")
-                          {:last-pattern (str searching-property "::")})
+        (commands/insert! element-id (str (or property q) gp-property/colons " ")
+                          {:last-pattern (str searching-property gp-property/colons)})
         (state/clear-editor-action!)
         (js/setTimeout (fn []
                          (let [pos (let [input (gdom/getElement element-id)]
@@ -2100,8 +2102,8 @@
 (defn property-value-on-chosen-handler
   [element-id q]
   (fn [property-value]
-    (commands/insert! element-id (str ":: " (or property-value q))
-                      {:last-pattern (str ":: " q)})
+    (commands/insert! element-id (str gp-property/colons " " (or property-value q))
+                      {:last-pattern (str gp-property/colons " " q)})
     (state/clear-editor-action!)))
 
 (defn parent-is-page?

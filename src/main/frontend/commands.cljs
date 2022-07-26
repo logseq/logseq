@@ -18,6 +18,7 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.property :as gp-property]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [promesa.core :as p]))
@@ -345,8 +346,8 @@
                                              (string/starts-with? last-pattern "[[")))
                                     (and s (string/starts-with? s "{{embed"))
                                     (and last-pattern
-                                         (or (string/ends-with? last-pattern "::")
-                                             (string/starts-with? last-pattern "::")))))))]
+                                         (or (string/ends-with? last-pattern gp-property/colons)
+                                             (string/starts-with? last-pattern gp-property/colons)))))))]
                    (if (and space? (string/starts-with? last-pattern "#[["))
                      false
                      space?))

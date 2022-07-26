@@ -86,14 +86,14 @@
           (case (state/get-preferred-format) ;; TODO fix me to block's format
             :org (thing-at-point ":" input "\n")
             (when-let [line (:raw-content (line-at-point input))]
-              (let [key (first (string/split line "::"))
+              (let [key (first (string/split line gp-property/colons))
                     line-beginning-pos (cursor/line-beginning-pos input)
                     pos-in-line (- (cursor/pos input) line-beginning-pos)]
-                (when (<= 0 pos-in-line (+ (count key) (count "::")))
-                  {:full-content (str key "::")
+                (when (<= 0 pos-in-line (+ (count key) (count gp-property/colons)))
+                  {:full-content (str key gp-property/colons)
                    :raw-content key
                    :start line-beginning-pos
-                   :end (+ line-beginning-pos (count (str key "::")))}))))]
+                   :end (+ line-beginning-pos (count (str key gp-property/colons)))}))))]
       (assoc property :type "property-key"))))
 
 (defn get-list-item-indent&bullet [line]

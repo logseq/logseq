@@ -10,3 +10,5 @@ logseq.graph-parser.block/left-and-right-parens
 logseq.graph-parser.block/->block-ref
 ;; API
 logseq.graph-parser.block/block-ref?
+;; API
+logseq.graph-parser.block/get-all-block-ref-ids

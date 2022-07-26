@@ -36,6 +36,7 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.property :as gp-property]
             [frontend.format.block :as block]
             [goog.functions :refer [debounce]]))
 
@@ -247,8 +248,8 @@
 (defn- replace-property-ref!
   [content old-name new-name]
   (let [new-name (keyword (string/replace (string/lower-case new-name) #"\s+" "-"))
-        old-property (str old-name "::")
-        new-property (str (name new-name) "::")]
+        old-property (str old-name gp-property/colons)
+        new-property (str (name new-name) gp-property/colons)]
     (util/replace-ignore-case content old-property new-property)))
 
 (defn- replace-old-page!
