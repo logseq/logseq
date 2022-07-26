@@ -8,3 +8,5 @@ logseq.graph-parser.property/register-built-in-properties
 logseq.graph-parser.block/left-and-right-parens
 ;; API
 logseq.graph-parser.block/->block-ref
+;; API
+logseq.graph-parser.block/block-ref?

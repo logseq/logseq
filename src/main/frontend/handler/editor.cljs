@@ -1030,9 +1030,9 @@
                             (map (fn [{:keys [id level]}]
                                    (condp = (:block/format block)
                                      :org
-                                     (util/format (str (string/join (repeat level "*")) " ((%s))") id)
+                                     (str (string/join (repeat level "*")) " " (gp-block/->block-ref id))
                                      :markdown
-                                     (util/format (str (string/join (repeat (dec level) "\t")) "- ((%s))") id))))
+                                     (str (string/join (repeat (dec level) "\t")) "- " (gp-block/->block-ref id)))))
                             (string/join "\n\n"))]
       (set-blocks-id! (map :id blocks))
       (util/copy-to-clipboard! copy-str))))
@@ -1551,18 +1551,16 @@
                                                                  (when (>= prefix-pos 0)
                                                                    [(subs new-value prefix-pos (+ prefix-pos 2))
                                                                     (+ prefix-pos 2)]))})]
-        (case prefix
-          "[["
+        (cond
+          (= prefix "[[")
           (do
             (commands/handle-step [:editor/search-page])
             (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
-          gp-block/left-parens
+          (= prefix gp-block/left-parens)
           (do
             (commands/handle-step [:editor/search-block :reference])
-            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
-
-          nil)))))
+            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})))))))
 
 (defn surround-by?
   [input before end]
@@ -3425,7 +3423,8 @@
 (defn delete-current-ref!
   [block ref-id]
   (when (and block ref-id)
-    (let [match (re-pattern (str "\\s?" (util/format "\\(\\(%s\\)\\)" (str ref-id))))
+    (let [match (re-pattern (str "\\s?"
+                                 (string/replace (gp-block/->block-ref ref-id) #"([\(\)])" "\\$1")))
           content (string/replace-first (:block/content block) match "")]
       (save-block! (state/get-current-repo)
                    (:block/uuid block)

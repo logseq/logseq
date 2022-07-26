@@ -34,17 +34,6 @@
    (string/starts-with? s "[[")
    (string/ends-with? s "]]")))
 
-(def block-ref-re #"\(\(([a-zA-z0-9]{8}-[a-zA-z0-9]{4}-[a-zA-z0-9]{4}-[a-zA-z0-9]{4}-[a-zA-z0-9]{12})\)\)")
-
-(defn get-block-ref
-  [s]
-  (and (string? s)
-       (second (re-matches block-ref-re s))))
-
-(defn block-ref?
-  [s]
-  (boolean (get-block-ref s)))
-
 (defonce page-ref-re #"\[\[(.*?)\]\]")
 
 (defonce page-ref-re-2 #"(\[\[.*?\]\])")
@@ -54,13 +43,6 @@
 (defn page-ref-un-brackets!
   [s]
   (or (get-page-name s) s))
-
-(defn block-ref-un-brackets!
-  [s]
-  (when (string? s)
-    (if (block-ref? s)
-      (subs s 2 (- (count s) 2))
-      s)))
 
 ;; E.g "Foo Bar"
 (defn sep-by-comma
