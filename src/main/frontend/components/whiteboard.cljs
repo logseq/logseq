@@ -75,7 +75,6 @@
                    (< container-width 900) 2
                    (< container-width 1200) 3
                    :else 4)]
-    (println container-width cols)
     [:div.p-4
      {:ref ref}
      (ui/button "Create new whiteboard"
