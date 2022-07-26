@@ -4,7 +4,8 @@
             [frontend.util :as util]
             ["/frontend/extensions/pdf/utils" :as js-utils]
             [frontend.db :as front-db]
-            [frontend.loader :refer [load]]))
+            [frontend.loader :refer [load]]
+            [clojure.string :as string]))
 
 (defonce MAX-SCALE 5.0)
 (defonce MIN-SCALE 0.25)
@@ -155,6 +156,16 @@
                      :width  (.-width rect)
                      :height (.-height rect)})]
         (optimize-client-reacts rects)))))
+
+(defn fix-selection-text-breakline
+  [text]
+
+  (when-not (string/blank? text)
+    (let [sp "@#~#@"]
+      (-> text
+          (string/replace #"[\r\n]+" sp)
+          (string/replace (str "-" sp) "")
+          (string/replace sp " ")))))
 
 ;; TODO: which viewer instance?
 (defn next-page
