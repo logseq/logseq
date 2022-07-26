@@ -18,6 +18,7 @@ import { LogseqContext } from '~lib/logseq-context'
 import { Shape, shapes } from '~lib/shapes'
 import {
   HighlighterTool,
+  HTMLTool,
   LineTool,
   LogseqPortalTool,
   NuEraseTool,
@@ -40,6 +41,7 @@ const tools: TLReactToolConstructor<Shape>[] = [
   PencilTool,
   TextTool,
   YouTubeTool,
+  HTMLTool,
   LogseqPortalTool,
 ]
 

@@ -93,8 +93,7 @@ export class PreviewManager {
             return (
               <g transform={transformArr.join(' ')} key={s.id}>
                 {s.getShapeSVGJsx({
-                  preview: true,
-                  assets: this.assets,
+                  assets: this.assets ?? [],
                 })}
               </g>
             )

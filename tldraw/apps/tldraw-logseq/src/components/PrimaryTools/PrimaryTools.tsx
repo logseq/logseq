@@ -81,14 +81,6 @@ export const PrimaryTools = observer(function PrimaryTools() {
           <TextIcon />
         </Button>
         <Button
-          data-tool="youtube"
-          data-selected={selectedToolId === 'youtube'}
-          onClick={handleToolClick}
-          onDoubleClick={handleToolDoubleClick}
-        >
-          <VideoIcon />
-        </Button>
-        <Button
           data-tool="logseq-portal"
           data-selected={selectedToolId === 'logseq-portal'}
           onClick={handleToolClick}

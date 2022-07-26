@@ -65,8 +65,6 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
     const {
       props: { opacity, embedId },
     } = this
-    const app = useApp()
-    const isSelected = app.selectedIds.has(this.id)
     return (
       <HTMLContainer
         style={{
@@ -76,24 +74,10 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
         }}
         {...events}
       >
-        {embedId && (
-          <div
-            style={{
-              height: '32px',
-              width: '100%',
-              background: '#bbb',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            {embedId}
-          </div>
-        )}
         <div
           style={{
             width: '100%',
-            height: embedId ? 'calc(100% - 32px)' : '100%',
+            height: '100%',
             pointerEvents: isEditing ? 'all' : 'none',
             userSelect: 'none',
             position: 'relative',
@@ -115,6 +99,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
                   height: '100%',
                   width: '100%',
                   position: 'absolute',
+                  margin: 0,
                 }}
                 width="853"
                 height="480"

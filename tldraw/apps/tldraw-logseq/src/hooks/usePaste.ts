@@ -6,12 +6,26 @@ import {
   TLBinding,
   TLShapeModel,
   uniqueId,
-  validUUID
+  validUUID,
 } from '@tldraw/core'
 import type { TLReactCallbacks } from '@tldraw/react'
 import * as React from 'react'
 import { NIL as NIL_UUID } from 'uuid'
-import { LogseqPortalShape, Shape, TextShape } from '~lib'
+import { HTMLShape, LogseqPortalShape, Shape, TextShape, YouTubeShape } from '~lib'
+
+const isValidURL = (url: string) => {
+  try {
+    new URL(url)
+    return true
+  } catch {
+    return false
+  }
+}
+
+const getYoutubeId = (url: string) => {
+  const match = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#&?]*).*/)
+  return match && match[2].length === 11 ? match[2] : null
+}
 
 export function usePaste() {
   return React.useCallback<TLReactCallbacks<Shape>['onPaste']>(async (app, { point }) => {
@@ -48,6 +62,37 @@ export function usePaste() {
       return false
     }
 
+    async function handleHTML(item: ClipboardItem) {
+      if (item.types.includes('text/html')) {
+        const blob = await item.getType('text/html')
+        const rawText = (await blob.text()).trim()
+
+        shapesToCreate.push({
+          ...HTMLShape.defaultProps,
+          html: rawText,
+          parentId: app.currentPageId,
+          point: [point[0], point[1]],
+        })
+        return true
+      }
+
+      if (item.types.includes('text/plain')) {
+        const blob = await item.getType('text/plain')
+        const rawText = (await blob.text()).trim()
+        // if rawText is iframe text
+        if (rawText.startsWith('<iframe')) {
+          shapesToCreate.push({
+            ...HTMLShape.defaultProps,
+            html: rawText,
+            parentId: app.currentPageId,
+            point: [point[0], point[1]],
+          })
+          return true
+        }
+      }
+      return false
+    }
+
     async function handleLogseqShapes(item: ClipboardItem) {
       if (item.types.includes('text/plain')) {
         const blob = await item.getType('text/plain')
@@ -70,7 +115,6 @@ export function usePaste() {
             const clonedShapes = shapes.map(shape => {
               return {
                 ...shape,
-                id: uniqueId(),
                 parentId: app.currentPageId,
                 point: [
                   point[0] + shape.point![0] - commonBounds.minX,
@@ -115,12 +159,31 @@ export function usePaste() {
             if (validUUID(blockRef)) {
               shapesToCreate.push({
                 ...LogseqPortalShape.defaultProps,
-                id: uniqueId(),
                 parentId: app.currentPageId,
                 point: [point[0], point[1]],
                 size: [600, 400],
                 pageId: blockRef,
                 blockType: 'B',
+              })
+            }
+          } else if (/^\[\[.*\]\]$/.test(rawText)) {
+            const pageName = rawText.slice(2, -2)
+            shapesToCreate.push({
+              ...LogseqPortalShape.defaultProps,
+              parentId: app.currentPageId,
+              point: [point[0], point[1]],
+              size: [600, 400],
+              pageId: pageName,
+              blockType: 'P',
+            })
+          } else if (isValidURL(rawText)) {
+            const youtubeId = getYoutubeId(rawText)
+            if (youtubeId) {
+              shapesToCreate.push({
+                ...YouTubeShape.defaultProps,
+                embedId: youtubeId,
+                parentId: app.currentPageId,
+                point: [point[0], point[1]],
               })
             }
           } else {
@@ -138,10 +201,14 @@ export function usePaste() {
       return false
     }
 
-    // TODO: supporting other pasting formats
     for (const item of await navigator.clipboard.read()) {
       try {
         let handled = await handleImage(item)
+
+        if (!handled) {
+          handled = await handleHTML(item)
+        }
+
         if (!handled) {
           await handleLogseqShapes(item)
         }
@@ -152,7 +219,6 @@ export function usePaste() {
 
     const allShapesToAdd: TLShapeModel[] = [
       ...assetsToCreate.map((asset, i) => ({
-        id: uniqueId(),
         type: 'image',
         parentId: app.currentPageId,
         // TODO: Should be place near the last edited shape
@@ -162,7 +228,12 @@ export function usePaste() {
         opacity: 1,
       })),
       ...shapesToCreate,
-    ]
+    ].map(shape => {
+      return {
+        ...shape,
+        id: uniqueId(),
+      }
+    })
 
     app.wrapUpdate(() => {
       if (assetsToCreate.length > 0) {
