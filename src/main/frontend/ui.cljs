@@ -900,6 +900,18 @@
      label-right]]
    (progress-bar width)])
 
+(rum/defc lazy-loading-placeholder
+  []
+  [:div.shadow.rounded-md.p-4.w-full.mx-auto.mb-5.fade-in {:style {:height 88}}
+   [:div.animate-pulse.flex.space-x-4
+    [:div.flex-1.space-y-3.py-1
+     [:div.h-2.bg-base-4.rounded]
+     [:div.space-y-3
+      [:div.grid.grid-cols-3.gap-4
+       [:div.h-2.bg-base-4.rounded.col-span-2]
+       [:div.h-2.bg-base-4.rounded.col-span-1]]
+      [:div.h-2.bg-base-4.rounded]]]]])
+
 (rum/defcs lazy-visible-inner
   [state visible? content-fn ref]
   [:div.lazy-visibility
@@ -911,15 +923,7 @@
         {:ref #(when-let [^js cls (and % (.-classList %))]
                  (.add cls "fade-enter-active"))}
         (content-fn)])
-     [:div.shadow.rounded-md.p-4.w-full.mx-auto.mb-5.fade-in {:style {:height 88}}
-      [:div.animate-pulse.flex.space-x-4
-       [:div.flex-1.space-y-3.py-1
-        [:div.h-2.bg-base-4.rounded]
-        [:div.space-y-3
-         [:div.grid.grid-cols-3.gap-4
-          [:div.h-2.bg-base-4.rounded.col-span-2]
-          [:div.h-2.bg-base-4.rounded.col-span-1]]
-         [:div.h-2.bg-base-4.rounded]]]]])])
+     (lazy-loading-placeholder))])
 
 (rum/defc lazy-visible
   ([content-fn]

@@ -17,6 +17,7 @@
   [val {:keys [key type title default description inputAs]} update-setting!]
 
   [:div.desc-item.as-input
+   {:data-key key}
    [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
 
    [:label.form-control
@@ -35,6 +36,7 @@
 
   (let [val (if (boolean? val) val (boolean default))]
     [:div.desc-item.as-toggle
+     {:data-key key}
      [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
 
      [:label.form-control
@@ -51,6 +53,7 @@
                               :selected (contains? vals v)}) enumChoices)
         picker (keyword enumPicker)]
     [:div.desc-item.as-enum
+     {:data-key key}
      [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
 
      [:div.form-control
@@ -68,6 +71,7 @@
   [_val {:keys [key title description _default]} pid]
 
   [:div.desc-item.as-object
+   {:data-key key}
    [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
 
    [:div.form-control
@@ -78,6 +82,7 @@
   [{:keys [title]}]
 
   [:div.heading-item
+   {:data-key key}
    [:h2 title]])
 
 (rum/defc settings-container

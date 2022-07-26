@@ -143,13 +143,8 @@
 (defn listen-and-persist!
   [repo]
   (when-let [conn (get-db repo false)]
-    (repo-listen-to-tx! repo conn)))
-
-(defn relisten-and-persist!
-  [repo]
-  (when-let [conn (get-db repo false)]
     (d/unlisten! conn :persistence)
-    (listen-and-persist! repo)))
+    (repo-listen-to-tx! repo conn)))
 
 (defn start-db-conn!
   ([repo]
