@@ -660,9 +660,11 @@
 (defn properties-block
   [properties format page]
   (let [content (property/insert-properties format "" properties)
-        refs (gp-block/get-page-refs-from-properties format properties
+        refs (gp-block/get-page-refs-from-properties format
+                                                     properties
                                                      (db/get-db (state/get-current-repo))
-                                                     (state/get-date-formatter))]
+                                                     (state/get-date-formatter)
+                                                     (state/get-config))]
     {:block/pre-block? true
      :block/uuid (db/new-block-id)
      :block/properties properties

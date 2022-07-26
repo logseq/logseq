@@ -120,7 +120,7 @@
           :page-name->original-name page-name->original-name})))))
 
 (defn build-page-graph
-  [page theme]
+  [page theme show-journal]
   (let [dark? (= "dark" theme)]
     (when-let [repo (state/get-current-repo)]
       (let [page (util/page-name-sanity-lc page)
@@ -128,7 +128,7 @@
             tags (:tags (:block/properties page-entity))
             tags (remove #(= page %) tags)
             ref-pages (db/get-page-referenced-pages repo page)
-            mentioned-pages (db/get-pages-that-mentioned-page repo page)
+            mentioned-pages (db/get-pages-that-mentioned-page repo page show-journal)
             namespaces (db/get-all-namespace-relation repo)
             links (concat
                    namespaces
@@ -148,7 +148,7 @@
                                  (let [ref-pages (-> (map first (db/get-page-referenced-pages repo page))
                                                      (set)
                                                      (set/intersection other-pages))
-                                       mentioned-pages (-> (map first (db/get-pages-that-mentioned-page repo page))
+                                       mentioned-pages (-> (map first (db/get-pages-that-mentioned-page repo page show-journal))
                                                            (set)
                                                            (set/intersection other-pages))]
                                    (concat
