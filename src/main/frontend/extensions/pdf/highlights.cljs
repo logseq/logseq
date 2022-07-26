@@ -1061,7 +1061,7 @@
         (let [get-doc$ (fn [^js opts] (.-promise (js/pdfjsLib.getDocument opts)))
               opts {:url           url
                     :ownerDocument js/document
-                    :cMapUrl       "./js/pdfjs/cmaps/"
+                    :cMapUrl       "./cmaps/"
                     ;;:cMapUrl       "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.8.335/cmaps/"
                     :cMapPacked    true}]
 
