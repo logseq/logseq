@@ -73,7 +73,7 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
             userSelect: 'none',
             position: 'relative',
             margin: 0,
-            overflow: 'auto',
+            overflow: isEditing ? 'auto' : 'hidden',
           }}
           dangerouslySetInnerHTML={{ __html: html }}
         />

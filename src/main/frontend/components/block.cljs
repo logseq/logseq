@@ -571,7 +571,7 @@
             (:block/name page))
 
         (and (not (util/mobile?))
-             (not preview?)) ;; TODO: support preview for whiteboard
+             (not preview?))
         (page-preview-trigger (assoc config :children inner) page-name)
 
         :else
@@ -2223,6 +2223,40 @@
          (when (and (not @*hide-block-refs?) (> refs-count 0))
            (let [refs-cp (state/get-component :block/linked-references)]
              (refs-cp uuid)))]))))
+
+;; FIXME: not updating when block content is updated outbound
+(rum/defcs single-block-cp-inner < rum/reactive db-mixins/query
+  ;; todo: mixin for init-blocks-container-id?
+  {:init (fn [state]
+           (assoc state
+                  ::init-blocks-container-id (atom nil)))}
+  [state block-uuid]
+  (let [uuid (if (string? block-uuid) (uuid block-uuid) block-uuid)
+        *init-blocks-container-id (::init-blocks-container-id state)
+        block-entity (db/entity [:block/uuid uuid])
+        {:block/keys [pre-block? level format content]} block-entity
+        blocks-container-id (if @*init-blocks-container-id
+                              @*init-blocks-container-id
+                              (let [id' (swap! *blocks-container-id inc)]
+                                (reset! *init-blocks-container-id id')
+                                id'))
+        config {:id (str uuid)
+                :db/id (:db/id block-entity)
+                :block? true
+                :editor-box (state/get-component :editor/box)}
+        edit-input-id (str "edit-block-" blocks-container-id "-" uuid)
+        edit? (state/sub [:editor/editing? edit-input-id])
+        block {:block/uuid uuid
+               :block/pre-block? pre-block?
+               :block/level level
+               :block/format format
+               :block/content content}
+        block (block/parse-title-and-body block)]
+    (block-content-or-editor config block edit-input-id uuid level edit?)))
+
+(rum/defc single-block-cp
+  [block-uuid]
+  (single-block-cp-inner block-uuid))
 
 (defn non-dragging?
   [e]

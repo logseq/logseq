@@ -83,7 +83,7 @@ and handles unexpected failure."
                body (vec (if title (rest ast) ast))
                body (drop-while gp-property/properties-ast? body)
                result (cond->
-                        (if (seq body) {:block/body body} {})
+                       (if (seq body) {:block/body body} {})
                         title
                         (assoc :block/title title))]
            (state/add-block-ast-cache! block-uuid content result)

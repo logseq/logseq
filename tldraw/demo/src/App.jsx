@@ -80,6 +80,18 @@ const Page = props => {
   )
 }
 
+const Block = props => {
+  const [value, setValue] = React.useState(JSON.stringify(props, null, 2))
+  return (
+    <textarea
+      className="whitespace-pre w-full h-full font-mono"
+      style={{ minHeight: '64px' }}
+      value={value}
+      onChange={e => setValue(e.target.value)}
+    />
+  )
+}
+
 const Breadcrumb = props => {
   const [value, setValue] = React.useState(JSON.stringify(props))
   return (
@@ -141,6 +153,7 @@ export default function App() {
       <TldrawApp
         renderers={{
           Page,
+          Block,
           Breadcrumb,
         }}
         searchHandler={q => (q ? list : [])}

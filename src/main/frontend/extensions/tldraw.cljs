@@ -2,8 +2,7 @@
   (:require ["/tldraw-logseq" :as TldrawLogseq]
             [frontend.components.block :as block]
             [frontend.components.page :as page]
-            [frontend.handler.whiteboard :refer [add-new-block-shape!
-                                                 page-name->tldr! transact-tldr!]]
+            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -15,9 +14,13 @@
 
 (def generate-preview (gobj/get TldrawLogseq "generateJSXFromApp"))
 
-(rum/defc page
+(rum/defc page-cp
   [props]
   (page/page {:page-name (gobj/get props "pageName") :whiteboard? true}))
+
+(rum/defc block-cp
+  [props]
+  ((state/get-component :block/single-block) (uuid (gobj/get props "blockId"))))
 
 (rum/defc breadcrumb
   [props]
@@ -32,11 +35,11 @@
     (let [uuid (:block/uuid block)
           client-x (gobj/get e "clientX")
           client-y (gobj/get e "clientY")]
-      (add-new-block-shape! uuid client-x client-y))))
+      (whiteboard-handler/add-new-block-shape! uuid client-x client-y))))
 
 (rum/defc tldraw-app
   [name block-id]
-  (let [data (page-name->tldr! name block-id)
+  (let [data (whiteboard-handler/page-name->tldr! name block-id)
         [tln set-tln] (rum/use-state nil)]
     (rum/use-effect!
      (fn []
@@ -55,12 +58,13 @@
         ;; wheel -> overscroll may cause browser navigation
         :on-wheel util/stop-propagation}
 
-       (tldraw {:renderers {:Page page
+       (tldraw {:renderers {:Page page-cp
+                            :Block block-cp
                             :Breadcrumb breadcrumb
                             :PageNameLink page-name-link}
                 :searchHandler (comp clj->js vec search/page-search)
                 :onMount (fn [app] (set-tln ^js app))
                 :onPersist (fn [app]
                              (let [document (gobj/get app "serialized")]
-                               (transact-tldr! name document)))
+                               (whiteboard-handler/transact-tldr! name document)))
                 :model data})])))

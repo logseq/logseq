@@ -228,7 +228,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       return null // not being correctly configured
     }
 
-    const { Page, Breadcrumb, PageNameLink } = renderers
+    const { Page, Block, Breadcrumb, PageNameLink } = renderers
 
     return (
       <HTMLContainer
@@ -290,7 +290,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                       cursor: 'default',
                     }}
                   >
-                    <Page pageName={pageId} />
+                    {this.props.blockType === 'P' ? (
+                      <Page pageName={pageId} />
+                    ) : (
+                      <Block blockId={pageId} />
+                    )}
                   </div>
                 </div>
               )}

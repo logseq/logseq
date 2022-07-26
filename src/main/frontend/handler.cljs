@@ -2,6 +2,8 @@
   (:require [cljs.reader :refer [read-string]]
             [electron.ipc :as ipc]
             [electron.listener :as el]
+            [frontend.components.block :as block]
+            [frontend.components.editor :as editor]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
             [frontend.components.whiteboard :as whiteboard]
@@ -174,6 +176,8 @@
   (state/set-page-blocks-cp! page/page-blocks-cp)
   (state/set-component! :block/linked-references reference/block-linked-references)
   (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
+  (state/set-component! :block/single-block block/single-block-cp)
+  (state/set-component! :editor/box editor/box)
   (command-palette/register-global-shortcut-commands))
 
 (reset! db/*db-listener outliner-db/after-transact-pipelines)

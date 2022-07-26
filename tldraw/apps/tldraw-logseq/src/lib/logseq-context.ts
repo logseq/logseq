@@ -5,6 +5,9 @@ export const LogseqContext = React.createContext<
       Page: React.FC<{
         pageName: string
       }>
+      Block: React.FC<{
+        blockId: string
+      }>
       Breadcrumb: React.FC<{
         blockId: string
       }>

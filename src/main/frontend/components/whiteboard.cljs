@@ -55,7 +55,7 @@
   (let [[rect set-rect] (rum/use-state nil)]
     (rum/use-effect!
      (fn []
-       (let [update-rect #(set-rect (.. ref -current getBoundingClientRect))
+       (let [update-rect #(set-rect (when (.-current ref) (.. ref -current getBoundingClientRect)))
              updator (fn [entries]
                        (when (.-contentRect (first (js->clj entries))) (update-rect)))
              observer (js/ResizeObserver. updator)]
