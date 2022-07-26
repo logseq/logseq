@@ -618,4 +618,5 @@ html[data-theme='dark'] .logseq-tldraw .tl-logseq-portal-header {
 .logseq-tldraw .html-container > iframe {
   height: 100% !important;
   width: 100% !important;
+  margin: 0;
 }

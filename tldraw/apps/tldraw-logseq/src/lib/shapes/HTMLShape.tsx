@@ -4,6 +4,8 @@ import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import { CustomStyleProps, withClampedStyles } from './style-props'
+import { useCameraMovingRef } from '~hooks/useCameraMoving'
+import type { Shape } from '~lib'
 
 export interface HTMLShapeProps extends TLBoxShapeProps, CustomStyleProps {
   type: 'html'
@@ -34,6 +36,22 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
     const {
       props: { opacity, html },
     } = this
+    const isMoving = useCameraMovingRef()
+    const app = useApp<Shape>()
+    const isSelected = app.selectedIds.has(this.id)
+
+    const tlEventsEnabled =
+      isMoving || (isSelected && !isEditing) || app.selectedTool.id !== 'select'
+    const stop = React.useCallback(
+      e => {
+        if (!tlEventsEnabled) {
+          // TODO: pinching inside Logseq Shape issue
+          e.stopPropagation()
+        }
+      },
+      [tlEventsEnabled]
+    )
+
     return (
       <HTMLContainer
         style={{
@@ -44,7 +62,10 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
         {...events}
       >
         <div
-          className='html-container'
+          onWheelCapture={stop}
+          onPointerDown={stop}
+          onPointerUp={stop}
+          className="html-container"
           style={{
             width: '100%',
             height: '100%',
@@ -52,6 +73,7 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
             userSelect: 'none',
             position: 'relative',
             margin: 0,
+            overflow: 'auto',
           }}
           dangerouslySetInnerHTML={{ __html: html }}
         />
