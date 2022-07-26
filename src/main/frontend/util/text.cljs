@@ -122,7 +122,3 @@
             (string/join "/" parts)
             (last parts))
           js/decodeURI))))
-
-(defn extract-all-block-refs
-  [content]
-  (map second (re-seq #"\(\(([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\)\)" content)))

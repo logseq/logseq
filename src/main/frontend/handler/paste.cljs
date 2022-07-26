@@ -15,7 +15,6 @@
             ["/frontend/utils" :as utils]
             [frontend.commands :as commands]
             [cljs.core.match :refer [match]]
-            [logseq.graph-parser.text :as text]
             [frontend.handler.notification :as notification]
             [frontend.util.text :as text-util]
             [frontend.format.mldoc :as mldoc]
@@ -81,9 +80,9 @@
                (not (string/blank? (util/get-selected-text))))
           (editor-handler/html-link-format! text)
 
-          (and (text/block-ref? text)
+          (and (gp-block/block-ref? text)
                (editor-handler/wrapped-by? input gp-block/left-parens gp-block/right-parens))
-          (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil)
+          (commands/simple-insert! (state/get-edit-input-id) (gp-block/get-block-ref-id text) nil)
 
           :else
           ;; from external

@@ -930,8 +930,8 @@
          (not= \* (last s)))
     (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
 
-    (text/block-ref? s)
-    (let [id (text/get-block-ref s)]
+    (gp-block/block-ref? s)
+    (let [id (gp-block/get-block-ref-id s)]
       (block-reference config id label))
 
     (not (string/includes? s "."))
@@ -1120,8 +1120,8 @@
         (when-not (string/blank? page-name)
           (page-embed (assoc config :link-depth (inc link-depth)) page-name)))
 
-      (gp-block/block-ref-string? a)
-      (when-let [s (-> gp-block/block-ref->block-id string/trim)]
+      (gp-block/string-block-ref? a)
+      (when-let [s (-> gp-block/get-string-block-ref-id string/trim)]
         (when-let [id (some-> s parse-uuid)]
           (block-embed (assoc config :link-depth (inc link-depth)) id)))
 
@@ -2152,8 +2152,7 @@
         editor-id (str "editor-" edit-input-id)
         slide? (:slide? config)
         trimmed-content (string/trim (:block/content block))
-        block-reference-only? (and (gp-block/block-ref-string? trimmed-content)
-                                   (re-find (re-pattern util/uuid-pattern) trimmed-content))]
+        block-reference-only? (gp-block/block-ref? trimmed-content)]
     (if (and edit? editor-box)
       [:div.editor-wrapper {:id editor-id}
        (ui/catch-error

@@ -189,9 +189,9 @@
                                                 (string/lower-case)))
                              (some-> (:arguments (second i))
                                      (first)
-                                     gp-block/block-ref-string?))
+                                     gp-block/string-block-ref?))
                         (let [arguments (:arguments (second i))
-                              block-uuid (gp-block/block-ref->block-id (first arguments))]
+                              block-uuid (gp-block/get-string-block-ref-id (first arguments))]
                           (conj! result block-uuid)
                           i)
                         :else
