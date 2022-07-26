@@ -26,12 +26,8 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
     html: '',
   }
 
-  aspectRatio = 480 / 853
-
-  canChangeAspectRatio = false
-
+  canChangeAspectRatio = true
   canFlip = false
-
   canEdit = true
 
   ReactComponent = observer(({ events, isErasing, isEditing }: TLComponentProps) => {
@@ -48,6 +44,7 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
         {...events}
       >
         <div
+          className='html-container'
           style={{
             width: '100%',
             height: '100%',
@@ -73,8 +70,8 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
 
   validateProps = (props: Partial<HTMLShapeProps>) => {
     if (props.size !== undefined) {
-      props.size[0] = Math.max(props.size[0], 1)
-      props.size[1] = Math.max(props.size[0] * this.aspectRatio, 1)
+      props.size[0] = Math.max(props.size[0], 120)
+      props.size[1] = Math.max(props.size[1], 80)
     }
     return withClampedStyles(props)
   }

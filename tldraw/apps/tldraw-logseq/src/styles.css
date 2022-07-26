@@ -614,3 +614,8 @@ html[data-theme='light'] .logseq-tldraw .tl-logseq-portal-header {
 html[data-theme='dark'] .logseq-tldraw .tl-logseq-portal-header {
   backdrop-filter: brightness(1.2);
 }
+
+.logseq-tldraw .html-container > iframe {
+  height: 100% !important;
+  width: 100% !important;
+}
