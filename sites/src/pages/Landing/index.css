@@ -338,10 +338,8 @@
             > i {
               @apply flex-1 h-[4px] bg-gray-500/30 rounded-md overflow-hidden;
 
-              &:first-child:before {
-                @apply flex h-[4px] w-1/6 bg-logseq-200/80;
-
-                content: " ";
+              > small {
+                @apply flex h-[4px] bg-logseq-200/80 transition-all;
               }
             }
           }

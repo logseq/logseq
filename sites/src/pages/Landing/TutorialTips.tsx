@@ -10,7 +10,109 @@ import { AnimateInTurnBox } from '../../components/Animations'
 import cx from 'classnames'
 import Swiper from 'swiper'
 import 'swiper/swiper-bundle.css'
-import { useEffect, useRef, useState } from 'react'
+import { ReactNode, useEffect, useRef, useState } from 'react'
+import { useMounted } from '../../hooks'
+
+export function TipSlideItem (props: {
+  active: boolean,
+  headEmoji: string,
+  headTitle: string,
+  content: ReactNode | string,
+  tips: Array<ReactNode | string>,
+  complete?: () => void,
+  className?: string
+}) {
+  const { headEmoji, headTitle, content, className, tips, ...rest } = props
+  const [activeTip, setActiveTip] = useState({ active: 0, progress: 0 })
+  const [_tipProgressTimer, setProgressTimer] = useState<number>(0) // interval timer
+  const isMounted = useMounted()
+
+  useEffect(() => {
+    if (!isMounted.current) return
+
+    const clear = () => {
+      setProgressTimer((timer) => {
+        clearInterval(timer)
+        return 0
+      })
+    }
+
+    const tickHandler = () => {
+      // async
+      setActiveTip(({ active, progress }) => {
+        let toProgress = progress + 2
+        let toActive = active
+
+        if (toProgress > 100) {
+          if (active) {
+            clear()
+            props.complete?.()
+            toProgress = 100
+          } else {
+            toProgress = 0
+            toActive = 1
+          }
+        }
+
+        return { active: toActive, progress: toProgress }
+      })
+    }
+
+    function run () {
+      clear()
+      const timer = setInterval(tickHandler, 200)
+      setProgressTimer(timer as any)
+    }
+
+    console.log('run ....')
+    run()
+
+    return clear
+  }, [])
+
+  return (
+    <div className={cx('item swiper-slide a', className)} {...rest}>
+      {/*  Beginner */}
+      <h1 className="flex">
+        <strong className="text-3xl pr-4">{headEmoji}</strong>
+        <LSButton
+          className={'text-sm cursor-text'}
+          leftIcon={<StarFour size={16}/>}
+        >
+          {headTitle}
+        </LSButton>
+      </h1>
+
+      <h2 className="pt-2 text-3xl text-gray-300">
+        {content}
+      </h2>
+
+      <strong className="progress">
+        <i><small style={{
+          width: (!activeTip.active ? activeTip.progress : 100) + '%',
+        }}>1</small></i>
+        <i><small
+          style={{
+            width: (!activeTip.active ? 0 : activeTip.progress) + '%',
+          }}>2</small></i>
+      </strong>
+
+      <h3 className="flex text-lg space-x-2 px-1 py-2 tracking-wide">
+        {tips.map((it, idx) => {
+          if (activeTip.active !== idx) return
+
+          return (
+            <span className={'animate-in duration-1000 fade-in-0'}>
+              <strong>Tip{idx + 1}: </strong>
+              <span className="text-gray-300/70">{it}</span>
+            </span>
+          )
+        })}
+      </h3>
+    </div>
+
+  )
+}
 
 export function TutorialTips () {
   const swiperElRef = useRef<HTMLDivElement>(null)
@@ -24,7 +126,7 @@ export function TutorialTips () {
     // @ts-ignore
     const sw = swiperRef.current = new Swiper(
       swiperElRef.current!, {
-        loop: true,
+        loop: false,
       },
     )
 
@@ -67,33 +169,19 @@ export function TutorialTips () {
         <div ref={swiperElRef} className="bd-slides swiper">
           <div className="items swiper-wrapper">
             {/* 1 */}
-            <div className="item swiper-slide a">
-              {/*  Beginner */}
-              <h1 className="flex">
-                <strong className="text-3xl pr-4">✍️</strong>
-                <LSButton
-                  className={'text-sm cursor-text'}
-                  leftIcon={<StarFour size={16}/>}
-                >
-                  Beginner
-                </LSButton>
-              </h1>
-
-              <h2 className="pt-2 text-3xl text-gray-300">
-                Get in the habit of writing <br/>
-                thoughts down every day.
-              </h2>
-
-              <strong className="progress">
-                <i>1</i>
-                <i>2</i>
-              </strong>
-
-              <h3 className="flex text-lg space-x-2 px-1 py-2 tracking-wide">
-                <strong>Tip1:</strong>
-                <span className="text-gray-300/70">Think in sections, use indentation.</span>
-              </h3>
-            </div>
+            <TipSlideItem
+              active={false}
+              headEmoji={'✍️'}
+              headTitle={'Beginner'}
+              content={<span>Get in the habit of writing <br/>thoughts down every day.</span>}
+              tips={[
+                'Think in sections, use indentation.',
+                'Use links & hashtags.',
+              ]}
+              complete={() => {
+                swiperRef.current?.slideNext()
+              }}
+            />
 
             {/* 2 */}
             <div className="item swiper-slide a">

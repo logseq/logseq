@@ -103,6 +103,7 @@ export function DailyShowcase () {
         {showcases.map(it => {
           return (
             <div className={cx('it flex flex-col flex-1', { active: it.label === activeShowcase })}
+                 key={it.label}
                  onClick={() => {
                    setActiveShowcase(it.label)
                  }}
@@ -126,7 +127,7 @@ export function DailyShowcase () {
           }
 
           return (
-            <>
+            <div className={'panel'} key={it.label}>
               <div className="desc flex justify-center text-center pt-12 text-4xl leading-10 tracking-wide">
                 <div className="animate-in fade-in">
                   {it.desc}
@@ -177,7 +178,7 @@ export function DailyShowcase () {
                   </div>
                 </div>
               </div>
-            </>
+            </div>
           )
         })}
 
