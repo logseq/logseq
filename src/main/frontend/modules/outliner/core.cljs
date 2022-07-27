@@ -15,7 +15,7 @@
             [logseq.graph-parser.util :as gp-util]
             [cljs.spec.alpha :as s]))
 
-(s/def ::block-map (s/keys :req [:db/id :block/uuid]
+(s/def ::block-map (s/keys :req [:db/id]
                            :opt [:block/page :block/left :block/parent]))
 
 (s/def ::block-map-or-entity (s/or :entity de/entity?
