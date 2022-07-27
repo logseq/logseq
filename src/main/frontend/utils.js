@@ -310,5 +310,18 @@ export const nodePath = Object.assign({}, path, {
   extname (input) {
     input = toPosixPath(input)
     return path.extname(input)
+  },
+
+  join (input, ...paths) {
+    let orURI = null
+
+    try {
+      orURI = new URL(input)
+      input = orURI.pathname
+    } catch (_e) {}
+
+    input = path.join(input, ...paths)
+
+    return (orURI ? (orURI.protocol + '//') : '') + input
   }
 })

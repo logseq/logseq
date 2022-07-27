@@ -266,8 +266,7 @@
                             (let [path       (:path f)
                                   ext        (string/lower-case (util/get-file-ext path))
                                   supported? (gp-config/mldoc-support? ext)
-                                  full-path  (js/decodeURI
-                                              (str (config/get-repo-dir current-repo) path))
+                                  full-path  (util/node-path.join (config/get-repo-dir current-repo) path)
                                   page-name  (db/get-file-page full-path)]
                               {:title [:div.files-history
                                        {:key i :class (when (= i 0) "is-first")}
