@@ -12,25 +12,46 @@ import Swiper from 'swiper'
 import 'swiper/swiper-bundle.css'
 import { ReactNode, useEffect, useRef, useState } from 'react'
 import { useMounted } from '../../hooks'
+import { promiseImages } from './index'
 
 export function TipSlideItem (props: {
-  active: boolean,
+  inActive: boolean,
   headEmoji: string,
   headTitle: string,
   content: ReactNode | string,
   tips: Array<ReactNode | string>,
   complete?: () => void,
+  activeTipChanged?: (tag: string) => void
   className?: string
 }) {
-  const { headEmoji, headTitle, content, className, tips, ...rest } = props
+  const {
+    inActive,
+    headEmoji,
+    headTitle,
+    content,
+    className,
+    tips,
+    ...rest
+  } = props
   const [activeTip, setActiveTip] = useState({ active: 0, progress: 0 })
   const [_tipProgressTimer, setProgressTimer] = useState<number>(0) // interval timer
   const isMounted = useMounted()
 
+  const resetState = () => {
+    setActiveTip({ active: 0, progress: 0 })
+    setProgressTimer(0)
+  }
+
   useEffect(() => {
     if (!isMounted.current) return
 
-    const clear = () => {
+    if (!inActive) {
+      clear()
+      resetState()
+      return
+    }
+
+    function clear () {
       setProgressTimer((timer) => {
         clearInterval(timer)
         return 0
@@ -60,7 +81,7 @@ export function TipSlideItem (props: {
 
     function run () {
       clear()
-      const timer = setInterval(tickHandler, 200)
+      const timer = setInterval(tickHandler, 300)
       setProgressTimer(timer as any)
     }
 
@@ -68,7 +89,11 @@ export function TipSlideItem (props: {
     run()
 
     return clear
-  }, [])
+  }, [inActive])
+
+  useEffect(() => {
+    inActive && props.activeTipChanged?.(activeTip.active.toString())
+  }, [activeTip.active, inActive])
 
   return (
     <div className={cx('item swiper-slide a', className)} {...rest}>
@@ -102,7 +127,7 @@ export function TipSlideItem (props: {
           if (activeTip.active !== idx) return
 
           return (
-            <span className={'animate-in duration-1000 fade-in-0'}>
+            <span className={'animate-in duration-1000 fade-in-0'} key={idx}>
               <strong>Tip{idx + 1}: </strong>
               <span className="text-gray-300/70">{it}</span>
             </span>
@@ -110,7 +135,6 @@ export function TipSlideItem (props: {
         })}
       </h3>
     </div>
-
   )
 }
 
@@ -118,6 +142,7 @@ export function TutorialTips () {
   const swiperElRef = useRef<HTMLDivElement>(null)
   const swiperRef = useRef<Swiper>(null)
   const [activeIndex, setActiveIndex] = useState(0)
+  const [activeTipTag, setActiveTipTag] = useState('00')
   const sidesLen = 3
 
   useEffect(() => {
@@ -170,7 +195,7 @@ export function TutorialTips () {
           <div className="items swiper-wrapper">
             {/* 1 */}
             <TipSlideItem
-              active={false}
+              inActive={activeIndex === 0}
               headEmoji={'✍️'}
               headTitle={'Beginner'}
               content={<span>Get in the habit of writing <br/>thoughts down every day.</span>}
@@ -181,66 +206,47 @@ export function TutorialTips () {
               complete={() => {
                 swiperRef.current?.slideNext()
               }}
+              activeTipChanged={(tag) => {
+                setActiveTipTag?.(`0${tag}`)
+              }}
+
             />
 
             {/* 2 */}
-            <div className="item swiper-slide a">
-              <h1 className="flex">
-                <strong className="text-3xl pr-4">🔍️</strong>
-                <LSButton
-                  className={'text-sm cursor-text'}
-                  leftIcon={<Sparkle size={16}/>}
-                >
-                  Intermediate
-                </LSButton>
-              </h1>
-
-              <h2 className="pt-2 text-3xl text-gray-300">
-                Always find what you’re <br/>
-                looking for.
-              </h2>
-
-              <strong className="progress">
-                <i>1</i>
-                <i>2</i>
-              </strong>
-
-              <h3 className="flex text-lg space-x-2 px-1 py-2 tracking-wide">
-                <strong>Tip1:</strong>
-                <span className="text-gray-300/70">
-                  Use CMD-K to search with ease.
-                </span>
-              </h3>
-            </div>
+            <TipSlideItem
+              inActive={activeIndex === 1}
+              headEmoji={'🔍️'}
+              headTitle={'Intermediate'}
+              content={<span>Always find what you’re <br/> looking for.</span>}
+              tips={[
+                'Use CMD-K to search with ease.',
+                <span className={'text-lg'}>Go through linked references to find valuable information nuggets from the past.</span>,
+              ]}
+              complete={() => {
+                swiperRef.current?.slideNext()
+              }}
+              activeTipChanged={(tag) => {
+                setActiveTipTag?.(`1${tag}`)
+              }}
+            />
 
             {/*  3 */}
-            <div className="item swiper-slide a">
-              <h1 className="flex">
-                <strong className="text-3xl pr-4">💼️</strong>
-                <LSButton
-                  className={'text-sm cursor-text'}
-                  leftIcon={<Brain size={16}/>}
-                >
-                  Expert
-                </LSButton>
-              </h1>
-
-              <h2 className="pt-2 text-3xl text-gray-300">
-                Create your own processes.
-              </h2>
-
-              <strong className="progress">
-                <i>1</i>
-                <i>2</i>
-              </strong>
-
-              <h3 className="text-lg space-x-2 px-1 py-2 tracking-wide">
-                <strong>Tip1:</strong>
-                <span className="text-gray-300/70">
-                  Use queries to generate tables of <br/> relevant information.
-                </span>
-              </h3>
-            </div>
+            <TipSlideItem
+              inActive={activeIndex === 2}
+              headEmoji={'💼️'}
+              headTitle={'Expert'}
+              content={<span>Create your own processes.</span>}
+              tips={[
+                <span>Use queries to generate tables of <br/> relevant information.</span>,
+                'Install plugins and customize the app around your workflow needs.',
+              ]}
+              complete={() => {
+                swiperRef.current?.slideNext()
+              }}
+              activeTipChanged={(tag) => {
+                setActiveTipTag?.(`2${tag}`)
+              }}
+            />
           </div>
         </div>
 
@@ -260,7 +266,7 @@ export function TutorialTips () {
                      'w-2 h-2 bg-logseq-100/50 rounded-2xl cursor-pointer select-none hover:opacity-80',
                      (i === activeIndex) && '!bg-white/90')}
                    onClick={() => {
-                     swiperRef.current?.slideTo(i + 1)
+                     swiperRef.current?.slideTo(i)
                    }}
                 ></i>
               )
@@ -276,7 +282,8 @@ export function TutorialTips () {
 
         <div className="bd-info">
           <div className="flex">
-            <img src={imageS1} alt="image"/>
+            <img className={'animate-in fade-in-0 duration-1000'}
+                 src={promiseImages[activeTipTag]} alt="image"/>
           </div>
 
           <FloatGlassButton className="absolute right-6 bottom-5">

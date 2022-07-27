@@ -314,7 +314,7 @@
 
       flex-basis: 486px;
       width: 0;
-      height: 240px;
+      height: 256px;
 
       .items {
         @apply w-full;
@@ -333,7 +333,7 @@
           }
 
           .progress {
-            @apply flex space-x-2 my-4;
+            @apply flex space-x-2 mt-4 mb-2;
 
             > i {
               @apply flex-1 h-[4px] bg-gray-500/30 rounded-md overflow-hidden;
@@ -351,7 +351,7 @@
       @apply justify-between px-2 py-2 mt-3 absolute;
 
       width: 482px;
-      top: 240px;
+      top: 258px;
 
       .prev, .next {
         @apply opacity-80 cursor-pointer select-none hover:opacity-90 active:opacity-90;

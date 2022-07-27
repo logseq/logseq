@@ -1,11 +1,11 @@
 import {
   fullBgImageB,
   HeadShowcase, LandingFooterDesc,
-  LandingFooterNav,
+  LandingFooterNav, promiseImages,
   TutorialShowcase,
   TutorialTips,
 } from './Landing'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimateInTurnBox } from '../components/Animations'
 import cx from 'classnames'
 import { DailyShowcase } from './Landing/DailyShowcase'
@@ -39,17 +39,20 @@ export function HomePage () {
               return (
                 <>
                   <h1
-                    className={cx('text-[60px] flex flex-col justify-center text-center pb-6 invisible',
+                    className={cx(
+                      'text-[60px] flex flex-col justify-center text-center pb-6 invisible',
                       t[0] && 'ani-slide-in-from-bottom')}
                   >
-                    <span className="opacity-60">Overwhelmed and constantly </span>
+                    <span
+                      className="opacity-60">Overwhelmed and constantly </span>
                     <strong className="opacity-90">afraid of losing your
                       thoughts?</strong>
                   </h1>
 
                   <h2
                     className={
-                      cx('flex flex-col justify-center text-center text-2xl tracking-wide invisible',
+                      cx(
+                        'flex flex-col justify-center text-center text-2xl tracking-wide invisible',
                         t[1] && 'ani-fade-in')}>
                     <span className="opacity-60">Everyday you’re bombarded with information.</span>
                     <span className="opacity-60">Your non-connected notes lead to missing context when</span>
@@ -67,7 +70,7 @@ export function HomePage () {
       </div>
 
       <div className="page-inner">
-        <DailyShowcase />
+        <DailyShowcase/>
       </div>
 
       <div className="page-inner-full-wrap b relative">
