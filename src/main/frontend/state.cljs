@@ -1691,3 +1691,8 @@
 (defn unlinked-dir?
   [dir]
   (contains? (:file/unlinked-dirs @state) dir))
+
+(defn enable-search-remove-accents?
+  []
+  (:feature/enable-search-remove-accents?
+    (get (sub-config) (get-current-repo))))
