@@ -517,7 +517,7 @@
           conn (conn/get-db repo false)
           datoms (d/datoms @conn :avet :block/page from-id)
           block-eids (mapv :e datoms)
-          blocks (db-utils/pull-many repo '[:db/id :block/page :block/refs :block/left :block/parent] block-eids)
+          blocks (db-utils/pull-many repo '[:db/id :block/page :block/refs :block/path-refs :block/left :block/parent] block-eids)
           tx-data (map (fn [block]
                          (let [id (:db/id block)]
                            (cond->

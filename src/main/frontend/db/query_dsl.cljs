@@ -360,7 +360,7 @@
   (let [page-name (-> (text/page-ref-un-brackets! e)
                       (util/page-name-sanity-lc))]
     {:query (list 'page-ref '?b page-name)
-     :rules [:parent :page-ref]}))
+     :rules [:page-ref]}))
 
 (defn- build-block-content [e]
   {:query (list 'block-content '?b e)
@@ -517,14 +517,9 @@ Some bindings in this fn:
                                 (keyword (ffirst result))
                                 (keyword (first result)))]
                       (add-bindings! form
-                                     (if (= key :and) (rest result) result))))
-          rules' (->> (map rules/query-dsl-rules rules)
-                      (reduce (fn [acc x] (if (vector? (first x))
-                                            (concat acc x)
-                                            (conj acc x))) [])
-                      vec)]
+                                     (if (= key :and) (rest result) result))))]
       {:query result'
-       :rules rules'
+       :rules (map rules/query-dsl-rules rules)
        :sort-by @sort-by
        :blocks? (boolean @blocks?)
        :sample sample})))

@@ -140,12 +140,5 @@
 
    :page-ref
    '[(page-ref ?b ?page-name)
-     [?b :block/refs ?br]
-     [?br :block/name ?page-name]]
-
-   :parent
-   '[[(parent ?p ?c)
-      [?c :block/parent ?p]]
-     [(parent ?p ?c)
-      [?c :block/parent ?t]
-      (parent ?p ?t)]]})
+     [?b :block/path-refs ?br]
+     [?br :block/name ?page-name]]})

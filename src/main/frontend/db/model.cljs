@@ -39,6 +39,7 @@
     :block/format
     :block/refs
     :block/_refs
+    :block/path-refs
     :block/tags
     :block/content
     :block/marker
@@ -1134,7 +1135,7 @@
                              '[:find [(pull ?block ?block-attrs) ...]
                                :in $ [?ref-page ...] ?block-attrs
                                :where
-                               [?block :block/refs ?ref-page]]
+                               [?block :block/path-refs ?ref-page]]
                              pages
                              (butlast block-attrs)))
              query-result (->> query-result
@@ -1160,9 +1161,7 @@
            '[:find [?block ...]
              :in $ [?ref-page ...]
              :where
-             [?block :block/refs ?ref-page]
-             [?block :block/page ?p]
-             [(not= ?p ?ref-page)]]
+             [?block :block/refs ?ref-page]]
            db
            pages))))))
 

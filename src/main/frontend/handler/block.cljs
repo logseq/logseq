@@ -252,7 +252,7 @@
   [repo page-entity ref-blocks]
   (->> ref-blocks
        (mapcat second)
-       (mapcat :block/refs)
+       (mapcat :block/path-refs)
        (map :db/id)
        (remove #{(:db/id page-entity)})
        (db/pull-many repo '[:db/id :block/name :block/original-name])))
@@ -269,12 +269,12 @@
       (cond->> ref-blocks
         (seq exclude-ids)
         (remove (fn [block]
-                  (let [ids (set (map :db/id (:block/refs block)))]
+                  (let [ids (set (map :db/id (:block/path-refs block)))]
                     (seq (set/intersection exclude-ids ids)))))
 
         (seq include-ids)
         (remove (fn [block]
-                  (let [ids (set (map :db/id (:block/refs block)))]
+                  (let [ids (set (map :db/id (:block/path-refs block)))]
                     (empty? (set/intersection include-ids ids)))))))))
 
 (defn get-filtered-ref-blocks

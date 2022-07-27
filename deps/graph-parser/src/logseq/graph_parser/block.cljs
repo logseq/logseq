@@ -489,7 +489,7 @@
                                 (remove nil?)
                                 (distinct))]
         (recur (rest blocks)
-               (conj acc (assoc block :block/refs path-ref-pages))
+               (conj acc (assoc block :block/path-refs path-ref-pages))
                parents)))))
 
 (defn- with-pre-block-if-exists

@@ -94,18 +94,21 @@
           [_original-page-name page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
           blocks (->> (gp-block/extract-blocks ast content false format (dissoc options :page-name-order))
                       (gp-block/with-parent-and-left {:block/name page-name}))
-          blocks (map (fn [b] (update b :block/refs conj {:block/name page-name})) blocks)
           ref-pages (atom #{})
           ref-tags (atom #{})
           blocks (map (fn [block]
-                        (let [block-ref-pages (seq (:block/refs block))]
+                        (let [block-ref-pages (seq (:block/refs block))
+                              page-lookup-ref [:block/name page-name]
+                              block-path-ref-pages (->> (cons page-lookup-ref (seq (:block/path-refs block)))
+                                                        (remove nil?))]
                           (when block-ref-pages
                             (swap! ref-pages set/union (set block-ref-pages)))
                           (-> block
                               (dissoc :ref-pages)
                               (assoc :block/format format
                                      :block/page [:block/name page-name]
-                                     :block/refs block-ref-pages))))
+                                     :block/refs block-ref-pages
+                                     :block/path-refs block-path-ref-pages))))
                       blocks)
           page-entity (build-page-entity properties file page-name page ref-tags options)
           namespace-pages (let [page (:block/original-name page-entity)]

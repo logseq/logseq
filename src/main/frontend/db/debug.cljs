@@ -37,7 +37,8 @@
      (:block/namespace block)]
     (:block/tags block)
     (:block/alias block)
-    (:block/refs block))
+    (:block/refs block)
+    (:block/path-refs block))
    (remove nil?)
    (some (fn [x]
            (and

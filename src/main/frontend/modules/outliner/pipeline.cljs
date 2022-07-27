@@ -11,7 +11,7 @@
   [_tx-report page]
   (file/sync-to-file page))
 
-(defn compute-block-refs
+(defn compute-block-path-refs
   [tx-meta blocks]
   (let [repo (state/get-current-repo)
         blocks (remove :block/name blocks)]
@@ -23,23 +23,22 @@
               tx (mapcat (fn [block]
                            (when-not (@*computed-ids (:db/id block)) ; not computed yet
                              (let [parents (db-model/get-block-parents repo (:block/uuid block))
-                                   parents-refs (->> (mapcat :block/refs parents)
+                                   parents-refs (->> (mapcat :block/path-refs parents)
                                                      (map :db/id))
-                                   old-refs (set (map :db/id (:block/refs block)))
-                                   new-refs (set (concat old-refs
-                                                         [(:db/id (:block/page block))]
+                                   old-refs (set (map :db/id (:block/path-refs block)))
+                                   new-refs (set (concat [(:db/id (:block/page block))]
                                                          parents-refs))
                                    refs-changed? (not= old-refs new-refs)
                                    children (db-model/get-block-children-ids repo (:block/uuid block))
                                    children-refs (map (fn [id]
                                                         {:db/id id
-                                                         :block/refs (concat (map :db/id (:refs (db/entity id)))
-                                                                             new-refs)}) children)]
+                                                         :block/path-refs (concat (map :db/id (:block/path-refs (db/entity id)))
+                                                                                  new-refs)}) children)]
                                (swap! *computed-ids set/union (set (cons (:db/id block) children)))
                                (util/concat-without-nil
                                 [(when (and refs-changed? (seq new-refs))
                                    {:db/id (:db/id block)
-                                    :block/refs new-refs})]
+                                    :block/path-refs new-refs})]
                                 children-refs))))
                          blocks)]
           (prn "refs tx: " tx)
@@ -51,10 +50,12 @@
              (not (:new-graph? (:tx-meta tx-report))))
     (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
           repo (state/get-current-repo)
-          refs-tx (set (compute-block-refs (:tx-meta tx-report) blocks))]
-      (when (seq refs-tx)
-        (db/transact! repo refs-tx {:outliner/transact? true
-                                    :compute-new-refs? true}))
+          refs-tx (set (compute-block-path-refs (:tx-meta tx-report) blocks))
+          truncate-refs-tx (map (fn [m] [:db/retract (:db/id m) :block/path-refs]) refs-tx)
+          tx (util/concat-without-nil truncate-refs-tx refs-tx)]
+      (when (seq tx)
+        (db/transact! repo tx {:outliner/transact? true
+                               :compute-new-refs? true}))
       (doseq [p (seq pages)]
         (updated-page-hook tx-report p))
       (when (and state/lsp-enabled? (seq blocks))
