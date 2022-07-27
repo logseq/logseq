@@ -84,9 +84,9 @@
         [:<>
 
          [:div.folder-tip.flex.flex-col.items-center
-          [:h3.-mt-1.5
-           [:span.flex.space-x-2 (ui/icon "cloud-lock") [:span GraphName]]]
-          [:h4.px-2.-mb-1.5 [:strong "UUID: "] GraphUUID]]
+          [:h3
+           [:span.flex.space-x-2 (ui/icon "cloud-lock")
+            [:span GraphName]]]]
 
          [:div.input-hints.text-sm.py-2.px-3.rounded.mb-2.mt-2.flex.items-center
           (if-let [display-str (:fail set-remote-graph-pwd-result)]
