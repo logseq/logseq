@@ -76,7 +76,7 @@
                          (if (seq children)
                            (assoc b :block/children children)
                            b)))
-                  (children parent-id)))]
+                  (children {:db/id parent-id})))]
     (nodes root-id)))
 
 (defn non-consecutive-blocks->vec-tree

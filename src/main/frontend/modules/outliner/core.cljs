@@ -141,8 +141,10 @@
           other-tx (:db/other-tx m)
           id (:db/id (:data this))
           block-entity (db/entity id)
-          old-refs (:block/refs block-entity)
-          new-refs (:block/refs m)]
+          remove-self-page #(remove (fn [b]
+                                      (= (:db/id b) (:db/id (:block/page block-entity)))) %)
+          old-refs (remove-self-page (:block/refs block-entity))
+          new-refs (remove-self-page (:block/refs m))]
       (when (seq other-tx)
         (swap! txs-state (fn [txs]
                            (vec (concat txs other-tx)))))
