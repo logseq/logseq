@@ -5,7 +5,7 @@
             [clojure.walk :as walk]
             [clojure.string :as string]
             [goog.string :as gstring]
-            [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.text :as text]))
 
@@ -31,7 +31,7 @@
   [text]
   (string/replace text uid-pattern (fn [[_ uid]]
                                      (let [id (get @uid->uuid uid uid)]
-                                       (gp-block/->block-ref id)))))
+                                       (block-ref/->block-ref id)))))
 
 (defn macro-transform
   [text]

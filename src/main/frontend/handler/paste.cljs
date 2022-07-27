@@ -5,6 +5,7 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.util.block-ref :as block-ref]
             [clojure.string :as string]
             [frontend.util :as util]
             [frontend.handler.editor :as editor-handler]
@@ -80,9 +81,9 @@
                (not (string/blank? (util/get-selected-text))))
           (editor-handler/html-link-format! text)
 
-          (and (gp-block/block-ref? text)
-               (editor-handler/wrapped-by? input gp-block/left-parens gp-block/right-parens))
-          (commands/simple-insert! (state/get-edit-input-id) (gp-block/get-block-ref-id text) nil)
+          (and (block-ref/block-ref? text)
+               (editor-handler/wrapped-by? input block-ref/left-parens block-ref/right-parens))
+          (commands/simple-insert! (state/get-edit-input-id) (block-ref/get-block-ref-id text) nil)
 
           :else
           ;; from external

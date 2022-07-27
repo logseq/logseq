@@ -51,6 +51,7 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.block :as gp-block]))
@@ -364,7 +365,7 @@
                                (nil? (:size first-elem-meta)))
         block-with-title? (mldoc/block-with-title? first-elem-type)
         content (string/triml content)
-        content (string/replace content (gp-block/->block-ref uuid) "")
+        content (string/replace content (block-ref/->block-ref uuid) "")
         [content content'] (cond
                              (and first-block? properties?)
                              [content content]
@@ -1032,9 +1033,9 @@
                             (map (fn [{:keys [id level]}]
                                    (condp = (:block/format block)
                                      :org
-                                     (str (string/join (repeat level "*")) " " (gp-block/->block-ref id))
+                                     (str (string/join (repeat level "*")) " " (block-ref/->block-ref id))
                                      :markdown
-                                     (str (string/join (repeat (dec level) "\t")) "- " (gp-block/->block-ref id)))))
+                                     (str (string/join (repeat (dec level) "\t")) "- " (block-ref/->block-ref id)))))
                             (string/join "\n\n"))]
       (set-blocks-id! (map :id blocks))
       (util/copy-to-clipboard! copy-str))))
@@ -1094,7 +1095,7 @@
         page-pattern #"\[\[([^\]]+)]]"
         tag-pattern #"#\S+"
         page-matches (util/re-pos page-pattern text)
-        block-matches (util/re-pos gp-block/block-ref-re text)
+        block-matches (util/re-pos block-ref/block-ref-re text)
         tag-matches (util/re-pos tag-pattern text)
         additional-matches (mapcat #(util/re-pos % text) additional-patterns)
         matches (->> (concat page-matches block-matches tag-matches additional-matches)
@@ -1559,7 +1560,7 @@
             (commands/handle-step [:editor/search-page])
             (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
-          (= prefix gp-block/left-parens)
+          (= prefix block-ref/left-parens)
           (do
             (commands/handle-step [:editor/search-block :reference])
             (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})))))))
@@ -1876,11 +1877,11 @@
 
       ;; block reference
       (insert-command! id
-                       (gp-block/->block-ref uuid-string)
+                       (block-ref/->block-ref uuid-string)
                        format
-                       {:last-pattern (str gp-block/left-parens (if @*selected-text "" q))
-                        :end-pattern gp-block/right-parens
-                        :postfix-fn   (fn [s] (util/replace-first gp-block/right-parens s ""))
+                       {:last-pattern (str block-ref/left-parens (if @*selected-text "" q))
+                        :end-pattern block-ref/right-parens
+                        :postfix-fn   (fn [s] (util/replace-first block-ref/right-parens s ""))
                         :forward-pos 3})
 
       ;; Save it so it'll be parsed correctly in the future
@@ -2346,7 +2347,7 @@
           (let [{:keys [raw-content start end]} embed-ref]
             (delete-and-update input start end)
             (if (= 5 (count raw-content))
-              (block-ref-fn gp-block/left-and-right-parens 2)
+              (block-ref-fn block-ref/left-and-right-parens 2)
               (insert raw-content)))
           (if-let [page-ref (thingatpt/block-ref-at-point input)]
             (let [{:keys [start end full-content raw-content]} page-ref]
@@ -2354,7 +2355,7 @@
               (if (= raw-content "")
                 (block-ref-fn "{{embed (())}}" 4)
                 (insert (util/format "{{embed %s}}" full-content))))
-            (block-ref-fn gp-block/left-and-right-parens 2)))))))
+            (block-ref-fn block-ref/left-and-right-parens 2)))))))
 
 (defn- keydown-new-block
   [state]
@@ -2892,9 +2893,9 @@
                    (contains? keycode/left-paren-keys k)
                    (= (:key last-key-code) k)
                    (> current-pos 0)
-                   (not (wrapped-by? input gp-block/left-parens gp-block/right-parens)))
+                   (not (wrapped-by? input block-ref/left-parens block-ref/right-parens)))
               (do
-                (commands/handle-step [:editor/input gp-block/left-and-right-parens {:backward-truncate-number 2
+                (commands/handle-step [:editor/input block-ref/left-and-right-parens {:backward-truncate-number 2
                                                              :backward-pos 2}])
                 (commands/handle-step [:editor/search-block :reference])
                 (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
@@ -2967,13 +2968,13 @@
     (when-let [block-id (:block/uuid current-block)]
       (if (= format "embed")
        (copy-block-ref! block-id #(str "{{embed ((" % "))}}"))
-       (copy-block-ref! block-id gp-block/->block-ref))
+       (copy-block-ref! block-id block-ref/->block-ref))
       (notification/show!
        [:div
         [:span.mb-1.5 (str "Block " format " copied!")]
         [:div [:code.whitespace.break-all (if (= format "embed")
                                          (str "{{embed ((" block-id "))}}")
-                                         (gp-block/->block-ref block-id))]]]
+                                         (block-ref/->block-ref block-id))]]]
        :success true
        ;; use uuid to make sure there is only one toast a time
        (str "copied-block-ref:" block-id)))))
@@ -3421,13 +3422,13 @@
 (defn copy-current-ref
   [block-id]
   (when block-id
-    (util/copy-to-clipboard! (gp-block/->block-ref block-id))))
+    (util/copy-to-clipboard! (block-ref/->block-ref block-id))))
 
 (defn delete-current-ref!
   [block ref-id]
   (when (and block ref-id)
     (let [match (re-pattern (str "\\s?"
-                                 (string/replace (gp-block/->block-ref ref-id) #"([\(\)])" "\\$1")))
+                                 (string/replace (block-ref/->block-ref ref-id) #"([\(\)])" "\\$1")))
           content (string/replace-first (:block/content block) match "")]
       (save-block! (state/get-current-repo)
                    (:block/uuid block)
@@ -3436,7 +3437,7 @@
 (defn replace-ref-with-text!
   [block ref-id]
   (when (and block ref-id)
-    (let [match (gp-block/->block-ref ref-id)
+    (let [match (block-ref/->block-ref ref-id)
           ref-block (db/entity [:block/uuid ref-id])
           block-ref-content (->> (or (:block/content ref-block)
                                      "")
@@ -3451,7 +3452,7 @@
 (defn replace-ref-with-embed!
   [block ref-id]
   (when (and block ref-id)
-    (let [match (gp-block/->block-ref ref-id)
+    (let [match (block-ref/->block-ref ref-id)
           content (string/replace-first (:block/content block) match
                                         (util/format "{{embed ((%s))}}"
                                                      (str ref-id)))]
