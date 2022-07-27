@@ -65,6 +65,7 @@
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.graph-parser.util.block-ref :as block-ref]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -788,7 +789,7 @@
                         :delay       [1000, 100]} inner)
              inner)])
         [:span.warning.mr-1 {:title "Block ref invalid"}
-         (gp-block/->block-ref id)]))))
+         (block-ref/->block-ref id)]))))
 
 (defn inline-text
   ([format v]
@@ -931,8 +932,8 @@
          (not= \* (last s)))
     (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
 
-    (gp-block/block-ref? s)
-    (let [id (gp-block/get-block-ref-id s)]
+    (block-ref/block-ref? s)
+    (let [id (block-ref/get-block-ref-id s)]
       (block-reference config id label))
 
     (not (string/includes? s "."))
@@ -1120,8 +1121,8 @@
         (when-not (string/blank? page-name)
           (page-embed (assoc config :link-depth (inc link-depth)) page-name)))
 
-      (gp-block/string-block-ref? a)
-      (when-let [s (-> gp-block/get-string-block-ref-id string/trim)]
+      (block-ref/string-block-ref? a)
+      (when-let [s (-> block-ref/get-string-block-ref-id string/trim)]
         (when-let [id (some-> s parse-uuid)]
           (block-embed (assoc config :link-depth (inc link-depth)) id)))
 
@@ -2152,7 +2153,7 @@
         editor-id (str "editor-" edit-input-id)
         slide? (:slide? config)
         trimmed-content (string/trim (:block/content block))
-        block-reference-only? (gp-block/block-ref? trimmed-content)]
+        block-reference-only? (block-ref/block-ref? trimmed-content)]
     (if (and edit? editor-box)
       [:div.editor-wrapper {:id editor-id}
        (ui/catch-error

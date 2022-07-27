@@ -5,7 +5,7 @@
             [frontend.config :as config]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [cljs.reader :as reader]
             [goog.object :as gobj]))
@@ -48,7 +48,7 @@
          :end line-end-pos}))))
 
 (defn block-ref-at-point [& [input]]
-  (when-let [block-ref (thing-at-point [gp-block/left-parens gp-block/right-parens] input " ")]
+  (when-let [block-ref (thing-at-point [block-ref/left-parens block-ref/right-parens] input " ")]
     (when-let [uuid (uuid (:raw-content block-ref))]
       (assoc block-ref
              :type "block-ref"
