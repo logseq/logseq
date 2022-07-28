@@ -81,26 +81,6 @@
          (content/content block-id
                           {:hiccup ref-hiccup})]))))
 
-(defn- scheduled-or-deadlines?
-  [page-name]
-  (and (date/valid-journal-title? (string/capitalize page-name))
-       (not (true? (state/scheduled-deadlines-disabled?)))
-       (= (string/lower-case page-name) (string/lower-case (date/journal-name)))))
-
-(rum/defc scheduled-and-deadlines-cp
-  [page-name scheduled-or-deadlines]
-  (ui/foldable
-   [:h2.font-bold.opacity-50 "SCHEDULED AND DEADLINE"]
-   [:div.references-blocks.mb-6
-    (let [ref-hiccup (block/->hiccup scheduled-or-deadlines
-                                     {:id (str page-name "-agenda")
-                                      :ref? true
-                                      :group-by-page? true
-                                      :editor-box editor/box}
-                                     {})]
-      (content/content page-name {:hiccup ref-hiccup}))]
-   {:title-trigger? true}))
-
 (rum/defc references-cp
   [repo page-entity page-name filtered-ref-blocks n-ref filters-atom filters filter-state]
   (let [threshold (state/get-linked-references-collapsed-threshold)
@@ -159,8 +139,6 @@
           filters-atom (get state ::filters)
           filter-state (rum/react filters-atom)
           block-id (parse-uuid page-name)
-          scheduled-or-deadlines (when (scheduled-or-deadlines? page-name)
-                                   (db/get-date-scheduled-or-deadlines (string/capitalize page-name)))
           ref-blocks (util/profile "ref blocks"
                                    (if block-id
                         (db/get-block-referenced-blocks block-id)
@@ -174,18 +152,12 @@
                                 ref-blocks
                                 (block-handler/get-filtered-ref-blocks repo page-name ref-blocks filters ref-pages))
           n-ref (if block-id (count ref-blocks) (count (mapcat second filtered-ref-blocks)))]
-      (when (or (seq ref-blocks)
-                (seq scheduled-or-deadlines)
-                (seq filter-state))
+      (when (or (seq ref-blocks) (seq filter-state))
         [:div.references.flex-1.flex-row
          [:div.content.pt-6
-          (when (seq scheduled-or-deadlines)
-            (scheduled-and-deadlines-cp page-name scheduled-or-deadlines))
+          (references-cp repo page-entity page-name filtered-ref-blocks n-ref filters-atom filters filter-state)]]))))
 
-          (when (seq ref-blocks)
-            (references-cp repo page-entity page-name filtered-ref-blocks n-ref filters-atom filters filter-state))]]))))
-
-(rum/defc references < rum/reactive db-mixins/query
+(rum/defc references
   [page-name]
   (ui/catch-error
    (ui/component-error "Linked References: Unexpected error")

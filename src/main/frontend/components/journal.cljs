@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
+            [frontend.components.scheduled-deadlines :as scheduled]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -61,6 +62,9 @@
       {})
 
      (page/today-queries repo today? false)
+
+     (when today?
+       (scheduled/scheduled-and-deadlines page))
 
      (rum/with-key
        (reference/references title)
