@@ -14,7 +14,7 @@
   (let [graph-dir "src/test/docs"
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir)
         files (gp-cli/build-graph-files graph-dir)
-        _ (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false})
+        _ (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false :verbose false})
         db (conn/get-db test-helper/test-db)]
 
     (docs-graph-helper/docs-graph-assertions db (map :file/path files))))
