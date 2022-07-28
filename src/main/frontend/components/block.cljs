@@ -2579,7 +2579,9 @@
 
       (when @*show-left-menu?
         (block-left-menu config block))
+
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)
+
       (when @*show-right-menu?
         (block-right-menu config block edit?))]
 

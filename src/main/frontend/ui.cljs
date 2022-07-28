@@ -82,12 +82,21 @@
                      :on-composition-end on-composition)]
     (textarea props)))
 
-(rum/defc dropdown-content-wrapper [state content class]
+(rum/defc dropdown-content-wrapper
+  < {:did-mount    (fn [_state]
+                     (let [k    (inc (count (state/sub :modal/dropdowns)))
+                           args (:rum/args _state)]
+                       (state/set-state! [:modal/dropdowns k] (second args))
+                       (assoc _state ::k k)))
+     :will-unmount (fn [_state]
+                     (state/update-state! :modal/dropdowns #(dissoc % (::k _state)))
+                     _state)}
+  [dropdown-state _close-fn content class]
   (let [class (or class
                   (util/hiccup->class "origin-top-right.absolute.right-0.mt-2.rounded-md.shadow-lg"))]
     [:div.dropdown-wrapper
      {:class (str class " "
-                  (case state
+                  (case dropdown-state
                     "entering" "transition ease-out duration-100 transform opacity-0 scale-95"
                     "entered" "transition ease-out duration-100 transform opacity-100 scale-100"
                     "exiting" "transition ease-in duration-75 transform opacity-100 scale-100"
@@ -100,14 +109,15 @@
    & [{:keys [modal-class z-index trigger-class]
        :or   {z-index 999}}]]
   (let [{:keys [open?]} state
-        modal-content (modal-content-fn state)]
+        modal-content (modal-content-fn state)
+        close-fn (:close-fn state)]
     [:div.relative.ui__dropdown-trigger {:style {:z-index z-index} :class trigger-class}
      (content-fn state)
      (css-transition
       {:in @open? :timeout 0}
       (fn [dropdown-state]
         (when @open?
-          (dropdown-content-wrapper dropdown-state modal-content modal-class))))]))
+          (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class))))]))
 
 (rum/defc menu-link
   [options child]

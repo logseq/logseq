@@ -52,6 +52,7 @@
      :search/graph-filters                  []
 
      ;; modals
+     :modal/dropdowns                       {}
      :modal/id                              nil
      :modal/label                           ""
      :modal/show?                           false
