@@ -98,14 +98,14 @@
           (cond
             (util/electron?)
             (p/let [path (ipc/ipc "openDialog")]
-              (set-selected-path path))
+                   (set-selected-path path))
 
             (mobile-util/native-ios?)
             (p/let [{:keys [path _localDocumentsPath]}
                     (p/chain
                      (.pickFolder mobile-util/folder-picker)
                      #(js->clj % :keywordize-keys true))]
-              (set-selected-path path))
+                   (set-selected-path path))
 
             :else
             nil)))]]
@@ -163,15 +163,15 @@
 (rum/defcs indicator <
   rum/reactive
   [_state]
-  (let [_                            (state/sub :auth/id-token)
-        current-repo                 (state/get-current-repo)
-        sync-state                   (state/sub [:file-sync/sync-state current-repo])
-        _                            (rum/react file-sync-handler/refresh-file-sync-component)
-        synced-file-graph?           (file-sync-handler/synced-file-graph? current-repo)
+  (let [_                      (state/sub :auth/id-token)
+        current-repo           (state/get-current-repo)
+        sync-state             (state/sub [:file-sync/sync-state current-repo])
+        _                      (rum/react file-sync-handler/refresh-file-sync-component)
+        synced-file-graph?     (file-sync-handler/synced-file-graph? current-repo)
         [graph-user-uuid graph-uuid] @fs-sync/graphs-txid
-        uploading-files              (:current-local->remote-files sync-state)
-        downloading-files            (:current-remote->local-files sync-state)
-        queuing-files                (:queued-local->remote-files sync-state)
+        uploading-files        (:current-local->remote-files sync-state)
+        downloading-files      (:current-remote->local-files sync-state)
+        queuing-files          (:queued-local->remote-files sync-state)
 
         status                 (:state sync-state)
         status                 (or (nil? status) (keyword (name status)))
@@ -191,31 +191,31 @@
                                           (create-remote-graph-panel current-repo graph-name close-fn))]
 
                                     (state/set-modal! confirm-fn {:center? true :close-btn? false})))
-        turn-on #(async/go
-                   (cond
-                     @*beta-unavailable?
-                     (state/pub-event! [:file-sync/onboarding-tip :unavailable])
+        turn-on                #(async/go
+                                  (cond
+                                    @*beta-unavailable?
+                                    (state/pub-event! [:file-sync/onboarding-tip :unavailable])
 
-                     ;; current graph belong to other user, do nothing
-                     (and graph-user-uuid
-                          (not (fs-sync/check-graph-belong-to-current-user (user/user-uuid) graph-user-uuid)))
-                     nil
+                                    ;; current graph belong to other user, do nothing
+                                    (and graph-user-uuid
+                                         (not (fs-sync/check-graph-belong-to-current-user (user/user-uuid) graph-user-uuid)))
+                                    nil
 
-                     (and synced-file-graph? (async/<! (fs-sync/<check-remote-graph-exists graph-uuid)))
-                     (fs-sync/sync-start)
+                                    (and synced-file-graph? (async/<! (fs-sync/<check-remote-graph-exists graph-uuid)))
+                                    (fs-sync/sync-start)
 
-                     ;; remote graph already has been deleted, clear repos first, then create-remote-graph
-                     synced-file-graph? ; <check-remote-graph-exists -> false
-                     (do (state/set-repos!
-                          (map (fn [r]
-                                 (if (= (:url r) current-repo)
-                                   (dissoc r :GraphUUID :GraphName :remote?)
-                                   r))
-                               (state/get-repos)))
-                         (create-remote-graph-fn))
+                                    ;; remote graph already has been deleted, clear repos first, then create-remote-graph
+                                    synced-file-graph?      ; <check-remote-graph-exists -> false
+                                    (do (state/set-repos!
+                                         (map (fn [r]
+                                                (if (= (:url r) current-repo)
+                                                  (dissoc r :GraphUUID :GraphName :remote?)
+                                                  r))
+                                              (state/get-repos)))
+                                        (create-remote-graph-fn))
 
-                     :else
-                     (create-remote-graph-fn)))]
+                                    :else
+                                    (create-remote-graph-fn)))]
 
     [:div.cp__file-sync-indicator
      (when (and (not config/publishing?)
@@ -287,8 +287,8 @@
                         :small? true
                         :on-click #(async/offer! fs-sync/immediately-local->remote-chan true))])
 
-                                        ;(when config/dev?
-                                        ;  [:strong.debug-status (str status)])
+          ;(when config/dev?
+          ;  [:strong.debug-status (str status)])
           ]}))]))
 
 (rum/defc pick-local-graph-for-sync [graph]
@@ -298,49 +298,57 @@
      #(file-sync-handler/set-wait-syncing-graph nil))
    [graph])
 
-  [:div.p-5
-   [:h1.mb-4.text-4xl "Sync a remote graph to local"]
+  [:div.cp__file-sync-related-normal-modal
+   [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "cloud-download")]]
 
-   [:div.py-3
-    [:p.px-2.pb-2
-     [:strong "Name: " (:GraphName graph)] [:br]
-     [:small.italic "UUID: " (:GraphUUID graph)]]
+   [:h1.mb-5.text-2xl.text-center.font-bold "Sync a remote graph to local"]
 
-    [:div
-     (ui/button
-      (str "Open a local directory")
-      :on-click #(-> (page-handler/ls-dir-files!
-                      (fn [{:keys [url]}]
-                        (file-sync-handler/init-remote-graph url)
-                        ;; TODO: wait for switch done
-                        (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
+   [:div.folder-tip.flex.flex-col.items-center
+    {:style {:border-bottom-right-radius 0 :border-bottom-left-radius 0}}
+    [:h3
+     [:span.flex.space-x-2.leading-none.pb-1
+      (ui/icon "cloud-lock")
+      [:span (:GraphName graph)]
+      [:span.scale-75 (ui/icon "arrow-right")]
+      [:span (ui/icon "folder")]]]
+    [:h4.px-2.-mb-1.5 [:strong "UUID: "] (:GraphUUID graph)]]
 
-                      {:empty-dir?-or-pred
-                       (fn [ret]
-                         (let [empty-dir? (nil? (second ret))]
-                           (if-let [root (first ret)]
+   [:div.-mt-1
+    (ui/button
+     (str "Open a local directory")
+     :class "w-full rounded-t-none py-4"
+     :on-click #(-> (page-handler/ls-dir-files!
+                     (fn [{:keys [url]}]
+                       (file-sync-handler/init-remote-graph url)
+                       ;; TODO: wait for switch done
+                       (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
 
-                             ;; verify directory
-                             (-> (if empty-dir?
-                                   (p/resolved nil)
-                                   (if (util/electron?)
-                                     (ipc/ipc :readGraphTxIdInfo root)
-                                     (fs-util/read-graph-txid-info root)))
+                     {:empty-dir?-or-pred
+                      (fn [ret]
+                        (let [empty-dir? (nil? (second ret))]
+                          (if-let [root (first ret)]
 
-                                 (p/then (fn [^js info]
-                                           (when (and (not empty-dir?)
-                                                      (or (nil? info)
-                                                          (nil? (second info))
-                                                          (not= (second info) (:GraphUUID graph))))
-                                             (throw (js/Error. "AssertDirectoryError"))))))
+                            ;; verify directory
+                            (-> (if empty-dir?
+                                  (p/resolved nil)
+                                  (if (util/electron?)
+                                    (ipc/ipc :readGraphTxIdInfo root)
+                                    (fs-util/read-graph-txid-info root)))
 
-                             ;; cancel pick a directory
-                             (throw (js/Error. nil)))))})
+                                (p/then (fn [^js info]
+                                          (when (and (not empty-dir?)
+                                                     (or (nil? info)
+                                                         (nil? (second info))
+                                                         (not= (second info) (:GraphUUID graph))))
+                                            (throw (js/Error. "AssertDirectoryError"))))))
 
-                     (p/catch (fn [^js e]
-                                (when (= "AssertDirectoryError" (.-message e))
-                                  (notifications/show! "Please select an empty directory or an existing remote graph!" :error))))))
-     [:p.text-xs.opacity-50.px-1 (ui/icon "alert-circle") " An empty directory or an existing remote graph!"]]]])
+                            ;; cancel pick a directory
+                            (throw (js/Error. nil)))))})
+
+                    (p/catch (fn [^js e]
+                               (when (= "AssertDirectoryError" (.-message e))
+                                 (notifications/show! "Please select an empty directory or an existing remote graph!" :error))))))
+    [:p.text-xs.opacity-50.px-1 (ui/icon "alert-circle") " An empty directory or an existing remote graph!"]]])
 
 (defn pick-dest-to-sync-panel [graph]
   (fn []

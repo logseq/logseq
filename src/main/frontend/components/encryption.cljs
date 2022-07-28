@@ -8,6 +8,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.config :as config]
             [promesa.core :as p]
             [cljs.core.async :as async]
             [rum.core :as rum]))
@@ -71,7 +72,7 @@
       [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "lock-access")]]
 
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
-       [:h3#modal-headline.text-2xl.font-bold.text-center
+       [:h1#modal-headline.text-2xl.font-bold.text-center
         (if init-graph-keys
           (if remote-pw?
             "Secure this remote graph!"
@@ -85,8 +86,12 @@
 
          [:div.folder-tip.flex.flex-col.items-center
           [:h3
-           [:span.flex.space-x-2 (ui/icon "cloud-lock")
-            [:span GraphName]]]]
+           [:span.flex.space-x-2.leading-none.pb-1
+            (ui/icon "cloud-lock")
+            [:span GraphName]
+            [:span.scale-75 (ui/icon "arrow-right")]
+            [:span (ui/icon "folder")]]]
+          [:h4.px-2.-mb-1.5 (config/get-repo-dir repo-url)]]
 
          [:div.input-hints.text-sm.py-2.px-3.rounded.mb-2.mt-2.flex.items-center
           (if-let [display-str (:fail set-remote-graph-pwd-result)]

@@ -144,7 +144,9 @@
      :warning)))
 
 (defmethod handle :graph/pick-dest-to-sync [[_ graph]]
-  (state/set-modal! (file-sync/pick-dest-to-sync-panel graph)))
+  (state/set-modal!
+   (file-sync/pick-dest-to-sync-panel graph)
+   {:center? true}))
 
 (defmethod handle :graph/pick-page-histories [[_ graph-uuid page-name]]
   (state/set-modal!
