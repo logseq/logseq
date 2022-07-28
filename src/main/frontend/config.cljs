@@ -312,6 +312,25 @@
          (->> (take-last 2 (string/split repo-url #"/"))
               (string/join "_")))))
 
+(defn get-string-repo-dir
+  [repo-dir]
+  (if (mobile-util/native-ios?)
+    (str (if (mobile-util/iCloud-container-path? repo-dir)
+           "iCloud"
+           (cond (mobile-util/native-iphone?)
+                 "On My iPhone"
+
+                 (mobile-util/native-ipad?)
+                 "On My iPad"
+
+                 :else
+                 "Local"))
+         (->> (string/split repo-dir "Documents/")
+              last
+              js/decodeURIComponent
+              (str "/" (string/capitalize app-name) "/")))
+    repo-dir))
+
 (defn get-repo-path
   [repo-url path]
   (if (and (or (util/electron?) (mobile-util/native-platform?))

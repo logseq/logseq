@@ -40,7 +40,7 @@
              (.complete))
    [])
 
-  (let [graph-dir      (js/decodeURIComponent (config/get-repo-dir repo))
+  (let [graph-dir      (config/get-repo-dir repo)
         [selected-path set-selected-path] (rum/use-state "")
         selected-path? (and (not (string/blank? selected-path))
                             (not (mobile-util/iCloud-container-path? selected-path)))
@@ -59,7 +59,7 @@
                                  nil)
                                (.then #(do
                                          (notifications/show! (str "Cloned to => "
-                                                                   (js/decodeURIComponent dest-dir))
+                                                                   (config/get-string-repo-dir dest-dir))
                                                               :success)
                                          (web-nfs/ls-dir-files-with-path! dest-dir)
                                          (close-fn)))
@@ -78,14 +78,14 @@
      [:div.folder-tip.flex.flex-col.items-center
       [:h3
        [:span (ui/icon "folder") [:label.pl-0.5 (js/decodeURIComponent graph-name)]]]
-      [:h4.px-6 graph-dir]
+      [:h4.px-6 (config/get-string-repo-dir graph-dir)]
 
       (when (not (string/blank? selected-path))
         [:h5.text-xs.pt-1.-mb-1.flex.items-center.leading-none
          (if (mobile-util/iCloud-container-path? selected-path)
            [:span.inline-block.pr-1.text-red-600.scale-75 (ui/icon "alert-circle")]
            [:span.inline-block.pr-1.text-green-600.scale-75 (ui/icon "circle-check")])
-         (js/decodeURIComponent selected-path)])
+         (config/get-string-repo-dir selected-path)])
 
       [:div.out-icloud
        (ui/button
@@ -98,14 +98,14 @@
           (cond
             (util/electron?)
             (p/let [path (ipc/ipc "openDialog")]
-                   (set-selected-path path))
+              (set-selected-path path))
 
             (mobile-util/native-ios?)
             (p/let [{:keys [path _localDocumentsPath]}
                     (p/chain
                      (.pickFolder mobile-util/folder-picker)
                      #(js->clj % :keywordize-keys true))]
-                   (set-selected-path path))
+              (set-selected-path path))
 
             :else
             nil)))]]
@@ -154,7 +154,7 @@
        [:span (ui/icon "folder") [:label.pl-0.5 graph-name]]
        [:span.opacity-50.scale-75 (ui/icon "arrow-right")]
        [:span (ui/icon "cloud-lock")]]
-      [:h4.px-4 (js/decodeURIComponent (config/get-repo-dir repo))]]
+      [:h4.px-4 (config/get-string-repo-dir repo)]]
 
      [:p.flex.items-center.space-x-2.pt-6.flex.justify-center.sm:justify-end.-mb-2
       (ui/button "Cancel" :background "gray" :class "opacity-50" :on-click close-fn)

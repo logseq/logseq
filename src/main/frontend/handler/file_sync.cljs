@@ -174,7 +174,7 @@
      (str "Start syncing the remote graph "
           (:GraphName graph)
           " to "
-          (js/decodeURIComponent (config/get-local-dir local)))
+          (config/get-string-repo-dir (config/get-local-dir local)))
      :warning)
 
     (init-graph (:GraphUUID graph))

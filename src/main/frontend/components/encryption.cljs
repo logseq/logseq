@@ -91,7 +91,7 @@
             [:span GraphName]
             [:span.scale-75 (ui/icon "arrow-right")]
             [:span (ui/icon "folder")]]]
-          [:h4.px-2.-mb-1.5 (config/get-repo-dir repo-url)]]
+          [:h4.px-2.-mb-1.5 (config/get-string-repo-dir repo-url)]]
 
          [:div.input-hints.text-sm.py-2.px-3.rounded.mb-2.mt-2.flex.items-center
           (if-let [display-str (:fail set-remote-graph-pwd-result)]
