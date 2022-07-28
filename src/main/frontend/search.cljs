@@ -11,6 +11,7 @@
             [frontend.search.protocol :as protocol]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.property :as property]
             [goog.object :as gobj]
             [promesa.core :as p]))
 
@@ -169,7 +170,9 @@
   ([q limit]
    (when q
      (let [q (clean-str q)
-           properties (map name (db-model/get-all-properties))]
+           properties (->> (db-model/get-all-properties)
+                           (remove (property/hidden-properties))
+                           (map name))]
        (when (seq properties)
          (if (string/blank? q)
            properties
