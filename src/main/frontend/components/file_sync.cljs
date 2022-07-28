@@ -179,7 +179,7 @@
         full-syncing?          (contains? #{:local->remote-full-sync :remote->local-full-sync} status)
         syncing?               (or full-syncing? (contains? #{:local->remote :remote->local} status))
         idle?                  (contains? #{:idle} status)
-        need-password?         (contains? #{:need-password} status)
+        _need-password?         (contains? #{:need-password} status)
         queuing?               (and idle? (boolean (seq queuing-files)))
         no-active-files?       (empty? (concat downloading-files queuing-files uploading-files))
         create-remote-graph-fn #(when (and current-repo (not (config/demo-graph? current-repo)))
@@ -265,16 +265,16 @@
              (map-indexed (fn [i f] (:time f)
                             (let [path       (:path f)
                                   ext        (string/lower-case (util/get-file-ext path))
-                                  supported? (gp-config/mldoc-support? ext)
+                                  _supported? (gp-config/mldoc-support? ext)
                                   full-path  (util/node-path.join (config/get-repo-dir current-repo) path)
                                   page-name  (db/get-file-page full-path)]
-                              {:title [:div.files-history
-                                       {:key i :class (when (= i 0) "is-first")}
-                                       [:a.file-sync-item
-                                        {:href (if page-name
-                                                 (rfe/href :page {:name page-name})
-                                                 (rfe/href :file {:path full-path}))}
-                                        (js/decodeURIComponent (:path f))]
+                              {:title [:div.files-history.cursor-pointer
+                                       {:key i :class (when (= i 0) "is-first")
+                                        :on-click (fn []
+                                                    (if page-name
+                                                      (rfe/push-state :page {:name page-name})
+                                                      (rfe/push-state :file {:path full-path})))}
+                                       [:span.file-sync-item (js/decodeURIComponent (:path f))]
                                        [:div.opacity-50 (util/time-ago (:time f))]]}))
                           (take 10 (:history sync-state))))))
 
