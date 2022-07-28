@@ -15,7 +15,7 @@
   (when repo
     (let [repo-dir (config/get-repo-dir repo)]
       (util/p-handle
-       (fs/mkdir! (str repo-dir (str "/" gp-config/default-draw-directory)))
+       (fs/mkdir! (util/node-path.join repo-dir gp-config/default-draw-directory))
        (fn [_result] nil)
        (fn [_error] nil)))))
 
@@ -62,6 +62,6 @@
   [current-file]
   (when-let [repo (state/get-current-repo)]
     (p/let [exists? (fs/file-exists? (config/get-repo-dir repo)
-                                     (str gp-config/default-draw-directory current-file))]
+                                     (util/node-path.join gp-config/default-draw-directory current-file))]
       (when-not exists?
         (save-excalidraw! current-file default-content)))))

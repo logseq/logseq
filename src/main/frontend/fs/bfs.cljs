@@ -22,14 +22,14 @@
   (rmdir! [_this dir]
     (js/window.workerThread.rimraf dir))
   (read-file [_this dir path options]
-    (js/window.pfs.readFile (str dir "/" path) (clj->js options)))
+    (js/window.pfs.readFile (util/node-path.join dir path) (clj->js options)))
   (write-file! [_this _repo dir path content _opts]
     (when-not (util/electron?)
-      (js/window.pfs.writeFile (str dir "/" path) content)))
+      (js/window.pfs.writeFile (util/node-path.join dir path) content)))
   (rename! [_this _repo old-path new-path]
     (js/window.pfs.rename old-path new-path))
   (stat [_this dir path]
-    (js/window.pfs.stat (str dir path)))
+    (js/window.pfs.stat (util/node-path.join dir path)))
   (open-dir [_this _ok-handler]
     nil)
   (get-files [_this _path-or-handle _ok-handler]

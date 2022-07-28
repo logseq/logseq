@@ -118,7 +118,7 @@
                 (and electron-local-repo? (or
                                            util/win32?
                                            (not= "/" (first file))))
-                (str (config/get-repo-dir repo-url) "/" file)
+                (util/node-path.join (config/get-repo-dir repo-url) file)
 
                 (and (mobile/native-android?) (not= "/" (first file)))
                 file
@@ -273,7 +273,7 @@
         path (str config/app-name "/" config/metadata-file)
         file-path (str "/" path)
         default-content (if encrypted? "{:db/encrypted? true}" "{}")]
-    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
+    (p/let [_ (fs/mkdir-if-not-exists (util/node-path.join repo-dir config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
         (reset-file! repo-url path default-content)))))
@@ -284,7 +284,7 @@
         path (str config/app-name "/" config/pages-metadata-file)
         file-path (str "/" path)
         default-content "{}"]
-    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
+    (p/let [_ (fs/mkdir-if-not-exists (util/node-path.join repo-dir config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
         (reset-file! repo-url path default-content)))))

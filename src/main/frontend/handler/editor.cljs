@@ -1366,7 +1366,7 @@
   (let [repo-dir (config/get-repo-dir repo)
         assets-dir "assets"]
     (p/then
-     (fs/mkdir-if-not-exists (str repo-dir "/" assets-dir))
+     (fs/mkdir-if-not-exists (util/node-path.join repo-dir assets-dir))
      (fn [] [repo-dir assets-dir]))))
 
 (defn get-asset-path [filename]

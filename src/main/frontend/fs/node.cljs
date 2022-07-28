@@ -21,9 +21,7 @@
     path
 
     :else
-    (str (string/replace dir #"/$" "")
-         (when path
-           (str "/" (string/replace path #"^/" ""))))))
+    (util/node-path.join dir path)))
 
 (defn- contents-matched?
   [disk-content db-content]

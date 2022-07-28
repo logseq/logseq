@@ -61,11 +61,9 @@
                                                       (= file "bak")))))
                              files (->> files
                                         (map (fn [file]
-                                               (str (string/replace d #"/+$" "")
-                                                    "/"
-                                                    (if (mobile-util/native-ios?)
-                                                      (util/url-encode file)
-                                                      file)))))
+                                               (util/node-path.join d (if (mobile-util/native-ios?)
+                                                                        (util/url-encode file)
+                                                                        file)))))
                              files-with-stats (p/all
                                                (mapv
                                                 (fn [file]
@@ -113,7 +111,7 @@
   [repo-dir path ext]
   (let [relative-path (-> (string/replace path repo-dir "")
                           (string/replace (str "." ext) ""))]
-    (str repo-dir backup-dir "/" relative-path)))
+    (util/node-path.join repo-dir backup-dir relative-path)))
 
 (defn- truncate-old-versioned-files!
   "reserve the latest 3 version files"
@@ -128,7 +126,8 @@
 (defn backup-file
   [repo-dir path content ext]
   (let [backup-dir (get-backup-dir repo-dir path ext)
-        new-path (str backup-dir "/" (string/replace (.toISOString (js/Date.)) ":" "_") "." ext)]
+        new-path (util/node-path.join backup-dir
+                                      (str (string/replace (.toISOString (js/Date.)) ":" "_") "." ext))]
     (.writeFile Filesystem (clj->js {:data content
                                      :path new-path
                                      :encoding (.-UTF8 Encoding)
@@ -199,22 +198,20 @@
   (let [[dir path] (map #(some-> %
                                  js/decodeURI)
                         [dir path])
-        dir (some-> dir (string/replace #"/+$" ""))
-        path (some-> path (string/replace #"^/+" ""))
-        path (cond (nil? path)
-                   dir
+        path' (cond (nil? path)
+                    dir
+                    
+                    (nil? dir)
+                    path
 
-                   (nil? dir)
-                   path
+                    (string/starts-with? path dir)
+                    path
 
-                   (string/starts-with? path dir)
-                   path
-
-                   :else
-                   (str dir "/" path))]
+                    :else
+                    (util/node-path.join dir path))]
     (if (mobile-util/native-ios?)
-      (js/encodeURI (js/decodeURI path))
-      path)))
+      (js/encodeURI (js/decodeURI path'))
+      path')))
 
 (defn- local-container-path?
   "Check whether `path' is logseq's container `localDocumentsPath' on iOS"
@@ -263,11 +260,11 @@
                    (string/replace-first path "file://" "")
                    path)
             repo-dir (config/get-local-dir repo)
-            recycle-dir (str repo-dir config/app-name "/.recycle")
+            recycle-dir (util/node-path.join repo-dir config/app-name ".recycle")
             file-name (-> (string/replace path repo-dir "")
                           (string/replace "/" "_")
                           (string/replace "\\" "_"))
-            new-path (str recycle-dir "/" file-name)]
+            new-path (util/node-path.join recycle-dir file-name)]
       (protocol/mkdir! this recycle-dir)
       (protocol/rename! this repo path new-path)))
   (rmdir! [_this _dir]

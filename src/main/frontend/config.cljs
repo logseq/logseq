@@ -279,7 +279,7 @@
 
 (defn get-local-repo
   [dir]
-  (str local-db-prefix dir))
+  (util/node-path.join local-db-prefix dir))
 
 (defn get-repo-dir
   [repo-url]

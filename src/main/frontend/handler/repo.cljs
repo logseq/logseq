@@ -36,11 +36,11 @@
   (spec/validate :repos/url repo-url)
   (let [repo-dir (config/get-repo-dir repo-url)
         app-dir config/app-name
-        dir (str repo-dir "/" app-dir)]
+        dir (util/node-path.join repo-dir app-dir)]
     (p/let [_ (fs/mkdir-if-not-exists dir)]
       (let [default-content config/config-default-content
             path (str app-dir "/" config/config-file)]
-        (p/let [file-exists? (fs/create-if-not-exists repo-url repo-dir (str app-dir "/" config/config-file) default-content)]
+        (p/let [file-exists? (fs/create-if-not-exists repo-url repo-dir path default-content)]
           (when-not file-exists?
             (file-handler/reset-file! repo-url path default-content)
             (common-handler/reset-config! repo-url default-content)))))))
@@ -61,7 +61,7 @@
                               "org" (rc/inline "contents.org")
                               "markdown" (rc/inline "contents.md")
                               "")]
-        (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" pages-dir))
+        (p/let [_ (fs/mkdir-if-not-exists (util/node-path.join repo-dir pages-dir))
                 file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
           (when-not file-exists?
             (file-handler/reset-file! repo-url path default-content)))))))
@@ -73,7 +73,7 @@
         path (str config/app-name "/" config/custom-css-file)
         file-path (str "/" path)
         default-content ""]
-    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
+    (p/let [_ (fs/mkdir-if-not-exists (util/node-path.join repo-dir config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
         (file-handler/reset-file! repo-url path default-content)))))
@@ -82,9 +82,9 @@
   [repo-url content]
   (spec/validate :repos/url repo-url)
   (let [repo-dir (config/get-repo-dir repo-url)
-        path (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")
+        path (util/node-path.join (config/get-pages-directory) "how_to_make_dummy_notes.md")
         file-path (str "/" path)]
-    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-pages-directory)))
+    (p/let [_ (fs/mkdir-if-not-exists (util/node-path.join repo-dir (config/get-pages-directory)))
             _file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
       (file-handler/reset-file! repo-url path content))))
 
@@ -117,7 +117,7 @@
           empty-blocks? (db/page-empty? repo-url (util/page-name-sanity-lc title))]
       (when (or empty-blocks? (not page-exists?))
         (p/let [_ (nfs/check-directory-permission! repo-url)
-                _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
+                _ (fs/mkdir-if-not-exists (util/node-path.join repo-dir (config/get-journals-directory)))
                 file-exists? (fs/file-exists? repo-dir file-path)]
           (when-not file-exists?
             (p/let [_ (file-handler/reset-file! repo-url path content)]
@@ -133,9 +133,9 @@
   ([repo-url encrypted?]
    (spec/validate :repos/url repo-url)
    (let [repo-dir (config/get-repo-dir repo-url)]
-     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
-             _ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name "/" config/recycle-dir))
-             _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
+     (p/let [_ (fs/mkdir-if-not-exists (util/node-path.join repo-dir config/app-name))
+             _ (fs/mkdir-if-not-exists (util/node-path.join repo-dir config/app-name config/recycle-dir))
+             _ (fs/mkdir-if-not-exists (util/node-path.join repo-dir (config/get-journals-directory)))
              _ (file-handler/create-metadata-file repo-url encrypted?)
              _ (create-config-file-if-not-exists repo-url)
              _ (create-contents-file repo-url)
