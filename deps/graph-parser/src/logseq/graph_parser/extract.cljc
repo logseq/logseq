@@ -190,9 +190,6 @@
          (map (partial apply merge))
          (with-block-uuid))))
 
-#?(:org.babashka/nbb
-   (alter-var-root #'gp-mldoc/parse-property (constantly text/parse-property))
-   :default
-   ;; TODO: Properly fix this circular dependency:
-   ;; mldoc/->edn > text/parse-property > mldoc/link? ->mldoc/inline->edn + mldoc/default-config
-   (set! gp-mldoc/parse-property text/parse-property))
+;; TODO: Properly fix this circular dependency:
+;; mldoc/->edn > text/parse-property > mldoc/link? ->mldoc/inline->edn + mldoc/default-config
+(set! gp-mldoc/parse-property text/parse-property)

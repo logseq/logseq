@@ -17,6 +17,8 @@
             [frontend.state :as state]
             [frontend.util :refer [mac?] :as util]
             [frontend.commands :as commands]
+            [electron.ipc :as ipc]
+            [promesa.core :as p]
             [clojure.data :as data]
             [medley.core :as medley]))
 
@@ -291,6 +293,11 @@
    :graph/save                     {:fn #(state/pub-event! [:graph/save])
                                     :binding false}
 
+   :graph/re-index                 {:fn (fn []
+                                          (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
+                                                 (state/pub-event! [:graph/ask-for-re-index multiple-windows?])))
+                                    :binding false}
+
    :command/run                    {:binding "mod+shift+1"
                                     :inactive (not (util/electron?))
                                     :fn      #(do
@@ -459,6 +466,7 @@
                           :graph/remove
                           :graph/add
                           :graph/save
+                          :graph/re-index
                           :editor/cycle-todo
                           :editor/up
                           :editor/down
@@ -643,6 +651,7 @@
     :graph/remove
     :graph/add
     :graph/save
+    :graph/re-index
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index

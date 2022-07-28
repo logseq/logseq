@@ -22,4 +22,4 @@
     (conn/start! current-repo)))
 
 (defn load-test-files [files]
-  (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false}))
+  (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false :verbose false}))
