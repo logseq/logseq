@@ -26,7 +26,8 @@
                                    parents-refs (->> (mapcat :block/path-refs parents)
                                                      (map :db/id))
                                    old-refs (set (map :db/id (:block/path-refs block)))
-                                   new-refs (set (concat [(:db/id (:block/page block))]
+                                   new-refs (set (concat [{:db/id (:db/id (:block/page block))}]
+                                                         (:block/refs block)
                                                          parents-refs))
                                    refs-changed? (not= old-refs new-refs)
                                    children (db-model/get-block-children-ids repo (:block/uuid block))

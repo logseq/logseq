@@ -68,7 +68,7 @@
                  root-block (assoc root-block :block/children result)]
              [root-block])))))))
 
-(defn tree [flat-nodes root-id]
+(defn- tree [flat-nodes root-id]
   (let [children (group-by :block/parent flat-nodes)
         nodes (fn nodes [parent-id]
                 (map (fn [b]

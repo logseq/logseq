@@ -102,9 +102,9 @@
    {:title-trigger? true}))
 
 (rum/defc references-cp
-  [repo page-entity page-name filtered-ref-blocks n-ref filters-atom filters filter-state refed-blocks-ids]
+  [repo page-entity page-name filtered-ref-blocks n-ref filters-atom filters filter-state]
   (let [threshold (state/get-linked-references-collapsed-threshold)
-        default-collapsed? (>= (count refed-blocks-ids) threshold)]
+        default-collapsed? (>= n-ref threshold)]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
       [:h2.font-bold.opacity-50 (str n-ref " Linked Reference"
@@ -151,7 +151,7 @@
                  filters (when page-name
                            (atom (page-handler/get-filters (string/lower-case page-name))))]
              (assoc state ::filters filters)))}
-  [state page-name refed-blocks-ids]
+  [state page-name]
   (when page-name
     (let [page-name (string/lower-case page-name)
           page-entity (db/entity [:block/name page-name])
@@ -161,9 +161,10 @@
           block-id (parse-uuid page-name)
           scheduled-or-deadlines (when (scheduled-or-deadlines? page-name)
                                    (db/get-date-scheduled-or-deadlines (string/capitalize page-name)))
-          ref-blocks (if block-id
-                       (db/get-block-referenced-blocks block-id)
-                       (db/get-page-referenced-blocks page-name))
+          ref-blocks (util/profile "ref blocks"
+                                   (if block-id
+                        (db/get-block-referenced-blocks block-id)
+                        (db/get-page-referenced-blocks page-name)))
           ref-pages (when-not block-id
                       (block-handler/get-blocks-refed-pages repo page-entity ref-blocks))
           filters (when (seq filter-state)
@@ -181,20 +182,17 @@
           (when (seq scheduled-or-deadlines)
             (scheduled-and-deadlines-cp page-name scheduled-or-deadlines))
 
-          (when (seq refed-blocks-ids)
-            (references-cp repo page-entity page-name filtered-ref-blocks n-ref filters-atom filters filter-state refed-blocks-ids))]]))))
+          (when (seq ref-blocks)
+            (references-cp repo page-entity page-name filtered-ref-blocks n-ref filters-atom filters filter-state))]]))))
 
 (rum/defc references < rum/reactive db-mixins/query
   [page-name]
-  (let [refed-blocks-ids (when page-name (model-db/get-referenced-blocks-ids page-name))]
-    (when (or (seq refed-blocks-ids)
-              (scheduled-or-deadlines? page-name))
-      (ui/catch-error
-       (ui/component-error "Linked References: Unexpected error")
-       (ui/lazy-visible
-        (fn []
-          (references* page-name refed-blocks-ids))
-        (str "ref-" page-name))))))
+  (ui/catch-error
+   (ui/component-error "Linked References: Unexpected error")
+   (ui/lazy-visible
+    (fn []
+      (references* page-name))
+    (str "ref-" page-name))))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
