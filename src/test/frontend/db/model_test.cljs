@@ -122,18 +122,18 @@
       "(get-pages-relation) Must be only ns one/two/tree")
 
   (is (= '("one/two/tree" "page one")
-         (map second (model/remove-nested-namespaces-link [["generic page" "one/two/tree"]
+         (map second (#'model/remove-nested-namespaces-link [["generic page" "one/two/tree"]
                                                            ["generic page" "one/two"]
                                                            ["generic page" "one"]
                                                            ["generic page" "page one"]])))
       "(model/remove-nested-namespaces-link) Must be only ns one/two/tree")
 
   (is (= '("one/two/tree" "one/two" "one")
-         (model/get-parents-namespace-list "one/two/tree/four"))
+         (#'model/get-parents-namespace-list "one/two/tree/four"))
       "Must be one/two/tree one/two one")
 
   (is (= '("one/two" "one")
-         (model/get-unnecessary-namespaces-name '("one/two/tree" "one" "one/two" "non nested tag" "non nested link")))
+         (#'model/get-unnecessary-namespaces-name '("one/two/tree" "one" "one/two" "non nested tag" "non nested link")))
       "Must be  one/two one"))
 
 
