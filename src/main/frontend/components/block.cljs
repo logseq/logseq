@@ -245,7 +245,11 @@
                                       images (if-not (= (count images) 1)
                                                (let [^js _image (.closest (.-target e) ".asset-container")
                                                      image (. _image querySelector "img")]
-                                                 (cons image (remove #(= image %) images)))
+                                                 (->> images
+                                                      (sort-by (juxt #(.-y %) #(.-x %)))
+                                                      (split-with (complement #{image}))
+                                                      reverse
+                                                      (apply concat)))
                                                images)
                                       images (for [^js it images] {:src (.-src it)
                                                                    :w (.-naturalWidth it)
@@ -1549,7 +1553,7 @@
   (and
    (or
     (empty? properties)
-    (property/properties-built-in? properties))
+    (property/properties-hidden? properties))
 
    (empty? title)
 
@@ -1805,9 +1809,12 @@
 
 (rum/defc property-cp
   [config block k v]
-  (let [date (and (= k :date) (date/get-locale-string (str v)))]
+  (let [date (and (= k :date) (date/get-locale-string (str v)))
+        property-pages-enabled? (contains? #{true nil} (:property-pages/enabled? (state/get-config)))]
     [:div
-     (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})
+     (if property-pages-enabled?
+       (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})
+       [:span.page-property-key.font-medium (name k)])
      [:span.mr-1 ":"]
      (cond
        (int? v)
@@ -1927,7 +1934,7 @@
         (dom/has-class? target "fn"))
    (dom/has-class? target "image-resize")
    (dom/closest target "a")
-   (dom/closest target ".dsl-query")))
+   (dom/closest target ".query-table")))
 
 (defn- block-content-on-mouse-down
   [e block block-id _content edit-input-id]
@@ -2083,7 +2090,7 @@
           (timestamp-cp block "SCHEDULED" scheduled-ast)))
 
       (when (and (seq properties)
-                 (let [hidden? (property/properties-built-in? properties)]
+                 (let [hidden? (property/properties-hidden? properties)]
                    (not hidden?))
                  (not (and block-ref? (or (seq title) (seq body))))
                  (not (:slide? config)))
@@ -3189,6 +3196,7 @@
       (block-handler/load-more! db-id last-block-id))))
 
 (rum/defcs lazy-blocks < rum/reactive
+  (rum/local nil ::loading?)
   {:init (fn [state]
            (assoc state ::id (str (random-uuid))))}
   [state config flat-blocks blocks->vec-tree]
@@ -3198,13 +3206,16 @@
                       (map (fn [b]
                              (assoc b :ui/selected? (contains? selected-blocks (:block/uuid b)))) flat-blocks)
                       flat-blocks)
-        blocks (blocks->vec-tree flat-blocks)]
+        blocks (blocks->vec-tree flat-blocks)
+        *loading? (::loading? state)]
     (if-not db-id
       (block-list config blocks)
-      (let [bottom-reached (fn []
-                             ;; To prevent scrolling after inserting new blocks
-                             (when (> (- (util/time-ms) (:start-time config)) 100)
-                               (load-more-blocks! config flat-blocks)))
+      (let [loading-more-data! (fn []
+                                 ;; To prevent scrolling after inserting new blocks
+                                 (when (> (- (util/time-ms) (:start-time config)) 100)
+                                   (reset! *loading? true)
+                                   (load-more-blocks! config flat-blocks)
+                                   (reset! *loading? false)))
             has-more? (and
                        (>= (count flat-blocks) model/initial-blocks-length)
                        (some? (model/get-next-open-block (db/get-db) (last flat-blocks) db-id)))
@@ -3213,14 +3224,20 @@
          (ui/infinite-list
           "main-content-container"
           (block-list config blocks)
-          {:on-load bottom-reached
+          {:on-load loading-more-data!
            :bottom-reached (fn []
                              (when-let [node (gdom/getElement dom-id)]
-                               (ui/bottom-reached? node 1000)))
+                               (ui/bottom-reached? node 300)))
            :has-more has-more?
-           :more (if (or (:preview? config) (:sidebar? config))
+           :more (cond
+                   (or (:preview? config) (:sidebar? config))
                    "More"
-                   (ui/loading "Loading"))})]))))
+
+                   @*loading?
+                   (ui/lazy-loading-placeholder)
+
+                   :else
+                   "")})]))))
 
 (rum/defcs blocks-container <
   {:init (fn [state]

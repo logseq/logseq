@@ -1,11 +1,11 @@
 (ns frontend.extensions.calc-test
   (:require [clojure.test :as test :refer [are deftest testing]]
+            [clojure.string :as str]
             [clojure.edn :as edn]
             [frontend.extensions.calc :as calc]))
 
 (defn convert-bigNum [b]
-  (edn/read-string (str b))
-  )
+  (edn/read-string (str b)))
 
 (defn run [expr]
   {:pre [(string? expr)]}
@@ -130,6 +130,23 @@
       1.0  "exp(0)"
       2.0  "ln(exp(2))")))
 
+(deftest additional-operators
+  (testing "mod"
+    (are [value expr] (= value (run expr))
+      0.0    "1 mod 1"
+      1.0    "7 mod 3"
+      3.0    "7 mod 4"
+      0.5    "4.5 mod 2"
+      -3.0   "-7 mod 4"))
+  (testing "factorial"
+    (are [value expr] (= value (run expr))
+      1.0     "0!"
+      1.0     "1!"
+      6.0     "3.0!"
+      -120.0  "-5!"
+      124.0   "(2+3)!+4"
+      240.0   "10 * 4!")))
+
 (deftest variables
   (testing "variables can be remembered"
     (are [final-env expr] (let [env (calc/new-env)]
@@ -174,13 +191,78 @@
 
 (deftest last-value
   (testing "last value is set"
-    (are [values exprs] (let [env (calc/new-env)]
-                          (mapv (fn [expr]
-                                  (calc/eval env (calc/parse expr)))
-                                exprs))
-      [42 126] ["6*7" "last*3"]
-      [25 5]   ["3^2+4^2" "sqrt(last)"]
-      [6 12]   ["2*3" "# a comment" "" "   " "last*2"])))
+    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+      ["42" "126"]            ["6*7" "last*3"]
+      ["25" "5"]              ["3^2+4^2" "sqrt(last)"]
+      ["6" nil nil nil "12"]  ["2*3" "# a comment" "" "   " "last*2"])))
+
+(deftest formatting
+  (testing "display normal"
+    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+      [nil "1000000"]     [":format norm" "1e6" ]
+      [nil "1000000"]     [":format norm 7" "1e6"]
+      [nil "1e+6"]        [":format norm 6" "1e6"]
+      [nil "3.14"]        [":format norm 3" "PI"]
+      [nil "3"]           [":format norm 1" "E"]
+      [nil "0.000123"]    [":format norm 5" "0.000123"]
+      [nil "1.23e-4"]     [":format norm 4" "0.000123"]
+      [nil "123400000"]   [":format normal 9" "1.234e8"]
+      [nil "1.234e+8"]    [":format normal 8" "1.234e8"]))
+  (testing "display fixed"
+    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+      [nil "0.123450"]    [":format fix 6" "0.12345"]
+      [nil "0.1235"]      [":format fix 4" "0.12345"]
+      [nil "2.7183"]      [":format fixed 4" "E"]
+      [nil "0.001"]       [":format fix 3" "0.0005"]
+      [nil "4.000e-4"]    [":format fix 3" "0.0004"]
+      [nil "1.00e+21"]    [":format fixed 2" "1e21+0.1"]))
+  (testing "display scientific"
+    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+      [nil "1e+6"]        [":format sci" "1e6"]
+      [nil "3.142e+0"]    [":format sci 3" "PI"]
+      [nil "3.14e+2"]     [":format scientific" "3.14*10^2"])))
+
+(deftest fractions
+  (testing "mixed numbers"
+    (are [value expr] (= value (run expr))
+      0          "0 0/1"
+      1          "0 1/1"
+      1          "1 0/1"
+      2.5        "2 1/2"
+      2.5        "2 1/2"
+      -4.28      "-4 7/25"
+      2.00101    "2 101/100000"
+      -99.2      "-99 8/40"))
+  (testing "display fractions"
+    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+      [nil "4 3/8"]           [":format frac" "4.375"]
+      [nil "-7 1/4"]          [":format fraction" "-7.25"]
+      [nil "2"]               [":format fractions" "19/20 + 1 1/20"]
+      [nil "-2"]              [":format frac" "19/17 - 3 2/17"]
+      [nil "3.14157"]         [":format frac" "3.14157"]
+      [nil "3 14157/100000"]  [":format frac 100000" "3.14157"]))
+  (testing "display improper fractions"
+    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+      [nil "35/8"]            [":format improper" "4.375"]
+      [nil "-29/4"]           [":format imp" "-7.25"]
+      [nil "3.14157"]         [":format improper" "3.14157" ]
+      [nil "314157/100000"]   [":format imp 100000" "3.14157"])))
+
+(deftest base-conversion
+  (testing "mixed base input"
+    (are [value expr] (= value (run expr))
+      255.0     "0xff"
+      511.0     "0x0A + 0xF5 + 0x100"
+      83.0      "0o123"
+      324.0     "0x100 + 0o100 + 0b100"
+      32.0      "0b100 * 0b1000"))
+  (testing "mixed base output"
+    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+      ["12345" "0x3039"]          ["12345" ":hex"]
+      ["12345" "0o30071"]         ["12345" ":oct"]
+      ["12345" "0b11000000111001"]["12345" ":bin"]
+      [nil "0b100000000"]         [":bin" "0b10000 * 0b10000"]
+      [nil "-0xff"]               [":hex" "-255"])))
 
 (deftest comments
   (testing "comments are ignored"
@@ -201,4 +283,5 @@
       " . "
       "_ = 2"
       "__ = 4"
+      "PI = 3.14"
       "foo_3  = _")))

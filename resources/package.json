@@ -1,6 +1,6 @@
 {
   "name": "Logseq",
-  "version": "0.7.6",
+  "version": "0.7.9",
   "main": "electron.js",
   "author": "Logseq",
   "license": "AGPL-3.0",
@@ -53,6 +53,7 @@
     "electron-rebuild": "3.2.5"
   },
   "resolutions": {
-    "**/electron": "15.1.2"
+    "**/electron": "15.1.2",
+    "**/node-gyp": "9.0.0"
   }
 }

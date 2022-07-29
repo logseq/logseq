@@ -90,6 +90,7 @@
    :graph/remove                   "Remove a graph"
    :graph/add                      "Add a graph"
    :graph/save                     "Save current graph to disk"
+   :graph/re-index                 "Re-index current graph"
    :command/run                    "Run git command"
    :go/home                        "Go to home"
    :go/all-pages                   "Go to all pages"
@@ -106,7 +107,7 @@
    :ui/toggle-help                 "Toggle help"
    :ui/toggle-theme                "Toggle between dark/light theme"
    :ui/toggle-contents             "Toggle Contents in sidebar"
-  ;;  :ui/open-new-window             "Open another window"
+   ;;  :ui/open-new-window             "Open another window"
    :command/toggle-favorite        "Add to/remove from favorites"
    :editor/open-file-in-default-app "Open file in default app"
    :editor/open-file-in-directory   "Open file in parent directory"
@@ -116,7 +117,7 @@
    :ui/goto-plugins                 "Go to plugins dashboard"
    :editor/toggle-open-blocks       "Toggle open blocks (collapse or expand all blocks)"
    :ui/toggle-cards                 "Toggle cards"
-   :git/commit                      "Git commit message"})
+   :git/commit                      "Create git commit with message"})
 
 (def category
   {:shortcut.category/basics "Basics"
@@ -1016,7 +1017,6 @@
              :command.editor/copy-text                "Copia le selezioni come testo"
              :command.pdf/close                       "Chiudi anteprima PDF"}
 
-   
    :tr      {:shortcut.category/basics "Temel bilgiler"
              :shortcut.category/formatting "Biçimlendirme"
              :shortcut.category/navigating "Gezinme"

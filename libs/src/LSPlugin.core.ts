@@ -19,6 +19,7 @@ import {
   cleanInjectedScripts,
   safeSnakeCase,
   injectTheme,
+  cleanInjectedUI,
 } from './helpers'
 import * as pluginHelpers from './helpers'
 import Debug from 'debug'
@@ -1474,6 +1475,11 @@ class LSPluginCore
 
   hostMounted() {
     this._hostMountedActor.resolve()
+  }
+
+  _forceCleanInjectedUI(id: string) {
+    if (!id) return
+    return cleanInjectedUI(id)
   }
 
   get registeredPlugins(): Map<PluginLocalIdentity, PluginLocal> {

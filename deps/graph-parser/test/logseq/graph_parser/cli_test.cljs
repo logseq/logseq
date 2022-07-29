@@ -8,7 +8,7 @@
 (deftest ^:integration parse-graph
   (let [graph-dir "test/docs"
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir)
-        {:keys [conn files asts]} (gp-cli/parse-graph graph-dir)]
+        {:keys [conn files asts]} (gp-cli/parse-graph graph-dir {:verbose false})]
 
     (docs-graph-helper/docs-graph-assertions @conn files)
 

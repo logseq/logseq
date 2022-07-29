@@ -12,7 +12,7 @@
  :preferred-workflow :now
 
  ;; The app will ignore those directories or files.
- ;; E.g. "/archived" "/test.md"
+ ;; E.g. :hidden ["/archived" "/test.md" "../assets/archived"]
  :hidden []
 
  ;; When creating the new journal page, the app will use your template if there is one.
@@ -166,8 +166,13 @@
     :inputs [:today :7d-after]
     :collapsed? false}]}
 
- ;; Add your own commands to speedup.
- ;; E.g. [["js" "Javascript"]]
+ ;; Add your own commands to slash menu to speedup.
+ ;; E.g.
+ ;; :commands
+ ;; [
+ ;; ["js" "Javascript"]
+ ;; ["md" "Markdown"]
+ ;; ]
  :commands
  []
 
@@ -209,8 +214,15 @@
  ;; :srs/initial-interval 4
 
  ;; hide specific properties for blocks
- ;; E.g. #{:created-at :updated-at}
+ ;; E.g. :block-hidden-properties #{:created-at :updated-at}
  ;; :block-hidden-properties #{}
+
+ ;; Enable all your properties to have corresponding pages
+ :property-pages/enabled? true
+
+ ;; Properties to exclude from having property pages
+ ;; E.g.:property-pages/excludelist #{:duration :author}
+ ;; :property-pages/excludelist
 
  ;; logbook setup
  ;; :logbook/settings
