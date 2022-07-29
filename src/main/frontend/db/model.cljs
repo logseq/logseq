@@ -15,6 +15,7 @@
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.text :as text]
             [logseq.db.rules :refer [rules]]
             [logseq.db.default :as default-db]
             [frontend.util.drawer :as drawer]))
@@ -1059,6 +1060,51 @@
                      pages)]
       (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages))))
 
+(def ns-char "/")
+(def ns-re #"/")
+
+(defn- get-parents-namespace-list
+  "Return list of parents namespace"
+  [page-namespace & nested-found]
+  (if (text/namespace-page? page-namespace)
+    (let [pre-nested-vec (drop-last (string/split page-namespace ns-re))
+          my-nested-found (if (nil? nested-found)
+                            []
+                            nested-found)]
+      (if (= (count pre-nested-vec) 1)
+        (conj my-nested-found (nth pre-nested-vec 0))
+        (let [pre-nested-str (string/join ns-char pre-nested-vec)]
+          (recur pre-nested-str (conj my-nested-found pre-nested-str)))))
+    []))
+
+(defn- get-unnecessary-namespaces-name
+  "Return unnecessary namespace from a list of page's name"
+  [pages-list]
+  (->> pages-list
+       (remove nil?)
+       (mapcat get-parents-namespace-list)
+       distinct))
+
+(defn- remove-nested-namespaces-link
+  "Remove relations between pages and their nested namespace"
+  [pages-relations]
+  (let [pages-relations-to-return (distinct (mapcat
+                                             identity
+                                             (for [item (for [a-link-from (mapv (fn [a-rel] (first a-rel)) pages-relations)]
+                                                          [a-link-from (mapv
+                                                                        (fn [a-rel] (second a-rel))
+                                                                        (filterv
+                                                                         (fn [link-target] (=  a-link-from (first link-target)))
+                                                                         pages-relations))])
+                                                   :let [list-to (get item 1)
+                                                         page (get item 0)
+                                                         namespaces-to-remove (get-unnecessary-namespaces-name list-to)
+                                                         list-to-without-nested-ns (filterv (fn [elem] (not (some #{elem} namespaces-to-remove))) list-to)
+                                                         node-links (for [item-ok list-to-without-nested-ns]
+                                                                      [page item-ok])]]
+                                               (seq node-links))))]
+    pages-relations-to-return))
+
 ;; Ignore files with empty blocks for now
 (defn get-pages-relation
   [repo with-journal?]
@@ -1080,7 +1126,8 @@
       (->>
        (d/q q db)
        (map (fn [[page ref-page-name]]
-              [page ref-page-name]))))))
+              [page ref-page-name]))
+       (remove-nested-namespaces-link)))))
 
 ;; get pages who mentioned this page
 ;; TODO: use :block/_refs
