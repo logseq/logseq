@@ -519,7 +519,7 @@ Some bindings in this fn:
                       (add-bindings! form
                                      (if (= key :and) (rest result) result))))]
       {:query result'
-       :rules (map rules/query-dsl-rules rules)
+       :rules (mapv rules/query-dsl-rules rules)
        :sort-by @sort-by
        :blocks? (boolean @blocks?)
        :sample sample})))
