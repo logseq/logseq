@@ -121,9 +121,6 @@
   [repo conn]
   (d/listen! conn :persistence
              (fn [tx-report]
-               ;; reactive components
-               (react/refresh! repo tx-report {})
-
                (when (and
                       (not config/publishing?)
                       (not (:new-graph? (:tx-meta tx-report)))) ; skip initial txs

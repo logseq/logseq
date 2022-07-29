@@ -119,7 +119,7 @@
      :db/last-transact-time                 {}
      ;; whether database is persisted
      :db/persisted?                         {}
-     :db/outliner-last-tx                   nil
+
      :cursor-range                          nil
 
      :selection/mode                        false

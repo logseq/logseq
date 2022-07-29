@@ -935,7 +935,7 @@
 (rum/defc lazy-visible
   ([content-fn]
    (lazy-visible content-fn nil))
-  ([content-fn {:keys [trigger-once?]
+  ([content-fn {:keys [trigger-once? debug-id]
                 :or {trigger-once? false}}]
    (if (or (util/mobile?) (mobile-util/native-platform?))
      (content-fn)
@@ -946,13 +946,13 @@
                                        :onChange (fn [in-view? entry]
                                                    (let [self-top (.-top (.-boundingClientRect entry))
                                                          time' (util/time-ms)]
-                                                     (when (or (nil? last-changed-time)
-                                                               (and
-                                                                (or (and (not visible?) in-view?)
-                                                                    ;; hide only the components below the current top for better ux
-                                                                    (and visible? (not in-view?) (> self-top 0)))
-                                                                (some? last-changed-time)
-                                                                (> (- time' last-changed-time) 50)))
+                                                     (when (and
+                                                            (or (and (not visible?) in-view?)
+                                                                ;; hide only the components below the current top for better ux
+                                                                (and visible? (not in-view?) (> self-top 0)))
+                                                            (or (nil? last-changed-time)
+                                                                (and (some? last-changed-time)
+                                                                     (> (- time' last-changed-time) 50))))
                                                        (set-last-changed-time! time')
                                                        (set-visible! in-view?))))})
            ref (.-ref inViewState)]

@@ -20,14 +20,15 @@
   [page-name]
   (let [scheduled-or-deadlines (when (scheduled-or-deadlines? page-name)
                                  (db/get-date-scheduled-or-deadlines (string/capitalize page-name)))]
-    (ui/foldable
-     [:h2.font-bold.opacity-50 "SCHEDULED AND DEADLINE"]
-     [:div.scheduled-deadlines.references-blocks.mb-6
-      (let [ref-hiccup (block/->hiccup scheduled-or-deadlines
-                                       {:id (str page-name "-agenda")
-                                        :ref? true
-                                        :group-by-page? true
-                                        :editor-box editor/box}
-                                       {})]
-        (content/content page-name {:hiccup ref-hiccup}))]
-     {:title-trigger? true})))
+    (when (seq scheduled-or-deadlines)
+      (ui/foldable
+       [:h2.font-bold.opacity-50 "SCHEDULED AND DEADLINE"]
+       [:div.scheduled-deadlines.references-blocks.mb-6
+        (let [ref-hiccup (block/->hiccup scheduled-or-deadlines
+                                         {:id (str page-name "-agenda")
+                                          :ref? true
+                                          :group-by-page? true
+                                          :editor-box editor/box}
+                                         {})]
+          (content/content page-name {:hiccup ref-hiccup}))]
+       {:title-trigger? true}))))

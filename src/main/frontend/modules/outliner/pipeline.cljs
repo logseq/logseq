@@ -15,8 +15,7 @@
 ;; TODO: it'll be great if we can calculate the :block/path-refs before any
 ;; outliner transaction, this way we can group together the real outliner tx
 ;; and the new path-refs changes, which makes both undo/redo and
-;; react-query/refresh! much easier, there's no need to have `skip-path-refs-check?`
-;; then.
+;; react-query/refresh! easier.
 
 ;; Steps:
 ;; 1. For each changed block, new-refs = its page + :block/refs + parents :block/refs
@@ -35,9 +34,10 @@
                             parents-refs (->> (mapcat :block/path-refs parents)
                                               (map :db/id))
                             old-refs (set (map :db/id (:block/path-refs block)))
-                            new-refs (set (concat [(:db/id (:block/page block))]
-                                                  (map :db/id (:block/refs block))
-                                                  parents-refs))
+                            new-refs (set (util/concat-without-nil
+                                           [(:db/id (:block/page block))]
+                                           (map :db/id (:block/refs block))
+                                           parents-refs))
                             refs-changed? (not= old-refs new-refs)
                             children (db-model/get-block-children-ids repo (:block/uuid block))
                             children-refs (map (fn [id]
@@ -55,24 +55,28 @@
 
 (defn invoke-hooks
   [tx-report]
-  (when (and (not (:from-disk? (:tx-meta tx-report)))
-             (not (:new-graph? (:tx-meta tx-report)))
-             (:outliner/transact? (:tx-meta tx-report)))
-    (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
-          repo (state/get-current-repo)
-          refs-tx (set (compute-block-path-refs (:tx-meta tx-report) blocks))
-          truncate-refs-tx (map (fn [m] [:db/retract (:db/id m) :block/path-refs]) refs-tx)
-          tx (util/concat-without-nil truncate-refs-tx refs-tx)]
-      (if (seq tx)
-        (db/transact! repo tx {:outliner/transact? true
-                               :compute-new-refs? true})
-        (do
-          (state/set-state! :db/outliner-last-tx nil)
-          (react/refresh! repo tx-report {:skip-path-refs-check? true})))
-      (doseq [p (seq pages)]
-        (updated-page-hook tx-report p))
-      (when (and state/lsp-enabled? (seq blocks))
-        (state/pub-event! [:plugin/hook-db-tx
-                           {:blocks  blocks
-                            :tx-data (:tx-data tx-report)
-                            :tx-meta (:tx-meta tx-report)}])))))
+  (let [tx-meta (:tx-meta tx-report)]
+    (when (and (not (:from-disk? tx-meta))
+               (not (:new-graph? tx-meta))
+               (not (:compute-new-refs? tx-meta))
+               (:outliner/transact? tx-meta))
+      (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
+            repo (state/get-current-repo)
+            refs-tx (set (compute-block-path-refs (:tx-meta tx-report) blocks))
+            truncate-refs-tx (map (fn [m] [:db/retract (:db/id m) :block/path-refs]) refs-tx)
+            tx (util/concat-without-nil truncate-refs-tx refs-tx)
+            tx-report' (if (seq tx)
+                         (let [refs-tx-data' (:tx-data (db/transact! repo tx {:outliner/transact? true
+                                                                         :compute-new-refs? true}))]
+                           ;; merge
+                           (assoc tx-report :tx-data (concat (:tx-data tx-report) refs-tx-data')))
+                         tx-report)]
+        (react/refresh! repo tx-report')
+
+        (doseq [p (seq pages)]
+          (updated-page-hook tx-report p))
+        (when (and state/lsp-enabled? (seq blocks))
+          (state/pub-event! [:plugin/hook-db-tx
+                             {:blocks  blocks
+                              :tx-data (:tx-data tx-report)
+                              :tx-meta (:tx-meta tx-report)}]))))))

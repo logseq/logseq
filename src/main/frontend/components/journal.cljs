@@ -57,7 +57,9 @@
 
       (if today?
         (blocks-cp repo page format)
-        (ui/lazy-visible (fn [] (blocks-cp repo page format))))
+        (ui/lazy-visible
+         (fn [] (blocks-cp repo page format))
+         {:debug-id (str "journal-blocks " page)}))
 
       {})
 

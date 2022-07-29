@@ -2759,9 +2759,10 @@
            :full-text-search? full-text-search?)))
 
 (defn- clear-custom-query!
-  [query]
-  (state/remove-custom-query-component! query)
-  (db/remove-custom-query! (state/get-current-repo) query))
+  [dsl? query]
+  (let [query (if dsl? (:query query) query)]
+    (state/remove-custom-query-component! query)
+    (db/remove-custom-query! (state/get-current-repo) query)))
 
 (rum/defcs ^:large-vars/cleanup-todo custom-query* < rum/reactive
   {:will-mount trigger-custom-query!
@@ -2771,7 +2772,8 @@
                 state)
    :will-unmount (fn [state]
                    (when-let [query (last (:rum/args state))]
-                     (clear-custom-query! (:query query)))
+                     (clear-custom-query! (:dsl-query? (first (:rum/args state)))
+                                          query))
                    state)}
   [state config {:keys [title query view collapsed? children? breadcrumb-show? table-view?] :as q}]
   (let [dsl-query? (:dsl-query? config)
@@ -2924,14 +2926,15 @@
            :title-trigger? true
            :on-mouse-down (fn [collapsed?]
                             (when collapsed?
-                              (clear-custom-query! (:query q))))})]))))
+                              (clear-custom-query! dsl-query? q)))})]))))
 
 (rum/defc custom-query
   [config q]
   (ui/catch-error
    (ui/block-error "Query Error:" {:content (:query q)})
    (ui/lazy-visible
-    (fn [] (custom-query* config q)))))
+    (fn [] (custom-query* config q))
+    {:debug-id q})))
 
 (defn admonition
   [config type result]
@@ -3333,7 +3336,7 @@
                    (rum/with-key
                      (breadcrumb-with-container blocks config)
                      (:db/id parent)))
-                 {})])))))]
+                 {:debug-id page})])))))]
 
      (and (:group-by-page? config)
           (vector? (first blocks)))

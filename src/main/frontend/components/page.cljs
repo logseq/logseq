@@ -384,7 +384,7 @@
                       page)]
            (page-blocks-cp repo page {:sidebar? sidebar?}))]]
 
-       (when-not block?
+       (when today?
          (today-queries repo today? sidebar?))
 
        (when today?
