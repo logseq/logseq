@@ -106,7 +106,7 @@
 (defn reset-file!
   ([repo-url file content]
    (reset-file! repo-url file content {}))
-  ([repo-url file content options]
+  ([repo-url file content {:keys [verbose] :as options}]
    (let [electron-local-repo? (and (util/electron?)
                                    (config/local-db? repo-url))
          file (cond
@@ -135,18 +135,20 @@
        (db/get-db repo-url false)
        file
        content
-       (merge options
+       (merge (dissoc options :verbose)
               {:new? new?
                :delete-blocks-fn (partial get-delete-blocks repo-url)
-               :extract-options {:user-config (state/get-config)
-                                 :date-formatter (state/get-date-formatter)
-                                 :page-name-order (state/page-name-order)
-                                 :block-pattern (config/get-block-pattern (gp-util/get-format file))
-                                 :supported-formats (gp-config/supported-formats)}}))))))
+               :extract-options (merge
+                                 {:user-config (state/get-config)
+                                  :date-formatter (state/get-date-formatter)
+                                  :page-name-order (state/page-name-order)
+                                  :block-pattern (config/get-block-pattern (gp-util/get-format file))
+                                  :supported-formats (gp-config/supported-formats)}
+                                 (when (some? verbose) {:verbose verbose}))}))))))
 
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
-  [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph?]
+  [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose]
                       :or {reset? true
                            re-render-root? false
                            from-disk? false
@@ -166,7 +168,8 @@
             [[:db/retract page-id :block/alias]
              [:db/retract page-id :block/tags]]
             opts))
-        (reset-file! repo path content opts))
+        (reset-file! repo path content (merge opts
+                                              (when (some? verbose) {:verbose verbose}))))
       (db/set-file-content! repo path content opts))
     (util/p-handle (write-file!)
                    (fn [_]

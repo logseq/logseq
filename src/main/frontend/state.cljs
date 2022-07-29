@@ -366,9 +366,11 @@
                 (get (sub-config) repo)))))
 
 (defn enable-flashcards?
-  [repo]
-  (not (false? (:feature/enable-flashcards?
-                (get (sub-config) repo)))))
+  ([]
+   (enable-flashcards? (get-current-repo)))
+  ([repo]
+   (not (false? (:feature/enable-flashcards?
+                 (get (sub-config) repo))))))
 
 (defn export-heading-to-list?
   []

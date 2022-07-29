@@ -249,7 +249,11 @@
                                       images (if-not (= (count images) 1)
                                                (let [^js _image (.closest (.-target e) ".asset-container")
                                                      image (. _image querySelector "img")]
-                                                 (cons image (remove #(= image %) images)))
+                                                 (->> images
+                                                      (sort-by (juxt #(.-y %) #(.-x %)))
+                                                      (split-with (complement #{image}))
+                                                      reverse
+                                                      (apply concat)))
                                                images)
                                       images (for [^js it images] {:src (.-src it)
                                                                    :w (.-naturalWidth it)
