@@ -528,19 +528,18 @@ Some bindings in this fn:
 ;; ========
 
 (defn query-wrapper
-  [where blocks?]
-  (let [block-attrs (butlast model/block-attrs)
+  [where {:keys [blocks? block-attrs]}]
+  (let [block-attrs (or block-attrs (butlast model/block-attrs))
         q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
             `[:find (~'pull ~'?b ~block-attrs)
               :in ~'$ ~'%
               :where]
             '[:find (pull ?p [*])
               :in $ %
-              :where])
-        result (if (coll? (first where))
-                 (apply conj q where)
-                 (conj q where))]
-    result))
+              :where])]
+    (if (coll? (first where))
+      (apply conj q where)
+      (conj q where))))
 
 (defn query
   "Runs a dsl query with query as a string. Primary use is from '{{query }}'"
@@ -548,7 +547,7 @@ Some bindings in this fn:
   (when (and (string? query-string) (not= "\"\"" query-string))
     (let [query-string' (template/resolve-dynamic-template! query-string)
           {:keys [query rules sort-by blocks? sample]} (parse query-string')]
-      (when-let [query' (some-> query (query-wrapper blocks?))]
+      (when-let [query' (some-> query (query-wrapper {:blocks? blocks?}))]
         (let [sort-by (or sort-by identity)
               random-samples (if @sample
                                (fn [col]
@@ -568,7 +567,7 @@ Some bindings in this fn:
   (when (seq (:query query-m))
     (let [query-string (template/resolve-dynamic-template! (pr-str (:query query-m)))
           {:keys [query sort-by blocks? rules]} (parse query-string)]
-      (when-let [query' (some-> query (query-wrapper blocks?))]
+      (when-let [query' (some-> query (query-wrapper {:blocks? blocks?}))]
         (query-react/react-query repo
                            (merge
                             query-m

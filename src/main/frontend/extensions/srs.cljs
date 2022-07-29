@@ -216,7 +216,7 @@
 
 (deftype Sided-Cloze-Card [block]
   ICard
-  (get-root-block [_this] (db/pull [:block/uuid (:block/uuid block)]))
+  (get-root-block [_this] (db/pull [:block/uuid block]))
   ICardShow
   (show-cycle [_this phase]
     (let [block-id (:db/id block)
@@ -243,7 +243,8 @@
       {:show-cloze? true})))
 
 (defn- ->card [block]
-  (->Sided-Cloze-Card block))
+  (let [block' (db/pull (:db/id block))]
+    (->Sided-Cloze-Card block')))
 
 ;;; ================================================================
 ;;;
@@ -268,7 +269,9 @@
                           query* (util/concat-without-nil
                                   [['?b :block/refs '?br] ['?br :block/name card-hash-tag]]
                                   (if (coll? (first query)) query [query]))]
-                      (when-let [query (query-dsl/query-wrapper query* true)]
+                      (when-let [query (query-dsl/query-wrapper query*
+                                                                {:blocks? true
+                                                                 :block-attrs [:db/id :block/properties]})]
                         (let [result (query-react/react-query repo
                                                               {:query (with-meta query {:cards-query? true})
                                                                :rules (or rules [])}
@@ -337,7 +340,7 @@
         result (get-next-interval card score)
         next-of-matrix (:next-of-matrix result)]
     (reset! of-matrix next-of-matrix)
-    (save-block-card-properties! (db/pull [:block/uuid (:block/uuid block)])
+    (save-block-card-properties! (db/pull (:db/id block))
                                  (select-keys result
                                               [card-last-interval-property
                                                card-repeats-property
@@ -350,7 +353,7 @@
   [card]
   {:pre [(satisfies? ICard card)]}
   (let [block (.-block card)]
-    (reset-block-card-properties! (db/pull [:block/uuid (:block/uuid block)]))))
+    (reset-block-card-properties! (db/pull (:db/id block)))))
 
 (defn- operation-card-info-summary!
   [review-records review-cards card-query-block]
