@@ -8,6 +8,7 @@
             [frontend.util.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.db-mixins :as db-mixins]
             [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
@@ -218,7 +219,9 @@
   (get-root-block [_this] (db/pull [:block/uuid (:block/uuid block)]))
   ICardShow
   (show-cycle [_this phase]
-    (let [blocks (-> (db/get-block-and-children (state/get-current-repo) (:block/uuid block))
+    (let [block-id (:db/id block)
+          blocks (-> (db/get-paginated-blocks (state/get-current-repo) block-id
+                                              {:scoped-block-id block-id})
                      clear-collapsed-property)
           cloze? (has-cloze? blocks)]
       (case phase
