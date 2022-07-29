@@ -246,7 +246,11 @@
                                       images (if-not (= (count images) 1)
                                                (let [^js _image (.closest (.-target e) ".asset-container")
                                                      image (. _image querySelector "img")]
-                                                 (cons image (remove #(= image %) images)))
+                                                 (->> images
+                                                      (sort-by (juxt #(.-y %) #(.-x %)))
+                                                      (split-with (complement #{image}))
+                                                      reverse
+                                                      (apply concat)))
                                                images)
                                       images (for [^js it images] {:src (.-src it)
                                                                    :w (.-naturalWidth it)
@@ -1931,7 +1935,8 @@
    (and (util/sup? target)
         (dom/has-class? target "fn"))
    (dom/has-class? target "image-resize")
-   (dom/closest target "a")))
+   (dom/closest target "a")
+   (dom/closest target ".query-table")))
 
 (defn- block-content-on-mouse-down
   [e block block-id _content edit-input-id]

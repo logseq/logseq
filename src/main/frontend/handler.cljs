@@ -57,7 +57,9 @@
                          (not (contains? (:file/unlinked-dirs @state/state)
                                          (config/get-repo-dir repo))))
                 ;; TODO: re-calculate only if there're transactions in 5 seconds
-                ;; (srs/update-cards-due-count!)
+                (when (state/enable-flashcards?)
+                  (srs/update-cards-due-count!))
+
                 ;; Don't create the journal file until user writes something
                 (page-handler/create-today-journal!))))]
     (f)

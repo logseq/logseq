@@ -43,7 +43,7 @@
    #{:id :custom-id :background-color :background_color :heading :collapsed
      :created-at :updated-at :last-modified-at :created_at :last_modified_at
      :query-table :query-properties :query-sort-by :query-sort-desc :ls-type
-     :hl-type :hl-page :hl-stamp :file-path}
+     :hl-type :hl-page :hl-stamp}
    (set (map keyword markers))
    @built-in-extended-properties))
 

@@ -183,14 +183,15 @@
     (load-pages-metadata! repo file-paths files force?)))
 
 (defn- parse-and-load-file!
-  [repo-url file new-graph?]
+  [repo-url file {:keys [new-graph? verbose]}]
   (try
     (file-handler/alter-file repo-url
                              (:file/path file)
                              (:file/content file)
-                             {:new-graph? new-graph?
-                              :re-render-root? false
-                              :from-disk? true})
+                             (merge {:new-graph? new-graph?
+                                     :re-render-root? false
+                                     :from-disk? true}
+                                    (when (some? verbose) {:verbose verbose})))
     (catch :default e
       (state/set-parsing-state! (fn [m]
                                   (update m :failed-parsing-files conj [(:file/path file) e])))))
@@ -215,7 +216,6 @@
 (defn- parse-files-and-create-default-files-inner!
   [repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts]
   (let [supported-files (graph-parser/filter-files files)
-        new-graph? (:new-graph? opts)
         delete-data (->> (concat delete-files delete-blocks)
                          (remove nil?))
         chan (async/to-chan! supported-files)
@@ -229,7 +229,7 @@
         (doseq [file supported-files]
           (state/set-parsing-state! (fn [m]
                                       (assoc m :current-parsing-file (:file/path file))))
-          (parse-and-load-file! repo-url file new-graph?))
+          (parse-and-load-file! repo-url file (select-keys opts [:new-graph? :verbose])))
         (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan))
       (async/go-loop []
         (if-let [file (async/<! chan)]
@@ -237,7 +237,7 @@
             (state/set-parsing-state! (fn [m]
                                         (assoc m :current-parsing-file (:file/path file))))
             (async/<! (async/timeout 10))
-            (parse-and-load-file! repo-url file new-graph?)
+            (parse-and-load-file! repo-url file (select-keys opts [:new-graph? :verbose]))
             (recur))
           (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan))))
     graph-added-chan))

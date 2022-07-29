@@ -433,8 +433,8 @@
       (d/squuid)))
 
 (defn get-page-refs-from-properties
-  [format properties db date-formatter]
-  (let [page-refs (get-page-ref-names-from-properties format properties {})]
+  [format properties db date-formatter user-config]
+  (let [page-refs (get-page-ref-names-from-properties format properties user-config)]
     (map (fn [page] (page-name->map page true db true date-formatter)) page-refs)))
 
 (defn- with-page-block-refs
@@ -493,7 +493,7 @@
                parents)))))
 
 (defn- with-pre-block-if-exists
-  [blocks body pre-block-properties encoded-content {:keys [supported-formats db date-formatter]}]
+  [blocks body pre-block-properties encoded-content {:keys [supported-formats db date-formatter user-config]}]
   (let [first-block (first blocks)
         format (or (:block/format first-block) :markdown)
         first-block-start-pos (get-in first-block [:block/meta :start_pos])
@@ -506,7 +506,7 @@
                    (let [content (utf8/substring encoded-content 0 first-block-start-pos)
                          {:keys [properties properties-order]} pre-block-properties
                          id (get-custom-id-or-new-id {:properties properties})
-                         property-refs (->> (get-page-refs-from-properties format properties db date-formatter)
+                         property-refs (->> (get-page-refs-from-properties format properties db date-formatter user-config)
                                             (map :block/original-name))
                          block {:uuid id
                                 :content content
