@@ -56,7 +56,8 @@
 (defn invoke-hooks
   [tx-report]
   (when (and (not (:from-disk? (:tx-meta tx-report)))
-             (not (:new-graph? (:tx-meta tx-report))))
+             (not (:new-graph? (:tx-meta tx-report)))
+             (:outliner/transact? (:tx-meta tx-report)))
     (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
           repo (state/get-current-repo)
           refs-tx (set (compute-block-path-refs (:tx-meta tx-report) blocks))
