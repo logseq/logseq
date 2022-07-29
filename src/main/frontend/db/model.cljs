@@ -1095,34 +1095,36 @@
       (util/safe-page-name-sanity-lc page))
      (distinct))))
 
+(def ns-char "/")
+(def ns-re #"/")
+
 (defn- get-parents-namespace-list
-  "return list of parents namespace"
+  "Return list of parents namespace"
   [page-namespace & nested-found]
   (if (text/namespace-page? page-namespace)
-    (let [pre-nested-vec (drop-last (string/split page-namespace #"/"))
+    (let [pre-nested-vec (drop-last (string/split page-namespace ns-re))
           my-nested-found (if (nil? nested-found)
                             []
                             nested-found)]
       (if (= (count pre-nested-vec) 1)
         (conj my-nested-found (nth pre-nested-vec 0))
-        (let [pre-nested-str (string/join "/" pre-nested-vec)]
+        (let [pre-nested-str (string/join ns-char pre-nested-vec)]
           (recur pre-nested-str (conj my-nested-found pre-nested-str)))))
     []))
 
 (defn- get-unnecessary-namespaces-name
-  "return unnecessary namespace from a list of page's name"
+  "Return unnecessary namespace from a list of page's name"
   [pages-list]
-  (distinct (remove nil? (flatten
-                          (for [item pages-list]
-                            (if (nil? item)
-                              nil
-                              (get-parents-namespace-list item)))))))
+  (->> pages-list
+       (remove nil?)
+       (mapcat get-parents-namespace-list)
+       distinct))
 
-(defn- remove-nested-namespaces-link 
-  "remove relations beetween pages and their nested namaspece"
+(defn- remove-nested-namespaces-link
+  "Remove relations between pages and their nested namespace"
   [pages-relations]
   (let [pages-relations-to-return (distinct (mapcat
-                                             (fn [a] a)
+                                             identity
                                              (for [item (for [a-link-from (mapv (fn [a-rel] (first a-rel)) pages-relations)]
                                                           [a-link-from (mapv
                                                                         (fn [a-rel] (second a-rel))
