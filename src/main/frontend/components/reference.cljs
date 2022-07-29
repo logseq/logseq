@@ -108,14 +108,20 @@
         filters (when (seq filter-state)
                   (-> (group-by second filter-state)
                       (update-vals #(map first %))))
-        *filtered-ref-blocks (atom nil)]
+        *filtered-ref-blocks (atom nil)
+        *collapsed? (atom nil)]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
       [:h2.font-bold.opacity-50 (str n-ref " Linked Reference"
                                      (when (> n-ref 1) "s"))]
       [:a.filter.fade-link
        {:title "Filter"
-        :on-mouse-down (fn [e] (util/stop-propagation e))
+        :on-mouse-over (fn [_e]
+                         (when @*collapsed? ; collapsed
+                           ;; expand
+                           (reset! @*collapsed? false)))
+        :on-mouse-down (fn [e]
+                         (util/stop-propagation e))
         :on-click (fn []
                     (let [ref-pages (block-handler/get-blocks-refed-pages repo page-entity @*filtered-ref-blocks)
                           ref-pages (map :block/original-name ref-pages)
@@ -137,7 +143,9 @@
        (references-inner repo page-entity page-name block-id filters *filtered-ref-blocks))
 
      {:default-collapsed? default-collapsed?
-      :title-trigger? true})))
+      :title-trigger? true
+      :init-collapsed (fn [collapsed-atom]
+                        (reset! *collapsed? collapsed-atom))})))
 
 (rum/defcs references* < rum/reactive
   {:init (fn [state]

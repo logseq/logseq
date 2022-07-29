@@ -639,8 +639,12 @@
                  (let [args (:rum/args state)]
                    (when (true? (:default-collapsed? (last args)))
                      (reset! (get state ::collapsed?) true)))
-                 state)}
-  [state header content {:keys [title-trigger? on-mouse-down]}]
+                 state)
+   :did-mount (fn [state]
+                (when-let [f (:init-collapsed (last (:rum/args state)))]
+                  (f (::collapsed? state)))
+                state)}
+  [state header content {:keys [title-trigger? on-mouse-down toggle-fn]}]
   (let [control? (get state ::control?)
         collapsed? (get state ::collapsed?)
         on-mouse-down (fn [e]
