@@ -393,7 +393,7 @@
          (let [version-uuid (get-version-key version)
                _local?      (some? (:relative-path version))]
            [:div.version-list-item {:key version-uuid}
-            [:a.item-link.block.fade-link
+            [:a.item-link.block.fade-link.flex.justify-between
              {:title    version-uuid
               :class    (util/classnames
                          [{:active (and current-page (= version-uuid (get-version-key current-page)))}])
@@ -402,7 +402,11 @@
              [:div.text-sm.pt-1
               (ui/humanity-time-ago
                (or (:CreateTime version)
-                   (:create-time version)) nil)]]])))]))
+                   (:create-time version)) nil)]
+             [:small.opacity-50.translate-y-1
+              (if _local?
+                [:<> (ui/icon "git-commit") " local"]
+                [:<> (ui/icon "cloud") " remote"])]]])))]))
 
 (rum/defc pick-page-histories-for-sync
   [repo-url graph-uuid page-name page-entity]
