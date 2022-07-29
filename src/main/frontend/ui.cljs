@@ -120,10 +120,15 @@
           (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class))))]))
 
 (rum/defc menu-link
-  [options child]
-  [:a.block.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
-   options
-   child])
+  ([options child] (menu-link options child true))
+  ([options child as-link?]
+   (if (false? as-link?)
+     [:div.px-4.py-2.text-sm.menu-link-block
+      options
+      child]
+     [:a.block.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
+      options
+      child])))
 
 (rum/defc dropdown-with-links
   [content-fn links {:keys [links-header links-footer] :as opts}]
@@ -133,7 +138,7 @@
      [:div.py-1.rounded-md.shadow-xs
       (when links-header links-header)
 
-      (for [{:keys [options title icon key hr hover-detail item]} (if (fn? links) (links) links)]
+      (for [{:keys [options title icon key hr hover-detail item as-link?]} (if (fn? links) (links) links)]
         (let [new-options
               (merge options
                      (cond->
@@ -154,7 +159,7 @@
           (if hr
             [:hr.my-1 {:key "dropdown-hr"}]
             (rum/with-key
-              (menu-link new-options child)
+              (menu-link new-options child as-link?)
               title))))
       (when links-footer links-footer)])
    opts))
@@ -272,7 +277,7 @@
     (rum/use-effect!
      (fn []
        (let [timer (js/setInterval
-                    #(set-time (time-fn)) 1000 * 30)]
+                    #(set-time (time-fn)) (* 1000 30))]
          #(js/clearInterval timer)))
      [])
 

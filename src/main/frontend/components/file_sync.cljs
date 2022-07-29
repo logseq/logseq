@@ -242,7 +242,9 @@
           synced-file-graph?
           (concat
            (if no-active-files?
-             [{:title [:p.flex.justify-center "Everything is synced!"]}]
+             [{:item [:div.flex.justify-center.w-full.py-2
+                      [:span.opacity-60 "Everything is synced!"]]
+               :as-link? false}]
              [{:title [:div.file-item.is-first ""] :options {:class "is-first-placeholder"}}])
 
            (map (fn [f] {:title [:div.file-item
