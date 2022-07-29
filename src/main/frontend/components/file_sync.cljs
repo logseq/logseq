@@ -168,7 +168,6 @@
         sync-state             (state/sub [:file-sync/sync-state current-repo])
         _                      (rum/react file-sync-handler/refresh-file-sync-component)
         synced-file-graph?     (file-sync-handler/synced-file-graph? current-repo)
-        [graph-user-uuid graph-uuid] @fs-sync/graphs-txid
         uploading-files        (:current-local->remote-files sync-state)
         downloading-files      (:current-remote->local-files sync-state)
         queuing-files          (:queued-local->remote-files sync-state)
@@ -197,12 +196,15 @@
                                     (state/pub-event! [:file-sync/onboarding-tip :unavailable])
 
                                     ;; current graph belong to other user, do nothing
-                                    (and graph-user-uuid
-                                         (not (fs-sync/check-graph-belong-to-current-user (user/user-uuid) graph-user-uuid)))
+                                    (and (first @fs-sync/graphs-txid)
+                                         (not (fs-sync/check-graph-belong-to-current-user (user/user-uuid)
+                                                                                          (first @fs-sync/graphs-txid))))
                                     nil
 
-                                    (and synced-file-graph? (async/<! (fs-sync/<check-remote-graph-exists graph-uuid)))
+                                    (and synced-file-graph?
+                                         (async/<! (fs-sync/<check-remote-graph-exists (second @fs-sync/graphs-txid))))
                                     (fs-sync/sync-start)
+
 
                                     ;; remote graph already has been deleted, clear repos first, then create-remote-graph
                                     synced-file-graph?      ; <check-remote-graph-exists -> false
