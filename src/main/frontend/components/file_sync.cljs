@@ -62,6 +62,7 @@
                                                                    (config/get-string-repo-dir dest-dir))
                                                               :success)
                                          (web-nfs/ls-dir-files-with-path! dest-dir)
+                                         (repo-handler/remove-repo! {:url repo})
                                          (close-fn)))
                                (.catch #(js/console.error %)))))]
 
