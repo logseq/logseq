@@ -21,7 +21,6 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
-            [frontend.handler.user :as user]
             [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -198,7 +197,7 @@
 
                                     ;; current graph belong to other user, do nothing
                                     (and (first @fs-sync/graphs-txid)
-                                         (not (fs-sync/check-graph-belong-to-current-user (user/user-uuid)
+                                         (not (fs-sync/check-graph-belong-to-current-user (user-handler/user-uuid)
                                                                                           (first @fs-sync/graphs-txid))))
                                     nil
 

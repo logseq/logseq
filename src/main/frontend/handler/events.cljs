@@ -72,7 +72,7 @@
     (async/<! (file-sync-handler/load-session-graphs))
     (p/let [repos (repo-handler/refresh-repos!)]
       (when-let [repo (state/get-current-repo)]
-        (if (some #(and (= (:url %) repo)
+        (when (some #(and (= (:url %) repo)
                           (vector? (:sync-meta %))
                           (util/uuid-string? (first (:sync-meta %)))
                           (util/uuid-string? (second (:sync-meta %)))) repos)
