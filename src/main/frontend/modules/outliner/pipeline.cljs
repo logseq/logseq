@@ -4,6 +4,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.db.model :as db-model]
+            [frontend.db.react :as react]
             [frontend.db :as db]
             [clojure.set :as set]))
 
@@ -15,13 +16,12 @@
   [tx-meta blocks]
   (let [repo (state/get-current-repo)
         blocks (remove :block/name blocks)]
-    (when-let [outliner-op (:outliner-op tx-meta)]
-      (when (and (not (contains? #{:collapse-expand-blocks :delete-blocks} outliner-op))
-                 ;; ignore move up/down since it doesn't affect the refs for any blocks
-                 (not (contains? #{:move-blocks-up-down} (:move-op tx-meta))))
+    (when (:outliner-op tx-meta)
+      (when (react/path-refs-need-recalculated? tx-meta)
         (let [*computed-ids (atom #{})
               tx (mapcat (fn [block]
-                           (when-not (@*computed-ids (:db/id block)) ; not computed yet
+                           (when (and (not (@*computed-ids (:db/id block))) ; not computed yet
+                                      (not (:block/name block)))
                              (let [parents (db-model/get-block-parents repo (:block/uuid block))
                                    parents-refs (->> (mapcat :block/path-refs parents)
                                                      (map :db/id))

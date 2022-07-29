@@ -2405,8 +2405,7 @@
             :else
             (profile
              "Insert block"
-             (do (save-current-block!)
-                 (insert-new-block! state)))))))))
+             (insert-new-block! state))))))))
 
 (defn keydown-new-block-handler [state e]
   (if (state/doc-mode-enter-for-new-line?)

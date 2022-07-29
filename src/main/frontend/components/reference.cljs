@@ -178,7 +178,7 @@
    (ui/lazy-visible
     (fn []
       (references* page-name))
-    (str "ref-" page-name))))
+    {:trigger-once? true})))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query

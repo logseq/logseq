@@ -2931,8 +2931,7 @@
   (ui/catch-error
    (ui/block-error "Query Error:" {:content (:query q)})
    (ui/lazy-visible
-    (fn [] (custom-query* config q))
-    "custom-query")))
+    (fn [] (custom-query* config q)))))
 
 (defn admonition
   [config type result]

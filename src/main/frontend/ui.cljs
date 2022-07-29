@@ -934,12 +934,14 @@
 (rum/defc lazy-visible
   ([content-fn]
    (lazy-visible content-fn nil))
-  ([content-fn _debug-id]
+  ([content-fn {:keys [trigger-once?]
+                :or {trigger-once? false}}]
    (if (or (util/mobile?) (mobile-util/native-platform?))
      (content-fn)
      (let [[visible? set-visible!] (rum/use-state false)
            [last-changed-time set-last-changed-time!] (rum/use-state nil)
            inViewState (useInView #js {:rootMargin "100px"
+                                       :triggerOnce trigger-once?
                                        :onChange (fn [in-view? entry]
                                                    (let [self-top (.-top (.-boundingClientRect entry))
                                                          time' (util/time-ms)]

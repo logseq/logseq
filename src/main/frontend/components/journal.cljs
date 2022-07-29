@@ -57,7 +57,7 @@
 
       (if today?
         (blocks-cp repo page format)
-        (ui/lazy-visible (fn [] (blocks-cp repo page format)) page))
+        (ui/lazy-visible (fn [] (blocks-cp repo page format))))
 
       {})
 
