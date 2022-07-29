@@ -58,18 +58,15 @@
 
 (defn pull-block
   [id]
-  (let [repo (state/get-current-repo)]
-    (when (conn/get-db repo)
-      (->
-       (react/q repo [:frontend.db.react/block id] {}
-                '[:find [(pull ?block ?block-attrs) ...]
-                  :in $ ?id ?block-attrs
-                  :where
-                  [?block :block/uuid ?id]]
-                id
-                block-attrs)
-       react
-       first))))
+  (when-let [repo (state/get-current-repo)]
+    (when-let [result (->>
+                       (react/q repo [:frontend.db.react/block id]
+                         {:query-fn (fn [_]
+                                      (db-utils/entity repo id))}
+                         nil)
+                       react
+                       d/touch)]
+      (into {:db/id (:db/id result)} result))))
 
 (defn get-original-name
   [page-entity]
@@ -1132,43 +1129,42 @@
      (when (conn/get-db repo)
        (let [page-id (:db/id (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)]))
              pages (page-alias-set repo page)
-             aliases (set/difference pages #{page-id})
-             query-result (react
-                           (react/q repo
-                             [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
-                             {}
-                             '[:find [(pull ?block ?block-attrs) ...]
-                               :in $ [?ref-page ...] ?block-attrs
-                               :where
-                               [?block :block/path-refs ?ref-page]]
-                             pages
-                             (butlast block-attrs)))
-             query-result (->> query-result
-                               (remove (fn [block] (= page-id (:db/id (:block/page block)))))
-                               (sort-by-left-recursive))]
-         (->> query-result
-              db-utils/group-by-page
-              (map (fn [[k blocks]]
-                     (let [k (if (contains? aliases (:db/id k))
-                               (assoc k :block/alias? true)
-                               k)]
-                       [k blocks])))))))))
+             aliases (set/difference pages #{page-id})]
+         (->>
+          (react/q repo
+            [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
+            {}
+            '[:find [(pull ?block ?block-attrs) ...]
+              :in $ [?ref-page ...] ?block-attrs
+              :where
+              [?block :block/path-refs ?ref-page]]
+            pages
+            (butlast block-attrs))
+          react
+          (remove (fn [block] (= page-id (:db/id (:block/page block)))))
+          db-utils/group-by-page
+          (map (fn [[k blocks]]
+                 (let [k (if (contains? aliases (:db/id k))
+                           (assoc k :block/alias? true)
+                           k)]
+                   [k blocks])))))))))
 
-(defn get-page-referenced-blocks-ids
-  "Faster and can be used for pagination later."
-  ([page]
-   (get-page-referenced-blocks-ids (state/get-current-repo) page))
-  ([repo page]
-   (when repo
-     (when-let [db (conn/get-db repo)]
-       (let [pages (page-alias-set repo page)]
-         (d/q
-           '[:find [?block ...]
-             :in $ [?ref-page ...]
-             :where
-             [?block :block/refs ?ref-page]]
-           db
-           pages))))))
+(defn get-linked-references-count
+  [id]
+  (when-let [block (db-utils/entity id)]
+    (let [repo (state/get-current-repo)
+          page? (:block/name block)
+          result (if page?
+                   (let [pages (page-alias-set repo (:block/name block))]
+                     (d/q
+                       '[:find [?block ...]
+                         :in $ [?ref-page ...]
+                         :where
+                         [?block :block/refs ?ref-page]]
+                       (conn/get-db repo)
+                       pages))
+                   (:block/_refs block))]
+      (count result))))
 
 (defn get-date-scheduled-or-deadlines
   [journal-title]
@@ -1252,27 +1248,6 @@
                                react
                                (sort-by-left-recursive))]
          (db-utils/group-by-page query-result))))))
-
-(defn get-block-referenced-blocks-ids
-  [block-uuid]
-  (when-let [repo (state/get-current-repo)]
-    (let [block (db-utils/entity [:block/uuid block-uuid])]
-      (->> (react/q repo [:frontend.db.react/block<-block-ids
-                          (:db/id block)] {}
-                    '[:find ?ref-block
-                      :in $ ?block-uuid ?block-attrs
-                      :where
-                      [?block :block/uuid ?block-uuid]
-                      [?ref-block :block/refs ?block]]
-                    block-uuid
-                    block-attrs)
-           react))))
-
-(defn get-referenced-blocks-ids
-  [page-name-or-block-uuid]
-  (if-let [id (parse-uuid (str page-name-or-block-uuid))]
-    (get-block-referenced-blocks-ids id)
-    (get-page-referenced-blocks-ids page-name-or-block-uuid)))
 
 (defn journal-page?
   "sanitized page-name only"

@@ -67,24 +67,48 @@
 
 (rum/defc block-linked-references < rum/reactive db-mixins/query
   [block-id]
-  (let [refed-blocks-ids (model-db/get-referenced-blocks-ids (str block-id))]
-    (when (seq refed-blocks-ids)
-      (let [ref-blocks (db/get-block-referenced-blocks block-id)
-            ref-hiccup (block/->hiccup ref-blocks
-                                       {:id (str block-id)
-                                        :ref? true
-                                        :breadcrumb-show? true
-                                        :group-by-page? true
-                                        :editor-box editor/box}
-                                       {})]
-        [:div.references-blocks
-         (content/content block-id
-                          {:hiccup ref-hiccup})]))))
+  (let [ref-blocks (db/get-block-referenced-blocks block-id)
+        ref-hiccup (block/->hiccup ref-blocks
+                                   {:id (str block-id)
+                                    :ref? true
+                                    :breadcrumb-show? true
+                                    :group-by-page? true
+                                    :editor-box editor/box}
+                                   {})]
+    [:div.references-blocks
+     (content/content block-id
+                      {:hiccup ref-hiccup})]))
+
+(rum/defc references-inner < rum/reactive db-mixins/query
+  [repo page-entity page-name block-id filters *filtered-ref-blocks]
+  [:div.references-blocks
+   (let [ref-blocks (if block-id
+                      (db/get-block-referenced-blocks block-id)
+                      (db/get-page-referenced-blocks page-name))
+         ref-pages (when-not block-id
+                     (block-handler/get-blocks-refed-pages repo page-entity ref-blocks))
+         filtered-ref-blocks (if block-id
+                               ref-blocks
+                               (block-handler/get-filtered-ref-blocks repo page-name ref-blocks filters ref-pages))
+         ref-hiccup (block/->hiccup filtered-ref-blocks
+                                    {:id page-name
+                                     :ref? true
+                                     :breadcrumb-show? true
+                                     :group-by-page? true
+                                     :editor-box editor/box
+                                     :filters filters}
+                                    {})]
+     (reset! *filtered-ref-blocks filtered-ref-blocks)
+     (content/content page-name {:hiccup ref-hiccup}))])
 
 (rum/defc references-cp
-  [repo page-entity page-name filtered-ref-blocks n-ref filters-atom filters filter-state]
+  [repo page-entity page-name block-id filters-atom filter-state n-ref]
   (let [threshold (state/get-linked-references-collapsed-threshold)
-        default-collapsed? (>= n-ref threshold)]
+        default-collapsed? (>= n-ref threshold)
+        filters (when (seq filter-state)
+                  (-> (group-by second filter-state)
+                      (update-vals #(map first %))))
+        *filtered-ref-blocks (atom nil)]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
       [:h2.font-bold.opacity-50 (str n-ref " Linked Reference"
@@ -93,7 +117,7 @@
        {:title "Filter"
         :on-mouse-down (fn [e] (util/stop-propagation e))
         :on-click (fn []
-                    (let [ref-pages (block-handler/get-blocks-refed-pages repo page-entity filtered-ref-blocks)
+                    (let [ref-pages (block-handler/get-blocks-refed-pages repo page-entity @*filtered-ref-blocks)
                           ref-pages (map :block/original-name ref-pages)
                           references (frequencies ref-pages)]
                       (state/set-modal! (filter-dialog filters-atom references page-name)
@@ -110,22 +134,12 @@
                           :style {:fontSize 24}})]]
 
      (fn []
-       [:div.references-blocks
-        (let [ref-hiccup (block/->hiccup filtered-ref-blocks
-                                         {:id page-name
-                                          :ref? true
-                                          :breadcrumb-show? true
-                                          :group-by-page? true
-                                          :editor-box editor/box
-                                          :filters filters}
-                                         {})]
-          (content/content page-name
-                           {:hiccup ref-hiccup}))])
+       (references-inner repo page-entity page-name block-id filters *filtered-ref-blocks))
 
      {:default-collapsed? default-collapsed?
       :title-trigger? true})))
 
-(rum/defcs references* < rum/reactive db-mixins/query
+(rum/defcs references* < rum/reactive
   {:init (fn [state]
            (let [page-name (first (:rum/args state))
                  filters (when page-name
@@ -139,23 +153,15 @@
           filters-atom (get state ::filters)
           filter-state (rum/react filters-atom)
           block-id (parse-uuid page-name)
-          ref-blocks (util/profile "ref blocks"
-                                   (if block-id
-                        (db/get-block-referenced-blocks block-id)
-                        (db/get-page-referenced-blocks page-name)))
-          ref-pages (when-not block-id
-                      (block-handler/get-blocks-refed-pages repo page-entity ref-blocks))
-          filters (when (seq filter-state)
-                    (-> (group-by second filter-state)
-                        (update-vals #(map first %))))
-          filtered-ref-blocks (if block-id
-                                ref-blocks
-                                (block-handler/get-filtered-ref-blocks repo page-name ref-blocks filters ref-pages))
-          n-ref (if block-id (count ref-blocks) (count (mapcat second filtered-ref-blocks)))]
-      (when (or (seq ref-blocks) (seq filter-state))
+          id (if block-id
+               (:db/id (db/pull [:block/uuid block-id]))
+               (:db/id page-entity))
+          n-ref (model-db/get-linked-references-count id)]
+      (when (or (seq filter-state) (> n-ref 0))
         [:div.references.flex-1.flex-row
          [:div.content.pt-6
-          (references-cp repo page-entity page-name filtered-ref-blocks n-ref filters-atom filters filter-state)]]))))
+          (references-cp repo page-entity page-name block-id
+                         filters-atom filter-state n-ref)]]))))
 
 (rum/defc references
   [page-name]

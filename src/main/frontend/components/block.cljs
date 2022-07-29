@@ -729,7 +729,8 @@
   db-mixins/query
   [config id label]
   (when-let [block-id (parse-uuid id)]
-    (let [block (db/pull-block block-id)
+    (let [db-id (:db/id (db/pull [:block/uuid block-id]))
+          block (when db-id (db/pull-block db-id))
           block-type (keyword (get-in block [:block/properties :ls-type]))
           hl-type (get-in block [:block/properties :hl-type])
           repo (state/get-current-repo)]
@@ -2793,9 +2794,7 @@
                                  (boolean (:result-transform q))
                                  (and (string? query) (string/includes? query "(by-page false)")))
         result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
-                 (->> (db-utils/group-by-page transformed-query-result)
-                      (map (fn [[page blocks]]
-                             [page (tree/non-consecutive-blocks->vec-tree blocks)])))
+                 (db-utils/group-by-page transformed-query-result)
                  transformed-query-result)
         _ (when-let [query-result (:query-result config)]
             (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
@@ -3320,6 +3319,7 @@
         (for [[page blocks] blocks]
           (let [alias? (:block/alias? page)
                 page (db/entity (:db/id page))
+                blocks (tree/non-consecutive-blocks->vec-tree blocks)
                 parent-blocks (group-by :block/parent blocks)]
             [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                          (:ref? config)

@@ -284,8 +284,5 @@
                          (mapcat #(tree-seq map? :block/children %))
                          (map #(dissoc % :block/children)))
         id->parent (zipmap (map :db/id ref-blocks') (map (comp :db/id :block/parent) ref-blocks'))
-        filtered-blocks (filter-blocks repo page-name ref-blocks' filters ref-pages)
-        result (group-by :block/page filtered-blocks)]
-    (map (fn [[page blocks]]
-           (let [blocks' (outliner-tree/non-consecutive-blocks->vec-tree blocks)]
-             [page blocks'])) result)))
+        filtered-blocks (filter-blocks repo page-name ref-blocks' filters ref-pages)]
+    (group-by :block/page filtered-blocks)))
