@@ -275,7 +275,7 @@
                                                       (rfe/push-state :page {:name page-name})
                                                       (rfe/push-state :file {:path full-path})))}
                                        [:span.file-sync-item (js/decodeURIComponent (:path f))]
-                                       [:div.opacity-50 (ui/humanity-time (:time f) nil)]]}))
+                                       [:div.opacity-50 (ui/humanity-time-ago (:time f) nil)]]}))
                           (take 10 (:history sync-state))))))
 
         {:links-header
@@ -396,7 +396,7 @@
               :on-click #(set-page-fn version)}
 
              [:div.text-sm.pt-1
-              (ui/humanity-time
+              (ui/humanity-time-ago
                (or (:CreateTime version)
                    (:create-time version)) nil)]]])))]))
 

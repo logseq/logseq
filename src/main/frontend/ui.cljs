@@ -259,7 +259,7 @@
                         (notification-content state (:content v) (:status v) k)))))
                  contents)))))
 
-(rum/defc humanity-time
+(rum/defc humanity-time-ago
   [input opts]
   (let [time-fn (fn []
                   (try

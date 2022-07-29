@@ -329,7 +329,7 @@
               last
               js/decodeURIComponent
               (str "/" (string/capitalize app-name) "/")))
-    repo-dir))
+    (get-repo-dir repo-dir)))
 
 (defn get-repo-path
   [repo-url path]
