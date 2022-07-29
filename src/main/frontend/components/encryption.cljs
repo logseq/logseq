@@ -64,9 +64,58 @@
   (let [*password (get state ::password)
         *pw-confirm (get state ::pw-confirm)
         *pw-confirm-focused? (get state ::pw-confirm-focused?)
+        *input-ref-0 (rum/create-ref)
+        *input-ref-1 (rum/create-ref)
         remote-pw? (= type :input-pwd-remote)
         loading? (state/sub [:ui/loading? :set-graph-password])
-        set-remote-graph-pwd-result (state/sub [:file-sync/set-remote-graph-password-result])]
+        set-remote-graph-pwd-result (state/sub [:file-sync/set-remote-graph-password-result])
+
+        submit-handler
+        (fn []
+          (let [value @*password]
+            (cond
+              (string/blank? value)
+              nil
+
+              (and init-graph-keys (not= @*password @*pw-confirm))
+              (notification/show! "The passwords are not matched." :error)
+
+              :else
+              (case type
+                :local
+                (p/let [keys                (encrypt/generate-key-pair-and-save! repo-url)
+                        db-encrypted-secret (encrypt/encrypt-with-passphrase value keys)]
+                  (metadata-handler/set-db-encrypted-secret! db-encrypted-secret)
+                  (close-fn true))
+
+                (:create-pwd-remote :input-pwd-remote)
+                (do
+                  (state/set-state! [:ui/loading? :set-graph-password] true)
+                  (state/set-state! [:file-sync/set-remote-graph-password-result] {})
+                  (async/go
+                    (let [persist-r (async/<! (sync/encrypt+persist-pwd! @*password GraphUUID))]
+                      (if (instance? js/Error persist-r)
+                        (js/console.error persist-r)
+                        (when (fn? after-input-password)
+                          (async/<! (after-input-password))
+                          ;; TODO: it's better if based on sync state
+                          (when init-graph-keys
+                            (js/setTimeout #(state/pub-event! [:file-sync/maybe-onboarding-show :sync-learn]) 10000)))))))))))
+
+        enter-handler
+        (fn [^js e]
+          (when-let [^js input (and e (= 13 (.-which e)) (.-target e))]
+            (when-not (string/blank? (.-value input))
+              (let [input-0? (= (util/safe-lower-case (.-placeholder input)) "password")]
+                (if init-graph-keys
+                  ;; setup mode
+                  (if input-0?
+                    (.select (rum/deref *input-ref-1))
+                    (submit-handler))
+
+                  ;; unlock mode
+                  (submit-handler))))))]
+
     [:div.encryption-password.max-w-2xl.-mb-2
      [:div.cp__file-sync-related-normal-modal
       [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "lock-access")]]
@@ -103,32 +152,38 @@
              [:span "Please enter the password for this graph to continue syncing."]])]])
 
       (when (and remote-pw? init-graph-keys)
-        [:<>
-         [:h2.text-center.opacity-70.text-sm.py-2
-          "Each graph you want to synchronize via Logseq needs its own password for end-to-end encryption."]
-         [:div.input-hints.text-sm.py-2.px-3.rounded.mb-3.mt-4.flex.items-center
-          (if (and (not (string/blank? @*password))
-                   (not (string/blank? @*pw-confirm)))
-            (if (not= @*password @*pw-confirm)
-              [:span.scale-125.pr-1.text-red-600 (ui/icon "alert-circle" {:class "text-md mr-1"})]
-              [:span.scale-125.pr-1.text-green-600 (ui/icon "circle-check" {:class "text-md mr-1"})])
-            [:span.scale-125.pr-1 (ui/icon "bulb" {:class "text-md mr-1"})])
+        (let [pattern-ok? #(>= (count @*password) 6)]
+          [:<>
+           [:h2.text-center.opacity-70.text-sm.py-2
+            "Each graph you want to synchronize via Logseq needs its own password for end-to-end encryption."]
+           [:div.input-hints.text-sm.py-2.px-3.rounded.mb-3.mt-4.flex.items-center
+            (if (or (not (string/blank? @*password))
+                    (not (string/blank? @*pw-confirm)))
+              (if (or (not (pattern-ok?))
+                      (not= @*password @*pw-confirm))
+                [:span.scale-125.pr-1.text-red-600 (ui/icon "alert-circle" {:class "text-md mr-1"})]
+                [:span.scale-125.pr-1.text-green-600 (ui/icon "circle-check" {:class "text-md mr-1"})])
+              [:span.scale-125.pr-1 (ui/icon "bulb" {:class "text-md mr-1"})])
 
-          (if (not (string/blank? @*password))
-            (if (not (string/blank? @*pw-confirm))
-              (if (not= @*pw-confirm @*password)
-                [:span "Password fields are not matching!"]
-                [:span "Password fields are matching!"])
-              [:span "Enter your chosen password again!"])
-            [:span "Choose a strong and hard to guess password!"])
-          ]])
+            (if (not (string/blank? @*password))
+              (if-not (pattern-ok?)
+                [:span "Password can't be less than 6 characters"]
+                (if (not (string/blank? @*pw-confirm))
+                  (if (not= @*pw-confirm @*password)
+                    [:span "Password fields are not matching!"]
+                    [:span "Password fields are matching!"])
+                  [:span "Enter your chosen password again!"]))
+              [:span "Choose a strong and hard to guess password!"])
+            ]]))
 
       [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
        {:type        "password"
+        :ref         *input-ref-0
         :placeholder "Password"
         :auto-focus  true
         :disabled    loading?
-        :on-change   (fn [e]
+        :on-key-up   enter-handler
+        :on-change   (fn [^js e]
                        (reset! *password (util/evalue e))
                        (when (:fail set-remote-graph-pwd-result)
                          (state/set-state! [:file-sync/set-remote-graph-password-result] {})))}]
@@ -136,11 +191,13 @@
       (when init-graph-keys
         [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
          {:type        "password"
+          :ref         *input-ref-1
           :placeholder "Re-enter the password"
           :on-focus    #(reset! *pw-confirm-focused? true)
           :on-blur     #(reset! *pw-confirm-focused? false)
           :disabled    loading?
-          :on-change   (fn [e]
+          :on-key-up   enter-handler
+          :on-change   (fn [^js e]
                          (reset! *pw-confirm (util/evalue e)))}])
 
       (when init-graph-keys
@@ -168,37 +225,7 @@
                     [:span.ml-1 (ui/loading "" {:class "w-4 h-4"})])]
 
                  :disabled loading?
-                 :on-click
-                 (fn []
-                   (let [value @*password]
-                     (cond
-                       (string/blank? value)
-                       nil
-
-                       (and init-graph-keys (not= @*password @*pw-confirm))
-                       (notification/show! "The passwords are not matched." :error)
-
-                       :else
-                       (case type
-                         :local
-                         (p/let [keys (encrypt/generate-key-pair-and-save! repo-url)
-                                 db-encrypted-secret (encrypt/encrypt-with-passphrase value keys)]
-                                (metadata-handler/set-db-encrypted-secret! db-encrypted-secret)
-                                (close-fn true))
-
-                         (:create-pwd-remote :input-pwd-remote)
-                         (do
-                           (state/set-state! [:ui/loading? :set-graph-password] true)
-                           (state/set-state! [:file-sync/set-remote-graph-password-result] {})
-                           (async/go
-                             (let [persist-r (async/<! (sync/encrypt+persist-pwd! @*password GraphUUID))]
-                               (if (instance? js/Error persist-r)
-                                 (js/console.error persist-r)
-                                 (when (fn? after-input-password)
-                                   (async/<! (after-input-password))
-                                   ;; TODO: it's better if based on sync state
-                                   (when init-graph-keys
-                                     (js/setTimeout #(state/pub-event! [:file-sync/maybe-onboarding-show :sync-learn]) 10000))))))))))))]]))
+                 :on-click submit-handler)]]))
 
 (defn input-password
   ([repo-url close-fn] (input-password repo-url close-fn {:type :local}))
