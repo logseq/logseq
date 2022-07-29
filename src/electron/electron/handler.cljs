@@ -289,7 +289,6 @@
   (search/truncate-blocks-table! repo)
   ;; unneeded serialization
   (search/upsert-blocks! repo (bean/->js data))
-  (search/write-search-version! repo)
   [])
 
 (defmethod handle :transact-blocks [_window [_ repo data]]
@@ -520,10 +519,6 @@
   (when-let [f (:window/once-graph-ready @state/state)]
     (f window graph-name)
     (state/set-state! :window/once-graph-ready nil)))
-
-(defmethod handle :searchVersionChanged?
-  [^js _win [_ graph]]
-  (search/version-changed? graph))
 
 (defmethod handle :reloadWindowPage [^js win]
   (logger/warn ::reload-window-page)

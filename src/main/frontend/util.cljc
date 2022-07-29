@@ -919,13 +919,16 @@
      (safe-re-find gp-util/reserved-chars-pattern s)))
 
 #?(:cljs
+   ;; Returning true is not expected. Legacy code, just leave for safety check
    (defn create-title-property?
      [page-name]
      (and (string? page-name)
           (let [file-name  (gp-util/file-name-sanity page-name)
-                page-name' (gp-util/page-name-parsing file-name)]
-            (or (not= page-name page-name')
-                (include-reserved-chars? file-name))))))
+                page-name' (gp-util/page-name-parsing file-name)
+                result     (or (not= page-name page-name')
+                               (include-reserved-chars? file-name))]
+            (when result (js/console.error "`util/create-title-property?` return true for page " page-name))
+            result))))
 
 #?(:cljs
    (defn search-normalize

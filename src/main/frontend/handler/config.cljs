@@ -30,10 +30,11 @@
         (file-handler/set-file-content! repo path new-content)))))
 
 (defn set-config!
-  "Sets config state for repo-specific config"
-  [k v]
-  (let [path (config/get-repo-config-path)]
-    (repo-config-set-key-value path k v)))
+  ([k v]
+   (set-config! (state/get-current-repo) k v))
+  ([repo k v]
+   (let [path (config/get-repo-config-path repo)]
+     (repo-config-set-key-value path k v))))
 
 (defn toggle-ui-show-brackets! []
   (let [show-brackets? (state/show-brackets?)]

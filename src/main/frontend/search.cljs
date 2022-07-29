@@ -271,8 +271,3 @@
   [repo]
   (when-let [engine (get-engine repo)]
     (protocol/remove-db! engine)))
-
-(defn cache-stale?
-  [repo]
-  (when-let [engine (get-engine repo)]
-    (protocol/cache-stale? engine repo)))

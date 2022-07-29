@@ -148,7 +148,8 @@
 
 (defn- graph-switch-on-persisted
   "Logic for keeping db sync when switching graphs
-   Only works for electron"
+   Only works for electron
+   graph: the target graph to switch to"
   [graph {:keys [persist?]}]
   (let [current-repo (state/get-current-repo)]
     (p/do!
@@ -316,13 +317,15 @@
   (p/let [content (when content (encrypt/decrypt content))]
     (state/set-modal! #(git-component/file-specific-version path hash content))))
 
-(defmethod handle :graph/ready [[_ repo]]
+  ;; Hook on graph is restored from `.transit` cache
+(defmethod handle :graph/ready 
+  [[_ repo]]
   (when (config/local-db? repo)
     (p/let [dir (config/get-repo-dir repo)
             dir-exists? (fs/dir-exists? dir)]
       (when-not dir-exists?
         (state/pub-event! [:graph/dir-gone dir]))))
-  (search-handler/rebuild-indices-when-stale! repo)
+  (repo-handler/re-index-when-stale!)
   (repo-handler/graph-ready! repo))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
@@ -558,6 +561,12 @@
                   (state/close-modal!)
                   (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
 
+(defmethod handle :graph/re-index [[_]]
+  (repo-handler/re-index!
+   nfs-handler/rebuild-index!
+   #(do (page-handler/create-today-journal!)
+        (file-sync-restart!))))
+
 (defmethod handle :graph/ask-for-re-index [[_ *multiple-windows?]]
   (if (and (util/atom? *multiple-windows?) @*multiple-windows?)
     (handle
@@ -575,9 +584,7 @@
          :large? true
          :on-click (fn []
                      (state/close-modal!)
-                     (repo-handler/re-index!
-                      nfs-handler/rebuild-index!
-                      page-handler/create-today-journal!)))]])))
+                     (state/pub-event! [:graph/re-index])))]])))
 
 ;; encryption
 (defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]

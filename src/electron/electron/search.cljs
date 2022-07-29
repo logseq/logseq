@@ -6,12 +6,6 @@
             ["electron" :refer [app]]
             [electron.logger :as logger]))
 
-;; version of the search cache
-;; ver. 0.0.1: initial version
-;; ver. 0.0.2: bump version as page name breaking changes of LogSeq 0.5.7 ~ 0.5.9
-(defonce version "0.0.2")
-(defonce invalid-version "0.0.0")
-
 (defonce databases (atom nil))
 
 (defn close!
@@ -79,15 +73,9 @@
   (let [path (.getPath ^object app "userData")]
     (path/join path "search")))
 
-(defn get-search-ver-dir
-  []
-  (let [path (.getPath ^object app "userData")]
-    (path/join path "search.versions")))
-
 (defn ensure-search-dir!
   []
-  (fs/ensureDirSync (get-search-dir))
-  (fs/ensureDirSync (get-search-ver-dir)))
+  (fs/ensureDirSync (get-search-dir)))
 
 (defn get-db-full-path
   [db-name]
@@ -99,25 +87,8 @@
   "File for storing search cache version"
   [db-name]
   (let [db-name (sanitize-db-name db-name)
-        search-dir (get-search-dir)
-        search-ver-dir (get-search-ver-dir)]
-    [db-name (path/join search-dir db-name) (path/join search-ver-dir db-name)]))
-
-(defn get-search-version
-  [db-name]
-  (let [[_db-name db-full-path db-ver-path] (get-db-version-path db-name)]
-    (if (and (fs/existsSync db-ver-path) (fs/existsSync db-full-path)) ;; avoid case that only ver file exists
-      (.toString (fs/readFileSync db-ver-path))
-      invalid-version))) ;; no any cache exists
-
-(defn write-search-version!
-  [db-name]
-  (let [[_db-name _db-full-path db-ver-path] (get-db-version-path db-name)]
-    (fs/writeFileSync db-ver-path version)))
-
-(defn version-changed?
-  [db-name]
-  (not= version (get-search-version db-name)))
+        search-dir (get-search-dir)]
+    [db-name (path/join search-dir db-name)]))
 
 (defn open-db!
   [db-name]
@@ -224,10 +195,9 @@
   [repo]
   (when-let [database (get-db repo)]
     (.close database)
-    (let [[db-name db-full-path db-ver-path] (get-db-version-path repo)]
-      (logger/info "Delete search indice" {:path db-full-path})
+    (let [[db-name db-full-path] (get-db-version-path repo)]
+      (logger/info "Delete search indice: " db-full-path)
       (fs/unlinkSync db-full-path)
-      (fs/unlinkSync db-ver-path)
       (swap! databases dissoc db-name))))
 
 (defn query

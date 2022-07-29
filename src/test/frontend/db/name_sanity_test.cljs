@@ -7,6 +7,7 @@
 (use-fixtures :each fixtures/reset-db)
 
 (defn- test-page-name
+  "Check if page name can be preserved after "
   [page-name]
   (testing (str "Test sanitization page-name: " page-name)
     (let [file-name   (gp-util/file-name-sanity page-name)
@@ -14,9 +15,7 @@
           url-single  (js/encodeURIComponent file-name)
           url-double  (js/encodeURIComponent url-single)
           file-name'  (js/decodeURIComponent url-single)
-          file-name'' (-> url-double
-                          js/decodeURIComponent
-                          js/decodeURIComponent)]
+          file-name'' ( js/decodeURIComponent (js/decodeURIComponent url-double))]
       (is (= page-name page-name'))
       (is (not (util/include-reserved-chars? file-name)))
       (is (= file-name' file-name))
@@ -52,7 +51,13 @@
                      gp-util/android-reserved-chars 
                      gp-util/other-reserved-chars)))
 
-(deftest uri-decoding-tests
-  (is (gp-util/safe-url-decode "%*-sd%%%saf%=lks") "%*-sd%%%saf%=lks") ;; Contains %, but invalid
-  (is (gp-util/safe-url-decode "%2FDownloads%2FCNN%3AIs%5CAll%3AYou%20Need.pdf") "/Downloads/CNN:Is\\All:You Need.pdf")
-  (is (gp-util/safe-url-decode "asldkflksdaf啦放假啦睡觉啦啊啥的都撒娇浪费；dla") "asldkflksdaf啦放假啦睡觉啦啊啥的都撒娇浪费；dla"))
+(deftest ^:focus uri-decoding-tests
+  (is (= (gp-util/safe-url-decode "%*-sd%%%saf%=lks") "%*-sd%%%saf%=lks")) ;; Contains %, but invalid
+  (is (= (gp-util/safe-url-decode "%2FDownloads%2FCNN%3AIs%5CAll%3AYou%20Need.pdf") "/Downloads/CNN:Is\\All:You Need.pdf"))
+  (is (= (gp-util/safe-url-decode "asldkflksdaf啦放假啦睡觉啦啊啥的都撒娇浪费；dla") "asldkflksdaf啦放假啦睡觉啦啊啥的都撒娇浪费；dla")))
+
+(deftest page-name-sanitization-backward-tests
+  (is (= (gp-util/page-name-parsing "abc.def.ghi.jkl") "abc.def.ghi.jkl"))
+  (is (= (gp-util/page-name-parsing "abc%2Fdef%2Fghi%2Fjkl") "abc/def/ghi/jkl"))
+  (is (= (gp-util/page-name-parsing "abc%25%2Fdef%2Fghi%2Fjkl") "abc%/def/ghi/jkl"))
+  (is (= (gp-util/page-name-parsing "abc%2——ef%2Fghi%2Fjkl") "abc%2——ef%2Fghi%2Fjkl")))

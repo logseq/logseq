@@ -356,11 +356,11 @@ tags: [[other]]
       "Correctly returns no results"))
 
 (deftest namespace-queries
-  (load-test-files [{:file/path "pages/ns1.page1.md"
+  (load-test-files [{:file/path "pages/ns1__page1.md"
                      :file/content "foo"}
-                    {:file/path "pages/ns1.page2.md"
+                    {:file/path "pages/ns1__page2.md"
                      :file/content "bar"}
-                    {:file/path "pages/ns2.page1.md"
+                    {:file/path "pages/ns2__page1.md"
                      :file/content "baz"}])
 
   (is (= #{"ns1/page1" "ns1/page2"}

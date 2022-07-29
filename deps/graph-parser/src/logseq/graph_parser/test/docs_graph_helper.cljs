@@ -51,8 +51,24 @@
        (apply merge-with +)
        (into {})))
 
+(defn- dump-data
+  [db]
+  (->> (d/q '[:find ?content ?page-name
+              :where
+              [?b :block/format]
+              [?b :block/content ?content]
+              [?b :block/parent ?p]
+              [?p :block/name ?page-name]]
+            db)
+       (sort-by first)
+       (mapv str)
+       (string/join "\n")
+       (.writeFileSync fs "lsq-dump.txt"))
+  db)
+
 (defn- get-block-format-counts
   [db]
+  (dump-data db)
   (->> (d/q '[:find (pull ?b [*]) :where [?b :block/format]] db)
        (map first)
        (group-by :block/format)

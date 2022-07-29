@@ -184,7 +184,7 @@
   [string]
   (if (string/includes? string "%")
     (try (some-> string str (js/decodeURIComponent))
-         (catch :default _
+         (catch js/Error _
            string))
     string))
 
@@ -208,10 +208,9 @@
   "Parse the file name back into page name"
   [file-name]
   (some-> file-name
-          (string/replace #"%" file-name-sanity) ;; a valid file name should contains no %. however, user might ruin it, so encode them
           (decode-urlencode-escaped)
           (decode-namespace-underlines)
-          (js/decodeURIComponent)
+          (safe-url-decode)
           (validize-namespaces)))
 
 (defn page-name-sanity-lc
