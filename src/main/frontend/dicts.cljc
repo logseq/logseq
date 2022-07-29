@@ -1463,7 +1463,6 @@
         :page/show-journals "Mostrar diarios"
         :page/show-name "Mostar nombre de página"
         :page/hide-name "Ocultar nombre de página"
-        :page/hide-name "Ocultar nombre de página"
         :block/name "Nombre de página"
         :page/last-modified "Fecha de modificación"
         :page/new-title "¿Cuál es el título de su nueva página?"
