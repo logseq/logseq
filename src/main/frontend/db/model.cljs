@@ -861,14 +861,14 @@
   (when-let [db (conn/get-db repo)]
     (let [eid (:db/id (db-utils/entity repo [:block/uuid block-uuid]))]
       (->> (d/q
-            '[:find ?id
-              :in $ ?p %
-              :where
-              (child ?p ?c)
-              [?c :db/id ?id]]
-            db
-            eid
-            rules)
+             '[:find ?id
+               :in $ ?p %
+               :where
+               (child ?p ?c)
+               [?c :block/uuid ?id]]
+             db
+             eid
+             rules)
            (apply concat)))))
 
 (defn get-block-immediate-children
@@ -890,7 +890,8 @@
   [repo block-uuid]
   (let [ids (get-block-children-ids repo block-uuid)]
     (when (seq ids)
-      (db-utils/pull-many repo '[*] ids))))
+      (let [ids' (map (fn [id] [:block/uuid id]) ids)]
+        (db-utils/pull-many repo '[*] ids')))))
 
 ;; TODO: use the tree directly
 (defn- flatten-tree

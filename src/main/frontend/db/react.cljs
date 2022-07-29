@@ -311,21 +311,19 @@
 
 (defn path-refs-need-recalculated?
   [tx-meta]
-  (let [outliner-op (:outliner-op tx-meta)]
+  (when-let [outliner-op (:outliner-op tx-meta)]
     (not (or
           (contains? #{:collapse-expand-blocks :delete-blocks} outliner-op)
           ;; ignore move up/down since it doesn't affect the refs for any blocks
           (contains? #{:move-blocks-up-down} (:move-op tx-meta))
-          (:compute-new-refs? tx-meta)
-          (:undo? tx-meta)
-          (:redo? tx-meta)))))
+          (:undo? tx-meta) (:redo? tx-meta)))))
 
 (defn refresh!
   "Re-compute corresponding queries (from tx) and refresh the related react components."
-  [repo-url {:keys [tx-data tx-meta] :as tx}]
+  [repo-url {:keys [tx-data tx-meta] :as tx} {:keys [skip-path-refs-check?]}]
   (when (and repo-url
              (not (:skip-refresh? tx-meta)))
-    (if (path-refs-need-recalculated? tx-meta)
+    (if (and (path-refs-need-recalculated? tx-meta) (not skip-path-refs-check?))
       ;; Wait for receiving the calculated `path-refs` below and refresh once instead twice
       (state/set-state! :db/outliner-last-tx tx)
       (let [{:keys [tx-data] :as m} (if (:compute-new-refs? tx-meta)

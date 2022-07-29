@@ -122,7 +122,7 @@
   (d/listen! conn :persistence
              (fn [tx-report]
                ;; reactive components
-               (react/refresh! repo tx-report)
+               (react/refresh! repo tx-report {})
 
                (when (and
                       (not config/publishing?)

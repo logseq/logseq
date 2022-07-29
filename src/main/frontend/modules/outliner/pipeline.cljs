@@ -15,7 +15,12 @@
 ;; TODO: it'll be great if we can calculate the :block/path-refs before any
 ;; outliner transaction, this way we can group together the real outliner tx
 ;; and the new path-refs changes, which makes both undo/redo and
-;; react-query/refresh! much easier.
+;; react-query/refresh! much easier, there's no need to have `skip-path-refs-check?`
+;; then.
+
+;; Steps:
+;; 1. For each changed block, new-refs = its page + :block/refs + parents :block/refs
+;; 2. Its children' block/path-refs might need to be updated too.
 (defn compute-block-path-refs
   [tx-meta blocks]
   (let [repo (state/get-current-repo)
@@ -24,22 +29,23 @@
       (when (react/path-refs-need-recalculated? tx-meta)
         (let [*computed-ids (atom #{})]
           (mapcat (fn [block]
-                    (when (and (not (@*computed-ids (:db/id block))) ; not computed yet
+                    (when (and (not (@*computed-ids (:block/uuid block))) ; not computed yet
                                (not (:block/name block)))
                       (let [parents (db-model/get-block-parents repo (:block/uuid block))
                             parents-refs (->> (mapcat :block/path-refs parents)
                                               (map :db/id))
                             old-refs (set (map :db/id (:block/path-refs block)))
-                            new-refs (set (concat [{:db/id (:db/id (:block/page block))}]
-                                                  (:block/refs block)
+                            new-refs (set (concat [(:db/id (:block/page block))]
+                                                  (map :db/id (:block/refs block))
                                                   parents-refs))
                             refs-changed? (not= old-refs new-refs)
                             children (db-model/get-block-children-ids repo (:block/uuid block))
                             children-refs (map (fn [id]
-                                                 {:db/id id
-                                                  :block/path-refs (concat (map :db/id (:block/path-refs (db/entity id)))
-                                                                           new-refs)}) children)]
-                        (swap! *computed-ids set/union (set (cons (:db/id block) children)))
+                                                 {:db/id (:db/id (db/entity [:block/uuid id]))
+                                                  :block/path-refs (concat
+                                                                    (map :db/id (:block/path-refs (db/entity id)))
+                                                                    new-refs)}) children)]
+                        (swap! *computed-ids set/union (set (cons (:block/uuid block) children)))
                         (util/concat-without-nil
                          [(when (and refs-changed? (seq new-refs))
                             {:db/id (:db/id block)
@@ -56,9 +62,12 @@
           refs-tx (set (compute-block-path-refs (:tx-meta tx-report) blocks))
           truncate-refs-tx (map (fn [m] [:db/retract (:db/id m) :block/path-refs]) refs-tx)
           tx (util/concat-without-nil truncate-refs-tx refs-tx)]
-      (when (seq tx)
+      (if (seq tx)
         (db/transact! repo tx {:outliner/transact? true
-                               :compute-new-refs? true}))
+                               :compute-new-refs? true})
+        (do
+          (state/set-state! :db/outliner-last-tx nil)
+          (react/refresh! repo tx-report {:skip-path-refs-check? true})))
       (doseq [p (seq pages)]
         (updated-page-hook tx-report p))
       (when (and state/lsp-enabled? (seq blocks))

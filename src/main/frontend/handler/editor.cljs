@@ -399,15 +399,15 @@
         block (apply dissoc block db-schema/retract-attributes)]
     (profile
      "Save block: "
-     (let [block (wrap-parse-block block)]
+     (let [block' (wrap-parse-block block)]
        (outliner-tx/transact!
          {:outliner-op :save-block}
-         (outliner-core/save-block! block))
+         (outliner-core/save-block! block'))
 
        ;; sanitized page name changed
-       (when-let [title (get-in block [:block/properties :title])]
-         (when-let [old-page-name (:block/name (db/entity (:db/id (:block/page block))))]
-           (when (and (:block/pre-block? block)
+       (when-let [title (get-in block' [:block/properties :title])]
+         (when-let [old-page-name (:block/name (db/entity (:db/id (:block/page block'))))]
+           (when (and (:block/pre-block? block')
                       (not (string/blank? title))
                       (not= (util/page-name-sanity-lc title) old-page-name))
              (state/pub-event! [:page/title-property-changed old-page-name title]))))))))
