@@ -275,7 +275,7 @@
                                                       (rfe/push-state :page {:name page-name})
                                                       (rfe/push-state :file {:path full-path})))}
                                        [:span.file-sync-item (js/decodeURIComponent (:path f))]
-                                       [:div.opacity-50 (util/time-ago (:time f))]]}))
+                                       [:div.opacity-50 (ui/humanity-time (:time f) nil)]]}))
                           (take 10 (:history sync-state))))))
 
         {:links-header
@@ -396,8 +396,9 @@
               :on-click #(set-page-fn version)}
 
              [:div.text-sm.pt-1
-              (util/time-ago (or (:CreateTime version)
-                                 (:create-time version)))]]])))]))
+              (ui/humanity-time
+               (or (:CreateTime version)
+                   (:create-time version)) nil)]]])))]))
 
 (rum/defc pick-page-histories-for-sync
   [repo-url graph-uuid page-name page-entity]
