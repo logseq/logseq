@@ -328,15 +328,16 @@
     (if (path-refs-need-recalculated? tx-meta)
       ;; Wait for receiving the calculated `path-refs` below and refresh once instead twice
       (state/set-state! :db/outliner-last-tx tx)
-      (let [{:keys [tx-data tx-meta]} (if (:compute-new-refs? tx-meta)
-                                        (let [tx (:db/outliner-last-tx @state/state)]
-                                          (state/set-state! :db/outliner-last-tx nil)
-                                          {:tx-meta (:tx-meta tx)
-                                           :tx-data (concat (:tx-data tx) tx-data)})
-                                        tx)]
+      (let [{:keys [tx-data] :as m} (if (:compute-new-refs? tx-meta)
+                                      (let [tx (:db/outliner-last-tx @state/state)]
+                                        (state/set-state! :db/outliner-last-tx nil)
+                                        {:tx-meta (:tx-meta tx)
+                                         :tx-data (concat (:tx-data tx) tx-data)})
+                                      tx)
+            tx' (merge tx m)]
         (when (seq tx-data)
           (let [db (conn/get-db repo-url)
-                affected-keys (get-affected-queries-keys tx)]
+                affected-keys (get-affected-queries-keys tx')]
             (doseq [[k cache] @query-state]
               (let [custom? (= :custom (second k))
                     kv? (= :kv (second k))]
@@ -355,8 +356,8 @@
                       (try
                         (if (and custom? (not immediately-run?))
                           (async/put! (state/get-reactive-custom-queries-chan)
-                                      [#(execute-query! repo-url db k tx cache nil) query])
-                          (execute-query! repo-url db k tx cache {:skip-query-time-check? immediately-run?}))
+                                      [#(execute-query! repo-url db k tx' cache nil) query])
+                          (execute-query! repo-url db k tx' cache {:skip-query-time-check? immediately-run?}))
                         (catch js/Error e
                           (js/console.error e))))))))))))))
 

@@ -13,8 +13,7 @@
    [frontend.state :as state]
    [frontend.util :as util]
    [goog.dom :as gdom]
-   [logseq.graph-parser.block :as gp-block]
-   [frontend.modules.outliner.tree :as outliner-tree]))
+   [logseq.graph-parser.block :as gp-block]))
 
 ;;  Fns
 
@@ -258,7 +257,7 @@
        (db/pull-many repo '[:db/id :block/name :block/original-name])))
 
 (defn- filter-blocks
-  [repo page-name ref-blocks filters ref-pages]
+  [ref-blocks filters ref-pages]
   (if (empty? filters)
     ref-blocks
     (let [ref-pages (zipmap (map :block/name ref-pages) (map :db/id ref-pages))
@@ -278,11 +277,10 @@
                     (empty? (set/intersection include-ids ids)))))))))
 
 (defn get-filtered-ref-blocks
-  [repo page-name ref-blocks filters ref-pages]
+  [ref-blocks filters ref-pages]
   (let [ref-blocks' (->> ref-blocks
                          (mapcat second)
                          (mapcat #(tree-seq map? :block/children %))
                          (map #(dissoc % :block/children)))
-        id->parent (zipmap (map :db/id ref-blocks') (map (comp :db/id :block/parent) ref-blocks'))
-        filtered-blocks (filter-blocks repo page-name ref-blocks' filters ref-pages)]
+        filtered-blocks (filter-blocks ref-blocks' filters ref-pages)]
     (group-by :block/page filtered-blocks)))

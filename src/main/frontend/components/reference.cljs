@@ -4,7 +4,6 @@
             [frontend.components.content :as content]
             [frontend.components.editor :as editor]
             [frontend.context.i18n :refer [t]]
-            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model-db]
@@ -14,8 +13,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]
-            [clojure.walk :as walk]))
+            [rum.core :as rum]))
 
 (defn- frequencies-sort
   [references]
@@ -89,7 +87,7 @@
                      (block-handler/get-blocks-refed-pages repo page-entity ref-blocks))
          filtered-ref-blocks (if block-id
                                ref-blocks
-                               (block-handler/get-filtered-ref-blocks repo page-name ref-blocks filters ref-pages))
+                               (block-handler/get-filtered-ref-blocks ref-blocks filters ref-pages))
          ref-hiccup (block/->hiccup filtered-ref-blocks
                                     {:id page-name
                                      :ref? true

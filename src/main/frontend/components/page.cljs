@@ -306,7 +306,7 @@
     (ui/rotating-arrow @*all-collapsed?)]])
 
 ;; A page is just a logical block
-(rum/defcs page < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo page < rum/reactive
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   [state {:keys [repo page-name] :as option}]

@@ -644,7 +644,8 @@
                 (when-let [f (:init-collapsed (last (:rum/args state)))]
                   (f (::collapsed? state)))
                 state)}
-  [state header content {:keys [title-trigger? on-mouse-down toggle-fn]}]
+  [state header content {:keys [title-trigger? on-mouse-down
+                                _default-collapsed? _init-collapsed]}]
   (let [control? (get state ::control?)
         collapsed? (get state ::collapsed?)
         on-mouse-down (fn [e]

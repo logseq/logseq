@@ -2,9 +2,7 @@
   (:require [frontend.db :as db]
             [frontend.db.model :as model]
             [clojure.string :as string]
-            [frontend.state :as state]
-            [clojure.walk :as walk]
-            [frontend.util :as util]))
+            [frontend.state :as state]))
 
 (defprotocol INode
   (-get-id [this])

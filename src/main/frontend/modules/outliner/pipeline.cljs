@@ -24,28 +24,28 @@
       (when (react/path-refs-need-recalculated? tx-meta)
         (let [*computed-ids (atom #{})]
           (mapcat (fn [block]
-                           (when (and (not (@*computed-ids (:db/id block))) ; not computed yet
-                                      (not (:block/name block)))
-                             (let [parents (db-model/get-block-parents repo (:block/uuid block))
-                                   parents-refs (->> (mapcat :block/path-refs parents)
-                                                     (map :db/id))
-                                   old-refs (set (map :db/id (:block/path-refs block)))
-                                   new-refs (set (concat [{:db/id (:db/id (:block/page block))}]
-                                                         (:block/refs block)
-                                                         parents-refs))
-                                   refs-changed? (not= old-refs new-refs)
-                                   children (db-model/get-block-children-ids repo (:block/uuid block))
-                                   children-refs (map (fn [id]
-                                                        {:db/id id
-                                                         :block/path-refs (concat (map :db/id (:block/path-refs (db/entity id)))
-                                                                                  new-refs)}) children)]
-                               (swap! *computed-ids set/union (set (cons (:db/id block) children)))
-                               (util/concat-without-nil
-                                [(when (and refs-changed? (seq new-refs))
-                                   {:db/id (:db/id block)
-                                    :block/path-refs new-refs})]
-                                children-refs))))
-                         blocks))))))
+                    (when (and (not (@*computed-ids (:db/id block))) ; not computed yet
+                               (not (:block/name block)))
+                      (let [parents (db-model/get-block-parents repo (:block/uuid block))
+                            parents-refs (->> (mapcat :block/path-refs parents)
+                                              (map :db/id))
+                            old-refs (set (map :db/id (:block/path-refs block)))
+                            new-refs (set (concat [{:db/id (:db/id (:block/page block))}]
+                                                  (:block/refs block)
+                                                  parents-refs))
+                            refs-changed? (not= old-refs new-refs)
+                            children (db-model/get-block-children-ids repo (:block/uuid block))
+                            children-refs (map (fn [id]
+                                                 {:db/id id
+                                                  :block/path-refs (concat (map :db/id (:block/path-refs (db/entity id)))
+                                                                           new-refs)}) children)]
+                        (swap! *computed-ids set/union (set (cons (:db/id block) children)))
+                        (util/concat-without-nil
+                         [(when (and refs-changed? (seq new-refs))
+                            {:db/id (:db/id block)
+                             :block/path-refs new-refs})]
+                         children-refs))))
+                  blocks))))))
 
 (defn invoke-hooks
   [tx-report]
