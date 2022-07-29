@@ -12,14 +12,18 @@
   [_tx-report page]
   (file/sync-to-file page))
 
+;; TODO: it'll be great if we can calculate the :block/path-refs before any
+;; outliner transaction, this way we can group together the real outliner tx
+;; and the new path-refs changes, which makes both undo/redo and
+;; react-query/refresh! much easier.
 (defn compute-block-path-refs
   [tx-meta blocks]
   (let [repo (state/get-current-repo)
         blocks (remove :block/name blocks)]
     (when (:outliner-op tx-meta)
       (when (react/path-refs-need-recalculated? tx-meta)
-        (let [*computed-ids (atom #{})
-              tx (mapcat (fn [block]
+        (let [*computed-ids (atom #{})]
+          (mapcat (fn [block]
                            (when (and (not (@*computed-ids (:db/id block))) ; not computed yet
                                       (not (:block/name block)))
                              (let [parents (db-model/get-block-parents repo (:block/uuid block))
@@ -41,9 +45,7 @@
                                    {:db/id (:db/id block)
                                     :block/path-refs new-refs})]
                                 children-refs))))
-                         blocks)]
-          (prn "refs tx: " tx)
-          tx)))))
+                         blocks))))))
 
 (defn invoke-hooks
   [tx-report]

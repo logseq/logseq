@@ -312,10 +312,13 @@
 (defn path-refs-need-recalculated?
   [tx-meta]
   (let [outliner-op (:outliner-op tx-meta)]
-    (and (not (contains? #{:collapse-expand-blocks :delete-blocks} outliner-op))
-        ;; ignore move up/down since it doesn't affect the refs for any blocks
-         (not (contains? #{:move-blocks-up-down} (:move-op tx-meta)))
-         (not (:compute-new-refs? tx-meta)))))
+    (not (or
+          (contains? #{:collapse-expand-blocks :delete-blocks} outliner-op)
+          ;; ignore move up/down since it doesn't affect the refs for any blocks
+          (contains? #{:move-blocks-up-down} (:move-op tx-meta))
+          (:compute-new-refs? tx-meta)
+          (:undo? tx-meta)
+          (:redo? tx-meta)))))
 
 (defn refresh!
   "Re-compute corresponding queries (from tx) and refresh the related react components."
@@ -342,21 +345,20 @@
                        (or (get affected-keys (vec (rest k)))
                            custom?
                            kv?))
-                  (util/profile (str "refresh! " (rest k))
-                                (let [{:keys [query query-fn]} cache
-                                      immediately-run? (or
-                                                        ;; modifying during cards review need to be executed immediately
-                                                        (:cards-query? (meta query))
-                                                        ;; detects whether user is editing in a custom query, if so, execute the query immediately
-                                                        (state/edit-in-query-component))]
-                                  (when (or query query-fn)
-                                    (try
-                                      (if (and custom? (not immediately-run?))
-                                        (async/put! (state/get-reactive-custom-queries-chan)
-                                                    [#(execute-query! repo-url db k tx cache nil) query])
-                                        (execute-query! repo-url db k tx cache {:skip-query-time-check? immediately-run?}))
-                                      (catch js/Error e
-                                        (js/console.error e)))))))))))))))
+                  (let [{:keys [query query-fn]} cache
+                        immediately-run? (or
+                                          ;; modifying during cards review need to be executed immediately
+                                          (:cards-query? (meta query))
+                                          ;; detects whether user is editing in a custom query, if so, execute the query immediately
+                                          (state/edit-in-query-component))]
+                    (when (or query query-fn)
+                      (try
+                        (if (and custom? (not immediately-run?))
+                          (async/put! (state/get-reactive-custom-queries-chan)
+                                      [#(execute-query! repo-url db k tx cache nil) query])
+                          (execute-query! repo-url db k tx cache {:skip-query-time-check? immediately-run?}))
+                        (catch js/Error e
+                          (js/console.error e))))))))))))))
 
 (defn set-key-value
   [repo-url key value]
