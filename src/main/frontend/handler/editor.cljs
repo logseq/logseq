@@ -1940,6 +1940,9 @@
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (some-> (db/pull (:db/id editing-block))
                                 (assoc :block/content (state/get-edit-content))))
+        has-unsaved-edits (and editing-block
+                               (not= (:block/content (db/pull (:db/id editing-block)))
+                                     (state/get-edit-content)))
         target-block (or target-block editing-block)
         block (db/entity (:db/id target-block))
         page (if (:block/name block) block
@@ -1954,10 +1957,10 @@
 
                    :else
                    true)]
-    (when editing-block
+    (when has-unsaved-edits
       (outliner-tx/transact!
-       {:outliner-op :save-block}
-       (outliner-core/save-block! target-block)))
+        {:outliner-op :save-block}
+        (outliner-core/save-block! editing-block)))
     (outliner-tx/transact!
       {:outliner-op :insert-blocks}
       (when target-block
