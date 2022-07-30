@@ -1,0 +1,536 @@
+# This is the main desktop application release workflow for both nightly and beta/stable releases.
+
+name: Build-Desktop-Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      build-target:
+        description: 'Build Target (Release Type)'
+        type: choice
+        required: true
+        options:
+          - beta
+          - nightly
+          - non-release
+        default: "non-release"
+      git-ref:
+        description: "Release Git Ref (Which branch or tag to build?)"
+        required: true
+        default: "master"
+      is-draft:
+        description: 'Draft Release? (Beta only, Nightly will always be a non-draft)'
+        type: boolean
+        required: true
+        default: true
+      is-pre-release:
+        description: 'Pre Release? (labeled as "PreRelease")'
+        type: boolean
+        required: true
+        default: true
+      enable-file-sync:
+        description: 'Build with file sync support'
+        type: boolean
+        required: true
+        default: false
+      enable-plugins:
+        description: 'Build with plugin system support'
+        type: boolean
+        required: true
+        default: true
+  schedule: # Every workday at the 2 P.M. (UTC) we run a scheduled nightly build
+    - cron: '0 14 * * MON-FRI'
+
+env:
+  CLOJURE_VERSION: '1.10.1.763'
+  NODE_VERSION: '16'
+
+jobs:
+  compile-cljs:
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.inputs.git-ref }}
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+
+      - name: Cache yarn cache directory
+        uses: actions/cache@v2
+        id: yarn-cache
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v1.4.3
+        with:
+          java-version: 1.8
+
+      - name: Cache clojure deps
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: ${{ runner.os }}-clojure-lib-${{ hashFiles('**/deps.edn') }}
+
+      - name: Setup clojure
+        uses: DeLaGuardo/setup-clojure@3.5
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+
+      - name: Retrieve tag version
+        id: ref
+        run: |
+          pkgver=$(node ./scripts/get-pkg-version.js "${{ github.event.inputs.build-target }}")
+          echo ::set-output name=version::$pkgver
+
+      - name: Update Nightly APP Version
+        if: ${{ github.event.inputs.build-target == 'nightly' || github.event_name == 'schedule' }}
+        run: |
+          sed -i 's/defonce version ".*"/defonce version "${{ steps.ref.outputs.version }}"/g' src/main/frontend/version.cljs
+
+      - name: Set Build Environment Variables (only when workflow_dispath)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          echo "ENABLE_FILE_SYNC=${{ github.event.inputs.enable-file-sync }}" >> $GITHUB_ENV
+          echo "ENABLE_PLUGINS=${{ github.event.inputs.enable-plugins }}" >> $GITHUB_ENV
+
+      - name: Compile CLJS
+        run: yarn install && gulp build && yarn cljs:release-electron
+
+      - name: Update APP Version
+        run: |
+          sed -i 's/"version": "0.0.1"/"version": "${{ steps.ref.outputs.version }}"/g' ./package.json
+        working-directory: ./static
+
+      - name: Display Package.json
+        run: cat ./package.json
+        working-directory: ./static
+
+      - name: Save VERSION file
+        run: echo "${{ steps.ref.outputs.version }}" > ./VERSION
+        working-directory: ./static
+
+      - name: List Files
+        run: ls -al
+        working-directory: ./static
+
+      - name: Upload Sentry Sourcemaps (beta only)
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
+        run: |
+          curl -sL https://sentry.io/get-cli/ | bash
+          release_name="logseq@${{ steps.ref.outputs.version }}"
+          sentry-cli releases new "${release_name}"
+          sentry-cli releases files "${release_name}" upload-sourcemaps --ext map --ext js ./static/js --url-prefix '~/static/js'
+          sentry-cli releases finalize "${release_name}"
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: logseq
+          SENTRY_PROJECT: logseq
+
+      - name: Cache Static File
+        uses: actions/upload-artifact@v2
+        with:
+          name: static
+          path: static
+
+  build-linux:
+    runs-on: ubuntu-18.04
+    needs: [ compile-cljs ]
+    steps:
+      - name: Download The Static Asset
+        uses: actions/download-artifact@v2
+        with:
+          name: static
+          path: static
+
+      - name: Retrieve tag version
+        id: ref
+        run: |
+          pkgver=$(cat ./static/VERSION)
+          echo ::set-output name=version::$pkgver
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # - name: Cache Node Modules
+      #   uses: actions/cache@v2
+      #   with:
+      #     path: |
+      #       **/node_modules
+      #     key: ${{ runner.os }}-node-modules
+
+      - name: Build/Release Electron App
+        run: yarn install && yarn electron:make
+        working-directory: ./static
+
+      - name: Save artifacts
+        run: |
+          mkdir -p builds
+          # NOTE: save VERSION file to builds directory
+          cp static/VERSION ./builds/VERSION
+          mv static/out/make/*-*.AppImage ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.AppImage
+          mv static/out/make/zip/linux/x64/*-linux-x64-*.zip ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.zip
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: logseq-linux-builds
+          path: builds
+
+  build-windows:
+    runs-on: windows-latest
+    needs: [ compile-cljs ]
+    steps:
+      - name: Download The Static Asset
+        uses: actions/download-artifact@v2
+        with:
+          name: static
+          path: static
+
+      - name: Retrieve tag version
+        id: ref
+        run: |
+          $env:PkgVer=$(cat ./static/VERSION)
+          echo "::set-output name=version::$env:PkgVer"
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # - name: Cache Node Modules
+      #   uses: actions/cache@v2
+      #   with:
+      #    path: |
+      #      **/node_modules
+      #    key: ${{ runner.os }}-node-modules
+
+      - name: Deps Electron app
+        run: yarn install
+        working-directory: ./static
+
+      - name: Fix Deps Electron app
+        run: yarn run postinstall
+        working-directory: ./static/node_modules/dugite/
+
+      - name: Build/Release Electron app
+        run: yarn electron:make
+        working-directory: ./static
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+
+      - name: Save Artifact
+        run: |
+          mkdir builds
+          mv static\out\make\squirrel.windows\x64\*.exe builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: logseq-win64-builds
+          path: builds
+
+  build-macos-x64:
+    needs: [ compile-cljs ]
+    runs-on: macos-11
+
+    steps:
+      - name: Download The Static Asset
+        uses: actions/download-artifact@v2
+        with:
+          name: static
+          path: static
+
+      - name: Retrieve tag version
+        id: ref
+        run: |
+          pkgver=$(cat ./static/VERSION)
+          echo ::set-output name=version::$pkgver
+
+      - name: List Static Files
+        run: ls -al ./static
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+      - name: Cache yarn cache directory
+        uses: actions/cache@v2
+        id: yarn-cache
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Signing By Apple Developer ID
+        uses: apple-actions/import-codesign-certs@v1
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
+
+      # - name: Cache Node Modules
+      #   uses: actions/cache@v2
+      #   with:
+      #     path: |
+      #       **/node_modules
+      #     key: ${{ runner.os }}-node-modules
+
+      - name: Build/Release Electron App for x64
+        run: yarn install && yarn electron:make
+        working-directory: ./static
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_ASC_PROVIDER: ${{ secrets.APPLE_ASC_PROVIDER }}
+
+      - name: Save x64 artifacts
+        run: |
+          mkdir -p builds
+          mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.dmg
+          mv static/out/make/zip/darwin/x64/*.zip ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.zip
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: logseq-darwin-x64-builds
+          path: builds
+
+  build-macos-arm64:
+    needs: [ compile-cljs ]
+    runs-on: macos-11
+
+    steps:
+      - name: Download The Static Asset
+        uses: actions/download-artifact@v2
+        with:
+          name: static
+          path: static
+
+      - name: Retrieve tag version
+        id: ref
+        run: |
+          pkgver=$(cat ./static/VERSION)
+          echo ::set-output name=version::$pkgver
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+      - name: Cache yarn cache directory
+        uses: actions/cache@v2
+        id: yarn-cache
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-arm64-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-arm64-yarn-
+
+      - name: Signing By Apple Developer ID
+        uses: apple-actions/import-codesign-certs@v1
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
+
+      # - name: Cache Node Modules
+      #   uses: actions/cache@v2
+      #   with:
+      #     path: |
+      #       **/node_modules
+      #     key: ${{ runner.os }}-node-modules
+
+      - name: Fetch deps and fix dugit arch for arm64
+        run: yarn install --ignore-platform && cd node_modules/dugite && npm_config_arch=arm64 node script/download-git.js
+        working-directory: ./static
+
+      - name: Build/Release Electron App for arm64
+        run: yarn electron:make-macos-arm64
+        working-directory: ./static
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_ASC_PROVIDER: ${{ secrets.APPLE_ASC_PROVIDER }}
+
+      - name: Save arm64 artifacts
+        run: |
+          mkdir -p builds
+          mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.dmg
+          mv static/out/make/zip/darwin/arm64/*.zip ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.zip
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: logseq-darwin-arm64-builds
+          path: builds
+
+  # reuse workflow via workflow_call
+  build-android:
+    uses: logseq/logseq/.github/workflows/build-android.yml@master
+    with:
+      build-target: "${{ github.event.inputs.build-target }}"
+    secrets:
+      ANDROID_KEYSTORE: "${{ secrets.ANDROID_KEYSTORE }}"
+      ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+      SENTRY_AUTH_TOKEN: "${{ secrets.SENTRY_AUTH_TOKEN }}"
+
+  nightly-release:
+    if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
+    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows, build-android ]
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Download MacOS x64 Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: logseq-darwin-x64-builds
+          path: ./
+
+      - name: Download MacOS arm64 Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: logseq-darwin-arm64-builds
+          path: ./
+
+      - name: Download The Linux Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: logseq-linux-builds
+          path: ./
+
+      - name: Download The Windows Artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: logseq-win64-builds
+          path: ./
+
+      - name: Download Android Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: logseq-android-builds
+          path: ./
+
+      - name: Generate SHA256 checksums
+        run: |
+          sha256sum *-darwin-* > SHA256SUMS.txt
+          sha256sum *-win-* >> SHA256SUMS.txt
+          sha256sum *-linux-* >> SHA256SUMS.txt
+          sha256sum *.apk >> SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: List files
+        run: ls -rl
+
+      - name: Update Nightly Release
+        uses: andelf/nightly-release@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: nightly
+          name: 'Desktop/Android APP Nightly Release $$'
+          draft: false
+          prerelease: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.is-pre-release) || (github.event_name == 'schedule')}}
+          body: |
+            This is a nightly release of the Logseq desktop app.
+            It's unstable compared to the official releases, **use it with caution**!
+          files: |
+            ./SHA256SUMS.txt
+            ./*.zip
+            ./*.dmg
+            ./*.exe
+            ./*.AppImage
+            ./*.apk
+
+  release:
+    # NOTE: For now, we only have beta channel to be released on Github
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
+    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows, build-android ]
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Download MacOS x64 Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: logseq-darwin-x64-builds
+          path: ./
+
+      - name: Download MacOS arm64 Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: logseq-darwin-arm64-builds
+          path: ./
+
+      - name: Download The Linux Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: logseq-linux-builds
+          path: ./
+
+      - name: Download The Windows Artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: logseq-win64-builds
+          path: ./
+
+      - name: Download Android Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: logseq-android-builds
+          path: ./
+
+      - name: List files
+        run: ls -rl
+
+      - name: Retrieve tag version
+        id: ref
+        run: |
+          pkgver=$(cat VERSION)
+          echo ::set-output name=version::$pkgver
+
+      - name: Generate SHA256 checksums
+        run: |
+          sha256sum *-darwin-* > SHA256SUMS.txt
+          sha256sum *-win-* >> SHA256SUMS.txt
+          sha256sum *-linux-* >> SHA256SUMS.txt
+          sha256sum *.apk >> SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create Release Draft
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.ref.outputs.version }}
+          name: Desktop/Android APP ${{ steps.ref.outputs.version }} (Beta Testing)
+          body: "TODO: Fill this changelog. Sorry for the inconvenience!"
+          draft: ${{ github.event.inputs.is-draft }}
+          prerelease: ${{ github.event.inputs.is-pre-release }}
+          files: |
+            ./VERSION
+            ./SHA256SUMS.txt
+            ./*.zip
+            ./*.dmg
+            ./*.exe
+            ./*.AppImage
+            ./*.apk
