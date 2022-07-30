@@ -995,9 +995,10 @@
           [top-level-block-uuids content] (compose-copied-blocks-contents repo ids)
           block (db/entity [:block/uuid (first ids)])]
       (when block
-        (let [html (export/export-blocks-as-html repo top-level-block-uuids)]
-          (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html)))
-        (state/set-copied-blocks! content (get-all-blocks-by-ids repo top-level-block-uuids))
+        (let [html (export/export-blocks-as-html repo top-level-block-uuids)
+              content (property/remove-id-property (:block/format block) content)]
+          (util/copy-to-clipboard! content (when html? html))
+          (state/set-copied-blocks! content (get-all-blocks-by-ids repo top-level-block-uuids)))
         (notification/show! "Copied!" :success)))))
 
 (defn copy-block-refs
@@ -1209,9 +1210,10 @@
           ;; TODO: support org mode
           [_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
           html (export/export-blocks-as-html repo [block-id])
-          sorted-blocks (tree/get-sorted-block-and-children repo (:db/id block))]
+          sorted-blocks (tree/get-sorted-block-and-children repo (:db/id block))
+          md-content (property/remove-id-property (:block/format block) md-content)]
       (state/set-copied-blocks! md-content sorted-blocks)
-      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html)
+      (util/copy-to-clipboard!  md-content html)
       (delete-block-aux! block true))))
 
 (defn clear-last-selected-block!

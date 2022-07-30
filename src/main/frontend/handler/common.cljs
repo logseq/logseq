@@ -8,15 +8,10 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.property :as property]
             [goog.object :as gobj]
             ["ignore" :as Ignore]
             [lambdaisland.glogi :as log]
             [borkdude.rewrite-edn :as rewrite]))
-
-(defn copy-to-clipboard-without-id-property!
-  [format raw-text html]
-  (util/copy-to-clipboard! (property/remove-id-property format raw-text) html))
 
 (defn config-with-document-mode
   [config]
