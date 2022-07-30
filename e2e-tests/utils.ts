@@ -202,10 +202,11 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
   }
 
   await page.waitForFunction('window.document.title === "Logseq"')
+  await page.waitForTimeout(500)
 
   // If there is an error notification from a previous test graph being deleted,
   // close it first so it doesn't cover up the UI
-  while (await (page.locator('.notification-close-button')?.isVisible())) {
+  while (await (page.locator('.notification-close-button').first()?.isVisible())) {
     await page.click('.notification-close-button')
     await page.waitForTimeout(500)
   }
