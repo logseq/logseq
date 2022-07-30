@@ -175,6 +175,7 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
   if (await onboardingOpenButton.isVisible()) {
     await onboardingOpenButton.click()
   } else {
+    console.log("No onboarding button, loading file manually")
     let sidebar = page.locator('#left-sidebar')
     if (!/is-open/.test(await sidebar.getAttribute('class') || '')) {
       await page.click('#left-menu.button')
@@ -185,6 +186,7 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
     await page.waitForSelector('#left-sidebar .dropdown-wrapper >> text="Add new graph"',
     { state: 'visible', timeout: 5000 })
     await page.click('text=Add new graph')
+    await page.waitForSelector('strong:has-text("Choose a folder")',{ state: 'visible', timeout: 5000 })
 
     expect(page.locator('#repo-name')).toHaveText(pathlib.basename(path))
   }
@@ -208,7 +210,7 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
   // close it first so it doesn't cover up the UI
   while (await (page.locator('.notification-close-button').first()?.isVisible())) {
     await page.click('.notification-close-button')
-    await page.waitForTimeout(500)
+    await page.waitForTimeout(250)
   }
 
   console.log('Graph loaded for ' + path)
