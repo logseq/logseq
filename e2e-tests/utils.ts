@@ -160,7 +160,7 @@ export async function openLeftSidebar(page: Page): Promise<void> {
   let sidebar = page.locator('#left-sidebar')
 
   // Left sidebar is toggled by `is-open` class
-  if (!/is-open/.test(await sidebar.getAttribute('class'))) {
+  if (!/is-open/.test(await sidebar.getAttribute('class') || '')) {
     await page.click('#left-menu.button')
     await page.waitForTimeout(10)
     await expect(sidebar).toHaveClass(/is-open/)
@@ -176,7 +176,7 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
     await onboardingOpenButton.click()
   } else {
     let sidebar = page.locator('#left-sidebar')
-    if (!/is-open/.test(await sidebar.getAttribute('class'))) {
+    if (!/is-open/.test(await sidebar.getAttribute('class') || '')) {
       await page.click('#left-menu.button')
       await expect(sidebar).toHaveClass(/is-open/)
     }
