@@ -238,7 +238,7 @@
           (if (srs/card-block? block)
             (ui/menu-link
              {:key      "Preview Card"
-              :on-click #(srs/preview block-id)}
+              :on-click #(srs/preview (:db/id block))}
              "Preview Card")
             (ui/menu-link
              {:key      "Make a Card"

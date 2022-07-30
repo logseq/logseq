@@ -254,7 +254,7 @@
   Add an extra condition: block's :block/refs contains `#card or [[card]]'"
   ([repo query-string]
    (query repo query-string {}))
-  ([repo query-string {:keys [disable-reactive? use-cache?]
+  ([repo query-string {:keys [use-cache?]
                        :or {use-cache? true}}]
    (when (string? query-string)
      (let [result (if (string/blank? query-string)
@@ -277,11 +277,8 @@
                                                                :rules (or rules [])}
                                                               (merge
                                                                {:use-cache? use-cache?}
-                                                               (cond->
-                                                                 (when sort-by
-                                                                   {:transform-fn sort-by})
-                                                                 disable-reactive?
-                                                                 (assoc :disable-reactive? true))))]
+                                                               (when sort-by
+                                                                 {:transform-fn sort-by})))]
                           (when result
                             (flatten (util/react result)))))))]
        (vec result)))))
@@ -421,21 +418,13 @@
 
 (rum/defcs view
   < rum/reactive
-  db-mixins/query
   (rum/local 1 ::phase)
   (rum/local {} ::review-records)
-  {:will-mount (fn [state]
-                 (state/set-state! :srs/mode? true)
-                 state)
-   :will-unmount (fn [state]
-                   (state/set-state! :srs/mode? false)
-                   state)}
   [state blocks {preview? :preview?
                  modal? :modal?
                  cb :callback}
    card-index]
-  (let [blocks (if (fn? blocks) (blocks) blocks)
-        review-records (::review-records state)
+  (let [review-records (::review-records state)
         current-block (if preview?
                         (when card-index (util/nth-safe blocks @card-index))
                         (first blocks))
@@ -517,24 +506,23 @@
 
 (rum/defc view-modal <
   (shortcut/mixin :shortcut.handler/cards)
-  rum/reactive
-  db-mixins/query
   [blocks option card-index]
   (let [option (update option :random-mode? (fn [v] (if (util/atom? v) @v v)))
-        blocks (if (fn? blocks) (blocks) blocks)
         blocks (if (:random-mode? option)
                  (shuffle blocks)
                  blocks)]
     [:div#cards-modal
      (if (seq blocks)
-       (view blocks option card-index)
+       (rum/with-key
+         (view blocks option card-index)
+         (:db/id (first blocks)))
        review-finished)]))
 
-(rum/defc preview-cp
+(rum/defc preview-cp < rum/reactive db-mixins/query
   [block-id]
-  (let [blocks-f (fn [] (db/get-paginated-blocks (state/get-current-repo) block-id
-                                                 {:scoped-block-id block-id}))]
-    (view-modal blocks-f {:preview? true} (atom 0))))
+  (let [blocks (db/get-paginated-blocks (state/get-current-repo) block-id
+                                        {:scoped-block-id block-id})]
+    (view-modal blocks {:preview? true} (atom 0))))
 
 (defn preview
   [block-id]
@@ -570,8 +558,7 @@
   (try
     (let [repo (state/get-current-repo)
           query-string ""
-          blocks (query repo query-string {:use-cache?        false
-                                           :disable-reactive? true})]
+          blocks (query repo query-string {:use-cache?        false})]
       (when (seq blocks)
         (let [{:keys [result]} (query-scheduled blocks (tl/local-now))
               count (count result)]
@@ -585,28 +572,33 @@
   (rum/local 0 ::card-index)
   (rum/local false ::random-mode?)
   (rum/local false ::preview-mode?)
+  {:will-mount (fn [state]
+                 (state/set-state! :srs/mode? true)
+                 state)
+   :will-unmount (fn [state]
+                   (state/set-state! :srs/mode? false)
+                   state)}
   [state config options]
   (let [*random-mode? (::random-mode? state)
         *preview-mode? (::preview-mode? state)
         repo (state/get-current-repo)
-        query-string (string/join ", " (:arguments options))
+        query-string (or (:query-string options)
+                         (string/join ", " (:arguments options)))
         query-result (query repo query-string)
-        *card-index (::card-index state)
-        global? (:global? config)]
+        *card-index (::card-index state)]
     (if (seq query-result)
       (let [{:keys [total result]} (query-scheduled query-result (tl/local-now))
             review-cards result
             card-query-block (db/entity [:block/uuid (:block/uuid config)])
             filtered-total (count result)
-            ;; FIXME: It seems that model? is always true?
+            ;; FIXME: It seems that modal? is always true?
             modal? (:modal? config)
             callback-fn (fn [review-records]
                           (when-not @*preview-mode?
                             (operation-card-info-summary!
                              review-records review-cards card-query-block)
                             (persist-var/persist-save of-matrix)))]
-        [:div.flex-1.cards-review {:style (when modal? {:height "100%"})
-                                   :class (if global? "" "shadow-xl")}
+        [:div.flex-1.cards-review {:style (when modal? {:height "100%"})}
          [:div.flex.flex-row.items-center.justify-between.cards-title
           [:div.flex.flex-row.items-center
            (if @*preview-mode?
@@ -665,28 +657,20 @@
            [:div.px-1
             (when (and (not modal?) (not @*preview-mode?))
               {:on-click (fn []
-                           (let [blocks-f (fn []
-                                            (let [query-result (query repo query-string)]
-                                              (:result (query-scheduled query-result (tl/local-now)))))]
-                             (state/set-modal! #(view-modal
-                                                 blocks-f
-                                                 {:modal? true
-                                                  :random-mode? *random-mode?
-                                                  :preview? false
-                                                  :callback callback-fn}
-                                                 *card-index)
-                                               {:id :srs})))})
+                           (state/set-modal! #(cards (assoc config :modal? true) {:query-string query-string})
+                                             {:id :srs}))})
             (let [view-fn (if modal? view-modal view)
                   blocks (if @*preview-mode?
                            (query repo query-string)
                            review-cards)]
-              (view-fn blocks
-               (merge config
-                      {:global? global?
-                       :random-mode? @*random-mode?
-                       :preview? @*preview-mode?
-                       :callback callback-fn})
-               *card-index))]
+              (rum/with-key
+                (view-fn blocks
+                         (merge config
+                                {:random-mode? @*random-mode?
+                                 :preview? @*preview-mode?
+                                 :callback callback-fn})
+                         *card-index)
+                (:db/id (first blocks))))]
            review-finished)])
       (if global?
         [:div.ls-card.content
