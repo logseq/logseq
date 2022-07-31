@@ -1203,13 +1203,17 @@
     (let [repo (state/get-current-repo)
           page? (:block/name block)
           result (if page?
-                   (let [pages (page-alias-set repo (:block/name block))]
+                   (let [pages (page-alias-set repo (:block/name block))
+                         block-page (:db/id (:block/page block))]
                      (d/q
                        '[:find [?block ...]
-                         :in $ [?ref-page ...]
+                         :in $ [?ref-page ...] ?block-page
                          :where
-                         [?block :block/refs ?ref-page]]
+                         [?block :block/refs ?ref-page]
+                         [?block :block/page ?p]
+                         [(not= ?p ?block-page)]]
                        (conn/get-db repo)
+                       block-page
                        pages))
                    (:block/_refs block))]
       (count result))))

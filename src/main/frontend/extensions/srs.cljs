@@ -357,16 +357,17 @@
   (when card-query-block
     (let [review-count (count (flatten (vals review-records)))
           review-cards-count (count review-cards)
-          score-5-count (count (get review-records 5))
-          score-1-count (count (get review-records 1))]
+          score-remembered-count (+ (count (get review-records 5))
+                                    (count (get review-records 3)))
+          score-forgotten-count (count (get review-records 1))]
       (editor-handler/insert-block-tree-after-target
        (:db/id card-query-block) false
        [{:content (util/format "Summary: %d items, %d review counts [[%s]]"
                                review-cards-count review-count (date/today))
          :children [{:content
-                     (util/format "Remembered:   %d (%d%%)" score-5-count (* 100 (/ score-5-count review-count)))}
+                     (util/format "Remembered:   %d (%d%%)" score-remembered-count (* 100 (/ score-remembered-count review-count)))}
                     {:content
-                     (util/format "Forgotten :   %d (%d%%)" score-1-count (* 100 (/ score-1-count review-count)))}]}]
+                     (util/format "Forgotten :   %d (%d%%)" score-forgotten-count (* 100 (/ score-forgotten-count review-count)))}]}]
        (:block/format card-query-block)))))
 
 ;;; ================================================================
@@ -379,10 +380,6 @@
                          (if (> n 0)
                            (dec n)
                            n))))
-
-(defn- review-finished?
-  [cards]
-  (<= (count cards) 1))
 
 (defn- score-and-next-card [score card *card-index finished? *phase *review-records cb]
   (operation-score! card score)
@@ -406,34 +403,31 @@
 
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click class]}]
   (ui/button
-   [:span btn-text (when-not (util/sm-breakpoint?)
-                     [" " (ui/render-keyboard-shortcut shortcut)])]
-   :id id
-   :class (str id " " class)
-   :background background
-   :on-click (fn [e]
-               (when-let [elem (gobj/get e "target")]
-                 (.add (.-classList elem) "opacity-25"))
-               (js/setTimeout #(on-click) 10))))
+    [:span btn-text (when-not (util/sm-breakpoint?)
+                      [" " (ui/render-keyboard-shortcut shortcut)])]
+    :id id
+    :class (str id " " class)
+    :background background
+    :on-mouse-down (fn [e] (util/stop-propagation e))
+    :on-click (fn [e]
+                (js/setTimeout #(on-click) 10))))
 
-(rum/defcs view
-  < rum/reactive
+(rum/defcs view < rum/reactive db-mixins/query
   (rum/local 1 ::phase)
   (rum/local {} ::review-records)
   [state blocks {preview? :preview?
+                 cards? :cards?
                  modal? :modal?
                  cb :callback}
    card-index]
   (let [review-records (::review-records state)
-        current-block (if preview?
-                        (when card-index (util/nth-safe blocks @card-index))
-                        (first blocks))
+        current-block (util/nth-safe blocks @card-index)
         card (when current-block (->card current-block))
-        finished? (review-finished? blocks)]
-    (if-not card
+        finished? (= (inc @card-index) (count blocks))]
+    (if (nil? card)
       review-finished
       (let [phase (::phase state)
-            {blocks :value next-phase :next-phase} (show-cycle card @phase)
+            {current-blocks :value next-phase :next-phase} (show-cycle card @phase)
             root-block (.-block card)
             root-block-id (:block/uuid root-block)]
         [:div.ls-card.content
@@ -444,7 +438,7 @@
            [:div {:style {:margin-top 20}}
             (component-block/breadcrumb {} repo root-block-id {})])
          (component-block/blocks-container
-          blocks
+          current-blocks
           (merge (show-cycle-config card @phase)
                  {:id (str root-block-id)
                   :editor-box editor/box
@@ -460,7 +454,9 @@
                                   :id "card-answers"
                                   :class "mr-2"
                                   :on-click #(reset! phase next-phase)}))
-            (when (and (> (count blocks) 1) preview?)
+            (when (and (not= @card-index (count blocks))
+                       cards?
+                       preview?)
               (btn-with-shortcut {:btn-text "Next"
                                   :shortcut "n"
                                   :id       "card-next"
@@ -507,16 +503,12 @@
 (rum/defc view-modal <
   (shortcut/mixin :shortcut.handler/cards)
   [blocks option card-index]
-  (let [option (update option :random-mode? (fn [v] (if (util/atom? v) @v v)))
-        blocks (if (:random-mode? option)
-                 (shuffle blocks)
-                 blocks)]
-    [:div#cards-modal
-     (if (seq blocks)
-       (rum/with-key
-         (view blocks option card-index)
-         (:db/id (first blocks)))
-       review-finished)]))
+  [:div#cards-modal
+   (if (seq blocks)
+     (rum/with-key
+       (view blocks option card-index)
+       (str "ls-card-" (:db/id (first blocks))))
+     review-finished)])
 
 (rum/defc preview-cp < rum/reactive db-mixins/query
   [block-id]
@@ -568,30 +560,20 @@
       (js/console.error e) 0)))
 
 ;;; register cards macro
-(rum/defcs ^:large-vars/cleanup-todo cards < rum/reactive db-mixins/query
+(rum/defcs ^:large-vars/cleanup-todo cards-inner < rum/reactive db-mixins/query
   (rum/local 0 ::card-index)
   (rum/local false ::random-mode?)
   (rum/local false ::preview-mode?)
-  {:will-mount (fn [state]
-                 (state/set-state! :srs/mode? true)
-                 state)
-   :will-unmount (fn [state]
-                   (state/set-state! :srs/mode? false)
-                   state)}
-  [state config options]
+  [state config options {:keys [query-string query-result due-result]}]
   (let [*random-mode? (::random-mode? state)
         *preview-mode? (::preview-mode? state)
         repo (state/get-current-repo)
-        query-string (or (:query-string options)
-                         (string/join ", " (:arguments options)))
-        query-result (query repo query-string)
         *card-index (::card-index state)]
     (if (seq query-result)
-      (let [{:keys [total result]} (query-scheduled query-result (tl/local-now))
-            review-cards result
+      (let [{:keys [total result]} due-result
+            review-cards (if @*preview-mode? query-result result)
             card-query-block (db/entity [:block/uuid (:block/uuid config)])
             filtered-total (count result)
-            ;; FIXME: It seems that modal? is always true?
             modal? (:modal? config)
             callback-fn (fn [review-records]
                           (when-not @*preview-mode?
@@ -617,10 +599,10 @@
                         [:span "/"]
                         total])
              (ui/tippy {:html [:div.text-sm "overdue/total"]
-                      ;; :class "tippy-hover"
+                        ;; :class "tippy-hover"
                         :interactive true}
                        [:div.opacity-60.text-sm.mr-3
-                        filtered-total
+                        (max 0 (- filtered-total @*card-index))
                         [:span "/"]
                         total]))
 
@@ -653,25 +635,21 @@
                                                  :font-weight 600}
                                                  @*random-mode?
                                                  (assoc :color "orange"))})])]]
-         (if (or @*preview-mode? (seq review-cards))
-           [:div.px-1
-            (when (and (not modal?) (not @*preview-mode?))
-              {:on-click (fn []
-                           (state/set-modal! #(cards (assoc config :modal? true) {:query-string query-string})
-                                             {:id :srs}))})
-            (let [view-fn (if modal? view-modal view)
-                  blocks (if @*preview-mode?
-                           (query repo query-string)
-                           review-cards)]
-              (rum/with-key
-                (view-fn blocks
-                         (merge config
-                                {:random-mode? @*random-mode?
-                                 :preview? @*preview-mode?
-                                 :callback callback-fn})
-                         *card-index)
-                (:db/id (first blocks))))]
-           review-finished)])
+         [:div.px-1
+          (when (and (not modal?) (not @*preview-mode?))
+            {:on-click (fn []
+                         (state/set-modal! #(cards (assoc config :modal? true) {:query-string query-string})
+                                           {:id :srs}))})
+          (let [view-fn (if modal? view-modal view)
+                blocks (if @*preview-mode? query-result review-cards)
+                blocks (if @*random-mode? (shuffle blocks) blocks)]
+            (view-fn blocks
+                     (merge config
+                            (merge options
+                                   {:random-mode? @*random-mode?
+                                    :preview? @*preview-mode?
+                                    :callback callback-fn}))
+                     *card-index))]])
       (if global?
         [:div.ls-card.content
          [:h1.title "Time to create a card!"]
@@ -687,6 +665,24 @@
          [:div.w-full.flex-1
           [:code.p-1 (str "Cards: " query-string)]]
          [:div.mt-2.ml-2.font-medium "No matched cards"]]))))
+
+(rum/defc cards < rum/static
+  {:will-mount (fn [state]
+                 (state/set-state! :srs/mode? true)
+                 state)
+   :will-unmount (fn [state]
+                   (state/set-state! :srs/mode? false)
+                   state)}
+  [config options]
+  (let [repo (state/get-current-repo)
+        query-string (or (:query-string options)
+                         (string/join ", " (:arguments options)))
+        query-result (query repo query-string)
+        due-result (query-scheduled query-result (tl/local-now))]
+    (cards-inner config (assoc options :cards? true)
+                 {:query-string query-string
+                  :query-result query-result
+                  :due-result due-result})))
 
 (rum/defc global-cards <
   {:will-mount (fn [state]
