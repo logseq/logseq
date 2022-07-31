@@ -8,7 +8,6 @@
             [frontend.util.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
             [frontend.db :as db]
-            [frontend.db.model :as db-model]
             [frontend.db-mixins :as db-mixins]
             [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
@@ -22,7 +21,6 @@
             [cljs-time.local :as tl]
             [cljs-time.coerce :as tc]
             [clojure.string :as string]
-            [goog.object :as gobj]
             [rum.core :as rum]
             [frontend.modules.shortcut.core :as shortcut]
             [medley.core :as medley]))
@@ -409,7 +407,7 @@
     :class (str id " " class)
     :background background
     :on-mouse-down (fn [e] (util/stop-propagation e))
-    :on-click (fn [e]
+    :on-click (fn [_e]
                 (js/setTimeout #(on-click) 10))))
 
 (rum/defcs view < rum/reactive db-mixins/query
@@ -559,6 +557,8 @@
     (catch js/Error e
       (js/console.error e) 0)))
 
+(declare cards)
+
 ;;; register cards macro
 (rum/defcs ^:large-vars/cleanup-todo cards-inner < rum/reactive db-mixins/query
   (rum/local 0 ::card-index)
@@ -567,7 +567,6 @@
   [state config options {:keys [query-string query-result due-result]}]
   (let [*random-mode? (::random-mode? state)
         *preview-mode? (::preview-mode? state)
-        repo (state/get-current-repo)
         *card-index (::card-index state)]
     (if (seq query-result)
       (let [{:keys [total result]} due-result
@@ -650,7 +649,7 @@
                                     :preview? @*preview-mode?
                                     :callback callback-fn}))
                      *card-index))]])
-      (if global?
+      (if (:global? config)
         [:div.ls-card.content
          [:h1.title "Time to create a card!"]
 

@@ -935,7 +935,7 @@
 (rum/defc lazy-visible
   ([content-fn]
    (lazy-visible content-fn nil))
-  ([content-fn {:keys [trigger-once? debug-id]
+  ([content-fn {:keys [trigger-once? _debug-id]
                 :or {trigger-once? false}}]
    (if (or (util/mobile?) (mobile-util/native-platform?))
      (content-fn)
