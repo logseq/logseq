@@ -9,7 +9,8 @@
                      [frontend.config :as config]
                      [logseq.graph-parser.util :as gp-util]
                      [lambdaisland.glogi :as log]
-                     [frontend.search :as search])))
+                     [frontend.search :as search]
+                     [logseq.graph-parser.block :as gp-block])))
 
 #?(:cljs
    (defn new-outliner-txs-state [] (atom [])))
@@ -63,8 +64,10 @@
                  conn (conn/get-db repo false)
                  editor-cursor (state/get-current-edit-block-and-position)
                  meta (merge opts {:editor-cursor editor-cursor})
-                 rs (d/transact! conn txs (assoc meta
-                                                 :outliner/transact? true))]
+                 macro-blocks (mapcat gp-block/extract-macro-blocks-from-content
+                                      (keep (fn [x] (and (map? x) (:block/content x))) txs))
+                 txs (concat txs macro-blocks)
+                 rs (d/transact! conn txs (assoc meta :outliner/transact? true))]
              (when true                 ; TODO: add debug flag
                (let [eids (distinct (mapv first (:tx-data rs)))
                      left&parent-list (->>

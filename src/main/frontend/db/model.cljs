@@ -1642,3 +1642,24 @@
                         (remove false?)
                         (remove nil?))]
     orphaned-pages))
+
+(defn get-macro-blocks
+  [repo]
+  (d/q
+    '[:find [(pull ?b [*]) ...]
+      :where
+      [?b :block/type "macro"]]
+    (conn/get-db repo)))
+
+(defn get-blocks-by-macro-name
+  [repo macro-name]
+  (d/q
+    '[:find [(pull ?b [*]) ...]
+      :in $ ?macro-name
+      :where
+      [?b :block/type "macro"]
+      [?b :block/properties ?properties]
+      [(get ?properties :name) ?name]
+      [(= ?name ?macro-name)]]
+    (conn/get-db repo)
+    macro-name))
