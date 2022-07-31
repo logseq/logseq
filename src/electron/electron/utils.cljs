@@ -46,7 +46,7 @@
         dirs (js->clj (fs/readdirSync plugins-root #js{"withFileTypes" true}))
         dirs (->> dirs
                   (filter #(.isDirectory %))
-                  (filter #(not (string/starts-with? (.-name %) "_")))
+                  (filter (fn [f] (not (some #(string/starts-with? (.-name f) %) ["_" "."]))))
                   (map #(path/join plugins-root (.-name %))))]
     dirs))
 
