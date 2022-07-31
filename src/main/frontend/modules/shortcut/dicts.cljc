@@ -251,6 +251,7 @@
              :command.git/commit                     "Git Commit-Nachricht"
              :command.editor/select-block-down       "Block unterhalb auswählen"
              :command.editor/select-all-blocks       "Alle Blöcke auswählen"}
+   :nl      {}
    :fr      {:shortcut.category/formatting           "Formats"
              :command.editor/indent                  "Indenter un Bloc vers la droite"
              :command.editor/outdent                 "Indenter un Bloc vers la gauche"
