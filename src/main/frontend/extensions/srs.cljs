@@ -8,11 +8,14 @@
             [frontend.util.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.db-mixins :as db-mixins]
             [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
             [frontend.components.block :as component-block]
             [frontend.components.macro :as component-macro]
+            [frontend.components.select :as component-select]
+            [frontend.components.svg :as svg]
             [frontend.ui :as ui]
             [frontend.date :as date]
             [frontend.commands :as commands]
@@ -559,12 +562,23 @@
 
 (declare cards)
 
+(rum/defc cards-select
+  [{:keys [on-chosen]}]
+  (let [cards (db-model/get-macro-blocks (state/get-current-repo) "cards")
+        items (map (comp :arguments :block/properties) cards)
+        items (concat items ["All"])]
+    (component-select/select {:items items
+                              :on-chosen on-chosen
+                              :close-modal? false
+                              :input-default-placeholder "Switch to"
+                              :extract-fn nil})))
+
 ;;; register cards macro
 (rum/defcs ^:large-vars/cleanup-todo cards-inner < rum/reactive db-mixins/query
   (rum/local 0 ::card-index)
   (rum/local false ::random-mode?)
   (rum/local false ::preview-mode?)
-  [state config options {:keys [query-string query-result due-result]}]
+  [state config options {:keys [query-atom query-string query-result due-result]}]
   (let [*random-mode? (::random-mode? state)
         *preview-mode? (::preview-mode? state)
         *card-index (::card-index state)]
@@ -582,10 +596,23 @@
         [:div.flex-1.cards-review {:style (when modal? {:height "100%"})}
          [:div.flex.flex-row.items-center.justify-between.cards-title
           [:div.flex.flex-row.items-center
-           (if @*preview-mode?
-             (ui/icon "book" {:style {:font-size 20}})
-             (ui/icon "infinity" {:style {:font-size 20}}))
-           [:div.ml-1.text-sm.font-medium (if (string/blank? query-string) "All" query-string)]]
+           (ui/icon "infinity" {:style {:font-size 20}})
+           (ui/dropdown
+            (fn [{:keys [toggle-fn]}]
+              [:div.ml-1.text-sm.font-medium.cursor
+               {:on-mouse-down (fn [e]
+                                 (util/stop e)
+                                 (toggle-fn))}
+               [:span.flex (if (string/blank? query-string) "All" query-string)
+                [:span {:style {:margin-top 2}}
+                 (svg/caret-down)]]])
+            (fn [{:keys [toggle-fn]}]
+              (cards-select {:on-chosen (fn [query]
+                                          (let [query' (if (= query "All") "" query)]
+                                            (reset! query-atom query')
+                                            (toggle-fn)))}))
+            {:modal-class (util/hiccup->class
+                           "origin-top-right.absolute.left-0.mt-2.ml-2.rounded-md.shadow-lg")})]
 
           [:div.flex.flex-row.items-center
 
@@ -665,21 +692,25 @@
           [:code.p-1 (str "Cards: " query-string)]]
          [:div.mt-2.ml-2.font-medium "No matched cards"]]))))
 
-(rum/defc cards < rum/static
+(rum/defcs cards <
+  (rum/local nil ::query)
   {:will-mount (fn [state]
                  (state/set-state! :srs/mode? true)
                  state)
    :will-unmount (fn [state]
                    (state/set-state! :srs/mode? false)
                    state)}
-  [config options]
-  (let [repo (state/get-current-repo)
-        query-string (or (:query-string options)
+  [state config options]
+  (let [*query (::query state)
+        repo (state/get-current-repo)
+        query-string (or @*query
+                         (:query-string options)
                          (string/join ", " (:arguments options)))
         query-result (query repo query-string)
         due-result (query-scheduled query-result (tl/local-now))]
     (cards-inner config (assoc options :cards? true)
-                 {:query-string query-string
+                 {:query-atom *query
+                  :query-string query-string
                   :query-result query-result
                   :due-result due-result})))
 

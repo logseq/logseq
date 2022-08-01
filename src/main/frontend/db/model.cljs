@@ -1644,14 +1644,6 @@
     orphaned-pages))
 
 (defn get-macro-blocks
-  [repo]
-  (d/q
-    '[:find [(pull ?b [*]) ...]
-      :where
-      [?b :block/type "macro"]]
-    (conn/get-db repo)))
-
-(defn get-blocks-by-macro-name
   [repo macro-name]
   (d/q
     '[:find [(pull ?b [*]) ...]
