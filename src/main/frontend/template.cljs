@@ -1,6 +1,5 @@
 (ns frontend.template
-  (:require [cljs-time.coerce :as tc]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.date :as date]
             [frontend.state :as state]
             [frontend.util :as util]))
