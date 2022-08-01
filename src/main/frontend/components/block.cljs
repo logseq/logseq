@@ -2766,6 +2766,27 @@
     (state/remove-custom-query-component! query)
     (db/remove-custom-query! (state/get-current-repo) query)))
 
+(rum/defc query-refresh-button
+  [state query-time {:keys [on-mouse-down]}]
+  (ui/tippy
+   {:html  [:div
+            [:p
+             (when (and query-time (> query-time 80))
+               [:span (str "This query takes " (int query-time) "ms to finish, it's a bit slow so that auto refresh is disabled.")])
+             (when (:full-text-search? state)
+               [:span "Full-text search results will not be refreshed automatically."])]
+            [:p
+             "Click the refresh button instead if you want to see the latest result."]]
+    :interactive     true
+    :popperOptions   {:modifiers {:preventOverflow
+                                  {:enabled           true
+                                   :boundariesElement "viewport"}}}
+    :arrow true}
+   [:a.control.fade-link.ml-1.inline-flex
+    {:style {:margin-top 7}
+     :on-mouse-down on-mouse-down}
+    (ui/icon "refresh" {:style {:font-size 20}})]))
+
 (rum/defcs ^:large-vars/cleanup-todo custom-query* < rum/reactive
   {:will-mount trigger-custom-query!
    :did-mount (fn [state]
@@ -2824,27 +2845,6 @@
          (ui/foldable
           [:div.custom-query-title.flex.justify-between.w-full
            [:div.flex.items-center
-            (when (or (:full-text-search? state)
-                      (and query-time (> query-time 80)))
-              (ui/tippy
-               {:html  [:div
-                        [:p
-                         (when (and query-time (> query-time 80))
-                           [:span (str "This query takes " (int query-time) "ms to finish, it's a bit slow so that auto refresh is disabled.")])
-                         (when (:full-text-search? state)
-                           [:span "Full-text search results will not be refreshed automatically."])]
-                        [:p
-                         "Click the refresh button instead if you want to see the latest result."]]
-                :interactive     true
-                :popperOptions   {:modifiers {:preventOverflow
-                                              {:enabled           true
-                                               :boundariesElement "viewport"}}}
-                :arrow true}
-               [:a.control.fade-link.mr-1.inline-flex
-                {:on-mouse-down (fn [e]
-                                  (util/stop e)
-                                  (trigger-custom-query! state))}
-                (ui/icon "refresh" {:style {:font-size 20}})]))
             [:span.title-text (cond
                                 (vector? title) title
                                 (string? title) (inline-text config
@@ -2855,12 +2855,20 @@
             (str (count result) " results")]]
 
            ;;insert an "edit" button in the query view
-           (when-not built-in?
-             [:a.opacity-70.hover:opacity-100.svg-small.inline
-              {:on-mouse-down (fn [e]
-                                (util/stop e)
-                                (editor-handler/edit-block! current-block :max (:block/uuid current-block)))}
-              svg/edit])]
+           [:div.flex.items-center
+            (when-not built-in?
+              [:a.opacity-70.hover:opacity-100.svg-small.inline
+               {:on-mouse-down (fn [e]
+                                 (util/stop e)
+                                 (editor-handler/edit-block! current-block :max (:block/uuid current-block)))}
+               svg/edit])
+
+            (when (or (:full-text-search? state)
+                      (and query-time (> query-time 80)))
+              (query-refresh-button state query-time
+                                    {:on-mouse-down (fn [e]
+                                                      (util/stop e)
+                                                      (trigger-custom-query! state))}))]]
           (fn []
             [:div
              (when (and current-block (not view-f) (nil? table-view?))
