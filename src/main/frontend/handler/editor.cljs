@@ -1224,7 +1224,6 @@
   (when-let [start-block (state/get-selection-start-block-or-first)]
     (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")
           direction (util/get-direction-between-two-nodes start-block end-block "ls-block")
-
           blocks (if (= :up direction)
                    (reverse blocks)
                    blocks)]

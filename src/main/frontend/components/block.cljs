@@ -2461,7 +2461,9 @@
         edit-input-id (str "edit-block-" blocks-container-id "-" uuid)
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
-        review-cards? (:review-cards? config)]
+        review-cards? (:review-cards? config)
+        selected-blocks (set (state/get-selection-block-ids))
+        selected? (contains? selected-blocks uuid)]
     [:div.ls-block
      (cond->
        {:id block-id
@@ -2471,7 +2473,7 @@
         :class (str uuid
                     (when pre-block? " pre-block")
                     (when (and card? (not review-cards?)) " shadow-md")
-                    (when (:ui/selected? block) " selected noselect"))
+                    (when selected? " selected noselect"))
         :blockid (str uuid)
         :haschild (str has-child?)}
 
@@ -2545,7 +2547,7 @@
                     ::navigating-block (atom (:block/uuid block)))))
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
-                                        :block/properties :block/left :block/children :block/_refs :ui/selected?]
+                                        :block/properties :block/left :block/children :block/_refs]
                           config-compare-keys [:show-cloze?]
                           b1 (second (:rum/args old-state))
                           b2 (second (:rum/args new-state))
@@ -3219,11 +3221,6 @@
            (assoc state ::id (str (random-uuid))))}
   [state config flat-blocks blocks->vec-tree]
   (let [db-id (:db/id config)
-        selected-blocks (set (state/get-selection-block-ids))
-        flat-blocks (if (seq selected-blocks)
-                      (map (fn [b]
-                             (assoc b :ui/selected? (contains? selected-blocks (:block/uuid b)))) flat-blocks)
-                      flat-blocks)
         blocks (blocks->vec-tree flat-blocks)
         *loading? (::loading? state)]
     (if-not db-id
