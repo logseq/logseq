@@ -10,7 +10,8 @@
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defn heading-block?
   [block]
@@ -87,7 +88,7 @@ of block-ref?"
 
                   (and
                    (= typ "Search")
-                   (text/page-ref? value)
+                   (page-ref/page-ref? value)
                    (text/page-ref-un-brackets! value))
 
                   (and

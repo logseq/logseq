@@ -17,6 +17,7 @@
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]))
 
 (defn- handle-received-text [result]
@@ -89,7 +90,7 @@
                 (.copy Filesystem (clj->js {:from url :to path}))
                 (fn [error]
                   (log/error :copy-file-error {:error error})))
-          url (util/format "[[%s]]" title)
+          url (page-ref/->page-ref title)
           template (get-in (state/get-config)
                            [:quick-capture-templates :text]
                            "**{time}** [[quick capture]]: {url}")]

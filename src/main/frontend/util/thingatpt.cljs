@@ -6,6 +6,7 @@
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [cljs.reader :as reader]
             [goog.object :as gobj]))
 
@@ -54,7 +55,7 @@
              :link uuid))))
 
 (defn page-ref-at-point [& [input]]
-  (when-let [page-ref (thing-at-point ["[[" "]]"] input)]
+  (when-let [page-ref (thing-at-point [page-ref/left-brackets page-ref/right-brackets] input)]
     (assoc page-ref
            :type "page-ref"
            :link (text/get-page-name

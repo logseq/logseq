@@ -51,6 +51,7 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.block :as gp-block]))
 
@@ -1089,11 +1090,11 @@
 
 (defn extract-nearest-link-from-text
   [text pos & additional-patterns]
-  (let [page-pattern #"\[\[([^\]]+)]]"
-        block-pattern #"\(\(([^\)]+)\)\)"
+  (let [;; didn't use page-ref regexs b/c it handles page-ref and org link cases
+        page-pattern #"\[\[([^\]]+)]]"
         tag-pattern #"#\S+"
         page-matches (util/re-pos page-pattern text)
-        block-matches (util/re-pos block-pattern text)
+        block-matches (util/re-pos gp-block/block-ref-re text)
         tag-matches (util/re-pos tag-pattern text)
         additional-matches (mapcat #(util/re-pos % text) additional-patterns)
         matches (->> (concat page-matches block-matches tag-matches additional-matches)
@@ -1553,7 +1554,7 @@
                                                                    [(subs new-value prefix-pos (+ prefix-pos 2))
                                                                     (+ prefix-pos 2)]))})]
         (cond
-          (= prefix "[[")
+          (= prefix page-ref/left-brackets)
           (do
             (commands/handle-step [:editor/search-page])
             (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
@@ -1772,7 +1773,7 @@
   [input]
   (when (and input
              (state/get-editor-action)
-             (not (wrapped-by? input "[[" "]]")))
+             (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets)))
     (when (get-search-q)
       (let [value (gobj/get input "value")
             pos (state/get-editor-last-pos)
@@ -2312,12 +2313,12 @@
               {:keys [selection-start selection-end selection]} selection]
           (if selection
             (do (delete-and-update input selection-start selection-end)
-                (insert (util/format "[[%s]]" selection)))
+                (insert (page-ref/->page-ref selection)))
             (if-let [embed-ref (thingatpt/embed-macro-at-point input)]
               (let [{:keys [raw-content start end]} embed-ref]
                 (delete-and-update input start end)
                 (if (= 5 (count raw-content))
-                  (page-ref-fn "[[]]" 2)
+                  (page-ref-fn page-ref/left-and-right-brackets 2)
                   (insert raw-content)))
               (if-let [page-ref (thingatpt/page-ref-at-point input)]
                 (let [{:keys [start end full-content raw-content]} page-ref]
@@ -2325,7 +2326,7 @@
                   (if (= raw-content "")
                     (page-ref-fn "{{embed [[]]}}" 4)
                     (insert (util/format "{{embed %s}}" full-content))))
-                (page-ref-fn "[[]]" 2)))))))))
+                (page-ref-fn page-ref/left-and-right-brackets 2)))))))))
 
 (defn toggle-block-reference-embed
   [parent-id]
@@ -2863,10 +2864,10 @@
           (when (and (not editor-action) (not non-enter-processed?))
             (cond
               (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp"} k))
-                   (wrapped-by? input "[[" "]]"))
+                   (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
               (let [orig-pos (cursor/get-caret-pos input)
                     value (gobj/get input "value")
-                    square-pos (string/last-index-of (subs value 0 (:pos orig-pos)) "[[")
+                    square-pos (string/last-index-of (subs value 0 (:pos orig-pos)) page-ref/left-brackets)
                     pos (+ square-pos 2)
                     _ (state/set-editor-last-pos! pos)
                     pos (assoc orig-pos :pos pos)
@@ -2880,9 +2881,9 @@
                    (contains? keycode/left-square-brackets-keys k)
                    (= (:key last-key-code) k)
                    (> current-pos 0)
-                   (not (wrapped-by? input "[[" "]]")))
+                   (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets)))
               (do
-                (commands/handle-step [:editor/input "[[]]" {:backward-truncate-number 2
+                (commands/handle-step [:editor/input page-ref/left-and-right-brackets {:backward-truncate-number 2
                                                              :backward-pos 2}])
                 (commands/handle-step [:editor/search-page])
                 (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))

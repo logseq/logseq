@@ -9,6 +9,7 @@
              logseq.graph-parser.util gp-util
              logseq.graph-parser.property gp-property
              logseq.graph-parser.config gp-config
-             logseq.graph-parser.date-time-util date-time-util}}}
+             logseq.graph-parser.date-time-util date-time-util
+             logseq.graph-parser.util.page-ref page-ref}}}
  :skip-comments true
  :output {:progress true}}
