@@ -95,14 +95,14 @@
             pages-after-journal-filter (if-not journal?
                                          (remove :block/journal? full-pages)
                                          full-pages)
-            alias-to-remove-ids (map :db/id (if
-                                         (not excluded-pages?)
-                                          (remove nil?
-                                                  (flatten
-                                                   (for [item pages-after-journal-filter]
-                                                     (when (=  true (:exclude-from-graph-view (:block/properties item)))
-                                                       (:block/alias item)))))
-                                          ()))
+            alias-to-remove-ids (if (not excluded-pages?)
+                                  (map :db/id
+                                       (remove nil?
+                                               (flatten
+                                                (for [item pages-after-journal-filter]
+                                                  (when (=  true (:exclude-from-graph-view (:block/properties item)))
+                                                    (:block/alias item))))))
+                                  ())
             pages-after-exclude-filter (cond->> pages-after-journal-filter
                                          (not excluded-pages?)
                                          (remove (fn [p]
