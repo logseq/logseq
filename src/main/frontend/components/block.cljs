@@ -68,7 +68,8 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [shadow.loader :as loader]))
+            [shadow.loader :as loader]
+            [datascript.impl.entity :as e]))
 
 (defn safe-read-string
   ([s]
@@ -2426,6 +2427,9 @@
                                                       {:scoped-block-id (:db/id block)})
                       tree (tree/blocks->vec-tree blocks (:block/uuid (first blocks)))]
                   (first tree))
+                block)
+        block (if ref?
+                (merge block (db/pull-block (:db/id block)))
                 block)
         {:block/keys [uuid children pre-block? top? refs heading-level level type format content]} block
         config (if navigated? (assoc config :id (str navigating-block)) config)

@@ -97,7 +97,7 @@
           ref-pages (atom #{})
           ref-tags (atom #{})
           blocks (map (fn [block]
-                        (if (:block/type block)
+                        (if (contains? #{"macro"} (:block/type block))
                           block
                           (let [block-ref-pages (seq (:block/refs block))
                                 page-lookup-ref [:block/name page-name]

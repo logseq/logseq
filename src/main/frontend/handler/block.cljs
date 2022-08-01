@@ -282,9 +282,6 @@
 
 (defn get-filtered-ref-blocks
   [ref-blocks filters ref-pages]
-  (let [ref-blocks' (->> ref-blocks
-                         (mapcat second)
-                         (mapcat #(tree-seq map? :block/children %))
-                         (map #(dissoc % :block/children)))
+  (let [ref-blocks' (mapcat second ref-blocks)
         filtered-blocks (filter-blocks ref-blocks' filters ref-pages)]
     (group-by :block/page filtered-blocks)))

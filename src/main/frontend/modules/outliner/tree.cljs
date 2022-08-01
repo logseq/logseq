@@ -80,7 +80,11 @@
 (defn non-consecutive-blocks->vec-tree
   "`blocks` need to be in the same page."
   [blocks]
-  (let [blocks (model/sort-page-random-blocks blocks)
+  (let [blocks (map (fn [e] {:db/id (:db/id e)
+                             :block/uuid (:block/uuid e)
+                             :block/parent {:db/id (:db/id (:block/parent e))}
+                             :block/page {:db/id (:db/id (:block/page e))}}) blocks)
+        blocks (model/sort-page-random-blocks blocks)
         id->parent (zipmap (map :db/id blocks)
                            (map (comp :db/id :block/parent) blocks))
         top-level-ids (set (remove #(id->parent (id->parent %)) (map :db/id blocks)))

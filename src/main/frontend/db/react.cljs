@@ -243,7 +243,7 @@
                               (let [page-id (or
                                              (when (:block/name block) (:db/id block))
                                              (:db/id (:block/page block)))
-                                    blocks [[::block (:block/uuid block)]]
+                                    blocks [[::block (:db/id block)]]
                                     others (when page-id
                                              (let [db-after-parent-uuid (:block/uuid (:block/parent block))
                                                    db-before-parent-uuid (:block/uuid (:block/parent (d/entity db-before
@@ -334,17 +334,18 @@
                    (or (get affected-keys (vec (rest k)))
                        custom?
                        kv?))
-              (let [{:keys [query query-fn]} cache
-                    query-or-refs? (state/edit-in-query-or-refs-component)]
-                (when (or query query-fn)
-                  (try
-                    (let [f #(execute-query! repo-url db k tx cache {:skip-query-time-check? query-or-refs?})]
-                      ;; Detects whether user is editing in a custom query, if so, execute the query immediately
-                      (if (or query-or-refs? (not custom?))
-                        (f)
-                        (async/put! (state/get-reactive-custom-queries-chan) [f query])))
-                    (catch js/Error e
-                      (js/console.error e))))))))))))
+              (util/profile (str "refresh " (rest k))
+               (let [{:keys [query query-fn]} cache
+                     query-or-refs? (state/edit-in-query-or-refs-component)]
+                 (when (or query query-fn)
+                   (try
+                     (let [f #(execute-query! repo-url db k tx cache {:skip-query-time-check? query-or-refs?})]
+                       ;; Detects whether user is editing in a custom query, if so, execute the query immediately
+                       (if (or query-or-refs? (not custom?))
+                         (f)
+                         (async/put! (state/get-reactive-custom-queries-chan) [f query])))
+                     (catch js/Error e
+                       (js/console.error e)))))))))))))
 
 (defn set-key-value
   [repo-url key value]

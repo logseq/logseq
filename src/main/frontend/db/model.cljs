@@ -60,14 +60,12 @@
 (defn pull-block
   [id]
   (when-let [repo (state/get-current-repo)]
-    (when-let [result (->>
-                       (react/q repo [:frontend.db.react/block id]
-                         {:query-fn (fn [_]
-                                      (db-utils/entity repo id))}
-                         nil)
-                       react
-                       d/touch)]
-      (into {:db/id (:db/id result)} result))))
+    (->
+     (react/q repo [:frontend.db.react/block id]
+       {:query-fn (fn [_]
+                    (db-utils/pull id))}
+       nil)
+     react)))
 
 (defn get-original-name
   [page-entity]
@@ -1167,11 +1165,11 @@
           page-id)
      (flatten))))
 
-(defn get-page-referenced-blocks
+(defn get-page-referenced-blocks-full
   ([page]
-   (get-page-referenced-blocks (state/get-current-repo) page {:filter? false}))
+   (get-page-referenced-blocks-full (state/get-current-repo) page {:filter? false}))
   ([page options]
-   (get-page-referenced-blocks (state/get-current-repo) page options))
+   (get-page-referenced-blocks-full (state/get-current-repo) page options))
   ([repo page options]
    (when repo
      (when (conn/get-db repo)
@@ -1189,6 +1187,40 @@
             pages
             (butlast block-attrs))
           react
+          (remove (fn [block] (= page-id (:db/id (:block/page block)))))
+          db-utils/group-by-page
+          (map (fn [[k blocks]]
+                 (let [k (if (contains? aliases (:db/id k))
+                           (assoc k :block/alias? true)
+                           k)]
+                   [k blocks])))))))))
+
+(defn get-page-referenced-blocks
+  ([page]
+   (get-page-referenced-blocks (state/get-current-repo) page {:filter? false}))
+  ([page options]
+   (get-page-referenced-blocks (state/get-current-repo) page options))
+  ([repo page options]
+   (when repo
+     (when (conn/get-db repo)
+       (let [page-id (:db/id (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)]))
+             pages (page-alias-set repo page)
+             aliases (set/difference pages #{page-id})]
+         (->>
+          (react/q repo
+            [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
+            {:use-cache? false
+             :query-fn (fn []
+                         (let [entities (mapcat (fn [id]
+                                                  (:block/_path-refs (db-utils/entity id))) pages)
+                               blocks (map (fn [e] {:block/parent (:block/parent e)
+                                                    :block/left (:block/left e)
+                                                    :block/page (:block/page e)}) entities)]
+                           {:entities entities
+                            :blocks blocks}))}
+            nil)
+          react
+          :entities
           (remove (fn [block] (= page-id (:db/id (:block/page block)))))
           db-utils/group-by-page
           (map (fn [[k blocks]]
