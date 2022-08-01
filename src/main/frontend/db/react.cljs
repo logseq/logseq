@@ -335,17 +335,10 @@
                        custom?
                        kv?))
               (let [{:keys [query query-fn]} cache
-                    immediately-run? (or
-                                      ;; modifying during cards review need to be executed immediately
-                                      (:cards-query? (meta query))
-                                      ;; detects whether user is editing in a custom query, if so, execute the query immediately
-                                      (state/edit-in-query-component))]
+                    immediately-run? (state/edit-in-query-component)]
                 (when (or query query-fn)
                   (try
-                    (if (and custom? (not immediately-run?))
-                      (async/put! (state/get-reactive-custom-queries-chan)
-                                  [#(execute-query! repo-url db k tx cache nil) query])
-                      (execute-query! repo-url db k tx cache {:skip-query-time-check? immediately-run?}))
+                    (execute-query! repo-url db k tx cache {:skip-query-time-check? immediately-run?})
                     (catch js/Error e
                       (js/console.error e))))))))))))
 

@@ -12,7 +12,7 @@
     /* width: 80vw; */
 
     @screen lg {
-      width: 820px;
+      width: 768px;
     }
 
     .menu-link {

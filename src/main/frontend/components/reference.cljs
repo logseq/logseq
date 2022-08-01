@@ -26,7 +26,7 @@
                               (if (= @filter-search "")
                                 references
                                 (search/fuzzy-search references @filter-search :limit 500 :extract-fn first)))]
-    [:div.filters
+    [:div.ls-filters.filters
      [:div.sm:flex.sm:items-start
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
        (ui/icon "filter" {:style {:fontSize 20}})]

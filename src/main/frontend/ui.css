@@ -110,8 +110,7 @@
       padding: 2rem;
 
       @screen md {
-        min-width: 760px;
-        width: auto;
+        width: 768px;
 
         .ls-card {
           width: 740px;
@@ -128,15 +127,6 @@
     transition ease-in-out duration-150;
   }
 
-  &[label="ls-modal-align-center"] {
-    top: 0;
-
-    .ui__modal-panel {
-      top: 50vh;
-      transform: translateY(-60%);
-    }
-  }
-
   &[label="diff__cp"] {
       .panel-content {
           padding: 2rem 1rem;
@@ -150,7 +140,7 @@
   &[label="flashcards__cp"] {
       .panel-content {
           padding: 2rem 0rem;
-          
+
           @screen sm {
               padding: 2rem 2rem;
           }
@@ -162,7 +152,7 @@
       .ui__modal-panel {
           height: 90%;
       }
-    
+
       .panel-content {
           height: 100%;
       }
