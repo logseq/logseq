@@ -106,6 +106,7 @@
         repos (state/sub [:me :repos])
         repos (util/distinct-by :url repos)
         remotes (state/sub [:file-sync/remote-graphs :graphs])
+        remotes-loading? (state/sub [:file-sync/remote-graphs :loading])
         repos (if (and login? (seq remotes))
                 (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
         repos (remove #(= (:url %) config/local-repo) repos)
@@ -132,7 +133,15 @@
         (when (seq remote-graphs)
           [:div
            [:hr]
-           [:h2.text-lg.font-medium.my-4 (str (t :graph/remote-graphs) ":")]
+           [:div.flex.align-items.justify-between
+            [:h2.text-lg.font-medium.my-4 (str (t :graph/remote-graphs) ":")]
+            [:div
+             (ui/button
+              [:span.flex.items-center "refresh"
+               (when remotes-loading? [:small.pl-2 (ui/loading nil)])]
+              :background "gray"
+              :disabled remotes-loading?
+              :on-click #(file-sync/load-session-graphs))]]
            (repos-inner remote-graphs)])]]
       (widgets/add-graph))))
 
