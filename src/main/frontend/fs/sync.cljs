@@ -111,10 +111,12 @@
 (s/def ::unknown-map (comp some? :unknown))
 (s/def ::stop-map #(= {:stop true} %))
 (s/def ::need-sync-remote #(= {:need-sync-remote true} %))
+(s/def ::graph-has-been-deleted #(= {:graph-has-been-deleted true} %))
 
 (s/def ::sync-local->remote!-result
   (s/or :succ ::succ-map
         :need-sync-remote ::need-sync-remote
+        :graph-has-been-deleted ::graph-has-been-deleted
         :unknown ::unknown-map))
 
 (s/def ::sync-remote->local!-result
@@ -1242,6 +1244,10 @@
     (when-let [r (re-find #"(\d+), txid_to_validate = (\d+)" (str cause))]
       (< (nth r 1) (nth r 2)))))
 
+(defn- graph-has-been-deleted?
+  [r]
+  (some->> (ex-cause r) str (re-find #"graph-not-exist")))
+
 
 ;; type = "change" | "add" | "unlink"
 (deftype FileChangeEvent [type dir path stat checksum]
@@ -1865,6 +1871,10 @@
                   (reset! *txid remote-txid)
                   {:succ true})
 
+                (graph-has-been-deleted? r*)
+                (do (println :graph-has-been-deleted r*)
+                    {:graph-has-been-deleted true})
+
                 succ?               ; succ
                 (do
                   (println "sync-local->remote! update txid" r*)
@@ -1910,13 +1920,13 @@
                   {:stop true}
                   (if (empty? es-partitions)
                     {:succ true}
-                    (let [{:keys [succ need-sync-remote unknown] :as r}
+                    (let [{:keys [succ need-sync-remote graph-has-been-deleted unknown] :as r}
                           (<! (<sync-local->remote! this (first es-partitions)))]
                       (s/assert ::sync-local->remote!-result r)
                       (cond
                         succ
                         (recur (next es-partitions))
-                        (or need-sync-remote unknown) r)))))))))))
+                        (or need-sync-remote graph-has-been-deleted unknown) r)))))))))))
 
 ;;; ### put all stuff together
 
@@ -2035,7 +2045,7 @@
 
     (full-sync [this]
       (go
-        (let [{:keys [succ need-sync-remote unknown stop] :as r}
+        (let [{:keys [succ need-sync-remote graph-has-been-deleted unknown stop] :as r}
               (<! (<sync-local->remote-all-files! local->remote-syncer))]
           (s/assert ::sync-local->remote-all-files!-result r)
           (cond
@@ -2046,6 +2056,10 @@
                 (>! ops-chan {:remote->local true})
                 (>! ops-chan {:local->remote-full-sync true})
                 (.schedule this ::idle nil nil))
+
+            graph-has-been-deleted
+            (.schedule this ::stop nil :graph-has-been-deleted)
+
             stop
             (.schedule this ::stop nil nil)
             unknown
@@ -2092,19 +2106,19 @@
       (assert (some? local-changes) local-changes)
       (go
         (let [change-events-partitions (sequence (partition-file-change-events 10) local-changes)
-              {:keys [succ need-sync-remote unknown stop]}
+              {:keys [succ need-sync-remote graph-has-been-deleted unknown stop]}
               (loop [es-partitions change-events-partitions]
                 (cond
                   @*stopped?             {:stop true}
                   (empty? es-partitions) {:succ true}
                   :else
-                  (let [{:keys [succ need-sync-remote unknown] :as r}
+                  (let [{:keys [succ need-sync-remote graph-has-been-deleted unknown] :as r}
                         (<! (<sync-local->remote! local->remote-syncer (first es-partitions)))]
                     (s/assert ::sync-local->remote!-result r)
                     (cond
                       succ
                       (recur (next es-partitions))
-                      (or need-sync-remote unknown) r))))]
+                      (or need-sync-remote graph-has-been-deleted unknown) r))))]
           (cond
             succ
             (.schedule this ::idle nil nil)
@@ -2114,6 +2128,9 @@
                 (>! ops-chan {:remote->local true})
                 (>! ops-chan {:local->remote local-changes})
                 (.schedule this ::idle nil nil))
+
+            graph-has-been-deleted
+            (.schedule this ::stop nil :graph-has-been-deleted)
 
             stop
             (.schedule this ::stop nil nil)
