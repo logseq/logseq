@@ -6,7 +6,8 @@
             [logseq.graph-parser.date-time-util :as date-time-util]
             [logseq.graph-parser.config :as gp-config]
             [clojure.string :as string]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [lambdaisland.glogi :as log]))
 
 (defn- db-set-file-content!
   "Modified copy of frontend.db.model/db-set-file-content!"
@@ -51,9 +52,14 @@
         tx (concat tx [(cond-> {:file/path file}
                                new?
                                ;; TODO: use file system timestamp?
-                               (assoc :file/created-at (date-time-util/time-ms)))])]
-    {:tx
-     (d/transact! conn (gp-util/remove-nils tx) (select-keys options [:new-graph? :from-disk?]))
+                         (assoc :file/created-at (date-time-util/time-ms)))])
+        tx' (gp-util/remove-nils tx)
+        result (try
+                 (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?]))
+                 (catch :default e
+                   (prn "DB transact failed")
+                   (log/error :exception e)))]
+    {:tx result
      :ast ast}))
 
 (defn filter-files

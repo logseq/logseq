@@ -592,7 +592,6 @@
   "macro: {:name \"\" arguments \"\"}"
   [macro]
   {:block/type "macro"
-   :block/uuid (d/squuid)
    :block/properties macro
    :db/ident (str "{{" (:name macro) " " (:arguments macro) "}}")})
 
