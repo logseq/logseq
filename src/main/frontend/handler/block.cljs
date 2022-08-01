@@ -248,13 +248,17 @@
   (reset! *swipe nil))
 
 (defn get-blocks-refed-pages
-  [repo page-entity ref-blocks]
-  (->> ref-blocks
-       (mapcat second)
-       (mapcat :block/path-refs)
-       (map :db/id)
-       (remove #{(:db/id page-entity)})
-       (db/pull-many repo '[:db/id :block/name :block/original-name])))
+  [repo page-entity]
+  (let [pages (db-model/page-alias-set repo (:block/name page-entity))
+        refs (->> pages
+                  (mapcat (fn [id] (:block/_refs (db/entity id))))
+                  (mapcat (fn [b] (conj (:block/refs b) (:block/page b))))
+                  (remove (fn [r] (= (:db/id page-entity) (:db/id r)))))]
+    (keep (fn [ref]
+            (when (:block/name ref)
+              {:db/id (:db/id ref)
+               :block/name (:block/name ref)
+               :block/original-name (:block/original-name ref)})) refs)))
 
 (defn- filter-blocks
   [ref-blocks filters ref-pages]

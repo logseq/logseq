@@ -34,11 +34,13 @@
        [:h3#modal-headline.text-lg.leading-6.font-medium "Filter"]
        [:span.text-xs
         "Click to include and shift-click to exclude. Click again to remove."]]]
-     [:div.cp__filters-input-panel.flex (ui/icon "search") [:input.cp__filters-input.w-full
-                                                            {:placeholder (t :linked-references/filter-search)
-                                                             :auto-focus true
-                                                             :on-change (fn [e]
-                                                                          (reset! filter-search (util/evalue e)))}]]
+     [:div.cp__filters-input-panel.flex
+      (ui/icon "search")
+      [:input.cp__filters-input.w-full
+       {:placeholder (t :linked-references/filter-search)
+        :auto-focus true
+        :on-change (fn [e]
+                     (reset! filter-search (util/evalue e)))}]]
      (when (seq filtered-references)
        (let [filters (rum/react filters-atom)]
          [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1.flex-wrap
@@ -50,12 +52,13 @@
                             true "text-green-400"
                             false "text-red-400"
                             nil)]
-                [:button.border.rounded.px-1.mb-1.mr-1.select-none {:key ref-name :class color :style {:border-color "currentColor"}
-                                                                    :on-click (fn [e]
-                                                                                (swap! filters-atom #(if (nil? (get filters lc-reference))
-                                                                                                       (assoc % lc-reference (not (.-shiftKey e)))
-                                                                                                       (dissoc % lc-reference)))
-                                                                                (page-handler/save-filter! page-name @filters-atom))}
+                [:button.border.rounded.px-1.mb-1.mr-1.select-none
+                 {:key ref-name :class color :style {:border-color "currentColor"}
+                  :on-click (fn [e]
+                              (swap! filters-atom #(if (nil? (get filters lc-reference))
+                                                     (assoc % lc-reference (not (.-shiftKey e)))
+                                                     (dissoc % lc-reference)))
+                              (page-handler/save-filter! page-name @filters-atom))}
                  ref-name [:sub " " ref-count]])))]))]))
 
 (defn filter-dialog
@@ -84,7 +87,7 @@
                       (db/get-block-referenced-blocks block-id)
                       (db/get-page-referenced-blocks page-name))
          ref-pages (when-not block-id
-                     (block-handler/get-blocks-refed-pages repo page-entity ref-blocks))
+                     (block-handler/get-blocks-refed-pages repo page-entity))
          filtered-ref-blocks (if block-id
                                ref-blocks
                                (block-handler/get-filtered-ref-blocks ref-blocks filters ref-pages))
@@ -121,7 +124,7 @@
         :on-mouse-down (fn [e]
                          (util/stop-propagation e))
         :on-click (fn []
-                    (let [ref-pages (block-handler/get-blocks-refed-pages repo page-entity @*filtered-ref-blocks)
+                    (let [ref-pages (block-handler/get-blocks-refed-pages repo page-entity)
                           ref-pages (map :block/original-name ref-pages)
                           references (frequencies ref-pages)]
                       (state/set-modal! (filter-dialog filters-atom references page-name)
