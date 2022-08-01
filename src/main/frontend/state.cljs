@@ -1621,11 +1621,10 @@
   []
   (:modal/id @state))
 
-(defn edit-in-query-component
+(defn edit-in-query-or-refs-component
   []
-  (and (editing?)
-       ;; config
-       (:custom-query? (last (get-editor-args)))))
+  (let [config (last (get-editor-args))]
+    (or (:custom-query? config) (:ref? config))))
 
 (defn set-auth-id-token
   [id-token]

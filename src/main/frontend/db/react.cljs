@@ -335,7 +335,7 @@
                        custom?
                        kv?))
               (let [{:keys [query query-fn]} cache
-                    immediately-run? (state/edit-in-query-component)]
+                    immediately-run? (state/edit-in-query-or-refs-component)]
                 (when (or query query-fn)
                   (try
                     (execute-query! repo-url db k tx cache {:skip-query-time-check? immediately-run?})
