@@ -1723,6 +1723,7 @@
 (defn- <file-changed?
   "return true when file changed compared with remote"
   [graph-uuid file-path-without-base-path base-path]
+  {:pre [(string? file-path-without-base-path)]}
   (go
     (let [remote-meta (first (<! (<get-remote-files-meta remoteapi graph-uuid [file-path-without-base-path])))
           local-meta (first (<! (<get-local-files-meta rsapi graph-uuid base-path [file-path-without-base-path])))]
@@ -2123,15 +2124,20 @@
               (.schedule this ::idle nil nil))))))
     IStoppable
     (-stop! [_]
-      (when-not @*stopped?
-        (vreset! *stopped? true)
-        (ws-stop! _*ws)
-        (offer! stop-sync-chan true)
-        (when ops-chan (async/close! ops-chan))
-        (stop-local->remote! local->remote-syncer)
-        (stop-remote->local! remote->local-syncer)
-        (debug/pprint ["stop sync-manager, graph-uuid" graph-uuid "base-path" base-path])
-        (swap! *sync-state sync-state--update-state ::stop)))
+      (go
+        (when-not @*stopped?
+          (vreset! *stopped? true)
+          (ws-stop! _*ws)
+          (offer! stop-sync-chan true)
+          (when ops-chan (async/close! ops-chan))
+          (stop-local->remote! local->remote-syncer)
+          (stop-remote->local! remote->local-syncer)
+          (debug/pprint ["stop sync-manager, graph-uuid" graph-uuid "base-path" base-path])
+          (swap! *sync-state sync-state--update-state ::stop)
+          (loop []
+            (when (not= ::stop state)
+              (<! (timeout 100))
+              (recur))))))
 
     IStopped?
     (-stopped? [_]
@@ -2163,11 +2169,12 @@
     (reset! current-sm-graph-uuid graph-uuid)
     (sync-manager user-uuid graph-uuid base-path repo txid *sync-state)))
 
-(defn sync-stop []
-  (when-let [sm (state/get-file-sync-manager)]
-    (println "stopping sync-manager")
-    (-stop! sm)
-    (reset! current-sm-graph-uuid nil)))
+(defn <sync-stop []
+  (go
+    (when-let [sm (state/get-file-sync-manager)]
+      (println "stopping sync-manager")
+      (reset! current-sm-graph-uuid nil)
+      (<! (-stop! sm)))))
 
 
 (defn check-graph-belong-to-current-user
@@ -2258,7 +2265,7 @@
                              (fn [_k _r o n]
                                (cond
                                  (and (true? o) (false? n))
-                                 (sync-stop)
+                                 (<sync-stop)
 
                                  (and (false? o) (true? n))
                                  (sync-start)
@@ -2269,7 +2276,7 @@
                   (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
                              (fn [_k _r _o n]
                                (when (nil? n)
-                                 (sync-stop)))))))))))))
+                                 (<sync-stop)))))))))))))
 
 ;;; debug funcs
 (comment

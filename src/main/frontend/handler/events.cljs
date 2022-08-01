@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [run!])
   (:require ["@capacitor/filesystem" :refer [Directory Filesystem]]
             [clojure.core.async :as async]
+            [clojure.core.async.interop :refer [p->c]]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -58,13 +59,13 @@
 (defmulti handle first)
 
 (defn- file-sync-restart! []
-  (p/do! (persist-var/load-vars)
-         (sync/sync-stop)
-         (sync/sync-start)))
+  (async/go (async/<! (p->c (persist-var/load-vars)))
+            (async/<! (sync/<sync-stop))
+            (some-> (sync/sync-start) async/<!)))
 
 (defn- file-sync-stop! []
-  (p/do! (persist-var/load-vars)
-         (sync/sync-stop)))
+  (async/go (async/<! (p->c (persist-var/load-vars)))
+            (async/<! (sync/<sync-stop))))
 
 (defmethod handle :user/login [[_]]
   (state/set-state! [:ui/loading? :login] false)
@@ -522,7 +523,8 @@
                      (state/close-modal!)
                      (repo-handler/re-index!
                       nfs-handler/rebuild-index!
-                      page-handler/create-today-journal!)))]])))
+                      #(do (page-handler/create-today-journal!)
+                           (file-sync-restart!)))))]])))
 
 ;; encryption
 (defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]
