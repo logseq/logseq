@@ -6,8 +6,7 @@
             [logseq.graph-parser.date-time-util :as date-time-util]
             [logseq.graph-parser.config :as gp-config]
             [clojure.string :as string]
-            [clojure.set :as set]
-            [lambdaisland.glogi :as log]))
+            [clojure.set :as set]))
 
 (defn- db-set-file-content!
   "Modified copy of frontend.db.model/db-set-file-content!"
@@ -58,7 +57,7 @@
                  (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?]))
                  (catch :default e
                    (prn "DB transact failed")
-                   (log/error :exception e)))]
+                   (js/console.error e)))]
     {:tx result
      :ast ast}))
 

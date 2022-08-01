@@ -68,8 +68,7 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [shadow.loader :as loader]
-            [datascript.impl.entity :as e]))
+            [shadow.loader :as loader]))
 
 (defn safe-read-string
   ([s]
