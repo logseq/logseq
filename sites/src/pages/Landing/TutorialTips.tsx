@@ -10,9 +10,26 @@ import { AnimateInTurnBox } from '../../components/Animations'
 import cx from 'classnames'
 import Swiper from 'swiper'
 import 'swiper/swiper-bundle.css'
+// @ts-ignore
+import PhotoSwipeLightbox from 'photoswipe/dist/photoswipe-lightbox.esm.js'
+import 'photoswipe/dist/photoswipe.css'
 import { ReactNode, useEffect, useRef, useState } from 'react'
 import { useMounted } from '../../hooks'
 import { promiseImages } from './index'
+
+function openLightbox (
+  sources: Array<{ src: string, width: number, height: number }>,
+  index: number = 0,
+) {
+  const lightbox = new PhotoSwipeLightbox({
+    dataSource: sources,
+    wheelToZoom: true,
+    pswpModule: () => import('photoswipe'),
+  })
+
+  lightbox.init()
+  lightbox.loadAndOpen(index)
+}
 
 export function TipSlideItem (props: {
   inActive: boolean,
@@ -141,6 +158,7 @@ export function TipSlideItem (props: {
 export function TutorialTips () {
   const swiperElRef = useRef<HTMLDivElement>(null)
   const swiperRef = useRef<Swiper>(null)
+  const bdRef = useRef<HTMLDivElement>(null)
   const [activeIndex, setActiveIndex] = useState(0)
   const [activeTipTag, setActiveTipTag] = useState('00')
   const sidesLen = 3
@@ -280,13 +298,21 @@ export function TutorialTips () {
             </span>
         </div>
 
-        <div className="bd-info">
-          <div className="flex">
+        <div className="bd-info" ref={bdRef}>
+          <div className="flex image-wrap">
             <img className={'animate-in fade-in-0 duration-1000'}
                  src={promiseImages[activeTipTag]} alt="image"/>
           </div>
 
-          <FloatGlassButton className="absolute right-6 bottom-5">
+          <FloatGlassButton
+            className="absolute right-6 bottom-5"
+            onClick={() => {
+              const src = bdRef.current!.querySelector('img')?.
+                getAttribute('src')!
+
+              openLightbox([{ src, width: 900, height: 553 }])
+            }}
+          >
             <FrameCorners
               className={'font-bold cursor-pointer'}
               size={26}
