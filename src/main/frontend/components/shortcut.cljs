@@ -8,6 +8,7 @@
             [frontend.extensions.latex :as latex]
             [frontend.extensions.highlight :as highlight]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [rum.core :as rum]))
 
 (rum/defcs customize-shortcut-dialog-inner <
@@ -98,7 +99,7 @@
      [:td.text-right [:code "<"]]]
     [:tr
      [:td.text-left (t :help/reference-autocomplete)]
-     [:td.text-right [:code "[[]]"]]]
+     [:td.text-right [:code page-ref/left-and-right-brackets]]]
     [:tr
      [:td.text-left (t :help/block-reference)]
      [:td.text-right [:code gp-block/left-and-right-parens]]]

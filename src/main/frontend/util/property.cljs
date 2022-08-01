@@ -7,6 +7,7 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property :refer [properties-start properties-end]]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.format.mldoc :as mldoc]
             [logseq.graph-parser.text :as text]
             [frontend.util.cursor :as cursor]))
@@ -325,7 +326,7 @@
                (some->>
                 (seq v)
                 (distinct)
-                (map (fn [item] (util/format "[[%s]]" (text/page-ref-un-brackets! item))))
+                (map (fn [item] (page-ref/->page-ref (text/page-ref-un-brackets! item))))
                 (string/join ", "))
                v)]
        (insert-property format content k v)))

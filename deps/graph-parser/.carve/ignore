@@ -12,3 +12,9 @@ logseq.graph-parser.block/->block-ref
 logseq.graph-parser.block/block-ref?
 ;; API
 logseq.graph-parser.block/get-all-block-ref-ids
+;; API
+logseq.graph-parser.util.page-ref/left-and-right-brackets
+;; API
+logseq.graph-parser.util.page-ref/->page-ref
+;; API
+logseq.graph-parser.util.page-ref/get-page-name!

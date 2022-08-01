@@ -4,6 +4,7 @@
             [frontend.db.query-react :as query-react]
             [frontend.util :as util]
             [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.util.property :as property]
             [frontend.util.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
@@ -264,7 +265,7 @@
                           query-string (if-not (or (string/blank? query-string)
                                                    (string/starts-with? query-string "(")
                                                    (string/starts-with? query-string "["))
-                                         (util/format "[[%s]]" (string/trim query-string))
+                                         (page-ref/->page-ref (string/trim query-string))
                                          query-string)
                           {:keys [query sort-by rules]} (query-dsl/parse query-string)
                           query* (util/concat-without-nil

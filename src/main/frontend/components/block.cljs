@@ -64,6 +64,7 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -632,7 +633,7 @@
        (when (and (or show-brackets? nested-link?)
                   (not html-export?)
                   (not contents-page?))
-         [:span.text-gray-500.bracket "[["])
+         [:span.text-gray-500.bracket page-ref/left-brackets])
        (let [s (string/trim s)]
          (page-cp (assoc config
                          :label (mldoc/plain->text label)
@@ -641,7 +642,7 @@
        (when (and (or show-brackets? nested-link?)
                   (not html-export?)
                   (not contents-page?))
-         [:span.text-gray-500.bracket "]]"])])))
+         [:span.text-gray-500.bracket page-ref/right-brackets])])))
 
 (defn- latex-environment-content
   [name option content]
@@ -820,7 +821,7 @@
      (when (and show-brackets?
                 (not html-export?)
                 (not (= (:id config) "contents")))
-       [:span.text-gray-500 "[["])
+       [:span.text-gray-500 page-ref/left-brackets])
      (let [page-name (subs content 2 (- (count content) 2))]
        (page-cp (assoc config
                        :children children
@@ -828,7 +829,7 @@
      (when (and show-brackets?
                 (not html-export?)
                 (not (= (:id config) "contents")))
-       [:span.text-gray-500 "]]"])]))
+       [:span.text-gray-500 page-ref/right-brackets])]))
 
 (declare custom-query)
 
@@ -992,7 +993,7 @@
           (image-link config url page nil metadata full_text)
           (let [label* (if (seq (mldoc/plain->text label)) label nil)]
             (if (and (string? page) (string/blank? page))
-              [:span (util/format "[[%s]]" page)]
+              [:span (page-ref/->page-ref page)]
               (page-reference (:html-export? config) page config label*)))))
 
       ["Embed_data" src]
@@ -1032,9 +1033,9 @@
                        (when-let [ext (util/get-file-ext href)]
                          (gp-config/mldoc-support? ext)))
                 [:span.page-reference
-                 (when show-brackets? [:span.text-gray-500 "[["])
+                 (when show-brackets? [:span.text-gray-500 page-ref/left-brackets])
                  (page-cp config page)
-                 (when show-brackets? [:span.text-gray-500 "]]"])]
+                 (when show-brackets? [:span.text-gray-500 page-ref/right-brackets])]
 
                 (let [href* (if (util/electron?)
                               (relative-assets-path->absolute-path href)
@@ -1114,8 +1115,7 @@
       (> link-depth max-depth-of-links)
       [:p.warning.text-sm "Embed depth is too deep"]
 
-      (and (string/starts-with? a "[[")
-           (string/ends-with? a "]]"))
+      (page-ref/page-ref? a)
       (let [page-name (text/get-page-name a)]
         (when-not (string/blank? page-name)
           (page-embed (assoc config :link-depth (inc link-depth)) page-name)))
@@ -1299,8 +1299,8 @@
   (let [{:keys [name arguments]} options
         arguments (if (and
                        (>= (count arguments) 2)
-                       (and (string/starts-with? (first arguments) "[[")
-                            (string/ends-with? (last arguments) "]]"))) ; page reference
+                       (and (string/starts-with? (first arguments) page-ref/left-brackets)
+                            (string/ends-with? (last arguments) page-ref/right-brackets))) ; page reference
                     (let [title (string/join ", " arguments)]
                       [title])
                     arguments)]
@@ -1314,7 +1314,7 @@
       (= name "namespace")
       (let [namespace (first arguments)]
         (when-not (string/blank? namespace)
-          (let [namespace (string/lower-case (text/page-ref-un-brackets! namespace))
+          (let [namespace (string/lower-case (page-ref/get-page-name! namespace))
                 children (model/get-namespace-hierarchy (state/get-current-repo) namespace)]
             (namespace-hierarchy config namespace children))))
 

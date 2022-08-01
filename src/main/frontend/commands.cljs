@@ -19,6 +19,7 @@
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [promesa.core :as p]))
@@ -217,7 +218,7 @@
   (->>
    (concat
     ;; basic
-    [["Page reference" [[:editor/input "[[]]" {:backward-pos 2}]
+    [["Page reference" [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
                         [:editor/search-page]] "Create a backlink to a page"]
      ["Page embed" (embed-page) "Embed a page here"]
      ["Block reference" [[:editor/input gp-block/left-and-right-parens {:backward-pos 2}]
@@ -276,7 +277,7 @@
      ["Draw" (fn []
                (let [file (draw/file-name)
                      path (str gp-config/default-draw-directory "/" file)
-                     text (util/format "[[%s]]" path)]
+                     text (page-ref/->page-ref path)]
                  (p/let [_ (draw/create-draw-with-default-content path)]
                    (println "draw file created, " path))
                  text)) "Draw a graph with Excalidraw"]
@@ -343,7 +344,7 @@
                                     (and s
                                          (string/ends-with? s "(")
                                          (or (string/starts-with? last-pattern gp-block/left-parens)
-                                             (string/starts-with? last-pattern "[[")))
+                                             (string/starts-with? last-pattern page-ref/left-brackets)))
                                     (and s (string/starts-with? s "{{embed"))
                                     (and last-pattern
                                          (or (string/ends-with? last-pattern gp-property/colons)
@@ -381,7 +382,7 @@
         (state/set-block-content-and-last-pos! id new-value new-pos)
         (cursor/move-cursor-to input
                                (if (and (or backward-pos forward-pos)
-                                        (not= end-pattern "]]"))
+                                        (not= end-pattern page-ref/right-brackets))
                                  new-pos
                                  (inc new-pos)))))))
 

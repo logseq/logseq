@@ -10,7 +10,7 @@
             [frontend.debug :as debug]
             [frontend.extensions.sci :as sci]
             [frontend.state :as state]
-            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.util :as util]
             [frontend.date :as date]
             [lambdaisland.glogi :as log]))
@@ -44,8 +44,8 @@
           days (parse-long (re-find #"^\d+" input))]
       (date->int (t/plus (t/today) (t/days days))))
 
-    (and (string? input) (text/page-ref? input))
-    (-> (text/page-ref-un-brackets! input)
+    (and (string? input) (page-ref/page-ref? input))
+    (-> (page-ref/get-page-name input)
         (string/lower-case))
 
     :else
@@ -81,7 +81,7 @@
 
 (defn- resolve-query
   [query]
-  (let [page-ref? #(and (string? %) (text/page-ref? %))]
+  (let [page-ref? #(and (string? %) (page-ref/page-ref? %))]
     (walk/postwalk
      (fn [f]
        (cond
@@ -100,7 +100,7 @@
          (let [[x y] (rest f)
                [page-ref sym] (if (page-ref? x) [x y] [y x])
                page-ref (string/lower-case page-ref)]
-           (list 'contains? sym (text/page-ref-un-brackets! page-ref)))
+           (list 'contains? sym (page-ref/get-page-name page-ref)))
 
          (and (vector? f)
               (= (first f) 'page-property)

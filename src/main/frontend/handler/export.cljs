@@ -24,6 +24,7 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
             [frontend.handler.notification :as notification])
   (:import
@@ -160,11 +161,8 @@
                              (= "embed" (some-> (:name (second i))
                                                 (string/lower-case)))
                              (some-> (:arguments (second i))
-                                     (first)
-                                     (string/starts-with? "[["))
-                             (some-> (:arguments (second i))
-                                     (first)
-                                     (string/ends-with? "]]")))
+                                     first
+                                     page-ref/page-ref?))
                         (let [arguments (:arguments (second i))
                               page-ref (first arguments)
                               page-name (-> page-ref

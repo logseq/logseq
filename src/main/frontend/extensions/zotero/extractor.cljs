@@ -5,7 +5,8 @@
             [frontend.extensions.html-parser :as html-parser]
             [frontend.extensions.zotero.schema :as schema]
             [frontend.extensions.zotero.setting :as setting]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defn item-type [item] (-> item :data :item-type))
 
@@ -64,8 +65,8 @@
 
 (defn date->journal [item]
   (if-let [date (-> item :meta :parsed-date
-                      (date/journal-name-s))]
-    (util/format "[[%s]]" date)
+                    (date/journal-name-s))]
+    (page-ref/->page-ref date)
     (-> item :data :date)))
 
 (defn wrap-in-doublequotes [m]
@@ -129,7 +130,7 @@
                                 :authors authors
                                 :tags tags
                                 :date date
-                                :item-type (util/format "[[%s]]" type))
+                                :item-type (page-ref/->page-ref type))
                          (dissoc :creators :abstract-note)
                          (rename-keys {:title :original-title})
                          (assoc :title (page-name item)))]

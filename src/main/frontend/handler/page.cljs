@@ -37,6 +37,7 @@
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.format.block :as block]
             [goog.functions :refer [debounce]]))
 
@@ -211,7 +212,7 @@
   "Unsanitized names"
   [content old-name new-name]
   (let [[original-old-name original-new-name] (map string/trim [old-name new-name])
-        [old-ref new-ref] (map #(util/format "[[%s]]" %) [old-name new-name])
+        [old-ref new-ref] (map page-ref/->page-ref [old-name new-name])
         [old-name new-name] (map #(if (string/includes? % "/")
                                     (string/replace % "/" ".")
                                     %)
@@ -455,8 +456,9 @@
   "Unsanitized names only"
   [old-ns-name new-ns-name]
   (let [repo            (state/get-current-repo)
-        nested-page-str (util/format "[[%s]]" (util/page-name-sanity-lc old-ns-name))
-        ns-prefix       (util/format "[[%s/" (util/page-name-sanity-lc old-ns-name))
+        nested-page-str (page-ref/->page-ref (util/page-name-sanity-lc old-ns-name))
+        ns-prefix-format-str (str page-ref/left-brackets "%s/")
+        ns-prefix       (util/format ns-prefix-format-str (util/page-name-sanity-lc old-ns-name))
         nested-pages    (db/get-pages-by-name-partition repo nested-page-str)
         nested-pages-ns (db/get-pages-by-name-partition repo ns-prefix)]
     (when nested-pages
@@ -465,8 +467,8 @@
         (let [old-page-title (or original-name name)
               new-page-title (string/replace
                               old-page-title
-                              (util/format "[[%s]]" old-ns-name)
-                              (util/format "[[%s]]" new-ns-name))]
+                              (page-ref/->page-ref old-ns-name)
+                              (page-ref/->page-ref new-ns-name))]
           (when (and old-page-title new-page-title)
             (p/do!
              (rename-page-aux old-page-title new-page-title false)
@@ -477,8 +479,8 @@
         (let [old-page-title (or original-name name)
               new-page-title (string/replace
                               old-page-title
-                              (util/format "[[%s/" old-ns-name)
-                              (util/format "[[%s/" new-ns-name))]
+                              (util/format ns-prefix-format-str old-ns-name)
+                              (util/format ns-prefix-format-str new-ns-name))]
           (when (and old-page-title new-page-title)
             (p/do!
              (rename-page-aux old-page-title new-page-title false)
@@ -637,7 +639,7 @@
           (util/format "[[file:%s][%s]]"
                        (util/get-relative-path edit-block-file-path ref-file-path)
                        page)))
-      (util/format "[[%s]]" page))))
+      (page-ref/->page-ref page))))
 
 (defn init-commands!
   []
@@ -690,7 +692,7 @@
   (if (state/org-mode-file-link? (state/get-current-repo))
     (let [page-ref-text (get-page-ref-text q)
           value (gobj/get input "value")
-          old-page-ref (util/format "[[%s]]" q)
+          old-page-ref (page-ref/->page-ref q)
           new-value (string/replace value
                                     old-page-ref
                                     page-ref-text)]
@@ -718,13 +720,13 @@
     (if hashtag?
       (fn [chosen _click?]
         (state/clear-editor-action!)
-        (let [wrapped? (= "[[" (gp-util/safe-subs edit-content (- pos 2) pos))
+        (let [wrapped? (= page-ref/left-brackets (gp-util/safe-subs edit-content (- pos 2) pos))
               prefix (str (t :new-page) ": ")
               chosen (if (string/starts-with? chosen prefix) ;; FIXME: What if a page named "New page: XXX"?
                        (string/replace-first chosen prefix "")
                        chosen)
               chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
-                       (util/format "[[%s]]" chosen)
+                       (page-ref/->page-ref chosen)
                        chosen)
               q (if @editor-handler/*selected-text "" q)
               [last-pattern forward-pos] (if wrapped?
@@ -732,12 +734,12 @@
                                            (if (= \# (first q))
                                              [(subs q 1) 1]
                                              [q 2]))
-              last-pattern (str "#" (when wrapped? "[[") last-pattern)]
+              last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)]
           (editor-handler/insert-command! id
-                                          (str "#" (when wrapped? "[[") chosen)
+                                          (str "#" (when wrapped? page-ref/left-brackets) chosen)
                                           format
                                           {:last-pattern last-pattern
-                                           :end-pattern (when wrapped? "]]")
+                                           :end-pattern (when wrapped? page-ref/right-brackets)
                                            :forward-pos forward-pos})))
       (fn [chosen _click?]
         (state/clear-editor-action!)
@@ -749,9 +751,9 @@
           (editor-handler/insert-command! id
                                           page-ref-text
                                           format
-                                          {:last-pattern (str "[[" (if @editor-handler/*selected-text "" q))
-                                           :end-pattern "]]"
-                                           :postfix-fn   (fn [s] (util/replace-first "]]" s ""))
+                                          {:last-pattern (str page-ref/left-brackets (if @editor-handler/*selected-text "" q))
+                                           :end-pattern page-ref/right-brackets
+                                           :postfix-fn   (fn [s] (util/replace-first page-ref/right-brackets s ""))
                                            :forward-pos 3}))))))
 
 (defn create-today-journal!
