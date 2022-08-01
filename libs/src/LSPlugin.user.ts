@@ -5,6 +5,7 @@ import {
   safetyPathJoin,
 } from './helpers'
 import { LSPluginCaller } from './LSPlugin.caller'
+import * as callableAPIs from './callable.apis'
 import {
   IAppProxy,
   IDBProxy,
@@ -47,6 +48,9 @@ declare global {
     logseq: LSPluginUser
   }
 }
+
+type callableMethods =
+  keyof typeof callableAPIs | string // host exported SDK apis & host platform related apis
 
 const PROXY_CONTINUE = Symbol.for('proxy-continue')
 const debug = Debug('LSPlugin:user')
@@ -623,14 +627,14 @@ export class LSPluginUser
     })
   }
 
-  _execCallableAPIAsync(method, ...args) {
+  _execCallableAPIAsync(method: callableMethods, ...args) {
     return this._caller.callAsync(`api:call`, {
       method,
       args,
     })
   }
 
-  _execCallableAPI(method, ...args) {
+  _execCallableAPI(method: callableMethods, ...args) {
     this._caller.call(`api:call`, {
       method,
       args,
