@@ -334,18 +334,17 @@
                    (or (get affected-keys (vec (rest k)))
                        custom?
                        kv?))
-              (util/profile (str "refresh " (rest k))
-               (let [{:keys [query query-fn]} cache
-                     query-or-refs? (state/edit-in-query-or-refs-component)]
-                 (when (or query query-fn)
-                   (try
-                     (let [f #(execute-query! repo-url db k tx cache {:skip-query-time-check? query-or-refs?})]
-                       ;; Detects whether user is editing in a custom query, if so, execute the query immediately
-                       (if (or query-or-refs? (not custom?))
-                         (f)
-                         (async/put! (state/get-reactive-custom-queries-chan) [f query])))
-                     (catch js/Error e
-                       (js/console.error e)))))))))))))
+              (let [{:keys [query query-fn]} cache
+                    query-or-refs? (state/edit-in-query-or-refs-component)]
+                (when (or query query-fn)
+                  (try
+                    (let [f #(execute-query! repo-url db k tx cache {:skip-query-time-check? query-or-refs?})]
+                      ;; Detects whether user is editing in a custom query, if so, execute the query immediately
+                      (if (or query-or-refs? (not custom?))
+                        (f)
+                        (async/put! (state/get-reactive-custom-queries-chan) [f query])))
+                    (catch js/Error e
+                      (js/console.error e))))))))))))
 
 (defn set-key-value
   [repo-url key value]
