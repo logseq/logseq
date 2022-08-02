@@ -564,13 +564,13 @@
 
 .logseq-tldraw .tl-logseq-portal-container {
   width: 100%;
-  overflow: auto;
-  border-radius: 8px;
   overscroll-behavior: none;
   height: 100%;
   display: flex;
   flex-direction: column;
   opacity: 1;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
 }
 
 .logseq-tldraw .tl-logseq-portal-header {
@@ -578,6 +578,8 @@
   width: 100%;
   flex-shrink: 0;
   background: transparent;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
   display: flex;
   color: var(--ls-title-text-color);
   padding: 0 1rem;
@@ -619,4 +621,13 @@ html[data-theme='dark'] .logseq-tldraw .tl-logseq-portal-header {
   height: 100% !important;
   width: 100% !important;
   margin: 0;
+}
+
+.tl-logseq-cp-container {
+  width: 100%;
+  border-radius: 8px;
+  overscroll-behavior: none;
+  height: 100%;
+  flex: 1 1 0%;
+  cursor: default;
 }

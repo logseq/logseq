@@ -2417,7 +2417,7 @@
   (let [el (rum/dom-node state)]
     (loop [el el]
       (cond (nil? el) false
-            (and (.-classList el) (.. el -classList (contains "single-block-wrapper"))) true
+            (and (.-classList el) (.. el -classList (contains "single-block"))) true
             :else (recur (.-parentElement el))))))
 
 (defn keydown-new-block-handler [state e]

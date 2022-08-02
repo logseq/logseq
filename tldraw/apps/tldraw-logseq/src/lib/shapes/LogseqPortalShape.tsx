@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { MagnifyingGlassIcon } from '@radix-ui/react-icons'
 import { TLBoxShape, TLBoxShapeProps, validUUID } from '@tldraw/core'
-import { HTMLContainer, TLComponentProps, TLContextBarProps, useApp } from '@tldraw/react'
+import { HTMLContainer, TLComponentProps, TLReactApp, useApp } from '@tldraw/react'
 import { makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
@@ -117,11 +117,16 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   canFlip = true
   canEdit = true
 
+  persist: (() => void) | null = null
+  // For quick add shapes, we want to calculate the page height dynamically
+  initialHeightCalculated = true
+  getInnerHeight: (() => number) | null = null // will be overridden in the hook
+
   constructor(props = {} as Partial<LogseqPortalShapeProps>) {
     super(props)
     makeObservable(this)
-    if (props.collapsed) {
-      this.canResize = [true, false]
+    if (props.collapsed || props.compact) {
+      Object.assign(this.canResize, [true, false])
     }
   }
 
@@ -131,6 +136,34 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       return /^\(\(.*\)\)$/.test(id) && id.length === blockRefEg.length ? 'B' : 'P'
     }
     return false
+  }
+
+  useComponentSize<T extends HTMLElement>(ref: React.RefObject<T> | null, selector = '') {
+    const [size, setSize] = React.useState<[number, number]>([0, 0])
+    React.useEffect(() => {
+      console.log(ref?.current)
+      if (ref?.current) {
+        const el = selector ? ref.current.querySelector<HTMLElement>(selector) : ref.current
+        if (el) {
+          const updateSize = () => {
+            const { width, height } = el.getBoundingClientRect()
+            setSize([width, height])
+            return [width, height]
+          }
+          updateSize()
+          this.getInnerHeight = () => updateSize()[1]
+          const resizeObserver = new ResizeObserver(() => {
+            updateSize()
+          })
+          resizeObserver.observe(el)
+          return () => {
+            resizeObserver.disconnect()
+          }
+        }
+      }
+      return () => {}
+    }, [ref, selector])
+    return size
   }
 
   ReactContextBar = observer(() => {
@@ -179,10 +212,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             label="Compact"
             checked={this.props.compact}
             onCheckedChange={compact => {
-              this.update({
-                compact: compact,
-              })
-              app.persist()
+              this.update({ compact })
+              this.canResize[1] = !compact
+              this.autoResizeHeight()
             }}
           />
         )}
@@ -190,14 +222,90 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     )
   })
 
-  ReactComponent = observer(({ events, isErasing, isEditing, isBinding }: TLComponentProps) => {
+  autoResizeHeight(ttl = 5) {
+    setTimeout(() => {
+      if (this.getInnerHeight) {
+        this.update({
+          size: [
+            this.props.size[0],
+            this.getInnerHeight() + (this.props.compact ? 0 : HEADER_HEIGHT),
+          ],
+        })
+        this.persist?.()
+        this.initialHeightCalculated = true
+      } else if (ttl > 0) {
+        this.autoResizeHeight(ttl - 1)
+      }
+    }, 10)
+  }
+
+  PortalComponent = observer(({ isBinding }: TLComponentProps) => {
     const {
-      props: { opacity, pageId, stroke, fill },
+      props: { pageId, stroke, fill },
+    } = this
+    const { renderers } = React.useContext(LogseqContext)
+    if (!renderers?.Page) {
+      return null // not being correctly configured
+    }
+    const { Page, Block, Breadcrumb, PageNameLink } = renderers
+
+    const cpRefContainer = React.useRef<HTMLDivElement>(null)
+
+    const [, innerHeight] = this.useComponentSize(
+      cpRefContainer,
+      this.props.compact
+        ? '.tl-logseq-cp-container > .single-block'
+        : '.tl-logseq-cp-container > .page'
+    )
+
+    return (
+      <div
+        className="tl-logseq-portal-container"
+        style={{
+          background: this.props.compact ? 'transparent' : fill,
+          boxShadow: isBinding ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)' : 'none',
+          color: stroke,
+          // @ts-expect-error ???
+          '--ls-primary-background-color': !fill?.startsWith('var') ? fill : undefined,
+          '--ls-primary-text-color': !stroke?.startsWith('var') ? stroke : undefined,
+          '--ls-title-text-color': !stroke?.startsWith('var') ? stroke : undefined,
+        }}
+      >
+        {!this.props.compact && (
+          <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'}>
+            {this.props.blockType === 'P' ? (
+              <PageNameLink pageName={pageId} />
+            ) : (
+              <Breadcrumb blockId={pageId} />
+            )}
+          </LogseqPortalShapeHeader>
+        )}
+        <div
+          ref={cpRefContainer}
+          className="tl-logseq-cp-container"
+          style={{
+            overflow: this.props.compact ? 'visible' : 'auto',
+          }}
+        >
+          {this.props.blockType === 'B' && this.props.compact ? (
+            <Block blockId={pageId} />
+          ) : (
+            <Page pageName={pageId} />
+          )}
+        </div>
+      </div>
+    )
+  })
+
+  ReactComponent = observer((componentProps: TLComponentProps) => {
+    const { events, isErasing, isEditing } = componentProps
+    const {
+      props: { opacity, pageId },
     } = this
 
     const app = useApp<Shape>()
+    this.persist = () => app.persist()
     const isMoving = useCameraMovingRef()
-    const { renderers } = React.useContext(LogseqContext)
     const isSelected = app.selectedIds.has(this.id)
     const isCreating = app.isIn('logseq-portal.creating') && !pageId
     const tlEventsEnabled =
@@ -231,6 +339,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     }, [isEditing, this.props.collapsed])
 
     const onPageNameChanged = React.useCallback((id: string) => {
+      this.initialHeightCalculated = false
       this.update({
         pageId: id,
         size: [600, 320],
@@ -241,11 +350,25 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       app.history.persist()
     }, [])
 
-    if (!renderers?.Page) {
-      return null // not being correctly configured
-    }
+    const showingPortal = !this.props.collapsed || isEditing
 
-    const { Page, Block, Breadcrumb, PageNameLink } = renderers
+    const PortalComponent = this.PortalComponent
+
+    React.useLayoutEffect(() => {
+      if (this.props.compact && this.props.blockType === 'B') {
+        const newHeight = innerHeight + (this.props.compact ? 0 : HEADER_HEIGHT)
+        this.update({
+          size: [this.props.size[0], newHeight],
+        })
+        app.persist()
+      }
+    }, [innerHeight, this.props.compact])
+
+    React.useEffect(() => {
+      if (!this.initialHeightCalculated) {
+        this.autoResizeHeight()
+      }
+    }, [this.initialHeightCalculated])
 
     return (
       <HTMLContainer
@@ -267,60 +390,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         >
           {isCreating ? (
             <LogseqQuickSearch onChange={onPageNameChanged} />
-          ) : (
-            <div
-              className="tl-logseq-portal-container"
-              style={{
-                background: this.props.compact ? 'transparent' : fill,
-                boxShadow: this.props.compact
-                  ? 'none'
-                  : isBinding
-                  ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
-                  : 'var(--shadow-medium)',
-                color: stroke,
-                // @ts-expect-error ???
-                '--ls-primary-background-color': !fill?.startsWith('var') ? fill : undefined,
-                '--ls-primary-text-color': !stroke?.startsWith('var') ? stroke : undefined,
-                '--ls-title-text-color': !stroke?.startsWith('var') ? stroke : undefined,
-              }}
-            >
-              {!this.props.compact && (
-                <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'}>
-                  {this.props.blockType === 'P' ? (
-                    <PageNameLink pageName={pageId} />
-                  ) : (
-                    <Breadcrumb blockId={pageId} />
-                  )}
-                </LogseqPortalShapeHeader>
-              )}
-              {(!this.props.collapsed || isEditing) && (
-                <div
-                  style={{
-                    width: '100%',
-                    overflow: 'auto',
-                    borderRadius: '8px',
-                    overscrollBehavior: 'none',
-                    height: '100%',
-                    flex: 1,
-                    cursor: 'default',
-                  }}
-                >
-                  {this.props.blockType === 'B' && this.props.compact ? (
-                    <Block blockId={pageId} />
-                  ) : (
-                    <div
-                      style={{
-                        padding: '12px',
-                        height: '100%',
-                      }}
-                    >
-                      <Page pageName={pageId} />
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+          ) : showingPortal ? (
+            <PortalComponent {...componentProps} />
+          ) : null}
         </div>
       </HTMLContainer>
     )

@@ -9,9 +9,13 @@
   background-color: var(--ls-secondary-background-color);
 }
 
-.single-block-wrapper > .block-content-wrapper {
+.single-block > :is(.block-content-wrapper, .editor-wrapper) {
   width: 100% !important;
   background-color: var(--ls-secondary-background-color);
   padding: 8px 12px;
   border-radius: 8px;
+}
+
+.tl-logseq-cp-container > .page {
+  padding: 12px;
 }

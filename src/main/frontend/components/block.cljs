@@ -2256,7 +2256,7 @@
 
 (rum/defc single-block-cp
   [block-uuid]
-  [:div.single-block-wrapper (single-block-cp-inner block-uuid)])
+  [:div.single-block (single-block-cp-inner block-uuid)])
 
 (defn non-dragging?
   [e]

@@ -33,7 +33,7 @@ const documentModel = onLoad() ?? {
           fill: '#ffffff',
           strokeWidth: 2,
           opacity: 1,
-          pageId: '',
+          pageId: 'aaasssdddfff',
           nonce: 1,
         },
       ],
@@ -49,7 +49,7 @@ const Page = props => {
   const [value, setValue] = React.useState(JSON.stringify(props, null, 2))
   return (
     <textarea
-      className="whitespace-pre w-full h-full font-mono"
+      className="whitespace-pre w-full h-full font-mono page"
       style={{ minHeight: '64px' }}
       value={value}
       onChange={e => setValue(e.target.value)}
@@ -61,7 +61,7 @@ const Block = props => {
   const [value, setValue] = React.useState(JSON.stringify(props, null, 2))
   return (
     <textarea
-      className="whitespace-pre w-full h-full font-mono"
+      className="whitespace-pre w-full h-32 font-mono single-block"
       style={{ minHeight: '64px' }}
       value={value}
       onChange={e => setValue(e.target.value)}

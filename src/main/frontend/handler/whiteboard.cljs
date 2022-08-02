@@ -86,7 +86,7 @@
 
 (defn- whiteboard-clj->tldr [page-block blocks shape-id]
   (let [id (str (:block/uuid page-block))
-        shapes (->> blocks 
+        shapes (->> blocks
                     (map block->shape)
                     (filter #(= :whiteboard-shape (:ls-type %))))
         page-properties (:block/properties page-block)
@@ -138,9 +138,10 @@
   ([page-name]
    (page-name->tldr! page-name nil))
   ([page-name shape-id]
-   (if-let [[page-block blocks] (get-whiteboard-clj page-name)]
-     (whiteboard-clj->tldr page-block blocks shape-id)
-     (create-new-whiteboard-page! page-name))))
+   (when page-name
+     (if-let [[page-block blocks] (get-whiteboard-clj page-name)]
+       (whiteboard-clj->tldr page-block blocks shape-id)
+       (create-new-whiteboard-page! page-name)))))
 
 (defn ->logseq-portal-shape
   [block-id point]
