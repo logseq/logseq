@@ -58,8 +58,7 @@
   (let [tx-meta (:tx-meta tx-report)]
     (when (and (not (:from-disk? tx-meta))
                (not (:new-graph? tx-meta))
-               (not (:compute-new-refs? tx-meta))
-               (:outliner/transact? tx-meta))
+               (not (:compute-new-refs? tx-meta)))
       (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
             repo (state/get-current-repo)
             refs-tx (set (compute-block-path-refs (:tx-meta tx-report) blocks))
