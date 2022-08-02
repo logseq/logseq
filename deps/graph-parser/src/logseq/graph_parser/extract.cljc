@@ -185,10 +185,9 @@
        {:block/uuid (uuid (:pageId shape))})]))
 
 (defn- with-whiteboard-block-refs
-  [shape parent-ref]
+  [shape]
   (let [refs (or (get-shape-refs shape) [])]
-    (merge {:block/refs refs
-            :block/path-refs (into [] (concat refs [parent-ref]))})))
+    (merge {:block/refs refs})))
 
 (defn- with-whiteboard-content
   [shape]
@@ -200,11 +199,10 @@
 
 (defn with-whiteboard-block-props
   [block]
-  (let [shape (:block/properties block)
-        parent (select-keys (:block/page block) [:block/name])]
+  (let [shape (:block/properties block)]
     (when (= :whiteboard-shape (:ls-type shape))
       (merge {:block/uuid (uuid (:id shape))}
-             (with-whiteboard-block-refs shape parent)
+             (with-whiteboard-block-refs shape)
              (with-whiteboard-content shape)))))
 
 (defn extract-whiteboard-edn

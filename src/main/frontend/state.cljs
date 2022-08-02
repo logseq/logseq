@@ -387,6 +387,15 @@
   (true? (:feature/enable-block-timestamps?
            (get (sub-config) (get-current-repo)))))
 
+(defn enable-whiteboards?
+  ([]
+   (enable-whiteboards? (get-current-repo)))
+  ([repo]
+   (and
+    (util/electron?)
+    (true? (:feature/enable-whiteboards?
+            (get (sub-config) repo))))))
+
 (defn sub-graph-config
   []
   (get (sub-config) (get-current-repo)))

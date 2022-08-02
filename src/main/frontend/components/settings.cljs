@@ -501,6 +501,14 @@
                  (config-handler/set-config! :feature/enable-flashcards? value)))
              true))
 
+(rum/defc whiteboards-enabled-switcher
+  [enable-whiteboards?]
+  (ui/toggle enable-whiteboards?
+             (fn []
+               (let [value (not enable-whiteboards?)]
+                 (config-handler/set-config! :feature/enable-whiteboards? value)))
+             true))
+
 (rum/defc user-proxy-settings
   [{:keys [protocol host port] :as agent-opts}]
   (ui/button [:span
@@ -520,6 +528,11 @@
   (row-with-button-action
    {:left-label (t :settings-page/enable-flashcards)
     :action (flashcards-enabled-switcher enable-flashcards?)}))
+
+(defn whiteboards-switcher-row [enable-whiteboards?]
+  (row-with-button-action
+   {:left-label (t :settings-page/enable-whiteboards)
+    :action (whiteboards-enabled-switcher enable-whiteboards?)}))
 
 (defn https-user-agent-row [agent-opts]
   (row-with-button-action
@@ -614,13 +627,15 @@
   (let [instrument-disabled? (state/sub :instrument/disabled?)
         developer-mode? (state/sub [:ui/developer-mode?])
         https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])
-        enable-flashcards? (state/enable-flashcards? current-repo)]
+        enable-flashcards? (state/enable-flashcards? current-repo)
+        enable-whiteboards? (state/enable-whiteboards? current-repo)]
     [:div.panel-wrap.is-advanced
      (when (and util/mac? (util/electron?)) (app-auto-update-row t))
      (usage-diagnostics-row t instrument-disabled?)
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (when (and (util/electron?) config/enable-plugins?) (plugin-system-switcher-row))
      (flashcards-switcher-row enable-flashcards?)
+     (when (util/electron?) (whiteboards-switcher-row enable-whiteboards?))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (clear-cache-row t)
 
