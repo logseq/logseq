@@ -76,9 +76,8 @@ public class FileSync extends Plugin {
         try {
             raw = RSFileSync.encryptFilenames(filePaths.toList());
             if (raw != null) {
-                List<String> fnames = Arrays.asList(raw);
                 JSObject ret = new JSObject();
-                ret.put("value", fnames);
+                ret.put("value", JSArray.from(raw));
                 call.resolve(ret);
             }
         } catch (JSONException e) {
@@ -94,9 +93,8 @@ public class FileSync extends Plugin {
         try {
             raw = RSFileSync.decryptFilenames(filePaths.toList());
             if (raw != null) {
-                List<String> fnames = Arrays.asList(raw);
                 JSObject ret = new JSObject();
-                ret.put("value", fnames);
+                ret.put("value", JSArray.from(raw));
                 call.resolve(ret);
             }
         } catch (JSONException e) {
@@ -112,7 +110,7 @@ public class FileSync extends Plugin {
         String basePath = call.getString("basePath");
         List<String> filePaths = call.getArray("filePaths").toList();
         for (String filePath : filePaths) {
-            Log.i("FileSync", "Got file " + filePath);
+            Log.i("FileSync", "Got file Meta " + filePath);
         }
 
         FileMeta[] metas = RSFileSync.getLocalFilesMeta(basePath, filePaths);
@@ -122,6 +120,7 @@ public class FileSync extends Plugin {
         }
         JSObject dict = new JSObject();
         for (FileMeta meta : metas) {
+            Log.i("FileSync", "got meta " + meta.toString());
             JSObject item = new JSObject();
             item.put("md5", meta.md5);
             item.put("size", meta.size);
@@ -131,7 +130,7 @@ public class FileSync extends Plugin {
             dict.put(meta.filePath, item);
         }
         JSObject ret = new JSObject();
-        ret.put("result", dict);;
+        ret.put("result", dict);
         call.resolve(ret);
     }
 

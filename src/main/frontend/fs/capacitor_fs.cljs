@@ -121,7 +121,11 @@
 (def backup-dir "logseq/bak")
 (defn- get-backup-dir
   [repo-dir path ext]
-  (let [relative-path (-> (string/replace path repo-dir "")
+  (prn ::debug-bak-dir repo-dir path ext)
+  (let [path (if (string/starts-with? path "file://")
+               (subs path 7)
+               path)
+        relative-path (-> (string/replace path repo-dir "")
                           (string/replace (str "." ext) ""))]
     (str repo-dir backup-dir "/" relative-path)))
 
@@ -266,7 +270,10 @@
       (js/console.log result)
       result))
   (readdir [_this dir]                  ; recursive
-    (readdir dir))
+    (let [dir (if-not (string/starts-with? dir "file://")
+                 (str "file://" dir)
+                 dir)]
+      (readdir dir)))
   (unlink! [this repo path _opts]
     (p/let [path (get-file-path nil path)
             path (if (string/starts-with? path "file://")

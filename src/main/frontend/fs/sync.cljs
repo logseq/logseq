@@ -288,10 +288,12 @@
           (swap! *on-flying-request disj name)
           r))))
 
+;; FIXME: For Android, dir is plain path
+;; For iOS, dir is URL
 (defn- remove-dir-prefix [dir path]
   (let [is-mobile-url? (string/starts-with? dir "file://")
         dir (if is-mobile-url? (gstring/urlDecode dir) dir)
-        r (string/replace path (js/RegExp. (str "^" (gstring/regExpEscape dir))) "")]
+        r (string/replace path (js/RegExp. (str "^" "(file://)?" (gstring/regExpEscape dir))) "")]
     (if (string/starts-with? r "/")
       (string/replace-first r "/" "")
       r)))
@@ -1497,10 +1499,11 @@
                         sync-state--stopped?)
         (when (or (:mtime stat) (= type "unlink"))
           (go
-            (let [files-meta (and (not= "unlink" type)
-                                  (<! (<get-local-files-meta rsapi "" dir [(remove-dir-prefix dir path)])))
+            (let [path (remove-dir-prefix dir path)
+                  files-meta (and (not= "unlink" type)
+                                  (<! (<get-local-files-meta rsapi "" dir [path])))
                   checksum (and (coll? files-meta) (some-> files-meta first :etag))]
-              (>! local-changes-chan (->FileChangeEvent type dir (string/replace-first path "file://" "") stat checksum)))))))))
+              (>! local-changes-chan (->FileChangeEvent type dir path stat checksum)))))))))
 
 ;;; ### encryption
 (def pwd-map
