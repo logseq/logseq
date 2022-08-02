@@ -297,17 +297,22 @@
       (when-not (mobile-util/native-platform?)
         "local")))
 
+(def default-config
+  "Default config for a repo-specific, user config"
+  {:feature/enable-search-remove-accents? true
+   :default-arweave-gateway "https://arweave.net"})
+
 (defn get-config
+  "User config for the given repo or current repo if none given"
   ([]
    (get-config (get-current-repo)))
   ([repo-url]
-   (get-in @state [:config repo-url])))
-
-(def default-arweave-gateway "https://arweave.net")
+   (merge default-config
+          (get-in @state [:config repo-url]))))
 
 (defn get-arweave-gateway
   []
-  (:arweave/gateway (get-config) default-arweave-gateway))
+  (:arweave/gateway (get-config)))
 
 (defonce built-in-macros
          {"img" "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]"})
@@ -1702,5 +1707,4 @@
 
 (defn enable-search-remove-accents?
   []
-  (:feature/enable-search-remove-accents?
-    (get (sub-config) (get-current-repo))))
+  (:feature/enable-search-remove-accents? (get-config)))
