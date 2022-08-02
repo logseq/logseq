@@ -354,7 +354,8 @@
         timeout 300
         in-page-search? (= search-mode :page)]
     [:div.cp__palette.cp__palette-main
-     [:div.input-wrap
+     [:div.ls-search
+      [:div.input-wrap
       [:input.cp__palette-input.w-full
        {:type          "text"
         :auto-focus    true
@@ -387,10 +388,10 @@
                                             (search-handler/search (state/get-current-repo) value opts)
                                             (search-handler/search (state/get-current-repo) value)))
                                         timeout))))))}]]
-     [:div.search-results-wrap
-      (if (seq search-result)
-        (search-auto-complete search-result search-q false)
-        (recent-search-and-pages in-page-search?))]]))
+      [:div.search-results-wrap
+       (if (seq search-result)
+         (search-auto-complete search-result search-q false)
+         (recent-search-and-pages in-page-search?))]]]))
 
 (rum/defc more < rum/reactive
   [route]

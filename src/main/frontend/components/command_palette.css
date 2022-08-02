@@ -9,10 +9,8 @@
     display: flex;
     flex-direction: column;
 
-    /* width: 80vw; */
-
     @screen lg {
-      width: 768px;
+      width: var(--ls-main-content-max-width);
     }
 
     .menu-link {
