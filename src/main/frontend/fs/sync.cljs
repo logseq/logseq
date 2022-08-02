@@ -1777,21 +1777,23 @@
   {:pre [(coll? es)
          (seq es)
          (every? #(instance? FileChangeEvent %) es)]}
+  (println :debug :<filter-checksum-not-consistent es)
   (go
-    (let [base-path            (.-dir (first es))
-          files-meta           (<! (<get-local-files-meta rsapi "" base-path (mapv relative-path es)))
-          current-checksum-map (when (coll? files-meta)
-                                 (into {} (mapv (juxt :path :etag) files-meta)))
-          origin-checksum-map  (into {} (mapv (juxt relative-path #(.-checksum ^FileChangeEvent %)) es))
-          origin-map           (into {} (mapv (juxt relative-path identity) es))]
-      (->>
-       (merge-with
-        #(boolean (or (nil? %1) (= %1 %2)))
-        origin-checksum-map current-checksum-map)
-       (filterv (comp true? second))
-       (mapv first)
-       (select-keys origin-map)
-       vals))))
+    (if (= "unlink" (.-type ^FileChangeEvent (first es)))
+      es
+      (let [base-path            (.-dir (first es))
+            files-meta           (<! (<get-local-files-meta rsapi "" base-path (mapv relative-path es)))
+            current-checksum-map (when (coll? files-meta) (into {} (mapv (juxt :path :etag) files-meta)))
+            origin-checksum-map  (into {} (mapv (juxt relative-path #(.-checksum ^FileChangeEvent %)) es))
+            origin-map           (into {} (mapv (juxt relative-path identity) es))]
+        (->>
+         (merge-with
+          #(boolean (or (nil? %1) (= %1 %2)))
+          origin-checksum-map current-checksum-map)
+         (filterv (comp true? second))
+         (mapv first)
+         (select-keys origin-map)
+         vals)))))
 
 
 (defrecord ^:large-vars/cleanup-todo
