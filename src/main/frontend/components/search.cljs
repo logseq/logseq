@@ -138,7 +138,7 @@
       (if page
         (if (or collapsed? long-page?)
           (route/redirect-to-page! block-uuid)
-          (route/redirect-to-page! (:block/name page) (str "ls-block-" (:block/uuid data))))
+          (route/redirect-to-page! (:block/name page) {:anchor (str "ls-block-" (:block/uuid data))}))
         ;; search indice outdated
         (println "[Error] Block page missing: "
                  {:block-id block-uuid

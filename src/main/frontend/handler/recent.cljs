@@ -2,10 +2,11 @@
   (:require [frontend.db :as db]))
 
 (defn add-page-to-recent!
-  [repo page]
+  [repo page click-from-recent?]
   (let [pages (or (db/get-key-value repo :recent/pages)
                   '())]
-    (when-not ((set pages) page)
+    (when (or (and click-from-recent? (not ((set pages) page)))
+              (not click-from-recent?))
       (let [new-pages (take 15 (distinct (cons page pages)))]
         (db/set-key-value repo :recent/pages new-pages)))))
 

@@ -67,7 +67,7 @@
     (< delta 14)))
 
 (rum/defc page-name
-  [name icon]
+  [name icon recent?]
   (let [original-name (db-model/get-page-original-name name)]
     [:a {:on-click (fn [e]
                      (let [name (util/safe-page-name-sanity-lc name)]
@@ -77,7 +77,7 @@
                             (state/get-current-repo)
                             (:db/id page-entity)
                             :page))
-                         (route-handler/redirect-to-page! name))))}
+                         (route-handler/redirect-to-page! name {:click-from-recent? recent?}))))}
      [:span.page-icon icon]
      (pdf-assets/fix-local-asset-filename original-name)]))
 
@@ -117,7 +117,7 @@
                                                    :up? (move-up? e)})
                  (reset! up? nil)
                  (reset! dragging-over nil))}
-     (page-name name icon)]))
+     (page-name name icon false)]))
 
 (rum/defc favorites < rum/reactive
   [t]
@@ -167,7 +167,7 @@
            {:key name
             :title name
             :data-ref name}
-           (page-name name (get-page-icon entity))]))])))
+           (page-name name (get-page-icon entity) true)]))])))
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
   {:did-mount (fn [state]
