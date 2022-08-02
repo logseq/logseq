@@ -180,7 +180,9 @@
   (let [num (state/sub :srs/cards-due-count)]
     [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
      {:class (util/classnames [{:active srs-open?}])
-      :on-click #(state/pub-event! [:modal/show-cards])}
+      :on-click #(do
+                   (srs/update-cards-due-count!)
+                   (state/pub-event! [:modal/show-cards]))}
      (ui/icon "infinity")
      [:span.flex-1 (t :right-side-bar/flashcards)]
      (when (and num (not (zero? num)))
