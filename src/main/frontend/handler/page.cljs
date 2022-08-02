@@ -305,10 +305,12 @@
 (defn unfavorite-page!
   [page-name]
   (when-not (string/blank? page-name)
-    (let [favorites (->> (:favorites (state/get-config))
-                         (remove #(= (string/lower-case %) (string/lower-case page-name)))
-                         (vec))]
-      (config-handler/set-config! :favorites favorites))))
+    (let [old-favorites (:favorites (state/get-config))
+          new-favorites (->> old-favorites
+                             (remove #(= (string/lower-case %) (string/lower-case page-name)))
+                             (vec))]
+      (when-not (= old-favorites new-favorites)
+        (config-handler/set-config! :favorites new-favorites)))))
 
 (defn toggle-favorite! []
   ;; NOTE: in journals or settings, current-page is nil
