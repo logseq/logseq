@@ -505,6 +505,24 @@
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))
 
+(defn- refresh-cb []
+  (page-handler/create-today-journal!)
+  (st/refresh!)
+  (file-sync-restart!))
+
+(defmethod handle :graph/ask-for-re-fresh [_]
+  (handle
+   [:modal/show
+    [:div {:style {:max-width 700}}
+     [:p (t :sync-from-local-changes-detected)]
+     (ui/button
+      (t :yes)
+      :autoFocus "on"
+      :large? true
+      :on-click (fn []
+                  (state/close-modal!)
+                  (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
+
 (defmethod handle :graph/ask-for-re-index [[_ *multiple-windows?]]
   (if (and (util/atom? *multiple-windows?) @*multiple-windows?)
     (handle
@@ -516,15 +534,15 @@
       [:div {:style {:max-width 700}}
        [:p (t :re-index-discard-unsaved-changes-warning)]
        (ui/button
-         (t :yes)
-         :autoFocus "on"
-         :large? true
-         :on-click (fn []
-                     (state/close-modal!)
-                     (repo-handler/re-index!
-                      nfs-handler/rebuild-index!
-                      #(do (page-handler/create-today-journal!)
-                           (file-sync-restart!)))))]])))
+        (t :yes)
+        :autoFocus "on"
+        :large? true
+        :on-click (fn []
+                    (state/close-modal!)
+                    (repo-handler/re-index!
+                     nfs-handler/rebuild-index!
+                     #(do (page-handler/create-today-journal!)
+                          (file-sync-restart!)))))]])))
 
 ;; encryption
 (defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]

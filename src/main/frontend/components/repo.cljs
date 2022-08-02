@@ -145,10 +145,6 @@
            (repos-inner remote-graphs)])]]
       (widgets/add-graph))))
 
-(defn refresh-cb []
-  (page-handler/create-today-journal!)
-  (shortcut/refresh!))
-
 (defn- check-multiple-windows?
   [state]
   (when (util/electron?)
@@ -184,19 +180,7 @@
                                       (mobile-util/native-platform?)))
                          {:title (t :sync-from-local-files)
                           :hover-detail (t :sync-from-local-files-detail)
-                          :options {:on-click
-                                    (fn []
-                                      (state/pub-event!
-                                       [:modal/show
-                                        [:div {:style {:max-width 700}}
-                                         [:p (t :sync-from-local-changes-detected)]
-                                         (ui/button
-                                          (t :yes)
-                                          :autoFocus "on"
-                                          :large? true
-                                          :on-click (fn []
-                                                      (state/close-modal!)
-                                                      (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))}}))
+                          :options {:on-click #(state/pub-event! [:graph/ask-for-re-fresh])}}))
         reindex-link {:title        (t :re-index)
                       :hover-detail (t :re-index-detail)
                       :options (cond->
