@@ -23,29 +23,6 @@ const documentModel = onLoad() ?? {
       shapes: [
         {
           scale: [1, 1],
-          blockType: 'P',
-          id: 'p6bv7EfoQPIF1eZB1RRO6',
-          type: 'logseq-portal',
-          parentId: 'page1',
-          point: [769.109375, 170.5546875],
-          size: [390.671875, 295.3671875],
-          stroke: '#000000',
-          fill: '#ffffff',
-          strokeWidth: 2,
-          opacity: 1,
-          pageId: '',
-          nonce: 1,
-        },
-      ],
-      bindings: {},
-      nonce: 2,
-    },
-    {
-      id: 'page1',
-      name: 'Page',
-      shapes: [
-        {
-          scale: [1, 1],
           blockType: 'B',
           id: 'p6bv7EfoQPIF1eZB1RRO6',
           type: 'logseq-portal',
@@ -93,6 +70,17 @@ const Block = props => {
 }
 
 const Breadcrumb = props => {
+  const [value, setValue] = React.useState(JSON.stringify(props))
+  return (
+    <input
+      className="whitespace-pre w-full h-full font-mono"
+      value={value}
+      onChange={e => setValue(e.target.value)}
+    />
+  )
+}
+
+const PageNameLink = props => {
   const [value, setValue] = React.useState(JSON.stringify(props))
   return (
     <input
@@ -155,6 +143,7 @@ export default function App() {
           Page,
           Block,
           Breadcrumb,
+          PageNameLink,
         }}
         searchHandler={q => (q ? list : [])}
         model={documentModel}

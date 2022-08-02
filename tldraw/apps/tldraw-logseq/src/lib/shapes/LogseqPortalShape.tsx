@@ -19,6 +19,7 @@ export interface LogseqPortalShapeProps extends TLBoxShapeProps, CustomStyleProp
   pageId: string // page name or UUID
   blockType?: 'P' | 'B'
   collapsed?: boolean
+  compact?: boolean
   collapsedHeight?: number
 }
 
@@ -108,6 +109,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     opacity: 1,
     pageId: '',
     collapsed: false,
+    compact: false,
   }
 
   hideRotateHandle = true
@@ -155,20 +157,35 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             app.persist(true)
           }}
         />
-        <SwitchInput
-          label="Collapsed"
-          checked={this.props.collapsed}
-          onCheckedChange={collapsing => {
-            const originalHeight = this.props.size[1]
-            this.canResize[1] = !collapsing
-            this.update({
-              collapsed: collapsing,
-              size: [this.props.size[0], collapsing ? HEADER_HEIGHT : this.props.collapsedHeight],
-              collapsedHeight: collapsing ? originalHeight : this.props.collapsedHeight,
-            })
-            app.persist()
-          }}
-        />
+        {this.props.blockType !== 'B' && (
+          <SwitchInput
+            label="Collapsed"
+            checked={this.props.collapsed}
+            onCheckedChange={collapsing => {
+              const originalHeight = this.props.size[1]
+              this.canResize[1] = !collapsing
+              this.update({
+                collapsed: collapsing,
+                size: [this.props.size[0], collapsing ? HEADER_HEIGHT : this.props.collapsedHeight],
+                collapsedHeight: collapsing ? originalHeight : this.props.collapsedHeight,
+              })
+              app.persist()
+            }}
+          />
+        )}
+
+        {this.props.blockType === 'B' && (
+          <SwitchInput
+            label="Compact"
+            checked={this.props.compact}
+            onCheckedChange={compact => {
+              this.update({
+                compact: compact,
+              })
+              app.persist()
+            }}
+          />
+        )}
       </>
     )
   })
@@ -254,8 +271,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             <div
               className="tl-logseq-portal-container"
               style={{
-                background: fill,
-                boxShadow: isBinding
+                background: this.props.compact ? 'transparent' : fill,
+                boxShadow: this.props.compact
+                  ? 'none'
+                  : isBinding
                   ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
                   : 'var(--shadow-medium)',
                 color: stroke,
@@ -265,13 +284,15 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 '--ls-title-text-color': !stroke?.startsWith('var') ? stroke : undefined,
               }}
             >
-              <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'}>
-                {this.props.blockType === 'P' ? (
-                  <PageNameLink pageName={pageId} />
-                ) : (
-                  <Breadcrumb blockId={pageId} />
-                )}
-              </LogseqPortalShapeHeader>
+              {!this.props.compact && (
+                <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'}>
+                  {this.props.blockType === 'P' ? (
+                    <PageNameLink pageName={pageId} />
+                  ) : (
+                    <Breadcrumb blockId={pageId} />
+                  )}
+                </LogseqPortalShapeHeader>
+              )}
               {(!this.props.collapsed || isEditing) && (
                 <div
                   style={{
@@ -281,21 +302,21 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                     overscrollBehavior: 'none',
                     height: '100%',
                     flex: 1,
+                    cursor: 'default',
                   }}
                 >
-                  <div
-                    style={{
-                      padding: '12px',
-                      height: '100%',
-                      cursor: 'default',
-                    }}
-                  >
-                    {this.props.blockType === 'P' ? (
+                  {this.props.blockType === 'B' && this.props.compact ? (
+                    <Block blockId={pageId} />
+                  ) : (
+                    <div
+                      style={{
+                        padding: '12px',
+                        height: '100%',
+                      }}
+                    >
                       <Page pageName={pageId} />
-                    ) : (
-                      <Block blockId={pageId} />
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

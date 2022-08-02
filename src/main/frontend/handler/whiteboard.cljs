@@ -146,6 +146,7 @@
   [block-id point]
   {:blockType "B"
    :id (str (d/squuid))
+   :compact true
    :pageId (str block-id)
    :point point
    :size [600, 400]
