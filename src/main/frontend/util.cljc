@@ -1120,7 +1120,9 @@
                                (async/<! filter-v)
                                filter-v)]
                (if filter-v*
-                 (recur timeout-ch (cond-> (conj coll e) distinct-coll? distinct))
+                 (recur timeout-ch (cond-> (conj coll e)
+                                     distinct-coll? distinct
+                                     true vec))
                  (recur timeout-ch coll)))
 
              (or stop

@@ -1299,6 +1299,25 @@
                      (val (first (<! (get-local-files-checksum (.-dir e) [path])))))
        :path path})))
 
+(defn- distinct-file-change-events-xf
+  "transducer.
+  distinct `FileChangeEvent`s by their path, keep the first one."
+  [rf]
+  (let [seen (volatile! #{})]
+    (fn
+      ([] (rf))
+      ([result] (rf result))
+      ([result ^FileChangeEvent e]
+       (if (contains? @seen (.-path e))
+         result
+         (do (vswap! seen conj (.-path e))
+             (rf result e)))))))
+
+(defn- distinct-file-change-events
+  "distinct `FileChangeEvent`s by their path, keep the last one."
+  [es]
+  (transduce distinct-file-change-events-xf conj '() (reverse es)))
+
 (defn- partition-file-change-events
   "return transducer.
   partition `FileChangeEvent`s, at most N file-change-events in each partition.
@@ -1777,7 +1796,6 @@
   {:pre [(coll? es)
          (seq es)
          (every? #(instance? FileChangeEvent %) es)]}
-  (println :debug :<filter-checksum-not-consistent es)
   (go
     (if (= "unlink" (.-type ^FileChangeEvent (first es)))
       es
@@ -1913,7 +1931,7 @@
                   diff-local-files      (diff-file-metadata-sets local-all-files-meta remote-all-files-meta)
                   monitored-dirs        (get-monitor-dirs)
                   ignored-files         (get-ignored-files)
-                  change-events-partitions
+                  change-events
                   (sequence
                    (comp
                     ;; convert to FileChangeEvent
@@ -1921,10 +1939,13 @@
                     ;; filter ignore-files & monitored-dirs
                     (filter #(let [path (relative-path %)]
                                (and (not (contains-path? ignored-files path))
-                                    (contains-path? monitored-dirs path))))
-                    ;; partition FileChangeEvents
-                    (partition-file-change-events 10))
-                   diff-local-files)]
+                                    (contains-path? monitored-dirs path)))))
+                   diff-local-files)
+                  change-events-partitions
+                  (sequence
+                   ;; partition FileChangeEvents
+                   (partition-file-change-events 10)
+                   (distinct-file-change-events change-events))]
               (println "[full-sync(local->remote)]"
                        (count (flatten change-events-partitions)) "files need to sync")
               (loop [es-partitions change-events-partitions]
@@ -2117,7 +2138,8 @@
     (local->remote [this {^FileChangeEvents local-changes :local}]
       (assert (some? local-changes) local-changes)
       (go
-        (let [change-events-partitions (sequence (partition-file-change-events 10) local-changes)
+        (let [change-events-partitions
+              (sequence (partition-file-change-events 10) (distinct-file-change-events local-changes))
               {:keys [succ need-sync-remote graph-has-been-deleted unknown stop]}
               (loop [es-partitions change-events-partitions]
                 (cond
