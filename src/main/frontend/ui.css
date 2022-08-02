@@ -278,6 +278,7 @@ html.is-mobile {
 
 .dropdown-wrapper {
   background-color: var(--ls-primary-background-color, #fff);
+  border: 1px solid var(--ls-tertiary-background-color);
   min-width: 12rem;
 }
 

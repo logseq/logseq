@@ -71,7 +71,6 @@
       overflow-y: auto;
       position: fixed;
       right: 5vw;
-      border: 1px solid var(--ls-tertiary-background-color);
       padding-bottom: 8px;
       padding-top: 5px;
 
@@ -387,12 +386,6 @@ div[label=modal-page-histories] {
 
 html[data-theme='light'] {
   .cp__file-sync {
-    &-indicator {
-      .dropdown-wrapper {
-        border-color: #cccccc;
-      }
-    }
-
     &-welcome-logseq-sync {
       > .head-bg {
         background-image: url("../img/file-sync-welcome-backer-light.png");
