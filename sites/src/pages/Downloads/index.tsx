@@ -9,8 +9,6 @@ import { LSButton } from '../../components/Buttons'
 import { LandingFooterDesc, LandingFooterNav } from '../Landing'
 import { useAppState } from '../../state'
 
-const headImageBg: any = new URL('assets/dl_head_bg.jpg', import.meta.url)
-const headImagePhone: any = new URL('assets/dl_head_bg_2.png', import.meta.url)
 const iosImageQr: any = new URL('assets/ios_app_qr.png', import.meta.url)
 const intelImageIcon: any = new URL('assets/icon_intel.png', import.meta.url)
 const M1ImageIcon: any = new URL('assets/icon_m1.png', import.meta.url)
@@ -20,6 +18,14 @@ const LinuxImageIcon: any = new URL('assets/icon_linux.png', import.meta.url)
 const GooglePlayImageIcon: any = new URL('assets/icon_google_play.png',
   import.meta.url)
 const AppleImageIcon: any = new URL('assets/icon_apple.png', import.meta.url)
+
+const releaseImages: any = {
+  'macos': new URL('assets/p_macos.png', import.meta.url),
+  'windows': new URL('assets/p_windows.png', import.meta.url),
+  'linux': new URL('assets/p_linux.png', import.meta.url),
+  'ios': new URL('assets/p_ios.png', import.meta.url),
+  'android': new URL('assets/p_android.png', import.meta.url),
+}
 
 const IntelIcon = (props: any) => {
   const { className, ...rest } = props
@@ -134,7 +140,8 @@ export function WrapGlobalDownloadButton (
   const rightIconFn = isMacOS ? (
     (props: any = {}) => <CaretDown className={'ml-1 opacity-60'} {...props}/>
   ) : (isIOS ? (
-    (props: any = {}) => <QrCode weight={'duotone'} className={'ml-1 opacity-60'} {...props}/>
+    (props: any = {}) => <QrCode weight={'duotone'}
+                                 className={'ml-1 opacity-60'} {...props}/>
   ) : null)
 
   useEffect(() => {
@@ -258,10 +265,10 @@ export function HeadDownloadLinks () {
     ) : (isAndroid ?
       <GooglePlayIcon className="bg-black/50 w-8 h-8"/>
       : (isLinux ?
-        <LinuxIcon className="bg-black/50 w-8 h-8" /> :
+        <LinuxIcon className="bg-black/50 w-8 h-8"/> :
         (isIOS ? (
-          <AppleIcon className="bg-black/50 w-8 h-8" />
-        ): icon)))
+          <AppleIcon className="bg-black/50 w-8 h-8"/>
+        ) : icon)))
 
     switch (label) {
       case 'iOS':
@@ -381,17 +388,11 @@ export function HeadDownloadLinks () {
         </div>
       </div>
 
-      <div className="screen-shot">
+      <div className="screen-shot -mt-10">
         <div className="img-wrap mx-24 relative overflow-hidden">
           <img alt="Image"
-               src={headImageBg}
-               className="opacity-80 translate-y-28 rounded-md overflow-hidden -mt-24 img-bg"
-          />
-
-          <img alt="Image"
-               src={headImagePhone}
-               className="opacity-90 absolute -right-20 -bottom-16 w-[380px]
-               animate-in duration-1000 slide-in-from-right-40 fade-in-0"
+               src={releaseImages[activeRelease[0].toString().toLowerCase()]}
+               className="opacity-90 translate-y-28 rounded-md overflow-hidden -mt-24 img-bg"
           />
         </div>
       </div>
@@ -412,7 +413,7 @@ export function DownloadsPage () {
         {/* particles background */}
         {/*<div id="particles-bg" className="particles-bg"></div>*/}
 
-        <div className="page-inner footer-desc">
+        <div className="page-inner footer-desc pt-16">
           <LandingFooterDesc/>
         </div>
 
