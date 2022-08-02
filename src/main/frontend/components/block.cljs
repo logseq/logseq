@@ -2238,7 +2238,8 @@
   (let [uuid (if (string? block-uuid) (uuid block-uuid) block-uuid)
         *init-blocks-container-id (::init-blocks-container-id state)
         block-entity (db/entity [:block/uuid uuid])
-        {:block/keys [pre-block? level format content]} block-entity
+        block-id (:db/id block-entity)
+        block (first (model/get-paginated-blocks (state/get-current-repo) block-id))
         blocks-container-id (if @*init-blocks-container-id
                               @*init-blocks-container-id
                               (let [id' (swap! *blocks-container-id inc)]
@@ -2250,13 +2251,8 @@
                 :editor-box (state/get-component :editor/box)}
         edit-input-id (str "edit-block-" blocks-container-id "-" uuid)
         edit? (state/sub [:editor/editing? edit-input-id])
-        block {:block/uuid uuid
-               :block/pre-block? pre-block?
-               :block/level level
-               :block/format format
-               :block/content content}
         block (block/parse-title-and-body block)]
-    (block-content-or-editor config block edit-input-id uuid level edit?)))
+    (block-content-or-editor config block edit-input-id uuid 1 edit?)))
 
 (rum/defc single-block-cp
   [block-uuid]

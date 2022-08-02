@@ -132,15 +132,6 @@ const tlcss = css`
     pointer-events: none;
   }
 
-  .tl-grid {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    touch-action: none;
-    pointer-events: none;
-    user-select: none;
-  }
-
   .tl-snap-line {
     stroke: var(--tl-accent);
     stroke-width: calc(1px * var(--tl-scale));
@@ -234,13 +225,6 @@ const tlcss = css`
     stroke: var(--tl-selectStroke);
     fill: var(--tl-background);
     stroke-width: calc(1.5px * var(--tl-scale));
-  }
-
-  .tl-binding {
-    fill: var(--tl-selectFill);
-    stroke: var(--tl-selectStroke);
-    stroke-width: calc(1px * var(--tl-scale));
-    pointer-events: none;
   }
 
   .tl-user {
@@ -387,10 +371,6 @@ const tlcss = css`
     fill: none;
     stroke: var(--tl-selectStroke);
     stroke-width: calc(2px * var(--tl-scale));
-  }
-
-  .tl-grid-dot {
-    fill: var(--tl-grid);
   }
 
   .tl-counter-scaled-positioned {
