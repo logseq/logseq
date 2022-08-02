@@ -150,7 +150,7 @@
    :compact true
    :pageId (str block-id)
    :point point
-   :size [600, 400]
+   :size [600, 0]
    :type "logseq-portal"})
 
 (defn add-new-block-shape!

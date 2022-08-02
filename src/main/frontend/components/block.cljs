@@ -2252,7 +2252,7 @@
         edit-input-id (str "edit-block-" blocks-container-id "-" uuid)
         edit? (state/sub [:editor/editing? edit-input-id])
         block (block/parse-title-and-body block)]
-    (block-content-or-editor config block edit-input-id uuid 0 edit?)))
+    (when (:block/content block) (block-content-or-editor config block edit-input-id uuid 0 edit?))))
 
 (rum/defc single-block-cp
   [block-uuid]

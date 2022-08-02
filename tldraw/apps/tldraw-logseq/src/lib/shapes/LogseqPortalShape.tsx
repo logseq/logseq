@@ -128,6 +128,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     if (props.collapsed || props.compact) {
       Object.assign(this.canResize, [true, false])
     }
+    if (props.size?.[1] === 0) {
+      this.initialHeightCalculated = false
+    }
   }
 
   static isPageOrBlock(id: string): 'P' | 'B' | false {
@@ -239,15 +242,12 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     }, 10)
   }
 
-  PortalComponent = observer(({ isBinding }: TLComponentProps) => {
+  PortalComponent = observer(({}: TLComponentProps) => {
     const {
-      props: { pageId, stroke, fill },
+      props: { pageId },
     } = this
     const { renderers } = React.useContext(LogseqContext)
-    if (!renderers?.Page) {
-      return null // not being correctly configured
-    }
-    const { Page, Block, Breadcrumb, PageNameLink } = renderers
+    const app = useApp<Shape>()
 
     const cpRefContainer = React.useRef<HTMLDivElement>(null)
 
@@ -258,55 +258,57 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         : '.tl-logseq-cp-container > .page'
     )
 
+    if (!renderers?.Page) {
+      return null // not being correctly configured
+    }
+    const { Page, Block } = renderers
+
+    React.useLayoutEffect(() => {
+      if (this.props.compact && this.props.blockType === 'B') {
+        const newHeight = innerHeight + (this.props.compact ? 0 : HEADER_HEIGHT)
+        this.update({
+          size: [this.props.size[0], newHeight],
+        })
+        app.persist()
+      }
+    }, [innerHeight, this.props.compact])
+
+    React.useEffect(() => {
+      if (!this.initialHeightCalculated) {
+        this.autoResizeHeight()
+      }
+    }, [this.initialHeightCalculated])
+
     return (
       <div
-        className="tl-logseq-portal-container"
+        ref={cpRefContainer}
+        className="tl-logseq-cp-container"
         style={{
-          background: this.props.compact ? 'transparent' : fill,
-          boxShadow: isBinding ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)' : 'none',
-          color: stroke,
-          // @ts-expect-error ???
-          '--ls-primary-background-color': !fill?.startsWith('var') ? fill : undefined,
-          '--ls-primary-text-color': !stroke?.startsWith('var') ? stroke : undefined,
-          '--ls-title-text-color': !stroke?.startsWith('var') ? stroke : undefined,
+          overflow: this.props.compact ? 'visible' : 'auto',
         }}
       >
-        {!this.props.compact && (
-          <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'}>
-            {this.props.blockType === 'P' ? (
-              <PageNameLink pageName={pageId} />
-            ) : (
-              <Breadcrumb blockId={pageId} />
-            )}
-          </LogseqPortalShapeHeader>
+        {this.props.blockType === 'B' && this.props.compact ? (
+          <Block blockId={pageId} />
+        ) : (
+          <Page pageName={pageId} />
         )}
-        <div
-          ref={cpRefContainer}
-          className="tl-logseq-cp-container"
-          style={{
-            overflow: this.props.compact ? 'visible' : 'auto',
-          }}
-        >
-          {this.props.blockType === 'B' && this.props.compact ? (
-            <Block blockId={pageId} />
-          ) : (
-            <Page pageName={pageId} />
-          )}
-        </div>
       </div>
     )
   })
 
   ReactComponent = observer((componentProps: TLComponentProps) => {
-    const { events, isErasing, isEditing } = componentProps
+    const { events, isErasing, isEditing, isBinding } = componentProps
     const {
-      props: { opacity, pageId },
+      props: { opacity, pageId, stroke, fill },
     } = this
 
     const app = useApp<Shape>()
+    const { renderers } = React.useContext(LogseqContext)
+
     this.persist = () => app.persist()
     const isMoving = useCameraMovingRef()
     const isSelected = app.selectedIds.has(this.id)
+
     const isCreating = app.isIn('logseq-portal.creating') && !pageId
     const tlEventsEnabled =
       (isMoving || (isSelected && !isEditing) || app.selectedTool.id !== 'select') && !isCreating
@@ -354,21 +356,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     const PortalComponent = this.PortalComponent
 
-    React.useLayoutEffect(() => {
-      if (this.props.compact && this.props.blockType === 'B') {
-        const newHeight = innerHeight + (this.props.compact ? 0 : HEADER_HEIGHT)
-        this.update({
-          size: [this.props.size[0], newHeight],
-        })
-        app.persist()
-      }
-    }, [innerHeight, this.props.compact])
-
-    React.useEffect(() => {
-      if (!this.initialHeightCalculated) {
-        this.autoResizeHeight()
-      }
-    }, [this.initialHeightCalculated])
+    if (!renderers?.Page) {
+      return null // not being correctly configured
+    }
+    const { Breadcrumb, PageNameLink } = renderers
 
     return (
       <HTMLContainer
@@ -390,9 +381,33 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         >
           {isCreating ? (
             <LogseqQuickSearch onChange={onPageNameChanged} />
-          ) : showingPortal ? (
-            <PortalComponent {...componentProps} />
-          ) : null}
+          ) : (
+            <div
+              className="tl-logseq-portal-container"
+              style={{
+                background: this.props.compact ? 'transparent' : fill,
+                boxShadow: isBinding
+                  ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
+                  : 'none',
+                color: stroke,
+                // @ts-expect-error ???
+                '--ls-primary-background-color': !fill?.startsWith('var') ? fill : undefined,
+                '--ls-primary-text-color': !stroke?.startsWith('var') ? stroke : undefined,
+                '--ls-title-text-color': !stroke?.startsWith('var') ? stroke : undefined,
+              }}
+            >
+              {!this.props.compact && (
+                <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'}>
+                  {this.props.blockType === 'P' ? (
+                    <PageNameLink pageName={pageId} />
+                  ) : (
+                    <Breadcrumb blockId={pageId} />
+                  )}
+                </LogseqPortalShapeHeader>
+              )}
+              {showingPortal && <PortalComponent {...componentProps} />}
+            </div>
+          )}
         </div>
       </HTMLContainer>
     )
