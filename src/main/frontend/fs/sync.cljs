@@ -486,15 +486,26 @@
   IRelativePath
   (-relative-path [_] path))
 
+(def ^:private higher-priority-remote-files
+  "when diff all remote files and local files, following remote files always need to download(when checksum not matched),
+  even local-file's last-modified > remote-file's last-modified.
+  because these files will be auto created when the graph created, we dont want them to re-write related remote files."
+  #{"logseq/config.edn" "logseq/custom.css"
+    "pages/contents.md" "pages/contents.org"
+    "logseq/metadata.edn"})
+
+;; TODO: use fn some to filter FileMetadata here, it cause too much loop
 (defn- diff-file-metadata-sets
   "Find the `FileMetadata`s that exists in s1 and does not exist in s2,
   compare by path+checksum+last-modified,
-  if s1.path = s2.path & s1.checksum <> s2.checksum & s1.last-modified > s2.last-modified,
+  if s1.path = s2.path & s1.checksum <> s2.checksum & s1.last-modified > s2.last-modified
+  (except some default created files),
   keep this `FileMetadata` in result"
   [s1 s2]
   (reduce
    (fn [result item]
-     (let [encrypted-path (:encrypted-path item)
+     (let [path (:path item)
+           encrypted-path (:encrypted-path item)
            checksum (:etag item)
            last-modified (:last-modified item)]
        (if (some
@@ -504,6 +515,9 @@
                (= checksum (:etag %))
                true
                (>= last-modified (:last-modified %))
+               false
+               ;; these special files have higher priority in s1
+               (contains? higher-priority-remote-files path)
                false
                (< last-modified (:last-modified %))
                true)
@@ -1231,7 +1245,7 @@
     (or
      (and (= (:error data) :promise-error)
           (when-let [r (re-find #"(\d+), txid_to_validate = (\d+)" (str cause))]
-            (> (nth r 1) (nth r 2)))) ;; TODO: better rsapi err info
+            (> (nth r 1) (nth r 2))))
      (= 409 (get-in data [:err :status])))))
 
 (defmethod need-sync-remote? :chan [c]
@@ -1679,9 +1693,6 @@
                                                             (completing (fn [r i] (conj r (reverse i)))) ;reverse
                                                             '()
                                                             (reverse diff-txns))]
-                        ;; (prn "partition-filetxns" partitioned-filetxns)
-
-                        ;; TODO: precheck etag
                         (if (empty? (flatten partitioned-filetxns))
                           (do (update-graphs-txid! latest-txid graph-uuid user-uuid repo)
                               (reset! *txid latest-txid)
@@ -1704,27 +1715,25 @@
 
   (<sync-remote->local-all-files! [this]
     (go
-      (let [remote-all-files-meta-c (<get-remote-all-files-meta remoteapi graph-uuid)
-            local-all-files-meta-c (<get-local-all-files-meta rsapi graph-uuid base-path)
+      (let [remote-all-files-meta-c      (<get-remote-all-files-meta remoteapi graph-uuid)
+            local-all-files-meta-c       (<get-local-all-files-meta rsapi graph-uuid base-path)
             remote-all-files-meta-or-exp (<! remote-all-files-meta-c)]
         (if (or (storage-exceed-limit? remote-all-files-meta-or-exp)
                 (sync-stop-when-api-flying? remote-all-files-meta-or-exp))
           {:stop true}
           (let [remote-all-files-meta remote-all-files-meta-or-exp
-                local-all-files-meta (<! local-all-files-meta-c)
-                diff-remote-files (diff-file-metadata-sets remote-all-files-meta local-all-files-meta)
-                recent-10-days-range ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %))
-                                      (t/today))
+                local-all-files-meta  (<! local-all-files-meta-c)
+                diff-remote-files     (diff-file-metadata-sets remote-all-files-meta local-all-files-meta)
+                recent-10-days-range  ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %)) (t/today))
                 sorted-diff-remote-files
                 (sort-by
                  (sort-file-metatdata-fn :recent-days-range recent-10-days-range) > diff-remote-files)
-                latest-txid (:TXId (<! (<get-remote-graph remoteapi nil graph-uuid)))]
-            (println "[full-sync(remote->local)]"
-                 (count sorted-diff-remote-files) "files need to sync")
-        (<! (.sync-files-remote->local!
-             this (map (juxt relative-path -checksum)
-                       sorted-diff-remote-files)
-             latest-txid))))))))
+                latest-txid           (:TXId (<! (<get-remote-graph remoteapi nil graph-uuid)))]
+            (println "[full-sync(remote->local)]" (count sorted-diff-remote-files) "files need to sync")
+            (<! (.sync-files-remote->local!
+                 this (map (juxt relative-path -checksum)
+                           sorted-diff-remote-files)
+                 latest-txid))))))))
 
 (defn- <file-changed?
   "return true when file changed compared with remote"
@@ -1841,7 +1850,7 @@
           (go
             (let [es*   (<! (<filter-checksum-not-consistent es))
                   _ (when (not= (count es*) (count es))
-                      (println :debug :filter-checksum-changed (mapv relative-path (set/difference es es*))))
+                      (println :debug :filter-checksum-changed (mapv relative-path (set/difference (set es) (set es*)))))
                   paths (sequence es->paths-xf es*)
                   _     (println :sync-local->remote type paths)
                   r     (if (empty? paths)
@@ -2190,8 +2199,8 @@
   (go
     (when-let [sm (state/get-file-sync-manager)]
       (println "stopping sync-manager")
-      (reset! current-sm-graph-uuid nil)
-      (<! (-stop! sm)))))
+      (<! (-stop! sm)))
+    (reset! current-sm-graph-uuid nil)))
 
 
 (defn check-graph-belong-to-current-user
