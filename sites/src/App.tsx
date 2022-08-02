@@ -2,12 +2,13 @@ import { Route, Routes } from 'react-router-dom'
 import { HomePage } from './pages/Home'
 import { DownloadsPage } from './pages/Downloads'
 import { Headbar } from './components/Headbar'
-import { useReleases } from './state'
+import { useDiscordState, useReleasesState } from './state'
 
 export function App () {
 
-  // load releases
-  useReleases()
+  // load global state
+  useReleasesState()
+  useDiscordState()
 
   return (
     <div id="app" className={'flex justify-center'}>

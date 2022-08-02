@@ -16,6 +16,7 @@ import 'photoswipe/dist/photoswipe.css'
 import { ReactNode, useEffect, useRef, useState } from 'react'
 import { useMounted } from '../../hooks'
 import { promiseImages } from './index'
+import { useAppState } from '../../state'
 
 function openLightbox (
   sources: Array<{ src: string, width: number, height: number }>,
@@ -156,6 +157,7 @@ export function TipSlideItem (props: {
 }
 
 export function TutorialTips () {
+  const appState = useAppState()
   const swiperElRef = useRef<HTMLDivElement>(null)
   const swiperRef = useRef<Swiper>(null)
   const bdRef = useRef<HTMLDivElement>(null)
@@ -329,7 +331,9 @@ export function TutorialTips () {
           <div className="flex space-x-6 py-5">
             <div>
               <LSButton
-                leftIcon={<MonitorPlay size={24}/>}>
+                leftIcon={<MonitorPlay size={24}/>}
+                href={`https://discuss.logseq.com/`}
+              >
                 Community Hub
               </LSButton>
               <span
@@ -341,7 +345,9 @@ export function TutorialTips () {
             <div>
               <LSButton
                 className="bg-logseq-700"
-                leftIcon={<Notebook size={24}/>}>
+                leftIcon={<Notebook size={24}/>}
+                href={`https://docs.logseq.com/#/page/Contents`}
+              >
                 Documentation
               </LSButton>
               <span
@@ -360,6 +366,7 @@ export function TutorialTips () {
               className="bg-[#7289da] px-6"
               leftIcon={<DiscordLogo size={20}/>}
               rightIcon={<SignOut className="opacity-40" size={20}/>}
+              href={`https://discord.gg/VNfUaTtdFb`}
             >
               Join our Discord
             </LSButton>
@@ -367,7 +374,7 @@ export function TutorialTips () {
             <span
               className="text-[12px] flex items-center pt-2 justify-center text-gray-400/80">
               <strong className="h-2 w-2 bg-green-600 rounded"></strong>
-              <strong className="pl-2 pr-1">1,000</strong>
+              <strong className="pl-2 pr-1">{appState.discord?.approximate_presence_count.get() || '-'}</strong>
               users online currently
             </span>
           </div>
