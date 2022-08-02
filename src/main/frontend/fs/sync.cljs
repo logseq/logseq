@@ -1780,7 +1780,8 @@
   (go
     (let [base-path            (.-dir (first es))
           files-meta           (<! (<get-local-files-meta rsapi "" base-path (mapv relative-path es)))
-          current-checksum-map (and (coll? files-meta) (into {} (mapv (juxt :path :etag) files-meta)))
+          current-checksum-map (when (coll? files-meta)
+                                 (into {} (mapv (juxt :path :etag) files-meta)))
           origin-checksum-map  (into {} (mapv (juxt relative-path #(.-checksum ^FileChangeEvent %)) es))
           origin-map           (into {} (mapv (juxt relative-path identity) es))]
       (->>
