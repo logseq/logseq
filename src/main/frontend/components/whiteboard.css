@@ -8,3 +8,7 @@
   border-bottom: 1px solid var(--ls-border-color);
   background-color: var(--ls-secondary-background-color);
 }
+
+.single-block-wrapper > .block-content-wrapper {
+  width: 100% !important;
+}

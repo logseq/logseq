@@ -8,7 +8,6 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [logseq.db.schema :as db-schema]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
             [frontend.diff :as diff]
@@ -31,8 +30,6 @@
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.template :as template]
-            [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.utf8 :as utf8]
             [frontend.util :as util :refer [profile]]
             [frontend.util.clock :as clock]
             [frontend.util.cursor :as cursor]
@@ -42,16 +39,20 @@
             [frontend.util.marker :as marker]
             [frontend.util.priority :as priority]
             [frontend.util.property :as property]
-            [frontend.util.thingatpt :as thingatpt]
             [frontend.util.text :as text-util]
+            [frontend.util.thingatpt :as thingatpt]
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.db.schema :as db-schema]
+            [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.block :as gp-block]))
+            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.utf8 :as utf8]
+            [logseq.graph-parser.util :as gp-util]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -2410,15 +2411,24 @@
              (do (save-current-block!)
                  (insert-new-block! state)))))))))
 
+(defn- inside-of-single-block
+  "When we are in a single block wrapper, we should always insert a new line instead of new block"
+  [state]
+  (let [el (rum/dom-node state)]
+    (loop [el el]
+      (cond (nil? el) false
+            (and (.-classList el) (.. el -classList (contains "single-block-wrapper"))) true
+            :else (recur (.-parentElement el))))))
+
 (defn keydown-new-block-handler [state e]
-  (if (state/doc-mode-enter-for-new-line?)
+  (if (or (state/doc-mode-enter-for-new-line?) (inside-of-single-block state))
     (keydown-new-line)
     (do
       (.preventDefault e)
       (keydown-new-block state))))
 
 (defn keydown-new-line-handler [state e]
-  (if (state/doc-mode-enter-for-new-line?)
+  (if (and (state/doc-mode-enter-for-new-line?) (not (inside-of-single-block state)))
     (keydown-new-block state)
     (do
       (.preventDefault e)
