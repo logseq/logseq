@@ -384,7 +384,7 @@
         block (update block :block/refs remove-non-existed-refs!)
         block (attach-page-properties-if-exists! block)
         new-properties (merge
-                        (select-keys properties (property/built-in-properties))
+                        (select-keys properties (property/hidden-properties))
                         (:block/properties block))]
     (-> block
         (dissoc :block/top?
@@ -2758,7 +2758,7 @@
         (do (util/stop e)
             (autopair input-id key format nil))
 
-        hashtag?
+        (and hashtag? (or (zero? pos) (re-matches #"\s" (get value (dec pos)))))
         (do
           (commands/handle-step [:editor/search-page-hashtag])
           (if (= key "#")

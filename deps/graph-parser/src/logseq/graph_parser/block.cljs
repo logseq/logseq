@@ -198,7 +198,6 @@
   [format properties user-config]
   (when (seq properties)
     (let [properties (seq properties)
-          properties (into {} properties)
           page-refs (get-page-ref-names-from-properties format properties user-config)
           properties (->> properties
                           (map (fn [[k v]]
@@ -512,7 +511,7 @@
                                 :content content
                                 :level 1
                                 :properties properties
-                                :properties-order properties-order
+                                :properties-order (vec properties-order)
                                 :refs property-refs
                                 :pre-block? true
                                 :unordered true
@@ -548,7 +547,7 @@
                 (assoc :properties (:properties properties))
 
                 (seq (:properties-order properties))
-                (assoc :properties-order (:properties-order properties)))
+                (assoc :properties-order (vec (:properties-order properties))))
         block (if (get-in block [:properties :collapsed])
                 (-> (assoc block :collapsed? true)
                     (update :properties (fn [m] (dissoc m :collapsed)))

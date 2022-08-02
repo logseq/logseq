@@ -245,7 +245,11 @@
                                       images (if-not (= (count images) 1)
                                                (let [^js _image (.closest (.-target e) ".asset-container")
                                                      image (. _image querySelector "img")]
-                                                 (cons image (remove #(= image %) images)))
+                                                 (->> images
+                                                      (sort-by (juxt #(.-y %) #(.-x %)))
+                                                      (split-with (complement #{image}))
+                                                      reverse
+                                                      (apply concat)))
                                                images)
                                       images (for [^js it images] {:src (.-src it)
                                                                    :w (.-naturalWidth it)
@@ -1841,8 +1845,8 @@
   [config block]
   (let [properties (walk/keywordize-keys (:block/properties block))
         properties-order (:block/properties-order block)
-        properties (apply dissoc properties (property/built-in-properties))
-        properties-order (remove (property/built-in-properties) properties-order)
+        properties (apply dissoc properties (property/hidden-properties))
+        properties-order (remove (property/hidden-properties) properties-order)
         pre-block? (:block/pre-block? block)
         properties (if pre-block?
                      (let [repo (state/get-current-repo)

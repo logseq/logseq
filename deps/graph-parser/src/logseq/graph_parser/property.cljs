@@ -33,7 +33,9 @@
 (defn editable-built-in-properties
   "Properties used by logseq that user can edit"
   []
-  (into #{:title :icon :template :template-including-parent :public :filters :exclude-from-graph-view}
+  (into #{:title :icon :template :template-including-parent :public :filters :exclude-from-graph-view
+          ;; org-mode only
+          :macro :filetags}
         editable-linkable-built-in-properties))
 
 (defn hidden-built-in-properties
