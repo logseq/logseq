@@ -1,6 +1,5 @@
 (ns frontend.template
-  (:require [cljs-time.coerce :as tc]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.date :as date]
             [frontend.state :as state]
             [frontend.util :as util]))
@@ -29,6 +28,8 @@
                        (get (variable-rules) (string/lower-case match))
                        :else
                        (if-let [nld (date/nld-parse match)]
-                         (let [date (tc/to-local-date-time nld)]
+                         (let [;; NOTE: This following cannot handle timezones
+                               ;; date (tc/to-local-date-time nld)
+                               date (doto (goog.date.DateTime.) (.setTime (.getTime nld)))]
                            (util/format "[[%s]]" (date/journal-name date)))
                          match))))))

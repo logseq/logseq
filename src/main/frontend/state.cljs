@@ -60,6 +60,8 @@
      :modal/close-btn?                      nil
      :modal/subsets                         []
 
+     ;; left sidebar
+     :ui/navigation-item-collapsed?         {}
 
      ;; right sidebar
      :ui/fullscreen?                        false
@@ -738,6 +740,10 @@
   (swap! state assoc
          :custom-context-menu/show? false
          :custom-context-menu/links nil))
+
+(defn toggle-navigation-item-collapsed!
+  [item]
+  (update-state! [:ui/navigation-item-collapsed? item] not))
 
 (defn toggle-sidebar-open?!
   []

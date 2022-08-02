@@ -67,7 +67,7 @@
 " md-config {})))
       "Src example with leading whitespace"))
 
-(deftest properties-test
+(deftest md-properties-test
   (are [x y] (= [["Properties" y] nil]
                 (first (gp-mldoc/->edn x md-config {})))
 
@@ -97,6 +97,28 @@
           {:start_pos 0, :end_pos 17}]
          (first (gp-mldoc/->edn "term
 : definition" md-config {})))))
+
+(defn- parse-properties
+  [text]
+  (->> (gp-mldoc/->edn text (gp-mldoc/default-config :org) {})
+       (filter #(= "Properties" (ffirst %)))
+       ffirst
+       second))
+
+(deftest org-properties-test
+  []
+  (testing "just title"
+    (let [content "#+TITLE:   some title   "
+          props (parse-properties content)]
+      (is (= "some title   " (:title props)))))
+
+  (testing "filetags"
+    (let [content "#+FILETAGS:   :tag1:tag2:@tag:
+#+TAGS: tag3
+body"
+          props (parse-properties content)]
+      (is ["@tag" "tag1" "tag2"] (sort (:filetags props)))
+      (is ["@tag" "tag1" "tag2" "tag3"] (sort (:tags props))))))
 
 (deftest ^:integration test->edn
   (let [graph-dir "test/docs"

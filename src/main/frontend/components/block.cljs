@@ -1848,8 +1848,8 @@
   [config block]
   (let [properties (walk/keywordize-keys (:block/properties block))
         properties-order (:block/properties-order block)
-        properties (apply dissoc properties (property/built-in-properties))
-        properties-order (remove (property/built-in-properties) properties-order)
+        properties (apply dissoc properties (property/hidden-properties))
+        properties-order (remove (property/hidden-properties) properties-order)
         pre-block? (:block/pre-block? block)
         properties (if pre-block?
                      (let [repo (state/get-current-repo)

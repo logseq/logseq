@@ -384,7 +384,7 @@
         block (update block :block/refs remove-non-existed-refs!)
         block (attach-page-properties-if-exists! block)
         new-properties (merge
-                        (select-keys properties (property/built-in-properties))
+                        (select-keys properties (property/hidden-properties))
                         (:block/properties block))]
     (-> block
         (dissoc :block/top?
