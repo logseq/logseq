@@ -917,8 +917,11 @@
 #?(:cljs
    (defn search-normalize
      "Normalize string for searching (loose)"
-     [s]
-     (removeAccents (.normalize (string/lower-case s) "NFKC"))))
+     [s remove-accents?]
+     (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
+      (if remove-accents?
+        (removeAccents  normalize-str)
+        normalize-str))))
 
 #?(:cljs
    (defn file-name-sanity
