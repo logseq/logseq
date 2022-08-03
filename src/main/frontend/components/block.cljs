@@ -2167,7 +2167,7 @@
 
 (rum/defcs block-content-or-editor < rum/reactive
   (rum/local true :hide-block-refs?)
-  [state config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
+  [state config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit? hide-block-refs-count?]
   (let [*hide-block-refs? (get state :hide-block-refs?)
         editor-box (get config :editor-box)
         editor-id (str "editor-" edit-input-id)
@@ -2222,7 +2222,7 @@
                                 (editor-handler/edit-block! block :max (:block/uuid block)))}
               svg/edit])
 
-           (block-refs-count block *hide-block-refs?)]]
+           (when-not hide-block-refs-count? (block-refs-count block *hide-block-refs?))]]
 
          (when (and (not @*hide-block-refs?) (> refs-count 0))
            (let [refs-cp (state/get-component :block/linked-references)]
@@ -2252,7 +2252,7 @@
         edit-input-id (str "edit-block-" blocks-container-id "-" uuid)
         edit? (state/sub [:editor/editing? edit-input-id])
         block (block/parse-title-and-body block)]
-    (when (:block/content block) (block-content-or-editor config block edit-input-id uuid 0 edit?))))
+    (when (:block/content block) (block-content-or-editor config block edit-input-id uuid 0 edit? true))))
 
 (rum/defc single-block-cp
   [block-uuid]
@@ -2569,7 +2569,7 @@
 
       (when @*show-left-menu?
         (block-left-menu config block))
-      (block-content-or-editor config block edit-input-id block-id heading-level edit?)
+      (block-content-or-editor config block edit-input-id block-id heading-level edit? false)
       (when @*show-right-menu?
         (block-right-menu config block edit?))]
 
