@@ -63,7 +63,7 @@
     (->
      (react/q repo [:frontend.db.react/block id]
        {:query-fn (fn [_]
-                    (db-utils/pull id))}
+                    (db-utils/pull (butlast block-attrs) id))}
        nil)
      react)))
 
