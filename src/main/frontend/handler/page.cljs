@@ -80,6 +80,7 @@
                                                       (state/get-date-formatter)
                                                       (state/get-config))]
      {:block/uuid (db/new-block-id)
+      :block/pre-block? true
       :block/properties ps
       :block/properties-order (keys ps)
       :block/refs refs
