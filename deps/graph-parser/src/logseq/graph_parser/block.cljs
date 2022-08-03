@@ -491,6 +491,26 @@
                (conj acc (assoc block :block/path-refs path-ref-pages))
                parents)))))
 
+(defn- macro->block
+  "macro: {:name \"\" arguments [\"\"]}"
+  [macro]
+  {:db/ident (str (:name macro) " " (string/join " " (:arguments macro)))
+   :block/type "macro"
+   :block/properties {:logseq.macro-name (:name macro)
+                      :logseq.macro-arguments (:arguments macro)}})
+
+(defn extract-macros-from-ast
+  [ast]
+  (let [*result (atom #{})]
+    (walk/postwalk
+     (fn [f]
+       (if (and (vector? f) (= (first f) "Macro"))
+         (do
+           (swap! *result conj (second f)))
+         f))
+     ast)
+    (mapv macro->block @*result)))
+
 (defn- with-pre-block-if-exists
   [blocks body pre-block-properties encoded-content {:keys [supported-formats db date-formatter user-config]}]
   (let [first-block (first blocks)
@@ -515,6 +535,7 @@
                                 :refs property-refs
                                 :pre-block? true
                                 :unordered true
+                                :macros (extract-macros-from-ast body)
                                 :body body}
                          block (with-page-block-refs block false supported-formats db date-formatter)]
                      (block-keywordize block))
@@ -569,38 +590,6 @@
                 (assoc :block/updated-at updated-at))]
     (dissoc block :title :body :anchor)))
 
-(defn- extract-macros
-  "Get macros from the content instead of ast becuase parsing ast from block's content
-  could result in high CPU usage."
-  [content]
-  (->> (re-seq #"\{\{(([^\n\}])+)\}\}" content)
-       (map second)
-       (remove string/blank?)
-       (map (fn [s]
-              (let [[name arguments] (gp-util/split-first " " s)]
-                (when-not (string/blank? name)
-                  (let [arguments (when arguments (string/trim arguments))]
-                    (cond->
-                      {:name (string/trim name)}
-                      arguments
-                      (assoc :arguments arguments)))))))
-       (remove nil?)
-       distinct))
-
-(defn- macro->block
-  "macro: {:name \"\" arguments \"\"}"
-  [macro]
-  {:block/type "macro"
-   :block/properties macro
-   :db/ident (str "{{" (:name macro) " " (:arguments macro) "}}")})
-
-(defn extract-macro-blocks-from-content
-  [content]
-  (when (string? content)
-    (when (string/includes? content "{{")
-      (->> (extract-macros content)
-           (map macro->block)))))
-
 (defn extract-blocks
   "Extract headings from mldoc ast.
   Args:
@@ -610,8 +599,7 @@
     `format`: content's format, it could be either :markdown or :org-mode.
     `options`: Options supported are :user-config, :block-pattern :supported-formats,
                :extract-macros, :date-formatter and :db"
-  [blocks content with-id? format {:keys [user-config extract-macros?] :as options
-                                   :or {extract-macros? true}}]
+  [blocks content with-id? format {:keys [user-config] :as options}]
   {:pre [(seq blocks) (string? content) (boolean? with-id?) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)
         [blocks body pre-block-properties]
@@ -638,8 +626,9 @@
                   (recur headings (rest blocks) timestamps properties body))
 
                 (heading-block? block)
-                (let [block (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)]
-                  (recur (conj headings block) (rest blocks) {} {} []))
+                (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
+                      block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))]
+                  (recur (conj headings block'') (rest blocks) {} {} []))
 
                 :else
                 (recur headings (rest blocks) timestamps properties (conj body block))))
@@ -647,12 +636,8 @@
                  sanity-blocks-data)
              body
              properties]))
-        result (with-pre-block-if-exists blocks body pre-block-properties encoded-content options)
-        result' (map #(dissoc % :block/meta) result)]
-    (if extract-macros?
-      (let [macro-blocks (extract-macro-blocks-from-content content)]
-        (concat result' macro-blocks))
-      result')))
+        result (with-pre-block-if-exists blocks body pre-block-properties encoded-content options)]
+    (map #(dissoc % :block/meta) result)))
 
 (defn with-parent-and-left
   [page-id blocks]

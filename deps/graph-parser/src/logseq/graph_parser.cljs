@@ -53,11 +53,7 @@
                                ;; TODO: use file system timestamp?
                          (assoc :file/created-at (date-time-util/time-ms)))])
         tx' (gp-util/remove-nils tx)
-        result (try
-                 (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?]))
-                 (catch :default e
-                   (prn "DB transact failed")
-                   (js/console.error e)))]
+        result (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?]))]
     {:tx result
      :ast ast}))
 

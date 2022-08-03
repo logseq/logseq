@@ -1167,7 +1167,7 @@
 
 (defn get-page-referenced-blocks-full
   ([page]
-   (get-page-referenced-blocks-full (state/get-current-repo) page {:filter? false}))
+   (get-page-referenced-blocks-full (state/get-current-repo) page nil))
   ([page options]
    (get-page-referenced-blocks-full (state/get-current-repo) page options))
   ([repo page options]
@@ -1197,7 +1197,7 @@
 
 (defn get-page-referenced-blocks
   ([page]
-   (get-page-referenced-blocks (state/get-current-repo) page {:filter? false}))
+   (get-page-referenced-blocks (state/get-current-repo) page nil))
   ([page options]
    (get-page-referenced-blocks (state/get-current-repo) page options))
   ([repo page options]
@@ -1681,7 +1681,7 @@
       :where
       [?b :block/type "macro"]
       [?b :block/properties ?properties]
-      [(get ?properties :name) ?name]
+      [(get ?properties :logseq.macro-name) ?name]
       [(= ?name ?macro-name)]]
     (conn/get-db repo)
     macro-name))

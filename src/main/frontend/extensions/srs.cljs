@@ -565,7 +565,8 @@
 (rum/defc cards-select
   [{:keys [on-chosen]}]
   (let [cards (db-model/get-macro-blocks (state/get-current-repo) "cards")
-        items (map (comp :arguments :block/properties) cards)
+        items (->> (map (comp :logseq.macro-arguments :block/properties) cards)
+                   (map (fn [col] (string/join " " col))))
         items (concat items ["All"])]
     (component-select/select {:items items
                               :on-chosen on-chosen

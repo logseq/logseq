@@ -15,17 +15,15 @@
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
 and handles unexpected failure."
-  [blocks content format {:keys [with-id? extract-macros?]
-                          :or {with-id? true
-                               extract-macros? true}}]
+  [blocks content format {:keys [with-id?]
+                          :or {with-id? true}}]
   (try
     (gp-block/extract-blocks blocks content with-id? format
                              {:user-config (state/get-config)
                               :block-pattern (config/get-block-pattern format)
                               :supported-formats (gp-config/supported-formats)
                               :db (db/get-db (state/get-current-repo))
-                              :date-formatter (state/get-date-formatter)
-                              :extract-macros? extract-macros?})
+                              :date-formatter (state/get-date-formatter)})
     (catch :default e
       (Sentry/captureException e)
       (notification/show! "An unexpected error occurred during block extraction." :error)
@@ -46,8 +44,7 @@ and handles unexpected failure."
    (when-not (string/blank? content)
      (let [block (dissoc block :block/pre-block?)
            ast (format/to-edn content format nil)
-           blocks (extract-blocks ast content format {:with-id? with-id?
-                                                      :extract-macros? false})
+           blocks (extract-blocks ast content format {:with-id? with-id?})
            new-block (first blocks)
            block (cond->
                    (merge block new-block)
