@@ -506,7 +506,8 @@
      (fn [f]
        (if (and (vector? f) (= (first f) "Macro"))
          (do
-           (swap! *result conj (second f)))
+           (swap! *result conj (second f))
+           nil)
          f))
      ast)
     (mapv macro->block @*result)))
