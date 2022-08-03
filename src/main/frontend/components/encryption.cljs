@@ -214,7 +214,7 @@
          [:div.flex-1.flex.items-center
           [:span.px-3.scale-125 (ui/icon "lock")]
           [:p.dark:text-gray-100
-           "If you lose your password, all the data in the cloud can’t be decrypted. "
+           "If you lose your password, all of your data in the cloud can’t be decrypted. "
            [:span "You will still be able to access the local version of your graph."]]]])]
 
      [:div.mt-5.sm:mt-4.flex.justify-center.sm:justify-end.space-x-3

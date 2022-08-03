@@ -1621,7 +1621,7 @@
                 (do (when (state/modal-opened?)
                       (when (state/sub [:ui/loading? :set-graph-password])
                         (state/set-state! [:file-sync/set-remote-graph-password-result]
-                                          {:fail "It seems to be a wrong password, please give it another try"}))
+                                          {:fail "Incorrect password. Please try again"}))
                       (state/set-state! [:ui/loading? :set-graph-password] false))
                     (clear-pwd! graph-uuid)
                     (recur)))))))))
