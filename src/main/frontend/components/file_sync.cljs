@@ -162,6 +162,12 @@
 
 (rum/defcs indicator <
   rum/reactive
+  {:will-mount   (fn [state]
+                   (let [unsub-fn (file-sync-handler/setup-file-sync-event-listeners)]
+                     (assoc state ::unsub-events unsub-fn)))
+   :will-unmount (fn [state]
+                   (apply (::unsub-events state) nil)
+                   state)}
   [_state]
   (let [_                      (state/sub :auth/id-token)
         current-repo           (state/get-current-repo)

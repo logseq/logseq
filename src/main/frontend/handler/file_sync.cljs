@@ -72,7 +72,6 @@
   []
   (go (:Graphs (<! (sync/<list-remote-graphs sync/remoteapi)))))
 
-
 (defn load-session-graphs
   []
   (when-not (state/sub [:file-sync/remote-graphs :loading])
@@ -179,3 +178,20 @@
 
     (init-graph (:GraphUUID graph))
     (state/close-modal!)))
+
+(defn setup-file-sync-event-listeners
+  []
+  (let [c     (async/chan 1)
+        p     sync/sync-events-publication
+        topic :finished-local->remote]
+
+    (async/sub p topic c)
+
+    (async/go
+      (let [{:keys [data]} (async/<! c)]
+        (when (and (:file-change-events data)
+                   (= :page (state/get-current-route)))
+          (state/pub-event!
+           [:file-sync/maybe-onboarding-show :sync-history]))))
+
+    #(async/unsub p topic c)))
