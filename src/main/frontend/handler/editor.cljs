@@ -385,7 +385,7 @@
         block (update block :block/refs remove-non-existed-refs!)
         block (attach-page-properties-if-exists! block)
         new-properties (merge
-                        (select-keys properties (property/built-in-properties))
+                        (select-keys properties (property/hidden-properties))
                         (:block/properties block))]
     (-> block
         (dissoc :block/top?
@@ -1941,6 +1941,9 @@
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (some-> (db/pull (:db/id editing-block))
                                 (assoc :block/content (state/get-edit-content))))
+        has-unsaved-edits (and editing-block
+                               (not= (:block/content (db/pull (:db/id editing-block)))
+                                     (state/get-edit-content)))
         target-block (or target-block editing-block)
         block (db/entity (:db/id target-block))
         page (if (:block/name block) block
@@ -1955,20 +1958,22 @@
 
                    :else
                    true)]
+    (when has-unsaved-edits
+      (outliner-tx/transact!
+        {:outliner-op :save-block}
+        (outliner-core/save-block! editing-block)))
     (outliner-tx/transact!
-     {:outliner-op :insert-blocks}
-     (when editing-block
-       (outliner-core/save-block! editing-block))
-     (when target-block
-       (let [format (or (:block/format target-block) (state/get-preferred-format))
-             blocks' (map (fn [block]
-                            (paste-block-cleanup block page exclude-properties format content-update-fn))
-                          blocks)
-             result (outliner-core/insert-blocks! blocks' target-block {:sibling? sibling?
-                                                                        :outliner-op :paste
-                                                                        :replace-empty-target? true
-                                                                        :keep-uuid? keep-uuid?})]
-         (edit-last-block-after-inserted! result))))))
+      {:outliner-op :insert-blocks}
+      (when target-block
+        (let [format (or (:block/format target-block) (state/get-preferred-format))
+              blocks' (map (fn [block]
+                             (paste-block-cleanup block page exclude-properties format content-update-fn))
+                           blocks)
+              result (outliner-core/insert-blocks! blocks' target-block {:sibling? sibling?
+                                                                         :outliner-op :paste
+                                                                         :replace-empty-target? true
+                                                                         :keep-uuid? keep-uuid?})]
+          (edit-last-block-after-inserted! result))))))
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"

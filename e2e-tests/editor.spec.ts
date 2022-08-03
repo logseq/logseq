@@ -179,3 +179,35 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
         await page.keyboard.press('Control+Shift+v')
     }
 })
+
+test('copy and paste block after editing new block', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  // Create a block and copy it in block-select mode
+  await block.mustFill('Block being copied')
+  await page.waitForTimeout(100)
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(100)
+  if (IsMac) {
+    await page.keyboard.press('Meta+c')
+  } else {
+    await page.keyboard.press('Control+c')
+  }
+  // await page.waitForTimeout(100)
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(100)
+  await page.keyboard.press('Enter')
+  
+  await page.waitForTimeout(100)
+  // Create a new block with some text
+  await page.keyboard.insertText("Typed block")
+
+  // Quickly paste the copied block
+  if (IsMac) {
+      await page.keyboard.press('Meta+v')
+  } else {
+      await page.keyboard.press('Control+v')
+  }
+
+  await expect(page.locator('text="Typed block"')).toHaveCount(1);
+})

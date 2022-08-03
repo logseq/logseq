@@ -1432,7 +1432,6 @@
     (->> (map keys properties)
          (apply concat)
          distinct
-         (remove #{:id})
          sort)))
 
 (defn get-property-values
