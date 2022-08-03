@@ -273,6 +273,7 @@
            {:class "whiteboard"
             :title "Whiteboards"
             :href  (rfe/href :whiteboards)
+            :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
             :icon  "artboard"}))]]
 
       (favorites t)
