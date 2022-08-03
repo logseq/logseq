@@ -81,7 +81,7 @@
                       {:hiccup ref-hiccup})]))
 
 (rum/defc references-inner < rum/reactive db-mixins/query
-  [repo page-entity page-name block-id filters *filtered-ref-blocks ref-pages]
+  [page-name block-id filters *filtered-ref-blocks ref-pages]
   [:div.references-blocks
    (let [ref-blocks (if block-id
                       (db/get-block-referenced-blocks block-id)
@@ -140,7 +140,7 @@
                           :style {:fontSize 24}})]]
 
      (fn []
-       (references-inner repo page-entity page-name block-id filters *filtered-ref-blocks ref-pages))
+       (references-inner page-name block-id filters *filtered-ref-blocks ref-pages))
 
      {:default-collapsed? default-collapsed?
       :title-trigger? true
