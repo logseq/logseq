@@ -251,7 +251,7 @@
   [repo page-entity]
   (let [pages (db-model/page-alias-set repo (:block/name page-entity))
         refs (->> pages
-                  (mapcat (fn [id] (:block/_refs (db/entity id))))
+                  (mapcat (fn [id] (:block/_path-refs (db/entity id))))
                   (mapcat (fn [b] (conj (:block/refs b) (:block/page b))))
                   (remove (fn [r] (= (:db/id page-entity) (:db/id r)))))]
     (keep (fn [ref]
@@ -262,23 +262,24 @@
 
 (defn- filter-blocks
   [ref-blocks filters ref-pages]
-  (if (empty? filters)
-    ref-blocks
-    (let [ref-pages (zipmap (map :block/name ref-pages) (map :db/id ref-pages))
-          exclude-ids (->> (keep (fn [page] (get ref-pages page)) (get filters false))
-                           (set))
-          include-ids (->> (keep (fn [page] (get ref-pages page)) (get filters true))
-                           (set))]
-      (cond->> ref-blocks
-        (seq exclude-ids)
-        (remove (fn [block]
-                  (let [ids (set (map :db/id (:block/path-refs block)))]
-                    (seq (set/intersection exclude-ids ids)))))
+  (let [ref-pages (distinct ref-pages)]
+    (if (empty? filters)
+      ref-blocks
+      (let [ref-pages (zipmap (map :block/name ref-pages) (map :db/id ref-pages))
+            exclude-ids (->> (keep (fn [page] (get ref-pages page)) (get filters false))
+                             (set))
+            include-ids (->> (keep (fn [page] (get ref-pages page)) (get filters true))
+                             (set))]
+        (cond->> ref-blocks
+          (seq exclude-ids)
+          (remove (fn [block]
+                    (let [ids (set (map :db/id (:block/path-refs block)))]
+                      (seq (set/intersection exclude-ids ids)))))
 
-        (seq include-ids)
-        (remove (fn [block]
-                  (let [ids (set (map :db/id (:block/path-refs block)))]
-                    (empty? (set/intersection include-ids ids)))))))))
+          (seq include-ids)
+          (remove (fn [block]
+                    (let [ids (set (map :db/id (:block/path-refs block)))]
+                      (empty? (set/intersection include-ids ids))))))))))
 
 (defn get-filtered-ref-blocks
   [ref-blocks filters ref-pages]

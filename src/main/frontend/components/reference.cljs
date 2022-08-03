@@ -81,13 +81,11 @@
                       {:hiccup ref-hiccup})]))
 
 (rum/defc references-inner < rum/reactive db-mixins/query
-  [repo page-entity page-name block-id filters *filtered-ref-blocks]
+  [repo page-entity page-name block-id filters *filtered-ref-blocks ref-pages]
   [:div.references-blocks
    (let [ref-blocks (if block-id
                       (db/get-block-referenced-blocks block-id)
                       (db/get-page-referenced-blocks page-name))
-         ref-pages (when-not block-id
-                     (block-handler/get-blocks-refed-pages repo page-entity))
          filtered-ref-blocks (if block-id
                                ref-blocks
                                (block-handler/get-filtered-ref-blocks ref-blocks filters ref-pages))
@@ -110,7 +108,9 @@
                   (-> (group-by second filter-state)
                       (update-vals #(map first %))))
         *filtered-ref-blocks (atom nil)
-        *collapsed? (atom nil)]
+        *collapsed? (atom nil)
+        ref-pages (when-not block-id
+                    (block-handler/get-blocks-refed-pages repo page-entity))]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
       [:h2.font-bold.opacity-50 (str n-ref " Linked Reference"
@@ -124,8 +124,7 @@
         :on-mouse-down (fn [e]
                          (util/stop-propagation e))
         :on-click (fn []
-                    (let [ref-pages (block-handler/get-blocks-refed-pages repo page-entity)
-                          ref-pages (map :block/original-name ref-pages)
+                    (let [ref-pages (map :block/original-name ref-pages)
                           references (frequencies ref-pages)]
                       (state/set-modal! (filter-dialog filters-atom references page-name)
                                         {:center? true})))}
@@ -141,7 +140,7 @@
                           :style {:fontSize 24}})]]
 
      (fn []
-       (references-inner repo page-entity page-name block-id filters *filtered-ref-blocks))
+       (references-inner repo page-entity page-name block-id filters *filtered-ref-blocks ref-pages))
 
      {:default-collapsed? default-collapsed?
       :title-trigger? true
