@@ -7,6 +7,7 @@
             [cljs.core.async.impl.channels]
             [cljs.core.async.interop :refer [p->c]]
             [cljs.spec.alpha :as s]
+            [cljs.pprint :as pp]
             [clojure.set :as set]
             [clojure.string :as string]
             [electron.ipc :as ipc]
@@ -131,6 +132,13 @@
         :stop ::stop-map
         :need-sync-remote ::need-sync-remote
         :unknown ::unknown-map))
+
+;; sync-event type
+(s/def ::event #{:created-local-version-file
+                 :finished-local->remote
+                 :finished-remote->local})
+
+(s/def ::sync-event (s/keys :req-un [::event ::data]))
 
 ;;; ### configs in config.edn
 ;; - :file-sync/ignore-files
@@ -867,6 +875,74 @@
               (and (= 403 status) (contains? events "graph-count-exceed-limit"))))))
 ;;; remote api exceptions ends
 
+;;; ### sync events
+(def ^:private sync-events-chan
+  "`SyncManager` will put some internal sync events to this chan.
+  see also spec `::sync-event`"
+  (chan (async/sliding-buffer 1000)))
+
+(def sync-events-publication
+  "see also spec `::event` for topic list"
+  (async/pub sync-events-chan :event))
+
+(defn- put-sync-event!
+  [val]
+  {:pre [(s/valid? ::sync-event val)]}
+  (async/put! sync-events-chan val))
+
+(def ^:private debug-print-sync-events-loop-stop-chan (chan 1))
+(defn debug-print-sync-events-loop
+  ([] (debug-print-sync-events-loop [:created-local-version-file
+                                     :finished-local->remote
+                                     :finished-remote->local]))
+  ([topics]
+   (util/drain-chan debug-print-sync-events-loop-stop-chan)
+   (let [topic&chs (map (juxt identity #(chan 10)) topics)
+         out-ch (chan 10)
+         out-mix (async/mix out-ch)]
+     (doseq [[topic ch] topic&chs]
+       (async/sub sync-events-publication topic ch)
+       (async/admix out-mix ch))
+     (go-loop []
+       (let [{:keys [val stop]}
+             (async/alt!
+               debug-print-sync-events-loop-stop-chan {:stop true}
+               out-ch ([v] {:val v}))]
+         (cond
+           stop nil
+           val (do (pp/pprint [:debug :sync-event val])
+                   (recur))))))))
+
+(defn stop-debug-print-sync-events-loop
+  []
+  (offer! debug-print-sync-events-loop-stop-chan true))
+
+(comment
+  ;; sub one type event example:
+  (def c1 (chan 10))
+  (async/sub sync-events-publication :created-local-version-file c1)
+  (offer! sync-events-chan {:event :created-local-version-file :data :xxx})
+  (poll! c1)
+
+  ;; sub multiple type events example:
+  ;; sub :created-local-version-file and :finished-remote->local events,
+  ;; output into channel c4-out
+  (def c2 (chan 10))
+  (def c3 (chan 10))
+  (def c4-out (chan 10))
+  (def mix-out (async/mix c4-out))
+  (async/admix mix-out c2)
+  (async/admix mix-out c3)
+  (async/sub sync-events-publication :created-local-version-file c2)
+  (async/sub sync-events-publication :finished-remote->local c3)
+  (offer! sync-events-chan {:event :created-local-version-file :data :xxx})
+  (offer! sync-events-chan {:event :finished-remote->local :data :xxx})
+  (poll! c4-out)
+  (poll! c4-out)
+  )
+
+;;; sync events ends
+
 (defn- fire-file-sync-storage-exceed-limit-event!
   [exp]
   (when (storage-exceed-limit? exp)
@@ -1126,8 +1202,8 @@
             to-path (.-to-path filetxn)]
         (assert (= 1 (count filetxns)))
         (<! (<rename-local-file rsapi graph-uuid base-path
-                               (relative-path from-path)
-                               (relative-path to-path))))
+                                (relative-path from-path)
+                                (relative-path to-path))))
 
       (.-updated? (first filetxns))
       (let [repo (state/get-current-repo)
@@ -1139,7 +1215,12 @@
             r (<! (<update-local-files rsapi graph-uuid base-path (map relative-path filetxns)))]
         (doseq [[filetxn origin-db-content] txn->db-content-vec]
           (when (<! (need-add-version-file? filetxn origin-db-content))
-            (add-new-version-file repo (relative-path filetxn) origin-db-content)))
+            (add-new-version-file repo (relative-path filetxn) origin-db-content)
+            (put-sync-event! {:event :created-local-version-file
+                              :data {:graph-uuid graph-uuid
+                                     :repo repo
+                                     :path (relative-path filetxn)
+                                     :epoch (tc/to-epoch (t/now))}})))
         r)
 
       (.-deleted? (first filetxns))
@@ -1562,13 +1643,20 @@
         timeout (recur)))))
 
 
-
 ;;; ### sync state
 
-(def full-sync-chan (chan 1))
-(def stop-sync-chan (chan 1))
-(def remote->local-sync-chan (chan 1))
-(def remote->local-full-sync-chan (chan 1))
+(def full-sync-chan
+  "offer `true` to this chan will trigger a local->remote full sync"
+  (chan 1))
+(def stop-sync-chan
+  "offer `true` to this chan will stop current `SyncManager`"
+  (chan 1))
+(def remote->local-sync-chan
+  "offer `true` to this chan will trigger a remote->local sync"
+  (chan 1))
+(def remote->local-full-sync-chan
+  "offer `true` to this chan will trigger a remote->local full sync"
+  (chan 1))
 (def immediately-local->remote-chan
   "Immediately trigger upload of files in waiting queue"
   (chan))
@@ -2097,7 +2185,11 @@
           (s/assert ::sync-local->remote-all-files!-result r)
           (cond
             succ
-            (.schedule this ::idle nil nil)
+            (do (put-sync-event! {:event :finished-local->remote
+                                  :data {:graph-uuid graph-uuid
+                                         :full-sync? true
+                                         :epoch (tc/to-epoch (t/now))}})
+                (.schedule this ::idle nil nil))
             need-sync-remote
             (do (util/drain-chan ops-chan)
                 (>! ops-chan {:remote->local true})
@@ -2120,7 +2212,11 @@
               (<! (<sync-remote->local-all-files! remote->local-syncer))]
           (cond
             succ
-            (.schedule this ::idle nil nil)
+            (do (put-sync-event! {:event :finished-remote->local
+                                  :data {:graph-uuid graph-uuid
+                                         :full-sync? true
+                                         :epoch (tc/to-epoch (t/now))}})
+                (.schedule this ::idle nil nil))
             stop
             (.schedule this ::stop nil nil)
             unknown
@@ -2132,7 +2228,8 @@
       (go
         (if (some-> remote-val :txid (<= @*txid))
           (.schedule this ::idle nil nil)
-          (let [{:keys [succ unknown stop need-remote->local-full-sync] :as r}
+          (let [origin-txid @*txid
+                {:keys [succ unknown stop need-remote->local-full-sync] :as r}
                 (<! (<sync-remote->local! remote->local-syncer))]
             (s/assert ::sync-remote->local!-result r)
             (cond
@@ -2142,7 +2239,13 @@
                   (>! ops-chan {:local->remote-full-sync true})
                   (.schedule this ::idle nil nil))
               succ
-              (.schedule this ::idle nil nil)
+              (do (put-sync-event! {:event :finished-remote->local
+                                    :data {:graph-uuid graph-uuid
+                                           :full-sync? false
+                                           :from-txid origin-txid
+                                           :to-txid @*txid
+                                           :epoch (tc/to-epoch (t/now))}})
+                  (.schedule this ::idle nil nil))
               stop
               (.schedule this ::stop nil nil)
               unknown
@@ -2152,8 +2255,9 @@
     (local->remote [this {^FileChangeEvents local-changes :local}]
       (assert (some? local-changes) local-changes)
       (go
-        (let [change-events-partitions
-              (sequence (partition-file-change-events 10) (distinct-file-change-events local-changes))
+        (let [distincted-local-changes (distinct-file-change-events local-changes)
+              change-events-partitions
+              (sequence (partition-file-change-events 10) distincted-local-changes)
               {:keys [succ need-sync-remote graph-has-been-deleted unknown stop]}
               (loop [es-partitions change-events-partitions]
                 (cond
@@ -2169,7 +2273,12 @@
                       (or need-sync-remote graph-has-been-deleted unknown) r))))]
           (cond
             succ
-            (.schedule this ::idle nil nil)
+            (do (put-sync-event! {:event :finished-local->remote
+                                  :data {:graph-uuid graph-uuid
+                                         :full-sync? false
+                                         :file-change-events distincted-local-changes
+                                         :epoch (tc/to-epoch (t/now))}})
+                (.schedule this ::idle nil nil))
 
             need-sync-remote
             (do (util/drain-chan ops-chan)
