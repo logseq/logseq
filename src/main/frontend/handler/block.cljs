@@ -252,7 +252,7 @@
   (let [pages (db-model/page-alias-set repo (:block/name page-entity))
         refs (->> pages
                   (mapcat (fn [id] (:block/_path-refs (db/entity id))))
-                  (mapcat (fn [b] (conj (:block/refs b) (:block/page b))))
+                  (mapcat (fn [b] (conj (:block/path-refs b) (:block/page b))))
                   (remove (fn [r] (= (:db/id page-entity) (:db/id r)))))]
     (keep (fn [ref]
             (when (:block/name ref)
