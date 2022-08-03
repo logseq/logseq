@@ -442,6 +442,11 @@
   [block-uuid]
   (editor-handler/open-block-in-sidebar! (uuid block-uuid)))
 
+(def ^:export select_block
+  (fn [block-uuid]
+    (when-let [block (db-model/get-block-by-uuid block-uuid)]
+      (editor-handler/select-block! (:block/uuid block)) nil)))
+
 (def ^:export edit_block
   (fn [block-uuid ^js opts]
     (when-let [block-uuid (and block-uuid (uuid block-uuid))]
