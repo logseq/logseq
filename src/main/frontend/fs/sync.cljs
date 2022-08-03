@@ -909,7 +909,10 @@
                debug-print-sync-events-loop-stop-chan {:stop true}
                out-ch ([v] {:val v}))]
          (cond
-           stop nil
+           stop (do (async/unmix-all out-mix)
+                    (doseq [[topic ch] topic&chs]
+                      (async/unsub sync-events-publication topic ch)))
+
            val (do (pp/pprint [:debug :sync-event val])
                    (recur))))))))
 
