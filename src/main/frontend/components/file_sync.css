@@ -258,13 +258,12 @@
 
   &-welcome-logseq-sync, &-unavailable-logseq-sync {
     > .head-bg {
-      @apply flex m-auto mb-10;
+      @apply flex m-auto mb-10 w-auto sm:w-[500px];
 
       background-image: url("../img/file-sync-welcome-backer-dark.png");
       background-size: contain;
       background-repeat: no-repeat;
       background-position: center;
-      width: 500px;
       padding-top: 86px;
       max-width: 90vw;
 

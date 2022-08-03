@@ -517,7 +517,7 @@
 
       [:strong "CLOSED BETA"]]
 
-     [:h1.text-2xl.font-bold
+     [:h1.text-2xl.font-bold.flex-col.sm:flex-row
       [:span.opacity-80 "Welcome to "]
       [:span.pl-2.dark:text-white.text-gray-800 "Logseq Sync! 👋"]]
 
@@ -526,7 +526,7 @@
       [:br]
       "you'll always have your notes backed up and available in real-time on any device."]
 
-     [:div.pt-6.flex.justify-end.space-x-2
+     [:div.pt-6.flex.justify-center.space-x-2.sm:justify-end
       (ui/button "Later" :on-click close-fn :background "gray" :class "opacity-60")
       (ui/button "Start syncing"
                  :disabled loading?
