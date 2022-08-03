@@ -1827,8 +1827,7 @@
         pos             (cursor/pos input)
         last-input-char (util/nth-safe (.-value input) (dec pos))
         last-prev-input-char (util/nth-safe (.-value input) (dec (dec pos)))
-        prev-prev-input-char (util/nth-safe (.-value input) (- pos 3))
-        current-line (text-util/get-current-line-by-pos (.-value input) (dec pos))]
+        prev-prev-input-char (util/nth-safe (.-value input) (- pos 3))]
 
     ;; TODO: is it cross-browser compatible?
     ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
@@ -1855,8 +1854,9 @@
 
       (and
        (not= :property-search (state/get-editor-action))
-       (or (text-util/wrapped-by? current-line (dec pos) "" "::")
-           (text-util/wrapped-by? current-line (dec pos) "\n" "::")))
+       (let [current-line (text-util/get-current-line-by-pos (.-value input) (dec pos))]
+         (or (text-util/wrapped-by? current-line (dec pos) "" "::")
+             (text-util/wrapped-by? current-line (dec pos) "\n" "::"))))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (state/set-editor-action! :property-search))
