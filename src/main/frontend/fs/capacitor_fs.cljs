@@ -32,12 +32,22 @@
   (when (string? uri)
     (util/url-decode uri)))
 
+(defn- fix-file-uri-schema
+  [uri]
+  (if (mobile-util/native-android?)
+    (try
+      (let [^js _u (js/URL. uri)]
+        (str (.-protocol _u) "//" (string/replace (.-pathname _u) #"^/+" "/")))
+      (catch js/Error _e
+        (str "file://" uri)))
+    uri))
+
 (defn- read-file-utf8
   [path]
   (when-not (string/blank? path)
     (.readFile Filesystem
                (clj->js
-                {:path path
+                {:path     (fix-file-uri-schema path)
                  :encoding (.-UTF8 Encoding)}))))
 
 (defn readdir
@@ -319,7 +329,7 @@
             {:keys [path localDocumentsPath]} (p/chain
                                                (.pickFolder mobile-util/folder-picker)
                                                #(js->clj % :keywordize-keys true))
-            _ (when (and (mobile-util/native-ios?) 
+            _ (when (and (mobile-util/native-ios?)
                          (not (or (local-container-path? path localDocumentsPath)
                                   (mobile-util/iCloud-container-path? path))))
                 (state/pub-event! [:modal/show-instruction]))
