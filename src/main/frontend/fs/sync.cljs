@@ -1060,6 +1060,29 @@
 
 (def remoteapi (->RemoteAPI nil))
 
+(def <get-graph-salt-memoize
+  (let [*cache (atom {})]
+    (fn [remoteapi graph-uuid]
+      (go
+        (let [r          (get @*cache graph-uuid)
+              expired-at (:expired-at r)
+              now        (tc/to-long (t/now))]
+          (if (< now expired-at)
+            r
+            (let [r (<! (<get-graph-salt remoteapi graph-uuid))]
+              (swap! *cache conj [graph-uuid r])
+              r)))))))
+
+(def <get-graph-encrypt-keys-memoize
+  (let [*cache (atom {})]
+    (fn [remoteapi graph-uuid]
+      (go (or (get @*cache graph-uuid)
+              (let [{:keys [public-key encrypted-private-key] :as r}
+                    (<! (<get-graph-encrypt-keys remoteapi graph-uuid))]
+                (when (and public-key encrypted-private-key)
+                  (swap! *cache conj [graph-uuid r]))
+                r))))))
+
 (defn add-new-version-file
   [repo path content]
   ;; TODO @leizhe mobile implementation
@@ -1397,7 +1420,7 @@
   (go
     (let [[value expired-at gone?]
           ((juxt :value :expired-at #(-> % ex-data :err :status (= 410)))
-           (<! (<get-graph-salt remoteapi graph-uuid)))
+           (<! (<get-graph-salt-memoize remoteapi graph-uuid)))
           [salt-value _expired-at]
           (if gone?
             ((juxt :value :expired-at) (<! (<create-graph-salt remoteapi graph-uuid)))
@@ -1414,7 +1437,7 @@
         {:restore-pwd-failed true}
         (let [[salt-value _expired-at gone?]
               ((juxt :value :expired-at #(-> % ex-data :err :status (= 410)))
-               (<! (<get-graph-salt remoteapi graph-uuid)))]
+               (<! (<get-graph-salt-memoize remoteapi graph-uuid)))]
           (if (or gone? (empty? salt-value))
             {:restore-pwd-failed "expired salt"}
             (let [pwd (<! (decrypt-content encrypted-pwd salt-value))]
@@ -1463,15 +1486,6 @@
   (swap! pwd-map dissoc graph-uuid)
   (remove-pwd! graph-uuid))
 
-(def <get-graph-encrypt-keys-memoize
-  (let [*cache (atom {})]
-    (fn [graph-uuid]
-      (go (or (get @*cache graph-uuid)
-              (let [{:keys [public-key encrypted-private-key] :as r}
-                    (<! (<get-graph-encrypt-keys remoteapi graph-uuid))]
-                (when (and public-key encrypted-private-key)
-                  (swap! *cache conj [graph-uuid r]))
-                r))))))
 
 (defn- <loop-ensure-pwd&keys
   [graph-uuid repo *stopped?]
@@ -1479,7 +1493,7 @@
     (if @*stopped?
       ::stop
       (let [{:keys [public-key encrypted-private-key] :as r}
-            (<! (<get-graph-encrypt-keys-memoize graph-uuid))
+            (<! (<get-graph-encrypt-keys-memoize remoteapi graph-uuid))
             init-graph-keys (some-> (ex-data r) :err :status (= 404))
             pwd (<! (<ensure-pwd-exists! repo graph-uuid init-graph-keys))]
 
@@ -2222,11 +2236,12 @@
 
 (defn <sync-stop []
   (go
-    (when-let [sm (state/get-file-sync-manager)]
-      (println "stopping sync-manager")
-      (<! (-stop! sm)))
+    (when-let [sm ^SyncManager (state/get-file-sync-manager)]
+      (println "[SyncManager" (:graph-uuid sm) "]" "stopping")
+      (<! (-stop! sm))
+      (println "[SyncManager" (:graph-uuid sm) "]" "stopped")
+      (state/set-file-sync-manager nil))
     (reset! current-sm-graph-uuid nil)))
-
 
 (defn check-graph-belong-to-current-user
   [current-user-uuid graph-user-uuid]
@@ -2271,11 +2286,13 @@
         *sync-state                 (atom (sync-state))
         current-user-uuid           (user/user-uuid)
         repo                        (state/get-current-repo)]
-    (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
-                                           (config/get-repo-dir repo) repo
-                                           txid *sync-state)]
-      (when (and repo (not (config/demo-graph? repo)))
-        (go
+    (go
+      ;; stop previous sync
+      (<! (<sync-stop))
+      (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
+                                             (config/get-repo-dir repo) repo
+                                             txid *sync-state)]
+        (when (and repo (not (config/demo-graph? repo)))
           ;; 1. if remote graph has been deleted, clear graphs-txid.edn
           ;; 2. if graphs-txid.edn's content isn't [user-uuid graph-uuid txid], clear it
           (if (not= 3 (count @graphs-txid))

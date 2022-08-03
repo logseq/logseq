@@ -54,11 +54,11 @@
           :else
           (notification/show! (str "Create graph failed:" r) :warning false))))))
 
-(defn delete-graph
+(defn <delete-graph
   [graph-uuid]
-  (when (= graph-uuid @sync/graphs-txid)
-    (sync/<sync-stop))
   (go
+    (when (= graph-uuid @sync/graphs-txid)
+      (<! (sync/<sync-stop)))
     (let [r (<! (sync/<delete-graph sync/remoteapi graph-uuid))]
       (if (instance? ExceptionInfo r)
         (notification/show! (str "Delete graph failed: " graph-uuid) :warning)

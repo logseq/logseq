@@ -91,7 +91,7 @@
                                              :on-confirm (fn [_ {:keys [close-fn]}]
                                                            (close-fn)
                                                            (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] true)
-                                                           (go (<! (file-sync/delete-graph GraphUUID))
+                                                           (go (<! (file-sync/<delete-graph GraphUUID))
                                                              (file-sync/load-session-graphs)
                                                              (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] false)))}))]
                                      (state/set-modal! (confirm-fn)))
