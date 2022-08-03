@@ -1,12 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { MagnifyingGlassIcon } from '@radix-ui/react-icons'
-import { BoundsUtils, TLBoxShape, TLBoxShapeProps, TLResizeInfo, validUUID } from '@tldraw/core'
+import { TLBoxShape, TLBoxShapeProps, TLResizeInfo, validUUID } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import Vec from '@tldraw/vec'
 import { makeObservable, runInAction } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
-import { ColorInput } from '~components/inputs/ColorInput'
 import { SwitchInput } from '~components/inputs/SwitchInput'
 import { useCameraMovingRef } from '~hooks/useCameraMoving'
 import type { Shape } from '~lib'
@@ -175,16 +174,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const app = useApp<Shape>()
     return (
       <>
-        <ColorInput
-          label="Background"
-          value={this.props.fill}
-          onChange={e => {
-            this.update({
-              fill: e.target.value,
-            })
-            app.persist(true)
-          }}
-        />
         {this.props.blockType !== 'B' && (
           <SwitchInput
             label="Collapsed"
@@ -498,7 +487,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           fill={this.props.stroke}
           stroke={this.props.stroke}
         >
-          {this.props.pageId}
+          {this.props.blockType === 'P' ? this.props.pageId : ''}
         </text>
       </>
     )
