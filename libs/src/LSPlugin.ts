@@ -650,6 +650,7 @@ export interface IEditorProxy extends Record<string, any> {
   ) => Promise<void>
 
   editBlock: (srcBlock: BlockIdentity, opts?: { pos: number }) => Promise<void>
+  selectBlock: (srcBlock: BlockIdentity) => Promise<void>
 
   upsertBlockProperty: (
     block: BlockIdentity,
