@@ -243,7 +243,7 @@
         (cond-> []
           synced-file-graph?
           (concat
-           (if no-active-files?
+           (if (and no-active-files? idle?)
              [{:item [:div.flex.justify-center.w-full.py-2
                       [:span.opacity-60 "Everything is synced!"]]
                :as-link? false}]
