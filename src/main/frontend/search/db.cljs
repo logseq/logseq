@@ -13,7 +13,7 @@
 (defn block->index
   "Convert a block to the index for searching"
   [{:block/keys [uuid page content] :as block}]
-  (when-let [content (util/search-normalize content)]
+  (when-let [content (util/search-normalize content (state/enable-search-remove-accents?))]
     {:id (:db/id block)
      :uuid (str uuid)
      :page page
@@ -42,7 +42,7 @@
     indice))
 
 (defn original-page-name->index
-  [p] {:name (util/search-normalize p)
+  [p] {:name (util/search-normalize p (state/enable-search-remove-accents?))
        :original-name p})
 
 (defn make-pages-indice!

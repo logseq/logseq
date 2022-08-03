@@ -219,7 +219,7 @@
                                                                      :class color-class}
              content]]
            [:div.ml-4.flex-shrink-0.flex
-            [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150
+            [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150.notification-close-button
              {:on-click (fn []
                           (notification-handler/clear! uid))}
              [:svg.h-5.w-5

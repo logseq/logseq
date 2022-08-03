@@ -29,8 +29,8 @@
     content
     (when (and content q)
       (let [q-words (string/split q #" ")
-            lc-content (util/search-normalize content)
-            lc-q (util/search-normalize q)]
+            lc-content (util/search-normalize content (state/enable-search-remove-accents?))
+            lc-q (util/search-normalize q (state/enable-search-remove-accents?))]
         (if (and (string/includes? lc-content lc-q)
                  (not (util/safe-re-find #" " q)))
           (let [i (string/index-of lc-content lc-q)
@@ -46,8 +46,8 @@
                                 result []]
                            (if (and (seq words) content)
                              (let [word (first words)
-                                   lc-word (util/search-normalize word)
-                                   lc-content (util/search-normalize content)]
+                                   lc-word (util/search-normalize word (state/enable-search-remove-accents?))
+                                   lc-content (util/search-normalize content (state/enable-search-remove-accents?))]
                                (if-let [i (string/index-of lc-content lc-word)]
                                  (recur (rest words)
                                         (subs content (+ i (count word)))

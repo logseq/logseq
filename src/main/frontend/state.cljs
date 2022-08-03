@@ -60,6 +60,8 @@
      :modal/close-btn?                      nil
      :modal/subsets                         []
 
+     ;; left sidebar
+     :ui/navigation-item-collapsed?         {}
 
      ;; right sidebar
      :ui/fullscreen?                        false
@@ -295,17 +297,22 @@
       (when-not (mobile-util/native-platform?)
         "local")))
 
+(def default-config
+  "Default config for a repo-specific, user config"
+  {:feature/enable-search-remove-accents? true
+   :default-arweave-gateway "https://arweave.net"})
+
 (defn get-config
+  "User config for the given repo or current repo if none given"
   ([]
    (get-config (get-current-repo)))
   ([repo-url]
-   (get-in @state [:config repo-url])))
-
-(def default-arweave-gateway "https://arweave.net")
+   (merge default-config
+          (get-in @state [:config repo-url]))))
 
 (defn get-arweave-gateway
   []
-  (:arweave/gateway (get-config) default-arweave-gateway))
+  (:arweave/gateway (get-config)))
 
 (defonce built-in-macros
          {"img" "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]"})
@@ -365,9 +372,11 @@
                 (get (sub-config) repo)))))
 
 (defn enable-flashcards?
-  [repo]
-  (not (false? (:feature/enable-flashcards?
-                (get (sub-config) repo)))))
+  ([]
+   (enable-flashcards? (get-current-repo)))
+  ([repo]
+   (not (false? (:feature/enable-flashcards?
+                 (get (sub-config) repo))))))
 
 (defn export-heading-to-list?
   []
@@ -735,6 +744,10 @@
   (swap! state assoc
          :custom-context-menu/show? false
          :custom-context-menu/links nil))
+
+(defn toggle-navigation-item-collapsed!
+  [item]
+  (update-state! [:ui/navigation-item-collapsed? item] not))
 
 (defn toggle-sidebar-open?!
   []
@@ -1691,3 +1704,7 @@
 (defn unlinked-dir?
   [dir]
   (contains? (:file/unlinked-dirs @state) dir))
+
+(defn enable-search-remove-accents?
+  []
+  (:feature/enable-search-remove-accents? (get-config)))
