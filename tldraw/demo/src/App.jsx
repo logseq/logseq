@@ -48,24 +48,25 @@ const list = ['foo', 'bar']
 const Page = props => {
   const [value, setValue] = React.useState(JSON.stringify(props, null, 2))
   return (
-    <textarea
-      className="whitespace-pre w-full h-full font-mono page"
-      style={{ minHeight: '64px' }}
-      value={value}
-      onChange={e => setValue(e.target.value)}
-    />
+    <div className="w-full font-mono page">
+      The Circle components are a collection of standardized UI elements and patterns for building
+      products. These pages provide more information and best practices on how to use the
+      components.The Circle components are a collection of standardized UI elements and patterns for
+      building products. These pages provide more information and best practices on how to use the
+      components.
+    </div>
   )
 }
 
 const Block = props => {
-  const [value, setValue] = React.useState(JSON.stringify(props, null, 2))
   return (
-    <textarea
-      className="whitespace-pre w-full h-32 font-mono single-block"
-      style={{ minHeight: '64px' }}
-      value={value}
-      onChange={e => setValue(e.target.value)}
-    />
+    <div className="w-full font-mono single-block">
+      The Circle components are a collection of standardized UI elements and patterns for building
+      products. These pages provide more information and best practices on how to use the
+      components.The Circle components are a collection of standardized UI elements and patterns for
+      building products. These pages provide more information and best practices on how to use the
+      components.
+    </div>
   )
 }
 

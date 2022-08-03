@@ -58,6 +58,7 @@ export class TLBoxShape<P extends TLBoxShapeProps = TLBoxShapeProps, M = any> ex
     if (scaleY < 0) nextScale[1] *= -1
     this.update({ point: [bounds.minX, bounds.minY], scale: nextScale, rotation })
     return this.update({
+      rotation,
       point: [bounds.minX, bounds.minY],
       size: [Math.max(1, bounds.width), Math.max(1, bounds.height)],
       scale: nextScale,
