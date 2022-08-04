@@ -121,7 +121,7 @@
    ;; initiate graph
    {:id             "sync-initiate"
     :text           (h/render-html [:section [:h2 "🚀 Initiate synchronization of your current graph"]
-                                    [:p "Clicking here will start the process of uploading your local files to an encrypted remote graph.."]])
+                                    [:p "Clicking here will start the process of uploading your local files to an encrypted remote graph."]])
     :attachTo       {:element ".cp__file-sync-indicator" :on "bottom"}
     :canClickTarget true
     :buttons        [{:text "Continue" :action (fn []
@@ -136,7 +136,7 @@
    ;; learn
    {:id             "sync-learn"
     :text           (h/render-html [:section [:h2 "💡 Learn about your sync status"]
-                                    [:p "By clicking this icon you will see the progress of your local graph being synced with the cloud."]])
+                                    [:p "Click here to see the progress of your local graph being synced with the cloud."]])
     :attachTo       {:element ".cp__file-sync-indicator" :on "bottom"}
     :canClickTarget true
     :buttons        [{:text "Got it!" :action (fn []
@@ -149,8 +149,8 @@
 
    ;; history
    {:id                "sync-history"
-    :text              (h/render-html [:section [:h2 "⏱ Get back in time!"]
-                                       [:p "With file sync you can now go through older version of this page and revert back to them if you like..."]])
+    :text              (h/render-html [:section [:h2 "⏱ Go back in time!"]
+                                       [:p "With file sync you can now go through older versions of this page and revert back to them if you like!"]])
     :attachTo          {:element ".cp__btn_history_version" :on "left"}
     :beforeShowPromise #(when-let [^js target (js/document.querySelector ".toolbar-dots-btn")]
                           (.click target)
