@@ -47,7 +47,7 @@
 
                       :else
                       (recur r1 t2 (inc i1) i2))))
-            current-line (text-util/get-current-line-by-pos markup pos)]
+            current-line (:line (text-util/get-current-line-by-pos markup pos))]
         (cond
           (= (util/nth-safe markup pos)
              (util/nth-safe markup (inc pos))

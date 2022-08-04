@@ -1855,9 +1855,8 @@
 
       (and
        (not= :property-search (state/get-editor-action))
-       (when-let [current-line (text-util/get-current-line-by-pos (.-value input) (dec pos))]
-         (or (wrapped-by? current-line "" gp-property/colons)
-             (wrapped-by? current-line "\n" gp-property/colons))))
+       (let [{:keys [line start-pos]} (text-util/get-current-line-by-pos (.-value input) (dec pos))]
+         (text-util/wrapped-by? line (dec (- pos start-pos)) "" gp-property/colons)))
 
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
@@ -2697,7 +2696,7 @@
         (on-tab direction)))
     nil))
 
-(defn keydown-not-matched-handler
+(defn ^:large-vars/cleanup-todo keydown-not-matched-handler
   [format]
   (fn [e _key-code]
     (let [input-id (state/get-edit-input-id)
@@ -2711,6 +2710,10 @@
                        (surround-by? input "#" :end)
                        (= key "#"))]
       (cond
+        (and (contains? #{"ArrowLeft" "ArrowRight" "ArrowUp" "ArrowDown"} key)
+             (contains? #{:property-search :property-value-search} (state/get-editor-action)))
+        (state/clear-editor-action!)
+
         (and (util/event-is-composing? e true) ;; #3218
              (not hashtag?) ;; #3283 @Rime
              (not (state/get-editor-show-page-search-hashtag?))) ;; #3283 @MacOS pinyin
