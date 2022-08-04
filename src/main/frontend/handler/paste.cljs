@@ -68,7 +68,8 @@
         internal-paste? (and
                          (seq (:copy/blocks copied-blocks))
                          ;; not copied from the external clipboard
-                         (= text (:copy/content copied-blocks)))]
+                         (= (string/trimr text)
+                            (string/trimr (:copy/content copied-blocks))))]
     (if internal-paste?
       (let [blocks (:copy/blocks copied-blocks)]
         (when (seq blocks)
