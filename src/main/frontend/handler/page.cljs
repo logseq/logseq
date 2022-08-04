@@ -80,6 +80,7 @@
                                                       (state/get-date-formatter)
                                                       (state/get-config))]
      {:block/uuid (db/new-block-id)
+      :block/pre-block? true
       :block/properties ps
       :block/properties-order (keys ps)
       :block/refs refs
@@ -384,8 +385,7 @@
                                    :block/content    content
                                    :block/properties properties
                                    :block/properties-order (map first properties)
-                                   :block/refs (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))
-                                   :block/path-refs (rename-update-block-refs! (:block/path-refs block) (:db/id page) (:db/id to-page))})))) blocks)
+                                   :block/refs (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))})))) blocks)
                       (remove nil?))]
     (db/transact! repo tx)
     (doseq [page-id page-ids]
@@ -526,7 +526,6 @@
                            (cond->
                             {:db/id id
                              :block/page {:db/id to-id}
-                             :block/path-refs (rename-update-block-refs! (:block/path-refs block) from-id to-id)
                              :block/refs (rename-update-block-refs! (:block/refs block) from-id to-id)}
 
                              (and from-first-child (= id (:db/id from-first-child)))

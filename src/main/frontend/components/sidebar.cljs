@@ -67,7 +67,7 @@
     (< delta 14)))
 
 (rum/defc page-name
-  [name icon]
+  [name icon recent?]
   (let [original-name (db-model/get-page-original-name name)]
     [:a {:on-click (fn [e]
                      (let [name (util/safe-page-name-sanity-lc name)]
@@ -77,7 +77,7 @@
                             (state/get-current-repo)
                             (:db/id page-entity)
                             :page))
-                         (route-handler/redirect-to-page! name))))}
+                         (route-handler/redirect-to-page! name {:click-from-recent? recent?}))))}
      [:span.page-icon icon]
      (pdf-assets/fix-local-asset-filename original-name)]))
 
@@ -117,7 +117,7 @@
                                                    :up? (move-up? e)})
                  (reset! up? nil)
                  (reset! dragging-over nil))}
-     (page-name name icon)]))
+     (page-name name icon false)]))
 
 (rum/defc favorites < rum/reactive
   [t]
@@ -167,7 +167,7 @@
            {:key name
             :title name
             :data-ref name}
-           (page-name name (get-page-icon entity))]))])))
+           (page-name name (get-page-icon entity) true)]))])))
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
   {:did-mount (fn [state]
@@ -177,7 +177,9 @@
   (let [num (state/sub :srs/cards-due-count)]
     [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
      {:class (util/classnames [{:active srs-open?}])
-      :on-click #(state/pub-event! [:modal/show-cards])}
+      :on-click #(do
+                   (srs/update-cards-due-count!)
+                   (state/pub-event! [:modal/show-cards]))}
      (ui/icon "infinity")
      [:span.flex-1 (t :right-side-bar/flashcards)]
      (when (and num (not (zero? num)))

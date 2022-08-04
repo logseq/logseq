@@ -26,7 +26,7 @@
   (when-let [editing-block (state/get-edit-block)]
     (let [page-id (:db/id (:block/page editing-block))
           blocks (block/extract-blocks
-                  (mldoc/->edn text (gp-mldoc/default-config format)) text true format)
+                  (mldoc/->edn text (gp-mldoc/default-config format)) text format {})
           blocks' (gp-block/with-parent-and-left page-id blocks)]
       (editor-handler/paste-blocks blocks' {}))))
 

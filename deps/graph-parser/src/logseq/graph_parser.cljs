@@ -51,9 +51,10 @@
         tx (concat tx [(cond-> {:file/path file}
                                new?
                                ;; TODO: use file system timestamp?
-                               (assoc :file/created-at (date-time-util/time-ms)))])]
-    {:tx
-     (d/transact! conn (gp-util/remove-nils tx) (select-keys options [:new-graph? :from-disk?]))
+                         (assoc :file/created-at (date-time-util/time-ms)))])
+        tx' (gp-util/remove-nils tx)
+        result (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?]))]
+    {:tx result
      :ast ast}))
 
 (defn filter-files

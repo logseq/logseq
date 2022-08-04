@@ -38,20 +38,19 @@
 (defn redirect-to-page!
   "Must ensure `page-name` is dereferenced (not an alias), or it will create a wrong new page with that name (#3511)."
   ([page-name]
-   (recent-handler/add-page-to-recent! (state/get-current-repo) page-name)
-   (redirect! {:to :page
-               :path-params {:name (str page-name)}}))
-  ([page-name anchor]
-   (recent-handler/add-page-to-recent! (state/get-current-repo) page-name)
-   (redirect! {:to :page
-               :path-params {:name (str page-name)}
-               :query-params {:anchor anchor}}))
-  ([page-name anchor push]
-   (recent-handler/add-page-to-recent! (state/get-current-repo) page-name)
-   (redirect! {:to :page
-               :path-params {:name (str page-name)}
-               :query-params {:anchor anchor}
-               :push push})))
+   (redirect-to-page! page-name {}))
+  ([page-name {:keys [anchor push click-from-recent?]
+               :or {click-from-recent? false}}]
+   (recent-handler/add-page-to-recent! (state/get-current-repo) page-name
+                                       click-from-recent?)
+   (let [m (cond->
+             {:to :page
+              :path-params {:name (str page-name)}}
+             anchor
+             (assoc :query-params {:anchor anchor})
+             push
+             (assoc :push push))]
+     (redirect! m))))
 
 (defn get-title
   [name path-params]

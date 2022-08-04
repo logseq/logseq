@@ -51,15 +51,6 @@
     :else
     input))
 
-(defn- remove-nested-children-blocks
-  [blocks]
-  (let [ids (set (map :db/id blocks))]
-    (->> blocks
-         (remove
-          (fn [block]
-            (let [id (:db/id (:block/parent block))]
-              (contains? ids id)))))))
-
 (defn custom-query-result-transform
   [query-result remove-blocks q]
   (try
@@ -72,10 +63,7 @@
                                               (contains? remove-blocks (:block/uuid h)))
                                             result))
                                   result)]
-                     (some->> result
-                              remove-nested-children-blocks
-                              (model/sort-by-left-recursive)
-                              (model/with-pages)))
+                     (model/with-pages result))
                    result)
           result-transform-fn (:result-transform q)
           repo (state/get-current-repo)]
@@ -135,7 +123,7 @@
                          rules
                          (conj rules))
           repo (or repo (state/get-current-repo))
-          k [:custom query']]
+          k [:custom (or (:query-string query') query')]]
       (pprint "inputs (post-resolution):" resolved-inputs)
       (pprint "query-opts:" query-opts)
       (pprint (str "time elapsed: " (.toFixed (- (.now js/performance) start-time) 2) "ms"))

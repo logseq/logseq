@@ -56,8 +56,7 @@
               (when (and (not (state/nfs-refreshing?))
                          (not (contains? (:file/unlinked-dirs @state/state)
                                          (config/get-repo-dir repo))))
-                (when (state/enable-flashcards?)
-                  (srs/update-cards-due-count!))
+
                 ;; Don't create the journal file until user writes something
                 (page-handler/create-today-journal!))))]
     (f)

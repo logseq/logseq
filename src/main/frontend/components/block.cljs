@@ -22,6 +22,7 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
+            [frontend.db.react :as react]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.utils :as db-utils]
             [frontend.extensions.highlight :as highlight]
@@ -728,7 +729,8 @@
   db-mixins/query
   [config id label]
   (when-let [block-id (parse-uuid id)]
-    (let [block (db/pull-block block-id)
+    (let [db-id (:db/id (db/pull [:block/uuid block-id]))
+          block (when db-id (db/pull-block db-id))
           block-type (keyword (get-in block [:block/properties :ls-type]))
           hl-type (get-in block [:block/properties :hl-type])
           repo (state/get-current-repo)]
@@ -1528,7 +1530,8 @@
   [config children collapsed?]
   (let [ref? (:ref? config)
         query? (:custom-query? config)
-        children (and (coll? children) (filter map? children))]
+        children (when (coll? children)
+                   (remove nil? children))]
     (when (and (coll? children)
                (seq children)
                (not collapsed?))
@@ -2424,6 +2427,9 @@
                       tree (tree/blocks->vec-tree blocks (:block/uuid (first blocks)))]
                   (first tree))
                 block)
+        block (if ref?
+                (merge block (db/pull-block (:db/id block)))
+                block)
         {:block/keys [uuid children pre-block? top? refs heading-level level type format content]} block
         config (if navigated? (assoc config :id (str navigating-block)) config)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
@@ -2442,13 +2448,6 @@
 
                      :else
                      db-collapsed?)
-        children (if (and ref-or-custom-query?
-                          (not collapsed?))
-                   (map
-                     (fn [b] (assoc b
-                                    :block/level (inc (:block/level block))))
-                     (model/sub-block-direct-children repo uuid))
-                   children)
         breadcrumb-show? (:breadcrumb-show? config)
         *show-left-menu? (::show-block-left-menu? state)
         *show-right-menu? (::show-block-right-menu? state)
@@ -2465,7 +2464,9 @@
         edit-input-id (str "edit-block-" blocks-container-id "-" uuid)
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
-        review-cards? (:review-cards? config)]
+        review-cards? (:review-cards? config)
+        selected-blocks (set (state/get-selection-block-ids))
+        selected? (contains? selected-blocks uuid)]
     [:div.ls-block
      (cond->
        {:id block-id
@@ -2475,7 +2476,7 @@
         :class (str uuid
                     (when pre-block? " pre-block")
                     (when (and card? (not review-cards?)) " shadow-md")
-                    (when (:ui/selected? block) " selected noselect"))
+                    (when selected? " selected noselect"))
         :blockid (str uuid)
         :haschild (str has-child?)}
 
@@ -2549,7 +2550,7 @@
                     ::navigating-block (atom (:block/uuid block)))))
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
-                                        :block/properties :block/left :block/children :block/_refs :ui/selected?]
+                                        :block/properties :block/left :block/children :block/_refs]
                           config-compare-keys [:show-cloze?]
                           b1 (second (:rum/args old-state))
                           b2 (second (:rum/args new-state))
@@ -2762,23 +2763,49 @@
            :query-atom query-atom
            :full-text-search? full-text-search?)))
 
+(defn- clear-custom-query!
+  [dsl? query]
+  (let [query (if dsl? (:query query) query)]
+    (state/remove-custom-query-component! query)
+    (db/remove-custom-query! (state/get-current-repo) query)))
+
+(rum/defc query-refresh-button
+  [state query-time {:keys [on-mouse-down]}]
+  (ui/tippy
+   {:html  [:div
+            [:p
+             (when (and query-time (> query-time 80))
+               [:span (str "This query takes " (int query-time) "ms to finish, it's a bit slow so that auto refresh is disabled.")])
+             (when (:full-text-search? state)
+               [:span "Full-text search results will not be refreshed automatically."])]
+            [:p
+             "Click the refresh button instead if you want to see the latest result."]]
+    :interactive     true
+    :popperOptions   {:modifiers {:preventOverflow
+                                  {:enabled           true
+                                   :boundariesElement "viewport"}}}
+    :arrow true}
+   [:a.control.fade-link.ml-1.inline-flex
+    {:style {:margin-top 7}
+     :on-mouse-down on-mouse-down}
+    (ui/icon "refresh" {:style {:font-size 20}})]))
+
 (rum/defcs ^:large-vars/cleanup-todo custom-query* < rum/reactive
   {:will-mount trigger-custom-query!
    :did-mount (fn [state]
                 (when-let [query (last (:rum/args state))]
                   (state/add-custom-query-component! query (:rum/react-component state)))
                 state)
-   :did-remount (fn [_old_state state]
-                  (trigger-custom-query! state))
    :will-unmount (fn [state]
                    (when-let [query (last (:rum/args state))]
-                     (state/remove-custom-query-component! query)
-                     (db/remove-custom-query! (state/get-current-repo) query))
+                     (clear-custom-query! (:dsl-query? (first (:rum/args state)))
+                                          query))
                    state)}
   [state config {:keys [title query view collapsed? children? breadcrumb-show? table-view?] :as q}]
   (let [dsl-query? (:dsl-query? config)
         query-atom (:query-atom state)
         repo (state/get-current-repo)
+        query-time (react/get-query-time query)
         view-fn (if (keyword? view) (state/sub [:config repo :query/views view]) view)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
@@ -2821,13 +2848,6 @@
          (ui/foldable
           [:div.custom-query-title.flex.justify-between.w-full
            [:div.flex.items-center
-            (when (:full-text-search? state)
-              [:a.control.fade-link.mr-1.inline-flex
-               {:title "Refresh query result"
-                :on-mouse-down (fn [e]
-                                 (util/stop e)
-                                 (trigger-custom-query! state))}
-               (ui/icon "refresh" {:style {:font-size 20}})])
             [:span.title-text (cond
                                 (vector? title) title
                                 (string? title) (inline-text config
@@ -2835,15 +2855,23 @@
                                                              title)
                                 :else title)]
            [:span.opacity-60.text-sm.ml-2.results-count
-            (str (count transformed-query-result) " results")]]
+            (str (count result) " results")]]
 
            ;;insert an "edit" button in the query view
-           (when-not built-in?
-             [:a.opacity-70.hover:opacity-100.svg-small.inline
-              {:on-mouse-down (fn [e]
-                                (util/stop e)
-                                (editor-handler/edit-block! current-block :max (:block/uuid current-block)))}
-              svg/edit])]
+           [:div.flex.items-center
+            (when-not built-in?
+              [:a.opacity-70.hover:opacity-100.svg-small.inline
+               {:on-mouse-down (fn [e]
+                                 (util/stop e)
+                                 (editor-handler/edit-block! current-block :max (:block/uuid current-block)))}
+               svg/edit])
+
+            (when (or (:full-text-search? state)
+                      (and query-time (> query-time 80)))
+              (query-refresh-button state query-time
+                                    {:on-mouse-down (fn [e]
+                                                      (util/stop e)
+                                                      (trigger-custom-query! state))}))]]
           (fn []
             [:div
              (when (and current-block (not view-f) (nil? table-view?))
@@ -2908,7 +2936,10 @@
                :else
                [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])])
           {:default-collapsed? collapsed?
-           :title-trigger? true})]))))
+           :title-trigger? true
+           :on-mouse-down (fn [collapsed?]
+                            (when collapsed?
+                              (clear-custom-query! dsl-query? q)))})]))))
 
 (rum/defc custom-query
   [config q]
@@ -2916,7 +2947,7 @@
    (ui/block-error "Query Error:" {:content (:query q)})
    (ui/lazy-visible
     (fn [] (custom-query* config q))
-    "custom-query")))
+    {:debug-id q})))
 
 (defn admonition
   [config type result]
@@ -3201,11 +3232,6 @@
            (assoc state ::id (str (random-uuid))))}
   [state config flat-blocks blocks->vec-tree]
   (let [db-id (:db/id config)
-        selected-blocks (set (state/get-selection-block-ids))
-        flat-blocks (if (seq selected-blocks)
-                      (map (fn [b]
-                             (assoc b :ui/selected? (contains? selected-blocks (:block/uuid b)))) flat-blocks)
-                      flat-blocks)
         blocks (blocks->vec-tree flat-blocks)
         *loading? (::loading? state)]
     (if-not db-id
@@ -3296,41 +3322,48 @@
    (cond-> option
      (:document/mode? config) (assoc :class "doc-mode"))
    (cond
-     (and (:custom-query? config)
+     (and (or (:ref? config) (:custom-query? config))
           (:group-by-page? config))
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page blocks] blocks]
-          (let [alias? (:block/alias? page)
-                page (db/entity (:db/id page))
-                parent-blocks (group-by :block/parent blocks)]
-            [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                         (:ref? config)
-                         (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
-             (ui/foldable
-              [:div
-               (page-cp config page)
-               (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-              (for [[_parent blocks] parent-blocks]
-                (breadcrumb-with-container blocks config))
-              {})])))]
+          (ui/lazy-visible
+           (fn []
+             (let [alias? (:block/alias? page)
+                   page (db/entity (:db/id page))
+                   blocks (tree/non-consecutive-blocks->vec-tree blocks)
+                   parent-blocks (group-by :block/parent blocks)]
+               [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
+                            (:ref? config)
+                            (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
+                (ui/foldable
+                 [:div
+                  (page-cp config page)
+                  (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+                 (for [[parent blocks] parent-blocks]
+                   (rum/with-key
+                     (breadcrumb-with-container blocks config)
+                     (:db/id parent)))
+                 {:debug-id page})])))))]
 
      (and (:group-by-page? config)
           (vector? (first blocks)))
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page blocks] blocks]
-          (let [alias? (:block/alias? page)
-                page (db/entity (:db/id page))]
-            [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                         (:ref? config)
-                         (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
-             (ui/foldable
-              [:div
-               (page-cp config page)
-               (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-              (blocks-container blocks config)
-              {})])))]
+          (let [blocks (remove nil? blocks)]
+            (when (seq blocks)
+              (let [alias? (:block/alias? page)
+                    page (db/entity (:db/id page))]
+                [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
+                             (:ref? config)
+                             (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
+                 (ui/foldable
+                  [:div
+                   (page-cp config page)
+                   (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+                  (blocks-container blocks config)
+                  {})])))))]
 
      :else
      (blocks-container blocks config))])

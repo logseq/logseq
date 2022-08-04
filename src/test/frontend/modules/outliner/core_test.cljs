@@ -70,10 +70,11 @@
 
 (defn transact-tree!
   [tree]
-  (db/transact! test-db (concat [{:db/id 1
-                                  :block/uuid 1
-                                  :block/name "Test page"}]
-                                (build-blocks tree))))
+  (let [blocks (build-blocks tree)]
+    (db/transact! test-db (concat [{:db/id 1
+                                    :block/uuid 1
+                                    :block/name "Test page"}]
+                                  blocks))))
 
 (def tree
   [[22 [[2 [[3 [[4]
@@ -625,6 +626,10 @@
   (dotimes [i 5]
     (do
       (frontend.test.fixtures/reset-datascript test-db)
-      (cljs.test/run-tests))
-    )
+      (cljs.test/run-tests)))
+
+  (do
+    (frontend.test.fixtures/reset-datascript test-db)
+    (cljs.test/test-vars [#'random-deletes]))
+
   )

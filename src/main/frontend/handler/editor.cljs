@@ -399,15 +399,15 @@
         block (apply dissoc block db-schema/retract-attributes)]
     (profile
      "Save block: "
-     (let [block (wrap-parse-block block)]
+     (let [block' (wrap-parse-block block)]
        (outliner-tx/transact!
          {:outliner-op :save-block}
-         (outliner-core/save-block! block))
+         (outliner-core/save-block! block'))
 
        ;; sanitized page name changed
-       (when-let [title (get-in block [:block/properties :title])]
-         (when-let [old-page-name (:block/name (db/entity (:db/id (:block/page block))))]
-           (when (and (:block/pre-block? block)
+       (when-let [title (get-in block' [:block/properties :title])]
+         (when-let [old-page-name (:block/name (db/entity (:db/id (:block/page block'))))]
+           (when (and (:block/pre-block? block')
                       (not (string/blank? title))
                       (not= (util/page-name-sanity-lc title) old-page-name))
              (state/pub-event! [:page/title-property-changed old-page-name title]))))))))
@@ -1224,7 +1224,6 @@
   (when-let [start-block (state/get-selection-start-block-or-first)]
     (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")
           direction (util/get-direction-between-two-nodes start-block end-block "ls-block")
-
           blocks (if (= :up direction)
                    (reverse blocks)
                    blocks)]
@@ -1914,9 +1913,7 @@
             :block/properties (apply dissoc (:block/properties block)
                                 (concat [:id :custom_id :custom-id]
                                         exclude-properties))
-            :block/content new-content
-            :block/path-refs (->> (cons (:db/id page) (:block/path-refs block))
-                                  (remove nil?))})))
+            :block/content new-content})))
 
 (defn- edit-last-block-after-inserted!
   [result]
@@ -1957,10 +1954,12 @@
 
                    :else
                    true)]
+
     (when has-unsaved-edits
       (outliner-tx/transact!
         {:outliner-op :save-block}
         (outliner-core/save-block! editing-block)))
+
     (outliner-tx/transact!
       {:outliner-op :insert-blocks}
       (when target-block
@@ -1984,7 +1983,7 @@
                     content* (str (if (= :markdown format) "- " "* ")
                                   (property/insert-properties format content props))
                     ast (mldoc/->edn content* (gp-mldoc/default-config format))
-                    blocks (block/extract-blocks ast content* true format)
+                    blocks (block/extract-blocks ast content* format {})
                     fst-block (first blocks)
                     fst-block (if (and keep-uuid? (uuid? (:uuid block)))
                                 (assoc fst-block :block/uuid (:uuid block))
@@ -2412,8 +2411,7 @@
             :else
             (profile
              "Insert block"
-             (do (save-current-block!)
-                 (insert-new-block! state)))))))))
+             (insert-new-block! state))))))))
 
 (defn keydown-new-block-handler [state e]
   (if (state/doc-mode-enter-for-new-line?)
