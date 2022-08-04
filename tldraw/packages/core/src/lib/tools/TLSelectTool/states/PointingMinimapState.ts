@@ -24,9 +24,9 @@ export class PointingMinimapState<
   }
 
   getCameraPoint = (clientPoint: [number, number]) => {
-    const minimapContainer = document.querySelector<HTMLElement>('.preview-minimap svg')
+    const minimapContainer = document.querySelector<HTMLElement>('.tl-preview-minimap svg')
     const minimapCamera = document.querySelector<HTMLElement>(
-      '.preview-minimap #minimap-camera-rect'
+      '.tl-preview-minimap #minimap-camera-rect'
     )
     if (minimapContainer && minimapCamera) {
       const rect = minimapContainer.getBoundingClientRect()

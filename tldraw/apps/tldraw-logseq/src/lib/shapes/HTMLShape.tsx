@@ -65,7 +65,7 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
           onWheelCapture={stop}
           onPointerDown={stop}
           onPointerUp={stop}
-          className="html-container"
+          className="tl-html-container"
           style={{
             width: '100%',
             height: '100%',

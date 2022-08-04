@@ -39,12 +39,12 @@ export const Minimap = observer(function Minimap() {
   return (
     <>
       {active && (
-        <div className="preview-minimap" {...events}>
+        <div className="tl-preview-minimap" {...events}>
           {preview}
         </div>
       )}
       <button
-        // className="preview-minimap-toggle"
+        // className="tl-preview-minimap-toggle"
         data-active={active}
         onClick={() => setActive(a => !a)}
       >

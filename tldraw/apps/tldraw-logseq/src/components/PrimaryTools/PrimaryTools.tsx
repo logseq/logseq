@@ -34,8 +34,8 @@ export const PrimaryTools = observer(function PrimaryTools() {
   const selectedToolId = app.selectedTool.id
 
   return (
-    <div className="primary-tools">
-      <div className="panel floating-panel" data-tool-locked={app.settings.isToolLocked}>
+    <div className="tl-primary-tools">
+      <div className="tl-tools-floating-panel" data-tool-locked={app.settings.isToolLocked}>
         <Button
           data-tool="select"
           data-selected={selectedToolId === 'select'}

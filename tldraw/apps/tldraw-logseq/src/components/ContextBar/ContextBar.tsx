@@ -65,7 +65,7 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets }) => {
 
   return (
     <HTMLContainer centered>
-      <div ref={rContextBar} className="contextbar">
+      <div ref={rContextBar} className="tl-contextbar">
         {ShapeContent ? (
           <ShapeContent />
         ) : (

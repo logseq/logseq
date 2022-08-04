@@ -53,7 +53,7 @@ export const ToolBar = observer(function ToolBar(): JSX.Element {
   }, [app])
 
   return (
-    <div className="toolbar">
+    <div className="tl-toolbar">
       <button onClick={sendToBack}>Send to Back</button>
       <button onClick={sendBackward}>Send Backward</button>
       <button onClick={bringForward}>Bring Forward</button>

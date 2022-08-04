@@ -4,7 +4,6 @@ import * as React from 'react'
 import { observer } from 'mobx-react-lite'
 import type { Shape } from '~lib'
 import { useApp } from '@tldraw/react'
-import { Minimap } from '~components/Minimap'
 import { RedoIcon, UndoIcon } from '~components/icons'
 import { ZoomMenu } from '~components/ZoomMenu'
 
@@ -19,8 +18,7 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
   }, [app])
 
   return (
-    <div className="action-bar">
-      <Minimap></Minimap>
+    <div className="tl-action-bar">
       <button onClick={undo}>
         <UndoIcon></UndoIcon>
       </button>

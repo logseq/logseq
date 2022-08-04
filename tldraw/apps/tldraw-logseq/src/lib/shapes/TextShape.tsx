@@ -152,7 +152,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
       <HTMLContainer {...events} opacity={isErasing ? 0.2 : opacity}>
         <div
           ref={rInnerWrapper}
-          className="text-shape-wrapper"
+          className="tl-text-shape-wrapper"
           data-hastext={!!text}
           data-isediting={isEditing}
           style={{
@@ -167,7 +167,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
           {isEditing ? (
             <textarea
               ref={rInput}
-              className="text-shape-input"
+              className="tl-text-shape-input"
               name="text"
               tabIndex={-1}
               autoComplete="false"

@@ -131,9 +131,9 @@ export const TextLabel = React.memo(function TextLabel({
   }, [text, font, offsetY, offsetX, scale])
 
   return (
-    <div className="text-label-wrapper">
+    <div className="tl-text-label-wrapper">
       <div
-        className="text-label-inner-wrapper"
+        className="tl-text-label-inner-wrapper"
         ref={rInnerWrapper}
         style={{
           font,
@@ -150,7 +150,7 @@ export const TextLabel = React.memo(function TextLabel({
               font,
               color,
             }}
-            className="text-label-textarea"
+            className="tl-text-label-textarea"
             name="text"
             tabIndex={-1}
             autoComplete="false"

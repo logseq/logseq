@@ -9,7 +9,7 @@ export const StatusBar = observer(function StatusBar() {
   const app = useApp<Shape>()
   React.useEffect(() => {
     const canvas = document.querySelector<HTMLElement>('.logseq-tldraw-wrapper .tl-canvas')
-    const actionBar = document.querySelector<HTMLElement>('.logseq-tldraw-wrapper .action-bar')
+    const actionBar = document.querySelector<HTMLElement>('.logseq-tldraw-wrapper .tl-action-bar')
     if (canvas) {
       canvas.style.height = 'calc(100% - 32px)'
     }
@@ -29,7 +29,7 @@ export const StatusBar = observer(function StatusBar() {
     }
   })
   return (
-    <div className="statusbar">
+    <div className="tl-statusbar">
       {app.selectedTool.id} | {app.selectedTool.currentState.id}
       <div style={{ flex: 1 }} />
       <div id="tl-statusbar-anchor" style={{ display: 'flex' }} />
