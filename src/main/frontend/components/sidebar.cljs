@@ -230,38 +230,45 @@
        [:div.nav-header.flex.gap-1.flex-col
         (if-let [page (:page default-home)]
           (sidebar-item
-            {:class            "home-nav"
-             :title            page
-             :on-click-handler route-handler/redirect-to-home!
-             :active           (and (not srs-open?)
-                                    (= route-name :page)
-                                    (= page (get-in route-match [:path-params :name])))
-             :icon             "home"})
+           {:class            "home-nav"
+            :title            page
+            :on-click-handler route-handler/redirect-to-home!
+            :active           (and (not srs-open?)
+                                   (= route-name :page)
+                                   (= page (get-in route-match [:path-params :name])))
+            :icon             "home"})
           (sidebar-item
-            {:class            "journals-nav"
-             :active           (and (not srs-open?)
-                                 (or (= route-name :all-journals) (= route-name :home)))
-             :title            (t :left-side-bar/journals)
-             :on-click-handler route-handler/go-to-journals!
-             :icon             "calendar"}))
+           {:class            "journals-nav"
+            :active           (and (not srs-open?)
+                                   (or (= route-name :all-journals) (= route-name :home)))
+            :title            (t :left-side-bar/journals)
+            :on-click-handler route-handler/go-to-journals!
+            :icon             "calendar"}))
 
         (when (state/enable-flashcards? (state/get-current-repo))
           [:div.flashcards-nav
            (flashcards srs-open?)])
 
         (sidebar-item
-          {:class  "graph-view-nav"
-           :title  (t :right-side-bar/graph-view)
-           :href   (rfe/href :graph)
-           :active (and (not srs-open?) (= route-name :graph))
-           :icon   "hierarchy"})
+         {:class  "graph-view-nav"
+          :title  (t :right-side-bar/graph-view)
+          :href   (rfe/href :graph)
+          :active (and (not srs-open?) (= route-name :graph))
+          :icon   "hierarchy"})
 
         (sidebar-item
-          {:class  "all-pages-nav"
-           :title  (t :right-side-bar/all-pages)
-           :href   (rfe/href :all-pages)
-           :active (and (not srs-open?) (= route-name :all-pages))
-           :icon   "files"})]]
+         {:class  "all-pages-nav"
+          :title  (t :right-side-bar/all-pages)
+          :href   (rfe/href :all-pages)
+          :active (and (not srs-open?) (= route-name :all-pages))
+          :icon   "files"})
+
+        (sidebar-item
+         {:class  "all-graphs-view-nav"
+          :title  (t :all-graphs)
+          :href   (rfe/href :repos)
+          :active (and (not srs-open?) (= route-name :repos))
+          :icon   "database"})]]
 
       (favorites t)
 
