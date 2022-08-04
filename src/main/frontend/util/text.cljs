@@ -59,9 +59,10 @@
         result (reduce (fn [acc line]
                          (let [new-pos (+ acc (count line))]
                            (if (>= new-pos pos)
-                             (reduced line)
+                             (reduced {:line line
+                                       :start-pos acc})
                              (inc new-pos)))) 0 lines)]
-    (when (string? result)
+    (when (map? result)
       result)))
 
 (defn surround-by?
