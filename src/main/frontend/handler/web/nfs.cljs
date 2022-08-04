@@ -209,6 +209,9 @@
                                      (log/error :exception error)))))))
       (p/catch (fn [error]
                  (log/error :exception error)
+                 (when mobile-native?
+                   (state/pub-event!
+                    [:notification/show {:content (str error) :status :error}]))
                  (when (contains? #{"AbortError" "Error"} (gobj/get error "name"))
                    (when @*repo (state/set-loading-files! @*repo false))
                    (throw error)

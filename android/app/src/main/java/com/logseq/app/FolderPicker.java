@@ -56,7 +56,11 @@ public class FolderPicker extends Plugin {
         Uri treeUri = result.getData().getData();
         Uri docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri,
                 DocumentsContract.getTreeDocumentId(treeUri));
-        ret.put("path", FileUtil.getPath(context, docUri));
-        call.resolve(ret);
+        try {
+            ret.put("path", FileUtil.getPath(context, docUri));
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject(e.toString() + "\n Debug: " + treeUri.toString());
+        }
     }
 }
