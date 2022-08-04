@@ -1225,7 +1225,9 @@
           db-utils/group-by-page
           (map (fn [[k blocks]]
                  (let [k (if (contains? aliases (:db/id k))
-                           (assoc k :block/alias? true)
+                           {:db/id (:db/id k)
+                            :block/alias? true
+                            :block/journal-day (:block/journal-day k)}
                            k)]
                    [k blocks])))))))))
 
