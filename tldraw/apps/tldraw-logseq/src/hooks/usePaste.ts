@@ -161,7 +161,7 @@ export function usePaste() {
                 ...LogseqPortalShape.defaultProps,
                 parentId: app.currentPageId,
                 point: [point[0], point[1]],
-                size: [600, 400],
+                size: [400, 0], // use 0 here to enable auto-resize
                 pageId: blockRef,
                 blockType: 'B',
               })
@@ -172,7 +172,7 @@ export function usePaste() {
               ...LogseqPortalShape.defaultProps,
               parentId: app.currentPageId,
               point: [point[0], point[1]],
-              size: [600, 400],
+              size: [400, 0], // use 0 here to enable auto-resize
               pageId: pageName,
               blockType: 'P',
             })
