@@ -419,7 +419,6 @@
                                                             :directory (.-Documents Directory)})
               current-app-id (-> (js->clj current-document-url :keywordize-keys true)
                                  get-ios-app-id)]
-        (prn :valid :deprecated-app-id deprecated-app-id :current-app-id current-app-id)
         (if (= deprecated-app-id current-app-id)
           (when graph-switch-f (graph-switch-f graph true))
           (do

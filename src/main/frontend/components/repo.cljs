@@ -11,7 +11,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
             [frontend.util.text :as text-util]
@@ -73,8 +72,8 @@
          (when loading? [:div.ml-2 (ui/loading "")])
          (ui/tippy {:html [:div.text-sm.max-w-xs
                            (if only-cloud?
-                             "Delete this remote graph, notice that this can't be recovered."
-                             "Unlink will remove Logseq's access to the local file path of your graph, it'll not remove your files on the disk.")]
+                             "Deletes this remote graph. Note this can't be recovered."
+                             "Removes Logseq's access to the local file path of your graph. It won't remove your local files.")]
                     :class "tippy-hover"
                     :interactive true}
                    [:a.text-gray-400.ml-4.font-medium.text-sm.whitespace-nowrap
@@ -85,9 +84,9 @@
                                            (ui/make-confirm-modal
                                             {:title      [:div
                                                           {:style {:max-width 700}}
-                                                          (str "Are you sure to permanently delete graph \"" GraphName "\" from remote?")]
+                                                          (str "Are you sure you want to permanently delete graph \"" GraphName "\" from remote?")]
                                              :sub-title   [:div.small.mt-1
-                                                           "Notice that the deleted graph can't be recovered, so we highly recommend you to download it at first before delete it."]
+                                                           "Notice that the deleted graph can't be recovered, so we highly recommend you download it before deletion."]
                                              :on-confirm (fn [_ {:keys [close-fn]}]
                                                            (close-fn)
                                                            (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] true)

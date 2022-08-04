@@ -243,7 +243,6 @@
                             {:readOnly true
                              :cursorBlinkRate -1})
                           user-options)
-        _ (prn cm-options)
         editor (when textarea
                  (from-textarea textarea (clj->js cm-options)))]
     (when editor
