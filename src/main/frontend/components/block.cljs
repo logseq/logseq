@@ -2152,8 +2152,10 @@
         editor-box (get config :editor-box)
         editor-id (str "editor-" edit-input-id)
         slide? (:slide? config)
-        trimmed-content (string/trim (:block/content block))
-        block-reference-only? (block-ref/block-ref? trimmed-content)]
+        block-reference-only? (some->
+                               (:block/content block)
+                               string/trim
+                               block-ref/block-ref?)]
     (if (and edit? editor-box)
       [:div.editor-wrapper {:id editor-id}
        (ui/catch-error
