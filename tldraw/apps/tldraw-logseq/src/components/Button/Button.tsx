@@ -5,5 +5,5 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 export function Button(props: ButtonProps) {
-  return <button className="button" {...props} />
+  return <button className="tl-button" {...props} />
 }

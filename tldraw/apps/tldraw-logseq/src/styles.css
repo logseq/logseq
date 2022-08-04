@@ -248,7 +248,7 @@
   pointer-events: all;
 }
 
-.tl-primary-tools .button {
+.tl-primary-tools .tl-button {
   position: relative;
   height: 36px;
   width: 36px;
@@ -264,16 +264,16 @@
   color: var(--ls-secondary-text-color);
 }
 
-.tl-primary-tools .button:hover {
+.tl-primary-tools .tl-button:hover {
   background-color: var(--color-hover);
 }
 
-.tl-primary-tools .button[data-selected='true'] {
+.tl-primary-tools .tl-button[data-selected='true'] {
   background-color: var(--color-selectedFill);
   color: var(--color-selectedContrast);
 }
 
-.floating-panel[data-tool-locked='true'] > .button[data-selected='true']::after {
+.floating-panel[data-tool-locked='true'] > .tl-button[data-selected='true']::after {
   content: '';
   display: block;
   height: 6px;
@@ -478,6 +478,7 @@
   grid-area: 1/2;
   width: auto;
   line-height: 1;
+  outline: none;
 }
 
 .tl-quick-search-input-sizer::after {
@@ -524,7 +525,6 @@
   flex-direction: column;
   opacity: 1;
   border-radius: 8px;
-  overflow: hidden;
 }
 
 .tl-logseq-portal-header {
@@ -534,6 +534,8 @@
   background: transparent;
   display: flex;
   color: var(--ls-title-text-color);
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
   padding: 0 1rem;
   align-items: center;
   gap: 0.5em;

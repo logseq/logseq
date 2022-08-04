@@ -29,6 +29,9 @@ export class CreatingState extends TLToolState<
       this.creatingShape = shape
       this.app.currentPage.addShapes(shape)
       this.app.setEditingShape(shape)
+      if (this.app.viewport.camera.zoom < 0.8 || this.app.viewport.camera.zoom > 1.2) {
+        this.app.api.resetZoomToCursor()
+      }
     })
   }
 

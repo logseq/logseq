@@ -155,6 +155,18 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     return this
   }
 
+  resetZoomToCursor = (): this => {
+    const viewport = this.app.viewport
+    viewport.update({
+      zoom: 1,
+      point: Vec.sub(
+        Vec.sub(this.app.inputs.originScreenPoint, Vec.mul(this.app.inputs.containerOffset, 2)),
+        this.app.inputs.originPoint
+      ),
+    })
+    return this
+  }
+
   toggleGrid = (): this => {
     const { settings } = this.app
     settings.update({ showGrid: !settings.showGrid })

@@ -79,7 +79,7 @@ export function useResizeObserver<T extends HTMLElement>(
     }
   }, [ref])
 
-  React.useLayoutEffect(() => {
+  React.useEffect(() => {
     updateBounds()
   }, [ref])
 }
