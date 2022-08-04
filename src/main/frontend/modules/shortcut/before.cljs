@@ -1,7 +1,8 @@
 (ns frontend.modules.shortcut.before
   (:require [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [frontend.handler.whiteboard :as whiteboard]))
 
 ;; before function
 (defn prevent-default-behavior
@@ -33,5 +34,6 @@
   [f]
   (fn [e]
     (when (or (contains? #{:srs} (state/get-modal-id))
-              (not (state/block-component-editing?)))
+              (not (state/block-component-editing?))
+              (not (whiteboard/tldraw-idle?)))
       (f e))))

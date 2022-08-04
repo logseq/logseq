@@ -41,6 +41,13 @@
   []
   (when (get-tldr-app) js/tln.api))
 
+(defn tldraw-idle?
+  "return true when tldraw is active and idle. nil when tldraw is 
+   not active."
+  []
+  (when-let [^js app (get-tldr-app)]
+    (.. app -selectedTool (isIn "idle"))))
+
 (defn create-page!
   [page-title]
   (when-let [app (get-tldr-app)]
@@ -150,7 +157,7 @@
    :compact true
    :pageId (str block-id)
    :point point
-   :size [600, 0]
+   :size [400, 0]
    :type "logseq-portal"})
 
 (defn add-new-block-shape!
