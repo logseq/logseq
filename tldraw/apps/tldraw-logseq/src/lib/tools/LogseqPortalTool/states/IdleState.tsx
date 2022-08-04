@@ -12,12 +12,6 @@ export class IdleState extends TLToolState<
   static id = 'idle'
   cursor = TLCursor.Cross
 
-  onEnter = ({ quick }: { quick?: boolean }) => {
-    if (quick) {
-      this.tool.transition('creating')
-    }
-  }
-
   onPointerDown: TLReactEvents<Shape>['pointer'] = e => {
     this.tool.transition('creating')
   }

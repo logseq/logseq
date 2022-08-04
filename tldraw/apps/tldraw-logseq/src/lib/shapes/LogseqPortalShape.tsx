@@ -100,7 +100,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     type: 'logseq-portal',
     parentId: 'page',
     point: [0, 0],
-    size: [600, 50],
+    size: [400, 50],
     // collapsedHeight is the height before collapsing
     collapsedHeight: 0,
     stroke: 'var(--ls-primary-text-color)',

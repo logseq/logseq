@@ -28,7 +28,7 @@ const documentModel = onLoad() ?? {
           type: 'logseq-portal',
           parentId: 'page1',
           point: [369.109375, 170.5546875],
-          size: [390.671875, 295.3671875],
+          size: [0, 0],
           stroke: '#000000',
           fill: '#ffffff',
           strokeWidth: 2,

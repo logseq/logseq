@@ -570,6 +570,7 @@
   flex-direction: column;
   opacity: 1;
   border-radius: 8px;
+  overflow: hidden;
 }
 
 .logseq-tldraw .tl-logseq-portal-header {

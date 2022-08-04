@@ -4,8 +4,6 @@ import type { Shape } from '~lib'
 
 export function useQuickAdd() {
   return React.useCallback<TLReactCallbacks<Shape>['onCanvasDBClick']>(async app => {
-    app.selectTool('logseq-portal', {
-      quick: true,
-    })
+    app.selectTool('logseq-portal').selectedTool.transition('creating')
   }, [])
 }
