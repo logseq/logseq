@@ -2834,12 +2834,14 @@
                                       (not= code keycode/enter-code))  ;; #3459
             editor-action (state/get-editor-action)]
         (cond
+          ;; When you type something after /
           (and (= :commands (state/get-editor-action)) (not= k (state/get-editor-command-trigger)))
           (let [matched-commands (get-matched-commands input)]
             (if (seq matched-commands)
               (reset! commands/*matched-commands matched-commands)
               (state/clear-editor-action!)))
 
+          ;; When you type search text after < (and when you release shift after typing <)
           (and (= :block-commands editor-action) (not= key-code 188)) ; not <
           (let [matched-block-commands (get-matched-block-commands input)]
             (if (seq matched-block-commands)
@@ -2856,10 +2858,12 @@
                 (reset! commands/*matched-block-commands matched-block-commands))
               (state/clear-editor-action!)))
 
+          ;; When you type two spaces after a command character (may always just be handled by the above instead?)
           (and (contains? #{:commands :block-commands} (state/get-editor-action))
                (= c (util/nth-safe value (dec (dec current-pos))) " "))
           (state/clear-editor-action!)
 
+          ;; When you type a space after a #
           (and (state/get-editor-show-page-search-hashtag?)
                (= c " "))
           (state/clear-editor-action!)
@@ -2867,6 +2871,7 @@
           :else
           (when (and (not editor-action) (not non-enter-processed?))
             (cond
+              ;; When you type text inside square brackets
               (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp"} k))
                    (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
               (let [orig-pos (cursor/get-caret-pos input)
@@ -2881,6 +2886,7 @@
                 (commands/handle-step [command-step])
                 (state/set-editor-action-data! {:pos pos}))
 
+              ;; Handle non-ascii square brackets
               (and blank-selected?
                    (contains? keycode/left-square-brackets-keys k)
                    (= (:key last-key-code) k)
@@ -2892,6 +2898,7 @@
                 (commands/handle-step [:editor/search-page])
                 (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
+              ;; Handle non-ascii parentheses
               (and blank-selected?
                    (contains? keycode/left-paren-keys k)
                    (= (:key last-key-code) k)
@@ -2903,6 +2910,7 @@
                 (commands/handle-step [:editor/search-block :reference])
                 (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
+              ;; Handle non-ascii angle brackets
               (and (= "〈" c)
                    (= "《" (util/nth-safe value (dec (dec current-pos))))
                    (> current-pos 0))
