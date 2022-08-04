@@ -13,6 +13,7 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [rum.core :as rum]
+            [logseq.graph-parser.config :as gp-config]
             [frontend.mobile.util :as mobile-util]))
 
 (defonce ^:large-vars/data-var state
@@ -26,6 +27,7 @@
      :system/events                         (async/chan 100)
      :db/batch-txs                          (async/chan 100)
      :file/writes                           (async/chan 100)
+     :file/unlinked-dirs                    #{}
      :reactive/custom-queries               (async/chan 100)
      :notification/show?                    false
      :notification/content                  nil
@@ -58,6 +60,8 @@
      :modal/close-btn?                      nil
      :modal/subsets                         []
 
+     ;; left sidebar
+     :ui/navigation-item-collapsed?         {}
 
      ;; right sidebar
      :ui/fullscreen?                        false
@@ -95,12 +99,9 @@
      :config                                {}
      :block/component-editing-mode?         false
      :editor/draw-mode?                     false
-     :editor/show-page-search?              false
-     :editor/show-page-search-hashtag?      false
-     :editor/show-date-picker?              false
+     :editor/action                         nil
+     :editor/action-data                    nil
      ;; With label or other data
-     :editor/show-input                     nil
-     :editor/show-zotero                    false
      :editor/last-saved-cursor              nil
      :editor/editing?                       nil
      :editor/in-composition?                false
@@ -120,6 +121,7 @@
      :db/last-transact-time                 {}
      ;; whether database is persisted
      :db/persisted?                         {}
+
      :cursor-range                          nil
 
      :selection/mode                        false
@@ -149,15 +151,13 @@
      :mobile/actioned-block                 nil
      :mobile/show-toolbar?                  false
      :mobile/show-recording-bar?            false
-     ;;; toolbar icon doesn't update correctly when clicking after separate it from box,
-     ;;; add a random in (<= 1000000) to observer its update
-     :mobile/toolbar-update-observer        0
      :mobile/show-tabbar?                   false
 
      ;; plugin
      :plugin/enabled                        (and (util/electron?)
                                                  ;; true false :theme-only
                                                  ((fnil identity true) (storage/get :lsp-core-enabled)))
+     :plugin/preferences                    nil
      :plugin/indicator-text                 nil
      :plugin/installed-plugins              {}
      :plugin/installed-themes               []
@@ -191,8 +191,8 @@
 
      ;; copied blocks
      :copy/blocks                           {:copy/content nil
-                                             :copy/block-ids nil
-                                             :copy/graph nil}
+                                             :copy/graph nil
+                                             :copy/blocks nil}
 
      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
                                                 "dashes")
@@ -298,17 +298,22 @@
       (when-not (mobile-util/native-platform?)
         "local")))
 
+(def default-config
+  "Default config for a repo-specific, user config"
+  {:feature/enable-search-remove-accents? true
+   :default-arweave-gateway "https://arweave.net"})
+
 (defn get-config
+  "User config for the given repo or current repo if none given"
   ([]
    (get-config (get-current-repo)))
   ([repo-url]
-   (get-in @state [:config repo-url])))
-
-(def default-arweave-gateway "https://arweave.net")
+   (merge default-config
+          (get-in @state [:config repo-url]))))
 
 (defn get-arweave-gateway
   []
-  (:arweave/gateway (get-config) default-arweave-gateway))
+  (:arweave/gateway (get-config)))
 
 (defonce built-in-macros
          {"img" "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]"})
@@ -365,7 +370,14 @@
 (defn enable-journals?
   [repo]
   (not (false? (:feature/enable-journals?
-                 (get (sub-config) repo)))))
+                (get (sub-config) repo)))))
+
+(defn enable-flashcards?
+  ([]
+   (enable-flashcards? (get-current-repo)))
+  ([repo]
+   (not (false? (:feature/enable-flashcards?
+                 (get (sub-config) repo))))))
 
 (defn export-heading-to-list?
   []
@@ -523,9 +535,7 @@
            (->> (remove #(= (:url repo)
                             (:url %))
                         repos)
-                (util/distinct-by :url))))
-  (when (= (get-current-repo) (:url repo))
-    (set-current-repo! (:url (first (get-repos))))))
+                (util/distinct-by :url)))))
 
 (defn set-timestamp-block!
   [value]
@@ -583,63 +593,58 @@
   [value]
   (set-state! :search/mode value))
 
-(defn set-editor-show-page-search!
+(defn set-editor-action!
   [value]
-  (set-state! :editor/show-page-search? value))
+  (set-state! :editor/action value))
+
+(defn set-editor-action-data!
+  [value]
+  (set-state! :editor/action-data value))
+
+(defn get-editor-action
+  []
+  (:editor/action @state))
+
+(defn get-editor-action-data
+  []
+  (:editor/action-data @state))
 
 (defn get-editor-show-page-search?
   []
-  (get @state :editor/show-page-search?))
+  (= (get-editor-action) :page-search))
 
-(defn set-editor-show-page-search-hashtag!
-  [value]
-  (set-state! :editor/show-page-search? value)
-  (set-state! :editor/show-page-search-hashtag? value))
 (defn get-editor-show-page-search-hashtag?
   []
-  (get @state :editor/show-page-search-hashtag?))
-(defn set-editor-show-block-search!
-  [value]
-  (set-state! :editor/show-block-search? value))
+  (= (get-editor-action) :page-search-hashtag))
+
 (defn get-editor-show-block-search?
   []
-  (get @state :editor/show-block-search?))
-(defn set-editor-show-template-search!
-  [value]
-  (set-state! :editor/show-template-search? value))
-(defn get-editor-show-template-search?
-  []
-  (get @state :editor/show-template-search?))
-(defn set-editor-show-date-picker!
-  [value]
-  (set-state! :editor/show-date-picker? value))
-(defn get-editor-show-date-picker?
-  []
-  (get @state :editor/show-date-picker?))
+  (= (get-editor-action) :block-search))
+
 (defn set-editor-show-input!
   [value]
-  (set-state! :editor/show-input value))
+  (if value
+    (do
+      (set-editor-action-data! (assoc (get-editor-action-data) :options value))
+      (set-editor-action! :input))
+    (do
+      (set-editor-action! nil)
+      (set-editor-action-data! nil))))
 (defn get-editor-show-input
   []
-  (get @state :editor/show-input))
+  (when (= (get-editor-action) :input)
+    (get @state :editor/action-data)))
+(defn set-editor-show-commands!
+  []
+  (when-not (get-editor-action) (set-editor-action! :commands)))
+(defn set-editor-show-block-commands!
+  []
+  (when-not (get-editor-action) (set-editor-action! :block-commands)))
 
-
-(defn set-editor-show-zotero!
-  [value]
-  (set-state! :editor/show-zotero value))
-
-;; TODO: refactor, use one state
-(defn clear-editor-show-state!
+(defn clear-editor-action!
   []
   (swap! state (fn [state]
-                 (assoc state
-                        :editor/show-input nil
-                        :editor/show-zotero false
-                        :editor/show-date-picker? false
-                        :editor/show-block-search? false
-                        :editor/show-template-search? false
-                        :editor/show-page-search? false
-                        :editor/show-page-search-hashtag? false))))
+                 (assoc state :editor/action nil))))
 
 (defn set-edit-input-id!
   [input-id]
@@ -693,6 +698,12 @@
                 (uuid id)))
        (distinct)))
 
+(defn get-selection-start-block-or-first
+  []
+  (or (get-selection-start-block)
+      (some-> (first (get-selection-blocks))
+              (gobj/get "id"))))
+
 (defn in-selection-mode?
   []
   (:selection/mode @state))
@@ -734,6 +745,10 @@
   (swap! state assoc
          :custom-context-menu/show? false
          :custom-context-menu/links nil))
+
+(defn toggle-navigation-item-collapsed!
+  [item]
+  (update-state! [:ui/navigation-item-collapsed? item] not))
 
 (defn toggle-sidebar-open?!
   []
@@ -1007,15 +1022,7 @@
 
 (defn get-date-formatter
   []
-  (or
-    (when-let [repo (get-current-repo)]
-      (or
-        (get-in @state [:config repo :journal/page-title-format])
-        ;; for compatibility
-        (get-in @state [:config repo :date-formatter])))
-    ;; TODO:
-    (get-in @state [:me :settings :date-formatter])
-    "MMM do, yyyy"))
+  (gp-config/get-date-formatter (get-config)))
 
 (defn shortcuts []
   (get-in @state [:config (get-current-repo) :shortcuts]))
@@ -1434,22 +1441,11 @@
   []
   (:copy/blocks @state))
 
-(defn set-copied-blocks
-  [content ids]
-  (set-state! :copy/blocks {:copy/graph (get-current-repo)
-                            :copy/content content
-                            :copy/block-ids ids
-                            :copy/full-blocks nil}))
-
-(defn set-copied-full-blocks
+(defn set-copied-blocks!
   [content blocks]
   (set-state! :copy/blocks {:copy/graph (get-current-repo)
-                            :copy/content content
-                            :copy/full-blocks blocks}))
-
-(defn set-copied-full-blocks!
-  [blocks]
-  (set-state! [:copy/blocks :copy/full-blocks] blocks))
+                            :copy/content (or content (get-in @state [:copy/blocks :copy/content]))
+                            :copy/blocks blocks}))
 
 (defn get-export-block-text-indent-style []
   (:copy/export-block-text-indent-style @state))
@@ -1636,11 +1632,10 @@
   []
   (:modal/id @state))
 
-(defn edit-in-query-component
+(defn edit-in-query-or-refs-component
   []
-  (and (editing?)
-       ;; config
-       (:custom-query? (last (get-editor-args)))))
+  (let [config (last (get-editor-args))]
+    (or (:custom-query? config) (:ref? config))))
 
 (defn set-auth-id-token
   [id-token]
@@ -1696,7 +1691,20 @@
                  (if (fn? m) m
                    (fn [old-value] (merge old-value m)))))
 
+(defn http-proxy-enabled-or-val? []
+  (when-let [agent-opts (sub [:electron/user-cfgs :settings/agent])]
+    (when (every? not-empty (vals agent-opts))
+      (str (:protocol agent-opts) "://" (:host agent-opts) ":" (:port agent-opts)))))
+
 (defn enable-encryption?
   [repo]
   (:feature/enable-encryption?
    (get (sub-config) repo)))
+
+(defn unlinked-dir?
+  [dir]
+  (contains? (:file/unlinked-dirs @state) dir))
+
+(defn enable-search-remove-accents?
+  []
+  (:feature/enable-search-remove-accents? (get-config)))

@@ -52,11 +52,6 @@ jobs:
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 
-      - name: Setup Babashka
-        uses: turtlequeue/setup-babashka@v1.3.0
-        with:
-          babashka-version: ${{ env.BABASHKA_VERSION }}
-
       - name: Clojure cache
         uses: actions/cache@v2
         id: clojure-deps
@@ -78,12 +73,6 @@ jobs:
         run: |
           yarn cljs:test
           node static/tests.js
-
-      - name: Run nbb tests for graph-parser
-        run: yarn nbb-logseq -cp src/main:src/test -m logseq.graph-parser.nbb-test-runner/run-tests
-      # In this job because it depends on an npm package
-      - name: Load nbb compatible namespaces
-        run: bb test:load-nbb-compatible-namespaces
 
   lint:
     runs-on: ubuntu-latest
@@ -112,16 +101,13 @@ jobs:
         run: clojure -M:clj-kondo --parallel --lint src
 
       - name: Carve lint for unused vars
-        run: scripts/carve.clj
+        run: bb lint:carve
 
       - name: Lint for vars that are too large
-        run: scripts/large_vars.clj
+        run: bb lint:large-vars
 
       - name: Lint invalid translation entries
         run: bb lang:invalid-translations
-
-      - name: Lint datalog rules
-        run: scripts/lint_rules.clj
 
   e2e-test:
     runs-on: ubuntu-latest
@@ -193,7 +179,7 @@ jobs:
         run: xvfb-run -- yarn e2e-test
         env:
           CI: true
-          DEBUG: "pw:test"
+          DEBUG: "pw:api"
 
       - name: Save test artifacts
         if: ${{ failure() }}

@@ -17,17 +17,17 @@
             [frontend.util.property :as property]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.graph-parser.util.block-ref :as block-ref]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [promesa.core :as p]))
 
 ;; TODO: move to frontend.handler.editor.commands
 
-(defonce *show-commands (atom false))
-(defonce *slash-caret-pos (atom nil))
-(defonce *show-block-commands (atom false))
 (defonce angle-bracket "<")
-(defonce *angle-bracket-caret-pos (atom nil))
+(defonce colon ":")
 (defonce *current-command (atom nil))
 
 (def query-doc
@@ -218,10 +218,10 @@
   (->>
    (concat
     ;; basic
-    [["Page reference" [[:editor/input "[[]]" {:backward-pos 2}]
+    [["Page reference" [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
                         [:editor/search-page]] "Create a backlink to a page"]
      ["Page embed" (embed-page) "Embed a page here"]
-     ["Block reference" [[:editor/input "(())" {:backward-pos 2}]
+     ["Block reference" [[:editor/input block-ref/left-and-right-parens {:backward-pos 2}]
                          [:editor/search-block :reference]] "Create a backlink to a block"]
      ["Block embed" (embed-block) "Embed a block here" "Embed a block here"]
      ["Link" (link-steps) "Create a HTTP link"]
@@ -277,11 +277,10 @@
      ["Draw" (fn []
                (let [file (draw/file-name)
                      path (str gp-config/default-draw-directory "/" file)
-                     text (util/format "[[%s]]" path)]
+                     text (page-ref/->page-ref path)]
                  (p/let [_ (draw/create-draw-with-default-content path)]
                    (println "draw file created, " path))
                  text)) "Draw a graph with Excalidraw"]
-     
      ["Embed HTML " (->inline "html")]
 
      ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern (state/get-editor-command-trigger)
@@ -308,15 +307,19 @@
 
 (defonce *matched-block-commands (atom (block-commands-map)))
 
-(defn restore-state
-  [restore-slash-caret-pos?]
-  (when restore-slash-caret-pos?
-    (reset! *slash-caret-pos nil))
-  (reset! *show-commands false)
-  (reset! *angle-bracket-caret-pos nil)
-  (reset! *show-block-commands false)
-  (reset! *matched-commands @*initial-commands)
+(defn reinit-matched-commands!
+  []
+  (reset! *matched-commands @*initial-commands))
+
+(defn reinit-matched-block-commands!
+  []
   (reset! *matched-block-commands (block-commands-map)))
+
+(defn restore-state
+  []
+  (state/clear-editor-action!)
+  (reinit-matched-commands!)
+  (reinit-matched-block-commands!))
 
 (defn insert!
   [id value
@@ -333,19 +336,22 @@
                            (+ current-pos i)))
                        current-pos)
           orig-prefix (subs edit-content 0 current-pos)
-          space? (when (and last-pattern orig-prefix)
-                   (let [s (when-let [last-index (string/last-index-of orig-prefix last-pattern)]
-                             (gp-util/safe-subs orig-prefix 0 last-index))]
-                     (not
-                      (or
-                       (and s
-                            (string/ends-with? s "(")
-                            (or (string/starts-with? last-pattern "((")
-                                (string/starts-with? last-pattern "[[")))
-                       (and s (string/starts-with? s "{{embed"))))))
-          space? (if (and space? (string/starts-with? last-pattern "#[["))
-                   false
-                   space?)
+          space? (let [space? (when (and last-pattern orig-prefix)
+                                (let [s (when-let [last-index (string/last-index-of orig-prefix last-pattern)]
+                                          (gp-util/safe-subs orig-prefix 0 last-index))]
+                                  (not
+                                   (or
+                                    (and s
+                                         (string/ends-with? s "(")
+                                         (or (string/starts-with? last-pattern block-ref/left-parens)
+                                             (string/starts-with? last-pattern page-ref/left-brackets)))
+                                    (and s (string/starts-with? s "{{embed"))
+                                    (and last-pattern
+                                         (or (string/ends-with? last-pattern gp-property/colons)
+                                             (string/starts-with? last-pattern gp-property/colons)))))))]
+                   (if (and space? (string/starts-with? last-pattern "#[["))
+                     false
+                     space?))
           prefix (cond
                    (and backward-truncate-number (integer? backward-truncate-number))
                    (str (gp-util/safe-subs orig-prefix 0 (- (count orig-prefix) backward-truncate-number))
@@ -372,12 +378,13 @@
                       (str prefix postfix))
           new-pos (- (count prefix)
                      (or backward-pos 0))]
-      (state/set-block-content-and-last-pos! id new-value new-pos)
-      (cursor/move-cursor-to input
-                             (if (and (or backward-pos forward-pos)
-                                      (not= end-pattern "]]"))
-                               new-pos
-                               (inc new-pos))))))
+      (when-not (string/blank? new-value)
+        (state/set-block-content-and-last-pos! id new-value new-pos)
+        (cursor/move-cursor-to input
+                               (if (and (or backward-pos forward-pos)
+                                        (not= end-pattern page-ref/right-brackets))
+                                 new-pos
+                                 (inc new-pos)))))))
 
 (defn simple-insert!
   [id value
@@ -405,25 +412,26 @@
     :as _option}]
   (let [selected? (not (string/blank? selected))
         input (gdom/getElement id)
-        edit-content (gobj/get input "value")
-        current-pos (cursor/pos input)
-        prefix (subs edit-content 0 current-pos)
-        postfix (if selected?
-                  (string/replace-first (subs edit-content current-pos)
-                                        selected
-                                        "")
-                  (subs edit-content current-pos))
-        new-value (str prefix value postfix)
-        new-pos (- (+ (count prefix)
-                      (count value)
-                      (or forward-pos 0))
-                   (or backward-pos 0))]
-    (state/set-block-content-and-last-pos! id new-value new-pos)
-    (cursor/move-cursor-to input new-pos)
-    (when selected?
-      (.setSelectionRange input new-pos (+ new-pos (count selected))))
-    (when check-fn
-      (check-fn new-value (dec (count prefix))))))
+        edit-content (gobj/get input "value")]
+    (when edit-content
+      (let [current-pos (cursor/pos input)
+            prefix (subs edit-content 0 current-pos)
+            postfix (if selected?
+                      (string/replace-first (subs edit-content current-pos)
+                                            selected
+                                            "")
+                      (subs edit-content current-pos))
+            new-value (str prefix value postfix)
+            new-pos (- (+ (count prefix)
+                          (count value)
+                          (or forward-pos 0))
+                       (or backward-pos 0))]
+        (state/set-block-content-and-last-pos! id new-value new-pos)
+        (cursor/move-cursor-to input new-pos)
+        (when selected?
+          (.setSelectionRange input new-pos (+ new-pos (count selected))))
+        (when check-fn
+          (check-fn new-value (dec (count prefix))))))))
 
 (defn delete-pair!
   [id]
@@ -436,6 +444,20 @@
         new-pos (count prefix)]
     (state/set-block-content-and-last-pos! id new-value new-pos)
     (cursor/move-cursor-to input new-pos)))
+
+(defn delete-selection!
+  [id]
+  (let [input (gdom/getElement id)
+        edit-content (gobj/get input "value")
+        start (util/get-selection-start input)
+        end (util/get-selection-end input)]
+    (when-not (= start end)
+      (let [prefix (subs edit-content 0 start)
+            new-value (str prefix
+                           (subs edit-content end))
+            new-pos (count prefix)]
+        (state/set-block-content-and-last-pos! id new-value new-pos)
+        (cursor/move-cursor-to input new-pos)))))
 
 (defn get-matched-commands
   ([text]
@@ -455,13 +477,13 @@
     (let [type (:type option)
           input (gdom/getElement input-id)
           beginning-of-line? (or (cursor/beginning-of-line? input)
-                                 (= 1 (:pos @*angle-bracket-caret-pos)))
+                                 (= 1 (:pos (:pos (state/get-editor-action-data)))))
           value (if (and (contains? #{"block" "properties"} type)
                          (not beginning-of-line?))
                   (str "\n" value)
                   value)]
       (insert! input-id value option)
-      (reset! *show-commands false))))
+      (state/clear-editor-action!))))
 
 (defmethod handle-step :editor/cursor-back [[_ n]]
   (when-let [input-id (state/get-edit-input-id)]
@@ -528,7 +550,7 @@
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [edit-content (gobj/get current-input "value")
-            slash-pos (:pos @*slash-caret-pos)
+            slash-pos (:pos (:pos (state/get-editor-action-data)))
             [re-pattern new-line-re-pattern] (if (= :org format)
                                                [#"\*+\s" #"\n\*+\s"]
                                                [#"#+\s" #"\n#+\s"])
@@ -586,22 +608,22 @@
         (state/set-edit-content! input-id new-value)))))
 
 (defmethod handle-step :editor/search-page [[_]]
-  (state/set-editor-show-page-search! true))
+  (state/set-editor-action! :page-search))
 
 (defmethod handle-step :editor/search-page-hashtag [[_]]
-  (state/set-editor-show-page-search-hashtag! true))
+  (state/set-editor-action! :page-search-hashtag))
 
 (defmethod handle-step :editor/search-block [[_ _type]]
-  (state/set-editor-show-block-search! true))
+  (state/set-editor-action! :block-search))
 
 (defmethod handle-step :editor/search-template [[_]]
-  (state/set-editor-show-template-search! true))
+  (state/set-editor-action! :template-search))
 
 (defmethod handle-step :editor/show-input [[_ option]]
   (state/set-editor-show-input! option))
 
 (defmethod handle-step :editor/show-zotero [[_]]
-  (state/set-editor-show-zotero! true))
+  (state/set-editor-action! :zotero))
 
 (defn insert-youtube-timestamp
   []
@@ -623,8 +645,8 @@
          (string/blank? value)))
     (do
       (notification/show! [:div "Please add some content first."] :warning)
-      (restore-state false))
-    (state/set-editor-show-date-picker! true)))
+      (restore-state))
+    (state/set-editor-action! :datepicker)))
 
 (defmethod handle-step :editor/click-hidden-file-input [[_ _input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]

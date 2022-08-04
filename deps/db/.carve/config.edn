@@ -1,0 +1,6 @@
+{:paths ["src"]
+ :api-namespaces [
+                  ;; Some fns are used by frontend but not worth moving over yet
+                  logseq.db.schema
+                  ]
+ :report {:format :ignore}}

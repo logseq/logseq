@@ -13,21 +13,25 @@
     position: absolute;
     width: fit-content;
     /* height:2rem; */
-    order:3;
-    display: flex;
+    order: 3;
     left: auto;
     right: 0;
     /* margin-top: 4px; */
     z-index: 9999;
-  }
+    padding: 4px 6px;
+    line-height: 1em;
+    opacity: .8;
 
-  .code-editor {
-      margin-top: 28px;
+    &:hover {
+      cursor: pointer;
+      opacity: 1;
+      user-select: none;
+    }
   }
 
   &-calc {
     @apply text-sm;
-    padding: 0.25em;
+    padding: 23px 0.25em 0.25em 0.25em;
     width: max-content;
     text-align: right;
 
@@ -40,22 +44,27 @@
 }
 
 .CodeMirror {
-    width: 100%;
-    font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
-    border-radius: 2px;
-    line-height: 1.45em;
+  width: 100%;
+  font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
+  border-radius: 2px;
+  line-height: 1.45em;
 
-    &:not(.CodeMirror-focused) {
-        .CodeMirror-activeline-background {
-            background: unset !important;
-        }
-    }
+  &-scroll {
+    padding-top: 18px;
+    padding-bottom: 62px;
+  }
 
-    pre.CodeMirror-line {
-        box-shadow: none !important;
+  &:not(.CodeMirror-focused) {
+    .CodeMirror-activeline-background {
+      background: unset !important;
     }
+  }
 
-    .CodeMirror-hscrollbar {
-        cursor: pointer;
-    }
+  pre.CodeMirror-line {
+    box-shadow: none !important;
+  }
+
+  .CodeMirror-hscrollbar {
+    cursor: pointer;
+  }
 }

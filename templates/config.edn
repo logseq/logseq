@@ -12,7 +12,7 @@
  :preferred-workflow :now
 
  ;; The app will ignore those directories or files.
- ;; E.g. "/archived" "/test.md"
+ ;; E.g. :hidden ["/archived" "/test.md" "../assets/archived"]
  :hidden []
 
  ;; When creating the new journal page, the app will use your template if there is one.
@@ -24,7 +24,15 @@
  ;; Default is true, you can also toggle this via setting page
  :ui/enable-tooltip? true
 
+ ;; Enable Block timestamp
  :feature/enable-block-timestamps? false
+
+ ;; Enable remove accents when searching.
+ ;; After toggle this option, please remember to rebuild your search index by press (cmd+c cmd+s).
+ :feature/enable-search-remove-accents? true
+
+ ;; Disable Built-in Scheduled and deadline Query
+ ;; :feature/disable-scheduled-and-deadline-query? true
 
  ;; Specify the date on which the week starts.
  ;; Goes from 0 to 6 (Monday to Sunday), default to 6
@@ -36,6 +44,15 @@
  ;; https://github.com/logseq/awesome-logseq#css-themes
  ;; Example:
  ;; :custom-css-url "@import url('https://cdn.jsdelivr.net/gh/dracula/logseq@master/custom.css');"
+
+ ;; Set Bullet indentation when exporting
+ ;; default option: tab
+ ;; Possible options are for `:sidebar` are
+ ;; 1. `:eight-spaces` as eight spaces
+ ;; 2. `:four-spaces` as four spaces
+ ;; 3. `:two-spaces` as two spaces
+ ;; :export/bullet-indentation :tab
+
 
  ;; When :all-pages-public? true, export repo would export all pages within that repo.
  ;; Regardless of whether you've set any page to public or not.
@@ -108,6 +125,16 @@
  ;; Whether to show empty bullets for non-document mode (the default mode)
  :ui/show-empty-bullets? false
 
+ ;; Pre-defined :view function to use in Query
+ :query/views
+ {:pprint
+  (fn [r] [:pre.code (pprint r)])}
+
+ ;; Pre-defined :result-transform function to use in Query
+ :query/result-transforms
+ {:sort-by-priority
+  (fn [result] (sort-by (fn [h] (get h :block/priority "Z")) result))}
+
  ;; The app will show those queries in today's journal page,
  ;; the "NOW" query asks the tasks which need to be finished "now",
  ;; the "NEXT" query asks the future tasks.
@@ -143,8 +170,13 @@
     :inputs [:today :7d-after]
     :collapsed? false}]}
 
- ;; Add your own commands to speedup.
- ;; E.g. [["js" "Javascript"]]
+ ;; Add your own commands to slash menu to speedup.
+ ;; E.g.
+ ;; :commands
+ ;; [
+ ;; ["js" "Javascript"]
+ ;; ["md" "Markdown"]
+ ;; ]
  :commands
  []
 
@@ -157,9 +189,9 @@
 
  ;; Macros replace texts and will make you more productive.
  ;; For example:
- ;; Add this to the macros below:
+ ;; Change the :macros value below to:
  ;; {"poem" "Rose is $1, violet's $2. Life's ordered: Org assists you."}
- ;; input "{{{poem red,blue}}}"
+ ;; input "{{poem red,blue}}"
  ;; becomes
  ;; Rose is red, violet's blue. Life's ordered: Org assists you.
  :macros {}
@@ -186,8 +218,15 @@
  ;; :srs/initial-interval 4
 
  ;; hide specific properties for blocks
- ;; E.g. #{:created-at :updated-at}
+ ;; E.g. :block-hidden-properties #{:created-at :updated-at}
  ;; :block-hidden-properties #{}
+
+ ;; Enable all your properties to have corresponding pages
+ :property-pages/enabled? true
+
+ ;; Properties to exclude from having property pages
+ ;; E.g.:property-pages/excludelist #{:duration :author}
+ ;; :property-pages/excludelist
 
  ;; logbook setup
  ;; :logbook/settings
@@ -200,12 +239,17 @@
  ;; :mobile/photo
  ;; {:allow-editing? true}
 
+ ;; Mobile features options
+ ;; Gestures
+ ;; :mobile
+ ;; {:gestures/disabled-in-block-with-tags ["kanban"]}
+
  ;; Extra CodeMirror options
  ;; :editor/extra-codemirror-options {:keyMap "emacs" :lineWrapping true}
 
  ;; ignore #+keyword: for parsing page references in orgmode
  ;; :ignored-page-references-keywords #{"author" "startup"}
- 
+
  ;; Quick capture templates on mobile for recieving contents from other apps.
  ;; Each template contains three elements {time}, {text} and {url}, which can be auto-expanded
  ;; by received contents from other apps. Note: the {} cannot be omitted.
@@ -215,6 +259,6 @@
  ;; You can also reorder them, or even only use one or two of them in the template.
  ;; You can also insert or format any text in the template as shown in the following examples.
  ;; :quick-capture-templates
- ;; {:text "[[quick capture]] **{time}**: \n - {text} from {url}"
- ;;  :media "[[quick capture]] **{time}**: \n - {url}"}
+ ;; {:text "[[quick capture]] **{time}**: {text} from {url}"
+ ;;  :media "[[quick capture]] **{time}**: {url}"}
  }

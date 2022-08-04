@@ -174,7 +174,7 @@
                                (assoc file :file/content content))) markup-files))
                (p/then (fn [result]
                          (let [files (map #(dissoc % :file/file) result)]
-                           (repo-handler/start-repo-db-if-not-exists! repo {:db-type :local-native-fs})
+                           (repo-handler/start-repo-db-if-not-exists! repo)
                            (async/go
                              (let [_finished? (async/<! (repo-handler/load-repo-to-db! repo
                                                                                        {:new-graph?   true
@@ -268,7 +268,8 @@
                       (repo-handler/load-repo-to-db! repo
                                                      {:diffs     diffs
                                                       :nfs-files modified-files
-                                                      :refresh? (not re-index?)}))
+                                                      :refresh? (not re-index?)
+                                                      :new-graph? re-index?}))
                     (when (and (util/electron?) (not re-index?))
                       (db/transact! repo new-files))))))))
 
@@ -321,14 +322,16 @@
     (search/reset-indice! repo)
     (db/remove-conn! repo)
     (db/clear-query-state!)
-    (db/start-db-conn! (state/get-me) repo)
+    (db/start-db-conn! repo)
     (p/let [_ (reload-dir! repo true)
             _ (ok-handler)]
       (state/set-nfs-refreshing! false))))
 
+;; TODO: move to frontend.handler.repo
 (defn refresh!
   [repo ok-handler]
-  (when repo
+  (when (and repo
+             (not (state/unlinked-dir? (config/get-repo-dir repo))))
     (state/set-nfs-refreshing! true)
     (p/let [_ (reload-dir! repo)
             _ (ok-handler)]

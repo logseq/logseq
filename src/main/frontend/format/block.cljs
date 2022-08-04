@@ -6,18 +6,28 @@
             [frontend.db :as db]
             [frontend.format :as format]
             [frontend.state :as state]
+            [frontend.handler.notification :as notification]
+            ["@sentry/react" :as Sentry]
+            [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.mldoc :as gp-mldoc]))
 
 (defn extract-blocks
-  "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state"
-  [blocks content with-id? format]
-  (gp-block/extract-blocks blocks content with-id? format
-                           {:user-config (state/get-config)
-                            :block-pattern (config/get-block-pattern format)
-                            :supported-formats (config/supported-formats)
-                            :db (db/get-db (state/get-current-repo))
-                            :date-formatter (state/get-date-formatter)}))
+  "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
+and handles unexpected failure."
+  [blocks content format {:keys [with-id?]
+                          :or {with-id? true}}]
+  (try
+    (gp-block/extract-blocks blocks content with-id? format
+                             {:user-config (state/get-config)
+                              :block-pattern (config/get-block-pattern format)
+                              :supported-formats (gp-config/supported-formats)
+                              :db (db/get-db (state/get-current-repo))
+                              :date-formatter (state/get-date-formatter)})
+    (catch :default e
+      (Sentry/captureException e)
+      (notification/show! "An unexpected error occurred during block extraction." :error)
+      [])))
 
 (defn page-name->map
   "Wrapper around logseq.graph-parser.block/page-name->map that adds in db"
@@ -29,25 +39,15 @@
 (defn parse-block
   ([block]
    (parse-block block nil))
-  ([{:block/keys [uuid content page format] :as block} {:keys [with-id?]
+  ([{:block/keys [uuid content format] :as block} {:keys [with-id?]
                                                         :or {with-id? true}}]
    (when-not (string/blank? content)
      (let [block (dissoc block :block/pre-block?)
            ast (format/to-edn content format nil)
-           blocks (extract-blocks ast content with-id? format)
+           blocks (extract-blocks ast content format {:with-id? with-id?})
            new-block (first blocks)
-           parent-refs (->> (db/get-block-parent (state/get-current-repo) uuid)
-                            :block/path-refs
-                            (map :db/id))
-           {:block/keys [refs]} new-block
-           ref-pages (filter :block/name refs)
-           path-ref-pages (->> (concat ref-pages parent-refs [(:db/id page)])
-                               (remove nil?))
            block (cond->
-                   (merge
-                    block
-                    new-block
-                    {:block/path-refs path-ref-pages})
+                   (merge block new-block)
                    (> (count blocks) 1)
                    (assoc :block/warning :multiple-blocks))
            block (dissoc block :block/title :block/body :block/level)]

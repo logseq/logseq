@@ -4,6 +4,7 @@
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.paste :as paste-handler]
             [frontend.handler.history :as history]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
@@ -16,6 +17,8 @@
             [frontend.state :as state]
             [frontend.util :refer [mac?] :as util]
             [frontend.commands :as commands]
+            [electron.ipc :as ipc]
+            [promesa.core :as p]
             [clojure.data :as data]
             [medley.core :as medley]))
 
@@ -48,6 +51,9 @@
 
    :pdf/next-page                {:binding "alt+n"
                                   :fn      pdf-utils/next-page}
+
+   :pdf/close                    {:binding "alt+x"
+                                  :fn      #(state/set-state! :pdf/current nil)}
 
    :auto-complete/complete       {:binding "enter"
                                   :fn      ui-handler/auto-complete-complete}
@@ -142,9 +148,11 @@
 
    :editor/replace-block-reference-at-point {:binding "mod+shift+r"
                                              :fn      editor-handler/replace-block-reference-with-content-at-point}
+   :editor/copy-embed {:binding "mod+e"
+                       :fn      editor-handler/copy-current-block-embed}
 
    :editor/paste-text-in-one-block-at-point {:binding "mod+shift+v"
-                                             :fn      editor-handler/paste-text-in-one-block-at-point}
+                                             :fn      (fn [_state e] ((paste-handler/editor-on-paste! nil true) e))}
 
    :editor/insert-youtube-timestamp         {:binding "mod+shift+y"
                                              :fn      commands/insert-youtube-timestamp}
@@ -285,6 +293,11 @@
    :graph/save                     {:fn #(state/pub-event! [:graph/save])
                                     :binding false}
 
+   :graph/re-index                 {:fn (fn []
+                                          (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
+                                                 (state/pub-event! [:graph/ask-for-re-index multiple-windows?])))
+                                    :binding false}
+
    :command/run                    {:binding "mod+shift+1"
                                     :inactive (not (util/electron?))
                                     :fn      #(do
@@ -339,10 +352,6 @@
 
    :ui/toggle-contents              {:binding "alt+shift+c"
                                      :fn      ui-handler/toggle-contents!}
-
-   :ui/open-new-window              {:binding "mod+n"
-                                     :inactive (not (util/electron?))
-                                     :fn      #(state/pub-event! [:graph/open-new-window nil])}
 
    :command/toggle-favorite         {:binding "mod+shift+f"
                                      :fn      page-handler/toggle-favorite!}
@@ -402,7 +411,8 @@
 
     :shortcut.handler/pdf
     (-> (build-category-map [:pdf/previous-page
-                             :pdf/next-page])
+                             :pdf/next-page
+                             :pdf/close])
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/auto-complete
@@ -443,6 +453,7 @@
                           :editor/forward-kill-word
                           :editor/backward-kill-word
                           :editor/replace-block-reference-at-point
+                          :editor/copy-embed
                           :editor/paste-text-in-one-block-at-point
                           :editor/insert-youtube-timestamp])
      (with-meta {:before m/enable-when-editing-mode!}))
@@ -455,6 +466,7 @@
                           :graph/remove
                           :graph/add
                           :graph/save
+                          :graph/re-index
                           :editor/cycle-todo
                           :editor/up
                           :editor/down
@@ -518,7 +530,6 @@
                           :ui/toggle-help
                           :ui/toggle-theme
                           :ui/toggle-contents
-                          :ui/open-new-window
                           :editor/open-file-in-default-app
                           :editor/open-file-in-directory
                           :editor/copy-current-file
@@ -574,8 +585,7 @@
     :go/tomorrow
     :go/next-journal
     :go/prev-journal
-    :go/keyboard-shortcuts
-    :ui/open-new-window]
+    :go/keyboard-shortcuts]
 
    :shortcut.category/block-editing
    [:editor/backspace
@@ -605,6 +615,7 @@
     :editor/forward-kill-word
     :editor/backward-kill-word
     :editor/replace-block-reference-at-point
+    :editor/copy-embed
     :editor/paste-text-in-one-block-at-point
     :editor/select-up
     :editor/select-down]
@@ -632,6 +643,7 @@
    :shortcut.category/others
    [:pdf/previous-page
     :pdf/next-page
+    :pdf/close
     :command/toggle-favorite
     :command/run
     :command-palette/toggle
@@ -639,6 +651,7 @@
     :graph/remove
     :graph/add
     :graph/save
+    :graph/re-index
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index
@@ -654,7 +667,8 @@
     :date-picker/next-day
     :date-picker/prev-week
     :date-picker/next-week
-    :date-picker/complete]})
+    :date-picker/complete
+    :git/commit]})
 
 (let [category-maps {::category (set (keys category*))
                      ::dicts/category (set (keys dicts/category))}]

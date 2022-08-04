@@ -312,6 +312,11 @@
   (when input
     (.-selectionEnd input)))
 
+(defn input-text-selected?
+  [input]
+  (not= (get-selection-start input)
+        (get-selection-end input)))
+
 (defn get-selection-direction
   [input]
   (when input
@@ -912,8 +917,11 @@
 #?(:cljs
    (defn search-normalize
      "Normalize string for searching (loose)"
-     [s]
-     (removeAccents (.normalize (string/lower-case s) "NFKC"))))
+     [s remove-accents?]
+     (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
+      (if remove-accents?
+        (removeAccents  normalize-str)
+        normalize-str))))
 
 #?(:cljs
    (defn file-name-sanity
@@ -1025,6 +1033,15 @@
             (.timeEnd js/console k#)
             res#))
         (do ~@body))))
+
+#?(:clj
+   (defmacro with-time
+     "Evaluates expr and prints the time it took. Returns the value of expr and the spent time."
+     [expr]
+     `(let [start# (cljs.core/system-time)
+            ret# ~expr]
+        {:result ret#
+         :time (.toFixed (- (cljs.core/system-time) start#) 6)})))
 
 ;; TODO: profile and profileEnd
 

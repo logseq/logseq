@@ -41,18 +41,15 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
-(rum/defc nav-content-item
+(rum/defc nav-content-item < rum/reactive
   [name {:keys [class]} child]
 
-  [:div.nav-content-item.is-expand
-   {:class class}
+  [:div.nav-content-item
+   {:class (util/classnames [class {:is-expand (not (state/sub [:ui/navigation-item-collapsed? class]))}])}
    [:div.nav-content-item-inner
     [:div.header.items-center.mb-1
-     {:on-click (fn [^js/MouseEvent e]
-                  (let [^js target (.-target e)
-                        ^js parent (.closest target ".nav-content-item")]
-                    (.toggle (.-classList parent) "is-expand")))}
-
+     {:on-click (fn [^js/MouseEvent _e]
+                  (state/toggle-navigation-item-collapsed! class))}
      [:div.font-medium.fade-link name]
      [:span
       [:a.more svg/arrow-down-v2]]]
@@ -70,7 +67,7 @@
     (< delta 14)))
 
 (rum/defc page-name
-  [name icon]
+  [name icon recent?]
   (let [original-name (db-model/get-page-original-name name)]
     [:a {:on-click (fn [e]
                      (let [name (util/safe-page-name-sanity-lc name)]
@@ -80,12 +77,12 @@
                             (state/get-current-repo)
                             (:db/id page-entity)
                             :page))
-                         (route-handler/redirect-to-page! name))))}
+                         (route-handler/redirect-to-page! name {:click-from-recent? recent?}))))}
      [:span.page-icon icon]
      (pdf-assets/fix-local-asset-filename original-name)]))
 
 (defn get-page-icon [page-entity]
-  (let [default-icon "◦"
+  (let [default-icon (ui/icon "file-text")
         from-properties (get-in (into {} page-entity) [:block/properties :icon])]
     (or
      (when (not= from-properties "") from-properties)
@@ -120,7 +117,7 @@
                                                    :up? (move-up? e)})
                  (reset! up? nil)
                  (reset! dragging-over nil))}
-     (page-name name icon)]))
+     (page-name name icon false)]))
 
 (rum/defc favorites < rum/reactive
   [t]
@@ -170,7 +167,7 @@
            {:key name
             :title name
             :data-ref name}
-           (page-name name (get-page-icon entity))]))])))
+           (page-name name (get-page-icon entity) true)]))])))
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
   {:did-mount (fn [state]
@@ -180,7 +177,9 @@
   (let [num (state/sub :srs/cards-due-count)]
     [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
      {:class (util/classnames [{:active srs-open?}])
-      :on-click #(state/pub-event! [:modal/show-cards])}
+      :on-click #(do
+                   (srs/update-cards-due-count!)
+                   (state/pub-event! [:modal/show-cards]))}
      (ui/icon "infinity")
      [:span.flex-1 (t :right-side-bar/flashcards)]
      (when (and num (not (zero? num)))
@@ -223,11 +222,11 @@
                    (when (some (fn [sel] (boolean (.closest target sel)))
                                [".favorites .bd" ".recent .bd" ".dropdown-wrapper" ".nav-header"])
                      (close-modal-fn)))}
-     [:div.flex.flex-col.pb-4.wrap
-      [:nav.px-4.pt-1.space-y-1 {:aria-label "Sidebar"}
+     [:div.flex.flex-col.pb-4.wrap.gap-4
+      [:nav.px-4.flex.flex-col.gap-1 {:aria-label "Sidebar"}
        (repo/repos-dropdown)
 
-       [:div.nav-header
+       [:div.nav-header.flex.gap-1.flex-col
         (if-let [page (:page default-home)]
           (sidebar-item
             {:class            "home-nav"
@@ -245,8 +244,9 @@
              :on-click-handler route-handler/go-to-journals!
              :icon             "calendar"}))
 
-        [:div.flashcards-nav
-         (flashcards srs-open?)]
+        (when (state/enable-flashcards? (state/get-current-repo))
+          [:div.flashcards-nav
+           (flashcards srs-open?)])
 
         (sidebar-item
           {:class  "graph-view-nav"
@@ -262,7 +262,7 @@
            :active (and (not srs-open?) (= route-name :all-pages))
            :icon   "files"})]]
 
-      (favorites t)
+      (when (and left-sidebar-open? (not config/publishing?)) (favorites t))
 
       (when (and left-sidebar-open? (not config/publishing?)) (recent-pages t))
 
@@ -333,7 +333,7 @@
 
       (when show-action-bar?
         (action-bar/action-bar))
-      
+
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?
         :data-is-full-width         (or global-graph-pages?
@@ -344,11 +344,11 @@
 
        (mobile-bar)
        (footer/footer)
-       
+
        (when (and (not (mobile-util/native-platform?))
                   (contains? #{:page :home} route-name))
          (widgets/demo-graph-alert))
-       
+
        (cond
          (not indexeddb-support?)
          nil
@@ -509,7 +509,8 @@
   [e]
   (state/hide-custom-context-menu!)
   (when-not (or (gobj/get e "shiftKey")
-                (util/meta-key? e))
+                (util/meta-key? e)
+                (state/get-edit-input-id))
     (editor-handler/clear-selection!)))
 
 (rum/defcs ^:large-vars/cleanup-todo sidebar <

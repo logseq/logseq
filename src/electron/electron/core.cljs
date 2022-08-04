@@ -2,7 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater] :as updater]
-            [electron.utils :refer [*win mac? linux? dev? logger get-win-from-sender restore-user-fetch-agent]]
+            [electron.utils :refer [*win mac? linux? dev? logger get-win-from-sender restore-user-fetch-agent get-graph-name]]
             [electron.url :refer [logseq-url-handler]]
             [clojure.string :as string]
             [promesa.core :as p]
@@ -43,6 +43,8 @@
                    :win    win})))
 
 (defn open-url-handler
+  "win - the main window instance (first renderer process)
+   url - the input URL"
   [win url]
   (.info logger "open-url" (str {:url url}))
 
@@ -59,7 +61,7 @@
    (fn [^js request callback]
      (let [url (.-url request)
            path (string/replace url "assets://" "")
-           path (js/decodeURIComponent path)]
+           path (js/decodeURI path)]
        (callback #js {:path path}))))
 
   (.registerFileProtocol
@@ -185,28 +187,45 @@
                    (.showMessageBox dialog (clj->js {:title "Logseq"
                                                      :icon (path/join js/__dirname "icons/logseq.png")
                                                      :message (str "Version " updater/electron-version)})))
-        template  (clj->js [{:role "fileMenu"
-                             :submenu [{:label "New Window"
-                                        :click (fn []
-                                                 (handler/open-new-window!))
-                                        :accelerator "CommandOrControl+N"
-                                        :acceleratorWorksWhenHidden false}
-                                       {:type "separator"}
-                                       {:role "close"
-                                        :label "Close Window"}
-                                       {:label "Quit Logseq"
-                                        :role "quit"}]}
-                            {:role "editMenu"}
-                            {:role "viewMenu"}
-                            {:role "windowMenu"}
-                            {:role "help"
-                             :submenu [{:label "Official Documentation"
-                                        :click (fn []
-                                                 (.openExternal shell "https://docs.logseq.com/"))}
-                                       {:role "about"
-                                        :label "About Logseq"
-                                        :click about-fn}]}])
-        menu (.buildFromTemplate Menu template)]
+        template (if mac?
+                   [{:label (.-name app)
+                     :submenu [{:role "about"}
+                               {:type "separator"}
+                               {:role "services"}
+                               {:type "separator"}
+                               {:role "hide"}
+                               {:role "hideOthers"}
+                               {:role "unhide"}
+                               {:type "separator"}
+                               {:role "quit"}]}]
+                   [])
+        template (conj template
+                       {:role "fileMenu"
+                        :submenu [{:label "New Window"
+                                   :click (fn []
+                                            (p/let [graph-name (get-graph-name (state/get-graph-path))
+                                                    _ (handler/broadcast-persist-graph! graph-name)]
+                                              (handler/open-new-window!)))
+                                   :accelerator "CommandOrControl+N"}
+                                  (if mac?
+                                    {:role "close"}
+                                    {:role "quit"})]}
+                       {:role "editMenu"}
+                       {:role "viewMenu"}
+                       {:role "windowMenu"})
+        ;; Windows has no about role
+        template (conj template
+                       (if mac?
+                         {:role "help"
+                          :submenu [{:label "Official Documentation"
+                                     :click #(.openExternal shell "https://docs.logseq.com/")}]}
+                         {:role "help"
+                          :submenu [{:label "Official Documentation"
+                                     :click #(.openExternal shell "https://docs.logseq.com/")}
+                                    {:role "about"
+                                     :label "About Logseq"
+                                     :click about-fn}]}))
+        menu (.buildFromTemplate Menu (clj->js template))]
     (.setApplicationMenu Menu menu)))
 
 (defn- setup-deeplink! []

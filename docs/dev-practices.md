@@ -5,7 +5,8 @@ This page describes development practices for this codebase.
 ## Linting
 
 Most of our linters require babashka. Before running them, please install
-https://github.com/babashka/babashka#installation.
+https://github.com/babashka/babashka#installation. To invoke all the linters in
+this section, run `bb dev:lint`.
 
 ### Clojure code
 
@@ -27,7 +28,7 @@ We use https://github.com/borkdude/carve to detect unused vars in our codebase.
 
 To run this linter:
 ```
-scripts/carve.clj
+bb lint:carve
 ```
 
 By default, the script runs in CI mode which prints unused vars if they are
@@ -35,7 +36,7 @@ found. The script can be run in an interactive mode which prompts for keeping
 (ignoring) an unused var or removing it. Run this mode with:
 
 ```
-scripts/carve.clj '{:interactive true}'
+bb lint:carve '{:interactive true}'
 ```
 
 When a var is ignored, it is added to `.carve/ignore`. Please add a comment for
@@ -46,24 +47,24 @@ why a var is ignored to help others understand why it's unused.
 Large vars have a lot of complexity and make it hard for the team to maintain
 and understand them. To run this linter:
 ```
-scripts/large_vars.clj
+bb lint:large-vars
 ```
 
-To configure the linter, see its `config` var.
+To configure the linter, see the `[:tasks/config :large-vars]` path of bb.edn.
 
 ### Datalog linting
 
-We use [datascript](https://github.com/tonsky/datascript)'s datalog to power our modeling and querying layer. Since datalog is concise, it is easy to write something invalid. To avoid typos and other preventable mistakes, we lint our queries and rules. Our queries are linted through clj-kondo and [datalog-parser](https://github.com/lambdaforge/datalog-parser). clj-kondo will error if it detects an invalid query. Our rules are linted through a script that also uses the datalog-parser. To run this linter:
-```
-scripts/lint_rules.clj
-```
+We use [datascript](https://github.com/tonsky/datascript)'s datalog to power our
+modeling and querying layer. Since datalog is concise, it is easy to write
+something invalid. To avoid typos and other preventable mistakes, we lint our
+queries and rules. Our queries are linted through clj-kondo and
+[datalog-parser](https://github.com/lambdaforge/datalog-parser). clj-kondo will
+error if it detects an invalid query.
 
-### Nbb compatible
+### Invalid translations
 
-Namespaces have the metadata flag `^:nbb-compatible` indicate they are compatible with https://github.com/logseq/nbb-logseq. This compatibility is necessary in order for namespaces to be reused by the frontend and CLIs. To confirm these compatibilities, run:
-```
-bb test:load-nbb-compatible-namespaces
-```
+Our translations can be configured incorrectly. We can catch some of these
+mistakes [as noted here](./contributing-to-translations.md#fix-mistakes).
 
 ## Testing
 
@@ -87,6 +88,10 @@ Our unit tests use the [shadow-cljs test-runner](https://shadow-cljs.github.io/d
 yarn test
 ```
 
+By convention, a namespace's tests are found at a corresponding namespace
+of the same name with an added `-test` suffix. For example, tests
+for `frontend.db.model` are found in `frontend.db.model-test`.
+
 There are a couple different ways to develop with tests:
 
 #### Focus Tests
@@ -109,12 +114,21 @@ For help on more options, run `node static/tests.js -h`.
 
 #### Autorun Tests
 
-To run tests automatically on file save, run `yarn
-shadow-cljs watch test --config-merge '{:autorun true}'`. The test output may
-appear where shadow-cljs was first invoked e.g. where `yarn watch` is running.
-Specific namespace(s) can be auto run with the `:ns-regexp` option e.g. `npx
-shadow-cljs watch test --config-merge '{:autorun true :ns-regexp
-"frontend.util.page-property-test"}'`.
+To run tests automatically on file save, run `clojure -M:test watch test
+--config-merge '{:autorun true}'`. Specific namespace(s) can be auto run with
+the `:ns-regexp` option e.g. `clojure -M:test watch test --config-merge
+'{:autorun true :ns-regexp "frontend.util.page-property-test"}'`.
+
+#### Database tests
+
+To write a test that uses a datascript db:
+
+* Be sure your test ns has test fixtures from `test-helper` ns to create and
+  destroy test databases after each test.
+* The easiest way to set up test data is to use `test-helper/load-test-files`.
+* For the repo argument that most fns take, pass it `test-helper/test-db`
+
+For examples of these tests, see `frontend.db.query-dsl-test` and `frontend.db.model-test`.
 
 ## Logging
 
@@ -135,3 +149,9 @@ Specs should go under `src/main/frontend/spec/` and be compatible with clojure
 and clojurescript. See `frontend.spec.storage` for an example. By following
 these conventions, specs should also be usable by babashka. This is helpful as it
 allows for third party tools to be written with logseq's data model.
+
+## Development Tools
+
+There are some babashka tasks under `nbb:` which are useful for inspecting
+database changes in realtime. See [these
+docs](https://github.com/logseq/bb-tasks#logseqbb-tasksnbbwatch) for more info.

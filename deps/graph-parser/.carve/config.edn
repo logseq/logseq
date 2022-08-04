@@ -1,0 +1,7 @@
+{:paths ["src"]
+ :api-namespaces [
+                  ;; carve doesn't detect nbb only usage
+                  logseq.graph-parser.log
+                  ;; Used in tests
+                  logseq.graph-parser.test.docs-graph-helper]
+ :report {:format :ignore}}

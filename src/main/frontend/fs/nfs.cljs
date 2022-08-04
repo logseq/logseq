@@ -203,8 +203,11 @@
                              file (.getFile file-handle)]
                        (when file
                          (nfs-saved-handler repo path file)))
-                     (notification/show! (str "The file " path " already exists, please save your changes and click the refresh button to reload it.")
-                                         :warning)))
+                     (do
+                       (notification/show! (str "The file " path " already exists, please append the content if you need it.\n Unsaved content: \n" content)
+                                          :warning
+                                          false)
+                       (state/pub-event! [:file/alter repo path text]))))
                  (println "Error: directory handle not exists: " handle-path)))
              (p/catch (fn [error]
                         (println "Write local file failed: " {:path path})

@@ -253,9 +253,6 @@ pre.code {
   color: var(--ls-primary-text-color, #f8f8f2);
 }
 
-:not(pre) > code {
-}
-
 dl {
   margin: 1rem 0;
 }
@@ -305,19 +302,6 @@ video {
 ::-moz-selection {
   background: var(--ls-selection-background-color);
   color: var(--ls-primary-text-color);
-}
-
-:not(pre) > code {
-  font-style: normal !important;
-  letter-spacing: 0;
-  padding: 0.1em 0.4em;
-  word-spacing: -0.15em;
-  -webkit-border-radius: var(--ls-border-radius-low);
-  border-radius: var(--ls-border-radius-low);
-  color: var(--ls-page-inline-code-color);
-  background-color: var(--ls-page-inline-code-bg-color, #eee);
-  line-height: 1.45;
-  text-rendering: optimizeSpeed;
 }
 
 /* endregion */
@@ -808,6 +792,14 @@ li p:last-child,
   border-right-color: var(--ls-border-color, #ccc);
 }
 
+i.ti {
+  /*
+  compensates the wrong top spacing in the iconfont.
+  See https://github.com/tabler/tabler-icons/issues/118/
+  */
+  transform: translateY(-1px);
+}
+
 .dnd-separator {
   border-bottom: 3px solid #ccc;
 }
@@ -870,7 +862,7 @@ h1.title {
 
 .block-highlight,
 .content .selected {
-  transition: background-color 0.15s;
+  transition: background-color 0.2s cubic-bezier(0, 1, 0, 1);
   background-color: var(--ls-block-highlight-color);
   padding: -1px;
 }
@@ -1080,7 +1072,6 @@ mark {
 }
 
 /* block references */
-
 .block-ref .block-ref {
   padding: 6px 5px;
   border: none;
@@ -1090,9 +1081,36 @@ mark {
 :not(pre) > code {
   border-radius: 3px;
   font-size: 0.9em;
+  font-style: normal;
   font-family: MonoLisa, 'Fira Code', Monaco, Menlo, Consolas, 'COURIER NEW',
     monospace;
+  letter-spacing: 0;
+  background-color: var(--ls-page-inline-code-bg-color, #eee);
+  color: var(--ls-page-inline-code-color);
+  word-spacing: -0.15em;
+  text-rendering: optimizeSpeed;
+}
+
+:not(pre):not(mark) > code {
+  line-height: 1.45;
   padding: 3px 5px !important;
+  border-radius: var(--ls-border-radius-low);
+  -webkit-border-radius: var(--ls-border-radius-low);
+}
+
+mark > code {
+  padding: 0;
+  line-height: inherit !important;
+  background: #fef3ac !important;
+  color: #262626 !important;
+}
+
+b > code {
+  font-weight: bold !important;
+}
+
+i > code {
+  font-style: italic !important;
 }
 
 a {
@@ -1178,4 +1196,8 @@ html[data-theme='dark'] .keyboard-shortcut > code {
 .lazy-visibility {
     min-width: 1px;
     min-height: 1px;
+}
+
+.katex .tag {
+    overflow-x: clip;
 }

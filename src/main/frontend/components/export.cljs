@@ -1,10 +1,11 @@
 (ns frontend.components.export
-  (:require [rum.core :as rum]
+  (:require [frontend.context.i18n :refer [t]]
+            [frontend.handler.export :as export]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.handler.export :as export]
-            [frontend.state :as state]
-            [frontend.context.i18n :refer [t]]))
+            [rum.core :as rum]))
 
 (rum/defc export
   []
@@ -17,21 +18,23 @@
         [:li.mb-4
          [:a.font-medium {:on-click #(export/export-repo-as-html! current-repo)}
           (t :export-public-pages)]])
-      [:li.mb-4
-       [:a.font-medium {:on-click #(export/export-repo-as-markdown! current-repo)}
-        (t :export-markdown)]]
-      [:li.mb-4
-       [:a.font-medium {:on-click #(export/export-repo-as-opml! current-repo)}
-        (t :export-opml)]]
+      (when-not (mobile-util/native-platform?)
+        [:li.mb-4
+         [:a.font-medium {:on-click #(export/export-repo-as-markdown! current-repo)}
+          (t :export-markdown)]]
+        [:li.mb-4
+         [:a.font-medium {:on-click #(export/export-repo-as-opml! current-repo)}
+          (t :export-opml)]])
       [:li.mb-4
        [:a.font-medium {:on-click #(export/export-repo-as-edn-v2! current-repo)}
         (t :export-edn)]]
       [:li.mb-4
        [:a.font-medium {:on-click #(export/export-repo-as-json-v2! current-repo)}
         (t :export-json)]]
-      [:li.mb-4
-       [:a.font-medium {:on-click #(export/export-repo-as-roam-json! current-repo)}
-        (t :export-roam-json)]]]
+      (when-not (mobile-util/native-platform?)
+       [:li.mb-4
+        [:a.font-medium {:on-click #(export/export-repo-as-roam-json! current-repo)}
+         (t :export-roam-json)]])]
      [:a#download-as-edn-v2.hidden]
      [:a#download-as-json-v2.hidden]
      [:a#download-as-roam-json.hidden]

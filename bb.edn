@@ -2,23 +2,59 @@
  :deps
  {org.babashka/spec.alpha
   {:git/url "https://github.com/babashka/spec.alpha"
-   :sha "1a841c4cc1d4f6dab7505a98ed2d532dd9d56b78"}}
+   :sha "1a841c4cc1d4f6dab7505a98ed2d532dd9d56b78"}
+  logseq/bb-tasks
+  #_{:local/root "../bb-tasks"}
+  {:git/url "https://github.com/logseq/bb-tasks"
+   :git/sha "abb32ccd26405d56fd28a29d56f3cb902b8c4334"}
+  logseq/graph-parser
+  {:local/root "deps/graph-parser"}}
  :pods
- {clj-kondo/clj-kondo {:version "2022.02.09"}}
+ {clj-kondo/clj-kondo {:version "2022.02.09"}
+  org.babashka/fswatcher {:version "0.0.3"}}
  :tasks
- {dev:watch
-  logseq.tasks.dev/watch
+ {dev:desktop-watch
+  logseq.tasks.dev.desktop/watch
 
   dev:open-dev-electron-app
-  logseq.tasks.dev/open-dev-electron-app
+  logseq.tasks.dev.desktop/open-dev-electron-app
 
   -dev:electron-start
-  {:depends [dev:watch dev:open-dev-electron-app]}
+  {:depends [dev:desktop-watch dev:open-dev-electron-app]}
 
   dev:electron-start
   {:doc "Start electron dev by watching assets and opening dev app"
    ;; Parallel execution - https://book.babashka.org/#parallel
    :task (run '-dev:electron-start {:parallel true})}
+
+  dev:app-watch
+  logseq.tasks.dev.mobile/app-watch
+
+  dev:npx-cap-run-ios
+  logseq.tasks.dev.mobile/npx-cap-run-ios
+
+  -dev:ios-app
+  {:depends [dev:app-watch dev:npx-cap-run-ios]}
+
+  dev:ios-app
+  {:doc "iOS development environment"
+   :task (run '-dev:ios-app {:parallel true})}
+
+  release:ios-app
+  logseq.tasks.dev.mobile/run-ios-release
+
+  dev:npx-cap-run-android
+  logseq.tasks.dev.mobile/npx-cap-run-android
+
+  -dev:android-app
+  {:depends [dev:app-watch dev:npx-cap-run-android]}
+
+  dev:android-app
+  {:doc "Android development environment"
+   :task (run '-dev:android-app {:parallel true})}
+
+  release:android-app
+  logseq.tasks.dev.mobile/run-android-release
 
   dev:validate-local-storage
   logseq.tasks.spec/validate-local-storage
@@ -26,8 +62,17 @@
   dev:lint
   logseq.tasks.dev/lint
 
-  test:load-nbb-compatible-namespaces
-  logseq.tasks.nbb/load-compatible-namespaces
+  lint:large-vars
+  logseq.bb-tasks.lint.large-vars/-main
+
+  lint:carve
+  logseq.bb-tasks.lint.carve/-main
+
+  nbb:watch
+  logseq.bb-tasks.nbb.watch/watch
+
+  nbb:portal-watch
+  logseq.bb-tasks.nbb.watch/portal-watch
 
   lang:list
   logseq.tasks.lang/list-langs
@@ -42,4 +87,13 @@
   logseq.tasks.lang/invalid-translations
 
   file-sync:integration-tests
-  logseq.tasks.file-sync/integration-tests}}
+  logseq.tasks.file-sync/integration-tests}
+
+ :tasks/config
+ {:large-vars
+  ;; TODO: Get to a smaller max-lines-count
+  {:max-lines-count 100
+   ;; TODO: Address vars tagged with cleanup-todo. These
+   ;; are left mostly because they are not high priority
+   ;; or not well understood
+   :metadata-exceptions #{:large-vars/cleanup-todo}}}}

@@ -9,21 +9,26 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.text :as text-util]
             [frontend.db :as db]
-            [logseq.graph-parser.text :as text]
             [rum.core :as rum]
             [frontend.config :as config]
             [frontend.handler.repo :as repo-handler]
             [reitit.frontend.easy :as rfe]))
 
 (rum/defc render-item
-  [{:keys [id value]} chosen?]
-  [:div.inline-grid.grid-cols-4.gap-x-4.w-full
-   {:class (when chosen? "chosen")}
-   [:span.col-span-3 value]
-   [:div.col-span-1.justify-end.tip.flex
-    (when id
-      [:code.opacity-20.bg-transparent id])]])
+  [result chosen?]
+  (if (map? result)
+    (let [{:keys [id value]} result]
+      [:div.inline-grid.grid-cols-4.gap-x-4.w-full
+       {:class (when chosen? "chosen")}
+       [:span.col-span-3 value]
+       [:div.col-span-1.justify-end.tip.flex
+        (when id
+          [:code.opacity-20.bg-transparent id])]])
+    [:div.inline-grid.grid-cols-4.gap-x-4.w-full
+     {:class (when chosen? "chosen")}
+     [:span.col-span-3 result]]))
 
 (rum/defcs select <
   (shortcut/disable-all-shortcuts)
@@ -31,27 +36,31 @@
   {:will-unmount (fn [state]
                    (state/set-state! [:ui/open-select] nil)
                    state)}
-  [state {:keys [items limit on-chosen empty-placeholder prompt-key]
+  [state {:keys [items limit on-chosen empty-placeholder
+                 prompt-key input-default-placeholder close-modal?
+                 extract-fn]
           :or {limit 100
                prompt-key :select/default-prompt
-               empty-placeholder (fn [_t] [:div])}}]
+               empty-placeholder (fn [_t] [:div])
+               close-modal? true
+               extract-fn :value}}]
   (let [input (::input state)]
     [:div.cp__select.cp__select-main
      [:div.input-wrap
       [:input.cp__select-input.w-full
        {:type        "text"
-        :placeholder (t prompt-key)
+        :placeholder (or input-default-placeholder (t prompt-key))
         :auto-focus  true
         :value       @input
         :on-change   (fn [e] (reset! input (util/evalue e)))}]]
 
      [:div.item-results-wrap
       (ui/auto-complete
-       (search/fuzzy-search items @input :limit limit :extract-fn :value)
+       (search/fuzzy-search items @input :limit limit :extract-fn extract-fn)
        {:item-render render-item
         :class       "cp__select-results"
         :on-chosen   (fn [x]
-                       (state/close-modal!)
+                       (when close-modal? (state/close-modal!))
                        (on-chosen x))
         :empty-placeholder (empty-placeholder t)})]]))
 
@@ -76,7 +85,7 @@
                            (or (config/demo-graph? url)
                                (= url (state/get-current-repo)))))
                  (map (fn [{:keys [url]}]
-                        {:value (text/get-graph-name-from-path
+                        {:value (text-util/get-graph-name-from-path
                                  ;; TODO: Use helper when a common one is refactored
                                  ;; from components.repo
                                  (if (config/local-db? url)
@@ -99,7 +108,7 @@
                      (remove (fn [{:keys [url]}]
                                (config/demo-graph? url)))
                      (map (fn [{:keys [url] :as original-graph}]
-                            {:value (text/get-graph-name-from-path
+                            {:value (text-util/get-graph-name-from-path
                                      ;; TODO: Use helper when a common one is refactored
                                      ;; from components.repo
                                      (if (config/local-db? url)

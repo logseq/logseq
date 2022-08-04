@@ -25,7 +25,7 @@
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
             ["@logseq/react-tweet-embed" :as react-tweet-embed]
-            ["react-visibility-sensor" :as rvs]
+            ["react-intersection-observer" :as react-intersection-observer]
             [rum.core :as rum]
             [frontend.db-mixins :as db-mixins]
             [frontend.mobile.util :as mobile-util]
@@ -38,7 +38,7 @@
 (def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
-(def visibility-sensor (r/adapt-class (gobj/get rvs "default")))
+(def useInView (gobj/get react-intersection-observer "useInView"))
 
 (defn reset-ios-whole-page-offset!
   []
@@ -65,10 +65,7 @@
                             (plugin-handler/hook-plugin-editor :input-selection-end (bean/->js e)))))))
                 state)}
   [{:keys [on-change] :as props}]
-  (let [skip-composition? (or
-                           (state/sub :editor/show-page-search?)
-                           (state/sub :editor/show-block-search?)
-                           (state/sub :editor/show-template-search?))
+  (let [skip-composition? (state/sub :editor/action)
         on-composition (fn [e]
                          (if skip-composition?
                            (on-change e)
@@ -100,11 +97,11 @@
 ;; public exports
 (rum/defcs dropdown < (mixins/modal :open?)
   [state content-fn modal-content-fn
-   & [{:keys [modal-class z-index]
+   & [{:keys [modal-class z-index trigger-class]
        :or   {z-index 999}}]]
   (let [{:keys [open?]} state
         modal-content (modal-content-fn state)]
-    [:div.relative.ui__dropdown-trigger {:style {:z-index z-index}}
+    [:div.relative.ui__dropdown-trigger {:style {:z-index z-index} :class trigger-class}
      (content-fn state)
      (css-transition
       {:in @open? :timeout 0}
@@ -125,19 +122,21 @@
    (fn [{:keys [close-fn]}]
      [:div.py-1.rounded-md.shadow-xs
       (when links-header links-header)
-      (for [{:keys [options title icon hr hover-detail]} (if (fn? links) (links) links)]
+      (for [{:keys [options title icon hr hover-detail item]} (if (fn? links) (links) links)]
         (let [new-options
               (merge options
-                     {:title hover-detail
+                     {:title    hover-detail
                       :on-click (fn [e]
-                                  (when-let [on-click-fn (:on-click options)]
-                                    (on-click-fn e))
-                                  (close-fn))})
+                                  (when-not (false? (when-let [on-click-fn (:on-click options)]
+                                                      (on-click-fn e)))
+                                    (close-fn)))})
               child (if hr
                       nil
-                      [:div.flex.items-center
-                       (when icon icon)
-                       [:div {:style {:margin-right "8px"}} title]])]
+                      (or item
+                          [:div.flex.items-center
+                           (when icon icon)
+                           [:div {:style {:margin-right "8px"
+                                          :margin-left  "4px"}} title]]))]
           (if hr
             [:hr.my-1 {:key "dropdown-hr"}]
             (rum/with-key
@@ -220,7 +219,7 @@
                                                                      :class color-class}
              content]]
            [:div.ml-4.flex-shrink-0.flex
-            [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150
+            [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150.notification-close-button
              {:on-click (fn []
                           (notification-handler/clear! uid))}
              [:svg.h-5.w-5
@@ -295,15 +294,19 @@
     (when-let [custom-theme (state/sub [:ui/custom-theme (keyword theme)])]
       (when-let [url (:url custom-theme)]
         (js/LSPluginCore.selectTheme (bean/->js custom-theme)
-                                     (bean/->js {:emit false}))
+                                     (bean/->js {:emit true}))
         (state/set-state! :plugin/selected-theme url)))))
 
 (defn setup-system-theme-effect!
   []
   (let [^js schemaMedia (js/window.matchMedia "(prefers-color-scheme: dark)")]
-    (.addEventListener schemaMedia "change" state/sync-system-theme!)
+    (try (.addEventListener schemaMedia "change" state/sync-system-theme!)
+         (catch js/Error _error
+           (.addListener schemaMedia state/sync-system-theme!)))
     (state/sync-system-theme!)
-    #(.removeEventListener schemaMedia "change" state/sync-system-theme!)))
+    #(try (.removeEventListener schemaMedia "change" state/sync-system-theme!)
+          (catch js/Error _error
+            (.removeListener schemaMedia state/sync-system-theme!)))))
 
 (defn set-global-active-keystroke [val]
   (.setAttribute js/document.body "data-active-keystroke" val))
@@ -394,11 +397,13 @@
            get-group-name
            empty-placeholder
            item-render
-           class]}]
+           class
+           header]}]
   (let [current-idx (get state ::current-idx)]
     [:div#ui__ac {:class class}
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
+        (when header header)
         (for [[idx item] (medley/indexed matched)]
           [:<>
            {:key idx}
@@ -634,13 +639,20 @@
                  (let [args (:rum/args state)]
                    (when (true? (:default-collapsed? (last args)))
                      (reset! (get state ::collapsed?) true)))
-                 state)}
-  [state header content {:keys [title-trigger?]}]
+                 state)
+   :did-mount (fn [state]
+                (when-let [f (:init-collapsed (last (:rum/args state)))]
+                  (f (::collapsed? state)))
+                state)}
+  [state header content {:keys [title-trigger? on-mouse-down
+                                _default-collapsed? _init-collapsed]}]
   (let [control? (get state ::control?)
         collapsed? (get state ::collapsed?)
         on-mouse-down (fn [e]
                         (util/stop e)
-                        (swap! collapsed? not))]
+                        (swap! collapsed? not)
+                        (when on-mouse-down
+                          (on-mouse-down @collapsed?)))]
     [:div.flex.flex-col
      [:div.content
       [:div.flex-1.flex-row.foldable-title (cond->
@@ -895,13 +907,22 @@
      label-right]]
    (progress-bar width)])
 
-(rum/defcs lazy-visible-inner < rum/reactive
-  {:init (fn [state]
-           (assoc state
-                  ::ref (atom nil)))}
-  [state visible? content-fn]
+(rum/defc lazy-loading-placeholder
+  []
+  [:div.shadow.rounded-md.p-4.w-full.mx-auto.mb-5.fade-in {:style {:height 88}}
+   [:div.animate-pulse.flex.space-x-4
+    [:div.flex-1.space-y-3.py-1
+     [:div.h-2.bg-base-4.rounded]
+     [:div.space-y-3
+      [:div.grid.grid-cols-3.gap-4
+       [:div.h-2.bg-base-4.rounded.col-span-2]
+       [:div.h-2.bg-base-4.rounded.col-span-1]]
+      [:div.h-2.bg-base-4.rounded]]]]])
+
+(rum/defcs lazy-visible-inner
+  [state visible? content-fn ref]
   [:div.lazy-visibility
-   {:ref #(reset! (::ref state) %)
+   {:ref ref
     :style {:min-height 24}}
    (if visible?
      (when (fn? content-fn)
@@ -909,35 +930,30 @@
         {:ref #(when-let [^js cls (and % (.-classList %))]
                  (.add cls "fade-enter-active"))}
         (content-fn)])
-     [:div.shadow.rounded-md.p-4.w-full.mx-auto.mb-5.fade-in {:style {:height 88}}
-      [:div.animate-pulse.flex.space-x-4
-       [:div.flex-1.space-y-3.py-1
-        [:div.h-2.bg-base-4.rounded]
-        [:div.space-y-3
-         [:div.grid.grid-cols-3.gap-4
-          [:div.h-2.bg-base-4.rounded.col-span-2]
-          [:div.h-2.bg-base-4.rounded.col-span-1]]
-         [:div.h-2.bg-base-4.rounded]]]]])])
+     (lazy-loading-placeholder))])
 
-(rum/defcs lazy-visible <
-  (rum/local false ::visible?)
-  (rum/local true ::active?)
-  [state content-fn sensor-opts {:keys [once?]}]
-  (let [*active? (::active? state)]
-    (if (or (util/mobile?) (mobile-util/native-platform?))
-      (content-fn)
-      (let [*visible? (::visible? state)]
-        (visibility-sensor
-         (merge
-          {:on-change (fn [v]
-                        (reset! *visible? v)
-                        (when (and once? v)
-                          (reset! *active? false)))
-           :partialVisibility true
-           :offset {:top -300
-                    :bottom -300}
-           :scrollCheck true
-           :scrollThrottle 500
-           :active @*active?}
-          sensor-opts)
-         (lazy-visible-inner @*visible? content-fn))))))
+(rum/defc lazy-visible
+  ([content-fn]
+   (lazy-visible content-fn nil))
+  ([content-fn {:keys [trigger-once? _debug-id]
+                :or {trigger-once? false}}]
+   (if (or (util/mobile?) (mobile-util/native-platform?))
+     (content-fn)
+     (let [[visible? set-visible!] (rum/use-state false)
+           [last-changed-time set-last-changed-time!] (rum/use-state nil)
+           inViewState (useInView #js {:rootMargin "100px"
+                                       :triggerOnce trigger-once?
+                                       :onChange (fn [in-view? entry]
+                                                   (let [self-top (.-top (.-boundingClientRect entry))
+                                                         time' (util/time-ms)]
+                                                     (when (and
+                                                            (or (and (not visible?) in-view?)
+                                                                ;; hide only the components below the current top for better ux
+                                                                (and visible? (not in-view?) (> self-top 0)))
+                                                            (or (nil? last-changed-time)
+                                                                (and (some? last-changed-time)
+                                                                     (> (- time' last-changed-time) 50))))
+                                                       (set-last-changed-time! time')
+                                                       (set-visible! in-view?))))})
+           ref (.-ref inViewState)]
+       (lazy-visible-inner visible? content-fn ref)))))

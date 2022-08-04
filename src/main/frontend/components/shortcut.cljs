@@ -7,6 +7,8 @@
             [frontend.ui :as ui]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.highlight :as highlight]
+            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [rum.core :as rum]))
 
 (rum/defcs customize-shortcut-dialog-inner <
@@ -97,10 +99,10 @@
      [:td.text-right [:code "<"]]]
     [:tr
      [:td.text-left (t :help/reference-autocomplete)]
-     [:td.text-right [:code "[[]]"]]]
+     [:td.text-right [:code page-ref/left-and-right-brackets]]]
     [:tr
      [:td.text-left (t :help/block-reference)]
-     [:td.text-right [:code "(())"]]]
+     [:td.text-right [:code block-ref/left-and-right-parens]]]
     [:tr
      [:td.text-left (t :command.editor/open-link-in-sidebar)]
      [:td.text-right (ui/render-keyboard-shortcut ["shift" "click"])]]

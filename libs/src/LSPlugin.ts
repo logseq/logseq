@@ -4,6 +4,9 @@ import EventEmitter from 'eventemitter3'
 import { LSPluginCaller } from './LSPlugin.caller'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
+import { LSPluginRequest } from './modules/LSPlugin.Request'
+
+export type WithOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 
 export type PluginLocalIdentity = string
 
@@ -193,6 +196,7 @@ export interface PageEntity {
   children?: Array<PageEntity>
   format?: 'markdown' | 'org'
   journalDay?: number
+  updatedAt?: number
 }
 
 export type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
@@ -224,7 +228,7 @@ export type SimpleCommandKeybinding = {
 
 export type SettingSchemaDesc = {
   key: string
-  type: 'string' | 'number' | 'boolean' | 'enum' | 'object'
+  type: 'string' | 'number' | 'boolean' | 'enum' | 'object' | 'heading'
   default: string | number | boolean | Array<any> | object | null
   title: string
   description: string // support markdown
@@ -453,6 +457,7 @@ export interface IAppProxy {
   // hook events
   onCurrentGraphChanged: IUserHook
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
+  onThemeChanged: IUserHook<Partial<{name: string, mode: string, pid: string, url: string}>>
   onBlockRendererSlotted: IUserSlotHook<{ uuid: BlockUUID }>
 
   /**
@@ -715,7 +720,7 @@ export interface IEditorProxy extends Record<string, any> {
 
   renamePage: (oldName: string, newName: string) => Promise<void>
 
-  getAllPages: (repo?: string) => Promise<any>
+  getAllPages: (repo?: string) => Promise<PageEntity[] | null>
 
   prependBlockInPage: (
     page: PageIdentity,
@@ -1175,6 +1180,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   Git: IGitProxy
   UI: IUIProxy
 
+  Request: LSPluginRequest
   FileStorage: LSPluginFileStorage
   Experiments: LSPluginExperiments
 }

@@ -22,9 +22,8 @@
             [shadow.resource :as rc]
             [frontend.db.persist :as db-persist]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser :as graph-parser]
             [electron.ipc :as ipc]
-            [clojure.set :as set]
             [clojure.core.async :as async]
             [frontend.encrypt :as encrypt]))
 
@@ -170,7 +169,7 @@
                                          (not= updated-at (:block/created-at page)))))) metadata)
                            (remove nil?))]
              (when (seq metadata)
-               (db/transact! repo metadata))))))
+               (db/transact! repo metadata {:new-graph? true}))))))
      (catch js/Error e
        (log/error :exception e)))))
 
@@ -181,17 +180,18 @@
         files [{:file/path path
                 :file/content content}]
         file-paths [path]]
-    (util/profile "update-pages-metadata!" (load-pages-metadata! repo file-paths files force?))))
+    (load-pages-metadata! repo file-paths files force?)))
 
 (defn- parse-and-load-file!
-  [repo-url file new-graph?]
+  [repo-url file {:keys [new-graph? verbose]}]
   (try
     (file-handler/alter-file repo-url
                              (:file/path file)
                              (:file/content file)
-                             {:new-graph? new-graph?
-                              :re-render-root? false
-                              :from-disk? true})
+                             (merge {:new-graph? new-graph?
+                                     :re-render-root? false
+                                     :from-disk? true}
+                                    (when (some? verbose) {:verbose verbose})))
     (catch :default e
       (state/set-parsing-state! (fn [m]
                                   (update m :failed-parsing-files conj [(:file/path file) e])))))
@@ -215,33 +215,21 @@
 
 (defn- parse-files-and-create-default-files-inner!
   [repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts]
-  (let [support-files (filter
-                       (fn [file]
-                         (let [format (gp-util/get-format (:file/path file))]
-                           (contains? (set/union #{:edn :css} gp-config/mldoc-support-formats) format)))
-                       files)
-        support-files (sort-by :file/path support-files)
-        {journals true non-journals false} (group-by (fn [file] (string/includes? (:file/path file) "journals/")) support-files)
-        {built-in true others false} (group-by (fn [file]
-                                                 (or (string/includes? (:file/path file) "contents.")
-                                                     (string/includes? (:file/path file) ".edn")
-                                                     (string/includes? (:file/path file) "custom.css"))) non-journals)
-        support-files' (concat (reverse journals) built-in others)
-        new-graph? (:new-graph? opts)
+  (let [supported-files (graph-parser/filter-files files)
         delete-data (->> (concat delete-files delete-blocks)
                          (remove nil?))
-        chan (async/to-chan! support-files')
+        chan (async/to-chan! supported-files)
         graph-added-chan (async/promise-chan)]
     (when (seq delete-data) (db/transact! repo-url delete-data))
     (state/set-current-repo! repo-url)
-    (state/set-parsing-state! {:total (count support-files')})
+    (state/set-parsing-state! {:total (count supported-files)})
     ;; Synchronous for tests for not breaking anything
     (if util/node-test?
       (do
-        (doseq [file support-files']
+        (doseq [file supported-files]
           (state/set-parsing-state! (fn [m]
                                       (assoc m :current-parsing-file (:file/path file))))
-          (parse-and-load-file! repo-url file new-graph?))
+          (parse-and-load-file! repo-url file (select-keys opts [:new-graph? :verbose])))
         (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan))
       (async/go-loop []
         (if-let [file (async/<! chan)]
@@ -249,7 +237,7 @@
             (state/set-parsing-state! (fn [m]
                                         (assoc m :current-parsing-file (:file/path file))))
             (async/<! (async/timeout 10))
-            (parse-and-load-file! repo-url file new-graph?)
+            (parse-and-load-file! repo-url file (select-keys opts [:new-graph? :verbose]))
             (recur))
           (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan))))
     graph-added-chan))
@@ -348,23 +336,26 @@
                         (db-persist/delete-graph! url)
                         (search/remove-db! url)
                         (state/delete-repo! repo)
-                        (when graph-exists? (ipc/ipc "graphUnlinked" repo))))]
+                        (when graph-exists? (ipc/ipc "graphUnlinked" repo))
+                        (when (= (state/get-current-repo) url)
+                          (state/set-current-repo! (:url (first (state/get-repos)))))))]
     (when (or (config/local-db? url) (= url "local"))
       (p/let [_ (idb/clear-local-db! url)] ; clear file handles
         (delete-db-f)))))
 
 (defn start-repo-db-if-not-exists!
-  [repo option]
+  [repo]
   (state/set-current-repo! repo)
-  (db/start-db-conn! nil repo option))
+  (db/start-db-conn! repo))
 
-(defn setup-local-repo-if-not-exists!
+(defn- setup-local-repo-if-not-exists-impl!
   []
+  ;; loop query if js/window.pfs is ready, interval 100ms
   (if js/window.pfs
     (let [repo config/local-repo]
       (p/do! (fs/mkdir-if-not-exists (str "/" repo))
              (state/set-current-repo! repo)
-             (db/start-db-conn! nil repo)
+             (db/start-db-conn! repo)
              (when-not config/publishing?
                (let [dummy-notes (t :tutorial/dummy-notes)]
                  (create-dummy-notes-page repo dummy-notes)))
@@ -377,45 +368,55 @@
              (create-custom-theme repo)
              (state/set-db-restoring! false)
              (ui-handler/re-render-root!)))
-    (js/setTimeout setup-local-repo-if-not-exists! 100)))
+    (p/then (p/delay 100) ;; TODO Junyi remove the string
+            setup-local-repo-if-not-exists-impl!)))
+
+(defn setup-local-repo-if-not-exists!
+  []
+  ;; ensure `(state/set-db-restoring! false)` at exit
+  (-> (setup-local-repo-if-not-exists-impl!)
+      (p/timeout 3000)
+      (p/catch (fn []
+                 (state/set-db-restoring! false)
+                 (prn "setup-local-repo failed! timeout 3000ms")))))
 
 (defn restore-and-setup-repo!
-  "Restore the db of a graph from the persisted data, and setup.
-   Create a new conn, or replace the conn in state with a new one.
-   me: optional, identity data, can be retrieved from `(state/get-me)` or `nil`"
-  ([repo]
-   (restore-and-setup-repo! repo (state/get-me)))
-  ([repo me]
-   (p/let [_ (state/set-db-restoring! true)
-           _ (db/restore-graph! repo me)]
-     (file-handler/restore-config! repo false)
-     ;; Don't have to unlisten the old listerner, as it will be destroyed with the conn
-     (db/listen-and-persist! repo)
-     (ui-handler/add-style-if-exists!)
-     (state/set-db-restoring! false))))
+  "Restore the db of a graph from the persisted data, and setup. Create a new
+  conn, or replace the conn in state with a new one."
+  [repo]
+  (p/let [_ (state/set-db-restoring! true)
+          _ (db/restore-graph! repo)]
+         (file-handler/restore-config! repo false)
+         ;; Don't have to unlisten the old listerner, as it will be destroyed with the conn
+         (db/listen-and-persist! repo)
+         (ui-handler/add-style-if-exists!)
+         (state/set-db-restoring! false)))
 
 (defn rebuild-index!
   [url]
-  (when url
-    (search/reset-indice! url)
-    (db/remove-conn! url)
-    (db/clear-query-state!)
-    (-> (p/do! (db-persist/delete-graph! url))
-        (p/catch (fn [error]
-                   (prn "Delete repo failed, error: " error))))))
+  (when-not (state/unlinked-dir? (config/get-repo-dir url))
+    (when url
+      (search/reset-indice! url)
+      (db/remove-conn! url)
+      (db/clear-query-state!)
+      (-> (p/do! (db-persist/delete-graph! url))
+          (p/catch (fn [error]
+                     (prn "Delete repo failed, error: " error)))))))
 
 (defn re-index!
   [nfs-rebuild-index! ok-handler]
-  (route-handler/redirect-to-home!)
   (when-let [repo (state/get-current-repo)]
-    (let [local? (config/local-db? repo)]
-      (if local?
-        (p/let [_ (metadata-handler/set-pages-metadata! repo)]
-          (nfs-rebuild-index! repo ok-handler))
-        (rebuild-index! repo))
-      (js/setTimeout
+    (let [dir (config/get-repo-dir repo)]
+      (when-not (state/unlinked-dir? dir)
        (route-handler/redirect-to-home!)
-       500))))
+       (let [local? (config/local-db? repo)]
+         (if local?
+           (p/let [_ (metadata-handler/set-pages-metadata! repo)]
+             (nfs-rebuild-index! repo ok-handler))
+           (rebuild-index! repo))
+         (js/setTimeout
+          (route-handler/redirect-to-home!)
+          500))))))
 
 (defn persist-db!
   ([]

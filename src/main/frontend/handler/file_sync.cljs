@@ -15,7 +15,7 @@
             [frontend.handler.user :as user]
             [frontend.fs :as fs]))
 
-(def hiding-login&file-sync (not config/dev?))
+(def hiding-login&file-sync (not config/enable-file-sync?))
 (def refresh-file-sync-component (atom false))
 
 (defn graph-txid-exists?

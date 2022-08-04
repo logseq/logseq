@@ -7,6 +7,7 @@
             [frontend.handler.history :as history]
             [frontend.handler.page :as page-handler]
             [frontend.mobile.camera :as mobile-camera]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -30,6 +31,14 @@
     (config-handler/set-config!
      :mobile/toolbar-stats @commands-stats)))
 
+(rum/defc indent-outdent [indent? icon]
+  [:div
+   [:button.bottom-action
+    {:on-mouse-down (fn [e]
+                      (util/stop e)
+                      (editor-handler/indent-outdent indent?))}
+    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
+
 (rum/defc command
   [command-handler icon & [count? event?]]
   [:div
@@ -40,16 +49,7 @@
                         (set-command-stats icon))
                       (if event?
                         (command-handler e)
-                        (command-handler))
-                      (state/set-state! :mobile/toolbar-update-observer (rand-int 1000000)))}
-    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
-
-(rum/defc indent-outdent [indent? icon]
-  [:div
-   [:button.bottom-action
-    {:on-mouse-down (fn [e]
-                      (util/stop e)
-                      (editor-handler/indent-outdent indent?))}
+                        (command-handler)))}
     (ui/icon icon {:style {:fontSize ui/icon-size}})]])
 
 (rum/defc timestamp-submenu
@@ -69,7 +69,6 @@
       {:on-mouse-down (fn [event]
                         (util/stop event)
                         (set-command-stats :calendar)
-                        (state/set-state! :mobile/toolbar-update-observer (rand-int 1000000))
                         (let [target (gdom/getNextElementSibling (.-target event))]
                           (dom/add-class! target "show-submenu")))}
       (ui/icon "calendar" {:style {:fontSize ui/icon-size}})
@@ -115,27 +114,25 @@
 
 (rum/defc mobile-bar < rum/reactive
   []
-  (when (and (state/sub :mobile/toolbar-update-observer)
-             (state/sub :mobile/show-toolbar?))
+  (when (and (state/sub :editor/editing?)
+             (or (state/sub :mobile/show-toolbar?)
+                 (mobile-util/native-ipad?)))
     (when-let [config-toolbar-stats (:mobile/toolbar-stats (state/get-config))]
-      (prn :config-toolbar-stats config-toolbar-stats)
       (reset! commands-stats config-toolbar-stats))
     (let [parent-id (state/get-edit-input-id)
           commands (commands parent-id)
           sorted-commands (sort-by (comp :counts second) > @commands-stats)]
-      (when (and (state/sub :mobile/show-toolbar?)
-                 (state/sub :editor/editing?))
-        [:div#mobile-editor-toolbar.bg-base-2
-         [:div.toolbar-commands
-          (indent-outdent false "indent-decrease")
-          (indent-outdent true "indent-increase")
-          (command (editor-handler/move-up-down true) "arrow-bar-to-up")
-          (command (editor-handler/move-up-down false) "arrow-bar-to-down")
-          (command #(if (state/sub :document/mode?)
-                      (editor-handler/insert-new-block! nil)
-                      (commands/simple-insert! parent-id "\n" {})) "arrow-back")
-          (for [command sorted-commands]
-            ((first command) commands))]
-         [:div.toolbar-hide-keyboard
-          (command #(state/clear-edit!) "keyboard-show")]]))))
+      [:div#mobile-editor-toolbar.bg-base-2
+       [:div.toolbar-commands
+        (indent-outdent false "indent-decrease")
+        (indent-outdent true "indent-increase")
+        (command (editor-handler/move-up-down true) "arrow-bar-to-up")
+        (command (editor-handler/move-up-down false) "arrow-bar-to-down")
+        (command #(if (state/sub :document/mode?)
+                    (editor-handler/insert-new-block! nil)
+                    (commands/simple-insert! parent-id "\n" {})) "arrow-back")
+        (for [command sorted-commands]
+          ((first command) commands))]
+       [:div.toolbar-hide-keyboard
+        (command #(state/clear-edit!) "keyboard-show")]])))
 

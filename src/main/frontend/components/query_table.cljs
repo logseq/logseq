@@ -112,7 +112,8 @@
                                  desc?
                                  result)]
       [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
-                             :style {:width "100%"}}
+                             :style {:width "100%"}
+                             :class (when-not page? "query-table")}
        [:table.table-auto
         [:thead
          [:tr.cursor
@@ -168,8 +169,9 @@
                            (let [vals (for [item value]
                                         (page-cp {} {:block/name item}))]
                              (interpose [:span ", "] vals))
-                           (if (not (string? value))
-                             value
-                             (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
-                               (page-cp {} page)
-                               (inline-text format value)))))))]))]))]]])))
+                           (cond
+                             (boolean? value) (str value)
+                             (string? value) (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
+                                               (page-cp {} page)
+                                               (inline-text format value))
+                             :else value)))))]))]))]]])))

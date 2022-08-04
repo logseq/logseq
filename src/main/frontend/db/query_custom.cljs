@@ -4,22 +4,23 @@
             [frontend.db.query-react :as query-react]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.model :as model]
-            [frontend.db.rules :as rules]
+            [logseq.db.rules :as rules]
             [frontend.util.datalog :as datalog-util]
             [clojure.walk :as walk]))
 
 ;; FIXME: what if users want to query other attributes than block-attrs?
 (defn- replace-star-with-block-attrs!
   [l]
-  (walk/postwalk
-   (fn [f]
-     (if (and (list? f)
-                (= 'pull (first f))
-                (= '?b (second f))
-                (= '[*] (nth f 2)))
-       `(~'pull ~'?b ~model/block-attrs)
-       f))
-   l))
+  (let [block-attrs (butlast model/block-attrs)]
+    (walk/postwalk
+    (fn [f]
+      (if (and (list? f)
+               (= 'pull (first f))
+               (= '?b (second f))
+               (= '[*] (nth f 2)))
+        `(~'pull ~'?b ~block-attrs)
+        f))
+    l)))
 
 (defn- add-rules-to-query
   "Searches query's :where for rules and adds them to query if used"
@@ -58,7 +59,9 @@
   ([query query-opts]
    (custom-query (state/get-current-repo) query query-opts))
   ([repo query query-opts]
-   (let [query' (replace-star-with-block-attrs! query)]
+   (let [query' (replace-star-with-block-attrs! query)
+         query-opts (if (:query-string query-opts) query-opts
+                        (assoc query-opts :query-string (str query)))]
      (if (or (list? (:query query'))
              (not= :find (first (:query query')))) ; dsl query
        (query-dsl/custom-query repo query' query-opts)

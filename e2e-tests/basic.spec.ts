@@ -15,7 +15,7 @@ test('create page and blocks, save to disk', async ({ page, block, graphDir }) =
   await block.waitForBlocks(2)
 
   await page.keyboard.type('second bullet')
-  await block.clickNext()
+  await block.enterNext()
 
   await page.keyboard.type('third bullet')
   expect(await block.indent()).toBe(true)
@@ -120,7 +120,8 @@ test('template', async ({ page, block }) => {
 
   await createRandomPage(page)
 
-  await block.mustFill('template test\ntemplate:: ' + randomTemplate)
+  await block.mustFill('template test\ntemplate:: ')
+  await page.keyboard.type(randomTemplate, {delay: 100})
   await page.keyboard.press('Enter')
   await block.clickNext()
 
@@ -195,12 +196,14 @@ test('auto completion and auto pair', async ({ page, block }) => {
 
   // {{
   await block.mustType('type {{', { toBe: 'type {{}}' })
-
+  await page.waitForTimeout(100);
   // ((
   await block.clickNext()
 
   await block.mustType('type (', { toBe: 'type ()' })
   await block.mustType('(', { toBe: 'type (())' })
+
+  await block.escapeEditing() // escape any popup from `(())`
 
   // [[  #3251
   await block.clickNext()
@@ -223,5 +226,5 @@ test('invalid page props #3944', async ({ page, block }) => {
   await block.mustFill('public:: true\nsize:: 65535')
   await page.press('textarea >> nth=0', 'Enter')
   // Force rendering property block
-  await block.clickNext()
+  await block.enterNext()
 })

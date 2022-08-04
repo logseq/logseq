@@ -15,6 +15,7 @@
 
 .textLayer {
   position: absolute;
+  text-align: initial;
   left: 0;
   top: 0;
   right: 0;
@@ -22,9 +23,14 @@
   overflow: hidden;
   opacity: 0.2;
   line-height: 1;
+  -webkit-text-size-adjust: none;
+     -moz-text-size-adjust: none;
+          text-size-adjust: none;
+  forced-color-adjust: none;
 }
 
-.textLayer > span {
+.textLayer span,
+.textLayer br {
   color: transparent;
   position: absolute;
   white-space: pre;
@@ -32,11 +38,22 @@
   transform-origin: 0% 0%;
 }
 
+/* Only necessary in Google Chrome, see issue 14205, and most unfortunately
+ * the problem doesn't show up in "text" reference tests. */
+.textLayer span.markedContent {
+  top: 0;
+  height: 0;
+}
+
 .textLayer .highlight {
   margin: -1px;
   padding: 1px;
   background-color: rgba(180, 0, 170, 1);
   border-radius: 4px;
+}
+
+.textLayer .highlight.appended {
+  position: initial;
 }
 
 .textLayer .highlight.begin {
@@ -63,6 +80,14 @@
   background: rgba(0, 0, 255, 1);
 }
 
+/* Avoids https://github.com/mozilla/pdf.js/issues/13840 in Chrome */
+.textLayer br::-moz-selection {
+  background: transparent;
+}
+.textLayer br::selection {
+  background: transparent;
+}
+
 .textLayer .endOfContent {
   display: block;
   position: absolute;
@@ -73,14 +98,18 @@
   z-index: -1;
   cursor: default;
   -webkit-user-select: none;
-  -moz-user-select: none;
-  user-select: none;
+     -moz-user-select: none;
+          user-select: none;
 }
 
 .textLayer .endOfContent.active {
   top: 0;
 }
 
+
+:root {
+  --annotation-unfocused-field-background: url("data:image/svg+xml;charset=UTF-8,<svg width='1px' height='1px' xmlns='http://www.w3.org/2000/svg'><rect width='100%' height='100%' style='fill:rgba(0, 54, 255, 0.13);'/></svg>");
+}
 
 .annotationLayer section {
   position: absolute;
@@ -95,6 +124,13 @@
   left: 0;
   width: 100%;
   height: 100%;
+}
+
+.annotationLayer .buttonWidgetAnnotation.pushButton > canvas {
+  position: relative;
+  top: 0;
+  left: 0;
+  z-index: -1;
 }
 
 .annotationLayer .linkAnnotation > a:hover,
@@ -114,7 +150,7 @@
 .annotationLayer .choiceWidgetAnnotation select,
 .annotationLayer .buttonWidgetAnnotation.checkBox input,
 .annotationLayer .buttonWidgetAnnotation.radioButton input {
-  background-color: rgba(0, 54, 255, 0.13);
+  background-image: var(--annotation-unfocused-field-background);
   border: 1px solid transparent;
   box-sizing: border-box;
   font-size: 9px;
@@ -164,6 +200,16 @@
   border: 1px solid transparent;
 }
 
+.annotationLayer .textWidgetAnnotation input :focus,
+.annotationLayer .textWidgetAnnotation textarea :focus,
+.annotationLayer .choiceWidgetAnnotation select :focus,
+.annotationLayer .buttonWidgetAnnotation.checkBox :focus,
+.annotationLayer .buttonWidgetAnnotation.radioButton :focus {
+  background-image: none;
+  background-color: transparent;
+  outline: auto;
+}
+
 .annotationLayer .buttonWidgetAnnotation.checkBox input:checked:before,
 .annotationLayer .buttonWidgetAnnotation.checkBox input:checked:after,
 .annotationLayer .buttonWidgetAnnotation.radioButton input:checked:before {
@@ -209,14 +255,14 @@
    * area, causing horizontal scrolling. We avoid this by extending the width
    * when the element has focus and revert this when it loses focus.
    */
-  width: 115%;
+  width: 103%;
 }
 
 .annotationLayer .buttonWidgetAnnotation.checkBox input,
 .annotationLayer .buttonWidgetAnnotation.radioButton input {
   -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
+     -moz-appearance: none;
+          appearance: none;
   padding: 0;
 }
 
@@ -249,15 +295,19 @@
   display: inline-block;
 }
 
-.annotationLayer .popup span {
+.annotationLayer .popupDate {
   display: inline-block;
   margin-left: 5px;
 }
 
-.annotationLayer .popup p {
+.annotationLayer .popupContent {
   border-top: 1px solid rgba(51, 51, 51, 1);
   margin-top: 2px;
   padding-top: 2px;
+}
+
+.annotationLayer .richText > * {
+  white-space: pre-wrap;
 }
 
 .annotationLayer .highlightAnnotation,
@@ -277,44 +327,108 @@
   cursor: pointer;
 }
 
-* /* Copyright 2021 Mozilla Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+
+:root {
+  --xfa-unfocused-field-background: url("data:image/svg+xml;charset=UTF-8,<svg width='1px' height='1px' xmlns='http://www.w3.org/2000/svg'><rect width='100%' height='100%' style='fill:rgba(0, 54, 255, 0.13);'/></svg>");
+}
+
+.xfaLayer .highlight {
+  margin: -1px;
+  padding: 1px;
+  background-color: rgba(239, 203, 237, 1);
+  border-radius: 4px;
+}
+
+.xfaLayer .highlight.appended {
+  position: initial;
+}
+
+.xfaLayer .highlight.begin {
+  border-radius: 4px 0 0 4px;
+}
+
+.xfaLayer .highlight.end {
+  border-radius: 0 4px 4px 0;
+}
+
+.xfaLayer .highlight.middle {
+  border-radius: 0;
+}
+
+.xfaLayer .highlight.selected {
+  background-color: rgba(203, 223, 203, 1);
+}
+
+.xfaLayer ::-moz-selection {
+  background: rgba(0, 0, 255, 1);
+}
+
+.xfaLayer ::selection {
+  background: rgba(0, 0, 255, 1);
+}
+
+.xfaPage {
+  overflow: hidden;
+  position: relative;
+}
+
+.xfaContentarea {
+  position: absolute;
+}
+
+.xfaPrintOnly {
+  display: none;
+}
+
 .xfaLayer {
   position: absolute;
+  text-align: initial;
   top: 0;
   left: 0;
-  z-index: 200;
   transform-origin: 0 0;
+  line-height: 1.2;
 }
 
 .xfaLayer * {
   color: inherit;
   font: inherit;
-  -webkit-font-kerning: inherit;
+  font-style: inherit;
+  font-weight: inherit;
   font-kerning: inherit;
-  letter-spacing: inherit;
+  letter-spacing: -0.01px;
   text-align: inherit;
   text-decoration: inherit;
-  vertical-align: inherit;
   box-sizing: border-box;
+  background-color: transparent;
+  padding: 0;
+  margin: 0;
+  pointer-events: auto;
+  line-height: inherit;
+}
+
+.xfaLayer div {
+  pointer-events: none;
+}
+
+.xfaLayer svg {
+  pointer-events: none;
+}
+
+.xfaLayer svg * {
+  pointer-events: none;
+}
+
+.xfaLayer a {
+  color: blue;
+}
+
+.xfaRich li {
+  margin-left: 3em;
 }
 
 .xfaFont {
   color: black;
   font-weight: normal;
-  -webkit-font-kerning: none;
   font-kerning: none;
   font-size: 10px;
   font-style: normal;
@@ -323,72 +437,98 @@
   vertical-align: 0;
 }
 
-.xfaDraw {
-  z-index: 200;
+.xfaCaption {
+  overflow: hidden;
+  flex: 0 0 auto;
 }
 
-.xfaExclgroup {
-  z-index: 300;
-}
-
-.xfaField {
-  z-index: 300;
-}
-
-.xfaSubform {
-  z-index: 100;
+.xfaCaptionForCheckButton {
+  overflow: hidden;
+  flex: 1 1 auto;
 }
 
 .xfaLabel {
+  height: 100%;
+  width: 100%;
+}
+
+.xfaLeft {
   display: flex;
   flex-direction: row;
   align-items: center;
+}
+
+.xfaRight {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+}
+
+.xfaLeft > .xfaCaption,
+.xfaLeft > .xfaCaptionForCheckButton,
+.xfaRight > .xfaCaption,
+.xfaRight > .xfaCaptionForCheckButton {
+  max-height: 100%;
+}
+
+.xfaTop {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.xfaBottom {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+}
+
+.xfaTop > .xfaCaption,
+.xfaTop > .xfaCaptionForCheckButton,
+.xfaBottom > .xfaCaption,
+.xfaBottom > .xfaCaptionForCheckButton {
+  width: 100%;
+}
+
+.xfaBorder {
+  background-color: transparent;
+  position: absolute;
+  pointer-events: none;
+}
+
+.xfaWrapped {
   width: 100%;
   height: 100%;
 }
 
-.xfaCaption {
-  flex: 1 1 auto;
+.xfaTextfield:focus,
+.xfaSelect:focus {
+  background-image: none;
+  background-color: transparent;
+  outline: auto;
+  outline-offset: -1px;
+}
+
+.xfaCheckbox:focus,
+.xfaRadio:focus {
+  outline: auto;
 }
 
 .xfaTextfield,
 .xfaSelect {
-  width: 100%;
   height: 100%;
+  width: 100%;
   flex: 1 1 auto;
   border: none;
+  resize: none;
+  background-image: var(--xfa-unfocused-field-background);
 }
 
-.xfaLabel > input[type="checkbox"] {
-  /* Use this trick to make the checkbox invisible but
-       but still focusable. */
-  position: absolute;
-  left: -99999px;
-}
-
-.xfaLabel > input[type="checkbox"]:focus + .xfaCheckboxMark {
-  box-shadow: 0 0 5px rgba(0, 0, 0, 0.7);
-}
-
-.xfaCheckboxMark {
-  cursor: pointer;
-  flex: 0 0 auto;
-  border-style: solid;
-  border-width: 2px;
-  border-color: #8f8f9d;
-  font-size: 10px;
-  line-height: 10px;
-  width: 10px;
-  height: 10px;
-  text-align: center;
-  vertical-align: middle;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-}
-
-.xfaCheckbox:checked + .xfaCheckboxMark::after {
-  content: attr(mark);
+.xfaTop > .xfaTextfield,
+.xfaTop > .xfaSelect,
+.xfaBottom > .xfaTextfield,
+.xfaBottom > .xfaSelect {
+  flex: 0 1 auto;
 }
 
 .xfaButton {
@@ -399,18 +539,66 @@
   text-align: center;
 }
 
-.xfaButton:hover {
-  background: Highlight;
+.xfaLink {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.xfaCheckbox,
+.xfaRadio {
+  width: 100%;
+  height: 100%;
+  flex: 0 0 auto;
+  border: none;
+}
+
+.xfaRich {
+  white-space: pre-wrap;
+  width: 100%;
+  height: 100%;
+}
+
+.xfaImage {
+  -o-object-position: left top;
+     object-position: left top;
+  -o-object-fit: contain;
+     object-fit: contain;
+  width: 100%;
+  height: 100%;
 }
 
 .xfaLrTb,
 .xfaRlTb,
-.xfaTb,
-.xfaPosition {
-  display: block;
+.xfaTb {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.xfaLr {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.xfaRl {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: stretch;
+}
+
+.xfaTb > div {
+  justify-content: left;
 }
 
 .xfaPosition {
+  position: relative;
+}
+
+.xfaArea {
   position: relative;
 }
 
@@ -419,39 +607,73 @@
   align-items: center;
 }
 
-.xfaLrTb > div {
-  display: inline;
-  float: left;
-}
-
-.xfaRlTb > div {
-  display: inline;
-  float: right;
-}
-
 .xfaTable {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
 }
 
 .xfaTable .xfaRow {
   display: flex;
   flex-direction: row;
-  flex: 1 1 auto;
-}
-
-.xfaTable .xfaRow > div {
-  flex: 1 1 auto;
+  align-items: stretch;
 }
 
 .xfaTable .xfaRlRow {
   display: flex;
   flex-direction: row-reverse;
+  align-items: stretch;
   flex: 1;
 }
 
 .xfaTable .xfaRlRow > div {
   flex: 1;
+}
+
+.xfaNonInteractive input,
+.xfaNonInteractive textarea,
+.xfaDisabled input,
+.xfaDisabled textarea,
+.xfaReadOnly input,
+.xfaReadOnly textarea {
+  background: initial;
+}
+
+@media print {
+  .xfaTextfield,
+  .xfaSelect {
+    background: transparent;
+  }
+
+  .xfaSelect {
+    -webkit-appearance: none;
+       -moz-appearance: none;
+            appearance: none;
+    text-indent: 1px;
+    text-overflow: "";
+  }
+}
+
+:root {
+  --viewer-container-height: 0;
+  --pdfViewer-padding-bottom: 0;
+  --page-margin: 1px auto -8px;
+  --page-border: 9px solid transparent;
+  --spreadHorizontalWrapped-margin-LR: -3.5px;
+  --zoom-factor: 1;
+}
+
+@media screen and (forced-colors: active) {
+  :root {
+    --pdfViewer-padding-bottom: 9px;
+    --page-margin: 9px auto 0;
+    --page-border: none;
+    --spreadHorizontalWrapped-margin-LR: 4.5px;
+  }
+}
+
+.pdfViewer {
+  padding-bottom: var(--pdfViewer-padding-bottom);
 }
 
 .pdfViewer .canvasWrapper {
@@ -462,12 +684,20 @@
   direction: ltr;
   width: 816px;
   height: 1056px;
-  margin: 1px auto -8px;
+  margin: var(--page-margin);
   position: relative;
   overflow: visible;
-  border: 9px solid transparent;
+  border: var(--page-border);
   background-clip: content-box;
+  -o-border-image: url(images/shadow.png) 9 9 repeat;
+     border-image: url(images/shadow.png) 9 9 repeat;
   background-color: rgba(255, 255, 255, 1);
+}
+
+.pdfViewer .dummyPage {
+  position: relative;
+  width: 0;
+  height: var(--viewer-container-height);
 }
 
 .pdfViewer.removePageBorders .page {
@@ -505,6 +735,7 @@
 }
 
 .spread .page,
+.spread .dummyPage,
 .pdfViewer.scrollHorizontal .page,
 .pdfViewer.scrollWrapped .page,
 .pdfViewer.scrollHorizontal .spread,
@@ -516,8 +747,8 @@
 .spread .page,
 .pdfViewer.scrollHorizontal .page,
 .pdfViewer.scrollWrapped .page {
-  margin-left: -3.5px;
-  margin-right: -3.5px;
+  margin-left: var(--spreadHorizontalWrapped-margin-LR);
+  margin-right: var(--spreadHorizontalWrapped-margin-LR);
 }
 
 .pdfViewer.removePageBorders .spread .page,
@@ -545,33 +776,26 @@
   bottom: 0;
 }
 
+.pdfViewer .page .loadingIcon.notVisible {
+  background: none;
+}
+
+.pdfViewer.enablePermissions .textLayer span {
+  -webkit-user-select: none !important;
+     -moz-user-select: none !important;
+          user-select: none !important;
+  cursor: not-allowed;
+}
+
 .pdfPresentationMode .pdfViewer {
-  margin-left: 0;
-  margin-right: 0;
+  padding-bottom: 0;
 }
 
-.pdfPresentationMode .pdfViewer .page,
-.pdfPresentationMode .pdfViewer .spread {
-  display: block;
+.pdfPresentationMode .spread {
+  margin: 0;
 }
 
-.pdfPresentationMode .pdfViewer .page,
-.pdfPresentationMode .pdfViewer.removePageBorders .page {
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.pdfPresentationMode:-webkit-full-screen .pdfViewer .page {
-  margin-bottom: 100%;
-  border: 0;
-}
-
-.pdfPresentationMode:-moz-full-screen .pdfViewer .page {
-  margin-bottom: 100%;
-  border: 0;
-}
-
-.pdfPresentationMode:fullscreen .pdfViewer .page {
-  margin-bottom: 100%;
-  border: 0;
+.pdfPresentationMode .pdfViewer .page {
+  margin: 0 auto;
+  border: 2px solid transparent;
 }

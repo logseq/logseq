@@ -6,7 +6,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
-            [frontend.db-schema :as db-schema]
+            [logseq.db.schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.error :as error]
@@ -19,7 +19,6 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.extensions.srs :as srs]
-            [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
             [frontend.idb :as idb]
             [frontend.modules.instrumentation.core :as instrument]
@@ -54,7 +53,10 @@
   (let [f (fn []
             #_:clj-kondo/ignore
             (let [repo (state/get-current-repo)]
-              (when-not (state/nfs-refreshing?)
+              (when (and (not (state/nfs-refreshing?))
+                         (not (contains? (:file/unlinked-dirs @state/state)
+                                         (config/get-repo-dir repo))))
+
                 ;; Don't create the journal file until user writes something
                 (page-handler/create-today-journal!))))]
     (f)
@@ -99,8 +101,10 @@
            (repo-handler/setup-local-repo-if-not-exists!)
 
            :else
-           (state/set-db-restoring! false))
-
+           (state/set-db-restoring! false))))
+      (p/then
+       (fn []
+         (prn "db restored, setting up repo hooks")
          (store-schema!)
 
          (state/pub-event! [:modal/nfs-ask-permission])
@@ -109,7 +113,8 @@
 
          (watch-for-date!)
          (file-handler/watch-for-current-graph-dir!)
-         (state/pub-event! [:graph/ready (state/get-current-repo)])))
+         (state/pub-event! [:graph/ready (state/get-current-repo)])
+         (state/pub-event! [:graph/restored (state/get-current-repo)])))
       (p/catch (fn [error]
                  (log/error :exception error)))))
 
@@ -181,8 +186,6 @@
     (i18n/start)
     (instrument/init)
     (set-network-watcher!)
-
-    (mobile/init!)
 
     (util/indexeddb-check?
      (fn [_error]

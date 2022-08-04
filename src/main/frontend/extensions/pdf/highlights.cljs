@@ -51,6 +51,7 @@
   nil)
 
 (rum/defc pdf-resizer
+  "Watches for changes in the pdf container's width and adjusts the viewer."
   [^js viewer]
   (let [el-ref (rum/use-ref nil)
         adjust-main-size!
@@ -87,8 +88,9 @@
     [:span.extensions__pdf-resizer {:ref el-ref}]))
 
 (rum/defc pdf-highlights-ctx-menu
+  "The contextual menu which appears over a text selection and allows e.g. creating a highlight."
   [^js viewer
-   {:keys [highlight point ^js range]}
+   {:keys [highlight point ^js selection]}
    {:keys [clear-ctx-tip! add-hl! upd-hl! del-hl!]}]
 
   (rum/use-effect!
@@ -120,7 +122,7 @@
                         "copy"
                         (do
                           (util/copy-to-clipboard!
-                            (or (:text content) (.toString range)))
+                            (or (:text content) (pdf-utils/fix-selection-text-breakline (.toString selection))))
                           (pdf-utils/clear-all-selection))
 
                         "link"
@@ -310,6 +312,7 @@
           :on-context-menu open-tip!}]))))
 
 (rum/defc pdf-highlights-region-container
+  "Displays the highlights over a pdf document."
   [^js viewer page-hls ops]
 
   [:div.hls-region-container
@@ -453,9 +456,9 @@
   (let [^js doc (.-ownerDocument el)
         ^js win (.-defaultView doc)
         *mounted (rum/use-ref false)
-        [sel-state, set-sel-state!] (rum/use-state {:range nil :collapsed nil :point nil})
+        [sel-state, set-sel-state!] (rum/use-state {:selection nil :range nil :collapsed nil :point nil})
         [highlights, set-highlights!] (rum/use-state initial-hls)
-        [tip-state, set-tip-state!] (rum/use-state {:highlight nil :vw-pos nil :range nil :point nil :reset-fn nil})
+        [tip-state, set-tip-state!] (rum/use-state {:highlight nil :vw-pos nil :selection nil :point nil :reset-fn nil})
 
         clear-ctx-tip! (rum/use-callback
                          #(let [reset-fn (:reset-fn tip-state)]
@@ -509,7 +512,12 @@
                     (set-sel-state! {:collapsed true})
 
                     (and sel-range (.contains el (.-commonAncestorContainer sel-range)))
-                    (set-sel-state! {:collapsed false :range sel-range :point {:x (.-clientX e) :y (.-clientY e)}}))))
+                    ;; NOTE: `Range.toString()` forgets newlines whereas `Selection.toString()`
+                    ;; preserves them, so we derive text contents from the selection. However
+                    ;; `Document.getSelection()` seems to return the same object across multiple
+                    ;; selection changes, so we use the range as the `use-effect!` dep. Thus,
+                    ;; we need to store both the selection and the range.
+                    (set-sel-state! {:collapsed false :selection selection :range sel-range :point {:x (.-clientX e) :y (.-clientY e)}}))))
 
               fn-selection
               (fn []
@@ -549,8 +557,9 @@
     ;; selection context menu
     (rum/use-effect!
       (fn []
-        (when-let [^js sel-range (and (not (:collapsed sel-state)) (:range sel-state))]
+        (when-let [^js/Range sel-range (and (not (:collapsed sel-state)) (:range sel-state))]
           (let [^js point (:point sel-state)
+                ^js/Selection selection (:selection sel-state)
                 hl-fn #(when-let [page-info (pdf-utils/get-page-from-range sel-range)]
                          (when-let [sel-rects (pdf-utils/get-range-rects<-page-cnt sel-range (:page-el page-info))]
                            (let [page (int (:page-number page-info))
@@ -563,16 +572,15 @@
                              ;;(dd "[Range] ====> [" page-info "]" (.toString sel-range) point)
                              ;;(dd "[Rects] ====>" sel-rects " [Bounding] ====>" bounding)
 
-
                              {:id         nil
                               :page       page
                               :position   sc-pos
-                              :content    {:text (.toString sel-range)}
+                              :content    {:text (pdf-utils/fix-selection-text-breakline (.toString selection))}
                               :properties {}})))]
 
             ;; show ctx menu
             (set-tip-state! {:highlight hl-fn
-                             :range     sel-range
+                             :selection selection
                              :point     point}))))
 
       [(:range sel-state)])
@@ -947,7 +955,6 @@
                                 #js {:container            el
                                      :eventBus             event-bus
                                      :linkService          link-service
-                                     :enhanceTextSelection true
                                      :textLayerMode        2
                                      :removePageBorders    true})]
                (. link-service setDocument pdf-document)
@@ -1054,7 +1061,7 @@
         (let [get-doc$ (fn [^js opts] (.-promise (js/pdfjsLib.getDocument opts)))
               opts {:url           url
                     :ownerDocument js/document
-                    :cMapUrl       "./js/pdfjs/cmaps/"
+                    :cMapUrl       "./cmaps/"
                     ;;:cMapUrl       "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.8.335/cmaps/"
                     :cMapPacked    true}]
 

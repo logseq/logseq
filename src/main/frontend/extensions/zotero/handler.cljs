@@ -8,7 +8,8 @@
             [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defn add [page-name type item]
   (go
@@ -41,8 +42,8 @@
 
 (defn handle-command-zotero
   [id page-name]
-  (state/set-editor-show-zotero! false)
-  (editor-handler/insert-command! id (str "[[" page-name "]]") nil {}))
+  (state/clear-editor-action!)
+  (editor-handler/insert-command! id (page-ref/->page-ref page-name) nil {}))
 
 (defn- create-abstract-note!
   [page-name abstract-note]

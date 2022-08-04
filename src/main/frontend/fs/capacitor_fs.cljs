@@ -2,15 +2,16 @@
   (:require ["@capacitor/filesystem" :refer [Encoding Filesystem]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.encrypt :as encrypt]
             [frontend.fs.protocol :as protocol]
             [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.state :as state]
-            [frontend.db :as db]
-            [frontend.encrypt :as encrypt]))
+            [rum.core :as rum]))
 
 (when (mobile-util/native-ios?)
   (defn iOS-ensure-documents!
@@ -107,6 +108,33 @@
         (= (string/trim decrypted-content) (string/trim db-content)))
       (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
 
+(def backup-dir "logseq/bak")
+(defn- get-backup-dir
+  [repo-dir path ext]
+  (let [relative-path (-> (string/replace path repo-dir "")
+                          (string/replace (str "." ext) ""))]
+    (str repo-dir backup-dir "/" relative-path)))
+
+(defn- truncate-old-versioned-files!
+  "reserve the latest 3 version files"
+  [dir]
+  (p/let [files (readdir dir)
+          files (js->clj files :keywordize-keys true)
+          old-versioned-files (drop 3 (reverse (sort-by :mtime files)))]
+    (mapv (fn [file]
+            (.deleteFile Filesystem (clj->js {:path (js/encodeURI (:uri file))})))
+          old-versioned-files)))
+
+(defn backup-file
+  [repo-dir path content ext]
+  (let [backup-dir (get-backup-dir repo-dir path ext)
+        new-path (str backup-dir "/" (string/replace (.toISOString (js/Date.)) ":" "_") "." ext)]
+    (.writeFile Filesystem (clj->js {:data content
+                                     :path new-path
+                                     :encoding (.-UTF8 Encoding)
+                                     :recursive true}))
+    (truncate-old-versioned-files! backup-dir)))
+
 (defn- write-file-impl!
   [_this repo _dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
   (if skip-compare?
@@ -129,6 +157,7 @@
                                         (js/console.error error)
                                         nil)))
             disk-content (or disk-content "")
+            repo-dir (config/get-local-dir repo)
             ext (string/lower-case (util/get-file-ext path))
             db-content (or old-content (db/get-file repo (js/decodeURI path)) "")
             contents-matched? (contents-matched? disk-content db-content)
@@ -148,7 +177,12 @@
          (p/let [result (.writeFile Filesystem (clj->js {:path path
                                                          :data content
                                                          :encoding (.-UTF8 Encoding)
-                                                         :recursive true}))]
+                                                         :recursive true}))
+                 mtime (-> (js->clj stat :keywordize-keys true)
+                           :mtime)]
+           (when-not contents-matched?
+             (backup-file repo-dir path disk-content ext))
+           (db/set-file-last-modified-at! repo path mtime)
            (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
                              (encrypt/decrypt content)
                              content)]
@@ -165,10 +199,13 @@
   (let [[dir path] (map #(some-> %
                                  js/decodeURI)
                         [dir path])
-        dir (string/replace dir #"/+$" "")
+        dir (some-> dir (string/replace #"/+$" ""))
         path (some-> path (string/replace #"^/+" ""))
         path (cond (nil? path)
                    dir
+
+                   (nil? dir)
+                   path
 
                    (string/starts-with? path dir)
                    path
@@ -183,11 +220,6 @@
   "Check whether `path' is logseq's container `localDocumentsPath' on iOS"
   [path localDocumentsPath]
   (string/includes? path localDocumentsPath))
-
-(defn- iCloud-container-path?
-  "Check whether `path' is logseq's iCloud container path on iOS"
-  [path]
-  (string/includes? path "iCloud~com~logseq~logseq"))
 
 (rum/defc instruction
   []
@@ -209,13 +241,12 @@
 (defrecord Capacitorfs []
   protocol/Fs
   (mkdir! [_this dir]
-    (p/let [result (.mkdir Filesystem
-                           (clj->js
-                            {:path dir
-                             ;; :directory (.-ExternalStorage Directory)
-                             }))]
-      (js/console.log result)
-      result))
+    (-> (.mkdir Filesystem
+                (clj->js
+                 {:path dir}))
+        (p/catch (fn [error]
+                   (log/error :mkdir! {:path dir
+                                       :error error})))))
   (mkdir-recur! [_this dir]
     (p/let [result (.mkdir Filesystem
                            (clj->js
@@ -226,8 +257,19 @@
       result))
   (readdir [_this dir]                  ; recursive
     (readdir dir))
-  (unlink! [_this _repo _path _opts]
-    nil)
+  (unlink! [this repo path _opts]
+    (p/let [path (get-file-path nil path)
+            path (if (string/starts-with? path "file://")
+                   (string/replace-first path "file://" "")
+                   path)
+            repo-dir (config/get-local-dir repo)
+            recycle-dir (str repo-dir config/app-name "/.recycle")
+            file-name (-> (string/replace path repo-dir "")
+                          (string/replace "/" "_")
+                          (string/replace "\\" "_"))
+            new-path (str recycle-dir "/" file-name)]
+      (protocol/mkdir! this recycle-dir)
+      (protocol/rename! this repo path new-path)))
   (rmdir! [_this _dir]
     ;; Too dangerious!!! We'll never implement this.
     nil)
@@ -241,18 +283,6 @@
          content)
        (p/catch (fn [error]
                   (log/error :read-file-failed error))))))
-  (delete-file! [_this repo dir path {:keys [ok-handler error-handler]}]
-    (let [path (get-file-path dir path)]
-      (p/catch
-       (p/let [result (.deleteFile Filesystem
-                                   (clj->js
-                                    {:path path}))]
-         (when ok-handler
-           (ok-handler repo path result)))
-       (fn [error]
-         (if error-handler
-           (error-handler error)
-           (log/error :delete-file-failed error))))))
   (write-file! [this repo dir path content opts]
     (let [path (get-file-path dir path)]
       (p/let [stat (p/catch
@@ -280,16 +310,10 @@
             {:keys [path localDocumentsPath]} (p/chain
                                                (.pickFolder mobile-util/folder-picker)
                                                #(js->clj % :keywordize-keys true))
-            _ (when (mobile-util/native-ios?)
-                (cond
-                  (not (or (local-container-path? path localDocumentsPath)
-                           (iCloud-container-path? path)))
-                  (state/pub-event! [:modal/show-instruction])
-
-                  (iCloud-container-path? path)
-                  (mobile-util/sync-icloud-repo path)
-
-                  :else nil))
+            _ (when (and (mobile-util/native-ios?) 
+                         (not (or (local-container-path? path localDocumentsPath)
+                                  (mobile-util/iCloud-container-path? path))))
+                (state/pub-event! [:modal/show-instruction]))
             files (readdir path)
             files (js->clj files :keywordize-keys true)]
       (into [] (concat [{:path path}] files))))
@@ -298,4 +322,6 @@
   (watch-dir! [_this dir]
     (p/do!
      (.unwatch mobile-util/fs-watcher)
-     (.watch mobile-util/fs-watcher #js {:path dir}))))
+     (.watch mobile-util/fs-watcher #js {:path dir})))
+  (unwatch-dir! [_this _dir]
+    (.unwatch mobile-util/fs-watcher)))

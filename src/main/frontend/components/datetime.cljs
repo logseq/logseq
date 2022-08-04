@@ -10,7 +10,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defonce default-timestamp-value {:time ""
                                   :repeater {}})
@@ -105,8 +106,7 @@
     (when show?
       (reset! show? false)))
   (clear-timestamp!)
-  (state/set-editor-show-date-picker! false)
-  (commands/restore-state false))
+  (commands/restore-state))
 
 (rum/defc time-repeater < rum/reactive
   (mixins/event-mixin
@@ -147,7 +147,7 @@
                                    (contains? #{"deadline" "scheduled"}
                                               (string/lower-case current-command)))
         date (state/sub :date-picker/date)]
-    (when (state/sub :editor/show-date-picker?)
+    (when (= :datepicker (state/sub :editor/action))
       [:div#date-time-picker.flex.flex-row {:on-click (fn [e] (util/stop e))
                                             :on-mouse-down (fn [e] (.stopPropagation e))}
        (ui/datepicker
@@ -161,10 +161,10 @@
              (when-not deadline-or-schedule?
                ;; similar to page reference
                (editor-handler/insert-command! id
-                                               (util/format "[[%s]]" journal)
+                                               (page-ref/->page-ref journal)
                                                format
                                                nil)
-               (state/set-editor-show-date-picker! false)
+               (state/clear-editor-action!)
                (reset! commands/*current-command nil))))})
        (when deadline-or-schedule?
          (time-repeater))])))

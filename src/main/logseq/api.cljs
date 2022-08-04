@@ -617,7 +617,7 @@
   (when-let [page (and page-name-or-uuid (db-model/get-page page-name-or-uuid))]
     (let [page-name (:block/name page)
           ref-blocks (if page-name
-                       (db-model/get-page-referenced-blocks page-name)
+                       (db-model/get-page-referenced-blocks-full page-name)
                        (db-model/get-block-referenced-blocks (:block/uuid page)))
           ref-blocks (and (seq ref-blocks) (into [] ref-blocks))]
       (bean/->js (normalize-keyword-for-json ref-blocks)))))
@@ -807,6 +807,22 @@
   (when-let [^js _pl (and (fn? enhancer) (plugin-handler/get-plugin-inst pid))]
     (plugin-handler/register-extensions-enhancer
       (keyword pid) type {:enhancer enhancer})))
+
+(defonce *request-k (volatile! 0))
+
+(defn ^:export exper_request
+  [pid ^js options]
+  (when-let [^js _pl (plugin-handler/get-plugin-inst pid)]
+    (let [req-id (vreset! *request-k (inc @*request-k))
+          req-cb #(plugin-handler/request-callback _pl req-id %)]
+      (-> (ipc/ipc :httpRequest req-id options)
+          (p/then #(req-cb %))
+          (p/catch #(req-cb %)))
+      req-id)))
+
+(defn ^:export http_request_abort
+  [req-id]
+  (ipc/ipc :httpRequestAbort req-id))
 
 ;; helpers
 (defn ^:export query_element_by_id

@@ -5,6 +5,7 @@
             [frontend.util :as util]
             [shadow.resource :as rc]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [frontend.mobile.util :as mobile-util]))
 
 (goog-define DEV-RELEASE false)
@@ -31,6 +32,15 @@
              "https://logseq-test2.auth.us-east-2.amazoncognito.com/login?client_id=3ji1a0059hspovjq5fhed3uil8&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
 (goog-define API-DOMAIN "api.logseq.com")
 (goog-define WS-URL "wss://og96xf1si7.execute-api.us-east-2.amazonaws.com/production?graphuuid=%s")
+
+;; feature flags
+(goog-define ENABLE-FILE-SYNC false)
+(defonce enable-file-sync? (or ENABLE-FILE-SYNC dev?)) ;; always enable file-sync when dev
+
+(goog-define ENABLE-PLUGINS true)
+(defonce enable-plugins? ENABLE-PLUGINS)
+
+(swap! state/state assoc :plugin/enabled enable-plugins?)
 
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
@@ -63,48 +73,19 @@
     (if dev? path
         (str asset-domain path))))
 
-(defn text-formats
-  []
-  (let [config-formats (some->> (get-in @state/state [:config :text-formats])
-                                (map :keyword)
-                                (set))]
-    (set/union
-     config-formats
-     #{:json :org :md :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :edn :clj :ml :rb :ex :erl :java :php :c :css
-       :excalidraw})))
-
 (def markup-formats
   #{:org :md :markdown :asciidoc :adoc :rst})
 
-(defn img-formats
-  []
-  (let [config-formats (some->> (get-in @state/state [:config :image-formats])
-                                (map :keyword)
-                                (set))]
-    (set/union
-     config-formats
-     #{:gif :svg :jpeg :ico :png :jpg :bmp :webp})))
-
 (defn doc-formats
   []
-  (let [config-formats (some->> (get-in @state/state [:config :document-formats])
-                                (map :keyword)
-                                (set))]
-    (set/union
-     config-formats
-     #{:doc :docx :xls :xlsx :ppt :pptx :one :pdf :epub})))
+  #{:doc :docx :xls :xlsx :ppt :pptx :one :pdf :epub})
 
 (def audio-formats #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
 
-(def media-formats (set/union (img-formats) audio-formats))
+(def media-formats (set/union (gp-config/img-formats) audio-formats))
 
 (def html-render-formats
   #{:adoc :asciidoc})
-
-(defn supported-formats
-  []
-  (set/union (text-formats)
-             (img-formats)))
 
 (def mobile?
   (when-not util/node-test?
@@ -114,13 +95,7 @@
 
 (defn get-block-pattern
   [format]
-  (let [format (or format (state/get-preferred-format))
-        format (keyword format)]
-    (case format
-      :org
-      "*"
-
-      "-")))
+  (gp-config/get-block-pattern (or format (state/get-preferred-format))))
 
 (defn get-hr
   [format]
@@ -149,7 +124,7 @@
       :org
       "/"
       :markdown
-      "_"
+      "*"
       "")))
 (defn get-underline
   [format]
@@ -157,8 +132,8 @@
     (case format
       :org
       "_"
-      :markdown
-      "__"
+      :markdown ;; no underline for markdown
+      ""
       "")))
 (defn get-strike-through
   [format]
@@ -283,10 +258,6 @@
 (def pages-metadata-file "pages-metadata.edn")
 
 (def config-default-content (rc/inline "config.edn"))
-
-(def markers
-  #{"now" "later" "todo" "doing" "done" "wait" "waiting"
-    "canceled" "cancelled" "started" "in-progress"})
 
 (defonce idb-db-prefix "logseq-db/")
 (defonce local-db-prefix "logseq_local_")

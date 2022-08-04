@@ -10,7 +10,8 @@
             [clojure.walk :as walk]
             [logseq.graph-parser.block :as gp-block]
             [datascript.core :as d]
-            [frontend.test.helper :as helper]))
+            [frontend.test.helper :as helper]
+            [clojure.set :as set]))
 
 (def test-db helper/test-db)
 
@@ -69,10 +70,11 @@
 
 (defn transact-tree!
   [tree]
-  (db/transact! test-db (concat [{:db/id 1
-                                  :block/uuid 1
-                                  :block/name "Test page"}]
-                                (build-blocks tree))))
+  (let [blocks (build-blocks tree)]
+    (db/transact! test-db (concat [{:db/id 1
+                                    :block/uuid 1
+                                    :block/name "Test page"}]
+                                  blocks))))
 
 (def tree
   [[22 [[2 [[3 [[4]
@@ -88,6 +90,10 @@
 (defn get-blocks-count
   []
   (count (d/datoms (db/get-db test-db) :avet :block/uuid)))
+
+(defn get-blocks-ids
+  []
+  (set (map :v (d/datoms (db/get-db test-db) :avet :block/uuid))))
 
 (defn get-children
   [id]
@@ -173,6 +179,73 @@
       {:graph test-db}
       (outliner-core/indent-outdent-blocks! [(get-block 6) (get-block 9)] true))
     (is (= [4 5 6 9] (get-children 3)))))
+
+(deftest test-indent-blocks-regression-5604
+  (testing "
+  [22 [[2 [[3
+           [[4]
+            [5]
+            [6 [[7 [[8]]]]]
+            [9 [[10]
+                [11]]]]]]]
+      [12 [[13]                         ; outdents 13, 14, 15
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+  "
+    (transact-tree! tree)
+    (outliner-tx/transact!
+      {:graph test-db}
+      (outliner-core/indent-outdent-blocks! [(get-block 13) (get-block 14) (get-block 15)] false))
+    (is (= [2 12 13 14 15 16] (get-children 22))))
+  (testing "
+  [22 [[2 [[3
+           [[4]
+            [5]
+            [6 [[7 [[8]]]]]
+            [9 [[10]
+                [11]]]]]]]
+      [12 [[13]                         ; outdents 13, 14
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+  "
+    (transact-tree! tree)
+    (outliner-tx/transact!
+      {:graph test-db}
+      (outliner-core/indent-outdent-blocks! [(get-block 13) (get-block 14)] false))
+    (is (= [2 12 13 14 16] (get-children 22)))))
+
+(deftest test-fix-top-level-blocks
+  (testing "no need to fix"
+    (let [blocks [{:block/uuid #uuid "62aa668b-e258-445d-aef6-5510054ff495",
+                   :block/properties {},
+                   :block/left #:db{:id 144},
+                   :block/format :markdown,
+                   :block/level 1,
+                   :block/content "a",
+                   :db/id 145,
+                   :block/parent #:db{:id 144},
+                   :block/page #:db{:id 144}}
+                  {:block/uuid #uuid "62aa668d-65d1-440c-849b-a0717f691193",
+                   :block/properties {},
+                   :block/left #:db{:id 145},
+                   :block/format :markdown,
+                   :block/level 1,
+                   :block/content "b",
+                   :db/id 146,
+                   :block/parent #:db{:id 144},
+                   :block/page #:db{:id 144}}
+                  {:block/uuid #uuid "62aa668e-f866-48ee-b8fe-737e101c548d",
+                   :block/properties {},
+                   :block/left #:db{:id 146},
+                   :block/format :markdown,
+                   :block/level 1,
+                   :block/content "c",
+                   :db/id 147,
+                   :block/parent #:db{:id 144},
+                   :block/page #:db{:id 144}}]]
+      (= blocks (outliner-core/fix-top-level-blocks blocks)))))
 
 (deftest test-outdent-blocks
   (testing "
@@ -321,6 +394,21 @@
              :block/parent #:db{:id 6},
              :block/uuid 9}]))))
 
+(deftest test-get-sorted-block-and-children
+  (testing "get-sorted-block-and-children"
+    (transact-tree! tree)
+    (is (=
+         '(2 3 4 5 6 7 8 9 10 11)
+         (map :block/uuid (tree/get-sorted-block-and-children test-db (:db/id (get-block 2))))))
+
+    (is (=
+         '(22 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17)
+         (map :block/uuid (tree/get-sorted-block-and-children test-db (:db/id (get-block 22))))))
+
+    (is (=
+         '(16 17)
+         (map :block/uuid (tree/get-sorted-block-and-children test-db (:db/id (get-block 16))))))))
+
 ;;; Fuzzy tests
 
 (def init-id (atom 100))
@@ -360,7 +448,9 @@
 (defn transact-random-tree!
   []
   (let [tree (gen-safe-tree)]
-    (transact-tree! tree)))
+    (if (seq tree)
+      (transact-tree! tree)
+      (transact-random-tree!))))
 
 (defn get-datoms
   []
@@ -390,22 +480,25 @@
               (recur (conj result next) next)))
           result)))))
 
-#_(deftest ^:long random-inserts
+(deftest ^:long random-inserts
   (testing "Random inserts"
     (transact-random-tree!)
-    (let [c1 (get-blocks-count)
-          *random-count (atom 0)]
+    (let [c1 (get-blocks-ids)
+          *random-blocks (atom c1)]
       (dotimes [_i 100]
+        ;; (prn "random insert: " i)
         (let [blocks (gen-blocks)]
-          (swap! *random-count + (count blocks))
-          (insert-blocks! blocks (get-random-block))))
-      (let [total (get-blocks-count)]
-        (is (= total (+ c1 @*random-count)))))))
+          (swap! *random-blocks (fn [old]
+                                  (set/union old (set (map :block/uuid blocks)))))
+          (insert-blocks! blocks (get-random-block)))
+        (let [total (get-blocks-count)]
+          (is (= total (count @*random-blocks))))))))
 
-#_(deftest ^:long random-deletes
+(deftest ^:long random-deletes
   (testing "Random deletes"
     (transact-random-tree!)
     (dotimes [_i 100]
+      ;; (prn "Random deletes: " i)
       (insert-blocks! (gen-blocks) (get-random-block))
       (let [blocks (get-random-successive-blocks)]
         (when (seq blocks)
@@ -415,11 +508,13 @@
 (deftest ^:long random-moves
   (testing "Random moves"
     (transact-random-tree!)
-    (let [c1 (get-blocks-count)
-          *random-count (atom 0)]
+    (let [c1 (get-blocks-ids)
+          *random-blocks (atom c1)]
       (dotimes [_i 100]
+        ;; (prn "Random move: " i)
         (let [blocks (gen-blocks)]
-          (swap! *random-count + (count blocks))
+          (swap! *random-blocks (fn [old]
+                                  (set/union old (set (map :block/uuid blocks)))))
           (insert-blocks! blocks (get-random-block)))
         (let [blocks (get-random-successive-blocks)]
           (when (seq blocks)
@@ -427,59 +522,64 @@
               (outliner-tx/transact! {:graph test-db}
                 (outliner-core/move-blocks! blocks target (gen/generate gen/boolean)))
               (let [total (get-blocks-count)]
-                (is (= total (+ c1 @*random-count)))))))))))
+                (is (= total (count @*random-blocks)))))))))))
 
-;; TODO: Enable when not failing as intermittently
-#_(deftest ^:long random-move-up-down
+(deftest ^:long random-move-up-down
   (testing "Random move up down"
     (transact-random-tree!)
-    (let [c1 (get-blocks-count)
-          *random-count (atom 0)]
+    (let [c1 (get-blocks-ids)
+          *random-blocks (atom c1)]
       (dotimes [_i 100]
+        ;; (prn "Random move up/down: " i)
         (let [blocks (gen-blocks)]
-          (swap! *random-count + (count blocks))
+          (swap! *random-blocks (fn [old]
+                                  (set/union old (set (map :block/uuid blocks)))))
           (insert-blocks! blocks (get-random-block)))
         (let [blocks (get-random-successive-blocks)]
           (when (seq blocks)
             (outliner-tx/transact! {:graph test-db}
               (outliner-core/move-blocks-up-down! blocks (gen/generate gen/boolean)))
             (let [total (get-blocks-count)]
-              (is (= total (+ c1 @*random-count))))))))))
+              (is (= total (count @*random-blocks))))))))))
 
-;; TODO: Enable when not failing as intermittently
-#_(deftest ^:long random-indent-outdent
+(deftest ^:long random-indent-outdent
   (testing "Random indent and outdent"
     (transact-random-tree!)
-    (let [c1 (get-blocks-count)
-          *random-count (atom 0)]
+    (let [c1 (get-blocks-ids)
+          *random-blocks (atom c1)]
       (dotimes [_i 100]
-        (let [blocks (gen-blocks)]
-          (swap! *random-count + (count blocks))
-          (insert-blocks! blocks (get-random-block)))
-        (let [blocks (get-random-successive-blocks)]
-          (when (seq blocks)
-            (outliner-tx/transact! {:graph test-db}
-              (outliner-core/indent-outdent-blocks! blocks (gen/generate gen/boolean)))
-            (let [total (get-blocks-count)]
-              (is (= total (+ c1 @*random-count))))))))))
+        ;; (prn "Random move indent/outdent: " i)
+        (let [new-blocks (gen-blocks)]
+          (swap! *random-blocks (fn [old]
+                                  (set/union old (set (map :block/uuid new-blocks)))))
+          (insert-blocks! new-blocks (get-random-block))
+          (let [blocks (get-random-successive-blocks)
+                indent? (gen/generate gen/boolean)]
+            (when (seq blocks)
+              (outliner-tx/transact! {:graph test-db}
+                (outliner-core/indent-outdent-blocks! blocks indent?))
+              (let [total (get-blocks-count)]
+                (is (= total (count @*random-blocks)))))))))))
 
 (deftest ^:long random-mixed-ops
   (testing "Random mixed operations"
     (transact-random-tree!)
-    (let [c1 (get-blocks-count)
-          *random-count (atom 0)
+    (let [c1 (get-blocks-ids)
+          *random-blocks (atom c1)
           ops [
                ;; insert
                (fn []
                  (let [blocks (gen-blocks)]
-                   (swap! *random-count + (count blocks))
+                   (swap! *random-blocks (fn [old]
+                                           (set/union old (set (map :block/uuid blocks)))))
                    (insert-blocks! blocks (get-random-block))))
 
                ;; delete
                (fn []
                  (let [blocks (get-random-successive-blocks)]
                    (when (seq blocks)
-                     (swap! *random-count - (count blocks))
+                     (swap! *random-blocks (fn [old]
+                                             (set/difference old (set (map :block/uuid blocks)))))
                      (outliner-tx/transact! {:graph test-db}
                        (outliner-core/delete-blocks! blocks {})))))
 
@@ -503,15 +603,15 @@
                    (when (seq blocks)
                      (outliner-tx/transact! {:graph test-db}
                        (outliner-core/indent-outdent-blocks! blocks (gen/generate gen/boolean))))))]]
-      (dotimes [_i 500]
+      (dotimes [_i 100]
         ((rand-nth ops)))
       (let [total (get-blocks-count)
             page-id 1]
 
         ;; Invariants:
 
-        ;; 1. created blocks length >= existing blocks + deleted top-level blocks
-        (is (<= total (+ c1 @*random-count)))
+        ;; 1. total blocks <= inserted blocks - deleted block
+        (is (<= total (count @*random-blocks)))
 
         ;; 2. verify page's length + page itself = total blocks
         (is (= (inc (db-model/get-page-blocks-count test-db page-id))
@@ -524,5 +624,12 @@
 
 (comment
   (dotimes [i 5]
-    (cljs.test/run-tests))
+    (do
+      (frontend.test.fixtures/reset-datascript test-db)
+      (cljs.test/run-tests)))
+
+  (do
+    (frontend.test.fixtures/reset-datascript test-db)
+    (cljs.test/test-vars [#'random-deletes]))
+
   )

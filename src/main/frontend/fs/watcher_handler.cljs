@@ -4,24 +4,25 @@
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor]
-            [logseq.graph-parser.extract :as extract]
             [frontend.handler.file :as file-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.util.block-ref :as block-ref]
             [lambdaisland.glogi :as log]
             [electron.ipc :as ipc]
             [promesa.core :as p]
             [frontend.state :as state]
-            [frontend.encrypt :as encrypt]))
+            [frontend.encrypt :as encrypt]
+            [frontend.fs :as fs]))
 
 ;; all IPC paths must be normalized! (via gp-util/path-normalize)
 
 (defn- set-missing-block-ids!
   [content]
   (when (string? content)
-    (doseq [block-id (extract/extract-all-block-refs content)]
+    (doseq [block-id (block-ref/get-all-block-ref-ids content)]
       (when-let [block (try
                          (model/get-block-by-uuid block-id)
                          (catch js/Error _e
@@ -48,10 +49,19 @@
           pages-metadata-path (config/get-pages-metadata-path)
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
-      (when (and (or content (= type "unlink"))
+      (when (and (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
                  (not (encrypt/content-encrypted? content))
                  (not (:encryption/graph-parsing? @state/state)))
         (cond
+          (and (= "unlinkDir" type) dir)
+          (state/pub-event! [:graph/dir-gone dir])
+
+          (and (= "addDir" type) dir)
+          (state/pub-event! [:graph/dir-back repo dir])
+
+          (contains? (:file/unlinked-dirs @state/state) dir)
+          nil
+
           (and (= "add" type)
                (not= (string/trim content) (string/trim db-content))
                (not= path pages-metadata-path))
@@ -76,9 +86,11 @@
 
           (and (= "unlink" type)
                (db/file-exists? repo path))
-          (when-let [page-name (db/get-file-page path)]
-            (println "Delete page: " page-name ", file path: " path ".")
-            (page-handler/delete! page-name #() :delete-file? false))
+          (p/let [dir-exists? (fs/file-exists? dir "")]
+            (when dir-exists?
+              (when-let [page-name (db/get-file-page path)]
+                (println "Delete page: " page-name ", file path: " path ".")
+                (page-handler/delete! page-name #() :delete-file? false))))
 
           (and (contains? #{"add" "change" "unlink"} type)
                (string/ends-with? path "logseq/custom.css"))

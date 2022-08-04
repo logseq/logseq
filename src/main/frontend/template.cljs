@@ -1,19 +1,17 @@
 (ns frontend.template
-  (:require [cljs-time.coerce :as tc]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.date :as date]
             [frontend.state :as state]
-            [frontend.util :as util]))
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defn- variable-rules
   []
-  {"today" (util/format "[[%s]]" (date/today))
-   "yesterday" (util/format "[[%s]]" (date/yesterday))
-   "tomorrow" (util/format "[[%s]]" (date/tomorrow))
+  {"today" (page-ref/->page-ref (date/today))
+   "yesterday" (page-ref/->page-ref (date/yesterday))
+   "tomorrow" (page-ref/->page-ref (date/tomorrow))
    "time" (date/get-current-time)
-   "current page" (util/format "[[%s]]"
-                               (or (state/get-current-page)
-                                   (date/today)))})
+   "current page" (page-ref/->page-ref (or (state/get-current-page)
+                                           (date/today)))})
 
 ;; TODO: programmable
 ;; context information, date, current page
@@ -29,6 +27,8 @@
                        (get (variable-rules) (string/lower-case match))
                        :else
                        (if-let [nld (date/nld-parse match)]
-                         (let [date (tc/to-local-date-time nld)]
-                           (util/format "[[%s]]" (date/journal-name date)))
+                         (let [;; NOTE: This following cannot handle timezones
+                               ;; date (tc/to-local-date-time nld)
+                               date (doto (goog.date.DateTime.) (.setTime (.getTime nld)))]
+                           (page-ref/->page-ref (date/journal-name date)))
                          match))))))

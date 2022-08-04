@@ -82,4 +82,61 @@
 ;;       1 (count a-ref-blocks)
 ;;       (set ["b" "c"]) (set alias-names))))
 
+(deftest get-pages-that-mentioned-page-with-show-journal
+  (load-test-files [{:file/path "journals/2020_08_15.md"
+                     :file/content "link 1 to [[page ONE]] and link to [[generic page]]"}
+                    {:file/path "journals/2020_09_18.md"
+                     :file/content "link 2 to [[page ONE]]"}
+                    {:file/path "pages/page ONE.md"
+                     :file/content "tags:: a tag
+- page one has link to [[Dec 26th, 2020]] journal page"}
+                    {:file/path "pages/a tag.md"
+                     :file/content "i'm a tag"}
+                    {:file/path "pages/generic page.md"
+                     :file/content "- link to page one [[page ONE]]"}])
+
+  (is (= '("sep 18th, 2020" "aug 15th, 2020" "generic page")
+         (map first (model/get-pages-that-mentioned-page test-helper/test-db "page ONE" true)))
+      "Must be 'generic page' + 2 journals")
+
+  (is (= '("generic page")
+         (map first (model/get-pages-that-mentioned-page test-helper/test-db "page ONE" false)))
+      "Must be only 'generic page'")
+
+  (is (= '("aug 15th, 2020")
+         (map first (model/get-pages-that-mentioned-page test-helper/test-db "generic page" true)))
+      "Must show only 'aug 15th, 2020'")
+
+  (is (= '()
+         (map first (model/get-pages-that-mentioned-page test-helper/test-db "generic page" false)))
+      "Must be empty"))
+
+(deftest remove-links-for-each-level-of-the-namespaces
+  (load-test-files [{:file/path "pages/generic page.md"
+                     :file/content "tags:: [[one/two/tree]], one/two
+- link to ns [[one]]
+- link to page one [[page ONE]]"}])
+
+  (is (= '("one/two/tree" "page one")
+         (map second (model/get-pages-relation test-helper/test-db true)))
+      "(get-pages-relation) Must be only ns one/two/tree")
+
+  (is (= '("one/two/tree" "page one")
+         (map second (#'model/remove-nested-namespaces-link [["generic page" "one/two/tree"]
+                                                           ["generic page" "one/two"]
+                                                           ["generic page" "one"]
+                                                           ["generic page" "page one"]])))
+      "(model/remove-nested-namespaces-link) Must be only ns one/two/tree")
+
+  (is (= '("one/two/tree" "one/two" "one")
+         (#'model/get-parents-namespace-list "one/two/tree/four"))
+      "Must be one/two/tree one/two one")
+
+  (is (= '("one/two" "one")
+         (#'model/get-unnecessary-namespaces-name '("one/two/tree" "one" "one/two" "non nested tag" "non nested link")))
+      "Must be  one/two one"))
+
+
+
+
 #_(cljs.test/test-ns 'frontend.db.model-test)
