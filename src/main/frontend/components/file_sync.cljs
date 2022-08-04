@@ -559,7 +559,7 @@
    [:h2
     "Thanks for creating an account! To ensure that our file syncing service runs well when we release it"
     [:br]
-    "to our users we need a little more time testing it. That’s why we decided to first roll it out only for our "
+    "to our users, we need a little more time to test it. That’s why we decided to first roll it out only to our "
     [:br]
     "charitable OpenCollective backers. We can notify you once it becomes available for you."]
 
@@ -587,7 +587,7 @@
     ;; TODO: better words
     [:div.items-center.pt-6.opacity-90.flex.justify-center
      [:span.pr-2 (ui/icon "bell-ringing" {:class "font-semibold"})]
-     [:strong "Logseq sync is still in Beta stage and the plan is not final!"]]
+     [:strong "Logseq Sync is still in Beta and the plan is not final!"]]
 
     [:ul.flex.py-6.px-4
      [:li.it

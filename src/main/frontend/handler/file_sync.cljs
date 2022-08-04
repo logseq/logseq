@@ -15,11 +15,6 @@
 (def hiding-login&file-sync (not config/enable-file-sync?))
 (def refresh-file-sync-component (atom false))
 
-(defn graph-txid-exists?
-  []
-  (let [[_user-uuid graph-uuid _txid] @sync/graphs-txid]
-    (some? graph-uuid)))
-
 (defn current-graph-sync-on?
   []
   (when-let [sync-state (state/sub [:file-sync/sync-state (state/get-current-repo)])]

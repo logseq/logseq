@@ -2380,19 +2380,6 @@
         (notification/show! (t :file-sync/graph-deleted) :warning false))
       result)))
 
-(defn <loop-set-env&keys-when-pwd-map-change
-  [graph-uuid *stopped?]
-  (go-loop []
-    (let [{:keys [change timeout]}
-          (async/alt!
-            (get-graph-pwd-changed-chan graph-uuid) {:change true}
-            (timeout 30000) {:timeout true})]
-      (cond
-        @*stopped? nil
-        change (do (<! (<set-env&keys config/FILE-SYNC-PROD? graph-uuid))
-                   (recur))
-        timeout (recur)))))
-
 (defn sync-start []
   (let [[user-uuid graph-uuid txid] @graphs-txid
         *sync-state                 (atom (sync-state))
