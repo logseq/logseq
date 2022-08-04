@@ -158,7 +158,11 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
           {selectedShapes && selectionBounds && (
             <>
               {showSelection && components.SelectionForeground && (
-                <Container data-type="SelectionForeground" bounds={selectionBounds} zIndex={10002}>
+                <Container
+                  data-type="SelectionForeground"
+                  bounds={selectionBounds}
+                  zIndex={editingShape && selectedShapes.includes(editingShape) ? 1002 : 10002}
+                >
                   <components.SelectionForeground
                     zoom={zoom}
                     shapes={selectedShapes}

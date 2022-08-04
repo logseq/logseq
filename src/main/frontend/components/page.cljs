@@ -785,6 +785,7 @@
   (rum/local :block/updated-at ::sort-by-item)
   (rum/local true ::desc?)
   (rum/local false ::journals)
+  (rum/local false ::whiteboards)
   (rum/local nil ::filter-fn)
   (rum/local 1 ::current-page)
   [state]
@@ -793,6 +794,7 @@
         *sort-by-item (get state ::sort-by-item)
         *desc? (::desc? state)
         *journal? (::journals state)
+        *whiteboard? (::whiteboards state)
         *results (::results state)
         *results-all (::results-all state)
         *checks (::checks state)
@@ -845,16 +847,19 @@
                                                              :block/backlinks (count (:block/_refs (db/entity (:db/id page))))
                                                              :block/idx idx))))]
            (reset! *filter-fn
-                   (memoize (fn [sort-by-item desc? journal?]
+                   (memoize (fn [sort-by-item desc? journal? whiteboard?]
                               (->> pages
-                                   (filter #(or (boolean journal?)
-                                                (= false (boolean (:block/journal? %)))))
+                                   (filter #(and
+                                             (or (boolean journal?)
+                                                 (= false (boolean (:block/journal? %))))
+                                             (or (boolean whiteboard?)
+                                                 (= false (boolean (:block/whiteboard? %))))))
                                    (sort-pages-by sort-by-item desc?)))))
            (reset! *pages pages)))
 
        ;; filter results
        (when @*filter-fn
-         (let [pages (@*filter-fn @*sort-by-item @*desc? @*journal?)
+         (let [pages (@*filter-fn @*sort-by-item @*desc? @*journal? @*whiteboard?)
 
                ;; search key
                pages (if-not (string/blank? @*search-key)
@@ -921,6 +926,14 @@
                   (ui/icon "x")])])]]
 
           [:div.r.flex.items-center.justify-between
+           [:div
+            (ui/tippy
+             {:html  [:small (str (t :page/show-whiteboards) " ?")]
+              :arrow true}
+             [:a.button.whiteboard
+              {:class    (util/classnames [{:active (boolean @*whiteboard?)}])
+               :on-click #(reset! *whiteboard? (not @*whiteboard?))}
+              (ui/icon "artboard" {:style {:fontSize ui/icon-size}})])]
            [:div
             (ui/tippy
              {:html  [:small (str (t :page/show-journals) " ?")]

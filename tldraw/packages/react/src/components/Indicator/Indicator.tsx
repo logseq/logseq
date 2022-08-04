@@ -34,7 +34,7 @@ export const Indicator = observer(function Shape({
       bounds={bounds}
       rotation={rotation}
       scale={scale}
-      zIndex={10000}
+      zIndex={isEditing ? 1000 : 10000}
     >
       <SVGContainer>
         <g className={`tl-indicator-container ${isSelected ? 'tl-selected' : 'tl-hovered'}`}>
