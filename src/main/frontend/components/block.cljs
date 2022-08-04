@@ -3228,9 +3228,8 @@
   (rum/local nil ::loading?)
   {:init (fn [state]
            (assoc state ::id (str (random-uuid))))}
-  [state config flat-blocks blocks->vec-tree]
+  [state config blocks flat-blocks]
   (let [db-id (:db/id config)
-        blocks (blocks->vec-tree flat-blocks)
         *loading? (::loading? state)]
     (if-not db-id
       (block-list config blocks)
@@ -3264,9 +3263,7 @@
                    "")})]))))
 
 (rum/defcs blocks-container <
-  {:init (fn [state]
-           (assoc state
-                  ::init-blocks-container-id (atom nil)))}
+  {:init (fn [state] (assoc state ::init-blocks-container-id (atom nil)))}
   [state blocks config]
   (let [*init-blocks-container-id (::init-blocks-container-id state)
         blocks-container-id (if @*init-blocks-container-id
@@ -3277,12 +3274,17 @@
         config (assoc config :blocks-container-id blocks-container-id)
         doc-mode? (:document/mode? config)]
     (when (seq blocks)
-      (let [blocks->vec-tree #(if (custom-query-or-ref? config) % (tree/blocks->vec-tree % (:id config)))
-            flat-blocks (vec blocks)
+      (let [flat-blocks (vec blocks)
+            query-or-ref? (custom-query-or-ref? config)
+            id (if (:navigated? config) @(:navigating-block config) (:id config))
+            blocks' (if (or (and query-or-ref? (:navigated? config))
+                            (not query-or-ref?))
+                      (tree/blocks->vec-tree flat-blocks id)
+                      flat-blocks)
             config (assoc config :start-time (util/time-ms))]
         [:div.blocks-container.flex-1
          {:class (when doc-mode? "document-mode")}
-         (lazy-blocks config flat-blocks blocks->vec-tree)]))))
+         (lazy-blocks config blocks' flat-blocks)]))))
 
 (rum/defcs breadcrumb-with-container < rum/reactive
   {:init (fn [state]
@@ -3311,7 +3313,8 @@
                     :navigating-block *navigating-block}))
      (blocks-container blocks (assoc config
                                      :breadcrumb-show? false
-                                     :navigating-block *navigating-block))]))
+                                     :navigating-block *navigating-block
+                                     :navigated? navigated?))]))
 
 ;; headers to hiccup
 (defn ->hiccup
