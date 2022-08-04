@@ -2874,7 +2874,7 @@
           (when (and (not editor-action) (not non-enter-processed?))
             (cond
               ;; When you type text inside square brackets
-              (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp"} k))
+              (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp" "Escape"} k))
                    (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
               (let [orig-pos (cursor/get-caret-pos input)
                     value (gobj/get input "value")
