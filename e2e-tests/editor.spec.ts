@@ -246,3 +246,27 @@ test('undo and redo after starting an action should not destroy text #6267', asy
   }
   await expect(page.locator('text="text2"')).toHaveCount(1)
 })
+
+test('undo after starting an action should close the action menu #6269', async ({ page, block }) => {
+  for (const [commandTrigger, modalName] of [['/', 'commands'], ['[[', 'page-search']]) {
+    await createRandomPage(page)
+
+    // Open the action modal
+    await block.mustType('text1 ')
+    await page.waitForTimeout(550)
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+    }
+    await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
+
+    // Undo, removing "/today", and closing the action modal
+    if (IsMac) {
+      await page.keyboard.press('Meta+z')
+    } else {
+      await page.keyboard.press('Control+z')
+    }
+    await page.waitForTimeout(100)
+    await expect(page.locator('text="/today"')).toHaveCount(0)
+    await expect(page.locator(`[data-modal-name="${modalName}"]`)).not.toBeVisible()
+  }
+})
