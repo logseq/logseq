@@ -75,10 +75,16 @@
                     :block/original-name original-page-name
                     :block/whiteboard? true
                     :block/properties (dissoc tldr-data :shapes)}
+        ;; todo: use get-paginated-blocks instead?
         existing-blocks (model/get-page-blocks-no-cache page-name)
         shapes (:shapes tldr-data)
         blocks (mapv #(shape->block % page-name) shapes)
-        block-ids (set (map :block/uuid blocks))
+        block-ids (->> shapes
+                       (map (fn [shape] (when (= (:blockType shape) "B")
+                                          (uuid (:pageId shape)))))
+                       (concat (map :block/uuid blocks))
+                       (remove nil?)
+                       (set))
         delete-shapes (filter (fn [shape]
                                 (not (block-ids (:block/uuid shape))))
                               existing-blocks)
@@ -166,3 +172,14 @@
         point (js->clj (.. (get-tldr-app) -viewport (getPagePoint #js[client-x client-y])))
         shape (->logseq-portal-shape block-id point)]
     (.createShapes api (clj->js shape))))
+
+(defn add-new-block!
+  [page-name content]
+  (let [uuid (d/squuid)
+        tx {:block/uuid uuid
+            :block/content (or content "")
+            :block/format :markdown ; fixme
+            :block/page {:block/name (util/page-name-sanity-lc page-name)}
+            :block/parent {:block/name page-name}}]
+    (db-utils/transact! [tx])
+    uuid))

@@ -146,7 +146,10 @@ export default function App() {
           Breadcrumb,
           PageNameLink,
         }}
-        searchHandler={q => (q ? list : [])}
+        handlers={{
+          search: q => (q ? list : []),
+          addNewBlock: q => q,
+        }}
         model={documentModel}
         onPersist={onPersist}
       />

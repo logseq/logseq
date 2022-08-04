@@ -30,17 +30,23 @@ interface LogseqQuickSearchProps {
 const LogseqQuickSearch = observer(({ onChange }: LogseqQuickSearchProps) => {
   const [q, setQ] = React.useState('')
   const rInput = React.useRef<HTMLInputElement>(null)
-  const { search } = React.useContext(LogseqContext)
+  const { handlers } = React.useContext(LogseqContext)
 
-  const commitChange = React.useCallback((id: string) => {
-    setQ(id)
+  const finishCreating = React.useCallback((id: string) => {
     onChange(id)
     rInput.current?.blur()
   }, [])
 
+  const onAddBlock = React.useCallback((content: string) => {
+    const uuid = handlers?.addNewBlock(content)
+    if (uuid) {
+      finishCreating(uuid)
+    }
+  }, [])
+
   const options = React.useMemo(() => {
-    return search?.(q)
-  }, [search, q])
+    return handlers?.search?.(q)
+  }, [handlers?.search, q])
 
   React.useEffect(() => {
     // autofocus seems not to be working
@@ -62,17 +68,19 @@ const LogseqQuickSearch = observer(({ onChange }: LogseqQuickSearchProps) => {
             onChange={q => setQ(q.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter') {
-                commitChange(q)
+                finishCreating(q)
               }
             }}
             className="tl-quick-search-input text-input"
           />
         </div>
       </div>
-
       <div className="tl-quick-search-options">
+        <div className="tl-quick-search-option" onClick={() => onAddBlock(q)}>
+          New block{q.length > 0 ? `: ${q}` : ''}
+        </div>
         {options?.map(name => (
-          <div key={name} className="tl-quick-search-option" onClick={() => commitChange(name)}>
+          <div key={name} className="tl-quick-search-option" onClick={() => finishCreating(name)}>
             {name}
           </div>
         ))}
@@ -372,10 +380,12 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     const onPageNameChanged = React.useCallback((id: string) => {
       this.initialHeightCalculated = false
+      const blockType = validUUID(id) ? 'B' : 'P'
       this.update({
         pageId: id,
-        size: [600, 320],
-        blockType: validUUID(id) ? 'B' : 'P',
+        size: [400, 320],
+        blockType: blockType,
+        compact: blockType === 'B',
       })
       app.selectTool('select')
       app.history.resume()

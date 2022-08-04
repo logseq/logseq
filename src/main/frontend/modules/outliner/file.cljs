@@ -21,9 +21,11 @@
   []
   (empty? @write-chan-batch-buf))
 
-(def blocks-pull-keys-with-persisted-ids
+(def whiteboard-blocks-pull-keys-with-persisted-ids
   '[:block/properties
     :block/uuid
+    :block/content
+    :block/format
     {:block/page      [:block/name :block/uuid]}
     {:block/left      [:block/name :block/uuid]}
     {:block/parent    [:block/name :block/uuid]}
@@ -33,8 +35,11 @@
   [repo page-db-id]
   (let [page-block (db/pull repo '[*] page-db-id)
         whiteboard? (:block/whiteboard? page-block)
-        blocks (model/get-page-blocks-no-cache repo (:block/name page-block)
-                                               {:pull-keys (if whiteboard? blocks-pull-keys-with-persisted-ids '[*])})]
+        blocks (model/get-page-blocks-no-cache
+                repo (:block/name page-block)
+                {:pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])})
+        blocks (map #(if (get-in % [:block/properties :ls-type] false)
+                       (dissoc % :block/content :block/format) %) blocks)]
     (when-not (and (= 1 (count blocks))
                    (string/blank? (:block/content (first blocks)))
                    (nil? (:block/file page-block)))

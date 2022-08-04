@@ -193,7 +193,9 @@
   [shape]
   {:block/content (case (:type shape)
                     "text" (:text shape)
-                    "logseq-portal" (str "[[" (:pageId shape) "]]")
+                    "logseq-portal" (if (= (:blockType shape) "P")
+                                      (str "[[" (:pageId shape) "]]")
+                                      (str "((" (:pageId shape) "))"))
                     "line" (str "whiteboard arrow" (when-let [label (:label shape)] (str ": " label)))
                     (str "whiteboard " (:type shape)))})
 
@@ -218,7 +220,7 @@
         page-entity (build-page-entity {} file page-name page-name nil options)
         page-block (merge page-block page-entity (when-not (:block/uuid page-block) {:block/uuid (d/squuid)}))
         blocks (->> blocks
-                    (map #(merge % {:block/level 1
+                    (map #(merge % {:block/level 1 ;; fixme
                                     :block/uuid (or (:block/uuid %)
                                                     (gp-block/get-custom-id-or-new-id (:block/properties %)))}
                                  (with-whiteboard-block-props %)))

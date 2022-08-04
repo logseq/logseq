@@ -6,7 +6,7 @@ import {
   AppProvider,
   TLReactCallbacks,
   TLReactComponents,
-  TLReactToolConstructor
+  TLReactToolConstructor,
 } from '@tldraw/react'
 import * as React from 'react'
 import { AppUI } from '~components/AppUI'
@@ -22,8 +22,9 @@ import {
   LineTool,
   LogseqPortalTool,
   NuEraseTool,
-  PencilTool, TextTool,
-  YouTubeTool
+  PencilTool,
+  TextTool,
+  YouTubeTool,
 } from '~lib/tools'
 
 const components: TLReactComponents<Shape> = {
@@ -51,13 +52,16 @@ interface LogseqTldrawProps {
     Breadcrumb: React.FC
     PageNameLink: React.FC
   }
-  searchHandler: (query: string) => string[]
+  handlers: {
+    search: (query: string) => string[]
+    addNewBlock: (content: string) => string
+  }
   model?: TLDocumentModel<Shape>
   onMount?: TLReactCallbacks<Shape>['onMount']
   onPersist?: TLReactCallbacks<Shape>['onPersist']
 }
 
-export const App = function App({ searchHandler, ...props }: LogseqTldrawProps): JSX.Element {
+export const App = function App(props: LogseqTldrawProps): JSX.Element {
   const onFileDrop = useFileDrop()
   const onPaste = usePaste()
   const onQuickAdd = useQuickAdd()
@@ -71,7 +75,12 @@ export const App = function App({ searchHandler, ...props }: LogseqTldrawProps):
   }, [])
 
   return (
-    <LogseqContext.Provider value={{ renderers, search: searchHandler }}>
+    <LogseqContext.Provider
+      value={{
+        renderers,
+        handlers: props.handlers,
+      }}
+    >
       <AppProvider
         Shapes={shapes}
         Tools={tools}

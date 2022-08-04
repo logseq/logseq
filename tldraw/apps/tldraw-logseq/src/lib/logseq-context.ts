@@ -15,6 +15,9 @@ export const LogseqContext = React.createContext<
         pageName: string
       }>
     }
-    search: (query: string) => string[]
+    handlers: {
+      search: (query: string) => string[]
+      addNewBlock: (content: string) => string // returns the new block uuid
+    }
   }>
 >({})

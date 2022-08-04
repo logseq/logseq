@@ -62,7 +62,9 @@
                             :Block block-cp
                             :Breadcrumb breadcrumb
                             :PageNameLink page-name-link}
-                :searchHandler (comp clj->js vec search/page-search)
+                :handlers (clj->js {:search (comp clj->js vec search/page-search)
+                                    :addNewBlock (fn [content]
+                                                   (str (whiteboard-handler/add-new-block! name content)))})
                 :onMount (fn [app] (set-tln ^js app))
                 :onPersist (fn [app]
                              (let [document (gobj/get app "serialized")]
