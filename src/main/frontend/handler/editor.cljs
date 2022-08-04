@@ -1576,7 +1576,7 @@
   [input before end]
   (when input
     (let [value (gobj/get input "value")
-          pos (dec (cursor/pos input))]
+          pos (cursor/pos input)]
       (when (>= pos 0)
         (text-util/wrapped-by? value pos before end)))))
 
@@ -1856,8 +1856,7 @@
       (and
        (not= :property-search (state/get-editor-action))
        (let [{:keys [line start-pos]} (text-util/get-current-line-by-pos (.-value input) (dec pos))]
-         (text-util/wrapped-by? line (dec (- pos start-pos)) "" gp-property/colons)))
-
+         (text-util/wrapped-by? line (- pos start-pos) "" gp-property/colons)))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (state/set-editor-action! :property-search))
