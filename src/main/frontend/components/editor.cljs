@@ -331,7 +331,7 @@
                  (on-submit command @input-value pos)))]))))))
 
 (rum/defc absolute-modal < rum/static
-  [cp set-default-width? {:keys [top left rect]}]
+  [cp modal-name set-default-width? {:keys [top left rect]}]
   (let [max-height 370
         max-width 300
         offset-top 24
@@ -376,6 +376,7 @@
                    {:left (if (or (nil? y-diff) (and y-diff (= y-diff 0))) left 0)})))]
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
      {:ref *el
+      :data-modal-name modal-name
       :class (if y-overflow-vh? "is-overflow-vh-y" "")
       :on-mouse-down (fn [e]
                        (.stopPropagation e))
@@ -383,13 +384,13 @@
      cp]))
 
 (rum/defc transition-cp < rum/reactive
-  [cp set-default-width?]
+  [cp modal-name set-default-width?]
   (when-let [pos (:pos (state/sub :editor/action-data))]
     (ui/css-transition
      {:class-names "fade"
       :timeout     {:enter 500
                     :exit  300}}
-     (absolute-modal cp set-default-width? pos))))
+     (absolute-modal cp modal-name set-default-width? pos))))
 
 (rum/defc image-uploader < rum/reactive
   [id format]
@@ -408,6 +409,7 @@
         [:div.flex.flex-row.align-center.rounded-md.shadow-sm.bg-base-2.px-1.py-1
          (ui/loading
           (util/format "Uploading %s%" (util/format "%2d" processing)))]
+        "upload-file"
         false)))])
 
 (defn- set-up-key-down!
@@ -506,10 +508,10 @@
     (mock-textarea content)))
 
 (rum/defc animated-modal < rum/reactive
-  [key component set-default-width?]
+  [modal-name component set-default-width?]
   (when-let [pos (:pos (state/get-editor-action-data))]
     (ui/css-transition
-     {:key key
+     {:key modal-name
       :class-names {:enter "origin-top-left opacity-0 transform scale-95"
                     :enter-done "origin-top-left transition opacity-100 transform scale-100"
                     :exit "origin-top-left transition opacity-0 transform scale-95"}
@@ -518,6 +520,7 @@
      (fn [_]
        (absolute-modal
         component
+        modal-name
         set-default-width?
         pos)))))
 
