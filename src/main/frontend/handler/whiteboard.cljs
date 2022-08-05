@@ -76,7 +76,10 @@
                     :block/whiteboard? true
                     :block/properties (dissoc tldr-data :shapes)}
         ;; todo: use get-paginated-blocks instead?
-        existing-blocks (model/get-page-blocks-no-cache page-name)
+        existing-blocks (model/get-page-blocks-no-cache (state/get-current-repo) 
+                                                        page-name
+                                                        {:pull-keys '[:block/uuid
+                                                                      {:block/parent [:block/uuid]}]})
         shapes (:shapes tldr-data)
         blocks (mapv #(shape->block % page-name) shapes)
         block-ids (->> shapes
