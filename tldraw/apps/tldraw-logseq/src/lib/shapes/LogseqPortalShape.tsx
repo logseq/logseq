@@ -311,7 +311,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     React.useEffect(() => {
       if (this.shouldAutoResizeHeight()) {
-        const newHeight = innerHeight + this.getHeaderHeight()
+        const newHeight = innerHeight + this.getHeaderHeight() + 2
         if (innerHeight && newHeight !== this.props.size[1]) {
           this.update({
             size: [this.props.size[0], newHeight],
