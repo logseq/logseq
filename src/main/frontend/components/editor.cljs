@@ -23,6 +23,7 @@
             [frontend.util.cursor :as cursor]
             [frontend.util.keycode :as keycode]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.property :as gp-property]
             [goog.dom :as gdom]
             [promesa.core :as p]
             [react-draggable]
@@ -262,7 +263,8 @@
                (not (string/blank? property)))
       (let [current-pos (cursor/pos input)
             edit-content (state/sub [:editor/content id])
-            start-idx (string/last-index-of (subs edit-content 0 current-pos) "::")
+            start-idx (string/last-index-of (subs edit-content 0 current-pos)
+                                            gp-property/colons)
             q (or
                (when (>= current-pos (+ start-idx 2))
                  (subs edit-content (+ start-idx 2) current-pos))

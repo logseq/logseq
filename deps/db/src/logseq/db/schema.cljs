@@ -84,7 +84,9 @@
    :block/journal-day {}
    ;; page's namespace
    :block/namespace {:db/valueType :db.type/ref}
-
+   ;; macros in block
+   :block/macros {:db/valueType :db.type/ref
+                  :db/cardinality :db.cardinality/many}
    ;; block's file
    :block/file {:db/valueType :db.type/ref}
 

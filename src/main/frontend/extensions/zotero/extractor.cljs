@@ -5,7 +5,8 @@
             [frontend.extensions.html-parser :as html-parser]
             [frontend.extensions.zotero.schema :as schema]
             [frontend.extensions.zotero.setting :as setting]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defn item-type [item] (-> item :data :item-type))
 
@@ -64,8 +65,8 @@
 
 (defn date->journal [item]
   (if-let [date (-> item :meta :parsed-date
-                      (date/journal-name-s))]
-    (util/format "[[%s]]" date)
+                    (date/journal-name-s))]
+    (page-ref/->page-ref date)
     (-> item :data :date)))
 
 (defn wrap-in-doublequotes [m]
@@ -129,7 +130,7 @@
                                 :authors authors
                                 :tags tags
                                 :date date
-                                :item-type (util/format "[[%s]]" type))
+                                :item-type (page-ref/->page-ref type))
                          (dissoc :creators :abstract-note)
                          (rename-keys {:title :original-title})
                          (assoc :title (page-name item)))]
@@ -146,11 +147,11 @@
   (util/format "{{zotero-imported-file %s, %s}}" item-key (pr-str filename)))
 
 (defn zotero-linked-file-macro [path]
-  (util/format "{{zotero-linked-file %s}}" (pr-str path)))
+  (util/format "{{zotero-linked-file %s}}" (pr-str (util/node-path.basename path))))
 
 (defmethod extract "attachment"
   [item]
-  (let [{:keys [title url link-mode path content-type filename]} (-> item :data)]
+  (let [{:keys [title url link-mode path filename]} (-> item :data)]
     (case link-mode
       "imported_file"
       (str
@@ -158,15 +159,10 @@
        " "
        (zotero-imported-file-macro (item-key item) filename))
       "linked_file"
-      (if (string/starts-with? path "attachments:")
-        (str
-         (markdown-link title (local-link item))
-         " "
-         (zotero-linked-file-macro path))
-        (let [path (string/replace path " " "%20")]
-          (if (= content-type "application/pdf")
-            (markdown-link title (str "file://" path) true)
-            (markdown-link title (str "file://" path)))))
+      (str
+       (markdown-link title (local-link item))
+       " "
+       (zotero-linked-file-macro path))
       "imported_url"
       (str
        (markdown-link title url)

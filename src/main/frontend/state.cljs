@@ -121,6 +121,7 @@
      :db/last-transact-time                 {}
      ;; whether database is persisted
      :db/persisted?                         {}
+
      :cursor-range                          nil
 
      :selection/mode                        false
@@ -151,7 +152,7 @@
      :mobile/show-toolbar?                  false
      :mobile/show-recording-bar?            false
      :mobile/show-tabbar?                   false
-     
+
      ;; plugin
      :plugin/enabled                        (and (util/electron?)
                                                  ;; true false :theme-only
@@ -1648,11 +1649,10 @@
   []
   (:modal/id @state))
 
-(defn edit-in-query-component
+(defn edit-in-query-or-refs-component
   []
-  (and (editing?)
-       ;; config
-       (:custom-query? (last (get-editor-args)))))
+  (let [config (last (get-editor-args))]
+    (or (:custom-query? config) (:ref? config))))
 
 (defn set-auth-id-token
   [id-token]

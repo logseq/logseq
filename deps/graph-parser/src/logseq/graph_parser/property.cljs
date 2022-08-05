@@ -6,6 +6,8 @@
             [goog.string :as gstring]
             [goog.string.format]))
 
+(def colons "Property delimiter for markdown mode" "::")
+
 (defn properties-ast?
   [block]
   (and
@@ -45,7 +47,7 @@
    #{:id :custom-id :background-color :background_color :heading :collapsed
      :created-at :updated-at :last-modified-at :created_at :last_modified_at
      :query-table :query-properties :query-sort-by :query-sort-desc :ls-type
-     :hl-type :hl-page :hl-stamp}
+     :hl-type :hl-page :hl-stamp :logseq.macro-name :logseq.macro-arguments}
    (set (map keyword markers))
    @built-in-extended-properties))
 
@@ -77,7 +79,7 @@
                                            compare-k (keyword (string/lower-case k))
                                            k (if (contains? #{:id :custom_id :custom-id} compare-k) "id" k)
                                            k (if (contains? #{:last-modified-at} compare-k) "updated-at" k)]
-                                       (str k ":: " (string/trim v)))
+                                       (str k colons " " (string/trim v)))
                                      text)))))
               after (subvec lines (inc end-idx))
               lines (concat before middle after)]

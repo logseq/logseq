@@ -7,6 +7,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
+            [frontend.components.scheduled-deadlines :as scheduled]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -317,7 +318,7 @@
   ((state/get-component :whiteboard/tldraw-preview) page-name))
 
 ;; A page is just a logical block
-(rum/defcs page < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo page < rum/reactive
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   [state {:keys [repo page-name] :as option}]
@@ -400,8 +401,11 @@
                         page)]
              (page-blocks-cp repo page {:sidebar? sidebar?}))]])
 
-       (when-not block?
+       (when today?
          (today-queries repo today? sidebar?))
+
+       (when today?
+         (scheduled/scheduled-and-deadlines page-name))
 
        (when-not block?
          (tagged-pages repo page-name))
@@ -539,7 +543,7 @@
                              (let [value (not excluded-pages?)]
                                (reset! *excluded-pages? value)
                                (set-setting! :excluded-pages? value)))
-                           true)]]              
+                           true)]]
               (when (seq focus-nodes)
                 [:div.flex.flex-col.mb-2
                  [:p {:title "N hops from selected nodes"}

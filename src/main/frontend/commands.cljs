@@ -16,6 +16,10 @@
             [frontend.util.priority :as priority]
             [frontend.util.property :as property]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.graph-parser.util.block-ref :as block-ref]
             [goog.dom :as gdom]
             [goog.object :as gobj]))
 
@@ -213,10 +217,10 @@
   (->>
    (concat
     ;; basic
-    [["Page reference" [[:editor/input "[[]]" {:backward-pos 2}]
+    [["Page reference" [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
                         [:editor/search-page]] "Create a backlink to a page"]
      ["Page embed" (embed-page) "Embed a page here"]
-     ["Block reference" [[:editor/input "(())" {:backward-pos 2}]
+     ["Block reference" [[:editor/input block-ref/left-and-right-parens {:backward-pos 2}]
                          [:editor/search-block :reference]] "Create a backlink to a block"]
      ["Block embed" (embed-block) "Embed a block here" "Embed a block here"]
      ["Link" (link-steps) "Create a HTTP link"]
@@ -269,9 +273,13 @@
      ["Query table function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query table function"]
      ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
                     [:codemirror/focus]] "Insert a calculator"]
-     
-     ["Draw" draw-handler/initialize-excalidarw-file "Draw a graph with Excalidraw"]
-     
+     ["Draw" (fn []
+               (let [file (draw/file-name)
+                     path (str gp-config/default-draw-directory "/" file)
+                     text (page-ref/->page-ref path)]
+                 (p/let [_ (draw/create-draw-with-default-content path)]
+                   (println "draw file created, " path))
+                 text)) "Draw a graph with Excalidraw"]
      ["Embed HTML " (->inline "html")]
 
      ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern (state/get-editor-command-trigger)
@@ -334,12 +342,12 @@
                                    (or
                                     (and s
                                          (string/ends-with? s "(")
-                                         (or (string/starts-with? last-pattern "((")
-                                             (string/starts-with? last-pattern "[[")))
+                                         (or (string/starts-with? last-pattern block-ref/left-parens)
+                                             (string/starts-with? last-pattern page-ref/left-brackets)))
                                     (and s (string/starts-with? s "{{embed"))
                                     (and last-pattern
-                                         (or (string/ends-with? last-pattern "::")
-                                             (string/starts-with? last-pattern "::")))))))]
+                                         (or (string/ends-with? last-pattern gp-property/colons)
+                                             (string/starts-with? last-pattern gp-property/colons)))))))]
                    (if (and space? (string/starts-with? last-pattern "#[["))
                      false
                      space?))
@@ -373,7 +381,7 @@
         (state/set-block-content-and-last-pos! id new-value new-pos)
         (cursor/move-cursor-to input
                                (if (and (or backward-pos forward-pos)
-                                        (not= end-pattern "]]"))
+                                        (not= end-pattern page-ref/right-brackets))
                                  new-pos
                                  (inc new-pos)))))))
 

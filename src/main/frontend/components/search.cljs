@@ -139,30 +139,27 @@
       (route/redirect! {:to :file
                         :path-params {:path data}})
 
-      :block
-      (let [block-uuid (uuid (:block/uuid data))
-            collapsed? (db/parents-collapsed? repo block-uuid)
-            page (:block/page (db/entity [:block/uuid block-uuid]))
-            page-name (:block/name page)
-            long-page? (block-handler/long-page? repo (:db/id page))]
+    :block
+    (let [block-uuid (uuid (:block/uuid data))
+          collapsed? (db/parents-collapsed? repo block-uuid)
+          page (:block/page (db/entity [:block/uuid block-uuid]))
+          page-name (:block/name page)
+          long-page? (block-handler/long-page? repo (:db/id page))]
+      (if page
+        (cond
+          (model/whiteboard-page? page-name)
+          (route/redirect-to-whiteboard! page-name {:block-id block-uuid})
 
-        (println page (model/whiteboard-page? page))
+          (or collapsed? long-page?)
+          (route/redirect-to-page! block-uuid)
 
-        (if page
-          (cond
-            (model/whiteboard-page? page-name)
-            (route/redirect-to-whiteboard! page-name {:block-id block-uuid})
-
-            (or collapsed? long-page?)
-            (route/redirect-to-page! block-uuid)
-
-            :else
-            (route/redirect-to-page! page-name (str "ls-block-" (:block/uuid data))))
-            ;; search indice outdated
-          (println "[Error] Block page missing: "
-                   {:block-id block-uuid
-                    :block (db/pull [:block/uuid block-uuid])})))
-      nil))
+          :else
+          (route/redirect-to-page! (:block/name page) {:anchor (str "ls-block-" (:block/uuid data))}))
+        ;; search indice outdated
+        (println "[Error] Block page missing: "
+                 {:block-id block-uuid
+                  :block (db/pull [:block/uuid block-uuid])})))
+    nil))
   (state/close-modal!))
 
 (defn- search-on-shift-chosen
@@ -388,7 +385,8 @@
         timeout 300
         in-page-search? (= search-mode :page)]
     [:div.cp__palette.cp__palette-main
-     [:div.input-wrap
+     [:div.ls-search
+      [:div.input-wrap
       [:input.cp__palette-input.w-full
        {:type          "text"
         :auto-focus    true
@@ -421,10 +419,10 @@
                                             (search-handler/search (state/get-current-repo) value opts)
                                             (search-handler/search (state/get-current-repo) value)))
                                         timeout))))))}]]
-     [:div.search-results-wrap
-      (if (seq search-result)
-        (search-auto-complete search-result search-q false)
-        (recent-search-and-pages in-page-search?))]]))
+      [:div.search-results-wrap
+       (if (seq search-result)
+         (search-auto-complete search-result search-q false)
+         (recent-search-and-pages in-page-search?))]]]))
 
 (rum/defc more < rum/reactive
   [route]
