@@ -547,14 +547,15 @@
 
 .tl-logseq-portal-header .type-tag {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  font-size: 12px;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 16px;
+  width: 20px;
+  height: 20px;
   line-height: 1;
-  padding: 1px 4px;
   color: #fff;
   background: rgba(0, 0, 0, 0.5);
-  border: 1px solid #fff;
   border-radius: 4px;
   order: 0;
   flex-grow: 0;

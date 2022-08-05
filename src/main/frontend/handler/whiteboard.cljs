@@ -65,7 +65,7 @@
         block {:block/page {:block/name (util/page-name-sanity-lc page-name)}
                :block/parent {:block/name page-name}
                :block/properties properties}
-        additional-props (gp-extract/with-whiteboard-block-props block)]
+        additional-props (gp-extract/with-whiteboard-block-props block page-name)]
     (merge block additional-props)))
 
 (defn- tldr-page->blocks-tx [page-name tldr-data]

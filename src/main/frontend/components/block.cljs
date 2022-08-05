@@ -1803,7 +1803,7 @@
        (if title
          (conj
           (map-inline config title)
-          (when (and (util/electron?) (not= block-type :default))
+          (when (and (util/electron?) (not (#{:default :whiteboard-shape} block-type)))
             [:a.prefix-link
              {:on-click #(case block-type
                            ;; pdf annotation
@@ -2083,7 +2083,7 @@
                                (util/clear-selection!)))}
        (not slide?)
        (merge attrs))
-
+     
      [:<>
       [:div.flex.flex-row.justify-between.block-content-inner
        [:div.flex-1.w-full
@@ -2092,7 +2092,8 @@
           (build-block-title config block)
 
           (= block-type :whiteboard-shape)
-          content
+          [:<> (ui/icon "whiteboard-element")
+           (inline config (first (:block/title block)))]
 
           :else
           nil)]

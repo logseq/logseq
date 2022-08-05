@@ -76,7 +76,7 @@
       (assoc
        (gp-block/page-name->map page false db true date-formatter)
        :block/file {:file/path (gp-util/path-normalize file)}))
-      
+
       (seq properties)
       (assoc :block/properties properties)
 
@@ -117,7 +117,7 @@
                                        :block/page [:block/name page-name]
                                        :block/refs block-ref-pages
                                        :block/path-refs block-path-ref-pages)))))
-                   blocks)
+                      blocks)
           page-entity (build-page-entity properties file page-name page ref-tags options)
           namespace-pages (let [page (:block/original-name page-entity)]
                             (when (text/namespace-page? page)
@@ -155,7 +155,7 @@
           _ (when verbose (println "Parsing start: " file))
           ast (gp-mldoc/->edn content (gp-mldoc/default-config format
                                         ;; {:parse_outline_only? true}
-                                        )
+                                                               )
                               user-config)]
       (when verbose (println "Parsing finished: " file))
       (let [first-block (ffirst ast)
@@ -202,12 +202,17 @@
                     (str "whiteboard " (:type shape)))})
 
 (defn with-whiteboard-block-props
-  [block]
-  (let [shape (:block/properties block)]
-    (when (= :whiteboard-shape (:ls-type shape))
-      (merge {:block/uuid (uuid (:id shape))}
-             (with-whiteboard-block-refs shape)
-             (with-whiteboard-content shape)))))
+  [block page-name]
+  (let [shape (:block/properties block)
+        shape? (= :whiteboard-shape (:ls-type shape))]
+    (merge (when shape?
+             (merge
+              {:block/uuid (uuid (:id shape))}
+              (with-whiteboard-block-refs shape)
+              (with-whiteboard-content shape)))
+           (when (nil? (:block/parent block)) {:block/name (gp-util/page-name-sanity-lc page-name)})
+           (when (nil? (:block/format block)) {:block/format :markdown})
+           {:block/page {:block/name (gp-util/page-name-sanity-lc page-name)}})))
 
 (defn extract-whiteboard-edn
   "Extracts whiteboard page from given edn file
@@ -226,7 +231,7 @@
                     (map #(merge % {:block/level 1 ;; fixme
                                     :block/uuid (or (:block/uuid %)
                                                     (gp-block/get-custom-id-or-new-id (:block/properties %)))}
-                                 (with-whiteboard-block-props %)))
+                                 (with-whiteboard-block-props % page-name)))
                     (gp-block/with-parent-and-left {:block/name page-name}))
         _ (when verbose (println "Parsing finished: " file))]
     {:pages [page-block]

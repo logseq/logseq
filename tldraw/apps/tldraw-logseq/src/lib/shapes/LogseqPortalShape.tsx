@@ -31,7 +31,9 @@ const LogseqPortalShapeHeader = observer(
   ({ type, children }: { type: 'P' | 'B'; children: React.ReactNode }) => {
     return (
       <div className="tl-logseq-portal-header">
-        <span className="type-tag">{type}</span>
+        <span className="type-tag">
+          <i className={`tie tie-${type === 'B' ? 'block' : 'page'}`} />
+        </span>
         {children}
       </div>
     )
