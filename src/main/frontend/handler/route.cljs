@@ -44,8 +44,8 @@
    (recent-handler/add-page-to-recent! (state/get-current-repo) page-name
                                        click-from-recent?)
    (let [m (cond->
-             {:to :page
-              :path-params {:name (str page-name)}}
+            {:to :page
+             :path-params {:name (str page-name)}}
              anchor
              (assoc :query-params {:anchor anchor})
              push
@@ -56,7 +56,7 @@
   ([name]
    (redirect-to-whiteboard! name nil))
   ([name {:keys [block-id]}]
-   (recent-handler/add-page-to-recent! (state/get-current-repo) name)
+   (recent-handler/add-page-to-recent! (state/get-current-repo) name false)
    (redirect! {:to :whiteboard
                :path-params {:name (str name)}
                :query-params (merge {:block-id block-id})})))

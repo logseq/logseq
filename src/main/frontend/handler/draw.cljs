@@ -19,7 +19,7 @@
        (fn [_result] nil)
        (fn [_error] nil)))))
 
-(defn save-draw!
+(defn save-excalidraw!
   [file data]
   (let [path file
         repo (state/get-current-repo)]
@@ -38,7 +38,7 @@
                     (prn "Write file failed, path: " path ", data: " data)
                     (js/console.dir error))))))))
 
-(defn load-draw-file
+(defn load-excalidraw-file
   [file ok-handler]
   (when-let [repo (state/get-current-repo)]
     (util/p-handle
@@ -49,28 +49,19 @@
        (println "Error loading " file ": "
                 error)))))
 
-(defonce default-excalidraw-content
+(defonce default-content
   (util/format
    "{\n  \"type\": \"excalidraw\",\n  \"version\": 2,\n  \"source\": \"%s\",\n  \"elements\": [],\n  \"appState\": {\n    \"viewBackgroundColor\": \"#FFF\",\n    \"gridSize\": null\n  }\n}"
    config/website))
 
-(defn- file-name
-  [ext]
-  (str (date/get-date-time-string-2) ext))
+(defn file-name
+  []
+  (str (date/get-date-time-string-2) ".excalidraw"))
 
-(defn- create-draw-with-default-content
-  [current-file content]
+(defn create-draw-with-default-content
+  [current-file]
   (when-let [repo (state/get-current-repo)]
     (p/let [exists? (fs/file-exists? (config/get-repo-dir repo)
                                      (str gp-config/default-draw-directory current-file))]
       (when-not exists?
-        (save-draw! current-file content)))))
-
-(defn initialize-excalidarw-file
-  []
-  (let [file (file-name ".excalidraw")
-        path (str gp-config/default-draw-directory "/" file)
-        text (util/format "[[%s]]" path)]
-    (p/let [_ (create-draw-with-default-content path default-excalidraw-content)]
-      (println "excalidraw file created, " path))
-    text))
+        (save-excalidraw! current-file default-content)))))

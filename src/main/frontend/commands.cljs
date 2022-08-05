@@ -4,7 +4,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.utils :as db-util]
-            [frontend.handler.draw :as draw-handler]
+            [frontend.handler.draw :as draw]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.extensions.video.youtube :as youtube]
@@ -21,7 +21,8 @@
             [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [goog.dom :as gdom]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [promesa.core :as p]))
 
 ;; TODO: move to frontend.handler.editor.commands
 
@@ -155,7 +156,7 @@
   ([type optional]
    (let [format (get (state/get-edit-block) :block/format)
          markdown-src? (and (= format :markdown)
-                       (= (string/lower-case type) "src"))
+                            (= (string/lower-case type) "src"))
          [left right] (cond
                         markdown-src?
                         ["```" "\n```"]
@@ -237,8 +238,7 @@
        ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"]
 
        (state/deprecated-logged?)
-       ["Upload an image" [[:editor/click-hidden-file-input :id]]]
-       )]
+       ["Upload an image" [[:editor/click-hidden-file-input :id]]])]
 
     (markdown-headings)
 
@@ -283,7 +283,7 @@
      ["Embed HTML " (->inline "html")]
 
      ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern (state/get-editor-command-trigger)
-                                                    :backward-pos 2}]]]
+                                                      :backward-pos 2}]]]
 
      ["Embed Youtube timestamp" [[:youtube/insert-timestamp]]]
 
@@ -580,10 +580,10 @@
 (defmethod handle-step :editor/insert-properties [[_ _] _format]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
-        (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
-              edit-content (gobj/get current-input "value")
-              new-value (property/insert-property format edit-content "" "")]
-          (state/set-edit-content! input-id new-value)))))
+      (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
+            edit-content (gobj/get current-input "value")
+            new-value (property/insert-property format edit-content "" "")]
+        (state/set-edit-content! input-id new-value)))))
 
 (defmethod handle-step :editor/move-cursor-to-properties [[_]]
   (when-let [input-id (state/get-edit-input-id)]
@@ -630,7 +630,7 @@
         macro (youtube/gen-youtube-ts-macro)]
     (when-let [input (gdom/getElement input-id)]
       (when macro
-       (util/insert-at-current-position! input (str macro " "))))))
+        (util/insert-at-current-position! input (str macro " "))))))
 
 (defmethod handle-step :youtube/insert-timestamp [[_]]
   (let [input-id (state/get-edit-input-id)

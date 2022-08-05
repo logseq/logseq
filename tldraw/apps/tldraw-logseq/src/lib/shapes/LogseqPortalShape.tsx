@@ -231,16 +231,15 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       const uuid = handlers?.addNewBlock(content)
       if (uuid) {
         finishCreating(uuid)
-        app.setEditingShape(this)
         // wait until the editor is mounted
         setTimeout(() => {
           // @ts-expect-error ???
-          if (window.logseq) {
-            // @ts-expect-error ???
-            const logseqApi = window.logseq.api as any
+          const logseqApi = window.logseq?.api as any
+          if (logseqApi) {
+            app.setEditingShape(this)
             logseqApi.edit_block(uuid)
           }
-        }, 100)
+        })
       }
     }, [])
 

@@ -1,21 +1,37 @@
 (ns frontend.extensions.excalidraw
   (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             ;; NOTE: Always use production build of excalidraw
             ;; See-also: https://github.com/excalidraw/excalidraw/pull/3330
             ["@excalidraw/excalidraw/dist/excalidraw.production.min" :as Excalidraw]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.draw :as draw-handler]
+            [frontend.handler.draw :as draw]
+            [frontend.handler.notification :as notification]
             [frontend.handler.ui :as ui-handler]
             [frontend.rum :as r]
             [frontend.state :as state]
+            [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.extensions.draw :as draw-common]
             [goog.object :as gobj]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mobile.util :as mobile-util]))
 
 (def excalidraw (r/adapt-class (gobj/get Excalidraw "default")))
 (def serialize-as-json (gobj/get Excalidraw "serializeAsJSON"))
+
+(defn from-json
+  [text]
+  (when-not (string/blank? text)
+    (try
+      (js/JSON.parse text)
+      (catch js/Error e
+        (println "from json error:")
+        (js/console.dir e)
+        (notification/show!
+         (util/format "Could not load this invalid excalidraw file")
+         :error)))))
 
 (defn- update-draw-content-width
   [state]
@@ -91,7 +107,7 @@
                             (when (and (seq elements->clj)
                                        (not= elements->clj @*elements)) ;; not= requires clj collections
                               (reset! *elements elements->clj)
-                              (draw-handler/save-draw!
+                              (draw/save-excalidraw!
                                file
                                (serialize-as-json elements app-state))))))
 
@@ -101,6 +117,47 @@
            :initial-data data
            :theme (excalidraw-theme (state/sub :ui/theme))}))]])))
 
-(rum/defc draw
+(rum/defcs draw-container < rum/reactive
+  {:init (fn [state]
+           (let [[option] (:rum/args state)
+                 file (:file option)
+                 *data (atom nil)
+                 *loading? (atom true)]
+             (when file
+               (draw/load-excalidraw-file
+                file
+                (fn [data]
+                  (let [data (from-json data)]
+                    (reset! *data data)
+                    (reset! *loading? false)))))
+             (assoc state
+                    ::data *data
+                    ::loading? *loading?)))}
+  [state option]
+  (let [*data (get state ::data)
+        *loading? (get state ::loading?)
+        loading? (rum/react *loading?)
+        data (rum/react *data)
+        db-restoring? (state/sub :db/restoring?)]
+    (when (:file option)
+      (cond
+        db-restoring?
+        [:div.ls-center
+         (ui/loading "Loading")]
+
+        (false? loading?)
+        (draw-inner data option)
+
+        :else
+        nil))))
+
+(rum/defc draw < rum/reactive
   [option]
-  (draw-common/draw-wrapper option draw-inner))
+  (let [repo (state/get-current-repo)
+        granted? (state/sub [:nfs/user-granted? repo])]
+    ;; Web granted
+    (when-not (and (config/local-db? repo)
+                   (not granted?)
+                   (not (util/electron?))
+                   (not (mobile-util/native-platform?)))
+      (draw-container option))))
