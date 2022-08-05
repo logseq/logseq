@@ -27,68 +27,6 @@ interface LogseqQuickSearchProps {
   onChange: (id: string) => void
 }
 
-const LogseqQuickSearch = observer(({ onChange }: LogseqQuickSearchProps) => {
-  const [q, setQ] = React.useState('')
-  const rInput = React.useRef<HTMLInputElement>(null)
-  const { handlers } = React.useContext(LogseqContext)
-
-  const finishCreating = React.useCallback((id: string) => {
-    onChange(id)
-    rInput.current?.blur()
-  }, [])
-
-  const onAddBlock = React.useCallback((content: string) => {
-    const uuid = handlers?.addNewBlock(content)
-    if (uuid) {
-      finishCreating(uuid)
-    }
-  }, [])
-
-  const options = React.useMemo(() => {
-    return handlers?.search?.(q)
-  }, [handlers?.search, q])
-
-  React.useEffect(() => {
-    // autofocus seems not to be working
-    setTimeout(() => {
-      rInput.current?.focus()
-    })
-  }, [])
-
-  return (
-    <div className="tl-quick-search">
-      <div className="tl-quick-search-input-container">
-        <MagnifyingGlassIcon className="tl-quick-search-icon" width={24} height={24} />
-        <div className="tl-quick-search-input-sizer" data-value={q}>
-          <input
-            ref={rInput}
-            type="text"
-            value={q}
-            placeholder="Search or create page"
-            onChange={q => setQ(q.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                finishCreating(q)
-              }
-            }}
-            className="tl-quick-search-input text-input"
-          />
-        </div>
-      </div>
-      <div className="tl-quick-search-options">
-        <div className="tl-quick-search-option" onClick={() => onAddBlock(q)}>
-          New block{q.length > 0 ? `: ${q}` : ''}
-        </div>
-        {options?.map(name => (
-          <div key={name} className="tl-quick-search-option" onClick={() => finishCreating(name)}>
-            {name}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-})
-
 const LogseqPortalShapeHeader = observer(
   ({ type, children }: { type: 'P' | 'B'; children: React.ReactNode }) => {
     return (
@@ -278,6 +216,79 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     })
   }
 
+  LogseqQuickSearch = observer(({ onChange }: LogseqQuickSearchProps) => {
+    const [q, setQ] = React.useState('')
+    const rInput = React.useRef<HTMLInputElement>(null)
+    const { handlers } = React.useContext(LogseqContext)
+    const app = useApp<Shape>()
+
+    const finishCreating = React.useCallback((id: string) => {
+      onChange(id)
+      rInput.current?.blur()
+    }, [])
+
+    const onAddBlock = React.useCallback((content: string) => {
+      const uuid = handlers?.addNewBlock(content)
+      if (uuid) {
+        finishCreating(uuid)
+        app.setEditingShape(this)
+        // wait until the editor is mounted
+        setTimeout(() => {
+          // @ts-expect-error ???
+          if (window.logseq) {
+            // @ts-expect-error ???
+            const logseqApi = window.logseq.api as any
+            logseqApi.edit_block(uuid)
+          }
+        }, 100)
+      }
+    }, [])
+
+    const options = React.useMemo(() => {
+      return handlers?.search?.(q)
+    }, [handlers?.search, q])
+
+    React.useEffect(() => {
+      // autofocus seems not to be working
+      setTimeout(() => {
+        rInput.current?.focus()
+      })
+    }, [])
+
+    return (
+      <div className="tl-quick-search">
+        <div className="tl-quick-search-input-container">
+          <MagnifyingGlassIcon className="tl-quick-search-icon" width={24} height={24} />
+          <div className="tl-quick-search-input-sizer" data-value={q}>
+            <input
+              ref={rInput}
+              type="text"
+              value={q}
+              placeholder="Search or create page"
+              onChange={q => setQ(q.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  finishCreating(q)
+                }
+              }}
+              className="tl-quick-search-input text-input"
+            />
+          </div>
+        </div>
+        <div className="tl-quick-search-options">
+          <div className="tl-quick-search-option" onClick={() => onAddBlock(q)}>
+            New block{q.length > 0 ? `: ${q}` : ''}
+          </div>
+          {options?.map(name => (
+            <div key={name} className="tl-quick-search-option" onClick={() => finishCreating(name)}>
+              {name}
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  })
+
   PortalComponent = observer(({}: TLComponentProps) => {
     const {
       props: { pageId },
@@ -395,6 +406,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const showingPortal = !this.props.collapsed || isEditing
 
     const PortalComponent = this.PortalComponent
+    const LogseqQuickSearch = this.LogseqQuickSearch
 
     if (!renderers?.Page) {
       return null // not being correctly configured

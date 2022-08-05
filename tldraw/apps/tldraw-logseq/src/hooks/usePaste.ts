@@ -11,7 +11,8 @@ import {
 import type { TLReactCallbacks } from '@tldraw/react'
 import * as React from 'react'
 import { NIL as NIL_UUID } from 'uuid'
-import { HTMLShape, LogseqPortalShape, Shape, TextShape, YouTubeShape } from '~lib'
+import { HTMLShape, LogseqPortalShape, Shape, YouTubeShape } from '~lib'
+import type { LogseqContextValue } from '~lib/logseq-context'
 
 const isValidURL = (url: string) => {
   try {
@@ -27,7 +28,9 @@ const getYoutubeId = (url: string) => {
   return match && match[2].length === 11 ? match[2] : null
 }
 
-export function usePaste() {
+export function usePaste(context: LogseqContextValue) {
+  const { handlers } = context
+
   return React.useCallback<TLReactCallbacks<Shape>['onPaste']>(async (app, { point }) => {
     const assetId = uniqueId()
     interface ImageAsset extends TLAsset {
@@ -187,14 +190,20 @@ export function usePaste() {
               })
             }
           } else {
-            // create text shape
-            shapesToCreate.push({
-              ...TextShape.defaultProps,
-              id: uniqueId(),
-              parentId: app.currentPageId,
-              point: [point[0], point[1]],
-              text: rawText,
-            })
+            const uuid = handlers?.addNewBlock(rawText)
+            if (uuid) {
+              // create text shape
+              shapesToCreate.push({
+                ...LogseqPortalShape.defaultProps,
+                id: uniqueId(),
+                parentId: app.currentPageId,
+                size: [400, 0], // use 0 here to enable auto-resize
+                point: [point[0], point[1]],
+                pageId: uuid,
+                blockType: 'B',
+                compact: true
+              })
+            }
           }
         }
       }

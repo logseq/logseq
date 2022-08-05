@@ -200,6 +200,9 @@
                     "ls-block"
                     "edit-block")))
 
+(get-edit-input-id-with-block-id (uuid "62ec813f-11f1-472e-9bb2-e69bacd07c7e"))
+
+
 (defn clear-selection!
   []
   (util/select-unhighlight! (dom/by-class "selected"))

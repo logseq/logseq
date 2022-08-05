@@ -1,15 +1,9 @@
-import * as React from 'react'
+import { CursorArrowIcon, Pencil1Icon, ShadowIcon, TextIcon } from '@radix-ui/react-icons'
 import { useApp } from '@tldraw/react'
-import {
-  CursorArrowIcon,
-  Pencil1Icon,
-  ShadowIcon,
-  VideoIcon,
-  TextIcon,
-} from '@radix-ui/react-icons'
 import { observer } from 'mobx-react-lite'
+import * as React from 'react'
 import { Button } from '~components/Button'
-import { EraserIcon, ArrowIcon, LogseqIcon } from '~components/icons'
+import { ArrowIcon, EraserIcon, LogseqIcon } from '~components/icons'
 
 export const PrimaryTools = observer(function PrimaryTools() {
   const app = useApp()

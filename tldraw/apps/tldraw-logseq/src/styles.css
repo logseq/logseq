@@ -519,8 +519,8 @@
 
 .tl-logseq-portal-container {
   width: 100%;
-  overscroll-behavior: none;
   height: 100%;
+  overscroll-behavior: none;
   display: flex;
   flex-direction: column;
   opacity: 1;

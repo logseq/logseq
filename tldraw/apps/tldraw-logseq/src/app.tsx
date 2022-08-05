@@ -62,10 +62,6 @@ interface LogseqTldrawProps {
 }
 
 export const App = function App(props: LogseqTldrawProps): JSX.Element {
-  const onFileDrop = useFileDrop()
-  const onPaste = usePaste()
-  const onQuickAdd = useQuickAdd()
-
   const renderers: any = React.useMemo(() => {
     return Object.fromEntries(
       Object.entries(props.renderers).map(([key, comp]) => {
@@ -73,6 +69,14 @@ export const App = function App(props: LogseqTldrawProps): JSX.Element {
       })
     )
   }, [])
+  const contextValue = {
+    renderers,
+    handlers: props.handlers,
+  }
+
+  const onFileDrop = useFileDrop()
+  const onPaste = usePaste(contextValue)
+  const onQuickAdd = useQuickAdd()
 
   return (
     <LogseqContext.Provider

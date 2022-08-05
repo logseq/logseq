@@ -85,11 +85,12 @@
                        (concat (map :block/uuid blocks))
                        (remove nil?)
                        (set))
-        delete-shapes (filter (fn [shape]
-                                (not (block-ids (:block/uuid shape))))
+        delete-blocks (filter (fn [block]
+                                (not (or (block-ids (:block/uuid block))
+                                         (block-ids (:block/uuid (:block/parent block))))))
                               existing-blocks)
-        delete-shapes-tx (mapv (fn [s] [:db/retractEntity (:db/id s)]) delete-shapes)]
-    (concat [page-block] blocks delete-shapes-tx)))
+        delete-blocks-tx (mapv (fn [s] [:db/retractEntity (:db/id s)]) delete-blocks)]
+    (concat [page-block] blocks delete-blocks-tx)))
 
 (defn- get-whiteboard-clj [page-name]
   (when (model/page-exists? page-name)
