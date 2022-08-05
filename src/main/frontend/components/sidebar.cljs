@@ -74,15 +74,15 @@
   (let [original-name (db-model/get-page-original-name name)]
     [:a {:on-click (fn [e]
                      (let [name (util/safe-page-name-sanity-lc name)
-                           source-page (db-model/get-alias-source-page (state/get-current-repo) name)
-                           page-name (if (empty? source-page) name (db-model/get-original-name source-page))] 
+                           source-page (db-model/get-alias-source-page (state/get-current-repo) name) 
+                           name (if (empty? source-page) name (:block/name source-page))]
                        (if (gobj/get e "shiftKey")
-                         (when-let [page-entity (db/entity [:block/name page-name])]
+                         (when-let [page-entity (if (empty? source-page) (db/entity [:block/name name]) source-page)]
                            (state/sidebar-add-block!
                             (state/get-current-repo)
                             (:db/id page-entity)
                             :page))
-                         (route-handler/redirect-to-page! page-name))))}
+                         (route-handler/redirect-to-page! name))))}
      [:span.page-icon icon]
      (pdf-assets/fix-local-asset-filename original-name)]))
 
