@@ -26,14 +26,6 @@
          "[logseq/page](file:./logseq.page.md)" "logseq/page"
          "[logseq/page](file:./pages/logseq.page.md)" "logseq/page"))
 
-(deftest page-ref?
-  []
-  (are [x y] (= (text/page-ref? x) y)
-    "[[page]]" true
-    "[[another page]]" true
-    "[single bracket]" false
-    "no brackets" false))
-
 (deftest page-ref-un-brackets!
   []
   (are [x y] (= (text/page-ref-un-brackets! x) y)

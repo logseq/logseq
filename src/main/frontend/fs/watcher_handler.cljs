@@ -9,7 +9,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [logseq.graph-parser.util :as gp-util]
-            [frontend.util.text :as text-util]
+            [logseq.graph-parser.util.block-ref :as block-ref]
             [lambdaisland.glogi :as log]
             [electron.ipc :as ipc]
             [promesa.core :as p]
@@ -22,7 +22,7 @@
 (defn- set-missing-block-ids!
   [content]
   (when (string? content)
-    (doseq [block-id (text-util/extract-all-block-refs content)]
+    (doseq [block-id (block-ref/get-all-block-ref-ids content)]
       (when-let [block (try
                          (model/get-block-by-uuid block-id)
                          (catch js/Error _e

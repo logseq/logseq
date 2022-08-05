@@ -23,6 +23,8 @@
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
             [frontend.handler.notification :as notification])
   (:import
@@ -159,11 +161,8 @@
                              (= "embed" (some-> (:name (second i))
                                                 (string/lower-case)))
                              (some-> (:arguments (second i))
-                                     (first)
-                                     (string/starts-with? "[["))
-                             (some-> (:arguments (second i))
-                                     (first)
-                                     (string/ends-with? "]]")))
+                                     first
+                                     page-ref/page-ref?))
                         (let [arguments (:arguments (second i))
                               page-ref (first arguments)
                               page-name (-> page-ref
@@ -188,15 +187,9 @@
                                                 (string/lower-case)))
                              (some-> (:arguments (second i))
                                      (first)
-                                     (string/starts-with? "(("))
-                             (some-> (:arguments (second i))
-                                     (first)
-                                     (string/ends-with? "))")))
+                                     block-ref/string-block-ref?))
                         (let [arguments (:arguments (second i))
-                              block-ref (first arguments)
-                              block-uuid (-> block-ref
-                                             (subs 2)
-                                             (#(subs % 0 (- (count %) 2))))]
+                              block-uuid (block-ref/get-string-block-ref-id (first arguments))]
                           (conj! result block-uuid)
                           i)
                         :else

@@ -219,7 +219,7 @@
                                                                      :class color-class}
              content]]
            [:div.ml-4.flex-shrink-0.flex
-            [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150
+            [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150.notification-close-button
              {:on-click (fn []
                           (notification-handler/clear! uid))}
              [:svg.h-5.w-5
@@ -639,13 +639,20 @@
                  (let [args (:rum/args state)]
                    (when (true? (:default-collapsed? (last args)))
                      (reset! (get state ::collapsed?) true)))
-                 state)}
-  [state header content {:keys [title-trigger?]}]
+                 state)
+   :did-mount (fn [state]
+                (when-let [f (:init-collapsed (last (:rum/args state)))]
+                  (f (::collapsed? state)))
+                state)}
+  [state header content {:keys [title-trigger? on-mouse-down
+                                _default-collapsed? _init-collapsed]}]
   (let [control? (get state ::control?)
         collapsed? (get state ::collapsed?)
         on-mouse-down (fn [e]
                         (util/stop e)
-                        (swap! collapsed? not))]
+                        (swap! collapsed? not)
+                        (when on-mouse-down
+                          (on-mouse-down @collapsed?)))]
     [:div.flex.flex-col
      [:div.content
       [:div.flex-1.flex-row.foldable-title (cond->
@@ -928,21 +935,25 @@
 (rum/defc lazy-visible
   ([content-fn]
    (lazy-visible content-fn nil))
-  ([content-fn _debug-id]
+  ([content-fn {:keys [trigger-once? _debug-id]
+                :or {trigger-once? false}}]
    (if (or (util/mobile?) (mobile-util/native-platform?))
      (content-fn)
-     (let [[hasBeenSeen setHasBeenSeen] (rum/use-state false)
+     (let [[visible? set-visible!] (rum/use-state false)
            [last-changed-time set-last-changed-time!] (rum/use-state nil)
            inViewState (useInView #js {:rootMargin "100px"
+                                       :triggerOnce trigger-once?
                                        :onChange (fn [in-view? entry]
                                                    (let [self-top (.-top (.-boundingClientRect entry))
                                                          time' (util/time-ms)]
-                                                     (when (or in-view?
-                                                               (and
-                                                                (nil? last-changed-time)
-                                                                (> (- time' last-changed-time) 50)
-                                                                (<= self-top 0)))
+                                                     (when (and
+                                                            (or (and (not visible?) in-view?)
+                                                                ;; hide only the components below the current top for better ux
+                                                                (and visible? (not in-view?) (> self-top 0)))
+                                                            (or (nil? last-changed-time)
+                                                                (and (some? last-changed-time)
+                                                                     (> (- time' last-changed-time) 50))))
                                                        (set-last-changed-time! time')
-                                                       (setHasBeenSeen in-view?))))})
+                                                       (set-visible! in-view?))))})
            ref (.-ref inViewState)]
-       (lazy-visible-inner hasBeenSeen content-fn ref)))))
+       (lazy-visible-inner visible? content-fn ref)))))

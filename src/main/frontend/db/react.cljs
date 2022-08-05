@@ -95,6 +95,11 @@
     (let [new-result' (f @result-atom)]
       (reset! result-atom new-result'))))
 
+(defn get-query-time
+  [q]
+  (let [k [(state/get-current-repo) :custom q]]
+    (get-in @query-state [k :query-time])))
+
 (defn kv
   [key value]
   {:db/id -1
@@ -119,8 +124,9 @@
     (reset! query-state state)))
 
 (defn add-q!
-  [k query inputs result-atom transform-fn query-fn inputs-fn]
+  [k query time inputs result-atom transform-fn query-fn inputs-fn]
   (swap! query-state assoc k {:query query
+                              :query-time time
                               :inputs inputs
                               :result result-atom
                               :transform-fn transform-fn
@@ -169,29 +175,30 @@
           (add-query-component! k component))
         (if (and use-cache? result-atom)
           result-atom
-          (let [result (cond
-                         query-fn
-                         (query-fn db nil nil)
+          (let [{:keys [result time]} (util/with-time
+                                        (-> (cond
+                                              query-fn
+                                              (query-fn db nil nil)
 
-                         inputs-fn
-                         (let [inputs (inputs-fn)]
-                           (apply d/q query db inputs))
+                                              inputs-fn
+                                              (let [inputs (inputs-fn)]
+                                                (apply d/q query db inputs))
 
-                         kv?
-                         (d/entity db (last k))
+                                              kv?
+                                              (d/entity db (last k))
 
-                         (seq inputs)
-                         (apply d/q query db inputs)
+                                              (seq inputs)
+                                              (apply d/q query db inputs)
 
-                         :else
-                         (d/q query db))
-                result (transform-fn result)
+                                              :else
+                                              (d/q query db))
+                                            transform-fn))
                 result-atom (or result-atom (atom nil))]
             ;; Don't notify watches now
             (set! (.-state result-atom) result)
             (if disable-reactive?
               result-atom
-              (add-q! k query inputs result-atom transform-fn query-fn inputs-fn))))))))
+              (add-q! k query time inputs result-atom transform-fn query-fn inputs-fn))))))))
 
 
 ;; TODO: Extract several parts to handlers
@@ -236,7 +243,7 @@
                               (let [page-id (or
                                              (when (:block/name block) (:db/id block))
                                              (:db/id (:block/page block)))
-                                    blocks [[::block (:block/uuid block)]]
+                                    blocks [[::block (:db/id block)]]
                                     others (when page-id
                                              (let [db-after-parent-uuid (:block/uuid (:block/parent block))
                                                    db-before-parent-uuid (:block/uuid (:block/parent (d/entity db-before
@@ -274,60 +281,70 @@
      set)))
 
 (defn- execute-query!
-  [graph db k tx {:keys [query inputs transform-fn query-fn inputs-fn result]}]
-  (let [new-result (->
-                    (cond
-                      query-fn
-                      (let [result (query-fn db tx result)]
-                        (if (coll? result)
-                          (doall result)
-                          result))
+  [graph db k tx {:keys [query query-time inputs transform-fn query-fn inputs-fn result]}
+   {:keys [skip-query-time-check?]}]
+  (when (or skip-query-time-check?
+            (<= (or query-time 0) 80))
+    (let [new-result (->
+                     (cond
+                       query-fn
+                       (let [result (query-fn db tx result)]
+                         (if (coll? result)
+                           (doall result)
+                           result))
 
-                      inputs-fn
-                      (let [inputs (inputs-fn)]
-                        (apply d/q query db inputs))
+                       inputs-fn
+                       (let [inputs (inputs-fn)]
+                         (apply d/q query db inputs))
 
-                      (keyword? query)
-                      (db-utils/get-key-value graph query)
+                       (keyword? query)
+                       (db-utils/get-key-value graph query)
 
-                      (seq inputs)
-                      (apply d/q query db inputs)
+                       (seq inputs)
+                       (apply d/q query db inputs)
 
-                      :else
-                      (d/q query db))
-                    transform-fn)]
-    (when-not (= new-result result)
-      (set-new-result! k new-result tx))))
+                       :else
+                       (d/q query db))
+                     transform-fn)]
+     (when-not (= new-result result)
+       (set-new-result! k new-result tx)))))
+
+(defn path-refs-need-recalculated?
+  [tx-meta]
+  (when-let [outliner-op (:outliner-op tx-meta)]
+    (not (or
+          (contains? #{:collapse-expand-blocks :delete-blocks} outliner-op)
+          ;; ignore move up/down since it doesn't affect the refs for any blocks
+          (contains? #{:move-blocks-up-down} (:move-op tx-meta))
+          (:undo? tx-meta) (:redo? tx-meta)))))
 
 (defn refresh!
   "Re-compute corresponding queries (from tx) and refresh the related react components."
   [repo-url {:keys [tx-data tx-meta] :as tx}]
   (when (and repo-url
-             (seq tx-data)
              (not (:skip-refresh? tx-meta)))
-    (let [db (conn/get-db repo-url)
-          affected-keys (get-affected-queries-keys tx)]
-      (doseq [[k cache] @query-state]
-        (let [custom? (= :custom (second k))
-              kv? (= :kv (second k))]
-          (when (and
-                 (= (first k) repo-url)
-                 (or (get affected-keys (vec (rest k)))
-                     custom?
-                     kv?))
-            (let [{:keys [query query-fn]} cache]
-              (when (or query query-fn)
-                (try
-                  (let [f #(execute-query! repo-url db k tx cache)]
-                    ;; Detects whether user is editing in a custom query, if so, execute the query immediately
-                    (if (and custom?
-                             ;; modifying during cards review need to be executed immediately
-                             (not (:cards-query? (meta query)))
-                             (not (state/edit-in-query-component)))
-                      (async/put! (state/get-reactive-custom-queries-chan) [f query])
-                      (f)))
-                  (catch js/Error e
-                    (js/console.error e)))))))))))
+    (when (seq tx-data)
+      (let [db (conn/get-db repo-url)
+            affected-keys (get-affected-queries-keys tx)]
+        (doseq [[k cache] @query-state]
+          (let [custom? (= :custom (second k))
+                kv? (= :kv (second k))]
+            (when (and
+                   (= (first k) repo-url)
+                   (or (get affected-keys (vec (rest k)))
+                       custom?
+                       kv?))
+              (let [{:keys [query query-fn]} cache
+                    query-or-refs? (state/edit-in-query-or-refs-component)]
+                (when (or query query-fn)
+                  (try
+                    (let [f #(execute-query! repo-url db k tx cache {:skip-query-time-check? query-or-refs?})]
+                      ;; Detects whether user is editing in a custom query, if so, execute the query immediately
+                      (if (or query-or-refs? (not custom?))
+                        (f)
+                        (async/put! (state/get-reactive-custom-queries-chan) [f query])))
+                    (catch js/Error e
+                      (js/console.error e))))))))))))
 
 (defn set-key-value
   [repo-url key value]

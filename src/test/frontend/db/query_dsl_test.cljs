@@ -401,6 +401,19 @@ tags: other
                 (map :block/content)))
         "NOT query")))
 
+(deftest nested-page-ref-queries
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "foo:: bar
+- p1 [[Parent page]]
+  - [[Child page]]
+- p2 [[Parent page]]
+  - Non linked content"}])
+  (is (= ["Non linked content"
+          "p2 [[Parent page]]"
+          "p1 [[Parent page]]"]
+         (map :block/content
+              (dsl-query "(and [[Parent page]] (not [[Child page]]))")))))
+
 (defn- load-test-files-with-timestamps
   []
   (let [files [{:file/path "journals/2020_12_26.md"

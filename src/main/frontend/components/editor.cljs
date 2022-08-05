@@ -23,6 +23,7 @@
             [frontend.util.cursor :as cursor]
             [frontend.util.keycode :as keycode]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.property :as gp-property]
             [goog.dom :as gdom]
             [promesa.core :as p]
             [react-draggable]
@@ -177,7 +178,7 @@
      result
      {:on-chosen   chosen-handler
       :on-enter    non-exist-block-handler
-      :empty-placeholder   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
+      :empty-placeholder   [:div.text-gray-500.pl-4.pr-4 (t :editor/block-search)]
       :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
                      (let [page (or (:block/original-name page)
                                     (:block/name page))
@@ -262,7 +263,8 @@
                (not (string/blank? property)))
       (let [current-pos (cursor/pos input)
             edit-content (state/sub [:editor/content id])
-            start-idx (string/last-index-of (subs edit-content 0 current-pos) "::")
+            start-idx (string/last-index-of (subs edit-content 0 current-pos)
+                                            gp-property/colons)
             q (or
                (when (>= current-pos (+ start-idx 2))
                  (subs edit-content (+ start-idx 2) current-pos))

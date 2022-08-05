@@ -97,19 +97,21 @@
           ref-pages (atom #{})
           ref-tags (atom #{})
           blocks (map (fn [block]
-                        (let [block-ref-pages (seq (:block/refs block))
-                              page-lookup-ref [:block/name page-name]
-                              block-path-ref-pages (->> (cons page-lookup-ref (seq (:block/path-refs block)))
-                                                        (remove nil?))]
-                          (when block-ref-pages
-                            (swap! ref-pages set/union (set block-ref-pages)))
-                          (-> block
-                              (dissoc :ref-pages)
-                              (assoc :block/format format
-                                     :block/page [:block/name page-name]
-                                     :block/refs block-ref-pages
-                                     :block/path-refs block-path-ref-pages))))
-                      blocks)
+                        (if (contains? #{"macro"} (:block/type block))
+                          block
+                          (let [block-ref-pages (seq (:block/refs block))
+                                page-lookup-ref [:block/name page-name]
+                                block-path-ref-pages (->> (cons page-lookup-ref (seq (:block/path-refs block)))
+                                                          (remove nil?))]
+                            (when block-ref-pages
+                              (swap! ref-pages set/union (set block-ref-pages)))
+                            (-> block
+                                (dissoc :ref-pages)
+                                (assoc :block/format format
+                                       :block/page [:block/name page-name]
+                                       :block/refs block-ref-pages
+                                       :block/path-refs block-path-ref-pages)))))
+                   blocks)
           page-entity (build-page-entity properties file page-name page ref-tags options)
           namespace-pages (let [page (:block/original-name page-entity)]
                             (when (text/namespace-page? page)

@@ -11,6 +11,7 @@
             [frontend.search.protocol :as protocol]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.property :as property]
             [goog.object :as gobj]
             [promesa.core :as p]))
 
@@ -77,20 +78,20 @@
 (defn fuzzy-search
   [data query & {:keys [limit extract-fn]
                  :or {limit 20}}]
-  (let [query (util/search-normalize query)]
+  (let [query (util/search-normalize query (state/enable-search-remove-accents?))]
     (->> (take limit
                (sort-by :score (comp - compare)
                         (filter #(< 0 (:score %))
                                 (for [item data]
                                   (let [s (str (if extract-fn (extract-fn item) item))]
                                     {:data item
-                                     :score (score query (util/search-normalize s))})))))
+                                     :score (score query (util/search-normalize s (state/enable-search-remove-accents?)))})))))
          (map :data))))
 
 (defn block-search
   [repo q option]
   (when-let [engine (get-engine repo)]
-    (let [q (util/search-normalize q)
+    (let [q (util/search-normalize q (state/enable-search-remove-accents?))
           q (if (util/electron?) q (escape-str q))]
       (when-not (string/blank? q)
         (protocol/query engine q option)))))
@@ -111,8 +112,8 @@
           (if (seq coll')
             (rest coll')
             (reduced false))))
-      (seq (util/search-normalize match))
-      (seq (util/search-normalize q))))))
+      (seq (util/search-normalize match (state/enable-search-remove-accents?)))
+      (seq (util/search-normalize q (state/enable-search-remove-accents?)))))))
 
 (defn page-search
   "Return a list of page names that match the query"
@@ -120,7 +121,7 @@
    (page-search q 10))
   ([q limit]
    (when-let [repo (state/get-current-repo)]
-     (let [q (util/search-normalize q)
+     (let [q (util/search-normalize q (state/enable-search-remove-accents?))
            q (clean-str q)]
        (when-not (string/blank? q)
          (let [indice (or (get-in @indices [repo :pages])
@@ -169,7 +170,9 @@
   ([q limit]
    (when q
      (let [q (clean-str q)
-           properties (map name (db-model/get-all-properties))]
+           properties (->> (db-model/get-all-properties)
+                           (remove (property/hidden-properties))
+                           (map name))]
        (when (seq properties)
          (if (string/blank? q)
            properties

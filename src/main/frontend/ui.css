@@ -110,13 +110,16 @@
       padding: 2rem;
 
       @screen md {
-        min-width: 760px;
+        min-width: 768px;
         width: auto;
 
-        .ls-card {
+        .ls-card, .ls-search {
           width: 740px;
           min-height: 60vh;
-          max-height: 740px;
+        }
+
+        .ls-search {
+          width: var(--ls-main-content-max-width);
         }
       }
     }
@@ -126,15 +129,6 @@
     @apply text-gray-400 hover:text-gray-500
     focus:outline-none focus:text-gray-500
     transition ease-in-out duration-150;
-  }
-
-  &[label="ls-modal-align-center"] {
-    top: 0;
-
-    .ui__modal-panel {
-      top: 50vh;
-      transform: translateY(-60%);
-    }
   }
 
   &[label="diff__cp"] {
@@ -150,7 +144,7 @@
   &[label="flashcards__cp"] {
       .panel-content {
           padding: 2rem 0rem;
-          
+
           @screen sm {
               padding: 2rem 2rem;
           }
@@ -162,7 +156,7 @@
       .ui__modal-panel {
           height: 90%;
       }
-    
+
       .panel-content {
           height: 100%;
       }

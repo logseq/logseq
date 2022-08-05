@@ -79,7 +79,7 @@
   (when-let [repo (state/get-current-repo)]
     (let [[headers parsed-blocks] (mldoc/opml->edn data)
           parsed-blocks (->>
-                         (block/extract-blocks parsed-blocks "" true :markdown)
+                         (block/extract-blocks parsed-blocks "" :markdown {})
                          (mapv editor/wrap-parse-block))
           page-name (:title headers)]
       (when (not (db/page-exists? page-name))

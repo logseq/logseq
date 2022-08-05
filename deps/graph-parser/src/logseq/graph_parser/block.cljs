@@ -10,7 +10,9 @@
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defn heading-block?
   [block]
@@ -49,7 +51,7 @@
 
                   (and
                    (= typ "Search")
-                   (text/page-ref? value)
+                   (page-ref/page-ref? value)
                    (text/page-ref-un-brackets! value))
 
                   (and
@@ -91,7 +93,7 @@
 
                :else
                nil)]
-    (text/block-ref-un-brackets! page)))
+    (when page (or (block-ref/get-block-ref-id page) page))))
 
 (defn- get-block-reference
   [block]
@@ -111,9 +113,8 @@
                         (let [{:keys [name arguments]} (second block)]
                           (when (and (= name "embed")
                                      (string? (first arguments))
-                                     (string/starts-with? (first arguments) "((")
-                                     (string/ends-with? (first arguments) "))"))
-                            (subs (first arguments) 2 (- (count (first arguments)) 2))))
+                                     (block-ref/string-block-ref? (first arguments)))
+                            (block-ref/get-string-block-ref-id (first arguments))))
 
                         (and (vector? block)
                              (= "Link" (first block))
@@ -121,7 +122,9 @@
                         (if (= "id" (:protocol (second (:url (second block)))))
                           (:link (second (:url (second block))))
                           (let [id (second (:url (second block)))]
-                            (text/block-ref-un-brackets! id)))
+                            ;; these can be maps
+                            (when (string? id)
+                              (or (block-ref/get-block-ref-id id) id))))
 
                         :else
                         nil)]
@@ -198,7 +201,6 @@
   [format properties user-config]
   (when (seq properties)
     (let [properties (seq properties)
-          properties (into {} properties)
           page-refs (get-page-ref-names-from-properties format properties user-config)
           properties (->> properties
                           (map (fn [[k v]]
@@ -396,53 +398,6 @@
            block))
        blocks))
 
-(defn- with-path-refs
-  [blocks]
-  (loop [blocks blocks
-         acc []
-         parents []]
-    (if (empty? blocks)
-      acc
-      (let [block (first blocks)
-            cur-level (:block/level block)
-            level-diff (- cur-level
-                          (get (last parents) :block/level 0))
-            [path-refs parents]
-            (cond
-              (zero? level-diff)            ; sibling
-              (let [path-refs (mapcat :block/refs (drop-last parents))
-                    parents (conj (vec (butlast parents)) block)]
-                [path-refs parents])
-
-              (> level-diff 0)              ; child
-              (let [path-refs (mapcat :block/refs parents)]
-                [path-refs (conj parents block)])
-
-              (< level-diff 0)              ; new parent
-              (let [parents (vec (take-while (fn [p] (< (:block/level p) cur-level)) parents))
-                    path-refs (mapcat :block/refs parents)]
-                [path-refs (conj parents block)]))
-            path-ref-pages (->> path-refs
-                                (concat (:block/refs block))
-                                (map (fn [ref]
-                                       (cond
-                                         (map? ref)
-                                         (:block/name ref)
-
-                                         :else
-                                         ref)))
-                                (remove string/blank?)
-                                (map (fn [ref]
-                                       (if (string? ref)
-                                         {:block/name (gp-util/page-name-sanity-lc ref)}
-                                         ref)))
-                                (remove vector?)
-                                (remove nil?)
-                                (distinct))]
-        (recur (rest blocks)
-               (conj acc (assoc block :block/path-refs path-ref-pages))
-               parents)))))
-
 (defn- block-tags->pages
   [{:keys [tags] :as block}]
   (if (seq tags)
@@ -492,6 +447,74 @@
           block-tags->pages
           (update :refs (fn [col] (remove nil? col)))))
 
+(defn- with-path-refs
+  [blocks]
+  (loop [blocks blocks
+         acc []
+         parents []]
+    (if (empty? blocks)
+      acc
+      (let [block (first blocks)
+            cur-level (:block/level block)
+            level-diff (- cur-level
+                          (get (last parents) :block/level 0))
+            [path-refs parents]
+            (cond
+              (zero? level-diff)            ; sibling
+              (let [path-refs (mapcat :block/refs (drop-last parents))
+                    parents (conj (vec (butlast parents)) block)]
+                [path-refs parents])
+
+              (> level-diff 0)              ; child
+              (let [path-refs (mapcat :block/refs parents)]
+                [path-refs (conj parents block)])
+
+              (< level-diff 0)              ; new parent
+              (let [parents (vec (take-while (fn [p] (< (:block/level p) cur-level)) parents))
+                    path-refs (mapcat :block/refs parents)]
+                [path-refs (conj parents block)]))
+            path-ref-pages (->> path-refs
+                                (concat (:block/refs block))
+                                (map (fn [ref]
+                                       (cond
+                                         (map? ref)
+                                         (:block/name ref)
+
+                                         :else
+                                         ref)))
+                                (remove string/blank?)
+                                (map (fn [ref]
+                                       (if (string? ref)
+                                         {:block/name (gp-util/page-name-sanity-lc ref)}
+                                         ref)))
+                                (remove vector?)
+                                (remove nil?)
+                                (distinct))]
+        (recur (rest blocks)
+               (conj acc (assoc block :block/path-refs path-ref-pages))
+               parents)))))
+
+(defn- macro->block
+  "macro: {:name \"\" arguments [\"\"]}"
+  [macro]
+  {:db/ident (str (:name macro) " " (string/join " " (:arguments macro)))
+   :block/type "macro"
+   :block/properties {:logseq.macro-name (:name macro)
+                      :logseq.macro-arguments (:arguments macro)}})
+
+(defn extract-macros-from-ast
+  [ast]
+  (let [*result (atom #{})]
+    (walk/postwalk
+     (fn [f]
+       (if (and (vector? f) (= (first f) "Macro"))
+         (do
+           (swap! *result conj (second f))
+           nil)
+         f))
+     ast)
+    (mapv macro->block @*result)))
+
 (defn- with-pre-block-if-exists
   [blocks body pre-block-properties encoded-content {:keys [supported-formats db date-formatter user-config]}]
   (let [first-block (first blocks)
@@ -512,10 +535,11 @@
                                 :content content
                                 :level 1
                                 :properties properties
-                                :properties-order properties-order
+                                :properties-order (vec properties-order)
                                 :refs property-refs
                                 :pre-block? true
                                 :unordered true
+                                :macros (extract-macros-from-ast body)
                                 :body body}
                          block (with-page-block-refs block false supported-formats db date-formatter)]
                      (block-keywordize block))
@@ -548,7 +572,7 @@
                 (assoc :properties (:properties properties))
 
                 (seq (:properties-order properties))
-                (assoc :properties-order (:properties-order properties)))
+                (assoc :properties-order (vec (:properties-order properties))))
         block (if (get-in block [:properties :collapsed])
                 (-> (assoc block :collapsed? true)
                     (update :properties (fn [m] (dissoc m :collapsed)))
@@ -578,7 +602,7 @@
     `with-id?`: If `with-id?` equals to true, all the referenced pages will have new db ids.
     `format`: content's format, it could be either :markdown or :org-mode.
     `options`: Options supported are :user-config, :block-pattern :supported-formats,
-     :date-formatter and :db"
+               :extract-macros, :date-formatter and :db"
   [blocks content with-id? format {:keys [user-config] :as options}]
   {:pre [(seq blocks) (string? content) (boolean? with-id?) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)
@@ -606,8 +630,9 @@
                   (recur headings (rest blocks) timestamps properties body))
 
                 (heading-block? block)
-                (let [block (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)]
-                  (recur (conj headings block) (rest blocks) {} {} []))
+                (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
+                      block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))]
+                  (recur (conj headings block'') (rest blocks) {} {} []))
 
                 :else
                 (recur headings (rest blocks) timestamps properties (conj body block))))
@@ -620,70 +645,75 @@
 
 (defn with-parent-and-left
   [page-id blocks]
-  (loop [blocks (map (fn [block] (assoc block :block/level-spaces (:block/level block))) blocks)
-         parents [{:page/id page-id     ; db id or a map {:block/name "xxx"}
-                   :block/level 0
-                   :block/level-spaces 0}]
-         result []]
-    (if (empty? blocks)
-      (map #(dissoc % :block/level-spaces) result)
-      (let [[block & others] blocks
-            level-spaces (:block/level-spaces block)
-            {:block/keys [uuid level parent] :as last-parent} (last parents)
-            parent-spaces (:block/level-spaces last-parent)
-            [blocks parents result]
-            (cond
-              (= level-spaces parent-spaces)        ; sibling
-              (let [block (assoc block
-                                 :block/parent parent
-                                 :block/left [:block/uuid uuid]
-                                 :block/level level)
-                    parents' (conj (vec (butlast parents)) block)
-                    result' (conj result block)]
-                [others parents' result'])
+  (let [[blocks other-blocks] (split-with
+                               (fn [b]
+                                 (not= "macro" (:block/type b)))
+                                blocks)
+        result (loop [blocks (map (fn [block] (assoc block :block/level-spaces (:block/level block))) blocks)
+                      parents [{:page/id page-id     ; db id or a map {:block/name "xxx"}
+                                :block/level 0
+                                :block/level-spaces 0}]
+                      result []]
+                 (if (empty? blocks)
+                   (map #(dissoc % :block/level-spaces) result)
+                   (let [[block & others] blocks
+                         level-spaces (:block/level-spaces block)
+                         {:block/keys [uuid level parent] :as last-parent} (last parents)
+                         parent-spaces (:block/level-spaces last-parent)
+                         [blocks parents result]
+                         (cond
+                           (= level-spaces parent-spaces)        ; sibling
+                           (let [block (assoc block
+                                              :block/parent parent
+                                              :block/left [:block/uuid uuid]
+                                              :block/level level)
+                                 parents' (conj (vec (butlast parents)) block)
+                                 result' (conj result block)]
+                             [others parents' result'])
 
-              (> level-spaces parent-spaces)         ; child
-              (let [parent (if uuid [:block/uuid uuid] (:page/id last-parent))
-                    block (cond->
-                            (assoc block
-                                  :block/parent parent
-                                  :block/left parent)
-                            ;; fix block levels with wrong order
-                            ;; For example:
-                            ;;   - a
-                            ;; - b
-                            ;; What if the input indentation is two spaces instead of 4 spaces
-                            (>= (- level-spaces parent-spaces) 1)
-                            (assoc :block/level (inc level)))
-                    parents' (conj parents block)
-                    result' (conj result block)]
-                [others parents' result'])
+                           (> level-spaces parent-spaces)         ; child
+                           (let [parent (if uuid [:block/uuid uuid] (:page/id last-parent))
+                                 block (cond->
+                                         (assoc block
+                                                :block/parent parent
+                                                :block/left parent)
+                                         ;; fix block levels with wrong order
+                                         ;; For example:
+                                         ;;   - a
+                                         ;; - b
+                                         ;; What if the input indentation is two spaces instead of 4 spaces
+                                         (>= (- level-spaces parent-spaces) 1)
+                                         (assoc :block/level (inc level)))
+                                 parents' (conj parents block)
+                                 result' (conj result block)]
+                             [others parents' result'])
 
-              (< level-spaces parent-spaces)
-              (cond
-                (some #(= (:block/level-spaces %) (:block/level-spaces block)) parents) ; outdent
-                (let [parents' (vec (filter (fn [p] (<= (:block/level-spaces p) level-spaces)) parents))
-                      left (last parents')
-                      blocks (cons (assoc (first blocks)
-                                          :block/level (dec level)
-                                          :block/left [:block/uuid (:block/uuid left)])
-                                   (rest blocks))]
-                  [blocks parents' result])
+                           (< level-spaces parent-spaces)
+                           (cond
+                             (some #(= (:block/level-spaces %) (:block/level-spaces block)) parents) ; outdent
+                             (let [parents' (vec (filter (fn [p] (<= (:block/level-spaces p) level-spaces)) parents))
+                                   left (last parents')
+                                   blocks (cons (assoc (first blocks)
+                                                       :block/level (dec level)
+                                                       :block/left [:block/uuid (:block/uuid left)])
+                                                (rest blocks))]
+                               [blocks parents' result])
 
-                :else
-                (let [[f r] (split-with (fn [p] (<= (:block/level-spaces p) level-spaces)) parents)
-                      left (first r)
-                      parent-id (if-let [block-id (:block/uuid (last f))]
-                                  [:block/uuid block-id]
-                                  page-id)
-                      block (cond->
-                              (assoc block
-                                     :block/parent parent-id
-                                     :block/left [:block/uuid (:block/uuid left)]
-                                     :block/level (:block/level left)
-                                     :block/level-spaces (:block/level-spaces left)))
+                             :else
+                             (let [[f r] (split-with (fn [p] (<= (:block/level-spaces p) level-spaces)) parents)
+                                   left (first r)
+                                   parent-id (if-let [block-id (:block/uuid (last f))]
+                                               [:block/uuid block-id]
+                                               page-id)
+                                   block (cond->
+                                           (assoc block
+                                                  :block/parent parent-id
+                                                  :block/left [:block/uuid (:block/uuid left)]
+                                                  :block/level (:block/level left)
+                                                  :block/level-spaces (:block/level-spaces left)))
 
-                      parents' (->> (concat f [block]) vec)
-                      result' (conj result block)]
-                  [others parents' result'])))]
-        (recur blocks parents result)))))
+                                   parents' (->> (concat f [block]) vec)
+                                   result' (conj result block)]
+                               [others parents' result'])))]
+                     (recur blocks parents result))))]
+    (concat result other-blocks)))
