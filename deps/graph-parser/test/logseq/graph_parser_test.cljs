@@ -52,7 +52,22 @@
                                                         (reset! deleted-page page))})
           (catch :default _)))
       (is (= nil @deleted-page)
-          "Page should not be deleted when there is unexpected failure"))))
+          "Page should not be deleted when there is unexpected failure")))
+  
+  (testing "parsing whiteboard page"
+    (let [conn (ldb/start-conn)]
+      (graph-parser/parse-file conn "whiteboards/foo.edn" (pr-str foo-edn) {})
+      (is (= {:block/name "foo" :block/file {:file/path "whiteboards/foo.edn"}}
+             (let [blocks (d/q '[:find (pull ?b [* {:block/parent
+                                                    [:block/name
+                                                     {:block/file
+                                                      [:file/path]}]}])
+                                 :in $
+                                 :where [?b :block/content] [(missing? $ ?b :block/name)]]
+                               @conn)
+                   parent (:block/parent (ffirst blocks))]
+               parent))
+          "parsed block in the whiteboard page has correct parent page"))))
 
 (defn- test-property-order [num-properties]
   (let [conn (ldb/start-conn)
@@ -79,18 +94,3 @@
     (test-property-order 4))
   (testing "Sort order and persistence of 10 properties"
     (test-property-order 10)))
-
-(testing "parsing whiteboard page"
-    (let [conn (ldb/start-conn)]
-      (graph-parser/parse-file conn "/whiteboards/foo.edn" (pr-str foo-edn) {})
-      (is (= {:block/name "foo" :block/file {:file/path "/whiteboards/foo.edn"}}
-             (let [blocks (d/q '[:find (pull ?b [* {:block/parent
-                                                    [:block/name
-                                                     {:block/file
-                                                      [:file/path]}]}])
-                                 :in $
-                                 :where [?b :block/content] [(missing? $ ?b :block/name)]]
-                               @conn)
-                   parent (:block/parent (ffirst blocks))]
-               parent))
-          "parsed block in the whiteboard page has correct parent page"))))

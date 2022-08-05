@@ -937,7 +937,7 @@
              [:a.button.whiteboard
               {:class    (util/classnames [{:active (boolean @*whiteboard?)}])
                :on-click #(reset! *whiteboard? (not @*whiteboard?))}
-              (ui/icon "artboard" {:style {:fontSize ui/icon-size}})])]
+              (ui/icon "whiteboard" {:style {:fontSize ui/icon-size}})])]
            [:div
             (ui/tippy
              {:html  [:small (str (t :page/show-journals) " ?")]

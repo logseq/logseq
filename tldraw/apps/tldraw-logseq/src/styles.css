@@ -519,7 +519,7 @@
 
 .tl-logseq-portal-container {
   width: calc(100% - 2px);
-  height: 100%;
+  height: calc(100% - 2px);
   transform: translate(1px, 1px);
   overscroll-behavior: none;
   display: flex;

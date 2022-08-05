@@ -115,7 +115,7 @@
       margin: 0;
     }
 
-    i.ti {
+    i:is(.ti, .tie) {
       font-size: 16px;
       display: inline-block;
       position: relative;

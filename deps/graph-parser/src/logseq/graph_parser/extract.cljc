@@ -215,6 +215,7 @@
    - it will only contain a single page (for now). The page properties contains 'bindings' etc
    - blocks will be adapted to tldraw shapes. All blocks's parent is the given page."
   [file content {:keys [verbose] :or {verbose true} :as options}]
+  (println "extract-whiteboard-edn Parsing start: " file)
   (let [_ (when verbose (println "Parsing start: " file))
         {:keys [pages blocks]} (gp-util/safe-read-string content)
         page-block (first pages)

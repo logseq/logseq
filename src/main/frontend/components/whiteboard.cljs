@@ -110,7 +110,7 @@
     {:style {:z-index 2000}}
     [:span.inline-flex.color-level.text-xl.px-2
      {:style {:color "var(--ls-primary-text-color)"}}
-     (page/page-title name [:span.ti.ti-artboard
+     (page/page-title name [:span.tie.tie-whiteboard
                             {:style {:font-size "0.9em"}}]
                       name nil false)]
 

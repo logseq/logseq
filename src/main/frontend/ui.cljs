@@ -867,10 +867,19 @@
              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
              :on-tweet-load-success #(reset! *loading? false)})]]))
 
+;; Extended tabler icons managed by Webfont app
+(defonce tie-names 
+  #{"block" 
+    "page" 
+    "references-hide" 
+    "references-show" 
+    "whiteboard" 
+    "whiteboard-element"})
+
 (defn icon
   ([class] (icon class nil))
   ([class opts]
-   [:i (merge {:class (str "ti ti-" class
+   [:i (merge {:class (str (if (tie-names class) "tie tie-" "ti ti-") class
                            (when (:class opts)
                              (str " " (string/trim (:class opts)))))}
               (dissoc opts :class))]))

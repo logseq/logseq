@@ -648,7 +648,7 @@
                   (not html-export?)
                   (not contents-page?))
          [:span.text-gray-500.bracket page-ref/left-brackets])
-       (when whiteboard? [:span.text-gray-500.ti.ti-artboard " "])
+       (when whiteboard? [:span.text-gray-500.tie.tie-whiteboard " "])
        (let [s (string/trim s)]
          (page-cp (assoc config
                          :label (mldoc/plain->text label)
@@ -2257,7 +2257,7 @@
       [:div.single-block
        {:class (str block-uuid)
         :id (str "ls-block-" blocks-container-id "-" block-uuid)}
-       (block-content-or-editor config block edit-input-id uuid 0 edit? true)])))
+       (block-content-or-editor config block edit-input-id uuid (:block/heading-level block) edit? true)])))
 
 (rum/defc single-block-cp
   [block-uuid]

@@ -48,7 +48,7 @@
     justify-content: center;
     opacity: .5;
 
-    .ti {
+    .ti, .tie {
       font-size: 20px;
     }
   }
@@ -107,7 +107,7 @@
   }
 
   .dropdown-wrapper {
-    .ti {
+    .ti, .tie {
       opacity: .9;
     }
   }
