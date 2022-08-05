@@ -124,7 +124,9 @@
                              (let [k (keyword (string/lower-case k))
                                    v (if (contains? #{:title :description :filters :macro} k)
                                        v
-                                       (parse-property k v config-state))]
+                                       ;; user config ignored as we always want to parse links
+                                       ;; out of page properties
+                                       (parse-property k v (dissoc config-state :property-values-allow-links-and-text?)))]
                                [k v]))))
           properties (into (linked/map) properties)
           macro-properties (filter (fn [x] (= :macro (first x))) properties)

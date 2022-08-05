@@ -45,7 +45,7 @@
 ;; Tests
 ;; =====
 
-(deftest block-property-queries
+(deftest ^:focus block-property-queries
   (load-test-files [{:file/path "journals/2022_02_28.md"
                      :file/content "a:: b
 - b1
@@ -64,7 +64,7 @@ prop-d:: nada"}])
   (testing "Blocks have given property value"
     (is (= #{"b1" "b2"}
            (set (map (comp first str/split-lines :block/content)
-                 (dsl-query "(property prop-a val-a)")))))
+                     (dsl-query "(property prop-a val-a)")))))
 
     (is (= ["b2"]
            (map (comp first str/split-lines :block/content)
@@ -112,15 +112,15 @@ prop-d:: nada"}])
               (dsl-query "(property prop-d)")))
       "Blocks that have a property"))
 
-(deftest page-property-queries
+(deftest ^:focus page-property-queries
   (load-test-files [{:file/path "pages/page1.md"
                      :file/content "parent:: [[child page 1]], [[child-no-space]]"}
                     {:file/path "pages/page2.md"
-                     :file/content "foo:: bar"}
+                     :file/content "foo:: #bar"}
                     {:file/path "pages/page3.md"
-                     :file/content "parent:: [[child page 1]], child page 2\nfoo:: bar"}
+                     :file/content "parent:: [[child page 1]], [[child page 2]]\nfoo:: bar"}
                     {:file/path "pages/page4.md"
-                     :file/content "parent:: child page 2\nfoo:: baz"}])
+                     :file/content "parent:: [[child page 2]]\nfoo:: baz"}])
 
   (is (= ["page1" "page3" "page4"]
          (map :block/name (dsl-query "(page-property parent)")))

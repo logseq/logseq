@@ -69,4 +69,23 @@
                                          ;; tags is linkable and background-color is not
                                          [["tags" "foo, bar"] ["background-color" "#008000"]]
                                          {:property-pages/enabled? true})))
-        "Only editable linkable built-in properties have page-refs in property values")))
+        "Only editable linkable built-in properties have page-refs in property values"))
+
+  (testing ":property-values-allow-links-and-text? option"
+    (are [x y]
+         (= y (select-keys
+               (gp-block/extract-properties :markdown
+                                            x
+                                            {:property-values-allow-links-and-text? true})
+               [:page-refs :properties]))
+         [["foo" "[[bar]] test #baz #[[multi word bar]]"]]
+         {:page-refs ["bar" "baz" "multi word bar" "foo"]
+          :properties {:foo #{"bar" "baz" "multi word bar"}}}
+
+         [["desc" "This is a multiple sentence description. It has one [[link]]"]]
+         {:page-refs ["link" "desc"]
+          :properties {:desc #{"link"}}}
+
+         [["foo" "[[bar]]"]]
+         {:page-refs ["bar" "foo"]
+          :properties {:foo #{"bar"}}})))

@@ -229,5 +229,9 @@
        (gp-mldoc/link? format v)
        v
 
+       (and (:property-values-allow-links-and-text? config-state)
+            (not (contains? gp-property/editable-linkable-built-in-properties k)))
+       v
+
        :else
        (split-page-refs-without-brackets v)))))
