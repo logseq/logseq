@@ -1645,46 +1645,63 @@
         change (<! (<set-env&keys config/FILE-SYNC-PROD? graph-uuid))
         timeout (recur)))))
 
-
-;;; ### sync state
-
+;;; ### chans to control sync process
 (def full-sync-chan
   "offer `true` to this chan will trigger a local->remote full sync"
   (chan 1))
+(def full-sync-mult (async/mult full-sync-chan))
+
 (def stop-sync-chan
   "offer `true` to this chan will stop current `SyncManager`"
   (chan 1))
+(def stop-sync-mult (async/mult stop-sync-chan))
+
 (def remote->local-sync-chan
   "offer `true` to this chan will trigger a remote->local sync"
   (chan 1))
+(def remote->local-sync-mult (async/mult remote->local-sync-chan))
+
 (def remote->local-full-sync-chan
   "offer `true` to this chan will trigger a remote->local full sync"
   (chan 1))
+(def remote->local-full-sync-mult (async/mult remote->local-full-sync-chan))
+
 (def immediately-local->remote-chan
   "Immediately trigger upload of files in waiting queue"
   (chan))
+
+(def app-state-changed-chan
+  "boolean value, means active or not"
+  (chan 1))
+(def app-state-changed-mult (async/mult app-state-changed-chan))
+
+(add-watch (rum/cursor state/state :mobile/app-state-change) "sync-manage"
+           (fn [_ _ _ {:keys [is-active?]}]
+             (offer! app-state-changed-chan is-active?)))
+
+;;; ### sync state
 
 (defn sync-state
   "create a new sync-state"
   []
   {:post [(s/valid? ::sync-state %)]}
-  {:current-syncing-graph-uuid nil
-   :state ::starting
+  {:current-syncing-graph-uuid  nil
+   :state                       ::starting
    :current-local->remote-files #{}
    :current-remote->local-files #{}
-   :queued-local->remote-files #{}
-   :recent-remote->local-files #{}
-   :history '()})
+   :queued-local->remote-files  #{}
+   :recent-remote->local-files  #{}
+   :history                     '()})
 
 (defn- sync-state--update-current-syncing-graph-uuid
   [sync-state graph-uuid]
-  {:pre [(s/valid? ::sync-state sync-state)]
+  {:pre  [(s/valid? ::sync-state sync-state)]
    :post [(s/valid? ::sync-state %)]}
   (assoc sync-state :current-syncing-graph-uuid graph-uuid))
 
 (defn- sync-state--update-state
   [sync-state next-state]
-  {:pre [(s/valid? ::state next-state)]
+  {:pre  [(s/valid? ::state next-state)]
    :post [(s/valid? ::sync-state %)]}
   (assoc sync-state :state next-state))
 
@@ -2073,7 +2090,10 @@
                  ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer remoteapi
                  ^:mutable ratelimit-local-changes-chan
                  *txid ^:mutable state ^:mutable _remote-change-chan ^:mutable _*ws *stopped?
-                 ^:mutable ops-chan]
+                 ^:mutable ops-chan
+                 ;; control chans
+                 private-full-sync-chan private-stop-sync-chan private-remote->local-sync-chan
+                 private-remote->local-full-sync-chan]
     Object
     (schedule [this next-state args reason]
       {:pre [(s/valid? ::state next-state)]}
@@ -2103,17 +2123,21 @@
       (set! _*ws (atom nil))
       (set! _remote-change-chan (ws-listen! graph-uuid _*ws))
       (set! ratelimit-local-changes-chan (<ratelimit local->remote-syncer local-changes-chan))
+      (async/tap full-sync-mult private-full-sync-chan)
+      (async/tap stop-sync-mult private-stop-sync-chan)
+      (async/tap remote->local-sync-mult private-remote->local-sync-chan)
+      (async/tap remote->local-full-sync-mult private-remote->local-full-sync-chan)
       (go-loop []
         (let [{:keys [stop remote->local remote->local-full-sync local->remote-full-sync local->remote]}
               (async/alt!
-                stop-sync-chan {:stop true}
-                remote->local-full-sync-chan {:remote->local-full-sync true}
-                remote->local-sync-chan {:remote->local true}
-                full-sync-chan {:local->remote-full-sync true}
+                private-stop-sync-chan {:stop true}
+                private-remote->local-full-sync-chan {:remote->local-full-sync true}
+                private-remote->local-sync-chan {:remote->local true}
+                private-full-sync-chan {:local->remote-full-sync true}
                 _remote-change-chan ([v] (println "remote change:" v) {:remote->local v})
                 ratelimit-local-changes-chan ([v]
                                               (let [rest-v (util/drain-chan ratelimit-local-changes-chan)
-                                                    vs (cons v rest-v)]
+                                                    vs     (cons v rest-v)]
                                                 (println "local changes:" vs)
                                                 {:local->remote vs}))
                 (timeout (* 20 60 1000)) {:local->remote-full-sync true}
@@ -2189,9 +2213,9 @@
           (cond
             succ
             (do (put-sync-event! {:event :finished-local->remote
-                                  :data {:graph-uuid graph-uuid
-                                         :full-sync? true
-                                         :epoch (tc/to-epoch (t/now))}})
+                                  :data  {:graph-uuid graph-uuid
+                                          :full-sync? true
+                                          :epoch      (tc/to-epoch (t/now))}})
                 (.schedule this ::idle nil nil))
             need-sync-remote
             (do (util/drain-chan ops-chan)
@@ -2216,9 +2240,9 @@
           (cond
             succ
             (do (put-sync-event! {:event :finished-remote->local
-                                  :data {:graph-uuid graph-uuid
-                                         :full-sync? true
-                                         :epoch (tc/to-epoch (t/now))}})
+                                  :data  {:graph-uuid graph-uuid
+                                          :full-sync? true
+                                          :epoch      (tc/to-epoch (t/now))}})
                 (.schedule this ::idle nil nil))
             stop
             (.schedule this ::stop nil nil)
@@ -2243,11 +2267,11 @@
                   (.schedule this ::idle nil nil))
               succ
               (do (put-sync-event! {:event :finished-remote->local
-                                    :data {:graph-uuid graph-uuid
-                                           :full-sync? false
-                                           :from-txid origin-txid
-                                           :to-txid @*txid
-                                           :epoch (tc/to-epoch (t/now))}})
+                                    :data  {:graph-uuid graph-uuid
+                                            :full-sync? false
+                                            :from-txid  origin-txid
+                                            :to-txid    @*txid
+                                            :epoch      (tc/to-epoch (t/now))}})
                   (.schedule this ::idle nil nil))
               stop
               (.schedule this ::stop nil nil)
@@ -2277,10 +2301,10 @@
           (cond
             succ
             (do (put-sync-event! {:event :finished-local->remote
-                                  :data {:graph-uuid graph-uuid
-                                         :full-sync? false
-                                         :file-change-events distincted-local-changes
-                                         :epoch (tc/to-epoch (t/now))}})
+                                  :data  {:graph-uuid         graph-uuid
+                                          :full-sync?         false
+                                          :file-change-events distincted-local-changes
+                                          :epoch              (tc/to-epoch (t/now))}})
                 (.schedule this ::idle nil nil))
 
             need-sync-remote
@@ -2305,7 +2329,11 @@
         (when-not @*stopped?
           (vreset! *stopped? true)
           (ws-stop! _*ws)
-          (offer! stop-sync-chan true)
+          (offer! private-stop-sync-chan true)
+          (async/untap full-sync-mult private-full-sync-chan)
+          (async/untap stop-sync-mult private-stop-sync-chan)
+          (async/untap remote->local-sync-mult private-remote->local-sync-chan)
+          (async/untap remote->local-full-sync-mult private-remote->local-full-sync-chan)
           (when ops-chan (async/close! ops-chan))
           (stop-local->remote! local->remote-syncer)
           (stop-remote->local! remote->local-syncer)
@@ -2336,7 +2364,7 @@
     (.set-local->remote-syncer! remote->local-syncer local->remote-syncer)
     (swap! *sync-state sync-state--update-current-syncing-graph-uuid graph-uuid)
     (->SyncManager graph-uuid base-path *sync-state local->remote-syncer remote->local-syncer remoteapi-with-stop
-                   nil *txid nil nil nil *stopped? nil)))
+                   nil *txid nil nil nil *stopped? nil (chan 1) (chan 1) (chan 1) (chan 1))))
 
 (def ^:private current-sm-graph-uuid (atom nil))
 
@@ -2403,10 +2431,6 @@
                 (do
                   (state/set-file-sync-state repo @*sync-state)
                   (state/set-file-sync-manager sm)
-
-                  (poll! stop-sync-chan)
-                  (poll! remote->local-sync-chan)
-                  (poll! remote->local-full-sync-chan)
 
                   ;; update global state when *sync-state changes
                   (add-watch *sync-state ::update-global-state
