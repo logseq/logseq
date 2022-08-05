@@ -1803,6 +1803,7 @@
        (if title
          (conj
           (map-inline config title)
+          (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element")])
           (when (and (util/electron?) (not (#{:default :whiteboard-shape} block-type)))
             [:a.prefix-link
              {:on-click #(case block-type
@@ -2091,9 +2092,9 @@
           (seq title)
           (build-block-title config block)
 
-          (= block-type :whiteboard-shape)
-          [:<> (ui/icon "whiteboard-element")
-           (inline config (first (:block/title block)))]
+          ;; (= block-type :whiteboard-shape)
+          ;; [:<> (ui/icon "whiteboard-element")
+          ;;  (inline config (first (:block/title block)))]
 
           :else
           nil)]
