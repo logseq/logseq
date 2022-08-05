@@ -420,11 +420,11 @@
    {:not-matched-handler (editor-handler/keydown-not-matched-handler format)}))
 
 (defn- set-up-key-up!
-  [state input input-id search-timeout]
+  [state input input-id]
   (mixins/on-key-up
    state
    {}
-   (editor-handler/keyup-handler state input input-id search-timeout)))
+   (editor-handler/keyup-handler state input input-id)))
 
 (def search-timeout (atom nil))
 
@@ -434,7 +434,7 @@
         input-id id
         input (gdom/getElement input-id)]
     (set-up-key-down! state format)
-    (set-up-key-up! state input input-id search-timeout)))
+    (set-up-key-up! state input input-id)))
 
 (def starts-with? clojure.string/starts-with?)
 
