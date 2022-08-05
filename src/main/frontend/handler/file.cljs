@@ -85,6 +85,94 @@
     :else
     nil))
 
+(defn- page-exists-in-another-file
+  "Conflict of files towards same page"
+  [repo-url page file]
+  (when-let [page-name (:block/name page)]
+    (let [current-file (:file/path (db/get-page-file repo-url page-name))]
+      (when (not= file current-file)
+        current-file))))
+
+(defn- get-delete-blocks [repo-url first-page file]
+  (let [delete-blocks (->
+                       (concat
+                        (db/delete-file-blocks! repo-url file)
+                        (when first-page (db/delete-page-blocks repo-url (:block/name first-page))))
+                       (distinct))]
+    delete-blocks))
+
+(defn- resolve-file-conflict
+  "When a new file is replacing the current file of a page, transact the delete operation.
+   Addressing the Chokodar inconsistent behavior under macOS (FsEvent) on renaming files
+     between capitalizations. It only fire `add` event for that, while the expected events are
+     `unlink` then `add`.
+   Hope our own native file watcher will fix it :)"
+  [repo-url first-page file transact!]
+  (when-let [current-file (page-exists-in-another-file repo-url first-page file)]
+    (when (not= file current-file)
+      (p/let [dir     (config/get-repo-dir repo-url)
+              exists? (fs/file-exists? dir current-file)]
+        ;; if the `:file/path` still exists, the adding is conflict
+        ;; notificate the error
+        ;; if the `:file/path` is not exists, then the file is replaced 
+        ;; clean the items to avoid conflict 
+        (if exists?
+          (let [error (str "Page already exists with another file: " current-file ", current file: " file)]
+            (state/pub-event! [:notification/show
+                               {:content error
+                                :status :error
+                                :clear? false}]))
+          (transact! (distinct (db/delete-file-blocks! repo-url current-file))))))))
+
+(defn reset-file!
+  ([repo-url file content]
+   (reset-file! repo-url file content {}))
+  ([repo-url file content {:keys [verbose] :as options}]
+   (try
+     (let [electron-local-repo? (and (util/electron?)
+                                    (config/local-db? repo-url))
+          file (cond
+                 (and electron-local-repo?
+                      util/win32?
+                      (utils/win32 file))
+                 file
+
+                 (and electron-local-repo? (or
+                                            util/win32?
+                                            (not= "/" (first file))))
+                 (str (config/get-repo-dir repo-url) "/" file)
+
+                 (and (mobile/native-android?) (not= "/" (first file)))
+                 file
+
+                 (and (mobile/native-ios?) (not= "/" (first file)))
+                 file
+
+                 :else
+                 file)
+          file (gp-util/path-normalize file)
+          new? (nil? (db/entity [:file/path file]))]
+      (:tx
+       (graph-parser/parse-file
+        (db/get-db repo-url false)
+        file
+        content
+        (merge (dissoc options :verbose)
+               {:new? new?
+                :delete-blocks-fn   (partial get-delete-blocks repo-url)
+                :resolve-replace-fn (partial resolve-file-conflict repo-url)
+                :extract-options (merge
+                                  {:user-config (state/get-config)
+                                   :date-formatter (state/get-date-formatter)
+                                   :page-name-order (state/page-name-order)
+                                   :block-pattern (config/get-block-pattern (gp-util/get-format file))
+                                   :supported-formats (gp-config/supported-formats)
+                                   :uri-encoded? (util/mobile?)}
+                                  (when (some? verbose) {:verbose verbose}))}))))
+     (catch :default e
+       (prn "Reset file failed " {:file file})
+       (log/error :exception e)))))
+
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
   [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose

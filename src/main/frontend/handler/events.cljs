@@ -15,6 +15,7 @@
             [frontend.components.plugins :as plugin]
             [frontend.components.search :as component-search]
             [frontend.components.shell :as shell]
+            [frontend.components.conversion :as conversion-component]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -118,6 +119,8 @@
 (defmethod handle :graph/refresh [_]
   (repo-handler/refresh-repos!))
 
+;; FIXME: awful multi-arty function. 
+;; Should use a `-impl` function instead of the awful `skip-ios-check?` param with nested callback.
 (defn- graph-switch
   ([graph]
    (graph-switch graph false))
@@ -138,6 +141,7 @@
        (repo-handler/refresh-repos!)
        (file-sync-restart!)))))
 
+;; Parameters for the `persist-db` function, to show the notification messages
 (def persist-db-noti-m
   {:before     #(notification/show!
                  (ui/loading (t :graph/persist))
@@ -317,15 +321,17 @@
   (p/let [content (when content (encrypt/decrypt content))]
     (state/set-modal! #(git-component/file-specific-version path hash content))))
 
-  ;; Hook on graph is restored from `.transit` cache
-(defmethod handle :graph/ready 
+;; Hook on a graph is ready to be shown to the user. 
+;; It's different from :graph/resotred, as :graph/restored is for window reloaded
+(defmethod handle :graph/ready
   [[_ repo]]
   (when (config/local-db? repo)
-    (p/let [dir (config/get-repo-dir repo)
-            dir-exists? (fs/dir-exists? dir)]
-      (when-not dir-exists?
+    (p/let [dir               (config/get-repo-dir repo)
+            dir-exists?       (fs/dir-exists? dir)]
+      (if dir-exists?
+        (conversion-component/check-for-conversion! repo)
         (state/pub-event! [:graph/dir-gone dir]))))
-  (repo-handler/re-index-when-stale!)
+  ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
@@ -415,7 +421,7 @@
         (set! (.. right-sidebar-node -style -paddingBottom) "150px")))))
 
 (defn update-file-path [deprecated-repo current-repo deprecated-app-id current-app-id]
-  (let [files (db-model/get-files-v2 deprecated-repo)
+  (let [files (db-model/get-files-entity deprecated-repo)
         conn (conn/get-db deprecated-repo false)
         tx (mapv (fn [[id path]]
                    (let [new-path (string/replace path deprecated-app-id current-app-id)]
@@ -562,20 +568,25 @@
                   (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
 
 (defmethod handle :graph/re-index [[_]]
+  ;; Ensure the graph only has ONE window instance
   (repo-handler/re-index!
    nfs-handler/rebuild-index!
    #(do (page-handler/create-today-journal!)
         (file-sync-restart!))))
 
-(defmethod handle :graph/ask-for-re-index [[_ *multiple-windows?]]
+(defmethod handle :graph/ask-for-re-index [[_ *multiple-windows? text]]
+  ;; *multiple-windows? - if the graph is opened in multiple windows, boolean atom
+  ;; text - custom message to show on asking for re-index
   (if (and (util/atom? *multiple-windows?) @*multiple-windows?)
     (handle
      [:modal/show
       [:div
+       (when (string? text) [:p text])
        [:p (t :re-index-multiple-windows-warning)]]])
     (handle
      [:modal/show
       [:div {:style {:max-width 700}}
+       (when (string? text) [:p text])
        [:p (t :re-index-discard-unsaved-changes-warning)]
        (ui/button
          (t :yes)

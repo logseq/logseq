@@ -23,10 +23,13 @@
      file name parsing
      first block content
    note: `page-name-order` is deprecated on Apr. 2021
+   uri-encoded? - since paths on mobile are uri-encoded, need to decode them first
    "
-  [file ast]
+  [file ast uri-encoded?]
   ;; headline
-  (let [ast (map first ast)]
+  (let [ast  (map first ast)
+        file (if uri-encoded? (js/decodeURI file) file)]
+    ;; check backward compatibility?
     (if (string/includes? file "pages/contents.")
       "Contents"
       (let [first-block (last (first (filter gp-block/heading-block? ast)))
@@ -38,11 +41,10 @@
                                (and first-block
                                     (string? title)
                                     title))
-            file-name (when-let [file-name (last (string/split file #"/"))]
-                        (let [result (first (gp-util/split-last "." file-name))]
-                          (if (gp-config/mldoc-support? (string/lower-case (gp-util/get-file-ext file)))
-                            (gp-util/page-name-parsing result)
-                            result)))]
+            file-name (when-let [result (gp-util/path->file-body file)]
+                        (if (gp-config/mldoc-support? (gp-util/get-file-ext file))
+                          (gp-util/title-parsing result)
+                          result))]
         (or property-name
             file-name
             first-block-name)))))
@@ -113,9 +115,10 @@
 
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
-  [format ast properties file content {:keys [date-formatter db] :as options}]
+  "uri-encoded? - if is true, apply URL decode on the file path"
+  [format ast properties file content {:keys [date-formatter db uri-encoded?] :as options}]
   (try
-    (let [page (get-page-name file ast)
+    (let [page (get-page-name file ast uri-encoded?)
           [page page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
           options' (-> options
                        (assoc :page-name page-name

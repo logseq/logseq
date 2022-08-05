@@ -83,8 +83,8 @@
         search-dir (get-search-dir)]
     [db-name (path/join search-dir db-name)]))
 
-(defn get-db-version-path
-  "File for storing search cache version"
+(defn get-db-path
+  "Search cache paths"
   [db-name]
   (let [db-name (sanitize-db-name db-name)
         search-dir (get-search-dir)]
@@ -195,7 +195,7 @@
   [repo]
   (when-let [database (get-db repo)]
     (.close database)
-    (let [[db-name db-full-path] (get-db-version-path repo)]
+    (let [[db-name db-full-path] (get-db-path repo)]
       (logger/info "Delete search indice: " db-full-path)
       (fs/unlinkSync db-full-path)
       (swap! databases dissoc db-name))))

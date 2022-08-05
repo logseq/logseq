@@ -286,4 +286,6 @@
  ;   :list?            true
  ; }
 
+ ;; Built in values for tracking data versions, don't edit manually
+ :repo/dir-version 3
  }

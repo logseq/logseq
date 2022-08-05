@@ -903,32 +903,7 @@
 #?(:cljs
    (defn url-encode
      [string]
-     (gp-util/url-encode string)))
-
-#?(:cljs
-   (defn url-decode
-     [string]
-     (some-> string str (js/decodeURIComponent))))
-
-#?(:cljs
-   (def safe-url-decode gp-util/safe-url-decode))
-
-#?(:cljs
-   (defn include-reserved-chars?
-     [s]
-     (safe-re-find gp-util/reserved-chars-pattern s)))
-
-#?(:cljs
-   ;; Returning true is not expected. Legacy code, just leave for safety check
-   (defn create-title-property?
-     [page-name]
-     (and (string? page-name)
-          (let [file-name  (gp-util/file-name-sanity page-name)
-                page-name' (gp-util/page-name-parsing file-name)
-                result     (or (not= page-name page-name')
-                               (include-reserved-chars? file-name))]
-            (when result (js/console.error "`util/create-title-property?` return true for page " page-name))
-            result))))
+     (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
 
 #?(:cljs
    (defn search-normalize
@@ -938,11 +913,6 @@
       (if remove-accents?
         (removeAccents  normalize-str)
         normalize-str))))
-
-#?(:cljs
-   (def file-name-sanity
-     "Delegate to gp-util to loosely couple app usages to graph-parser"
-     gp-util/file-name-sanity))
 
 #?(:cljs
    (def page-name-sanity-lc
@@ -1000,12 +970,13 @@
     [col1 col2]))
 
 ;; fs
-(defn get-file-ext
-  [file]
-  (and
-   (string? file)
-   (string/includes? file ".")
-   (some-> (last (string/split file #"\.")) string/lower-case)))
+#?(:cljs
+   (defn get-file-ext
+     [file]
+     (and
+      (string? file)
+      (string/includes? file ".")
+      (some-> (gp-util/path->file-ext file) string/lower-case))))
 
 (defn get-dir-and-basename
   [path]

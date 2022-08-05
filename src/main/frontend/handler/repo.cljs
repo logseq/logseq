@@ -33,8 +33,7 @@
             [clojure.core.async :as async]
             [frontend.encrypt :as encrypt]
             [frontend.mobile.util :as mobile-util]
-            [frontend.version :refer [index-version]]
-            [frontend.handler.config :refer [set-config!]]
+            [frontend.encrypt :as encrypt]
             [medley.core :as medley]))
 
 ;; Project settings should be checked in two situations:
@@ -446,17 +445,6 @@
           (route-handler/redirect-to-home!)
           500))))))
 
-(defn index-stale?
-  [repo]
-  (not= (:index/version (state/get-config repo)) index-version))
-
-(defn write-index-version!
-  "Version for tracking if re-index is required.
-   Write version when internal state is persisted to disk."
-  [repo]
-  (js/console.log (str "Writing index version " index-version " to repo " repo))
-  (set-config! :index/version index-version))
-
 (defn persist-db!
   ([]
    (persist-db! {}))
@@ -469,7 +457,6 @@
        (before))
      (metadata-handler/set-pages-metadata! repo)
      (db/persist! repo)
-     (write-index-version! repo)
      (when on-success
        (on-success)))
     (p/catch (fn [error]
@@ -549,16 +536,6 @@
     repos'))
 
 (defn graph-ready!
-  "Call electron that the graph is loaded."
+  ;; FIXME: Call electron that the graph is loaded, an ugly implementation for redirect to page when graph is restored
   [graph]
   (ipc/ipc "graphReady" graph))
-
-(defn re-index-when-stale!
-  []
-  (p/let [repo              (state/get-current-repo)
-          multiple-windows? (ipc/ipc "graphHasMultipleWindows" repo)]
-    (when (index-stale? repo)
-      (js/console.log (str "Index stale. Re-index on graph " repo))
-      (if multiple-windows? ;; should never happen, would mess the internal states between windows
-        (js/console.log (str "Multiple windows on graph " repo " exist while staled index detected."))
-        (state/pub-event! [:graph/re-index])))))

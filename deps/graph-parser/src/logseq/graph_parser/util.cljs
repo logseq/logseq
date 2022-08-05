@@ -5,6 +5,14 @@
             [clojure.string :as string]
             [clojure.edn :as edn]))
 
+(defn safe-url-decode
+  [string]
+  (if (string/includes? string "%")
+    (try (some-> string str (js/decodeURIComponent))
+         (catch js/Error _
+           string))
+    string))
+
 (defn path-normalize
   "Normalize file path (for reading paths from FS, not required by writting)"
   [s]
@@ -73,14 +81,6 @@
     (str "0" n)
     (str n)))
 
-(defn get-file-ext
-  "Copy of frontend.util/get-file-ext. Too basic to couple to main app"
-  [file]
-  (and
-   (string? file)
-   (string/includes? file ".")
-   (some-> (last (string/split file #"\.")) string/lower-case)))
-
 (defn remove-boundary-slashes
   [s]
   (when (string? s)
@@ -102,51 +102,12 @@
                  (conj result (str prev "/" (first others)))))
         result))))
 
-;; Should not contains %
-;; Should not contains any reserved character
-(def PERCENT-ESCAPE-CODE "_0x")
-
-(def PERCENT-ESCAPE-CODE-PATTERN (re-pattern PERCENT-ESCAPE-CODE))
-
-(def PERCENT-ESCAPE-URLENCODED-PATTERN (re-pattern (str PERCENT-ESCAPE-CODE "[0-9A-Fa-f]{2}")))
-
-(defn escape-lowbar
-  "Escape when ambiguation happens"
-  [input]
-  (string/replace input #"_" "%5F"))
-
-(defn escape-namespace-slashes-and-multilowbars
-  "Encode slashes / as double lowbars __
-   Don't encode _ in most cases, except causing ambiguation"
-  [string]
-  (-> string
-      ;; The ambiguation is caused by the unbounded _ (possible continuation of `_`s)
-      (string/replace PERCENT-ESCAPE-CODE-PATTERN escape-lowbar)
-      (string/replace #"__" escape-lowbar)
-      (string/replace #"_/" escape-lowbar)
-      (string/replace #"/_" escape-lowbar)
-      ;; After ambiguaous _ encoded, encode the slash
-      (string/replace #"/" "__")))
-
 (defn decode-namespace-underlines
   "Decode namespace underlines to slashed;
    If continuous underlines, only decode at start;
    Having empty namespace is invalid."
   [string]
-  (string/replace string #"__" "/"))
-
-(defn escape-urlencode-percent-signs
-  [string]
-  (string/replace string #"%" PERCENT-ESCAPE-CODE))
-
-(defn- decode-urlencode-byted
-  [string]
-  (string/replace string PERCENT-ESCAPE-CODE "%"))
-
-(defn decode-urlencode-escaped
-"Only decode when the percent sign escaped pattern is followed by a valid ascii hex code"
-  [string]
-  (string/replace string PERCENT-ESCAPE-URLENCODED-PATTERN decode-urlencode-byted))
+  (string/replace string "__" "/"))
 
 (defn page-name-sanity
   "Sanitize the page-name. Unify different diacritics and other visual differences.
@@ -158,45 +119,6 @@
           (remove-boundary-slashes)
           (path-normalize)))
 
-(def windows-reserved-chars ":\\*\\?\"<>|")
-
-(def android-reserved-chars "\\#|%")
-
-(def other-reserved-chars "%") ;; reserved-for url encode
-
-(def reserved-chars-pattern
-  (re-pattern (str "["
-                   windows-reserved-chars
-                   android-reserved-chars
-                   other-reserved-chars
-                   "]+")))
-
-(defn url-encode
-  "This URL encoding is for filename escaping in Logseq"
-  ;; Don't encode `/`, they will be handled in `escape-namespace-slashes-and-multilowbars`
-  ;; Don't encode `_` except the cases mentioned in `escape-namespace-slashes-and-multilowbars`
-  [string]
-  (some-> string str
-          (js/encodeURIComponent)
-          (string/replace #"\*" "%2A")))
-
-(defn safe-url-decode
-  [string]
-  (if (string/includes? string "%")
-    (try (some-> string str (js/decodeURIComponent))
-         (catch js/Error _
-           string))
-    string))
-
-(defn file-name-sanity
-  "Sanitize page-name for file name (strict), for file name in file writing."
-  [title]
-  (some-> title
-          page-name-sanity
-          (string/replace reserved-chars-pattern url-encode)
-          (escape-namespace-slashes-and-multilowbars)
-          (escape-urlencode-percent-signs)))
-
 (defn validize-namespaces
   "Remove those empty namespaces from title to make it a valid page name."
   [title]
@@ -204,13 +126,14 @@
        (remove empty?)
        (string/join "/")))
 
-(defn page-name-parsing
+(def url-encoded-pattern #"(?i)%[0-9a-f]{2}") ;; (?i) for case-insensitive mode
+
+(defn title-parsing
   "Parse the file name back into page name"
   [file-name]
   (some-> file-name
-          (decode-urlencode-escaped)
           (decode-namespace-underlines)
-          (safe-url-decode)
+          (string/replace url-encoded-pattern safe-url-decode)
           (validize-namespaces)))
 
 (defn page-name-sanity-lc
@@ -243,10 +166,38 @@
     ;; default
     (keyword format)))
 
+(defn path->file-name
+  ;; Only for interal paths, as they are converted to POXIS already
+  ;; https://github.com/logseq/logseq/blob/48b8e54e0fdd8fbd2c5d25b7f1912efef8814714/deps/graph-parser/src/logseq/graph_parser/extract.cljc#L32
+  ;; Should be converted to POXIS first for external paths
+  [path]
+  (if (string/includes? path "/")
+    (last (split-last "/" path))
+    path))
+
+(defn path->file-body
+  [path]
+  (when-let [file-name (path->file-name path)]
+    (if (string/includes? file-name ".")
+      (first (split-last "." file-name))
+      file-name)))
+
+(defn path->file-ext
+  [path-or-file-name]
+  (last (split-last "." path-or-file-name)))
+
 (defn get-format
   [file]
   (when file
-    (normalize-format (keyword (string/lower-case (last (string/split file #"\.")))))))
+    (normalize-format (keyword (string/lower-case (path->file-ext file))))))
+
+(defn get-file-ext
+  "Copy of frontend.util/get-file-ext. Too basic to couple to main app"
+  [file]
+  (and
+   (string? file)
+   (string/includes? file ".")
+   (some-> (path->file-ext file) string/lower-case)))
 
 (defn valid-edn-keyword?
   "Determine if string is a valid edn keyword"

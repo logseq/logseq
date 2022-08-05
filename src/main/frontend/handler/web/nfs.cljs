@@ -14,6 +14,7 @@
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.conversion :as conversion-handler]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
             [frontend.search :as search]
@@ -120,6 +121,7 @@
 
 ;; TODO: extract code for `ls-dir-files` and `reload-dir!`
 (defn ^:large-vars/cleanup-todo ls-dir-files-with-handler!
+  "Read files from directory and setup repo (for the first time setup a repo)"
   ([ok-handler] (ls-dir-files-with-handler! ok-handler nil))
   ([ok-handler {:keys [empty-dir?-or-pred dir-result-fn]}]
    (let [path-handles (atom {})

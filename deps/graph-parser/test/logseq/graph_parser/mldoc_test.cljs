@@ -122,7 +122,7 @@ body"
 
 (deftest ^:integration test->edn
   (let [graph-dir "test/docs"
-        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir)
+        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.6.7")
         files (gp-cli/build-graph-files graph-dir)
         asts-by-file (->> files
                           (map (fn [{:file/keys [path content]}]

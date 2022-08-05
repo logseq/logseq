@@ -113,6 +113,7 @@
         :file/last-modified-at "Last modified at"
         :file/no-data "No data"
         :file/format-not-supported "Format .{1} is not supported."
+        :file/need-action "Suggested actions on updating from a previous version"
         :page/created-at "Created At"
         :page/updated-at "Updated At"
         :page/backlinks "Back Links"

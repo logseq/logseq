@@ -10,6 +10,7 @@
             [frontend.util.page-property :as page-property]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [medley.core :as medley]
@@ -19,7 +20,7 @@
 
 (def HLS-PREFIX "hls/")
 
-(def HLS-PREFIX-DISPLAY "[Annotations] ")
+(def HLS-PREFIX-DISPLAY "📒")
 
 (def HLS-PREFIX-LEN (count HLS-PREFIX))
 
@@ -263,7 +264,7 @@
     (when-let [page (db-utils/pull (:db/id (:block/page block)))]
       (when-let [group-key (string/replace-first (:block/original-name page) HLS-PREFIX-PATTERN "")]
         (when-let [hl-page (:hl-page props)]
-          (let [encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
+          (let [encoded-chars? (boolean (re-find gp-util/url-encoded-pattern group-key))
                 group-key (if encoded-chars? (js/encodeURI group-key) group-key)
                 asset-path (editor-handler/make-asset-url
                              (str "/" gp-config/local-assets-dir "/" group-key "/" (str hl-page "_" id "_" stamp ".png")))]
@@ -282,7 +283,7 @@
             (string/trimr))
         (-> title
             (string/replace HLS-PREFIX-PATTERN HLS-PREFIX-DISPLAY)
-            (util/safe-url-decode)) ;; In case user import URI pdf resource like #6167
+            (gp-util/safe-url-decode)) ;; In case user import URI pdf resource like #6167
         ))))
 
 (rum/defc human-hls-pagename-display

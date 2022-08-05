@@ -7,7 +7,8 @@
 ;; Integration test that test parsing a large graph like docs
 (deftest ^:integration parse-graph
   (let [graph-dir "test/docs"
-        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir)
+        ;; TODO update docs filename rules to the latest version when the namespace PR is released
+        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.6.7")
         {:keys [conn files asts]} (gp-cli/parse-graph graph-dir {:verbose false})]
 
     (docs-graph-helper/docs-graph-assertions @conn files)

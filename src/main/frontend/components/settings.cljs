@@ -417,7 +417,7 @@
              (when value
                (state/close-modal!)
                ;; FIXME: Don't send the `(atom false)` ! Should check multi-window! or internal status error happens
-               (js/setTimeout (fn [] (state/pub-event! [:graph/ask-for-re-index (atom false)]))
+               (js/setTimeout (fn [] (state/pub-event! [:graph/ask-for-re-index (atom false) nil]))
                               100)))
           [:p.text-sm.opacity-50 "⚠️ This feature is experimental! "
            [:span "You can use "]

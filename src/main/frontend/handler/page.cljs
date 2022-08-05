@@ -29,6 +29,7 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.property :as property]
+            [frontend.util.fs :as fs-util]
             [frontend.util.page-property :as page-property]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -96,7 +97,7 @@
 (defn- create-title-property?
   [journal? page-name]
   (and (not journal?)
-       (util/create-title-property? page-name)))
+       (fs-util/create-title-property? page-name)))
 
 (defn- build-page-tx [format properties page journal?]
   (when (:block/uuid page)
@@ -108,10 +109,9 @@
       (cond
         (not page-empty?)
         [page]
-        
+
         create-title?
         (let [properties-block (default-properties-block (build-title page) format page-entity properties)]
-          (js/console.error "`util/create-title-property?` return true for page " title)
           [page
            properties-block])
 
@@ -185,7 +185,8 @@
             (p/catch (fn [error] (js/console.error error))))))))
 
 (defn- compute-new-file-path
-  "Construct the full path given old full path and the file sanitized body"
+  "Construct the full path given old full path and the file sanitized body. 
+   Ext. included in the `old-path`."
   [old-path new-file-name-body]
   (let [result (string/split old-path "/")
         ext (last (string/split (last result) "."))
@@ -411,7 +412,7 @@
   "Only accepts unsanitized page names"
   [old-name new-name redirect?]
   (let [old-page-name       (util/page-name-sanity-lc old-name)
-        new-file-name-body  (gp-util/file-name-sanity new-name) ;; w/o file extension
+        new-file-name-body  (fs-util/file-name-sanity new-name) ;; w/o file extension
         new-page-name       (util/page-name-sanity-lc new-name)
         repo                (state/get-current-repo)
         page                (db/pull [:block/name old-page-name])]
@@ -439,8 +440,7 @@
 
         (d/transact! (db/get-db repo false) page-txs)
         
-        (when (util/create-title-property? new-page-name)
-          (js/console.error "`util/create-title-property?` return true for page " new-page-name)
+        (when (fs-util/create-title-property? new-page-name)
           (page-property/add-property! new-page-name :title new-name))
 
         (when (and file (not journal?))

@@ -118,6 +118,15 @@
      [?page :block/name]]
    (conn/get-db repo)))
 
+(defn get-pages-with-file
+  [repo]
+  (d/q
+   '[:find (pull ?page [:block/name :block/properties :block/journal?]) (pull ?file [*])
+     :where
+     [?page :block/name ?page-name]
+     [?page :block/file ?file]]
+   (conn/get-db repo)))
+
 (defn get-page-alias
   [repo page-name]
   (when-let [db (and repo (conn/get-db repo))]
@@ -171,16 +180,13 @@
          ;; (sort-by last)
          (reverse))))
 
-(defn get-files-v2
+(defn get-files-entity
   [repo]
   (when-let [db (conn/get-db repo)]
     (->> (d/q
           '[:find ?file ?path
-            ;; ?modified-at
             :where
-            [?file :file/path ?path]
-            ;; [?file :file/last-modified-at ?modified-at]
-            ]
+            [?file :file/path ?path]]
           db)
          (seq)
          ;; (sort-by last)

@@ -289,7 +289,10 @@
 (def default-config
   "Default config for a repo-specific, user config"
   {:feature/enable-search-remove-accents? true
-   :default-arweave-gateway "https://arweave.net"})
+   :default-arweave-gateway "https://arweave.net"
+
+   ;; For triggering file / db when updating from old versions of Logseq w/o these keys. Don't bump the value.
+   :repo/dir-version 0})
 
 ;; State that most user config is dependent on
 (declare get-current-repo)
@@ -1818,3 +1821,8 @@ Similar to re-frame subscriptions"
   {:pre [(map? v)
          (= #{:repo :old-path :new-path} (set (keys v)))]}
   (async/offer! (get-file-rename-event-chan) v))
+
+(defn get-dir-version
+  "If the version is outdated, action on graph directory is required."
+  [repo]
+  (:repo/dir-version (get-config repo)))
