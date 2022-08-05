@@ -1,11 +1,13 @@
 (ns frontend.encrypt
   (:require [logseq.graph-parser.utf8 :as utf8]
             [frontend.db.utils :as db-utils]
+            [frontend.util :as util]
             [frontend.db :as db]
-            [promesa.core :as p]
             [frontend.state :as state]
             [clojure.string :as str]
             [cljs.reader :as reader]
+            [promesa.core :as p]
+            [electron.ipc :as ipc]
             [shadow.loader :as loader]
             [lambdaisland.glogi :as log]))
 
@@ -88,17 +90,29 @@
 
 (defn encrypt-with-passphrase
   [passphrase content]
-  (p/let [_ (loader/load :age-encryption)
-          lazy-encrypt-with-user-passphrase (resolve 'frontend.extensions.age-encryption/encrypt-with-user-passphrase)
-          content (utf8/encode content)
-          encrypted (@lazy-encrypt-with-user-passphrase passphrase content true)]
-    (utf8/decode encrypted)))
+  (cond
+    (util/electron?)
+    (p/let [raw-content (utf8/encode content)
+            encrypted (ipc/ipc "encrypt-with-passphrase" passphrase raw-content)]
+      (utf8/decode encrypted))
 
-;; ;; TODO: What if decryption failed
+    :else
+    (p/let [lazy-encrypt-with-user-passphrase (resolve 'frontend.extensions.age-encryption/encrypt-with-user-passphrase)
+            content (utf8/encode content)
+            encrypted (@lazy-encrypt-with-user-passphrase passphrase content true)]
+      (utf8/decode encrypted))))
+
 (defn decrypt-with-passphrase
   [passphrase content]
-  (p/let [_ (loader/load :age-encryption)
-          lazy-decrypt-with-user-passphrase (resolve 'frontend.extensions.age-encryption/decrypt-with-user-passphrase)
-          content (utf8/encode content)
-          decrypted (lazy-decrypt-with-user-passphrase passphrase content)]
-    (utf8/decode decrypted)))
+  (cond
+    (util/electron?)
+    (p/let [raw-content (utf8/encode content)
+            decrypted (ipc/ipc "decrypt-with-passphrase" passphrase raw-content)]
+      (utf8/decode decrypted))
+
+    :else
+    (p/let [_ (loader/load :age-encryption)
+            lazy-decrypt-with-user-passphrase (resolve 'frontend.extensions.age-encryption/decrypt-with-user-passphrase)
+            content (utf8/encode content)
+            decrypted (lazy-decrypt-with-user-passphrase passphrase content)]
+      (utf8/decode decrypted))))

@@ -549,6 +549,12 @@
 (defmethod handle :encrypt-fnames [_ args]
   (apply rsapi/encrypt-fnames (rest args)))
 
+(defmethod handle :encrypt-with-passphrase [_ args]
+  (apply rsapi/encrypt-with-passphrase (rest args)))
+
+(defmethod handle :decrypt-with-passphrase [_ args]
+  (apply rsapi/decrypt-with-passphrase (rest args)))
+
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))
 

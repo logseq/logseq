@@ -38,3 +38,9 @@
 
 (defn decrypt-fnames [fnames]
   (mapv rsapi/decryptFname fnames))
+
+(defn encrypt-with-passphrase [passphrase data]
+  (rsapi/ageEncryptWithPassphrase passphrase data))
+
+(defn decrypt-with-passphrase [passphrase data]
+  (rsapi/ageDecryptWithPassphrase passphrase data))
