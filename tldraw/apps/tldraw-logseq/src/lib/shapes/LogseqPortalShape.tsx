@@ -27,13 +27,19 @@ interface LogseqQuickSearchProps {
   onChange: (id: string) => void
 }
 
+const LogseqTypeTag = ({ type }: { type: 'B' | 'P' }) => {
+  return (
+    <span className="tl-type-tag">
+      <i className={`tie tie-${type === 'B' ? 'block' : 'page'}`} />
+    </span>
+  )
+}
+
 const LogseqPortalShapeHeader = observer(
   ({ type, children }: { type: 'P' | 'B'; children: React.ReactNode }) => {
     return (
       <div className="tl-logseq-portal-header">
-        <span className="type-tag">
-          <i className={`tie tie-${type === 'B' ? 'block' : 'page'}`} />
-        </span>
+        <LogseqTypeTag type={type} />
         {children}
       </div>
     )
@@ -278,8 +284,15 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         </div>
         <div className="tl-quick-search-options">
           <div className="tl-quick-search-option" onClick={() => onAddBlock(q)}>
+            <LogseqTypeTag type="B" />
             New block{q.length > 0 ? `: ${q}` : ''}
           </div>
+          {options?.length === 0 && q && (
+            <div className="tl-quick-search-option" onClick={() => finishCreating(q)}>
+              <LogseqTypeTag type="P" />
+              New page: {q}
+            </div>
+          )}
           {options?.map(name => (
             <div key={name} className="tl-quick-search-option" onClick={() => finishCreating(name)}>
               {name}

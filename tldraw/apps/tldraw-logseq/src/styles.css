@@ -511,6 +511,7 @@
   display: flex;
   font-size: 0.875rem;
   line-height: 1.25rem;
+  gap: 0.5em;
 }
 
 .tl-quick-search-option:hover {
@@ -545,7 +546,7 @@
   overflow: hidden;
 }
 
-.tl-logseq-portal-header .type-tag {
+.tl-type-tag {
   display: flex;
   align-items: center;
   justify-content: center;

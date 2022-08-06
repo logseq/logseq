@@ -148,7 +148,7 @@ export default function App() {
           PageNameLink,
         }}
         handlers={{
-          search: q => (q ? list : []),
+          search: q => (q ? list.filter(item => item.includes(q)) : []),
           addNewBlock: () => uniqueId(),
         }}
         model={documentModel}
