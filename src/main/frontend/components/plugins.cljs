@@ -261,7 +261,7 @@
                  (js-invoke js/LSPluginCore (if disabled? "enable" "disable") id))
                true)]])
 
-(defn open-plugin-readme! 
+(defn get-open-plugin-readme-handler
   [url item repo]
   #(plugin-handler/open-readme!
     url item (if repo remote-readme-display local-markdown-display))
@@ -284,7 +284,7 @@
                 :has-new-version new-version}])}
 
      [:div.l.link-block.cursor-pointer
-      {:on-click (open-plugin-readme! url item repo)}
+      {:on-click (get-open-plugin-readme-handler url item repo)}
       (if (and icon (not (string/blank? icon)))
         [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
         svg/folder)
@@ -296,7 +296,7 @@
       [:h3.head.text-xl.font-bold.pt-1.5
 
        [:span.l.link-block.cursor-pointer
-        {:on-click (open-plugin-readme! url item repo)}
+        {:on-click (get-open-plugin-readme-handler url item repo)}
         name]
        (when (not market?) [:sup.inline-block.px-1.text-xs.opacity-50 version])]
 
