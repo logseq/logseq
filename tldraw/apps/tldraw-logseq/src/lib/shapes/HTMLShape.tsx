@@ -20,7 +20,7 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
     type: 'html',
     parentId: 'page',
     point: [0, 0],
-    size: [600, 320],
+    size: [600, 0],
     stroke: '#000000',
     fill: '#ffffff',
     strokeWidth: 2,
@@ -31,6 +31,7 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
   canChangeAspectRatio = true
   canFlip = false
   canEdit = true
+  hideContextBar = true
 
   ReactComponent = observer(({ events, isErasing, isEditing }: TLComponentProps) => {
     const {
@@ -52,6 +53,17 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
       [tlEventsEnabled]
     )
 
+    const anchorRef = React.useRef<HTMLDivElement>(null)
+
+    React.useEffect(() => {
+      if (this.props.size[1] === 0 && anchorRef.current) {
+        this.update({
+          size: [this.props.size[0], anchorRef.current.offsetHeight],
+        })
+        app.persist(true)
+      }
+    }, [])
+
     return (
       <HTMLContainer
         style={{
@@ -70,13 +82,18 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
             width: '100%',
             height: '100%',
             pointerEvents: isEditing ? 'all' : 'none',
-            userSelect: 'none',
+            userSelect: 'all',
             position: 'relative',
             margin: 0,
             overflow: isEditing ? 'auto' : 'hidden',
           }}
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
+        >
+          <div
+            ref={anchorRef}
+            className="tl-html-anchor"
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        </div>
       </HTMLContainer>
     )
   })

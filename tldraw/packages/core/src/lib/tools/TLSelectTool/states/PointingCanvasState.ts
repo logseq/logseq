@@ -15,6 +15,7 @@ export class PointingCanvasState<
     if (!shiftKey) {
       this.app.setSelectedShapes([])
       this.app.clearEditingShape()
+      window.getSelection()?.removeAllRanges()
     }
   }
 

@@ -39,12 +39,13 @@
                 {:pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])})
         blocks (map #(if (get-in % [:block/properties :ls-type] false)
                        (dissoc %
+                               :block/uuid ;; shape block uuid is read from properties
                                :block/content
                                :block/format
                                :block/left
                                :block/page
                                :block/parent) ;; these are auto-generated for whiteboard shapes
-                       %) blocks)]
+                       (dissoc % :block/page)) blocks)]
     (when-not (and (= 1 (count blocks))
                    (string/blank? (:block/content (first blocks)))
                    (nil? (:block/file page-block)))

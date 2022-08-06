@@ -368,7 +368,7 @@
                :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
 
        (if whiteboard-page?
-         [:div (get-tldraw-preview page-name)]
+         [:div ((state/get-component :whiteboard/tldraw-preview) page-name)] ;; FIXME: this is not reactive
          [:div.relative
           (when (and (not sidebar?) (not block?))
             [:div.flex.flex-row.space-between

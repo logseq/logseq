@@ -1,3 +1,4 @@
+import { uniqueId } from '@tldraw/core'
 import React from 'react'
 import ReactDOM from 'react-dom'
 import { App as TldrawApp } from 'tldraw-logseq'
@@ -148,7 +149,7 @@ export default function App() {
         }}
         handlers={{
           search: q => (q ? list : []),
-          addNewBlock: q => q,
+          addNewBlock: () => uniqueId(),
         }}
         model={documentModel}
         onPersist={onPersist}

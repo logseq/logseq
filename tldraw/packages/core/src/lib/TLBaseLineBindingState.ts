@@ -1,5 +1,5 @@
 import Vec from '@tldraw/vec'
-import { transaction } from 'mobx'
+import { toJS, transaction } from 'mobx'
 import { TLApp, TLLineShape, TLLineShapeProps, TLShape, TLTool, TLToolState } from '~lib'
 import type { TLBinding, TLEventMap, TLHandle, TLStateEvents } from '~types'
 import { deepMerge, GeomUtils } from '~utils'
@@ -196,11 +196,12 @@ export class TLBaseLineBindingState<
       if (updated) {
         this.currentShape.update(updated)
         this.app.currentPage.updateBindings(next.bindings)
-        this.app.setBindingShapes(
-          Object.values(updated.handles ?? {})
-            .map(h => next.bindings[h.bindingId!]?.toId)
-            .filter(Boolean)
-        )
+        const bindingShapes = Object.values(updated.handles ?? {})
+          .map(handle => handle.bindingId!)
+          .map(id => this.app.currentPage.bindings[id])
+          .filter(Boolean)
+          .flatMap(binding => [binding.toId, binding.fromId].filter(Boolean))
+        this.app.setBindingShapes(bindingShapes)
       }
     })
   }
