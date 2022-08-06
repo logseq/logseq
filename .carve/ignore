@@ -24,6 +24,7 @@ frontend.extensions.age-encryption/decrypt-with-user-passphrase
 frontend.extensions.excalidraw/draw
 ;; Lazily loaded
 frontend.extensions.tldraw/tldraw-app
+frontend.extensions.tldraw/generate-preview
 ;; Referenced in commented TODO
 frontend.extensions.pdf.utils/get-page-bounding
 ;; For repl
