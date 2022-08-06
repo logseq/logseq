@@ -3,7 +3,7 @@ import { useApp, useMinimapEvents } from '@tldraw/react'
 import { reaction } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import React from 'react'
-import { Crosshair2Icon } from '@radix-ui/react-icons'
+import { TablerIcon } from '~components/icons'
 import { PreviewManager } from '~lib'
 
 export const Minimap = observer(function Minimap() {
@@ -48,7 +48,7 @@ export const Minimap = observer(function Minimap() {
         data-active={active}
         onClick={() => setActive(a => !a)}
       >
-        <Crosshair2Icon />
+        <TablerIcon name="crosshair2" />
       </button>
     </>
   )

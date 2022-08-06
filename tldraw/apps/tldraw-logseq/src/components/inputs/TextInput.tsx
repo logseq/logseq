@@ -7,9 +7,9 @@ interface TextInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 export const TextInput = React.forwardRef<HTMLInputElement, TextInputProps>(
   ({ label, ...rest }, ref) => {
     return (
-      <div className="input">
+      <div className="tl-input">
         <label htmlFor={`text-${label}`}>{label}</label>
-        <input ref={ref} className="text-input" name={`text-${label}`} type="text" {...rest} />
+        <input ref={ref} className="tl-text-input" name={`text-${label}`} type="text" {...rest} />
       </div>
     )
   }

@@ -73,7 +73,7 @@ const defaultTheme: TLTheme = {
   selectFill: 'rgba(65, 132, 244, 0.05)',
   binding: 'rgba(65, 132, 244, 0.5)',
   background: 'var(--ls-primary-background-color)',
-  foreground: 'var(--ls-secondary-text-color)',
+  foreground: 'var(--ls-primary-text-color)',
   grid: 'var(--ls-quaternary-background-color)',
 }
 

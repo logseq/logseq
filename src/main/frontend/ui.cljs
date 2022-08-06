@@ -868,12 +868,14 @@
              :on-tweet-load-success #(reset! *loading? false)})]]))
 
 ;; Extended tabler icons managed by Webfont app
-(defonce tie-names 
-  #{"block" 
-    "page" 
-    "references-hide" 
-    "references-show" 
-    "whiteboard" 
+(defonce tie-names
+  #{"block"
+    "block-search"
+    "page"
+    "page-search"
+    "references-hide"
+    "references-show"
+    "whiteboard"
     "whiteboard-element"})
 
 (defn icon

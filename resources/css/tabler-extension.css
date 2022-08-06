@@ -20,25 +20,33 @@
 }
 
 .tie-block::before {
-  content: '\ea01';
+  content: "\ea01";
+}
+
+.tie-block-search::before {
+  content: "\ea02";
 }
 
 .tie-page::before {
-  content: '\ea02';
+  content: "\ea03";
+}
+
+.tie-page-search::before {
+  content: "\ea04";
 }
 
 .tie-references-hide::before {
-  content: '\ea03';
+  content: "\ea05";
 }
 
 .tie-references-show::before {
-  content: '\ea04';
+  content: "\ea06";
 }
 
 .tie-whiteboard::before {
-  content: '\ea05';
+  content: "\ea07";
 }
 
 .tie-whiteboard-element::before {
-  content: '\ea06';
+  content: "\ea08";
 }

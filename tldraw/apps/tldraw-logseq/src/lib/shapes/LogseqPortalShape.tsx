@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { MagnifyingGlassIcon } from '@radix-ui/react-icons'
 import { TLBoxShape, TLBoxShapeProps, TLResizeInfo, validUUID } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import Vec from '@tldraw/vec'
@@ -28,10 +27,16 @@ interface LogseqQuickSearchProps {
   onChange: (id: string) => void
 }
 
-const LogseqTypeTag = ({ type, active }: { type: 'B' | 'P'; active?: boolean }) => {
+const LogseqTypeTag = ({ type, active }: { type: 'B' | 'P' | 'BS' | 'PS'; active?: boolean }) => {
+  const nameMapping = {
+    B: 'block',
+    P: 'page',
+    BS: 'block-search',
+    PS: 'page-search',
+  }
   return (
     <span className="tl-type-tag" data-active={active}>
-      <i className={`tie tie-${type === 'B' ? 'block' : 'page'}`} />
+      <i className={`tie tie-${nameMapping[type]}`} />
     </span>
   )
 }
@@ -297,12 +302,15 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const searchResult = useSearch(q)
     const Breadcrumb = renderers?.Breadcrumb
 
+    const [prefixIcon, setPrefixIcon] = React.useState<string>('circle-plus')
+    const [searchFilter, setSearchFilter] = React.useState<'B' | 'P' | null>(null)
+
     React.useEffect(() => {
       // autofocus seems not to be working
       setTimeout(() => {
         rInput.current?.focus()
       })
-    }, [])
+    }, [searchFilter])
 
     if (!Breadcrumb) {
       return null
@@ -310,64 +318,130 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     return (
       <div className="tl-quick-search">
+        <div className="tl-quick-search-indicator">
+          <TablerIcon name={prefixIcon} className="tl-quick-search-icon" />
+        </div>
         <div className="tl-quick-search-input-container">
-          <TablerIcon name="search" className="tl-quick-search-icon" />
+          {searchFilter && (
+            <div className="tl-quick-search-input-filter">
+              <LogseqTypeTag type={searchFilter} />
+              {searchFilter === 'B' ? 'Search blocks' : 'Search pages'}
+              <div
+                className="tl-quick-search-input-filter-remove"
+                onClick={() => setSearchFilter(null)}
+              >
+                <TablerIcon name="x" />
+              </div>
+            </div>
+          )}
           <div className="tl-quick-search-input-sizer" data-value={q}>
+            <div className="tl-quick-search-input-hidden">{q}</div>
             <input
               ref={rInput}
               type="text"
               value={q}
-              placeholder="Search or create page"
+              placeholder="Create or search your graph..."
               onChange={q => setQ(q.target.value)}
               onKeyDown={e => {
                 if (e.key === 'Enter') {
                   finishCreating(q)
                 }
               }}
-              className="tl-quick-search-input text-input"
+              className="tl-quick-search-input"
             />
           </div>
         </div>
         <div className="tl-quick-search-options">
-          <div className="tl-quick-search-option" onClick={() => onAddBlock(q)}>
+          <div
+            className="tl-quick-search-option"
+            onMouseEnter={() => setPrefixIcon('circle-plus')}
+            onClick={() => onAddBlock(q)}
+          >
             <div className="tl-quick-search-option-row">
               <LogseqTypeTag active type="B" />
-              New block{q.length > 0 ? `: ${q}` : ''}
+              {q.length > 0 ? (
+                <>
+                  <strong>New whiteboard block:</strong>
+                  {q}
+                </>
+              ) : (
+                <strong>New whiteboard block</strong>
+              )}
             </div>
           </div>
           {searchResult?.pages?.length === 0 && q && (
-            <div className="tl-quick-search-option" onClick={() => finishCreating(q)}>
+            <div
+              className="tl-quick-search-option"
+              onMouseEnter={() => setPrefixIcon('circle-plus')}
+              onClick={() => finishCreating(q)}
+            >
               <div className="tl-quick-search-option-row">
                 <LogseqTypeTag active type="P" />
-                New page: {q}
+                <strong>New page:</strong>
+                {q}
               </div>
             </div>
           )}
-          {searchResult?.pages?.map(name => (
-            <div key={name} className="tl-quick-search-option" onClick={() => finishCreating(name)}>
-              <div className="tl-quick-search-option-row">
-                <LogseqTypeTag type="P" />
-                {highlightedJSX(name, q)}
-              </div>
-            </div>
-          ))}
-          {searchResult?.blocks
-            ?.filter(block => block.content && block.uuid)
-            .map(({ content, uuid }) => (
+          {q.length === 0 && searchFilter === null && (
+            <>
               <div
-                key={uuid}
                 className="tl-quick-search-option"
-                onClick={() => finishCreating(uuid)}
+                onMouseEnter={() => setPrefixIcon('search')}
+                onClick={() => setSearchFilter('B')}
               >
                 <div className="tl-quick-search-option-row">
-                  <LogseqTypeTag type="B" />
-                  <Breadcrumb blockId={uuid} />
+                  <LogseqTypeTag type="BS" />
+                  Search only blocks
                 </div>
+              </div>
+              <div
+                className="tl-quick-search-option"
+                onMouseEnter={() => setPrefixIcon('search')}
+                onClick={() => setSearchFilter('P')}
+              >
                 <div className="tl-quick-search-option-row">
-                  {highlightedJSX(content, q)}
+                  <LogseqTypeTag type="PS" />
+                  Search only pages
+                </div>
+              </div>
+            </>
+          )}
+          {(!searchFilter || searchFilter === 'P') &&
+            searchResult?.pages?.map(name => (
+              <div
+                key={name}
+                className="tl-quick-search-option"
+                onMouseEnter={() => setPrefixIcon('circle-plus')}
+                onClick={() => finishCreating(name)}
+              >
+                <div className="tl-quick-search-option-row">
+                  <LogseqTypeTag type="P" />
+                  {highlightedJSX(name, q)}
                 </div>
               </div>
             ))}
+          {(!searchFilter || searchFilter === 'B') &&
+            searchResult?.blocks
+              ?.filter(block => block.content && block.uuid)
+              .map(({ content, uuid }) => (
+                <div
+                  key={uuid}
+                  className="tl-quick-search-option"
+                  onMouseEnter={() => setPrefixIcon('search')}
+                  onClick={() => finishCreating(uuid)}
+                >
+                  <div className="tl-quick-search-option-row">
+                    <LogseqTypeTag type="B" />
+                    <div className="tl-quick-search-option-breadcrumb">
+                      <Breadcrumb blockId={uuid} />
+                    </div>
+                  </div>
+                  <div className="tl-quick-search-option-row">
+                    <div className="tl-quick-search-option-placeholder" />
+                    {highlightedJSX(content, q)}
+                  </div>
+                </div>
+              ))}
         </div>
       </div>
     )

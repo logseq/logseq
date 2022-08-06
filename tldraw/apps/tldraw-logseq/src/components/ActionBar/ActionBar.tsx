@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as React from 'react'
-import { observer } from 'mobx-react-lite'
-import type { Shape } from '~lib'
 import { useApp } from '@tldraw/react'
-import { RedoIcon, UndoIcon } from '~components/icons'
+import { observer } from 'mobx-react-lite'
+import * as React from 'react'
+import { TablerIcon } from '~components/icons'
 import { ZoomMenu } from '~components/ZoomMenu'
+import type { Shape } from '~lib'
 
 export const ActionBar = observer(function ActionBar(): JSX.Element {
   const app = useApp<Shape>()
@@ -20,12 +20,12 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
   return (
     <div className="tl-action-bar">
       <button onClick={undo}>
-        <UndoIcon></UndoIcon>
+        <TablerIcon name="arrow-back-up" />
       </button>
-      <ZoomMenu></ZoomMenu>
       <button onClick={redo}>
-        <RedoIcon></RedoIcon>
+        <TablerIcon name="arrow-forward-up" />
       </button>
+      <ZoomMenu />
     </div>
   )
 })

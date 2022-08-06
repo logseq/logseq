@@ -11,7 +11,6 @@
     "dev:vite": "tsup --watch --sourcemap inline"
   },
   "devDependencies": {
-    "@radix-ui/react-icons": "^1.1.1",
     "@tldraw/core": "2.0.0-alpha.1",
     "@tldraw/react": "2.0.0-alpha.1",
     "@tldraw/vec": "2.0.0-alpha.1",
@@ -32,8 +31,8 @@
     "tsup": "^6.1.2",
     "typescript": "^4.7.3",
     "zx": "^6.2.4",
-    "@radix-ui/react-switch": "^0.1.6-rc.40",
-    "@radix-ui/react-dropdown-menu": "^0.1.6"
+    "@radix-ui/react-switch": "^1.0.0",
+    "@radix-ui/react-dropdown-menu": "^1.0.0"
   },
   "peerDependencies": {
     "react": "^16.8.0 || ^17.0.0 || ^18.0.0",

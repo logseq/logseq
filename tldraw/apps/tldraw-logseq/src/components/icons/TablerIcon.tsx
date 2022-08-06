@@ -2,7 +2,9 @@ import React from 'react'
 
 const extendedIcons = [
   'block',
+  'block-search',
   'page',
+  'page-search',
   'references-hide',
   'references-show',
   'whiteboard',
