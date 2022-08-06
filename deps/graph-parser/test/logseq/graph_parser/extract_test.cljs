@@ -68,22 +68,23 @@
 (def foo-edn
   "Example exported whiteboard page as an edn exportable."
   '{:blocks
-    [{:block/content "foo content a",
-      :block/format :markdown,
-      :block/unordered true},
+    ({:block/content "foo content a",
+      :block/format :markdown},
      {:block/content "foo content b",
-      :block/format :markdown,
-      :block/unordered true}],
+      :block/format :markdown}),
     :pages
     ({:block/format :markdown,
-      :block/whiteboard? true,
-      :block/original-name "my foo whiteboard"})})
+      :block/original-name "Foo"
+      :block/properties {:title "my whiteboard foo"}})})
+
+(extract/extract-whiteboard-edn "/whiteboards/foo.edn" (pr-str foo-edn) {})
 
 (deftest test-extract-whiteboard-edn
   []
   (let [{:keys [pages blocks]} (extract/extract-whiteboard-edn "/whiteboards/foo.edn" (pr-str foo-edn) {})
         page (first pages)]
     (is (= (get-in page [:block/file :file/path]) "/whiteboards/foo.edn"))
-    (is (= (get-in page [:block/name]) "foo"))
+    (is (= (:block/name page) "foo"))
+    (is (= (:block/original-name page) "Foo"))
     (is (every? #(= (:block/parent %) {:block/name "foo"}) blocks))
     (is (= (:block/uuid (first blocks)) (get-in (second blocks) [:block/left 1])))))

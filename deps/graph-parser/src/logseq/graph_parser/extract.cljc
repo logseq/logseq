@@ -204,15 +204,16 @@
 (defn with-whiteboard-block-props
   [block page-name]
   (let [shape (:block/properties block)
-        shape? (= :whiteboard-shape (:ls-type shape))]
+        shape? (= :whiteboard-shape (:ls-type shape))
+        default-page-ref {:block/name (gp-util/page-name-sanity-lc page-name)}]
     (merge (when shape?
              (merge
               {:block/uuid (uuid (:id shape))}
               (with-whiteboard-block-refs shape)
               (with-whiteboard-content shape)))
-           (when (nil? (:block/parent block)) {:block/name (gp-util/page-name-sanity-lc page-name)})
-           (when (nil? (:block/format block)) {:block/format :markdown})
-           {:block/page {:block/name (gp-util/page-name-sanity-lc page-name)}})))
+           (when (nil? (:block/parent block)) {:block/parent default-page-ref})
+           (when (nil? (:block/format block)) {:block/format :markdown}) ;; TODO: read from config
+           {:block/page default-page-ref})))
 
 (defn extract-whiteboard-edn
   "Extracts whiteboard page from given edn file
@@ -224,7 +225,8 @@
         {:keys [pages blocks]} (gp-util/safe-read-string content)
         page-block (first pages)
         page-name (filepath->page-name file)
-        page-entity (build-page-entity {} file page-name page-name nil options)
+        page-original-name (or (:block/original-name page-block) page-name)
+        page-entity (build-page-entity (:block/properties page-block) file page-name page-original-name nil options)
         page-block (merge page-block page-entity (when-not (:block/uuid page-block) {:block/uuid (d/squuid)}))
         blocks (->> blocks
                     (map #(merge % {:block/level 1 ;; fixme
@@ -233,7 +235,7 @@
                                  (with-whiteboard-block-props % page-name)))
                     (gp-block/with-parent-and-left {:block/name page-name}))
         _ (when verbose (println "Parsing finished: " file))]
-    {:pages [page-block]
+    {:pages (list page-block)
      :blocks blocks}))
 
 (defn- with-block-uuid

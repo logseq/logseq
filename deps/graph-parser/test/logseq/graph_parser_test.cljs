@@ -9,13 +9,14 @@
 (def foo-edn
   "Example exported whiteboard page as an edn exportable."
   '{:blocks
-    [{:block/content "foo content",
-      :block/format :markdown,
-      :block/unordered true}],
+    ({:block/content "foo content a",
+      :block/format :markdown},
+     {:block/content "foo content b",
+      :block/format :markdown}),
     :pages
     ({:block/format :markdown,
-      :block/whiteboard? true,
-      :block/original-name "my foo whiteboard"})})
+      :block/original-name "Foo"
+      :block/properties {:title "my whiteboard foo"}})})
 
 (deftest parse-file
   (testing "id properties"
