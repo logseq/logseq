@@ -74,7 +74,8 @@
   border: none;
   z-index: 100000;
   user-select: none;
-  background: var(--color-panel);
+  background: var(--ls-primary-background-color);
+  box-shadow: var(--shadow-medium);
 }
 
 .tl-action-bar > button:hover {
@@ -666,7 +667,7 @@ html[data-theme='dark'] .tl-logseq-portal-header {
 
 .tl-highlighted {
   padding: 0;
-  border-radius: none;
+  border-radius: 0;
 }
 
 .logseq-img-icon {
