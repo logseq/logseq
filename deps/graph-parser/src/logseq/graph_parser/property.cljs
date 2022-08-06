@@ -8,6 +8,13 @@
 
 (def colons "Property delimiter for markdown mode" "::")
 
+(defn ->block-content
+  "Creates a block content string from properties map"
+  [properties]
+  (->> properties
+       (map #(str (name (key %)) (str colons " ") (val %)))
+       (string/join "\n")))
+
 (defn properties-ast?
   [block]
   (and

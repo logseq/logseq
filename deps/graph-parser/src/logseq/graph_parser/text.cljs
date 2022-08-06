@@ -5,6 +5,7 @@
             [clojure.set :as set]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.util.page-ref :as page-ref :refer [right-brackets]]))
 
 (defn get-file-basename
@@ -199,7 +200,26 @@
 (defonce non-parsing-properties
   (atom #{"background-color" "background_color"}))
 
+(defn parse-property-value
+  "Property agnostic value parsing used to save properties to db and to
+  construct simple queries from user input"
+  [v]
+  (cond
+    (= v "true")
+    true
+
+    (= v "false")
+    false
+
+    (gp-util/safe-re-find #"^\d+$" v)
+    (parse-long v)
+
+    :else
+    (split-page-refs-without-brackets v)))
+
 (defn parse-property
+  "Property value parsing that takes into account built-in properties, format
+  and user config"
   ([k v config-state]
    (parse-property :markdown k v config-state))
   ([format k v config-state]
@@ -212,14 +232,6 @@
                    (get config-state :ignored-page-references-keywords)) k)
        v
 
-       (= v "true")
-       true
-       (= v "false")
-       false
-
-       (and (not= k "alias") (gp-util/safe-re-find #"^\d+$" v))
-       (parse-long v)
-
        (gp-util/wrapped-by-quotes? v) ; wrapped in ""
        v
 
@@ -229,9 +241,11 @@
        (gp-mldoc/link? format v)
        v
 
-       (and (:property-values-allow-links-and-text? config-state)
-            (not (contains? gp-property/editable-linkable-built-in-properties k)))
+       (contains? gp-property/editable-linkable-built-in-properties (keyword k))
+       (split-page-refs-without-brackets v)
+
+       (:property-values-allow-links-and-text? config-state)
        v
 
        :else
-       (split-page-refs-without-brackets v)))))
+       (parse-property-value v)))))

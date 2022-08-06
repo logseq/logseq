@@ -124,9 +124,7 @@
                              (let [k (keyword (string/lower-case k))
                                    v (if (contains? #{:title :description :filters :macro} k)
                                        v
-                                       ;; user config ignored as we always want to parse links
-                                       ;; out of page properties
-                                       (parse-property k v (dissoc config-state :property-values-allow-links-and-text?)))]
+                                       (parse-property k v config-state))]
                                [k v]))))
           properties (into (linked/map) properties)
           macro-properties (filter (fn [x] (= :macro (first x))) properties)
@@ -156,7 +154,8 @@
                           (remove string/blank?)))
           tags (:tags properties)
           tags (->> (->vec-concat tags filetags)
-                    (remove string/blank?))
+                    (remove string/blank?)
+                    vec)
           properties (assoc properties :tags tags :alias alias)
           properties (-> properties
                          (update :filetags (constantly filetags)))

@@ -229,7 +229,7 @@
  ;; :property-pages/excludelist
 
  ;; Allows property values to contain tags, page-refs and free-form text
- ;; property-values-allow-links-and-text? true
+ ;; :property-values-allow-links-and-text? true
 
  ;; logbook setup
  ;; :logbook/settings

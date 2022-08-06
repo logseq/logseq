@@ -1,9 +1,10 @@
 (ns logseq.graph-parser-test
-  (:require [cljs.test :refer [deftest testing is]]
+  (:require [cljs.test :refer [deftest testing is are]]
             [clojure.string :as string]
             [logseq.graph-parser :as graph-parser]
             [logseq.db :as ldb]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.property :as gp-property]
             [datascript.core :as d]))
 
 (deftest parse-file
@@ -68,3 +69,123 @@
     (test-property-order 4))
   (testing "Sort order and persistence of 10 properties"
     (test-property-order 10)))
+
+(deftest page-properties-persistence
+  (testing "Non-string property values"
+    (let [conn (ldb/start-conn)]
+      (graph-parser/parse-file conn
+                               "lythe-of-heaven.md"
+                               "rating:: 8\nrecommend:: true\narchive:: false"
+                               {})
+      (is (= {:rating 8 :recommend true :archive false}
+             (->> (d/q '[:find (pull ?b [*])
+                         :in $
+                         :where [?b :block/properties]]
+                       @conn)
+                  (map (comp :block/properties first))
+                  first)))))
+
+  (testing "Other special property cases"
+    (let [conn (ldb/start-conn)]
+      (graph-parser/parse-file conn
+                               "foo.md"
+                               "- desc:: \"true\""
+                               {})
+      (is (= {:desc "\"true\""}
+             (->> (d/q '[:find (pull ?b [*])
+                         :in $
+                         :where [?b :block/properties]]
+                       @conn)
+                  (map (comp :block/properties first))
+                  first))
+          "Quoted values are unparsed")))
+
+  (testing "Linkable built-in properties"
+    (let [conn (ldb/start-conn)
+          _ (graph-parser/parse-file conn
+                                     "lol.md"
+                                     "alias:: 233\ntags:: fun, facts"
+                                     {})
+          block (->> (d/q '[:find (pull ?b [:block/properties {:block/alias [:block/name]} {:block/tags [:block/name]}])
+                            :in $
+                            :where [?b :block/name "lol"]]
+                          @conn)
+                     (map first)
+                     first)]
+
+      (is (= {:block/alias [{:block/name "233"}]
+              :block/tags [{:block/name "fun"} {:block/name "facts"}]
+              :block/properties {:alias ["233"] :tags ["fun" "facts"]}}
+             block))
+
+      (is (every? vector? (vals (:block/properties block)))
+          "Linked built-in property values as vectors provides for easier transforms"))))
+
+(defn- property-relationships-test
+  "Runs tests on page properties and block properties. file-properties is what is
+  visible in a file and db-properties is what is pulled out from the db"
+  [file-properties db-properties user-config]
+  (let [conn (ldb/start-conn)
+        page-content (gp-property/->block-content file-properties)
+        ;; Create Block properties from given page ones
+        block-property-transform (fn [m] (update-keys m #(keyword (str "block-" (name %)))))
+        block-content (gp-property/->block-content (block-property-transform file-properties))
+        _ (graph-parser/parse-file conn
+                                   "property-relationships.md"
+                                   (str page-content "\n- " block-content)
+                                   {:extract-options {:user-config user-config}})
+        pages (->> (d/q '[:find (pull ?b [* :block/properties])
+                          :in $
+                          :where [?b :block/name] [?b :block/properties]]
+                        @conn)
+                   (map first))
+        _ (assert (= 1 (count pages)))
+        blocks (->> (d/q '[:find (pull ?b [:block/pre-block? :block/properties
+                                           {:block/refs [:block/original-name]}])
+                           :in $
+                           :where [?b :block/properties] [(missing? $ ?b :block/name)]]
+                         @conn)
+                    (map first)
+                    (map (fn [m] (update m :block/refs #(map :block/original-name %)))))
+        block-db-properties (block-property-transform db-properties)]
+
+    (is (= db-properties (:block/properties (first pages)))
+        "page has expected properties")
+
+    (is (= [true nil] (map :block/pre-block? blocks))
+        "page has 2 blocks, one of which is a pre-block")
+
+    (is (= [db-properties block-db-properties]
+           (map :block/properties blocks))
+        "pre-block/page and block have expected properties")
+
+    (are [db-props refs]
+         (= (->> (vals db-props)
+                 (mapcat identity)
+                 (concat (map name (keys db-props)))
+                 set)
+            (set refs))
+         ; pre-block/page has expected refs
+         db-properties (first (map :block/refs blocks))
+         ;; block has expected refs
+         block-db-properties (second (map :block/refs blocks)))))
+
+(deftest property-relationships
+  (let [properties {:single-link "[[bar]]"
+                    :multi-link "[[Logseq]] is the fastest #triples #[[text editor]]"
+                    :desc "This is a multiple sentence description. It has one [[link]]"}]
+    (testing "With default config"
+      (property-relationships-test
+       properties
+       {:single-link #{"bar"}
+        :multi-link #{"Logseq" "is the fastest" "triples" "text editor"}
+        :desc #{"This is a multiple sentence description. It has one" "link"}}
+       {}))
+
+    (testing "With :property-values-allow-links-and-text config"
+      (property-relationships-test
+       properties
+       {:single-link #{"bar"}
+        :multi-link #{"Logseq" "triples" "text editor"}
+        :desc #{"link"}}
+       {:property-values-allow-links-and-text? true}))))

@@ -6,7 +6,6 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [frontend.state :as state]
             [frontend.date :as date]
             [frontend.db.model :as model]
             [frontend.db.query-react :as query-react]
@@ -240,7 +239,7 @@
   (let [k (string/replace (name (nth e 1)) "_" "-")
         v (nth e 2)
         v (if-not (nil? v)
-            (text/parse-property k v (state/get-config))
+            (text/parse-property-value (str v))
             v)
         v (if (coll? v) (first v) v)]
     {:query (list 'property '?b (keyword k) v)
@@ -285,7 +284,7 @@
   (let [[k v] (rest e)
         k (string/replace (name k) "_" "-")]
     (if (some? v)
-      (let [v' (text/parse-property k v (state/get-config))
+      (let [v' (text/parse-property-value (str v))
             val (if (coll? v') (first v') v')]
         {:query (list 'page-property '?p (keyword k) val)
          :rules [:page-property]})

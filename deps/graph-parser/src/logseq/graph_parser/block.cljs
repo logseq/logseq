@@ -157,12 +157,15 @@
              distinct)
     []))
 
+;; Regex first checks page-refs
+;; to handle multi-word
+;; page-refs e.g. #[[foo bar]]
+(def ^:private page-ref-or-tag-re
+  (re-pattern (str "#?" (page-ref/->page-ref-re-str "(.*?)") "|#(\\S+)")))
+
 (defn- extract-page-refs-and-tags [string]
   (let [refs (map #(or (second %) (get % 2))
-                  ;; Regex first checks page-refs
-                  ;; to handle multi-word
-                  ;; page-refs e.g. #[[foo bar]]
-                  (re-seq #"#?\[\[(.*?)\]\]|#(\S+)" string))]
+                  (re-seq page-ref-or-tag-re string))]
     (or (seq refs) string)))
 
 (defn- get-page-ref-names-from-properties
