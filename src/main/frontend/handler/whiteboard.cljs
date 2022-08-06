@@ -78,7 +78,8 @@
         ;; todo: use get-paginated-blocks instead?
         existing-blocks (model/get-page-blocks-no-cache (state/get-current-repo) 
                                                         page-name
-                                                        {:pull-keys '[:block/uuid
+                                                        {:pull-keys '[:db/id
+                                                                      :block/uuid
                                                                       {:block/parent [:block/uuid]}]})
         shapes (:shapes tldr-data)
         blocks (mapv #(shape->block % page-name) shapes)
@@ -88,11 +89,13 @@
                        (concat (map :block/uuid blocks))
                        (remove nil?)
                        (set))
-        delete-blocks (filter (fn [block]
+        delete-blocks (filterv (fn [block]
                                 (not (or (block-ids (:block/uuid block))
                                          (block-ids (:block/uuid (:block/parent block))))))
                               existing-blocks)
+        _ (util/pprint delete-blocks)
         delete-blocks-tx (mapv (fn [s] [:db/retractEntity (:db/id s)]) delete-blocks)]
+    (util/pprint delete-blocks-tx)
     (concat [page-block] blocks delete-blocks-tx)))
 
 (defn- get-whiteboard-clj [page-name]
