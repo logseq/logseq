@@ -314,9 +314,6 @@
                          "control-show cursor-pointer" "control-hide")}
     (ui/rotating-arrow @*all-collapsed?)]])
 
-(defn get-tldraw-preview [page-name]
-  ((state/get-component :whiteboard/tldraw-preview) page-name))
-
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page < rum/reactive
   (rum/local false ::all-collapsed?)

@@ -12,8 +12,6 @@
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
-(def generate-preview (gobj/get TldrawLogseq "generateJSXFromApp"))
-
 (rum/defc page-cp
   [props]
   (page/page {:page-name (gobj/get props "pageName") :whiteboard? true}))
