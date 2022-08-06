@@ -277,9 +277,7 @@
                 :updating        installing-or-updating?
                 :has-new-version new-version}])}
 
-     [:div.l.link-block.cursor-pointer
-      {:on-click #(plugin-handler/open-readme!
-                   url item (if repo remote-readme-display local-markdown-display))}
+     [:div.l
       (if (and icon (not (string/blank? icon)))
         [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
         svg/folder)
@@ -290,7 +288,10 @@
      [:div.r
       [:h3.head.text-xl.font-bold.pt-1.5
 
-       [:span name]
+       [:span.l.link-block.cursor-pointer 
+        {:on-click #(plugin-handler/open-readme!
+                     url item (if repo remote-readme-display local-markdown-display))}
+        name]
        (when (not market?) [:sup.inline-block.px-1.text-xs.opacity-50 version])]
 
       [:div.desc.text-xs.opacity-70
