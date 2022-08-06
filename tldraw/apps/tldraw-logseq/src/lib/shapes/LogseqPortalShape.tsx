@@ -411,7 +411,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               <div
                 key={name}
                 className="tl-quick-search-option"
-                onMouseEnter={() => setPrefixIcon('circle-plus')}
+                onMouseEnter={() => setPrefixIcon('search')}
                 onClick={() => finishCreating(name)}
               >
                 <div className="tl-quick-search-option-row">
