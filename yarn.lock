@@ -786,10 +786,10 @@
   dependencies:
     defer-to-connect "^1.0.1"
 
-"@tabler/icons@1.54.0":
-  version "1.54.0"
-  resolved "https://registry.yarnpkg.com/@tabler/icons/-/icons-1.54.0.tgz#c8cf4e777e61b19004d0e21443c9a7fae31d70c4"
-  integrity sha512-X0SjUMWlu6IWsWIZP6gtMZhi9Q7pO2+BQ9vex28rOu+gtym7fZjnDXWG0okzVhtt4mlOwJ2BHQllRky29lsn7Q==
+"@tabler/icons@1.78.0":
+  version "1.78.0"
+  resolved "https://registry.yarnpkg.com/@tabler/icons/-/icons-1.78.0.tgz#6687acf21d8663858cb266ed0d79913058f20376"
+  integrity sha512-Aq4mHpQcvJSRb0+m1azJPDs/0ZvyoR1da8JmLMzVfObS1tRcJYsvuxBJfYCreFtBT33w4PtBTD+7J+2hk8JTQw==
 
 "@tailwindcss/custom-forms@^0.2.1":
   version "0.2.1"

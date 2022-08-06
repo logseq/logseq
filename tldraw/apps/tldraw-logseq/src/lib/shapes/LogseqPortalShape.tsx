@@ -6,10 +6,11 @@ import Vec from '@tldraw/vec'
 import { makeObservable, runInAction } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
+import { TablerIcon } from '~components/icons'
 import { SwitchInput } from '~components/inputs/SwitchInput'
 import { useCameraMovingRef } from '~hooks/useCameraMoving'
 import type { Shape } from '~lib'
-import { LogseqContext } from '~lib/logseq-context'
+import { LogseqContext, SearchResult } from '~lib/logseq-context'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
 const HEADER_HEIGHT = 40
@@ -27,9 +28,9 @@ interface LogseqQuickSearchProps {
   onChange: (id: string) => void
 }
 
-const LogseqTypeTag = ({ type }: { type: 'B' | 'P' }) => {
+const LogseqTypeTag = ({ type, active }: { type: 'B' | 'P'; active?: boolean }) => {
   return (
-    <span className="tl-type-tag">
+    <span className="tl-type-tag" data-active={active}>
       <i className={`tie tie-${type === 'B' ? 'block' : 'page'}`} />
     </span>
   )
@@ -45,6 +46,48 @@ const LogseqPortalShapeHeader = observer(
     )
   }
 )
+
+const highlightedJSX = (input: string, keyword: string) => {
+  return (
+    <span>
+      {input
+        .split(new RegExp(`(${keyword})`, 'gi'))
+        .map((part, index) => {
+          if (index % 2 === 1) {
+            return <mark className="tl-highlighted">{part}</mark>
+          }
+          return part
+        })
+        .map((frag, idx) => (
+          <React.Fragment key={idx}>{frag}</React.Fragment>
+        ))}
+    </span>
+  )
+}
+
+const useSearch = (q: string) => {
+  const { handlers } = React.useContext(LogseqContext)
+  const [results, setResults] = React.useState<SearchResult | null>(null)
+
+  React.useEffect(() => {
+    let canceled = false
+    const searchHandler = handlers?.search
+    if (q.length > 0 && searchHandler) {
+      handlers.search(q).then(_results => {
+        if (!canceled) {
+          setResults(_results)
+        }
+      })
+    } else {
+      setResults(null)
+    }
+    return () => {
+      canceled = true
+    }
+  }, [q, handlers?.search])
+
+  return results
+}
 
 export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   static id = 'logseq-portal'
@@ -227,7 +270,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   LogseqQuickSearch = observer(({ onChange }: LogseqQuickSearchProps) => {
     const [q, setQ] = React.useState('')
     const rInput = React.useRef<HTMLInputElement>(null)
-    const { handlers } = React.useContext(LogseqContext)
+    const { handlers, renderers } = React.useContext(LogseqContext)
     const app = useApp<Shape>()
 
     const finishCreating = React.useCallback((id: string) => {
@@ -251,9 +294,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       }
     }, [])
 
-    const options = React.useMemo(() => {
-      return handlers?.search?.(q)
-    }, [handlers?.search, q])
+    const searchResult = useSearch(q)
+    const Breadcrumb = renderers?.Breadcrumb
 
     React.useEffect(() => {
       // autofocus seems not to be working
@@ -262,10 +304,14 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       })
     }, [])
 
+    if (!Breadcrumb) {
+      return null
+    }
+
     return (
       <div className="tl-quick-search">
         <div className="tl-quick-search-input-container">
-          <MagnifyingGlassIcon className="tl-quick-search-icon" width={24} height={24} />
+          <TablerIcon name="search" className="tl-quick-search-icon" />
           <div className="tl-quick-search-input-sizer" data-value={q}>
             <input
               ref={rInput}
@@ -284,20 +330,44 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         </div>
         <div className="tl-quick-search-options">
           <div className="tl-quick-search-option" onClick={() => onAddBlock(q)}>
-            <LogseqTypeTag type="B" />
-            New block{q.length > 0 ? `: ${q}` : ''}
+            <div className="tl-quick-search-option-row">
+              <LogseqTypeTag active type="B" />
+              New block{q.length > 0 ? `: ${q}` : ''}
+            </div>
           </div>
-          {options?.length === 0 && q && (
+          {searchResult?.pages?.length === 0 && q && (
             <div className="tl-quick-search-option" onClick={() => finishCreating(q)}>
-              <LogseqTypeTag type="P" />
-              New page: {q}
+              <div className="tl-quick-search-option-row">
+                <LogseqTypeTag active type="P" />
+                New page: {q}
+              </div>
             </div>
           )}
-          {options?.map(name => (
+          {searchResult?.pages?.map(name => (
             <div key={name} className="tl-quick-search-option" onClick={() => finishCreating(name)}>
-              {name}
+              <div className="tl-quick-search-option-row">
+                <LogseqTypeTag type="P" />
+                {highlightedJSX(name, q)}
+              </div>
             </div>
           ))}
+          {searchResult?.blocks
+            ?.filter(block => block.content && block.uuid)
+            .map(({ content, uuid }) => (
+              <div
+                key={uuid}
+                className="tl-quick-search-option"
+                onClick={() => finishCreating(uuid)}
+              >
+                <div className="tl-quick-search-option-row">
+                  <LogseqTypeTag type="B" />
+                  <Breadcrumb blockId={uuid} />
+                </div>
+                <div className="tl-quick-search-option-row">
+                  {highlightedJSX(content, q)}
+                </div>
+              </div>
+            ))}
         </div>
       </div>
     )

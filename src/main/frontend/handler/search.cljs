@@ -48,7 +48,8 @@
                          {:pages (search/page-search q)
                           :files (search/file-search q)}))
                search-key (if more? :search/more-result :search/result)]
-           (swap! state/state assoc search-key result)))))))
+           (swap! state/state assoc search-key result)
+           result))))))
 
 (defn clear-search!
   ([]

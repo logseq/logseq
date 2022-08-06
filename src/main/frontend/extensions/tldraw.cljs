@@ -2,12 +2,13 @@
   (:require ["/tldraw-logseq" :as TldrawLogseq]
             [frontend.components.block :as block]
             [frontend.components.page :as page]
+            [frontend.handler.search :as search]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.rum :as r]
-            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
+            [promesa.core :as p]
             [rum.core :as rum]))
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
@@ -37,6 +38,10 @@
           client-y (gobj/get e "clientY")]
       (whiteboard-handler/add-new-block-shape! uuid client-x client-y))))
 
+(defn search-handler [q]
+  (p/let [results (search/search q)]
+    (clj->js results)))
+
 (rum/defc tldraw-app
   [name block-id]
   (let [data (whiteboard-handler/page-name->tldr! name block-id)
@@ -62,7 +67,7 @@
                             :Block block-cp
                             :Breadcrumb breadcrumb
                             :PageNameLink page-name-link}
-                :handlers (clj->js {:search (comp clj->js vec search/page-search)
+                :handlers (clj->js {:search search-handler
                                     :addNewBlock (fn [content]
                                                    (str (whiteboard-handler/add-new-block! name content)))})
                 :onMount (fn [app] (set-tln ^js app))

@@ -1,5 +1,12 @@
 import React from 'react'
 
+export interface SearchResult {
+  pages: string[]
+  blocks: { content: string; page: number; uuid: string }[]
+  'has-more?': boolean
+  files?: string[]
+}
+
 export interface LogseqContextValue {
   renderers: {
     Page: React.FC<{
@@ -16,7 +23,7 @@ export interface LogseqContextValue {
     }>
   }
   handlers: {
-    search: (query: string) => string[]
+    search: (query: string) => Promise<SearchResult>
     addNewBlock: (content: string) => string // returns the new block uuid
   }
 }

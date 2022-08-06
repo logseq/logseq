@@ -44,8 +44,6 @@ const documentModel = onLoad() ?? {
   ],
 }
 
-const list = ['foo', 'bar']
-
 const Page = props => {
   const [value, setValue] = React.useState(JSON.stringify(props, null, 2))
   return (
@@ -72,14 +70,7 @@ const Block = props => {
 }
 
 const Breadcrumb = props => {
-  const [value, setValue] = React.useState(JSON.stringify(props))
-  return (
-    <input
-      className="whitespace-pre w-full h-full font-mono"
-      value={value}
-      onChange={e => setValue(e.target.value)}
-    />
-  )
+  return <div className="font-mono">{props.blockId}</div>
 }
 
 const PageNameLink = props => {
@@ -134,6 +125,17 @@ const ThemeSwitcher = ({ theme, setTheme }) => {
   )
 }
 
+const searchHandler = q => {
+  return Promise.resolve({
+    pages: ['foo', 'bar', 'asdf'].filter(p => p.includes(q)),
+    blocks: [
+      { content: 'foo content 1', uuid: 'uuid 1', page: 0 },
+      { content: 'bar content 2', uuid: 'uuid 2', page: 1 },
+      { content: 'asdf content 3', uuid: 'uuid 3', page: 2 },
+    ],
+  })
+}
+
 export default function App() {
   const [theme, setTheme] = React.useState('light')
 
@@ -148,7 +150,7 @@ export default function App() {
           PageNameLink,
         }}
         handlers={{
-          search: q => (q ? list.filter(item => item.includes(q)) : []),
+          search: searchHandler,
           addNewBlock: () => uniqueId(),
         }}
         model={documentModel}

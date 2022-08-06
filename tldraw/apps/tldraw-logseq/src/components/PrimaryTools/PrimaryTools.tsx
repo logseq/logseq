@@ -3,7 +3,7 @@ import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { Button } from '~components/Button'
-import { ArrowIcon, EraserIcon, LogseqIcon } from '~components/icons'
+import { ArrowIcon, EraserIcon, LogseqIcon, TablerIcon } from '~components/icons'
 
 export const PrimaryTools = observer(function PrimaryTools() {
   const app = useApp()
@@ -31,50 +31,57 @@ export const PrimaryTools = observer(function PrimaryTools() {
     <div className="tl-primary-tools">
       <div className="tl-tools-floating-panel" data-tool-locked={app.settings.isToolLocked}>
         <Button
+          title="Select tool"
           data-tool="select"
           data-selected={selectedToolId === 'select'}
           onClick={handleToolClick}
         >
-          <CursorArrowIcon />
+          <TablerIcon name="click" />
         </Button>
         <Button
+          title="Draw tool"
           data-tool="pencil"
           data-selected={selectedToolId === 'pencil'}
           onClick={handleToolClick}
         >
-          <Pencil1Icon />
+          <TablerIcon name="ballpen" />
         </Button>
         <Button
+          title="Highlight tool"
           data-tool="highlighter"
           data-selected={selectedToolId === 'highlighter'}
           onClick={handleToolClick}
         >
-          <ShadowIcon />
+          <TablerIcon name="highlight" />
         </Button>
         <Button
+          title="Eraser tool"
           data-tool="erase"
           data-selected={selectedToolId === 'erase'}
           onClick={handleToolClick}
         >
-          <EraserIcon />
+          <TablerIcon name="eraser" />
         </Button>
         <Button
+          title="Line tool"
           data-tool="line"
           data-selected={selectedToolId === 'line'}
           onClick={handleToolClick}
           onDoubleClick={handleToolDoubleClick}
         >
-          <ArrowIcon />
+          <TablerIcon name="line" />
         </Button>
         <Button
+          title="Text tool"
           data-tool="text"
           data-selected={selectedToolId === 'text'}
           onClick={handleToolClick}
           onDoubleClick={handleToolDoubleClick}
         >
-          <TextIcon />
+          <TablerIcon name="text-resize" />
         </Button>
         <Button
+          title="Logseq Portal tool"
           data-tool="logseq-portal"
           data-selected={selectedToolId === 'logseq-portal'}
           onClick={handleToolClick}

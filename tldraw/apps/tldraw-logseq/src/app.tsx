@@ -14,7 +14,7 @@ import { ContextBar } from '~components/ContextBar/ContextBar'
 import { useFileDrop } from '~hooks/useFileDrop'
 import { usePaste } from '~hooks/usePaste'
 import { useQuickAdd } from '~hooks/useQuickAdd'
-import { LogseqContext } from '~lib/logseq-context'
+import { LogseqContext, LogseqContextValue } from '~lib/logseq-context'
 import { Shape, shapes } from '~lib/shapes'
 import {
   HighlighterTool,
@@ -47,15 +47,8 @@ const tools: TLReactToolConstructor<Shape>[] = [
 ]
 
 interface LogseqTldrawProps {
-  renderers: {
-    Page: React.FC
-    Breadcrumb: React.FC
-    PageNameLink: React.FC
-  }
-  handlers: {
-    search: (query: string) => string[]
-    addNewBlock: (content: string) => string
-  }
+  renderers: LogseqContextValue['renderers']
+  handlers: LogseqContextValue['handlers']
   model?: TLDocumentModel<Shape>
   onMount?: TLReactCallbacks<Shape>['onMount']
   onPersist?: TLReactCallbacks<Shape>['onPersist']

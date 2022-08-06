@@ -241,7 +241,7 @@
   flex-flow: column;
   border-radius: 8px;
   overflow: hidden;
-  padding: 8px;
+  padding: 4px;
   gap: 8px;
   background-color: var(--color-panel);
   box-shadow: var(--shadow-medium);
@@ -256,12 +256,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 24px;
   font-family: var(--ls-font-family);
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--ls-secondary-text-color);
+  color: var(--ls-primary-text-color);
 }
 
 .tl-primary-tools .tl-button:hover {
@@ -506,9 +506,10 @@
 }
 
 .tl-quick-search-option {
-  padding: 8px 16px;
-  cursor: pointer;
   display: flex;
+  flex-flow: column;
+  padding: 12px 16px;
+  cursor: pointer;
   font-size: 0.875rem;
   line-height: 1.25rem;
   gap: 0.5em;
@@ -516,6 +517,20 @@
 
 .tl-quick-search-option:hover {
   background-color: var(--ls-menu-hover-color, #f4f5f7);
+}
+
+.tl-quick-search-option-row {
+  display: flex;
+  gap: 0.5em;
+}
+
+.tl-quick-search-option-row .breadcrumb {
+  margin: 0;
+}
+
+.tl-quick-search-option-placeholder {
+  width: 20px;
+  flex-shrink: 0;
 }
 
 .tl-logseq-portal-container {
@@ -562,6 +577,10 @@
   flex-grow: 0;
 }
 
+.tl-type-tag[data-active='true'] {
+  background: var(--color-selectedFill);
+}
+
 .tl-logseq-portal-header .page-ref {
   color: var(--ls-title-text-color);
 }
@@ -587,4 +606,8 @@ html[data-theme='dark'] .tl-logseq-portal-header {
   height: 100%;
   flex: 1 1 0%;
   cursor: default;
+}
+
+.tl-highlighted {
+  padding: 0;
 }
