@@ -1,17 +1,14 @@
-import * as React from 'react'
-import { TLResizeCorner, TLResizeEdge, TLRotateCorner } from '@tldraw/core'
+import { TLResizeCorner, TLResizeEdge } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
-import { EdgeHandle, CornerHandle, RotateHandle } from './handles'
 import { SVGContainer } from '~components'
 import type { TLReactShape } from '~lib'
 import type { TLSelectionComponentProps } from '~types'
-import { RotateCornerHandle } from './handles/RotateCornerHandle.tsx'
+import { CornerHandle, EdgeHandle } from './handles'
 
 export const SelectionForeground = observer(function SelectionForeground<S extends TLReactShape>({
   bounds,
   zoom,
   showResizeHandles,
-  showRotateHandles,
   shapes,
 }: TLSelectionComponentProps<S>) {
   const { width, height } = bounds
@@ -68,34 +65,6 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
         edge={TLResizeEdge.Left}
         disabled={!canResize[0]}
         isHidden={!showResizeHandles}
-      />
-      <RotateCornerHandle
-        cx={0}
-        cy={0}
-        targetSize={targetSize}
-        corner={TLRotateCorner.TopLeft}
-        isHidden={!showRotateHandles}
-      />
-      <RotateCornerHandle
-        cx={width + targetSize * 2}
-        cy={0}
-        targetSize={targetSize}
-        corner={TLRotateCorner.TopRight}
-        isHidden={!showRotateHandles}
-      />
-      <RotateCornerHandle
-        cx={width + targetSize * 2}
-        cy={height + targetSize * 2}
-        targetSize={targetSize}
-        corner={TLRotateCorner.BottomRight}
-        isHidden={!showRotateHandles}
-      />
-      <RotateCornerHandle
-        cx={0}
-        cy={height + targetSize * 2}
-        targetSize={targetSize}
-        corner={TLRotateCorner.BottomLeft}
-        isHidden={!showRotateHandles}
       />
       {canResize?.every(r => r) && (
         <>
