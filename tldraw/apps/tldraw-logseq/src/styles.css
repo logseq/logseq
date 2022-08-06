@@ -666,6 +666,7 @@ html[data-theme='dark'] .tl-logseq-portal-header {
 
 .tl-highlighted {
   padding: 0;
+  border-radius: none;
 }
 
 .logseq-img-icon {
