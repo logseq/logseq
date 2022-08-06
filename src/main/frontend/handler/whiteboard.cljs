@@ -93,9 +93,7 @@
                                 (not (or (block-ids (:block/uuid block))
                                          (block-ids (:block/uuid (:block/parent block))))))
                               existing-blocks)
-        _ (util/pprint delete-blocks)
         delete-blocks-tx (mapv (fn [s] [:db/retractEntity (:db/id s)]) delete-blocks)]
-    (util/pprint delete-blocks-tx)
     (concat [page-block] blocks delete-blocks-tx)))
 
 (defn- get-whiteboard-clj [page-name]
