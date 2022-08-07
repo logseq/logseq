@@ -84,3 +84,7 @@
   color: var(--ls-primary-text-color);
   vertical-align: baseline;
 }
+
+.open-page-ref-link:hover {
+  filter: brightness(0.9);
+}

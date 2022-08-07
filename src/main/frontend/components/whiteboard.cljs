@@ -40,11 +40,31 @@
     (when generate-preview
       (generate-preview tldr))))
 
+(rum/defc whiteboard-references
+  [name]
+  (let [uuid (or (parse-uuid name) (:block/uuid (whiteboard-handler/get-whiteboard-entity name)))
+        [show set-show] (rum/use-state false)]
+    [:div.ml-2
+     [:button.border.text-sm.bg-gray-500.text-white.px-2 {:on-click (fn [] (set-show not))} "references"]
+     (when show (reference/block-linked-references uuid))]))
+
 (rum/defc page-refs-count < rum/static
   [page-name]
   (let [page-entity (model/get-page page-name)
+        block-uuid (:block/uuid page-entity)
         refs-count (count (:block/_refs page-entity))]
-    [:a.open-page-ref-link refs-count]))
+     (if (> refs-count 0)
+       (ui/tippy {:in-editor?      true
+                  :html            (fn [] [:div.mx-2 (reference/block-linked-references block-uuid)])
+                  :interactive     true
+                  :delay           [100, 500]
+                  :position        "bottom"
+                  :distance        10
+                  :popperOptions   {:modifiers {:preventOverflow
+                                                {:enabled           true
+                                                 :boundariesElement "viewport"}}}}
+                 [:div.open-page-ref-link refs-count])
+       [:div.open-page-ref-link  refs-count])))
 
 (defn- get-page-display-name
   [page-name]
@@ -135,14 +155,6 @@
          [:<> {:key whiteboard-name} (dashboard-preview-card whiteboard-name)])
        (for [n (range empty-cards)]
          [:div.dashboard-card.dashboard-bg-card {:key n}])]]]))
-
-(rum/defc whiteboard-references
-  [name]
-  (let [uuid (or (parse-uuid name) (:block/uuid (whiteboard-handler/get-whiteboard-entity name)))
-        [show set-show] (rum/use-state false)]
-    [:div.ml-2
-     [:button.border.text-sm.bg-gray-500.text-white.px-2 {:on-click (fn [] (set-show not))} "references"]
-     (when show (reference/block-linked-references uuid))]))
 
 (rum/defc whiteboard-page
   [name block-id]
