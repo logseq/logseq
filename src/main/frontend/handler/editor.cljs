@@ -2440,7 +2440,10 @@
       (state/exit-editing-and-set-selected-blocks! [block]))))
 
 (defn- select-up-down [direction]
-  (let [selected (first (state/get-selection-blocks))
+  (let [selected-blocks (state/get-selection-blocks)
+        selected (case direction
+                   :up (first selected-blocks)
+                   :down (last selected-blocks))
         f (case direction
             :up util/get-prev-block-non-collapsed
             :down util/get-next-block-non-collapsed)
@@ -3069,7 +3072,7 @@
         (state/editing?)
         (keydown-up-down-handler direction)
 
-        (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
+        (state/selection?)
         (select-up-down direction)
 
         :else
