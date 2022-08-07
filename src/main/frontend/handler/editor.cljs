@@ -3101,34 +3101,35 @@
 
 (defn open-selected-block!
   [direction e]
-  (when-let [block-id (some-> (state/get-selection-blocks)
-                              first
-                              (dom/attr "blockid")
-                              uuid)]
-    (util/stop e)
-    (let [block    {:block/uuid block-id}
-          block-id (-> (state/get-selection-blocks)
-                       first
-                       (gobj/get "id")
-                       (string/replace "ls-block" "edit-block"))
-          left?    (= direction :left)]
-      (edit-block! block
-                   (if left? 0 :max)
-                   block-id))))
+  (let [selected-blocks (state/get-selection-blocks)
+        f (case direction
+            :left first
+            :right last)]
+    (when-let [block-id (some-> selected-blocks
+                                f
+                                (dom/attr "blockid")
+                                uuid)]
+      (util/stop e)
+      (let [block    {:block/uuid block-id}
+            block-id (-> selected-blocks
+                         f
+                         (gobj/get "id")
+                         (string/replace "ls-block" "edit-block"))
+            left?    (= direction :left)]
+        (edit-block! block
+                    (if left? 0 :max)
+                    block-id)))))
 
 (defn shortcut-left-right [direction]
   (fn [e]
     (when-not (auto-complete?)
+      (util/stop e)
       (cond
         (state/editing?)
-        (do
-          (util/stop e)
-          (keydown-arrow-handler direction))
+        (keydown-arrow-handler direction)
 
-        (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
-        (do
-          (util/stop e)
-          (open-selected-block! direction e))
+        (state/selection?)
+        (open-selected-block! direction e)
 
         :else
         nil))))
