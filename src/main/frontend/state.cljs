@@ -127,7 +127,7 @@
      :selection/mode                        false
      ;; Warning: blocks order is determined when setting this attribute
      :selection/blocks                      []
-     :selection/start-block                 nil
+     :selection/start-block-id              nil
      ;; either :up or :down, defaults to down
      ;; used to determine selection direction when two or more blocks are selected
      :selection/direction                   :down
@@ -229,8 +229,7 @@
 
      :file-sync/download-init-progress      nil
 
-     :encryption/graph-parsing?             false
-     })))
+     :encryption/graph-parsing?             false})))
 
 ;; block uuid -> {content(String) -> ast}
 (def blocks-ast-cache (atom {}))
@@ -249,6 +248,7 @@
     (get-in @blocks-ast-cache [block-uuid content])))
 
 (defn sub
+  "Returns an atom for the part of `state` from drilling in using the key/keys"
   [ks]
   (if (coll? ks)
     (util/react (rum/cursor-in state ks))
@@ -657,13 +657,18 @@
   (when-let [input (get-input)]
     (util/get-selection-start input)))
 
-(defn set-selection-start-block!
+(defn set-selection-start-block-id!
   [start-block]
-  (swap! state assoc :selection/start-block start-block))
+  (assert (string/starts-with? start-block "ls-block-") (cons "block ID must be the HTML id: " start-block)) ;; TODO: Remove, maybe
+  (swap! state assoc :selection/start-block-id start-block))
 
-(defn get-selection-start-block
+(defn get-selection-start-block-id
   []
-  (get @state :selection/start-block))
+  (get @state :selection/start-block-id))
+
+(defn get-selection-end-block-id
+  []
+  (get @state :selection/end-block-id))
 
 (defn set-selection-blocks!
   ([blocks]
@@ -672,9 +677,13 @@
    (when (seq blocks)
      (let [blocks (util/sort-by-height blocks)]
        (swap! state assoc
-             :selection/mode true
-             :selection/blocks blocks
-             :selection/direction direction)))))
+              :selection/mode true
+              :selection/blocks blocks
+              :selection/direction direction
+              :selection/end-block-id (util/get-block-id
+                                       (case direction
+                                         :up (first blocks)
+                                         :down (last blocks))))))))
 
 (defn into-selection-mode!
   []
@@ -691,7 +700,8 @@
   []
   (:selection/blocks @state))
 
-(defn get-selection-block-ids
+;; TODO: Maybe use html id throughout this
+(defn get-selection-block-uuids
   []
   (->> (sub :selection/blocks)
        (keep #(when-let [id (dom/attr % "blockid")]
@@ -700,7 +710,7 @@
 
 (defn get-selection-start-block-or-first
   []
-  (or (get-selection-start-block)
+  (or (get-selection-start-block-id)
       (some-> (first (get-selection-blocks))
               (gobj/get "id"))))
 
@@ -720,14 +730,24 @@
          :selection/mode true
          :selection/blocks (-> (conj (vec (:selection/blocks @state)) block)
                                (util/sort-by-height))
+         :selection/end-block-id (dom/attr block "id")
          :selection/direction direction))
 
 (defn drop-last-selection-block!
   []
-  (let [last-block (peek (vec (:selection/blocks @state)))]
+  ;; In this case, "up" means we are dropping from the top, and "down" from the bottom, to match the original selection direction we are undoing
+  (let [last-block (case (:selection/direction @state)
+                     :up (first (vec (:selection/blocks @state)))
+                     :down (peek (vec (:selection/blocks @state))))
+        updated-blocks (case (:selection/direction @state)
+                         :up (drop 1 (vec (:selection/blocks @state)))
+                         :down (pop (vec (:selection/blocks @state))))]
     (swap! state assoc
            :selection/mode true
-           :selection/blocks (pop (vec (:selection/blocks @state))))
+           :selection/blocks updated-blocks
+           :selection/end-block-id (case (:selection/direction @state)
+                                     :up (util/get-block-id (first updated-blocks))
+                                     :down (util/get-block-id (peek updated-blocks)))) ;; TODO: a bit of a hack, check to make sure this behaves correctly when using mouse individual selection then moving via keyboard
     last-block))
 
 (defn get-selection-direction

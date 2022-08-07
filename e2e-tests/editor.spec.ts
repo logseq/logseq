@@ -211,3 +211,172 @@ test('copy and paste block after editing new block', async ({ page, block }) => 
 
   await expect(page.locator('text="Typed block"')).toHaveCount(1);
 })
+
+test('moving after selection', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  async function selectDirection(key, count: number) {
+    await page.keyboard.down('Shift')
+    for (let i = 0; i < count; i++) {
+      await page.waitForTimeout(10)
+      await page.keyboard.press(key)
+    }
+    await page.keyboard.up('Shift')
+  }
+  const selectDown = async (count: number) => await selectDirection('ArrowDown', count)
+  const selectUp = async (count: number) => await selectDirection('ArrowUp', count)
+
+  async function waitForBlockToBeSelected(text) {
+    await page.locator(`.selected >> text="${text}"`).waitFor({ timeout: 1000 })
+    await expect(page.locator('.selected')).toHaveCount(1)
+    await expect(page.locator('.selected')).toHaveText(text)
+  }
+
+  // add some blocks
+  const count = 6
+  for (let i = 1; i <= count; i++) {
+    await block.mustFill(`line ${i}`)
+    if (i < count) await block.enterNext()
+  }
+
+  // Direction: selecting down
+  // move up when selection ends in the middle
+  await page.locator('text=line 2').click()
+  await selectDown(3)
+  await block.waitForSelectedBlocks(3)
+  await expect(page.locator('.selected').last()).toHaveText('line 4')
+
+  await page.keyboard.press('ArrowUp')
+  await waitForBlockToBeSelected("line 3")
+
+  // move down when selection ends in the middle
+  await page.locator('text=line 2').click()
+  await selectDown(3)
+  await block.waitForSelectedBlocks(3)
+  await expect(page.locator('.selected').last()).toHaveText('line 4')
+
+  await page.keyboard.press('ArrowDown')
+  await waitForBlockToBeSelected("line 5")
+
+  // move down when selection ends on the last block
+  await page.locator('text=line 4').click()
+  await selectDown(3)
+  await block.waitForSelectedBlocks(3)
+  await expect(page.locator('.selected').last()).toHaveText('line 6')
+
+  await page.keyboard.press('ArrowDown')
+  await waitForBlockToBeSelected("line 6")
+
+  // Direction: selecting up
+  // move up when selection ends in the middle
+  await page.locator('text=line 5').click()
+  await selectUp(3)
+  await block.waitForSelectedBlocks(3)
+  await expect(page.locator('.selected').first()).toHaveText('line 3')
+
+  await page.keyboard.press('ArrowUp')
+  await block.waitForSelectedBlocks(1)
+  await waitForBlockToBeSelected("line 2")
+
+  // move down when selection ends in the middle
+  await page.locator('text=line 5').click()
+  await selectUp(3)
+  await block.waitForSelectedBlocks(3)
+  await expect(page.locator('.selected').first()).toHaveText('line 3')
+
+  await page.keyboard.press('ArrowDown')
+  await block.waitForSelectedBlocks(1)
+  await waitForBlockToBeSelected("line 4")
+
+  // move up when selection ends on the first block
+  await page.locator('text=line 3').click()
+  await selectUp(3)
+  await block.waitForSelectedBlocks(3)
+  await expect(page.locator('.selected').first()).toHaveText('line 1')
+
+  await page.keyboard.press('ArrowUp')
+  await block.waitForSelectedBlocks(1)
+  await waitForBlockToBeSelected("line 1")
+
+  // Direction: Selecting down, then up (to un-select)
+  await page.locator('text=line 2').click()
+  await selectDown(3)
+  await block.waitForSelectedBlocks(3)
+  await page.keyboard.press('ArrowUp')
+  await expect(page.locator('.selected').last()).toHaveText('line 3')
+
+  await page.keyboard.press('ArrowDown')
+  await block.waitForSelectedBlocks(1)
+  await waitForBlockToBeSelected("line 4")
+
+  // Direction: Selecting up, then down (to un-select)
+  await page.locator('text=line 5').click()
+  await selectUp(3)
+  await block.waitForSelectedBlocks(3)
+  await page.keyboard.press('ArrowDown')
+  await expect(page.locator('.selected').first()).toHaveText('line 4')
+
+  await page.keyboard.press('ArrowUp')
+  await block.waitForSelectedBlocks(1)
+  await waitForBlockToBeSelected("line 3")
+
+  // Direction: Down, with the mouse
+  await page.locator('text=line 2').dragTo(page.locator('text=line 4'))
+  await block.waitForSelectedBlocks(3)
+  await expect(page.locator('.selected').last()).toHaveText('line 4')
+  
+  await page.keyboard.press('ArrowDown')
+  await block.waitForSelectedBlocks(1)
+  await expect(page.locator('.selected')).toHaveText('line 5')
+
+  // Direction: Up, with the mouse
+  await page.locator('text=line 5').dragTo(page.locator('text=line 3'))
+  await block.waitForSelectedBlocks(3)
+  await expect(page.locator('.selected').first()).toHaveText('line 3')
+  
+  await page.keyboard.press('ArrowUp')
+  await block.waitForSelectedBlocks(1)
+  await expect(page.locator('.selected')).toHaveText('line 2')
+})
+
+test('pressing up after indenting a block should select the prev block', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  // Open the action modal
+  await block.mustFill('1')
+  await block.enterNext()
+  await block.mustFill('2')
+  await block.enterNext()
+  await block.mustFill('3')
+  await page.waitForTimeout(100)
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(100)
+  await page.keyboard.press('ArrowUp')
+  await page.waitForTimeout(100)
+  await page.keyboard.press('Tab')
+  await page.waitForTimeout(100)
+  await page.keyboard.press('ArrowUp')
+  await page.waitForTimeout(100)
+  expect(page.locator('.selected')).toHaveText('1')
+})
+
+test('pressing down after indenting a block should select the next block', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  // Open the action modal
+  await block.mustFill('1')
+  await block.enterNext()
+  await block.mustFill('2')
+  await block.enterNext()
+  await block.mustFill('3')
+  await page.waitForTimeout(100)
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(100)
+  await page.keyboard.press('ArrowUp')
+  await page.waitForTimeout(100)
+  await page.keyboard.press('Tab')
+  await page.waitForTimeout(100)
+  await page.keyboard.press('ArrowDown')
+  await page.waitForTimeout(100)
+  expect(page.locator('.selected')).toHaveText('3')
+})

@@ -1947,9 +1947,9 @@
     (if (and meta? (not (state/get-edit-input-id)))
       (do
         (util/stop e)
-        (state/conj-selection-block! (gdom/getElement block-id) :down)
-        (when (and block-id (not (state/get-selection-start-block)))
-          (state/set-selection-start-block! block-id)))
+        (state/conj-selection-block! (util/get-block-by-id block-id) :down)
+        (when (and block-id (not (state/get-selection-start-block-id)))
+          (state/set-selection-start-block-id! block-id)))
       (when (contains? #{1 0} button)
         (when-not (target-forbidden-edit? target)
           (cond
@@ -1986,7 +1986,7 @@
                   (f)
                   (js/setTimeout f 5))
 
-                (when block-id (state/set-selection-start-block! block-id))))))))))
+                (when block-id (state/set-selection-start-block-id! block-id))))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block block-id slide? top? block-content?]
@@ -2328,7 +2328,7 @@
   [event uuid target-block *move-to]
   (util/stop event)
   (when-not (dnd-same-block? uuid)
-    (let [block-uuids (state/get-selection-block-ids)
+    (let [block-uuids (state/get-selection-block-uuids)
           lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
           selected (db/pull-many (state/get-current-repo) '[*] lookup-refs)
           blocks (if (seq selected) selected [@*dragging-block])]
@@ -2463,7 +2463,7 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
-        selected-blocks (set (state/get-selection-block-ids))
+        selected-blocks (set (state/get-selection-block-uuids))
         selected? (contains? selected-blocks uuid)]
     [:div.ls-block
      (cond->

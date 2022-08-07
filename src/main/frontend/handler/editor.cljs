@@ -195,9 +195,10 @@
     (doseq [block blocks]
       (gdom-classes/remove block "block-highlight"))))
 
+;; TODO: Maybe use html id all the way through this
 (defn- get-edit-input-id-with-block-id
   [block-id]
-  (when-let [first-block (util/get-first-block-by-id block-id)]
+  (when-let [first-block (util/get-first-block-by-uuid block-id)]
     (string/replace (gobj/get first-block "id")
                     "ls-block"
                     "edit-block")))
@@ -1679,7 +1680,8 @@
                          {:outliner-op :move-blocks}
                          (save-current-block!)
                          (outliner-core/move-blocks-up-down! blocks up?))
-                       (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
+;; TODO: Maybe use html id all the way through this
+                       (when-let [block-node (util/get-first-block-by-uuid (:block/uuid (first blocks)))]
                          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})))]
       (if edit-block-id
         (when-let [block (db/pull [:block/uuid edit-block-id])]
@@ -1689,7 +1691,7 @@
             (when-let [input (gdom/getElement input-id)]
               (.focus input)
               (js/setTimeout #(util/scroll-editor-cursor input) 100))))
-        (let [ids (state/get-selection-block-ids)]
+        (let [ids (state/get-selection-block-uuids)]
           (when (seq ids)
             (let [lookup-refs (map (fn [id] [:block/uuid id]) ids)
                   blocks (db/pull-many (state/get-current-repo) '[*] lookup-refs)]
@@ -1698,7 +1700,7 @@
 (defn get-selected-ordered-blocks
   []
   (let [repo (state/get-current-repo)
-        ids (state/get-selection-block-ids)
+        ids (state/get-selection-block-uuids)
         lookup-refs (->> (map (fn [id] [:block/uuid id]) ids)
                          (remove nil?))]
     (db/pull-many repo '[*] lookup-refs)))
@@ -2440,14 +2442,17 @@
       (state/exit-editing-and-set-selected-blocks! [block]))))
 
 (defn- select-up-down [direction]
-  (let [selected (first (state/get-selection-blocks))
+  (let [selected-id (state/get-selection-end-block-id)
+        selected (util/get-block-by-id selected-id)
         f (case direction
-            :up util/get-prev-block-non-collapsed
-            :down util/get-next-block-non-collapsed)
-        sibling-block (f selected)]
-    (when (and sibling-block (dom/attr sibling-block "blockid"))
-      (.scrollIntoView sibling-block #js {:behavior "smooth" :block "center"})
-      (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
+            :up util/get-prev-block-id-non-collapsed
+            :down util/get-next-block-id-non-collapsed)
+        sibling-block-id (f selected-id)
+        sibling-block (util/get-block-by-id sibling-block-id)
+        target-block (or sibling-block selected)]
+    (assert target-block) ;; TODO: Remove if this never fires
+    (.scrollIntoView target-block #js {:behavior "smooth" :block "center"})
+    (state/exit-editing-and-set-selected-blocks! [target-block])))
 
 (defn- move-cross-boundrary-up-down
   [direction]
@@ -2455,23 +2460,25 @@
         line-pos (util/get-first-or-last-line-pos input)
         repo (state/get-current-repo)
         f (case direction
-            :up util/get-prev-block-non-collapsed
-            :down util/get-next-block-non-collapsed)
-        sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))
+            :up util/get-prev-block-id-non-collapsed
+            :down util/get-next-block-id-non-collapsed)
+        edit-input-id (state/get-edit-input-id)
+        edit-block-id (string/replace edit-input-id "edit-block" "ls-block")
+        sibling-block-id (f edit-block-id)
+        sibling-block (util/get-block-by-id sibling-block-id)
         {:block/keys [uuid content format]} (state/get-edit-block)]
     (when sibling-block
-      (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
-        (let [value (state/get-edit-content)]
-          (when (not= (clean-content! format content)
-                      (string/trim value))
-            (save-block! repo uuid value)))
+      (let [value (state/get-edit-content)]
+        (when (not= (clean-content! format content)
+                    (string/trim value))
+          (save-block! repo uuid value)))
 
-        (let [new-id (string/replace (gobj/get sibling-block "id") "ls-block" "edit-block")
-              new-uuid (cljs.core/uuid sibling-block-id)
-              block (db/pull repo '[*] [:block/uuid new-uuid])]
-          (edit-block! block
-                       [direction line-pos]
-                       new-id))))))
+      (let [new-id sibling-block-id
+            new-uuid (util/get-block-uuid sibling-block)
+            block (db/pull repo '[*] [:block/uuid new-uuid])]
+        (edit-block! block
+                     [direction line-pos]
+                     new-id)))))
 
 (defn keydown-up-down-handler
   [direction]
@@ -3069,7 +3076,7 @@
         (state/editing?)
         (keydown-up-down-handler direction)
 
-        (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
+        (state/selection?)
         (select-up-down direction)
 
         :else

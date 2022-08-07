@@ -177,6 +177,7 @@ export const test = base.extend<LogseqFixtures>({
       waitForSelectedBlocks: async (total: number): Promise<void> => {
         // NOTE: `nth=` counts from 0.
         await page.waitForSelector(`.ls-block.selected >> nth=${total - 1}`, { timeout: 1000 })
+        await page.waitForSelector(`.ls-block.selected >> nth=${total}`, { state: 'detached', timeout: 1000 })
       },
       escapeEditing: async (): Promise<void> => {
         await page.keyboard.press('Escape')

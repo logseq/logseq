@@ -310,6 +310,7 @@
     (when (= (:data-lang attr) "calc")
       (calc/results (:calc-atom state)))]])
 
+;; TODO: Maybe use html id all the way through this
 ;; Focus into the CodeMirror editor rather than the normal "raw" editor
 (defmethod commands/handle-step :codemirror/focus [[_]]
   ;; This requestAnimationFrame is necessary because, for some reason, when you
@@ -325,7 +326,7 @@
     (state/clear-edit!)
     (js/setTimeout
      (fn []
-       (let [block-node (util/get-first-block-by-id block-uuid)
+       (let [block-node (util/get-first-block-by-uuid block-uuid)
              textarea-ref (.querySelector block-node "textarea")]
          (when-let [codemirror-ref (gobj/get textarea-ref codemirror-ref-name)]
            (.focus codemirror-ref))))

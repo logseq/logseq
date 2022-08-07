@@ -699,9 +699,27 @@
             (rec-get-blocks-content-section (gobj/get node "parentNode"))))))
 
 #?(:cljs
+   (defn get-block-uuid [block]
+     (when block
+       (uuid (d/attr block "blockid")))))
+
+#?(:cljs
+   (defn get-block-id [block]
+     (when block
+       (d/attr block "id"))))
+
+#?(:cljs
+   (defn get-block-by-id [block-uuid]
+     (gdom/getElement block-uuid))) ;; should this use blockid attribute instead?
+
+#?(:cljs
    (defn get-blocks-noncollapse []
      (->> (d/by-class "ls-block")
           (filter (fn [b] (some? (gobj/get b "offsetParent")))))))
+
+#?(:cljs
+   (defn get-block-ids-noncollapse []
+     (map #(d/attr % "id") (get-blocks-noncollapse))))
 
 #?(:cljs
    (defn remove-embeded-blocks [blocks]
@@ -750,6 +768,9 @@
     (time (reset! result (doall (f))))
     @result))
 
+(defn filter-indices [pred coll]
+  (keep-indexed (fn [idx val] (when (pred val) idx)) coll))
+
 (defn concat-without-nil
   [& cols]
   (->> (apply concat cols)
@@ -770,46 +791,78 @@
            (gdom/getElement section "id"))))))
 
 #?(:cljs
+   (defn get-block-id-index
+     [block-id block-uuids]
+     (assert (starts-with? block-id "ls-block-") (cons "block ID must be the HTML id: " block-id))
+     [(first (filter-indices #(= block-id %) block-uuids)) block-uuids]))
+
+;; REVIEW: These use UUIDs as the default block ID type. Should we use strings instead? We convert between them a lot either way.
+#?(:cljs
+   (defn get-prev-block-id-non-collapsed
+     [block-id]
+     (assert (starts-with? block-id "ls-block-") (cons "block ID must be the HTML id: " block-id))
+     (when-let [[index block-ids] (get-block-id-index block-id (get-block-ids-noncollapse))]
+       (let [idx (dec index)]
+         (when (>= idx 0)
+           (nth-safe block-ids idx))))))
+
+#?(:cljs
    (defn get-prev-block-non-collapsed
      [block]
-     (when-let [blocks (get-blocks-noncollapse)]
-       (when-let [index (.indexOf blocks block)]
-         (let [idx (dec index)]
-           (when (>= idx 0)
-             (nth-safe blocks idx)))))))
+     (->> block (get-block-id) (get-prev-block-id-non-collapsed) (get-block-by-id))))
+
+#?(:cljs
+   (defn get-prev-block-id-non-collapsed-non-embed
+     [block-id]
+     (assert (starts-with? block-id "ls-block-") (cons "block ID must be the HTML id: " block-id))
+     (when-let [blocks (->> (get-blocks-noncollapse)
+                            remove-embeded-blocks)]
+       (let [block-ids (map get-block-id blocks)]
+         (when-let [index (.indexOf block-ids block-id)]
+           (let [idx (dec index)]
+             (when (>= idx 0)
+               (nth-safe block-ids idx))))))))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed-non-embed
      [block]
-     (when-let [blocks (->> (get-blocks-noncollapse)
-                            remove-embeded-blocks)]
-       (when-let [index (.indexOf blocks block)]
-         (let [idx (dec index)]
-           (when (>= idx 0)
-             (nth-safe blocks idx)))))))
+     (->> block (get-block-id) (get-prev-block-id-non-collapsed-non-embed) (get-block-by-id))))
+
+#?(:cljs
+   (defn get-next-block-id-non-collapsed
+     [block-id]
+     (assert (starts-with? block-id "ls-block-") (cons "block ID must be the HTML id: " block-id))
+     (when-let [[index block-ids] (get-block-id-index block-id (get-block-ids-noncollapse))]
+       (let [idx (inc index)]
+         (when (>= (count block-ids) idx)
+           (nth-safe block-ids idx))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed
      [block]
+     (->> block (get-block-id) (get-next-block-id-non-collapsed) (get-block-by-id))))
+
+#?(:cljs
+   (defn get-next-block-id-non-collapsed-skip
+     [block-id]
+     (assert (starts-with? block-id "ls-block-") (cons "block ID must be the HTML id: " block-id))
      (when-let [blocks (get-blocks-noncollapse)]
-       (when-let [index (.indexOf blocks block)]
-         (let [idx (inc index)]
-           (when (>= (count blocks) idx)
-             (nth-safe blocks idx)))))))
+       (let [block-ids (map #(get-block-id %) blocks)]
+         (when-let [index (.indexOf block-ids block-id)]
+           (loop [idx (inc index)]
+             (when (>= (count block-ids) idx)
+               (let [block-uuid (nth-safe block-ids idx)
+                     block (nth-safe blocks idx)
+                     nested? (->> (array-seq (gdom/getElementsByClass "selected"))
+                                  (some (fn [dom] (.contains dom block))))]
+                 (if nested?
+                   (recur (inc idx))
+                   block-uuid)))))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed-skip
      [block]
-     (when-let [blocks (get-blocks-noncollapse)]
-       (when-let [index (.indexOf blocks block)]
-         (loop [idx (inc index)]
-           (when (>= (count blocks) idx)
-             (let [block (nth-safe blocks idx)
-                   nested? (->> (array-seq (gdom/getElementsByClass "selected"))
-                                (some (fn [dom] (.contains dom block))))]
-               (if nested?
-                 (recur (inc idx))
-                 block))))))))
+     (->> block (get-block-id) (get-next-block-id-non-collapsed-skip) (get-block-by-id))))
 
 (defn rand-str
   [n]
@@ -878,13 +931,14 @@
 
     "- "))
 
+;; TODO: Clean this up to use HTML id and be more concise/use other methods I wrote
 #?(:cljs
-   (defn get-first-block-by-id
-     [block-id]
-     (when block-id
-       (let [block-id (str block-id)]
-         (when (uuid-string? block-id)
-           (first (array-seq (js/document.getElementsByClassName block-id))))))))
+   (defn get-first-block-by-uuid
+     [block-uuid]
+     (when block-uuid
+       (let [block-uuid-str (str block-uuid)]
+         (when (uuid-string? block-uuid-str)
+           (first (array-seq (js/document.getElementsByClassName block-uuid-str))))))))
 
 #?(:cljs
    (defn url-encode

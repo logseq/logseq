@@ -86,6 +86,46 @@ test('delete and backspace', async ({ page, block }) => {
 })
 
 
+test('moving cursor between blocks', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  // add 5 blocks
+  await block.mustFill('line 1')
+  await block.enterNext()
+  await block.mustFill('line 2')
+  await block.enterNext()
+  expect(await block.indent()).toBe(true)
+  await block.mustFill('line 3')
+  await block.enterNext()
+  await block.mustFill('line 4')
+  expect(await block.indent()).toBe(true)
+  await block.enterNext()
+  await page.waitForTimeout(30)
+  await block.mustFill('line 5')
+  expect(await block.unindent()).toBe(true)
+  expect(await block.unindent()).toBe(true)
+
+  // Moving up with keyboard
+  await page.keyboard.press('ArrowUp')
+  await expect(await page.locator('.block-editor textarea')).toHaveText('line 4')
+  await page.keyboard.press('ArrowUp')
+  await expect(await page.locator('.block-editor textarea')).toHaveText('line 3')
+  await page.keyboard.press('ArrowUp')
+  await expect(await page.locator('.block-editor textarea')).toHaveText('line 2')
+  await page.keyboard.press('ArrowUp')
+  await expect(await page.locator('.block-editor textarea')).toHaveText('line 1')
+
+  // Moving down with keyboard
+  await page.keyboard.press('ArrowDown')
+  await expect(page.locator('.block-editor textarea')).toHaveText('line 2')
+  await page.keyboard.press('ArrowDown')
+  await expect(page.locator('.block-editor textarea')).toHaveText('line 3')
+  await page.keyboard.press('ArrowDown')
+  await expect(page.locator('.block-editor textarea')).toHaveText('line 4')
+  await page.keyboard.press('ArrowDown')
+  await expect(page.locator('.block-editor textarea')).toHaveText('line 5')
+})
+
 test('selection', async ({ page, block }) => {
   await createRandomPage(page)
 
