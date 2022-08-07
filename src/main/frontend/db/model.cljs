@@ -63,9 +63,9 @@
   (when-let [repo (state/get-current-repo)]
     (->
      (react/q repo [:frontend.db.react/block id]
-       {:query-fn (fn [_]
-                    (db-utils/pull (butlast block-attrs) id))}
-       nil)
+              {:query-fn (fn [_]
+                           (db-utils/pull (butlast block-attrs) id))}
+              nil)
      react)))
 
 (defn get-original-name
@@ -861,14 +861,14 @@
   (when-let [db (conn/get-db repo)]
     (let [eid (:db/id (db-utils/entity repo [:block/uuid block-uuid]))]
       (->> (d/q
-             '[:find ?id
-               :in $ ?p %
-               :where
-               (child ?p ?c)
-               [?c :block/uuid ?id]]
-             db
-             eid
-             rules)
+            '[:find ?id
+              :in $ ?p %
+              :where
+              (child ?p ?c)
+              [?c :block/uuid ?id]]
+            db
+            eid
+            rules)
            (apply concat)))))
 
 (defn get-block-immediate-children
@@ -1179,14 +1179,14 @@
              aliases (set/difference pages #{page-id})]
          (->>
           (react/q repo
-            [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
-            {}
-            '[:find [(pull ?block ?block-attrs) ...]
-              :in $ [?ref-page ...] ?block-attrs
-              :where
-              [?block :block/path-refs ?ref-page]]
-            pages
-            (butlast block-attrs))
+                   [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
+                   {}
+                   '[:find [(pull ?block ?block-attrs) ...]
+                     :in $ [?ref-page ...] ?block-attrs
+                     :where
+                     [?block :block/path-refs ?ref-page]]
+                   pages
+                   (butlast block-attrs))
           react
           (remove (fn [block] (= page-id (:db/id (:block/page block)))))
           db-utils/group-by-page
@@ -1209,17 +1209,17 @@
              aliases (set/difference pages #{page-id})]
          (->>
           (react/q repo
-            [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
-            {:use-cache? false
-             :query-fn (fn []
-                         (let [entities (mapcat (fn [id]
-                                                  (:block/_path-refs (db-utils/entity id))) pages)
-                               blocks (map (fn [e] {:block/parent (:block/parent e)
-                                                    :block/left (:block/left e)
-                                                    :block/page (:block/page e)}) entities)]
-                           {:entities entities
-                            :blocks blocks}))}
-            nil)
+                   [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
+                   {:use-cache? false
+                    :query-fn (fn []
+                                (let [entities (mapcat (fn [id]
+                                                         (:block/_path-refs (db-utils/entity id))) pages)
+                                      blocks (map (fn [e] {:block/parent (:block/parent e)
+                                                           :block/left (:block/left e)
+                                                           :block/page (:block/page e)}) entities)]
+                                  {:entities entities
+                                   :blocks blocks}))}
+                   nil)
           react
           :entities
           (remove (fn [block] (= page-id (:db/id (:block/page block)))))
@@ -1240,15 +1240,15 @@
           result (if page?
                    (let [pages (page-alias-set repo (:block/name block))]
                      (d/q
-                       '[:find [?block ...]
-                         :in $ [?ref-page ...] ?id
-                         :where
-                         [?block :block/refs ?ref-page]
-                         [?block :block/page ?p]
-                         [(not= ?p ?id)]]
-                       (conn/get-db repo)
-                       pages
-                       id))
+                      '[:find [?block ...]
+                        :in $ [?ref-page ...] ?id
+                        :where
+                        [?block :block/refs ?ref-page]
+                        [?block :block/page ?p]
+                        [(not= ?p ?id)]]
+                      (conn/get-db repo)
+                      pages
+                      id))
                    (:block/_refs block))]
       (count result))))
 
@@ -1679,15 +1679,15 @@
 (defn get-macro-blocks
   [repo macro-name]
   (d/q
-    '[:find [(pull ?b [*]) ...]
-      :in $ ?macro-name
-      :where
-      [?b :block/type "macro"]
-      [?b :block/properties ?properties]
-      [(get ?properties :logseq.macro-name) ?name]
-      [(= ?name ?macro-name)]]
-    (conn/get-db repo)
-    macro-name))
+   '[:find [(pull ?b [*]) ...]
+     :in $ ?macro-name
+     :where
+     [?b :block/type "macro"]
+     [?b :block/properties ?properties]
+     [(get ?properties :logseq.macro-name) ?name]
+     [(= ?name ?macro-name)]]
+   (conn/get-db repo)
+   macro-name))
 
 (defn whiteboard-page?
   [page-name]
@@ -1713,12 +1713,13 @@
 ;;                                 (whiteboard-clj->tldr page blocks))) result)]
 ;;     tldrs))
 
-(defn get-all-whiteboard-names
+(defn get-all-whiteboards
   [repo]
   (->> (d/q
-        '[:find [(pull ?page [:block/name]) ...]
+        '[:find [(pull ?page [:block/name
+                              :block/created-at
+                              :block/updated-at]) ...]
           :where
           [?page :block/name]
           [?page :block/whiteboard? true]]
-        (conn/get-db repo))
-       (map :block/name)))
+        (conn/get-db repo))))

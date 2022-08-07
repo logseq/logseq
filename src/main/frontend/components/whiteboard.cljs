@@ -1,5 +1,6 @@
 (ns frontend.components.whiteboard
-  (:require [datascript.core :as d]
+  (:require [cljs.math :as math]
+            [datascript.core :as d]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
             [frontend.db.model :as model]
@@ -25,6 +26,7 @@
     (when draw-component
       (draw-component name shape-id))))
 
+;; TODO: make it reactive to db changes
 (rum/defc tldraw-preview < rum/reactive
   {:init (fn [state]
            (p/let [_ (loader/load :tldraw)]
@@ -38,19 +40,59 @@
     (when generate-preview
       (generate-preview tldr))))
 
-(rum/defc dashboard-card
+(rum/defc page-refs-count < rum/static
   [page-name]
-  [:div.rounded.text-lg.cursor-pointer.flex.flex-col.gap-1.overflow-hidden.dashboard-card
+  (let [page-entity (model/get-page page-name)
+        refs-count (count (:block/_refs page-entity))]
+    [:a.open-page-ref-link refs-count]))
+
+(defn- get-page-display-name
+  [page-name]
+  (let [page-entity (model/get-page page-name)]
+    (or (get-in page-entity [:block/properties :title] nil)
+        (:block/original-name page-entity)
+        page-name)))
+
+;; This is not accurate yet
+;; (defn- get-page-human-update-time
+;;   [page-name]
+;;   (let [page-entity (model/get-page page-name)
+;;         updated-at (:block/updated-at page-entity)]
+;;     (str "Edited at " (util/time-ago (js/Date. updated-at)))))
+
+(rum/defc dashboard-preview-card
+  [page-name]
+  [:div.dashboard-card.dashboard-preview-card.cursor-pointer.hover:shadow-lg
    {:on-mouse-down
     (fn [e]
       (util/stop e)
       (route-handler/redirect-to-whiteboard! page-name))}
-   [:div.truncate.px-4.py-1.dashboard-card-title page-name]
+   [:div.dashboard-card-title
+    [:div.flex.w-full
+     [:div.dashboard-card-title-name (get-page-display-name page-name)]
+     [:div.flex-1]
+     (page-refs-count page-name)]
+    ;; [:div.flex.w-full
+    ;;  [:div (get-page-human-update-time page-name)]
+    ;;  [:div.flex-1]
+    ;;  (page-refs-count page-name)]
+    ]
    [:div.p-4.h-64.flex.justify-center
     (tldraw-preview page-name)]])
 
+(rum/defc dashboard-create-card
+  []
+  [:div.dashboard-card.dashboard-create-card.cursor-pointer
+   {:on-mouse-down
+    (fn [e]
+      (util/stop e)
+      (route-handler/redirect-to-whiteboard! (d/squuid)))}
+   (ui/icon "plus")
+   [:span.dashboard-create-card-caption
+    "New whiteboard"]])
+
 ;; TODO: move it to util?
-(defn- use-component-rect
+(defn- use-component-size
   [ref]
   (let [[rect set-rect] (rum/use-state nil)]
     (rum/use-effect!
@@ -67,25 +109,32 @@
 
 (rum/defc whiteboard-dashboard
   []
-  (let [whiteboard-names (model/get-all-whiteboard-names (state/get-current-repo))
+  (let [whiteboards (model/get-all-whiteboards (state/get-current-repo))
+        whiteboard-names (map :block/name whiteboards)
         ref (rum/use-ref nil)
-        rect (use-component-rect ref)
-        container-width (when rect (.-width rect))
+        rect (use-component-size ref)
+        [container-width] (when rect [(.-width rect) (.-height rect)])
         cols (cond (< container-width 600) 1
                    (< container-width 900) 2
                    (< container-width 1200) 3
-                   :else 4)]
-    [:div.p-4
-     {:ref ref}
-     (ui/button "Create new whiteboard"
-                :small? true
-                :on-click (fn [e]
-                            (util/stop e)
-                            (route-handler/redirect-to-whiteboard! (d/squuid))))
-     [:div.gap-8.py-4.grid.grid-rows-auto
-      {:style {:grid-template-columns (str "repeat(" cols ", minmax(0, 1fr))")}}
-      (for [whiteboard-name whiteboard-names]
-        [:<> {:key whiteboard-name} (dashboard-card whiteboard-name)])]]))
+                   :else 4)
+        total-whiteboards (count whiteboards)
+        empty-cards (- (max (* (math/ceil (/ (inc total-whiteboards) cols)) cols) (* 2 cols))
+                       (inc total-whiteboards))]
+    [:<>
+     [:h1.title
+      "All whiteboards"
+      [:span.opacity-50
+       (str " · " total-whiteboards)]]
+     [:div
+      {:ref ref}
+      [:div.gap-8.grid.grid-rows-auto
+       {:style {:grid-template-columns (str "repeat(" cols ", minmax(0, 1fr))")}}
+       (dashboard-create-card)
+       (for [whiteboard-name whiteboard-names]
+         [:<> {:key whiteboard-name} (dashboard-preview-card whiteboard-name)])
+       (for [n (range empty-cards)]
+         [:div.dashboard-card.dashboard-bg-card {:key n}])]]]))
 
 (rum/defc whiteboard-references
   [name]
