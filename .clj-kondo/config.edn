@@ -32,7 +32,9 @@
              logseq.graph-parser.util gp-util
              logseq.graph-parser.property gp-property
              logseq.graph-parser.config gp-config
-             logseq.graph-parser.date-time-util date-time-util}}}
+             logseq.graph-parser.date-time-util date-time-util
+             logseq.graph-parser.util.page-ref page-ref
+             logseq.graph-parser.util.block-ref block-ref}}}
 
  :hooks {:analyze-call {rum.core/defc hooks.rum/defc
                         rum.core/defcs hooks.rum/defcs}}

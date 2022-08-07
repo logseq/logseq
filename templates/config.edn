@@ -27,6 +27,10 @@
  ;; Enable Block timestamp
  :feature/enable-block-timestamps? false
 
+ ;; Enable remove accents when searching.
+ ;; After toggle this option, please remember to rebuild your search index by press (cmd+c cmd+s).
+ :feature/enable-search-remove-accents? true
+
  ;; Disable Built-in Scheduled and deadline Query
  ;; :feature/disable-scheduled-and-deadline-query? true
 

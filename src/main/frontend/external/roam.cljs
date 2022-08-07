@@ -4,7 +4,8 @@
             [frontend.date :as date]
             [clojure.walk :as walk]
             [clojure.string :as string]
-            [frontend.util :as util]
+            [goog.string :as gstring]
+            [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.text :as text]))
 
@@ -30,7 +31,7 @@
   [text]
   (string/replace text uid-pattern (fn [[_ uid]]
                                      (let [id (get @uid->uuid uid uid)]
-                                       (str "((" id "))")))))
+                                       (block-ref/->block-ref id)))))
 
 (defn macro-transform
   [text]
@@ -38,7 +39,7 @@
                                        (let [[name arg] (gp-util/split-first ":" text)]
                                          (if name
                                            (let [name (text/page-ref-un-brackets! name)]
-                                             (util/format "{{%s %s}}" name arg))
+                                             (gstring/format "{{%s %s}}" name arg))
                                            original)))))
 
 (defn- fenced-code-transform
@@ -83,7 +84,7 @@
                              " -"))
         properties (when (contains? @all-refed-uids uid)
                      (str
-                      (util/format "id:: %s"
+                      (gstring/format "id:: %s"
                                    (str (get @uid->uuid uid)))
                       "\n"))]
     (if string
@@ -109,7 +110,7 @@
                  (let [journal? (date/valid-journal-title? title)
                        front-matter (if journal?
                                       ""
-                                      (util/format "---\ntitle: %s\n---\n\n" title))]
+                                      (gstring/format "---\ntitle: %s\n---\n\n" title))]
                    (str front-matter (transform text)))))]
     (when (and (not (string/blank? title))
                text)

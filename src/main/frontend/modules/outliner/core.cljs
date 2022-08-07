@@ -15,7 +15,7 @@
             [logseq.graph-parser.util :as gp-util]
             [cljs.spec.alpha :as s]))
 
-(s/def ::block-map (s/keys :req [:db/id :block/uuid]
+(s/def ::block-map (s/keys :req [:db/id]
                            :opt [:block/page :block/left :block/parent]))
 
 (s/def ::block-map-or-entity (s/or :entity de/entity?
@@ -141,8 +141,10 @@
           other-tx (:db/other-tx m)
           id (:db/id (:data this))
           block-entity (db/entity id)
-          old-refs (:block/refs block-entity)
-          new-refs (:block/refs m)]
+          remove-self-page #(remove (fn [b]
+                                      (= (:db/id b) (:db/id (:block/page block-entity)))) %)
+          old-refs (remove-self-page (:block/refs block-entity))
+          new-refs (remove-self-page (:block/refs m))]
       (when (seq other-tx)
         (swap! txs-state (fn [txs]
                            (vec (concat txs other-tx)))))
@@ -666,13 +668,14 @@
                     move-blocks-next-tx [(build-move-blocks-next-tx blocks non-consecutive-blocks?)]
                     children-page-tx (when not-same-page?
                                        (let [children-ids (mapcat #(db/get-block-children-ids (state/get-current-repo) (:block/uuid %)) blocks)]
-                                         (map (fn [uuid] {:block/uuid uuid
-                                                          :block/page target-page}) children-ids)))
+                                         (map (fn [id] {:block/uuid id
+                                                        :block/page target-page}) children-ids)))
                     fix-non-consecutive-tx (->> (fix-non-consecutive-blocks blocks target-block sibling?)
                                                 (remove (fn [b]
                                                           (contains? (set (map :db/id move-blocks-next-tx)) (:db/id b)))))
                     full-tx (util/concat-without-nil tx-data move-blocks-next-tx children-page-tx fix-non-consecutive-tx)
                     tx-meta (cond-> {:move-blocks (mapv :db/id blocks)
+                                     :move-op outliner-op
                                      :target (:db/id target-block)}
                               not-same-page?
                               (assoc :from-page first-block-page
