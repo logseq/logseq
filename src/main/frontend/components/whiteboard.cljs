@@ -46,19 +46,24 @@
   ([page-name classname children]
    (let [page-entity (model/get-page page-name)
          block-uuid (:block/uuid page-entity)
-         refs-count (count (:block/_refs page-entity))]
+         refs-count (count (:block/_refs page-entity))
+         [open? set-open?] (rum/use-state nil)]
      (when (> refs-count 0)
-       (ui/tippy {:in-editor?      true
+       (ui/tippy {:in-editor?      false
                   :html            (fn [] [:div.mx-2 (reference/block-linked-references block-uuid)])
                   :interactive     true
                   :delay           [100, 500]
                   :position        "bottom"
                   :distance        10
+                  :open?           open?
                   :popperOptions   {:modifiers {:preventOverflow
                                                 {:enabled           true
                                                  :boundariesElement "viewport"}}}}
                  [:div.flex.items-center.gap-2.whiteboard-page-refs-count
-                  {:class classname}
+                  {:class classname
+                   :on-click (fn [e]
+                               (util/stop e)
+                               (set-open? (fn [o] (if (nil? o) true nil))))}
                   [:div.open-page-ref-link refs-count]
                   children])))))
 
@@ -79,7 +84,7 @@
 (rum/defc dashboard-preview-card
   [page-name]
   [:div.dashboard-card.dashboard-preview-card.cursor-pointer.hover:shadow-lg
-   {:on-mouse-down
+   {:on-click
     (fn [e]
       (util/stop e)
       (route-handler/redirect-to-whiteboard! page-name))}
@@ -99,7 +104,7 @@
 (rum/defc dashboard-create-card
   []
   [:div.dashboard-card.dashboard-create-card.cursor-pointer
-   {:on-mouse-down
+   {:on-click
     (fn [e]
       (util/stop e)
       (route-handler/redirect-to-whiteboard! (d/squuid)))}
