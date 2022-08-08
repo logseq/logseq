@@ -1122,7 +1122,7 @@
           (page-embed (assoc config :link-depth (inc link-depth)) page-name)))
 
       (block-ref/string-block-ref? a)
-      (when-let [s (-> block-ref/get-string-block-ref-id string/trim)]
+      (when-let [s (-> a block-ref/get-string-block-ref-id string/trim)]
         (when-let [id (some-> s parse-uuid)]
           (block-embed (assoc config :link-depth (inc link-depth)) id)))
 
