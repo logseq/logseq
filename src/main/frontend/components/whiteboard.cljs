@@ -41,23 +41,26 @@
       (generate-preview tldr))))
 
 (rum/defc page-refs-count < rum/static
-  [page-name & children]
-  (let [page-entity (model/get-page page-name)
-        block-uuid (:block/uuid page-entity)
-        refs-count (count (:block/_refs page-entity))]
-    (when (> refs-count 0)
-      (ui/tippy {:in-editor?      true
-                 :html            (fn [] [:div.mx-2 (reference/block-linked-references block-uuid)])
-                 :interactive     true
-                 :delay           [100, 500]
-                 :position        "bottom"
-                 :distance        10
-                 :popperOptions   {:modifiers {:preventOverflow
-                                               {:enabled           true
-                                                :boundariesElement "viewport"}}}}
-                [:div.flex.items-center.gap-2.whiteboard-page-refs-count
-                 [:div.open-page-ref-link refs-count]
-                 children]))))
+  ([page-name classname]
+   (page-refs-count page-name classname nil))
+  ([page-name classname children]
+   (let [page-entity (model/get-page page-name)
+         block-uuid (:block/uuid page-entity)
+         refs-count (count (:block/_refs page-entity))]
+     (when (> refs-count 0)
+       (ui/tippy {:in-editor?      true
+                  :html            (fn [] [:div.mx-2 (reference/block-linked-references block-uuid)])
+                  :interactive     true
+                  :delay           [100, 500]
+                  :position        "bottom"
+                  :distance        10
+                  :popperOptions   {:modifiers {:preventOverflow
+                                                {:enabled           true
+                                                 :boundariesElement "viewport"}}}}
+                 [:div.flex.items-center.gap-2.whiteboard-page-refs-count
+                  {:class classname}
+                  [:div.open-page-ref-link refs-count]
+                  children])))))
 
 (defn- get-page-display-name
   [page-name]
@@ -84,7 +87,7 @@
     [:div.flex.w-full
      [:div.dashboard-card-title-name (get-page-display-name page-name)]
      [:div.flex-1]
-     (page-refs-count page-name)]
+     (page-refs-count page-name nil)]
     ;; [:div.flex.w-full
     ;;  [:div (get-page-human-update-time page-name)]
     ;;  [:div.flex-1]
@@ -167,9 +170,9 @@
                             {:style {:font-size "0.9em"}}]
                       name nil false)]
 
-    [:span.text-md.px-3.py-1.cursor-default.whiteboard-page-refs-count
-     (page-refs-count name [:<> "Reference" (ui/icon "references-show")])]]
-
+     (page-refs-count name
+                      "text-md px-3 py-1 cursor-default whiteboard-page-refs-count"
+                      [:<> "Reference" (ui/icon "references-show")])]
    (tldraw-app name block-id)])
 
 (rum/defc whiteboard-route

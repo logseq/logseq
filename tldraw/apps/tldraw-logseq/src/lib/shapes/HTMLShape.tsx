@@ -109,8 +109,8 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
 
   validateProps = (props: Partial<HTMLShapeProps>) => {
     if (props.size !== undefined) {
-      props.size[0] = Math.max(props.size[0], 120)
-      props.size[1] = Math.max(props.size[1], 80)
+      props.size[0] = Math.max(props.size[0], 1)
+      props.size[1] = Math.max(props.size[1], 1)
     }
     return withClampedStyles(props)
   }
