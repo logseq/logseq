@@ -1096,18 +1096,24 @@
   - :stop-ch stop go-loop when stop-ch closed
   - :distinct-coll? distinct coll when put into CH
   - :chan-buffer buffer of return CH, default use (async/chan 1000)
-  - :flush-now-ch flush the content in the queue immediately"
-     [in-ch max-duration & {:keys [filter-fn flush-fn stop-ch distinct-coll? chan-buffer flush-now-ch]}]
+  - :flush-now-ch flush the content in the queue immediately
+  - :refresh-timeout-ch refresh (timeout max-duration)"
+     [in-ch max-duration & {:keys [filter-fn flush-fn stop-ch distinct-coll? chan-buffer flush-now-ch refresh-timeout-ch]}]
      (let [ch (if chan-buffer (async/chan chan-buffer) (async/chan 1000))
            stop-ch* (or stop-ch (async/chan))
-           flush-now-ch* (or flush-now-ch (async/chan))]
+           flush-now-ch* (or flush-now-ch (async/chan))
+           refresh-timeout-ch* (or refresh-timeout-ch (async/chan))]
        (async/go-loop [timeout-ch (async/timeout max-duration) coll []]
-         (let [{:keys [timeout e stop flush-now]}
-               (async/alt! timeout-ch {:timeout true}
+         (let [{:keys [refresh-timeout timeout e stop flush-now]}
+               (async/alt! refresh-timeout-ch* {:refresh-timeout true}
+                           timeout-ch {:timeout true}
                            in-ch ([e] {:e e})
                            stop-ch* {:stop true}
                            flush-now-ch* {:flush-now true})]
            (cond
+             refresh-timeout
+             (recur (async/timeout max-duration) coll)
+
              (or flush-now timeout)
              (do (async/onto-chan! ch coll false)
                  (flush-fn coll)

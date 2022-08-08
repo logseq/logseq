@@ -1711,6 +1711,7 @@
 (def immediately-local->remote-chan
   "Immediately trigger upload of files in waiting queue"
   (chan))
+(def immediately-local->remote-mult (async/mult immediately-local->remote-chan))
 
 (def app-state-changed-chan
   "boolean value, means active or not"
@@ -1723,13 +1724,20 @@
   (chan 1))
 (def pause-resume-mult (async/mult pause-resume-chan))
 
-(add-watch (rum/cursor state/state :mobile/app-state-change) "sync-manage"
-           (fn [_ _ _ {:keys [is-active?]}]
-             (offer! pause-resume-chan is-active?)))
+(defonce _watch-app-state-change
+  (add-watch (rum/cursor state/state :mobile/app-state-change) "sync"
+             (fn [_ _ _ {:keys [is-active?]}]
+               (offer! pause-resume-chan is-active?))))
 
 (def recent-edited-chan
   "Triggered when there is content editing"
   (chan 1))
+(def recent-edited-mult (async/mult recent-edited-chan))
+
+(defonce _watch-last-input-time
+  (add-watch (rum/cursor state/state :editor/last-input-time) "sync"
+             (fn [_ _ _ _]
+               (offer! recent-edited-chan true))))
 
 
 ;;; ### sync state
@@ -1857,6 +1865,7 @@
   (<sync-remote->local-all-files! [this] "sync all files, return ExceptionInfo when error occurs"))
 
 (defprotocol ILocal->RemoteSync
+  (setup-local->remote! [this])
   (stop-local->remote! [this])
   (<ratelimit [this from-chan] "get watched local file-change events from FROM-CHAN,
   return chan returning events with rate limited")
@@ -2011,7 +2020,9 @@
 
 (defrecord ^:large-vars/cleanup-todo
     Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state remoteapi
-                         ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan *stopped *paused]
+                         ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan *stopped *paused
+                         ;; control chans
+                         private-immediately-local->remote-chan private-recent-edited-chan]
     Object
     (filter-file-change-events-fn [_]
       (fn [^FileChangeEvent e]
@@ -2031,7 +2042,13 @@
     (set-remote->local-syncer! [_ s] (set! remote->local-syncer s))
 
     ILocal->RemoteSync
+    (setup-local->remote! [_]
+      (async/tap immediately-local->remote-mult private-immediately-local->remote-chan)
+      (async/tap recent-edited-mult private-recent-edited-chan))
+
     (stop-local->remote! [_]
+      (async/untap immediately-local->remote-mult private-immediately-local->remote-chan)
+      (async/untap recent-edited-mult private-recent-edited-chan)
       (async/close! stop-chan)
       (vreset! *stopped true))
 
@@ -2053,7 +2070,8 @@
          :flush-fn #(swap! *sync-state sync-state-reset-queued-local->remote-files)
          :stop-ch stop-chan
          :distinct-coll? true
-         :flush-now-ch immediately-local->remote-chan)))
+         :flush-now-ch private-immediately-local->remote-chan
+         :refresh-timeout-ch private-recent-edited-chan)))
 
     (<sync-local->remote! [_ es]
       (if (empty? es)
@@ -2206,6 +2224,7 @@
     (set! _*ws (atom nil))
     (set! _remote-change-chan (ws-listen! graph-uuid _*ws))
     (set! ratelimit-local-changes-chan (<ratelimit local->remote-syncer local-changes-chan))
+    (setup-local->remote! local->remote-syncer)
     (async/tap full-sync-mult private-full-sync-chan)
     (async/tap stop-sync-mult private-stop-sync-chan)
     (async/tap remote->local-sync-mult private-remote->local-sync-chan)
@@ -2218,8 +2237,7 @@
               private-remote->local-full-sync-chan {:remote->local-full-sync true}
               private-remote->local-sync-chan {:remote->local true}
               private-full-sync-chan {:local->remote-full-sync true}
-              private-pause-resume-chan ([v] (do (println :debug :pause-or-resume v)
-                                                 (if v {:resume true} {:pause true})))
+              private-pause-resume-chan ([v] (if v {:resume true} {:pause true}))
               _remote-change-chan ([v] (println "remote change:" v) {:remote->local v})
               ratelimit-local-changes-chan ([v]
                                             (let [rest-v (util/drain-chan ratelimit-local-changes-chan)
@@ -2495,7 +2513,8 @@
                                                     base-path
                                                     repo *sync-state remoteapi-with-stop
                                                     20000
-                                                    *txid nil (chan) *stopped? *paused?)
+                                                    *txid nil (chan) *stopped? *paused?
+                                                    (chan 1) (chan 1))
         remote->local-syncer (->Remote->LocalSyncer user-uuid graph-uuid base-path
                                                     repo *txid *sync-state remoteapi-with-stop
                                                     nil *stopped? *paused?)]
@@ -2579,31 +2598,36 @@
                   (.start sm)
 
                   (offer! remote->local-full-sync-chan true)
-                  (offer! full-sync-chan true)
+                  (offer! full-sync-chan true))))))))))
 
-                  ;; watch :network/online?
-                  ;; TOOD: replace this logic by pause/resume state
-                  (add-watch (rum/cursor state/state :network/online?) "sync-manage"
-                             (fn [_k _r o n]
-                               (cond
-                                 (and (true? o) (false? n))
-                                 (<sync-stop)
+;;; some add-watches
 
-                                 (and (false? o) (true? n))
-                                 (sync-start)
+;; TOOD: replace this logic by pause/resume state
+(defonce _watch-network
+  (add-watch (rum/cursor state/state :network/online?) "sync-manage"
+             (fn [_k _r o n]
+               (cond
+                 (and (true? o) (false? n))
+                 (<sync-stop)
 
-                                 :else
-                                 nil)))
-                  ;; watch :auth/id-token
-                  (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
-                             (fn [_k _r _o n]
-                               (when (nil? n)
-                                 (<sync-stop)))))))))))))
+                 (and (false? o) (true? n))
+                 (sync-start)
+
+                 :else
+                 nil))))
+
+(defonce _watch-id-token
+  (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
+             (fn [_k _r _o n]
+               (when (nil? n)
+                 (<sync-stop)))))
+
+
 
 ;;; debug funcs
 (comment
   (<get-remote-all-files-meta remoteapi graph-uuid)
   (<get-local-all-files-meta rsapi graph-uuid
-                            (config/get-repo-dir (state/get-current-repo)))
+                             (config/get-repo-dir (state/get-current-repo)))
   (def base-path (config/get-repo-dir (state/get-current-repo)))
   )
