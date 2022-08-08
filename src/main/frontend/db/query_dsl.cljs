@@ -234,12 +234,20 @@
     (= 4 (count e))
     (build-between-three-arg e)))
 
+
+(defn parse-property-value
+  "Parses non-string property values or any page-ref like values"
+  [v]
+  (if-some [res (text/parse-non-string-property-value v)]
+    res
+    (text/split-page-refs-without-brackets v)))
+
 (defn- build-property-two-arg
   [e]
   (let [k (string/replace (name (nth e 1)) "_" "-")
         v (nth e 2)
         v (if-not (nil? v)
-            (text/parse-property-value (str v))
+            (parse-property-value (str v))
             v)
         v (if (coll? v) (first v) v)]
     {:query (list 'property '?b (keyword k) v)
@@ -284,7 +292,7 @@
   (let [[k v] (rest e)
         k (string/replace (name k) "_" "-")]
     (if (some? v)
-      (let [v' (text/parse-property-value (str v))
+      (let [v' (parse-property-value (str v))
             val (if (coll? v') (first v') v')]
         {:query (list 'page-property '?p (keyword k) val)
          :rules [:page-property]})

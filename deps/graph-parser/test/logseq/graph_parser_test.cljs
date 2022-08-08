@@ -159,9 +159,11 @@
            (map :block/properties blocks))
         "pre-block/page and block have expected properties")
 
+    ;; has expected refs
     (are [db-props refs]
          (= (->> (vals db-props)
-                 (mapcat identity)
+                 ;; ignore string values
+                 (mapcat #(if (coll? %) % []))
                  (concat (map name (keys db-props)))
                  set)
             (set refs))
@@ -173,13 +175,15 @@
 (deftest property-relationships
   (let [properties {:single-link "[[bar]]"
                     :multi-link "[[Logseq]] is the fastest #triples #[[text editor]]"
-                    :desc "This is a multiple sentence description. It has one [[link]]"}]
+                    :desc "This is a multiple sentence description. It has one [[link]]"
+                    :comma-prop "one, two,three"}]
     (testing "With default config"
       (property-relationships-test
        properties
        {:single-link #{"bar"}
         :multi-link #{"Logseq" "is the fastest" "triples" "text editor"}
-        :desc #{"This is a multiple sentence description. It has one" "link"}}
+        :desc #{"This is a multiple sentence description. It has one" "link"}
+        :comma-prop #{"one" "two" "three"}}
        {}))
 
     (testing "With :property-values-allow-links-and-text config"
@@ -187,5 +191,6 @@
        properties
        {:single-link #{"bar"}
         :multi-link #{"Logseq" "triples" "text editor"}
-        :desc #{"link"}}
+        :desc #{"link"}
+        :comma-prop "one, two,three"}
        {:property-values-allow-links-and-text? true}))))

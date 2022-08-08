@@ -200,9 +200,8 @@
 (defonce non-parsing-properties
   (atom #{"background-color" "background_color"}))
 
-(defn parse-property-value
-  "Property agnostic value parsing used to save properties to db and to
-  construct simple queries from user input"
+(defn parse-non-string-property-value
+  "Return parsed non-string property value or nil if none is found"
   [v]
   (cond
     (= v "true")
@@ -212,10 +211,18 @@
     false
 
     (gp-util/safe-re-find #"^\d+$" v)
-    (parse-long v)
+    (parse-long v)))
 
-    :else
-    (split-page-refs-without-brackets v)))
+(def ^:private page-ref-or-tag-re
+  (re-pattern (str "#?" (page-ref/->page-ref-re-str "(.*?)") "|#(\\S+)")))
+
+(defn extract-page-refs-and-tags
+  "Returns set of page-refs and tags in given string or returns string if none
+  are found"
+  [string]
+  (let [refs (map #(or (second %) (get % 2))
+                  (re-seq page-ref-or-tag-re string))]
+    (if (seq refs) (set refs) string)))
 
 (defn parse-property
   "Property value parsing that takes into account built-in properties, format
@@ -244,8 +251,9 @@
        (contains? gp-property/editable-linkable-built-in-properties (keyword k))
        (split-page-refs-without-brackets v)
 
-       (:property-values-allow-links-and-text? config-state)
-       v
-
        :else
-       (parse-property-value v)))))
+       (if-some [res (parse-non-string-property-value v)]
+         res
+         (if (:property-values-allow-links-and-text? config-state)
+           (extract-page-refs-and-tags v)
+           (split-page-refs-without-brackets v)))))))

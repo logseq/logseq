@@ -157,17 +157,6 @@
              distinct)
     []))
 
-;; Regex first checks page-refs
-;; to handle multi-word
-;; page-refs e.g. #[[foo bar]]
-(def ^:private page-ref-or-tag-re
-  (re-pattern (str "#?" (page-ref/->page-ref-re-str "(.*?)") "|#(\\S+)")))
-
-(defn- extract-page-refs-and-tags [string]
-  (let [refs (map #(or (second %) (get % 2))
-                  (re-seq page-ref-or-tag-re string))]
-    (or (seq refs) string)))
-
 (defn- get-page-ref-names-from-properties
   [format properties user-config]
   (let [page-refs (->>
@@ -186,7 +175,7 @@
                                  (not (gp-mldoc/link? format v)))
                             (let [v (string/trim v)
                                   result (if (:property-values-allow-links-and-text? user-config)
-                                           (extract-page-refs-and-tags v)
+                                           (text/extract-page-refs-and-tags v)
                                            (text/split-page-refs-without-brackets v {:un-brackets? false}))]
                               (if (coll? result)
                                 (map text/page-ref-un-brackets! result)
@@ -233,8 +222,6 @@
                                                  (and (= (keyword k) :file-path)
                                                       (string/starts-with? v "file:"))
                                                  v
-                                                 (:property-values-allow-links-and-text? user-config)
-                                                 (extract-page-refs-and-tags v)
                                                  :else
                                                  (text/parse-property format k v user-config)))
                                            k (keyword k)
