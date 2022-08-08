@@ -3,7 +3,8 @@
             ["fs-extra" :as fs]
             ["better-sqlite3" :as sqlite3]
             [clojure.string :as string]
-            ["electron" :refer [app]]))
+            ["electron" :refer [app]]
+            [electron.utils :refer [logger]]))
 
 ;; version of the search cache
 ;; ver. 0.0.1: initial version
@@ -120,12 +121,15 @@
 
 (defn open-db!
   [db-name]
-  (let [[db-sanitized-name db-full-path] (get-db-full-path db-name)
-        db (sqlite3 db-full-path nil)
-        _ (create-blocks-table! db)
-        _ (create-blocks-fts-table! db)
-        _ (add-triggers! db)]
-    (swap! databases assoc db-sanitized-name db)))
+    (let [[db-sanitized-name db-full-path] (get-db-full-path db-name)]
+      (try (let [db (sqlite3 db-full-path nil)]
+             (create-blocks-table! db)
+             (create-blocks-fts-table! db)
+             (add-triggers! db)
+             (swap! databases assoc db-sanitized-name db))
+           (catch :default e
+             (.error logger (str e ": " db-name))
+             (fs/unlinkSync db-full-path)))))
 
 (defn open-dbs!
   []
@@ -236,5 +240,4 @@
   (def repo (first (keys @databases)))
   (query repo
          "select * from blocks_fts")
-
   (delete-db! repo))
