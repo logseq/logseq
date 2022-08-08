@@ -43,18 +43,20 @@
 (rum/defc page-refs-count < rum/static
   ([page-name classname]
    (page-refs-count page-name classname nil))
-  ([page-name classname children]
+  ([page-name classname render-fn]
    (let [page-entity (model/get-page page-name)
          block-uuid (:block/uuid page-entity)
          ref (rum/use-ref nil)
          refs-count (count (:block/_refs page-entity))
-         [open? set-open?] (rum/use-state nil)]
+         [open-flag set-open-flag] (rum/use-state 0)
+         open? (not= open-flag 0)
+         d-open-flag (rum/use-memo #(util/debounce 200 set-open-flag) [])]
      ;; TODO: move click outside to the utility? 
      (rum/use-effect!
       (let [listener (fn [e]
                        (when (and (.-current ref)
                                   (not (.contains (.-current ref) (.-target e))))
-                         (set-open? nil)))]
+                         (d-open-flag 0)))]
         (.addEventListener js/document.body "mousedown" listener true)
         #(.removeEventListener js/document.body "mousedown" listener))
       [ref])
@@ -62,7 +64,6 @@
        (ui/tippy {:in-editor?      false
                   :html            (fn [] [:div.mx-2 {:ref ref} (reference/block-linked-references block-uuid)])
                   :interactive     true
-                  :delay           [100, 500]
                   :position        "bottom"
                   :distance        10
                   :open?           open?
@@ -71,11 +72,13 @@
                                                  :boundariesElement "viewport"}}}}
                  [:div.flex.items-center.gap-2.whiteboard-page-refs-count
                   {:class (str classname (when open? " open"))
+                   :on-mouse-enter (fn [] (d-open-flag #(if (= % 0) 1 %)))
+                   :on-mouse-leave (fn [] (d-open-flag #(if (= % 2) % 0)))
                    :on-click (fn [e]
                                (util/stop e)
-                               (set-open? (fn [o] (if (nil? o) true nil))))}
+                               (d-open-flag (fn [o] (if (not= o 2) 2 0))))}
                   [:div.open-page-ref-link refs-count]
-                  children])))))
+                  (when render-fn (render-fn open?))])))))
 
 (defn- get-page-display-name
   [page-name]
@@ -187,7 +190,7 @@
 
     (page-refs-count name
                      "text-md px-3 py-1 cursor-default whiteboard-page-refs-count"
-                     [:<> "Reference" (ui/icon "references-show")])]
+                     (fn [open?] [:<> "Reference" (ui/icon (if open? "references-hide" "references-show"))]))]
    (tldraw-app name block-id)])
 
 (rum/defc whiteboard-route
