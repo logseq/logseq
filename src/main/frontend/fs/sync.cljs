@@ -142,7 +142,9 @@
                  :finished-local->remote
                  :finished-remote->local
                  :pause
-                 :resume})
+                 :resume
+                 :exception-decrypt-failed
+                 })
 
 (s/def ::sync-event (s/keys :req-un [::event ::data]))
 
@@ -722,7 +724,11 @@
          (<retry-rsapi
           #(p->c (ipc/ipc "delete-remote-files" graph-uuid base-path filepaths local-txid token)))))))
   (<encrypt-fnames [_ fnames] (go (js->clj (<! (p->c (ipc/ipc "encrypt-fnames" fnames))))))
-  (<decrypt-fnames [_ fnames] (go (js->clj (<! (p->c (ipc/ipc "decrypt-fnames" fnames)))))))
+  (<decrypt-fnames [_ fnames] (go
+                                (let [r (<! (p->c (ipc/ipc "decrypt-fnames" fnames)))]
+                                  (if (instance? ExceptionInfo r)
+                                    (ex-info "decrypt-failed" {:fnames fnames} (ex-cause r))
+                                    (js->clj r))))))
 
 
 (deftype CapacitorAPI [^:mutable _graph-uuid ^:mutable _private-key ^:mutable _public-key]
@@ -847,7 +853,7 @@
     (go (let [r (<! (p->c (.decryptFnames mobile-util/file-sync
                                           (clj->js {:filePaths fnames}))))]
           (if (instance? ExceptionInfo r)
-            (.-cause r)
+            (ex-info "decrypt-failed" {:fnames fnames} (ex-cause r))
             (get (js->clj r) "value"))))))
 
 (def rsapi (cond
@@ -860,7 +866,7 @@
              :else
              nil))
 
-;;; ### remote api exceptions
+;;; ### remote & rs api exceptions
 (defn sync-stop-when-api-flying?
   [exp]
   (some-> (ex-data exp) :err (= :stop)))
@@ -869,16 +875,20 @@
   [exp]
   (some->> (ex-data exp)
            :err
-           ((juxt :status (comp set :events :body)))
-           ((fn [[status events]] (and (= 403 status) (contains? events "storage-limit"))))))
+           ((juxt :status (comp :message :body)))
+           ((fn [[status msg]] (and (= 403 status) (= msg "storage-limit"))))))
 
 (defn graph-count-exceed-limit?
   [exp]
   (some->> (ex-data exp)
            :err
-           ((juxt :status (comp set :events :body)))
-           ((fn [[status events]]
-              (and (= 403 status) (contains? events "graph-count-exceed-limit"))))))
+           ((juxt :status (comp :message :body)))
+           ((fn [[status msg]] (and (= 403 status) (= msg "graph-count-exceed-limit"))))))
+
+(defn decrypt-exp?
+  [exp]
+  (some-> exp ex-message #(= % "decrypt-failed")))
+
 ;;; remote api exceptions ends
 
 ;;; ### sync events
@@ -902,7 +912,8 @@
                                      :finished-local->remote
                                      :finished-remote->local
                                      :pause
-                                     :resume]))
+                                     :resume
+                                     :exception-decrypt-failed]))
   ([topics]
    (util/drain-chan debug-print-sync-events-loop-stop-chan)
    (let [topic&chs (map (juxt identity #(chan 10)) topics)
@@ -1004,70 +1015,76 @@
   IRemoteAPI
   (<user-info [this] (.<request this "user_info" {}))
   (<get-remote-all-files-meta [this graph-uuid]
-    (let [file-meta-list      (transient #{})
-          encrypted-path-list (transient [])]
-      (go
-        (<!
-         (go-loop [continuation-token nil]
-           (let [r (<! (.<request this "get_all_files"
-                                  (into
-                                   {}
-                                   (remove (comp nil? second)
-                                           {:GraphUUID graph-uuid :ContinuationToken continuation-token}))))]
-             (if (instance? ExceptionInfo r)
-               r
-               (let [next-continuation-token (:NextContinuationToken r)
-                     objs                    (:Objects r)]
-                 (apply conj! encrypted-path-list (map (comp remove-user-graph-uuid-prefix :Key) objs))
-                 (apply conj! file-meta-list
-                        (map
-                         #(hash-map :checksum (:checksum %)
-                                    :encrypted-path (remove-user-graph-uuid-prefix (:Key %))
-                                    :last-modified (:LastModified %))
-                         objs))
-                 (when-not (empty? next-continuation-token)
-                   (recur next-continuation-token)))))))
-        (let [file-meta-list*          (persistent! file-meta-list)
-              encrypted-path-list*     (persistent! encrypted-path-list)
-              encrypted-path->path-map (zipmap encrypted-path-list*
-                                               (<! (<decrypt-fnames rsapi encrypted-path-list*)))]
-          (set
-           (mapv
-            #(->FileMetadata nil
-                             (:checksum %)
-                             (get encrypted-path->path-map (:encrypted-path %))
-                             (:encrypted-path %)
-                             (:last-modified %)
-                             true nil)
-            file-meta-list*))))))
+    (go
+      (let [file-meta-list      (transient #{})
+            encrypted-path-list (transient [])
+            exp-r
+            (<!
+             (go-loop [continuation-token nil]
+               (let [r (<! (.<request this "get_all_files"
+                                      (into
+                                       {}
+                                       (remove (comp nil? second)
+                                               {:GraphUUID graph-uuid :ContinuationToken continuation-token}))))]
+                 (if (instance? ExceptionInfo r)
+                   r
+                   (let [next-continuation-token (:NextContinuationToken r)
+                         objs                    (:Objects r)]
+                     (apply conj! encrypted-path-list (map (comp remove-user-graph-uuid-prefix :Key) objs))
+                     (apply conj! file-meta-list
+                            (map
+                             #(hash-map :checksum (:checksum %)
+                                        :encrypted-path (remove-user-graph-uuid-prefix (:Key %))
+                                        :last-modified (:LastModified %))
+                             objs))
+                     (when-not (empty? next-continuation-token)
+                       (recur next-continuation-token)))))))]
+        (if (instance? ExceptionInfo exp-r)
+          exp-r
+          (let [file-meta-list*          (persistent! file-meta-list)
+                encrypted-path-list*     (persistent! encrypted-path-list)
+                path-list-or-exp (<! (<decrypt-fnames rsapi encrypted-path-list*))]
+            (if (instance? ExceptionInfo path-list-or-exp)
+              path-list-or-exp
+              (let [encrypted-path->path-map (zipmap encrypted-path-list* path-list-or-exp)]
+                (set
+                 (mapv
+                  #(->FileMetadata nil
+                                   (:checksum %)
+                                   (get encrypted-path->path-map (:encrypted-path %))
+                                   (:encrypted-path %)
+                                   (:last-modified %)
+                                   true nil)
+                  file-meta-list*)))))))))
 
   (<get-remote-files-meta [this graph-uuid filepaths]
     {:pre [(coll? filepaths)]}
     (go
       (let [encrypted-paths* (<! (<encrypt-fnames rsapi filepaths))
-            r (<! (.<request this "get_files_meta" {:GraphUUID graph-uuid :Files encrypted-paths*}))
-            encrypted-paths (mapv :FilePath r)
-            encrypted-path->path-map (zipmap
-                                      encrypted-paths
-                                      (<! (<decrypt-fnames rsapi encrypted-paths)))]
+            r                (<! (.<request this "get_files_meta" {:GraphUUID graph-uuid :Files encrypted-paths*}))]
         (if (instance? ExceptionInfo r)
           r
-          (into #{}
-                (map #(->FileMetadata (:Size %)
-                                      (:Checksum %)
-                                      (get encrypted-path->path-map (:FilePath %))
-                                      (:FilePath %)
-                                      (:LastModified %)
-                                      true nil))
-                r)))))
+          (let [encrypted-paths (mapv :FilePath r)
+                paths-or-exp    (<! (<decrypt-fnames rsapi encrypted-paths))]
+            (if (instance? ExceptionInfo paths-or-exp)
+              paths-or-exp
+              (let [encrypted-path->path-map (zipmap encrypted-paths paths-or-exp)]
+                (into #{}
+                      (map #(->FileMetadata (:Size %)
+                                            (:Checksum %)
+                                            (get encrypted-path->path-map (:FilePath %))
+                                            (:FilePath %)
+                                            (:LastModified %)
+                                            true nil))
+                      r))))))))
 
   (<get-remote-graph [this graph-name-opt graph-uuid-opt]
     {:pre [(or graph-name-opt graph-uuid-opt)]}
     (.<request this "get_graph" (cond-> {}
-                                 (seq graph-name-opt)
-                                 (assoc :GraphName graph-name-opt)
-                                 (seq graph-uuid-opt)
-                                 (assoc :GraphUUID graph-uuid-opt))))
+                                  (seq graph-name-opt)
+                                  (assoc :GraphName graph-name-opt)
+                                  (seq graph-uuid-opt)
+                                  (assoc :GraphUUID graph-uuid-opt))))
 
   (<get-remote-file-versions [this graph-uuid filepath]
     (go
@@ -1140,9 +1157,9 @@
     (.<request this "get_graph_encrypt_keys" {:GraphUUID graph-uuid}))
 
   (<upload-graph-encrypt-keys [this graph-uuid public-key encrypted-private-key]
-    (.<request this "upload_graph_encrypt_keys" {:GraphUUID graph-uuid
-                                                :public-key public-key
-                                                :encrypted-private-key encrypted-private-key})))
+    (.<request this "upload_graph_encrypt_keys" {:GraphUUID             graph-uuid
+                                                 :public-key            public-key
+                                                 :encrypted-private-key encrypted-private-key})))
 
 
 (def remoteapi (->RemoteAPI nil))
@@ -1710,6 +1727,11 @@
            (fn [_ _ _ {:keys [is-active?]}]
              (offer! pause-resume-chan is-active?)))
 
+(def recent-edited-chan
+  "Triggered when there is content editing"
+  (chan 1))
+
+
 ;;; ### sync state
 
 (def *resume-state
@@ -1906,8 +1928,13 @@
             local-all-files-meta-c       (<get-local-all-files-meta rsapi graph-uuid base-path)
             remote-all-files-meta-or-exp (<! remote-all-files-meta-c)]
         (if (or (storage-exceed-limit? remote-all-files-meta-or-exp)
-                (sync-stop-when-api-flying? remote-all-files-meta-or-exp))
-          {:stop true}
+                (sync-stop-when-api-flying? remote-all-files-meta-or-exp)
+                (decrypt-exp? remote-all-files-meta-or-exp))
+          (do (put-sync-event! {:event :exception-decrypt-failed
+                                :data {:graph-uuid graph-uuid
+                                       :exp remote-all-files-meta-or-exp
+                                       :epoch (tc/to-epoch (t/now))}})
+              {:stop true})
           (let [remote-all-files-meta remote-all-files-meta-or-exp
                 local-all-files-meta  (<! local-all-files-meta-c)
                 diff-remote-files     (diff-file-metadata-sets remote-all-files-meta local-all-files-meta)
@@ -2095,8 +2122,13 @@
               local-all-files-meta-c       (<get-local-all-files-meta rsapi graph-uuid base-path)
               remote-all-files-meta-or-exp (<! remote-all-files-meta-c)]
           (if (or (storage-exceed-limit? remote-all-files-meta-or-exp)
-                  (sync-stop-when-api-flying? remote-all-files-meta-or-exp))
-            {:stop true}
+                  (sync-stop-when-api-flying? remote-all-files-meta-or-exp)
+                  (decrypt-exp? remote-all-files-meta-or-exp))
+            (do (put-sync-event! {:event :exception-decrypt-failed
+                                  :data {:graph-uuid graph-uuid
+                                         :exp remote-all-files-meta-or-exp
+                                         :epoch (tc/to-epoch (t/now))}})
+                {:stop true})
             (let [remote-all-files-meta remote-all-files-meta-or-exp
                   local-all-files-meta  (<! local-all-files-meta-c)
                   diff-local-files      (diff-file-metadata-sets local-all-files-meta remote-all-files-meta)
