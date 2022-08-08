@@ -1,6 +1,5 @@
 (ns frontend.extensions.pdf.assets-test
   (:require [clojure.test :as test :refer [are deftest testing]]
-            [clojure.string :as str]
             [frontend.extensions.pdf.assets :as assets]))
 
 (deftest fix-local-asset-filename
