@@ -4,12 +4,6 @@
   (:require [clojure.walk :as walk]
             [clojure.string :as string]))
 
-(defn safe-re-find
-  "Copy of frontend.util/safe-re-find. Too basic to couple to main app"
-  [pattern s]
-  (when (string? s)
-    (re-find pattern s)))
-
 (defn path-normalize
   "Normalize file path (for reading paths from FS, not required by writting)"
   [s]
@@ -38,7 +32,7 @@
 (defn tag-valid?
   [tag-name]
   (when (string? tag-name)
-    (not (safe-re-find #"[# \t\r\n]+" tag-name))))
+    (not (re-find #"[# \t\r\n]+" tag-name))))
 
 (defn safe-subs
   ([s start]

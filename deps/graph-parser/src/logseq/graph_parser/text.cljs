@@ -110,8 +110,8 @@
 
      (and (string? s)
             ;; Either a page ref, a tag or a comma separated collection
-            (or (gp-util/safe-re-find page-ref/page-ref-re s)
-                (gp-util/safe-re-find #"[\,|，|#|\"]+" s)))
+            (or (re-find page-ref/page-ref-re s)
+                (re-find #"[\,|，|#|\"]+" s)))
      (let [result (->> (sep-by-quotes s)
                        (mapcat
                         (fn [s]
@@ -210,7 +210,7 @@
     (= v "false")
     false
 
-    (gp-util/safe-re-find #"^\d+$" v)
+    (re-find #"^\d+$" v)
     (parse-long v)))
 
 (def ^:private page-ref-or-tag-re

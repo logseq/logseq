@@ -67,7 +67,7 @@
   [content]
   (when content
     (and (string/includes? content properties-start)
-         (gp-util/safe-re-find properties-end-pattern content))))
+         (re-find properties-end-pattern content))))
 
 (defn ->new-properties
   "New syntax: key:: value"

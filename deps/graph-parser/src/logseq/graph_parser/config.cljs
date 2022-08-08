@@ -1,7 +1,6 @@
 (ns logseq.graph-parser.config
   "Config that is shared between graph-parser and rest of app"
-  (:require [logseq.graph-parser.util :as gp-util]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.string :as string]))
 
 (def app-name
@@ -12,7 +11,8 @@
 
 (defn local-asset?
   [s]
-  (gp-util/safe-re-find (re-pattern (str "^[./]*" local-assets-dir)) s))
+  (and (string? s)
+       (re-find (re-pattern (str "^[./]*" local-assets-dir)) s)))
 
 (defonce default-draw-directory "draws")
 
