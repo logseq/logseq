@@ -40,31 +40,24 @@
     (when generate-preview
       (generate-preview tldr))))
 
-(rum/defc whiteboard-references
-  [name]
-  (let [uuid (or (parse-uuid name) (:block/uuid (whiteboard-handler/get-whiteboard-entity name)))
-        [show set-show] (rum/use-state false)]
-    [:div.ml-2
-     [:button.border.text-sm.bg-gray-500.text-white.px-2 {:on-click (fn [] (set-show not))} "references"]
-     (when show (reference/block-linked-references uuid))]))
-
 (rum/defc page-refs-count < rum/static
-  [page-name]
+  [page-name & children]
   (let [page-entity (model/get-page page-name)
         block-uuid (:block/uuid page-entity)
         refs-count (count (:block/_refs page-entity))]
-     (if (> refs-count 0)
-       (ui/tippy {:in-editor?      true
-                  :html            (fn [] [:div.mx-2 (reference/block-linked-references block-uuid)])
-                  :interactive     true
-                  :delay           [100, 500]
-                  :position        "bottom"
-                  :distance        10
-                  :popperOptions   {:modifiers {:preventOverflow
-                                                {:enabled           true
-                                                 :boundariesElement "viewport"}}}}
-                 [:div.open-page-ref-link refs-count])
-       [:div.open-page-ref-link  refs-count])))
+    (when (> refs-count 0)
+      (ui/tippy {:in-editor?      true
+                 :html            (fn [] [:div.mx-2 (reference/block-linked-references block-uuid)])
+                 :interactive     true
+                 :delay           [100, 500]
+                 :position        "bottom"
+                 :distance        10
+                 :popperOptions   {:modifiers {:preventOverflow
+                                               {:enabled           true
+                                                :boundariesElement "viewport"}}}}
+                [:div.flex.items-center.gap-2.whiteboard-page-refs-count
+                 [:div.open-page-ref-link refs-count]
+                 children]))))
 
 (defn- get-page-display-name
   [page-name]
@@ -167,15 +160,15 @@
             :text-rendering "geometricPrecision"
             :-webkit-font-smoothing "subpixel-antialiased"}}
 
-   [:div.absolute.p-4.flex.items-start
-    {:style {:z-index 2000}}
-    [:span.inline-flex.color-level.text-xl.px-2
+   [:div.whiteboard-page-title-root
+    [:span.whiteboard-page-title
      {:style {:color "var(--ls-primary-text-color)"}}
      (page/page-title name [:span.tie.tie-whiteboard
                             {:style {:font-size "0.9em"}}]
                       name nil false)]
 
-    (whiteboard-references name)]
+    [:span.text-md.px-3.py-1.cursor-default.whiteboard-page-refs-count
+     (page-refs-count name [:<> "Reference" (ui/icon "references-show")])]]
 
    (tldraw-app name block-id)])
 

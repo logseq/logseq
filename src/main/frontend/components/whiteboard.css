@@ -44,7 +44,8 @@
 
 .dashboard-create-card:hover {
   background-color: var(--ls-selection-background-color);
-  box-shadow: 0 4px 8px -2px rgba(16, 24, 40, 0.1),
+  box-shadow:
+    0 4px 8px -2px rgba(16, 24, 40, 0.1),
     0 2px 4px -2px rgba(16, 24, 40, 0.06);
   border: 1px solid var(--ls-page-blockquote-border-color);
 }
@@ -77,7 +78,8 @@
  * ???
  */
 .open-page-ref-link {
-  @apply text-sm ml-2 px-1 flex items-center rounded;
+  @apply text-sm px-1 flex items-center;
+  border-radius: 2px;
   flex-shrink: 0;
   background-color: var(--ls-quaternary-background-color);
   font-size: 14px;
@@ -85,6 +87,33 @@
   vertical-align: baseline;
 }
 
-.open-page-ref-link:hover {
-  filter: brightness(0.9);
+.whiteboard-page-refs-count {
+  border-radius: 8px;
+}
+
+.whiteboard-page-refs-count:hover {
+  background: var(--ls-secondary-background-color);
+}
+
+.whiteboard-page-title-root {
+  @apply shadow-md flex items-center;
+  position: absolute;
+  left: 53px;
+  top: 0;
+  background: var(--ls-primary-background-color);
+  padding: 4px;
+  border-radius: 0 0 12px 12px;
+  z-index: 2000;
+  gap: 4px;
+}
+
+.whiteboard-page-title {
+  @apply inline-flex px-2;
+  font-size: 20px;
+  border-radius: 8px;
+  background: var(--ls-secondary-background-color);
+}
+
+.whiteboard-page-title:hover {
+  background-color: var(--ls-tertiary-background-color);
 }
