@@ -1519,7 +1519,8 @@
 (defn remove-all-pwd!
   []
   (doseq [k (filter #(string/starts-with? % "encrypted-pwd/") (js->clj (js-keys js/localStorage)))]
-    (js/localStorage.removeItem k)))
+    (js/localStorage.removeItem k))
+  (reset! pwd-map {}))
 
 
 (defn encrypt+persist-pwd!
