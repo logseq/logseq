@@ -89,10 +89,12 @@
 
 .whiteboard-page-refs-count {
   border-radius: 8px;
+  background: var(--ls-primary-background-color);
 }
 
-.whiteboard-page-refs-count:hover {
-  background: var(--ls-secondary-background-color);
+.whiteboard-page-refs-count:hover,
+.whiteboard-page-refs-count.open {
+  filter: brightness(0.9)
 }
 
 .whiteboard-page-title-root {

@@ -46,11 +46,21 @@
   ([page-name classname children]
    (let [page-entity (model/get-page page-name)
          block-uuid (:block/uuid page-entity)
+         ref (rum/use-ref nil)
          refs-count (count (:block/_refs page-entity))
          [open? set-open?] (rum/use-state nil)]
+     ;; TODO: move click outside to the utility? 
+     (rum/use-effect!
+      (let [listener (fn [e]
+                       (when (and (.-current ref)
+                                  (not (.contains (.-current ref) (.-target e))))
+                         (set-open? nil)))]
+        (.addEventListener js/document.body "mousedown" listener true)
+        #(.removeEventListener js/document.body "mousedown" listener))
+      [ref])
      (when (> refs-count 0)
        (ui/tippy {:in-editor?      false
-                  :html            (fn [] [:div.mx-2 (reference/block-linked-references block-uuid)])
+                  :html            (fn [] [:div.mx-2 {:ref ref} (reference/block-linked-references block-uuid)])
                   :interactive     true
                   :delay           [100, 500]
                   :position        "bottom"
@@ -60,7 +70,7 @@
                                                 {:enabled           true
                                                  :boundariesElement "viewport"}}}}
                  [:div.flex.items-center.gap-2.whiteboard-page-refs-count
-                  {:class classname
+                  {:class (str classname (when open? " open"))
                    :on-click (fn [e]
                                (util/stop e)
                                (set-open? (fn [o] (if (nil? o) true nil))))}
@@ -175,9 +185,9 @@
                             {:style {:font-size "0.9em"}}]
                       name nil false)]
 
-     (page-refs-count name
-                      "text-md px-3 py-1 cursor-default whiteboard-page-refs-count"
-                      [:<> "Reference" (ui/icon "references-show")])]
+    (page-refs-count name
+                     "text-md px-3 py-1 cursor-default whiteboard-page-refs-count"
+                     [:<> "Reference" (ui/icon "references-show")])]
    (tldraw-app name block-id)])
 
 (rum/defc whiteboard-route
