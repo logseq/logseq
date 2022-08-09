@@ -232,7 +232,7 @@ export type SettingSchemaDesc = {
   default: string | number | boolean | Array<any> | object | null
   title: string
   description: string // support markdown
-  inputAs?: 'color' | 'date' | 'datetime-local' | 'range'
+  inputAs?: 'color' | 'date' | 'datetime-local' | 'range' | 'textarea'
   enumChoices?: Array<string>
   enumPicker?: 'select' | 'radio' | 'checkbox' // default: select
 }
@@ -650,6 +650,7 @@ export interface IEditorProxy extends Record<string, any> {
   ) => Promise<void>
 
   editBlock: (srcBlock: BlockIdentity, opts?: { pos: number }) => Promise<void>
+  selectBlock: (srcBlock: BlockIdentity) => Promise<void>
 
   upsertBlockProperty: (
     block: BlockIdentity,
