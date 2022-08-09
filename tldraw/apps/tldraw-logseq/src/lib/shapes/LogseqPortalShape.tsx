@@ -456,21 +456,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     React.useEffect(() => {
       const keydownListener = (e: KeyboardEvent) => {
+        let newIndex = focusedOptionIdx
         if (e.key === 'ArrowDown') {
-          const index = Math.min(options.length - 1, focusedOptionIdx + 1)
-          const option = options[index]
-          setFocusedOptionIdx(index)
-          setPrefixIcon(option.actionIcon)
-          e.stopPropagation()
-          e.preventDefault()
+          newIndex = Math.min(options.length - 1, focusedOptionIdx + 1)
         } else if (e.key === 'ArrowUp') {
-          const index = Math.max(0, focusedOptionIdx - 1)
-          setFocusedOptionIdx(index)
-          const option = options[index]
-          setFocusedOptionIdx(index)
-          setPrefixIcon(option.actionIcon)
-          e.stopPropagation()
-          e.preventDefault()
+          newIndex = Math.max(0, focusedOptionIdx - 1)
         } else if (e.key === 'Enter') {
           options[focusedOptionIdx]?.onChosen()
           e.stopPropagation()
@@ -478,23 +468,27 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         } else if (e.key === 'Backspace' && q.length === 0) {
           setSearchFilter(null)
         }
+
+        if (newIndex !== focusedOptionIdx) {
+          const option = options[newIndex]
+          setFocusedOptionIdx(newIndex)
+          setPrefixIcon(option.actionIcon)
+          e.stopPropagation()
+          e.preventDefault()
+          const optionElement = optionsWrapperRef.current?.querySelector(
+            '.tl-quick-search-option:nth-child(' + (newIndex + 1) + ')'
+          )
+          if (optionElement) {
+            // @ts-expect-error we are using scrollIntoViewIfNeeded, which is not in standards
+            optionElement?.scrollIntoViewIfNeeded(false)
+          }
+        }
       }
       document.addEventListener('keydown', keydownListener, true)
       return () => {
         document.removeEventListener('keydown', keydownListener, true)
       }
     }, [options, focusedOptionIdx, q])
-
-    React.useEffect(() => {
-      const optionElement = optionsWrapperRef.current?.querySelector(
-        '.tl-quick-search-option:nth-child(' + (focusedOptionIdx + 1) + ')'
-      )
-
-      if (optionElement) {
-        // @ts-expect-error we are using scrollIntoViewIfNeeded, which is not in standards
-        optionElement?.scrollIntoViewIfNeeded(false)
-      }
-    }, [options, focusedOptionIdx, optionsWrapperRef])
 
     return (
       <div className="tl-quick-search">
