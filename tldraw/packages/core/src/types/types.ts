@@ -158,7 +158,7 @@ export type TLSubscriptionEvent =
     }
   | {
       event: 'paste'
-      info: { point: number[] }
+      info: { point: number[]; shiftKey: boolean }
     }
   | {
       event: 'create-assets'

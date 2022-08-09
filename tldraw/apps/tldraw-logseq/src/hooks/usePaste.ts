@@ -31,7 +31,7 @@ const getYoutubeId = (url: string) => {
 export function usePaste(context: LogseqContextValue) {
   const { handlers } = context
 
-  return React.useCallback<TLReactCallbacks<Shape>['onPaste']>(async (app, { point }) => {
+  return React.useCallback<TLReactCallbacks<Shape>['onPaste']>(async (app, { point, shiftKey }) => {
     const assetId = uniqueId()
     interface ImageAsset extends TLAsset {
       size: number[]
@@ -218,7 +218,7 @@ export function usePaste(context: LogseqContextValue) {
       try {
         let handled = await handleImage(item)
 
-        if (!handled) {
+        if (!handled && !shiftKey) {
           handled = await handleHTML(item)
         }
 

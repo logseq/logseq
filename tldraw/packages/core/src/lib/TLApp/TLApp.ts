@@ -115,7 +115,11 @@ export class TLApp<
         keys: 'mod+a',
         fn: () => {
           const { selectedTool } = this
-          if (selectedTool.currentState.id !== 'idle') return
+          if (
+            selectedTool.currentState.id !== 'idle' &&
+            !selectedTool.currentState.id.includes('hovering')
+          )
+            return
           if (selectedTool.id !== 'select') {
             this.selectTool('select')
           }
@@ -218,7 +222,7 @@ export class TLApp<
       currentPageId: this.currentPageId,
       selectedIds: Array.from(this.selectedIds.values()),
       pages: Array.from(this.pages.values()).map(page => page.serialized),
-      assets: this.getCleanUpAssets()
+      assets: this.getCleanUpAssets(),
     }
   }
 
@@ -376,10 +380,11 @@ export class TLApp<
     }
   }
 
-  paste = (e?: ClipboardEvent) => {
+  paste = (e?: ClipboardEvent, shiftKey?: boolean) => {
     if (!this.editingShape) {
       this.notify('paste', {
         point: this.inputs.currentPoint,
+        shiftKey: !!shiftKey,
       })
     }
   }
