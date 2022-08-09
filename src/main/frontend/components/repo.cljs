@@ -136,7 +136,7 @@
             [:h2.text-lg.font-medium.my-4 (str (t :graph/remote-graphs) ":")]
             [:div
              (ui/button
-              [:span.flex.items-center "refresh"
+              [:span.flex.items-center "Refresh"
                (when remotes-loading? [:small.pl-2 (ui/loading nil)])]
               :background "gray"
               :disabled remotes-loading?
