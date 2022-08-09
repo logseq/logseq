@@ -168,6 +168,7 @@ export function usePaste(context: LogseqContextValue) {
                 pageId: blockRef,
                 blockType: 'B',
               })
+              return true
             }
           } else if (/^\[\[.*\]\]$/.test(rawText)) {
             const pageName = rawText.slice(2, -2)
@@ -179,6 +180,7 @@ export function usePaste(context: LogseqContextValue) {
               pageId: pageName,
               blockType: 'P',
             })
+            return true
           } else if (isValidURL(rawText)) {
             const youtubeId = getYoutubeId(rawText)
             if (youtubeId) {
@@ -188,22 +190,24 @@ export function usePaste(context: LogseqContextValue) {
                 parentId: app.currentPageId,
                 point: [point[0], point[1]],
               })
+              return true
             }
-          } else {
-            const uuid = handlers?.addNewBlock(rawText)
-            if (uuid) {
-              // create text shape
-              shapesToCreate.push({
-                ...LogseqPortalShape.defaultProps,
-                id: uniqueId(),
-                parentId: app.currentPageId,
-                size: [400, 0], // use 0 here to enable auto-resize
-                point: [point[0], point[1]],
-                pageId: uuid,
-                blockType: 'B',
-                compact: true
-              })
-            }
+            // ??? deal with normal URLs?
+          }
+          const uuid = handlers?.addNewBlock(rawText)
+          if (uuid) {
+            // create text shape
+            shapesToCreate.push({
+              ...LogseqPortalShape.defaultProps,
+              id: uniqueId(),
+              parentId: app.currentPageId,
+              size: [400, 0], // use 0 here to enable auto-resize
+              point: [point[0], point[1]],
+              pageId: uuid,
+              blockType: 'B',
+              compact: true,
+            })
+            return true
           }
         }
       }

@@ -81,5 +81,10 @@ export function useResizeObserver<T extends HTMLElement>(
 
   React.useEffect(() => {
     updateBounds()
+    // make sure the document get focus when the component is mounted
+    // so that the document can receive keyboard events
+    setTimeout(() => {
+      ref.current?.querySelector<HTMLElement>('.tl-canvas')?.focus()
+    })
   }, [ref])
 }

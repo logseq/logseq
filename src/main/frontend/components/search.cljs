@@ -253,7 +253,7 @@
                       (nil? result)
                       all?)
                    []
-                   [{:type :new-page}])
+                   [{:type :new-page}]) ;; todo: add new whiteboard
         result (cond
                  config/publishing?
                  (concat pages files blocks)
