@@ -139,27 +139,33 @@
   (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)]))
 
 (defn create-new-whiteboard-page!
-  [name]
-  (let [uuid (or (parse-uuid name) (d/squuid))
-        tldr (get-default-tldr (str uuid))]
-    (transact-tldr! name (get-default-tldr (str uuid)))
-    (let [entity (get-whiteboard-entity name)
-          tx (assoc (select-keys entity [:db/id])
-                    :block/uuid uuid)]
-      (db-utils/transact! [tx])
-      (let [page-entity (get-whiteboard-entity name)]
-        (when (and page-entity (nil? (:block/file page-entity)))
-          (outliner-file/sync-to-file page-entity))))
-    tldr))
+  ([]
+   (create-new-whiteboard-page! nil))
+  ([name]
+   (let [name (or name (str (d/squuid)))
+         uuid (parse-uuid name)
+         tldr (get-default-tldr (str uuid))]
+     (transact-tldr! name (get-default-tldr (str uuid)))
+     (let [entity (get-whiteboard-entity name)
+           tx (assoc (select-keys entity [:db/id])
+                     :block/uuid uuid)]
+       (db-utils/transact! [tx])
+       (let [page-entity (get-whiteboard-entity name)]
+         (when (and page-entity (nil? (:block/file page-entity)))
+           (outliner-file/sync-to-file page-entity))))
+     tldr)))
+
+(create-new-whiteboard-page!)
 
 (defn page-name->tldr!
   ([page-name]
    (page-name->tldr! page-name nil))
   ([page-name shape-id]
-   (when page-name
+   (if page-name
      (if-let [[page-block blocks] (get-whiteboard-clj page-name)]
        (whiteboard-clj->tldr page-block blocks shape-id)
-       (create-new-whiteboard-page! page-name)))))
+       (create-new-whiteboard-page! page-name))
+     (create-new-whiteboard-page! nil))))
 
 (defn ->logseq-portal-shape
   [block-id point]

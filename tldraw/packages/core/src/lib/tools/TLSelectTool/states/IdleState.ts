@@ -10,13 +10,6 @@ export class IdleState<
 > extends TLToolState<S, K, R, P> {
   static id = 'idle'
 
-  static shortcuts: TLShortcut<TLShape, TLEventMap, TLApp>[] = [
-    {
-      keys: ['delete', 'backspace'],
-      fn: app => app.api.deleteShapes(),
-    },
-  ]
-
   onEnter = (info: { fromId: string } & any) => {
     // if (info.fromId === 'editingShape') {
     //   this.onPointerDown(info as any, {} as any)

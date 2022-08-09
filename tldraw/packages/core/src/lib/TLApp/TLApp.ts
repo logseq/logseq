@@ -118,8 +118,9 @@ export class TLApp<
           if (
             selectedTool.currentState.id !== 'idle' &&
             !selectedTool.currentState.id.includes('hovering')
-          )
+          ) {
             return
+          }
           if (selectedTool.id !== 'select') {
             this.selectTool('select')
           }
@@ -138,6 +139,19 @@ export class TLApp<
         fn: () => {
           this.saveAs()
           this.notify('saveAs', null)
+        },
+      },
+      {
+        keys: ['delete', 'backspace'],
+        fn: () => {
+          const { selectedTool } = this
+          if (
+            selectedTool.currentState.id !== 'idle' &&
+            !selectedTool.currentState.id.includes('hovering')
+          ) {
+            return
+          }
+          this.api.deleteShapes()
         },
       },
     ]

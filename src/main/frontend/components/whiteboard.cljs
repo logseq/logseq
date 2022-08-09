@@ -120,9 +120,11 @@
    {:on-click
     (fn [e]
       (util/stop e)
-      (route-handler/redirect-to-whiteboard! (d/squuid)))}
+      (let [name (str (d/squuid))]
+        (whiteboard-handler/create-new-whiteboard-page! name)
+        (route-handler/redirect-to-whiteboard! name)))}
    (ui/icon "plus")
-   [:span.dashboard-create-card-caption
+   [:span.dashboard-create-card-caption.select-none
     "New whiteboard"]])
 
 ;; TODO: move it to util?
@@ -156,7 +158,7 @@
         empty-cards (- (max (* (math/ceil (/ (inc total-whiteboards) cols)) cols) (* 2 cols))
                        (inc total-whiteboards))]
     [:<>
-     [:h1.title
+     [:h1.title.select-none
       "All whiteboards"
       [:span.opacity-50
        (str " · " total-whiteboards)]]
@@ -186,7 +188,7 @@
      {:style {:color "var(--ls-primary-text-color)"}}
      (page/page-title name [:span.tie.tie-whiteboard
                             {:style {:font-size "0.9em"}}]
-                      name nil false)]
+                      (get-page-display-name name) nil false)]
 
     (page-refs-count name
                      "text-md px-3 py-1 cursor-default whiteboard-page-refs-count"
