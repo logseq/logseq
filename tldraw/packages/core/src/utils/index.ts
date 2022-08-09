@@ -71,3 +71,7 @@ export function isDarwin(): boolean {
 export function modKey(e: any): boolean {
   return isDarwin() ? e.metaKey : e.ctrlKey
 }
+
+export function isNonNullable<TValue>(value: TValue): value is NonNullable<TValue> {
+  return Boolean(value)
+}

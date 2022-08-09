@@ -52,11 +52,15 @@ const LogseqPortalShapeHeader = observer(
   }
 )
 
+function escapeRegExp(text: string) {
+  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')
+}
+
 const highlightedJSX = (input: string, keyword: string) => {
   return (
     <span>
       {input
-        .split(new RegExp(`(${keyword})`, 'gi'))
+        .split(new RegExp(`(${escapeRegExp(keyword)})`, 'gi'))
         .map((part, index) => {
           if (index % 2 === 1) {
             return <mark className="tl-highlighted">{part}</mark>
@@ -299,8 +303,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       }
     }, [])
 
+    const optionsWrapperRef = React.useRef<HTMLDivElement>(null)
+
+    const [focusedOptionIdx, setFocusedOptionIdx] = React.useState<number>(0)
+
     const searchResult = useSearch(q)
-    const Breadcrumb = renderers?.Breadcrumb
 
     const [prefixIcon, setPrefixIcon] = React.useState<string>('circle-plus')
     const [searchFilter, setSearchFilter] = React.useState<'B' | 'P' | null>(null)
@@ -312,9 +319,182 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       })
     }, [searchFilter])
 
-    if (!Breadcrumb) {
-      return null
+    type Option = {
+      actionIcon: 'search' | 'circle-plus'
+      onChosen: () => void
+      element: React.ReactNode
     }
+
+    const options: Option[] = React.useMemo(() => {
+      const options: Option[] = []
+
+      const Breadcrumb = renderers?.Breadcrumb
+
+      if (!Breadcrumb) {
+        return []
+      }
+
+      // New block option
+      options.push({
+        actionIcon: 'circle-plus',
+        onChosen: () => {
+          onAddBlock(q)
+        },
+        element: (
+          <div className="tl-quick-search-option-row">
+            <LogseqTypeTag active type="B" />
+            {q.length > 0 ? (
+              <>
+                <strong>New whiteboard block:</strong>
+                {q}
+              </>
+            ) : (
+              <strong>New whiteboard block</strong>
+            )}
+          </div>
+        ),
+      })
+
+      // New page option
+      if (searchResult?.pages?.length === 0 && q) {
+        options.push({
+          actionIcon: 'circle-plus',
+          onChosen: () => {
+            finishCreating(q)
+          },
+          element: (
+            <div className="tl-quick-search-option-row">
+              <LogseqTypeTag active type="P" />
+              <strong>New page:</strong>
+              {q}
+            </div>
+          ),
+        })
+      }
+
+      // search filters
+      if (q.length === 0 && searchFilter === null) {
+        options.push(
+          {
+            actionIcon: 'search',
+            onChosen: () => {
+              setSearchFilter('B')
+            },
+            element: (
+              <div className="tl-quick-search-option-row">
+                <LogseqTypeTag type="BS" />
+                Search only blocks
+              </div>
+            ),
+          },
+          {
+            actionIcon: 'search',
+            onChosen: () => {
+              setSearchFilter('P')
+            },
+            element: (
+              <div className="tl-quick-search-option-row">
+                <LogseqTypeTag type="PS" />
+                Search only pages
+              </div>
+            ),
+          }
+        )
+      }
+
+      // Page results
+      if ((!searchFilter || searchFilter === 'P') && searchResult && searchResult.pages) {
+        options.push(
+          ...searchResult.pages.map(page => {
+            return {
+              actionIcon: 'search' as 'search',
+              onChosen: () => {
+                finishCreating(page)
+              },
+              element: (
+                <div className="tl-quick-search-option-row">
+                  <LogseqTypeTag type="P" />
+                  {highlightedJSX(page, q)}
+                </div>
+              ),
+            }
+          })
+        )
+      }
+
+      // Block results
+      if ((!searchFilter || searchFilter === 'B') && searchResult && searchResult.blocks) {
+        options.push(
+          ...searchResult.blocks
+            .filter(block => block.content && block.uuid)
+            .map(({ content, uuid }) => {
+              return {
+                actionIcon: 'search' as 'search',
+                onChosen: () => {
+                  finishCreating(uuid)
+                },
+                element: (
+                  <>
+                    <div className="tl-quick-search-option-row">
+                      <LogseqTypeTag type="B" />
+                      <div className="tl-quick-search-option-breadcrumb">
+                        <Breadcrumb blockId={uuid} />
+                      </div>
+                    </div>
+                    <div className="tl-quick-search-option-row">
+                      <div className="tl-quick-search-option-placeholder" />
+                      {highlightedJSX(content, q)}
+                    </div>
+                  </>
+                ),
+              }
+            })
+        )
+      }
+      return options
+    }, [q, searchFilter, searchResult, renderers?.Breadcrumb])
+
+    React.useEffect(() => {
+      const keydownListener = (e: KeyboardEvent) => {
+        if (e.key === 'ArrowDown') {
+          const index = Math.min(options.length - 1, focusedOptionIdx + 1)
+          const option = options[index]
+          setFocusedOptionIdx(index)
+          setPrefixIcon(option.actionIcon)
+          e.stopPropagation()
+          e.preventDefault()
+        } else if (e.key === 'ArrowUp') {
+          const index = Math.max(0, focusedOptionIdx - 1)
+          setFocusedOptionIdx(index)
+          const option = options[index]
+          setFocusedOptionIdx(index)
+          setPrefixIcon(option.actionIcon)
+          e.stopPropagation()
+          e.preventDefault()
+        } else if (e.key === 'Enter') {
+          options[focusedOptionIdx]?.onChosen()
+          e.stopPropagation()
+          e.preventDefault()
+        } else if (e.key === 'Backspace' && q.length === 0) {
+          setSearchFilter(null)
+        }
+      }
+      document.addEventListener('keydown', keydownListener, true)
+      return () => {
+        document.removeEventListener('keydown', keydownListener, true)
+      }
+    }, [options, focusedOptionIdx, q])
+
+    React.useEffect(() => {
+      const optionElement = optionsWrapperRef.current?.querySelector(
+        '.tl-quick-search-option:nth-child(' + (focusedOptionIdx + 1) + ')'
+      )
+
+      if (optionElement) {
+        // @ts-expect-error we are using scrollIntoViewIfNeeded, which is not in standards
+        optionElement?.scrollIntoViewIfNeeded(false)
+      }
+    }, [options, focusedOptionIdx, optionsWrapperRef])
 
     return (
       <div className="tl-quick-search">
@@ -351,97 +531,24 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             />
           </div>
         </div>
-        <div className="tl-quick-search-options">
-          <div
-            className="tl-quick-search-option"
-            onMouseEnter={() => setPrefixIcon('circle-plus')}
-            onClick={() => onAddBlock(q)}
-          >
-            <div className="tl-quick-search-option-row">
-              <LogseqTypeTag active type="B" />
-              {q.length > 0 ? (
-                <>
-                  <strong>New whiteboard block:</strong>
-                  {q}
-                </>
-              ) : (
-                <strong>New whiteboard block</strong>
-              )}
-            </div>
-          </div>
-          {searchResult?.pages?.length === 0 && q && (
-            <div
-              className="tl-quick-search-option"
-              onMouseEnter={() => setPrefixIcon('circle-plus')}
-              onClick={() => finishCreating(q)}
-            >
-              <div className="tl-quick-search-option-row">
-                <LogseqTypeTag active type="P" />
-                <strong>New page:</strong>
-                {q}
-              </div>
-            </div>
-          )}
-          {q.length === 0 && searchFilter === null && (
-            <>
+        <div className="tl-quick-search-options" ref={optionsWrapperRef}>
+          {options.map(({ actionIcon, onChosen, element }, index) => {
+            return (
               <div
+                key={index}
+                data-focused={index === focusedOptionIdx}
                 className="tl-quick-search-option"
-                onMouseEnter={() => setPrefixIcon('search')}
-                onClick={() => setSearchFilter('B')}
+                tabIndex={0}
+                onMouseEnter={() => {
+                  setPrefixIcon(actionIcon)
+                  setFocusedOptionIdx(index)
+                }}
+                onClick={onChosen}
               >
-                <div className="tl-quick-search-option-row">
-                  <LogseqTypeTag type="BS" />
-                  Search only blocks
-                </div>
+                {element}
               </div>
-              <div
-                className="tl-quick-search-option"
-                onMouseEnter={() => setPrefixIcon('search')}
-                onClick={() => setSearchFilter('P')}
-              >
-                <div className="tl-quick-search-option-row">
-                  <LogseqTypeTag type="PS" />
-                  Search only pages
-                </div>
-              </div>
-            </>
-          )}
-          {(!searchFilter || searchFilter === 'P') &&
-            searchResult?.pages?.map(name => (
-              <div
-                key={name}
-                className="tl-quick-search-option"
-                onMouseEnter={() => setPrefixIcon('search')}
-                onClick={() => finishCreating(name)}
-              >
-                <div className="tl-quick-search-option-row">
-                  <LogseqTypeTag type="P" />
-                  {highlightedJSX(name, q)}
-                </div>
-              </div>
-            ))}
-          {(!searchFilter || searchFilter === 'B') &&
-            searchResult?.blocks
-              ?.filter(block => block.content && block.uuid)
-              .map(({ content, uuid }) => (
-                <div
-                  key={uuid}
-                  className="tl-quick-search-option"
-                  onMouseEnter={() => setPrefixIcon('search')}
-                  onClick={() => finishCreating(uuid)}
-                >
-                  <div className="tl-quick-search-option-row">
-                    <LogseqTypeTag type="B" />
-                    <div className="tl-quick-search-option-breadcrumb">
-                      <Breadcrumb blockId={uuid} />
-                    </div>
-                  </div>
-                  <div className="tl-quick-search-option-row">
-                    <div className="tl-quick-search-option-placeholder" />
-                    {highlightedJSX(content, q)}
-                  </div>
-                </div>
-              ))}
+            )
+          })}
         </div>
       </div>
     )
