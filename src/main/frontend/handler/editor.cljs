@@ -3123,13 +3123,16 @@
 (defn shortcut-left-right [direction]
   (fn [e]
     (when-not (auto-complete?)
-      (util/stop e)
       (cond
         (state/editing?)
-        (keydown-arrow-handler direction)
+        (do
+          (util/stop e)
+          (keydown-arrow-handler direction))
 
         (state/selection?)
-        (open-selected-block! direction e)
+        (do
+          (util/stop e)
+          (open-selected-block! direction e))
 
         :else
         nil))))
