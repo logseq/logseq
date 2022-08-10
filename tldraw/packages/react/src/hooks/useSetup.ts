@@ -31,7 +31,6 @@ export function useSetup<
     if (onMount) onMount(app, null)
     return () => {
       unsubs.forEach(unsub => unsub())
-      app.dispose()
     }
   }, [app])
 

@@ -152,6 +152,8 @@ export default function App() {
         handlers={{
           search: searchHandler,
           addNewBlock: () => uniqueId(),
+          queryBlockByUUID: (uuid) => ({uuid, content: 'some random content'}),
+          isWhiteboardPage: () => false
         }}
         model={documentModel}
         onPersist={onPersist}

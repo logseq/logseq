@@ -567,7 +567,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const {
       props: { pageId },
     } = this
-    const { renderers, handlers } = React.useContext(LogseqContext)
+    const { renderers } = React.useContext(LogseqContext)
     const app = useApp<Shape>()
 
     const cpRefContainer = React.useRef<HTMLDivElement>(null)
@@ -602,26 +602,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       }
     }, [this.initialHeightCalculated])
 
-    const blockBlob = React.useMemo(() => {
-      if (pageId && this.props.blockType === 'B') {
-        return handlers?.queryBlockByUUID(pageId)
-      }
-    }, [handlers?.queryBlockByUUID, pageId])
-
-    let element: React.ReactNode = null
-
-    if (this.props.blockType === 'B') {
-      if (!blockBlob) {
-        element = `Target block not found`
-      } else if (this.props.compact) {
-        element = <Block blockId={pageId} />
-      }
-    }
-
-    if (!element) {
-      element = <Page pageName={pageId} />
-    }
-
     return (
       <div
         ref={cpRefContainer}
@@ -630,7 +610,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           overflow: this.props.compact ? 'visible' : 'auto',
         }}
       >
-        {element}
+        {this.props.blockType === 'B' && this.props.compact ? (
+          <Block blockId={pageId} />
+        ) : (
+          <Page pageName={pageId} />
+        )}
       </div>
     )
   })
@@ -642,7 +626,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     } = this
 
     const app = useApp<Shape>()
-    const { renderers } = React.useContext(LogseqContext)
+    const { renderers, handlers } = React.useContext(LogseqContext)
 
     this.persist = () => app.persist()
     const isMoving = useCameraMovingRef()
@@ -693,14 +677,22 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       app.history.persist()
     }, [])
 
-    const showingPortal = !this.props.collapsed || isEditing
-
     const PortalComponent = this.PortalComponent
     const LogseqQuickSearch = this.LogseqQuickSearch
+
+    const blockContent = React.useMemo(() => {
+      if (pageId && this.props.blockType === 'B') {
+        return handlers?.queryBlockByUUID(pageId)?.content
+      }
+    }, [handlers?.queryBlockByUUID, pageId])
+
+    const targetNotFound = this.props.blockType === 'B' && !blockContent
+    const showingPortal = (!this.props.collapsed || isEditing) && !targetNotFound
 
     if (!renderers?.Page) {
       return null // not being correctly configured
     }
+
     const { Breadcrumb, PageNameLink } = renderers
 
     return (
@@ -738,7 +730,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 '--ls-title-text-color': !stroke?.startsWith('var') ? stroke : undefined,
               }}
             >
-              {!this.props.compact && (
+              {!this.props.compact && !targetNotFound && (
                 <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'}>
                   {this.props.blockType === 'P' ? (
                     <PageNameLink pageName={pageId} />
@@ -747,6 +739,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                   )}
                 </LogseqPortalShapeHeader>
               )}
+              {targetNotFound && <div className="tl-target-not-found">Target not found</div>}
               {showingPortal && <PortalComponent {...componentProps} />}
             </div>
           )}

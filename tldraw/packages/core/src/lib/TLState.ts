@@ -53,6 +53,7 @@ export abstract class TLRootState<S extends TLShape, K extends TLEventMap>
 
   dispose() {
     this._disposables.forEach(disposable => disposable())
+    this._disposables = []
     return this
   }
 

@@ -676,3 +676,11 @@ html[data-theme='dark'] .tl-logseq-portal-header {
   border-radius: 4px;
   box-shadow: 0 8px 12px 0 #85c8c81a, 0 4px 32px 0 #85c8c880;
 }
+
+.tl-target-not-found {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+}

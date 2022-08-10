@@ -66,6 +66,32 @@ export class TLApp<
     if (Tools) this.registerTools(Tools)
     this.history.resume()
     if (serializedApp) this.history.deserialize(serializedApp)
+    this.api = new TLApi(this)
+    makeObservable(this)
+    this.notify('mount', null)
+  }
+
+  keybindingRegistered = false
+
+  static id = 'app'
+  static initial = 'select'
+
+  readonly api: TLApi<S, K>
+  readonly inputs = new TLInputs<K>()
+  readonly cursors = new TLCursors()
+  readonly viewport = new TLViewport()
+  readonly settings = new TLSettings()
+
+  dispose() {
+    super.dispose()
+    this.keybindingRegistered = false
+    return this
+  }
+
+  initKeyboardShortcuts() {
+    if (this.keybindingRegistered) {
+      return
+    }
     const ownShortcuts: TLShortcut<S, K>[] = [
       {
         keys: 'mod+shift+g',
@@ -165,19 +191,8 @@ export class TLApp<
         })
       })
     )
-    this.api = new TLApi(this)
-    makeObservable(this)
-    this.notify('mount', null)
+    this.keybindingRegistered = true
   }
-
-  static id = 'app'
-  static initial = 'select'
-
-  readonly api: TLApi<S, K>
-  readonly inputs = new TLInputs<K>()
-  readonly cursors = new TLCursors()
-  readonly viewport = new TLViewport()
-  readonly settings = new TLSettings()
 
   /* --------------------- History -------------------- */
 

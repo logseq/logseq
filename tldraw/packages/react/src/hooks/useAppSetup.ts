@@ -7,5 +7,13 @@ export function useAppSetup<S extends TLReactShape, R extends TLReactApp<S> = TL
 ): R {
   if ('app' in props) return props.app
   const [app] = React.useState<R>(() => new TLReactApp(props.model, props.Shapes, props.Tools) as R)
+
+  React.useLayoutEffect(() => {
+    app.initKeyboardShortcuts()
+    return () => {
+      app.dispose()
+    }
+  }, [app])
+
   return app
 }
