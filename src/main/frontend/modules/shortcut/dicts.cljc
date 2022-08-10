@@ -1,10 +1,10 @@
 (ns ^:bb-compatible frontend.modules.shortcut.dicts
-  "Provides dictionary entries for shortcuts")
+    "Provides dictionary entries for shortcuts")
 
 (defn- decorate-namespace [k]
-  (let [n (name k)
-        ns (namespace k)]
-    (keyword (str "command." ns) n)))
+       (let [n (name k)
+             ns (namespace k)]
+            (keyword (str "command." ns) n)))
 
 (def ^:large-vars/data-var all-default-keyboard-shortcuts
   {:date-picker/complete         "Date picker: Choose selected day"
@@ -131,11 +131,11 @@
 
 (def ^:large-vars/data-var dicts
   {:en (merge
-        ;; Dynamically add this ns since command descriptions have to
-        ;; stay in sync with shortcut.config command ids which do not
-        ;; have a namespace
-        (update-keys all-default-keyboard-shortcuts decorate-namespace)
-        category)
+         ;; Dynamically add this ns since command descriptions have to
+         ;; stay in sync with shortcut.config command ids which do not
+         ;; have a namespace
+         (update-keys all-default-keyboard-shortcuts decorate-namespace)
+         category)
 
    :zh-CN   {:shortcut.category/formatting            "格式化"
              :shortcut.category/basics                "基础操作"
@@ -708,7 +708,7 @@
              :command.sidebar/clear "Fjern alt i høyre sidestolpe"
              :command.sidebar/open-today-page "Åpne dagens side i høyre sidestolpe"
              :command.ui/goto-plugins "Gå til dashbord for utvidelser"
-            ;;  :command.ui/open-new-window "Åpne et nytt vindu"
+             ;;  :command.ui/open-new-window "Åpne et nytt vindu"
              :command.ui/select-theme-color "Velg tilgjengelige temafarger"
              :command.ui/toggle-cards "Veksle kort"}
 
@@ -943,7 +943,7 @@
              :command.graph/save                      "Salvar gráfico atual no computador"
              :command.misc/copy                       "Copiar (copiar seleção ou referência do bloco)"
              :command.ui/goto-plugins                 "Ir para o painel de plugins"
-            ;;  :command.ui/open-new-window              "Abra uma nova janela"
+             ;;  :command.ui/open-new-window              "Abra uma nova janela"
              :command.editor/select-down              "Selecione o conteúdo abaixo"
              :command.editor/select-up                "Selecione o conteúdo acima"
              :command.editor/copy-embed               "Copiar uma incorporação do bloco, apontando para o bloco atual"
@@ -988,7 +988,7 @@
              :command.go/next-journal                 "次の日誌へ移動"
              :command.go/prev-journal                 "前の日誌へ移動"
              :command.go/keyboard-shortcuts           "キーボードショートカットへ移動"
-            ;;  :command.ui/open-new-window              "別のウィンドウを開く"
+             ;;  :command.ui/open-new-window              "別のウィンドウを開く"
              :command.go/search-in-page               "ページ内を検索"
              :command.ui/toggle-document-mode         "ドキュメントモードのトグル"
              :command.ui/toggle-contents              "目次のトグル"
@@ -1162,7 +1162,7 @@
              :command.ui/toggle-help                 "Attiva/disattiva aiuto"
              :command.ui/toggle-theme                "Passa dal tema scuro a quello chiaro"
              :command.ui/toggle-contents             "Attiva/disattiva i contenuti nella barra laterale"
-            ;;  :command.ui/open-new-window             "Apri un'altra finestra"
+             ;;  :command.ui/open-new-window             "Apri un'altra finestra"
              :command.command/toggle-favorite        "Aggiungi a/rimuovi dai preferiti"
              :command.editor/open-file-in-default-app "Apri file nell'app predefinita"
              :command.editor/open-file-in-directory   "Apri file nella directory principale"
@@ -1292,7 +1292,7 @@
              :command.ui/toggle-help                 "Yardımı aç/kapat"
              :command.ui/toggle-theme                "Koyu ve açık tema arasında geçiş yap"
              :command.ui/toggle-contents             "Kenar çubuğundaki içeriği aç/kapat"
-            ;;  :command.ui/open-new-window             "Başka bir pencere aç"
+             ;;  :command.ui/open-new-window             "Başka bir pencere aç"
              :command.command/toggle-favorite        "Sık kullanılanlara ekle/çıkar"
              :command.editor/open-file-in-default-app "Dosyayı varsayılan uygulamada aç"
              :command.editor/open-file-in-directory   "Dosyayı üst dizinde aç"
@@ -1342,7 +1342,7 @@
              :command.go/next-journal                 "다음 일지로 이동"
              :command.go/prev-journal                 "이전 일지로 이동"
              :command.go/keyboard-shortcuts           "키보드 단축키로 이동"
-            ;;  :command.ui/open-new-window              "새 창 열기"
+             ;;  :command.ui/open-new-window              "새 창 열기"
              :command.go/search-in-page               "페이지 안에서 검색"
              :command.ui/toggle-document-mode         "문서 모드 토글"
              :command.ui/toggle-contents              "목차 토글"
@@ -1422,4 +1422,126 @@
              :command.editor/copy-text                        "선택한 영역을 텍스트로 복사"
              :command.pdf/close                               "PDF 닫기"
              }
+   :pl {
+        :shortcut.category/basics                        "Podstawy"
+        :shortcut.category/formatting                    "Formatowanie"
+        :shortcut.category/navigating                    "Nawigacja"
+        :shortcut.category/block-editing                 "Edycja bloków (ogólne)"
+        :shortcut.category/block-command-editing         "Komenda edycji bloków"
+        :shortcut.category/block-selection               "Zaznaczanie bloków (wciśnij Esc aby zakończyć)"
+        :shortcut.category/toggle                        "Przełącz"
+        :shortcut.category/others                        "Pozostałe"
+
+        :command.date-picker/complete                    "Date picker: Wybierz zaznaczony dzień"
+        :command.date-picker/next-day                    "Date picker: Wybierz następny dzień"
+        :command.date-picker/prev-day                    "Date picker: Wybierz poprzedni dzień"
+        :command.date-picker/prev-week                   "Date picker: Wybierz poprzedni tydzień"
+        :command.date-picker/next-week                   "Date picker: Wybierz następny tydzień"
+        :command.pdf/previous-page                       "Poprzednia strona otwartego dokumentu PDF"
+        :command.pdf/next-page                           "Następna strona otwartego dokumentu PDF"
+        :command.pdf/close                               "Zamknij aktualnie otwarty dokument PDF"
+        :command.auto-complete/complete                  "Auto uzupełnianie: Wybierz zaznaczoną opcję"
+        :command.auto-complete/prev                      "Auto uzupełnianie: Wybierz poprzednią opcję"
+        :command.auto-complete/next                      "Auto uzupełnianie: Wybierz następną opcję"
+        :command.auto-complete/shift-complete            "Auto uzupełnianie: Otwórz wybraną opcję w panelu bocznym"
+        :command.auto-complete/open-link                 "Auto uzupełnianie: Otwórz wybraną opcję w przeglądarce"
+        :command.cards/toggle-answers                    "Karty: pokaż/ukryj odpowiedzi/luki w tekście"
+        :command.cards/next-card                         "Karty: następna karta"
+        :command.cards/forgotten                         "Karty: zapomniane"
+        :command.cards/remembered                        "Karty: zapamiętane"
+        :command.cards/recall                            "Karty: zajęło chwilę żeby sobie przypomnieć"
+        :command.editor/escape-editing                   "Wyjście z edycji"
+        :command.editor/backspace                        "Usuwanie wstecz"
+        :command.editor/delete                           "Usuwanie naprzód"
+        :command.editor/new-block                        "Utwórz nowy blok"
+        :command.editor/new-line                         "Nowa linia w obecnym bloku"
+        :command.editor/follow-link                      "Przejdź do linku pod kursorem"
+        :command.editor/open-link-in-sidebar             "Otwórz link w panelu bocznym"
+        :command.editor/bold                             "Wytłuszczenie"
+        :command.editor/italics                          "Pochylenie"
+        :command.editor/highlight                        "Podświetlenie"
+        :command.editor/strike-through                   "Przekreślenie"
+        :command.editor/clear-block                      "Usuń całą treść bloku"
+        :command.editor/kill-line-before                 "Usuń linię powyżej kursora"
+        :command.editor/copy-embed                       "Kopiuj kod osadzenia dla obecnego bloku"
+        :command.editor/kill-line-after                  "Usuń linię poniżej kursora"
+        :command.editor/beginning-of-block               "Umieść kursor na początku bloku"
+        :command.editor/end-of-block                     "Umieść kursor na końcu bloku"
+        :command.editor/forward-word                     "Przesuń kursor do następnego słowa"
+        :command.editor/backward-word                    "Przesuń kursor do poprzedniego słowa"
+        :command.editor/forward-kill-word                "Usuń następne słowo"
+        :command.editor/backward-kill-word               "Usuń poprzednie słowo"
+        :command.editor/replace-block-reference-at-point "Zastąp referencję do bloku jego treścią"
+        :command.editor/paste-text-in-one-block-at-point "Wklej cały tekst jako jeden blok"
+        :command.editor/insert-youtube-timestamp         "Umieść znacznik czasu filmu YouTube"
+        :command.editor/cycle-todo                       "Rotuj stan TODO dla aktualnego bloku"
+        :command.editor/up                               "Przesuń kursor do góry / Zaznacz powyższą opcję"
+        :command.editor/down                             "Przesuń kursor w dół / Zaznacz poniższą opcję"
+        :command.editor/left                             "Przesuń kursor w lewo / Rozpocznij edycję na początku bloku"
+        :command.editor/right                            "Przesuń kursor w prawo / Rozpocznij edycję na końcu bloku"
+        :command.editor/select-up                        "Zaznacz treść powyżej"
+        :command.editor/select-down                      "Zaznacz treść poniżej"
+        :command.editor/move-block-up                    "Przesuń blok powyżej"
+        :command.editor/move-block-down                  "Przesuń blok poniżej"
+        :command.editor/open-edit                        "Edytuj zaznaczony blok"
+        :command.editor/select-block-up                  "Zaznacz blok powyżej"
+        :command.editor/select-block-down                "Zaznacz blok poniżej"
+        :command.editor/delete-selection                 "Usuń zaznaczone bloki"
+        :command.editor/expand-block-children            "Rozwiń"
+        :command.editor/collapse-block-children          "Zwiń"
+        :command.editor/indent                           "Przesuń blok poziom niżej"
+        :command.editor/outdent                          "Przesuń blok poziom wyżej"
+        :command.editor/copy                             "Kopiuj (kopiuje zaznaczenie lub referencję do bloku)"
+        :command.editor/copy-text                        "Kopiuj zaznaczenie jako tekst"
+        :command.editor/cut                              "Wytnij"
+        :command.editor/undo                             "Cofnij"
+        :command.editor/redo                             "Ponów"
+        :command.editor/insert-link                      "HTML Link"
+        :command.editor/select-all-blocks                "Zaznacz wszystkie bloki"
+        :command.editor/zoom-in                          "Zoom in editing block / Forwards otherwise"
+        :command.editor/zoom-out                         "Zoom out editing block / Backwards otherwise"
+        :command.ui/toggle-brackets                      "Pokaż / Ukrywaj kwadratowe nawiasy"
+        :command.go/search-in-page                       "Szukaj na aktualnej stronie"
+        :command.go/search                               "Wyszukiwanie tekstowe"
+        :command.go/journals                             "Idź do dzienników"
+        :command.go/backward                             "Wstecz"
+        :command.go/forward                              "Naprzód"
+        :command.search/re-index                         "Przebuduj index wyszukiwania"
+        :command.sidebar/open-today-page                 "Otwórz dzisiejszy dziennik w panelu bocznym"
+        :command.sidebar/clear                           "Wyczyść wszystko w panelu bocznym"
+        :command.misc/copy                               "mod+c"
+        :command.graph/open                              "Wybierz graf do otwarcia"
+        :command.graph/remove                            "Usuń graf"
+        :command.graph/add                               "Dodaj graf"
+        :command.graph/save                              "Zapisz obecny graf na dysk"
+        :command.graph/re-index                          "Reindeksuj obecny graf"
+        :command.command/run                             "Wykonaj polecenie GIT"
+        :command.command/toggle-favorite                 "Dodaj / Usuń z ulubionych"
+        :command.command-palette/toggle                  "Pokaż / Ukryj paletę poleceń"
+        :command.go/home                                 "Idź do strony głównej"
+        :command.go/all-pages                            "Idź do indeksu wszystkich stron"
+        :command.go/graph-view                           "Idź do widoku grafu"
+        :command.go/keyboard-shortcuts                   "Idź do widoku skrótów klawiszowych"
+        :command.go/tomorrow                             "Idź do jutrzejszego dziennika"
+        :command.go/next-journal                         "Idź do następnego dziennika"
+        :command.go/prev-journal                         "Idź do poprzedniego dziennika"
+        :command.go/flashcards                           "Pokaż / Ukryj widok fiszek"
+        :command.ui/toggle-document-mode                 "Wyświetl / Ukryj widok dokumentu"
+        :command.ui/toggle-settings                      "Wyświetl / Ukryj ustawienia"
+        :command.ui/toggle-right-sidebar                 "Pokaż / Ukryj prawy panel"
+        :command.ui/toggle-left-sidebar                  "Pokaż / Ukryj lewy panel"
+        :command.ui/toggle-help                          "Pogaż / Ukryj pomoc"
+        :command.ui/toggle-theme                         "Zmień motyw graficzny na ciemny/jasny"
+        :command.ui/toggle-contents                      "Toggle Contents in sidebar"
+        :command.editor/open-file-in-default-app         "Otwórz plik w domyślnej aplikacji"
+        :command.editor/open-file-in-directory           "Otwórz plik w nadrzędnym katalogu"
+        :command.editor/copy-current-file                "Kopiuj aktualny plik"
+        :command.editor/toggle-open-blocks               "Zwiń / Rozwiń otwarte bloki"
+        :command.ui/toggle-wide-mode                     "Włącz / wyłącz tryb szeroki"
+        :command.ui/select-theme-color                   "Select available theme colors"
+        :command.ui/goto-plugins                         "Przejdź do dashboardu pluginów"
+        :command.ui/toggle-cards                         "Pokaż / Ukryj karty"
+        :command.git/commit                              "Wykonaj GIT COMMIT z wiadomością"
+        }
 })
+
