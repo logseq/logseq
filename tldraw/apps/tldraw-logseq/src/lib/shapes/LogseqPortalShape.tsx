@@ -567,7 +567,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const {
       props: { pageId },
     } = this
-    const { renderers } = React.useContext(LogseqContext)
+    const { renderers, handlers } = React.useContext(LogseqContext)
     const app = useApp<Shape>()
 
     const cpRefContainer = React.useRef<HTMLDivElement>(null)
@@ -602,6 +602,26 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       }
     }, [this.initialHeightCalculated])
 
+    const blockBlob = React.useMemo(() => {
+      if (pageId && this.props.blockType === 'B') {
+        return handlers?.queryBlockByUUID(pageId)
+      }
+    }, [handlers?.queryBlockByUUID, pageId])
+
+    let element: React.ReactNode = null
+
+    if (this.props.blockType === 'B') {
+      if (!blockBlob) {
+        element = `Target block not found`
+      } else if (this.props.compact) {
+        element = <Block blockId={pageId} />
+      }
+    }
+
+    if (!element) {
+      element = <Page pageName={pageId} />
+    }
+
     return (
       <div
         ref={cpRefContainer}
@@ -610,11 +630,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           overflow: this.props.compact ? 'visible' : 'auto',
         }}
       >
-        {this.props.blockType === 'B' && this.props.compact ? (
-          <Block blockId={pageId} />
-        ) : (
-          <Page pageName={pageId} />
-        )}
+        {element}
       </div>
     )
   })

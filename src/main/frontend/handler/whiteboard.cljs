@@ -60,10 +60,11 @@
                     :block/whiteboard? true
                     :block/properties (dissoc tldr-data :shapes)}
         ;; todo: use get-paginated-blocks instead?
-        existing-blocks (model/get-page-blocks-no-cache (state/get-current-repo) 
+        existing-blocks (model/get-page-blocks-no-cache (state/get-current-repo)
                                                         page-name
                                                         {:pull-keys '[:db/id
                                                                       :block/uuid
+                                                                      :block/properties [:ls-type]
                                                                       {:block/parent [:block/uuid]}]})
         shapes (:shapes tldr-data)
         blocks (mapv #(shape->block % page-name) shapes)
@@ -74,9 +75,11 @@
                        (remove nil?)
                        (set))
         delete-blocks (filterv (fn [block]
-                                (not (or (block-ids (:block/uuid block))
-                                         (block-ids (:block/uuid (:block/parent block))))))
-                              existing-blocks)
+                                 (not
+                                  (or (block-ids (:block/uuid block))
+                                      (block-ids (:block/uuid (:block/parent block)))
+                                      (not= :whiteboard-shape (:ls-type (:block/properties block))))))
+                               existing-blocks)
         delete-blocks-tx (mapv (fn [s] [:db/retractEntity (:db/id s)]) delete-blocks)]
     (concat [page-block] blocks delete-blocks-tx)))
 
@@ -138,8 +141,6 @@
          (when (and page-entity (nil? (:block/file page-entity)))
            (outliner-file/sync-to-file page-entity))))
      tldr)))
-
-(create-new-whiteboard-page!)
 
 (defn page-name->tldr!
   ([page-name]

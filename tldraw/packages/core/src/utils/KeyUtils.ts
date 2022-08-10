@@ -24,7 +24,8 @@ export class KeyUtils {
       }
       callback(keyboardEvent, combo)
     }
-    Mousetrap.bind(keys, fn, 'keydown')
+    // todo: figure out why mod+a need to bind keypress instead of keydown
+    Mousetrap.bind(keys, fn, keys === 'mod+a' ? 'keypress' : 'keydown')
     return () => Mousetrap.unbind(keys)
   }
 }
