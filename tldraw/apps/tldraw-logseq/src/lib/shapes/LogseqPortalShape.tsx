@@ -686,7 +686,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       }
     }, [handlers?.queryBlockByUUID, pageId])
 
-    const targetNotFound = this.props.blockType === 'B' && !blockContent
+    const targetNotFound = this.props.blockType === 'B' && typeof blockContent !== 'string'
     const showingPortal = (!this.props.collapsed || isEditing) && !targetNotFound
 
     if (!renderers?.Page) {
