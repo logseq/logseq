@@ -24,7 +24,7 @@ export class KeyUtils {
       }
       callback(keyboardEvent, combo)
     }
-    Mousetrap.bind(keys, fn)
+    Mousetrap.bind(keys, fn, 'keydown')
     return () => Mousetrap.unbind(keys)
   }
 }

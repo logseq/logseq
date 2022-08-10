@@ -420,8 +420,9 @@ export abstract class TLState<
     // @ts-ignore
     const shortcut = this.constructor['shortcut'] as string
     if (shortcut) {
-      KeyUtils.registerShortcut(shortcut, () => {
+      KeyUtils.registerShortcut(shortcut, e => {
         this.parent.transition(this.id)
+        e.stopPropagation()
       })
     }
 
