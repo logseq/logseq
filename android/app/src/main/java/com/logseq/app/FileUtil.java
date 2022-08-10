@@ -40,19 +40,35 @@ public class FileUtil {
                     relPath = split[1];
                 }
 
-                String storageState = Environment.getExternalStorageState();
-                if (storageState.equals(Environment.MEDIA_MOUNTED)) {
-                    // attempt 1
-                    File dir = new File("/storage/" + type + "/" + relPath);
-                    if (dir.exists()) {
-                        return dir.getPath();
-                    }
-                    // attempt 2
-                    dir = new File("/mnt/" + type + "/" + relPath);
-                    if (dir.exists()) {
-                        return dir.getPath();
+                File dir = null;
+                File[] external = context.getExternalMediaDirs();
+                for (File dev : external) {
+                    String extPath = dev.getAbsolutePath();
+                    String devPath = extPath.substring(0, extPath.indexOf("/Android"));
+
+                    if (extPath.contains("/" + type  +"/")) {
+                        dir = new File(devPath + "/" + relPath);
+                        if (dir.exists()) {
+                            return dir.getAbsolutePath();
+                        }
                     }
                 }
+                // attempt 1
+                dir = new File("/storage/" + type + "/" + relPath);
+                if (dir.exists()) {
+                    return dir.getAbsolutePath();
+                }
+                // attempt 2
+                dir = new File("/mnt/" + type + "/" + relPath);
+                if (dir.exists()) {
+                    return dir.getAbsolutePath();
+                }
+                // attempt 3
+                dir = new File("/mnt/media_rw" + type + "/" + relPath);
+                if (dir.exists()) {
+                    return dir.getAbsolutePath();
+                }
+
                 // TODO: other cases
             } else if (isDownloadsDocument(uri)) {
                 final String id = DocumentsContract.getDocumentId(uri);
