@@ -419,16 +419,6 @@ export abstract class TLState<
 
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
-    const shortcut = this.constructor['shortcut'] as string
-    if (shortcut) {
-      KeyUtils.registerShortcut(shortcut, e => {
-        this.parent.transition(this.id)
-        e.stopPropagation()
-      })
-    }
-
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
     const shortcuts = this.constructor['shortcuts'] as TLShortcut<S, K>[]
     this._shortcuts = shortcuts
 

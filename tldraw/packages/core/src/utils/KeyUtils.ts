@@ -26,7 +26,7 @@ export class KeyUtils {
     }
     Mousetrap.bind(keys, fn, 'keydown')
     return () => {
-      Mousetrap.unbind(keys)
+      Mousetrap.unbind(keys, 'keydown')
     }
   }
 }

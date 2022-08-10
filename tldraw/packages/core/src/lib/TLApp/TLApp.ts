@@ -184,8 +184,21 @@ export class TLApp<
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     const shortcuts = (this.constructor['shortcuts'] || []) as TLShortcut<S, K>[]
+    const childrenShortcuts = Array.from(this.children.values())
+      // @ts-expect-error ???
+      .filter(c => c.constructor['shortcut'])
+      .map(child => {
+        return {
+          // @ts-expect-error ???
+          keys: child.constructor['shortcut'] as string | string[],
+          fn: (_: any, __: any, e: Event) => {
+            this.transition(child.id)
+            e.stopPropagation()
+          },
+        }
+      })
     this._disposables.push(
-      ...[...ownShortcuts, ...shortcuts].map(({ keys, fn }) => {
+      ...[...ownShortcuts, ...shortcuts, ...childrenShortcuts].map(({ keys, fn }) => {
         return KeyUtils.registerShortcut(keys, e => {
           fn(this, this, e)
         })
