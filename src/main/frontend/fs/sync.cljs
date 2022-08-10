@@ -144,6 +144,7 @@
                  :pause
                  :resume
                  :exception-decrypt-failed
+                 :remote->local-full-sync-failed
                  })
 
 (s/def ::sync-event (s/keys :req-un [::event ::data]))
@@ -913,7 +914,8 @@
                                      :finished-remote->local
                                      :pause
                                      :resume
-                                     :exception-decrypt-failed]))
+                                     :exception-decrypt-failed
+                                     :remote->local-full-sync-failed]))
   ([topics]
    (util/drain-chan debug-print-sync-events-loop-stop-chan)
    (let [topic&chs (map (juxt identity #(chan 10)) topics)
@@ -2394,7 +2396,9 @@
               (.schedule this ::pause nil nil))
           unknown
           (do
-            (debug/pprint "remote->local-full-sync" unknown)
+            (put-sync-event! {:event :remote->local-full-sync-failed
+                              :data {:graph-uuid graph-uuid
+                                     :epoch (tc/to-epoch (t/now))}})
             (.schedule this ::idle nil nil))))))
 
   (remote->local [this _next-state {remote-val :remote}]
@@ -2623,6 +2627,19 @@
                  (<sync-stop)))))
 
 
+;;; some sync events handler
+
+;; re-exec remote->local-full-sync when it failed before
+(def re-remote->local-full-sync-chan (chan 1))
+(async/sub sync-events-publication :remote->local-full-sync-failed re-remote->local-full-sync-chan)
+(go-loop []
+  (let [{{graph-uuid :graph-uuid} :data} (<! re-remote->local-full-sync-chan)
+        {:keys [current-syncing-graph-uuid state]}
+        (state/get-file-sync-state (state/get-current-repo))]
+    (when (and (= graph-uuid current-syncing-graph-uuid)
+               (= state ::idle))
+      (offer! remote->local-full-sync-chan true))
+    (recur)))
 
 ;;; debug funcs
 (comment
