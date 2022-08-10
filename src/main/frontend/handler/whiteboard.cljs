@@ -1,6 +1,5 @@
 (ns frontend.handler.whiteboard
-  (:require [clojure.string :as string]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
             [frontend.modules.outliner.file :as outliner-file]
@@ -47,15 +46,6 @@
   []
   (when-let [^js app (get-tldr-app)]
     (.. app -selectedTool (isIn "idle"))))
-
-(defn create-page!
-  [page-title]
-  (when-let [app (get-tldr-app)]
-    (when-not (string/blank? page-title)
-      (.createShapes app (clj->js
-                          [{:id (str "logseq-portal-" page-title)
-                            :type "logseq-portal"
-                            :pageId page-title}])))))
 
 (defn- block->shape [block]
   (:block/properties block))

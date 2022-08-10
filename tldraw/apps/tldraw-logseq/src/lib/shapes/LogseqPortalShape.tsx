@@ -27,10 +27,17 @@ interface LogseqQuickSearchProps {
   onChange: (id: string) => void
 }
 
-const LogseqTypeTag = ({ type, active }: { type: 'B' | 'P' | 'BS' | 'PS'; active?: boolean }) => {
+const LogseqTypeTag = ({
+  type,
+  active,
+}: {
+  type: 'B' | 'P' | 'WP' | 'BS' | 'PS'
+  active?: boolean
+}) => {
   const nameMapping = {
     B: 'block',
     P: 'page',
+    WP: 'whiteboard',
     BS: 'block-search',
     PS: 'page-search',
   }
@@ -330,7 +337,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
       const Breadcrumb = renderers?.Breadcrumb
 
-      if (!Breadcrumb) {
+      if (!Breadcrumb || !handlers) {
         return []
       }
 
@@ -413,7 +420,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               },
               element: (
                 <div className="tl-quick-search-option-row">
-                  <LogseqTypeTag type="P" />
+                  <LogseqTypeTag type={handlers.isWhiteboardPage(page) ? 'WP' : 'P'} />
                   {highlightedJSX(page, q)}
                 </div>
               ),
@@ -428,12 +435,15 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           ...searchResult.blocks
             .filter(block => block.content && block.uuid)
             .map(({ content, uuid }) => {
+              const block = handlers.queryBlockByUUID(uuid)
               return {
                 actionIcon: 'search' as 'search',
                 onChosen: () => {
-                  finishCreating(uuid)
+                  if (block) {
+                    finishCreating(uuid)
+                  }
                 },
-                element: (
+                element: block ? (
                   <>
                     <div className="tl-quick-search-option-row">
                       <LogseqTypeTag type="B" />
@@ -446,13 +456,18 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                       {highlightedJSX(content, q)}
                     </div>
                   </>
+                ) : (
+                  <div className="tl-quick-search-option-row">
+                    Cache is outdated. Please click the 'Re-index' button in the graph's dropdown
+                    menu.
+                  </div>
                 ),
               }
             })
         )
       }
       return options
-    }, [q, searchFilter, searchResult, renderers?.Breadcrumb])
+    }, [q, searchFilter, searchResult, renderers?.Breadcrumb, handlers])
 
     React.useEffect(() => {
       const keydownListener = (e: KeyboardEvent) => {

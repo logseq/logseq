@@ -9,7 +9,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.search :as search-handler]
@@ -115,29 +114,25 @@
 (defn- search-on-chosen
   [repo search-q {:keys [type data alias]}]
   (search-handler/add-search-to-recent! repo search-q)
-  (let [whiteboard? (whiteboard-handler/whiteboard-mode?)]
-    (search-handler/clear-search!)
-    (case type
-      :graph-add-filter
-      (state/add-graph-search-filter! search-q)
+  (search-handler/clear-search!)
+  (case type
+    :graph-add-filter
+    (state/add-graph-search-filter! search-q)
 
-      :new-page
-      (do
-        (page-handler/create! search-q {:redirect? (not whiteboard?)})
-        (when whiteboard?
-          (whiteboard-handler/create-page! search-q)))
+    :new-page
+    (page-handler/create! search-q {:redirect? true})
 
-      :page
-      (let [data (or alias data)]
-        (cond
-          (model/whiteboard-page? data)
-          (route/redirect-to-whiteboard! data)
-          :else
-          (route/redirect-to-page! data)))
+    :page
+    (let [data (or alias data)]
+      (cond
+        (model/whiteboard-page? data)
+        (route/redirect-to-whiteboard! data)
+        :else
+        (route/redirect-to-page! data)))
 
-      :file
-      (route/redirect! {:to :file
-                        :path-params {:path data}})
+    :file
+    (route/redirect! {:to :file
+                      :path-params {:path data}})
 
     :block
     (let [block-uuid (uuid (:block/uuid data))
@@ -159,7 +154,7 @@
         (println "[Error] Block page missing: "
                  {:block-id block-uuid
                   :block (db/pull [:block/uuid block-uuid])})))
-    nil))
+    nil)
   (state/close-modal!))
 
 (defn- search-on-shift-chosen

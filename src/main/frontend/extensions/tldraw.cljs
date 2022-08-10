@@ -2,6 +2,7 @@
   (:require ["/tldraw-logseq" :as TldrawLogseq]
             [frontend.components.block :as block]
             [frontend.components.page :as page]
+            [frontend.db.model :as model]
             [frontend.handler.search :as search]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.rum :as r]
@@ -68,6 +69,8 @@
                             :Breadcrumb breadcrumb
                             :PageNameLink page-name-link}
                 :handlers (clj->js {:search search-handler
+                                    :queryBlockByUUID #(clj->js (model/query-block-by-uuid (parse-uuid %)))
+                                    :isWhiteboardPage model/whiteboard-page?
                                     :addNewBlock (fn [content]
                                                    (str (whiteboard-handler/add-new-block! name content)))})
                 :onMount (fn [app] (set-tln ^js app))
