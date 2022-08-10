@@ -237,6 +237,45 @@ input::-webkit-inner-spin-button {
     }
   }
 
+  &-finder {
+    &-wrap.hls-popup-wrap {
+      right: -12px;
+      left: unset;
+      bottom: unset;
+      height: auto;
+      width: auto;
+    }
+
+    &.hls-popup-box {
+      width: 360px;
+
+      > .input-inner {
+        @apply p-2;
+
+        input {
+          @apply flex-1 bg-gray-200 border border-gray-300 mr-1.5;
+
+          padding: 2px 5px;
+          border-radius: 4px;
+          color: black;
+        }
+
+        .ui__button {
+          margin-top: unset;
+          border-radius: 4px;
+          color: black;
+
+          .ti {
+            font-weight: bold;
+          }
+        }
+      }
+      > .result-inner {
+        @apply text-gray-800;
+      }
+    }
+  }
+
   &-viewer {
     position: absolute;
     overflow: auto;
@@ -712,4 +751,16 @@ body.is-pdf-active {
   background: rgb(185, 231, 255);
   mix-blend-mode: multiply;
   color: unset;
+}
+
+.textLayer .highlight {
+  background-color: rgb(206 255 162);
+  border: 1px solid transparent;
+  border-radius: 0;
+  padding: 0 2px;
+
+  &.selected {
+    background-color: rgb(206 255 162);
+    border: 2px dashed #ff3434;
+  }
 }
