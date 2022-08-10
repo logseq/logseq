@@ -58,7 +58,13 @@ public class FolderPicker extends Plugin {
         Uri docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri,
                 DocumentsContract.getTreeDocumentId(treeUri));
         Log.i("Logseq/FolderPicker", "Got uri " + docUri);
-        ret.put("path", FileUtil.getPath(context, docUri));
-        call.resolve(ret);
+        String path = FileUtil.getPath(context, docUri);
+        Log.i("Logseq/FolderPicker", "Convert to path " + FileUtil.getPath(context, docUri));
+        if (path == null || path.isEmpty()) {
+            call.reject("Cannot support this directory type: " + docUri);
+        } else {
+            ret.put("path", path);
+            call.resolve(ret);
+        }
     }
 }

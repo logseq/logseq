@@ -10,6 +10,9 @@ import android.os.Environment;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.text.TextUtils;
+import android.util.Log;
+
+import java.io.File;
 
 // https://stackoverflow.com/questions/29713587/how-to-get-the-real-path-with-action-open-document-tree-intent
 // https://gist.github.com/asifmujteba/d89ba9074bc941de1eaa#file-asfurihelper
@@ -31,7 +34,26 @@ public class FileUtil {
                     return Environment.getExternalStorageDirectory() + "/" + split[1];
                 }
 
-                // TODO handle non-primary volumes
+                // NOTE: It's not a good idea to use storage root as Graph root.
+                String relPath = "";
+                if (split.length == 2) {
+                    relPath = split[1];
+                }
+
+                String storageState = Environment.getExternalStorageState();
+                if (storageState.equals(Environment.MEDIA_MOUNTED)) {
+                    // attempt 1
+                    File dir = new File("/storage/" + type + "/" + relPath);
+                    if (dir.exists()) {
+                        return dir.getPath();
+                    }
+                    // attempt 2
+                    dir = new File("/mnt/" + type + "/" + relPath);
+                    if (dir.exists()) {
+                        return dir.getPath();
+                    }
+                }
+                // TODO: other cases
             } else if (isDownloadsDocument(uri)) {
                 final String id = DocumentsContract.getDocumentId(uri);
                 if (!TextUtils.isEmpty(id)) {
@@ -67,7 +89,6 @@ public class FileUtil {
                 return getDataColumn(context, contentUri, selection, selectionArgs);
             }
         } else if ("content".equalsIgnoreCase(uri.getScheme())) {
-
             // Return the remote address
             if (isGooglePhotosUri(uri))
                 return uri.getLastPathSegment();
