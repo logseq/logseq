@@ -59,7 +59,7 @@
   (let [[_ blocks _ sidebar? preview?] (:rum/args state)]
     (when (and
            (or preview?
-               (not (contains? #{:home :all-journals} (state/get-current-route))))
+               (not (contains? #{:home :all-journals :whiteboard} (state/get-current-route))))
            (not sidebar?))
       (let [block (first blocks)]
         (when (and (= (count blocks) 1)
