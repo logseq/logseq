@@ -307,12 +307,11 @@
         result)))
   (open-dir [_this _ok-handler]
     (p/let [_    (when (= (mobile-util/platform) "android") (check-permission-android))
-            {:keys [path localDocumentsPath]} (p/chain
-                                               (p/catch (.pickFolder mobile-util/folder-picker)
-                                                        (fn [e]
-                                                          (js/alert (str e))
-                                                          nil)) ;; NOTE: Can not pick folder, let it crash
-                                               #(js->clj % :keywordize-keys true))
+            {:keys [path localDocumentsPath]} (-> (.pickFolder mobile-util/folder-picker)
+                                                  (p/then #(js->clj % :keywordize-keys true))
+                                                  (p/catch (fn [e]
+                                                             (js/alert (str e))
+                                                             nil))) ;; NOTE: Can not pick folder, let it crash
             _ (when (and (mobile-util/native-ios?)
                          (not (or (local-container-path? path localDocumentsPath)
                                   (mobile-util/iCloud-container-path? path))))
