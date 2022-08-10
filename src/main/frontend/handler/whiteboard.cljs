@@ -26,12 +26,6 @@
 ;;           (and (.-classList el) (.. el -classList (contains "whiteboard"))) true
 ;;           :else (recur (.-parentElement el)))))
 
-;; FIXME: embed /draw should be supported too
-;; FIXME: should use current target to see if it is actually inside of whiteboard
-(defn whiteboard-mode?
-  []
-  (= (state/get-current-route) :whiteboard))
-
 (defn get-tldr-app
   []
   js/window.tln)
