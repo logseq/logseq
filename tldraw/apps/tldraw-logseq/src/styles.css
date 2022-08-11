@@ -64,10 +64,14 @@
 
 .tl-zoom-menu-dropdown-menu-button {
   opacity: 100%;
-  background-color: #fff;
+  background-color: var(--color-panel);
   border-radius: 6px;
   padding: 5px;
   box-shadow: 0 10px 38px -10px rgba(22, 23, 24, 0.35), 0 10px 20px -15px rgba(22, 23, 24, 0.2);
+
+  > span svg {
+    fill: var(--color-panel) !important;
+  }
 }
 
 .tl-zoom-menu-dropdown-item {
@@ -83,21 +87,17 @@
   padding: 0 5px;
   position: relative;
   user-select: none;
+  color: var(--color-text);
 
-  &:focus {
-    color: white;
-    background-color: black;
+  &:hover {
+    background-color: var(--color-hover);
   }
 }
 
 .tl-zoom-menu-right-slot {
   margin-left: auto;
   padding-left: 20px;
-  color: black;
-
-  &:focus {
-    color: whites;
-  }
+  color: var(--color-text);
 }
 
 .tl-contextbar {
