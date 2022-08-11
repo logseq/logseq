@@ -91,7 +91,7 @@
       [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
        [:span.bullet-container.cursor
         [:span.bullet]]]
-      [:div.flex.flex-1 {:tabindex 0
+      [:div.flex.flex-1 {:tabIndex 0
                          :on-key-press (fn [e]
                                          (when (= "Enter" (util/ekey e))
                                            (handler-fn)))

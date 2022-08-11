@@ -261,7 +261,7 @@
           (ui/menu-link
            {:key      "Collapse all"
             :on-click (fn [_e]
-                        (editor-handler/collapse-all! block-id))}
+                        (editor-handler/collapse-all! block-id {}))}
            "Collapse all")
 
           (when (state/sub [:plugin/simple-commands])

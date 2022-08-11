@@ -264,7 +264,7 @@
            :active (and (not srs-open?) (= route-name :all-pages))
            :icon   "files"})]]
 
-      (when (and left-sidebar-open? (not config/publishing?)) (favorites t))
+      (when left-sidebar-open? (favorites t))
 
       (when (and left-sidebar-open? (not config/publishing?)) (recent-pages t))
 
