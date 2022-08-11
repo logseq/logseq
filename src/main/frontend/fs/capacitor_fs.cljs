@@ -121,7 +121,6 @@
 (def backup-dir "logseq/bak")
 (defn- get-backup-dir
   [repo-dir path ext]
-  (prn ::debug-bak-dir repo-dir path ext)
   (let [path (if (string/starts-with? path "file://")
                (subs path 7)
                path)
