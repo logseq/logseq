@@ -373,6 +373,15 @@
      (get-file-path repo
                     (str app-name "/" export-css-file)))))
 
+(defn expand-relative-assets-path
+  ;; ../assets/xxx -> {assets|file}://{current-graph-root-path}/xxx
+  [source]
+  (when-let [protocol (and (string? source)
+                           (not (string/blank? source))
+                           (if (util/electron?) "assets" "file"))]
+
+    (string/replace
+     source "../assets" (util/format "%s://%s/assets" protocol (get-repo-dir (state/get-current-repo))))))
 
 (defn get-custom-js-path
   ([]
