@@ -296,8 +296,8 @@
   (write-file! [this repo dir path content opts]
     (let [path (get-file-path dir path)]
       (p/let [stat (p/catch
-                       (.stat Filesystem (clj->js {:path path}))
-                       (fn [_e] :not-found))]
+                    (.stat Filesystem (clj->js {:path path}))
+                    (fn [_e] :not-found))]
         (write-file-impl! this repo dir path content opts stat))))
   (rename! [_this _repo old-path new-path]
     (let [[old-path new-path] (map #(get-file-path "" %) [old-path new-path])]
@@ -312,9 +312,9 @@
     (let [[old-path new-path] (map #(get-file-path "" %) [old-path new-path])]
       (p/catch
        (p/let [_ (.copy Filesystem
-                          (clj->js
-                           {:from old-path
-                            :to new-path}))])
+                        (clj->js
+                         {:from old-path
+                          :to new-path}))])
        (fn [error]
          (log/error :copy-file-failed error)))))
   (stat [_this dir path]

@@ -865,6 +865,9 @@
              (mobile-util/native-ios?)
              (->CapacitorAPI nil nil nil)
 
+             (mobile-util/native-android?)
+             (->CapacitorAPI nil nil nil)
+
              :else
              nil))
 
@@ -1497,7 +1500,7 @@
             (let [files-meta (and (not= "unlink" type)
                                   (<! (<get-local-files-meta rsapi "" dir [(remove-dir-prefix dir path)])))
                   checksum (and (coll? files-meta) (some-> files-meta first :etag))]
-              (>! local-changes-chan (->FileChangeEvent type dir path stat checksum)))))))))
+              (>! local-changes-chan (->FileChangeEvent type dir (string/replace-first path "file://" "") stat checksum)))))))))
 
 ;;; ### encryption
 (def pwd-map
@@ -2036,7 +2039,8 @@
                    ;; ignore events too early
                    (> (* 1000 mtime) (tc/to-long (t/minus (t/now) (t/minutes 1))))
                    true)
-                 (string/starts-with? (.-dir e) base-path) ; valid path prefix
+                 (or (string/starts-with? (.-dir e) base-path)
+                     (string/starts-with? (str "file://" (.-dir e)) base-path)) ; valid path prefix
                  (not (contains-path? (get-ignored-files) (relative-path e))) ;not ignored
                  (contains-path? (get-monitor-dirs) (relative-path e)) ; dir is monitored
                  ;; download files will also trigger file-change-events, ignore them
