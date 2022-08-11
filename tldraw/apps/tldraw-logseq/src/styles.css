@@ -95,21 +95,21 @@
   padding: 0 5px;
   position: relative;
   user-select: none;
-}
 
-.tl-zoom-menu-dropdown-item:focus {
-  color: white;
-  background-color: black;
+  &:focus {
+    color: white;
+    background-color: black;
+  }
 }
 
 .tl-zoom-menu-right-slot {
   margin-left: auto;
   padding-left: 20px;
   color: black;
-}
 
-.tl-zoom-menu-right-slot:focus {
-  color: whites;
+  &:focus {
+    color: whites;
+  }
 }
 
 .tl-contextbar {
