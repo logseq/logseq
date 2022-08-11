@@ -7,10 +7,14 @@ on:
   workflow_dispatch:
     inputs:
       build-target:
-        description: 'Build Target ("nightly"/"beta"/"non-release")'
-        type: string
+        description: 'Build Target (Release Type)'
+        type: choice
         required: true
-        default: "beta"
+        options:
+          - beta
+          - nightly
+          - non-release
+        default: "non-release"
       git-ref:
         description: "Build from Git Ref(master)"
         required: true

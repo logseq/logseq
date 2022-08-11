@@ -13,7 +13,9 @@
    [frontend.state :as state]
    [frontend.util :as util]
    [goog.dom :as gdom]
-   [logseq.graph-parser.block :as gp-block]))
+   [logseq.graph-parser.block :as gp-block]
+   [frontend.modules.instrumentation.posthog :as posthog]
+   [cljs-bean.core :as bean]))
 
 ;;  Fns
 
@@ -283,6 +285,13 @@
 
 (defn get-filtered-ref-blocks
   [ref-blocks filters ref-pages]
-  (let [ref-blocks' (mapcat second ref-blocks)
-        filtered-blocks (filter-blocks ref-blocks' filters ref-pages)]
-    (group-by :block/page filtered-blocks)))
+  (try
+    (let [ref-blocks' (doall (mapcat second ref-blocks))
+          filtered-blocks (filter-blocks ref-blocks' filters ref-pages)]
+      (group-by :block/page filtered-blocks))
+    (catch :default e
+      (js/console.error e)
+      (posthog/capture :bad-ref-blocks (bean/->js
+                                        {:ref-blocks ref-blocks
+                                         :filters filters
+                                         :ref-pages ref-pages})))))

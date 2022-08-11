@@ -1122,7 +1122,7 @@
           (page-embed (assoc config :link-depth (inc link-depth)) page-name)))
 
       (block-ref/string-block-ref? a)
-      (when-let [s (-> block-ref/get-string-block-ref-id string/trim)]
+      (when-let [s (-> a block-ref/get-string-block-ref-id string/trim)]
         (when-let [id (some-> s parse-uuid)]
           (block-embed (assoc config :link-depth (inc link-depth)) id)))
 
@@ -2418,7 +2418,7 @@
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
-        block (if navigated?
+        block (if (or navigated? custom-query?)
                 (let [block (db/pull [:block/uuid navigating-block])
                       blocks (db/get-paginated-blocks repo (:db/id block)
                                                       {:scoped-block-id (:db/id block)})
