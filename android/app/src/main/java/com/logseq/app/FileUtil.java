@@ -35,36 +35,36 @@ public class FileUtil {
                 }
 
                 // NOTE: It's not a good idea to use storage root as Graph root.
-                String relPath = "";
+                String remain = "";
                 if (split.length == 2) {
-                    relPath = split[1];
+                    remain = split[1];
                 }
 
                 File dir = null;
-                File[] external = context.getExternalMediaDirs();
-                for (File dev : external) {
-                    String extPath = dev.getAbsolutePath();
-                    String devPath = extPath.substring(0, extPath.indexOf("/Android"));
+                File[] mdirs = context.getExternalMediaDirs();
+                for (File mdir : mdirs) {
+                    String extPath = mdir.getAbsolutePath();
 
-                    if (extPath.contains("/" + type  +"/")) {
-                        dir = new File(devPath + "/" + relPath);
+                    if (extPath.contains("/" + type + "/")) {
+                        dir = new File(extPath.substring(0, extPath.indexOf("/Android")) + "/" + remain);
                         if (dir.exists()) {
                             return dir.getAbsolutePath();
                         }
                     }
                 }
+                // FIXME: The following attempt cannot handle same directory name on different devices!
                 // attempt 1
-                dir = new File("/storage/" + type + "/" + relPath);
-                if (dir.exists()) {
-                    return dir.getAbsolutePath();
-                }
-                // attempt 2
-                dir = new File("/mnt/" + type + "/" + relPath);
+                dir = new File("/storage/" + type + "/" + remain);
                 if (dir.exists()) {
                     return dir.getAbsolutePath();
                 }
                 // attempt 3
-                dir = new File("/mnt/media_rw" + type + "/" + relPath);
+                dir = new File("/mnt/media_rw/" + type + "/" + remain);
+                if (dir.exists()) {
+                    return dir.getAbsolutePath();
+                }
+                // attempt 3
+                dir = new File("/mnt/" + type + "/" + remain);
                 if (dir.exists()) {
                     return dir.getAbsolutePath();
                 }
@@ -103,6 +103,36 @@ public class FileUtil {
                 };
 
                 return getDataColumn(context, contentUri, selection, selectionArgs);
+            } else if (isTermuxDocument(uri)) {
+                String docId = DocumentsContract.getDocumentId(uri);
+
+                // Ref: https://github.com/termux/termux-app/blob/master/app/src/main/java/com/termux/app/TermuxInstaller.java
+                if (docId.startsWith("/")) {
+                    if (docId.contains("/com.termux/files/home/storage/")) {
+                        String remain = docId.replaceFirst("^.*?com\\.termux/files/home/storage/[^/]+/", "");
+                        if (docId.contains("/storage/external-1")) { // TODO: Support external-2 or more
+                            File[] dirs = context.getExternalFilesDirs(remain);
+                            if (dirs != null && dirs.length >= 2) {
+                                docId = dirs[1].getAbsolutePath();
+                            }
+                        } else if (docId.contains("/storage/media-1")) {
+                            File[] dirs = context.getExternalMediaDirs();
+                            if (dirs != null && dirs.length >= 2) {
+                                docId = dirs[1].getAbsolutePath() + "/" + remain;
+                            }
+                        } else if (docId.contains("/storage/downloads")) {
+                            docId = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "/" + remain;
+                        } else if (docId.contains("/storage/shared")) {
+                            docId = Environment.getExternalStorageDirectory() + "/" + remain;
+                        }
+                    }
+                    File dir = new File(docId);
+                    if (dir.exists()) {
+                        return dir.getAbsolutePath();
+                    }
+                    Log.e("Logseq/FileUtil", "Handle termux content url failed: " + docId);
+                }
+                // FIXME: Are there any other cases?
             }
         } else if ("content".equalsIgnoreCase(uri.getScheme())) {
             // Return the remote address
@@ -171,5 +201,9 @@ public class FileUtil {
      */
     public static boolean isGooglePhotosUri(Uri uri) {
         return "com.google.android.apps.photos.content".equals(uri.getAuthority());
+    }
+
+    public static boolean isTermuxDocument(Uri uri) {
+        return "com.termux.documents".equals(uri.getAuthority());
     }
 }
