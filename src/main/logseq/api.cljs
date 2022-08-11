@@ -715,7 +715,7 @@
 
 (defn ^:export custom_query
   [query-string]
-  (let [result (let [query (cljs.reader/read-string query-map-or-string)]
+  (let [result (let [query (cljs.reader/read-string query-string)]
                  (db/custom-query {:query query}))]
     (bean/->js (normalize-keyword-for-json (flatten @result)))))
 
