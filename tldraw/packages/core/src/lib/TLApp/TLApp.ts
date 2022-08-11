@@ -94,10 +94,6 @@ export class TLApp<
     }
     const ownShortcuts: TLShortcut<S, K>[] = [
       {
-        keys: 'mod+shift+g',
-        fn: () => this.api.toggleGrid(),
-      },
-      {
         keys: 'shift+0',
         fn: () => this.api.resetZoom(),
       },
