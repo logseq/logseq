@@ -288,10 +288,12 @@
           (swap! *on-flying-request disj name)
           r))))
 
+;; FIXME: For Android, dir is plain path
+;; For iOS, dir is URL
 (defn- remove-dir-prefix [dir path]
   (let [is-mobile-url? (string/starts-with? dir "file://")
         dir (if is-mobile-url? (gstring/urlDecode dir) dir)
-        r (string/replace path (js/RegExp. (str "^" (gstring/regExpEscape dir))) "")]
+        r (string/replace path (js/RegExp. (str "^" "(file://)?" (gstring/regExpEscape dir))) "")]
     (if (string/starts-with? r "/")
       (string/replace-first r "/" "")
       r)))
@@ -863,6 +865,9 @@
              (->RSAPI nil nil nil)
 
              (mobile-util/native-ios?)
+             (->CapacitorAPI nil nil nil)
+
+             (mobile-util/native-android?)
              (->CapacitorAPI nil nil nil)
 
              :else
@@ -1494,8 +1499,9 @@
                         sync-state--stopped?)
         (when (or (:mtime stat) (= type "unlink"))
           (go
-            (let [files-meta (and (not= "unlink" type)
-                                  (<! (<get-local-files-meta rsapi "" dir [(remove-dir-prefix dir path)])))
+            (let [path (remove-dir-prefix dir path)
+                  files-meta (and (not= "unlink" type)
+                                  (<! (<get-local-files-meta rsapi "" dir [path])))
                   checksum (and (coll? files-meta) (some-> files-meta first :etag))]
               (>! local-changes-chan (->FileChangeEvent type dir path stat checksum)))))))))
 
@@ -2036,7 +2042,8 @@
                    ;; ignore events too early
                    (> (* 1000 mtime) (tc/to-long (t/minus (t/now) (t/minutes 1))))
                    true)
-                 (string/starts-with? (.-dir e) base-path) ; valid path prefix
+                 (or (string/starts-with? (.-dir e) base-path)
+                     (string/starts-with? (str "file://" (.-dir e)) base-path)) ; valid path prefix
                  (not (contains-path? (get-ignored-files) (relative-path e))) ;not ignored
                  (contains-path? (get-monitor-dirs) (relative-path e)) ; dir is monitored
                  ;; download files will also trigger file-change-events, ignore them
