@@ -14,8 +14,10 @@ import android.util.Log;
 
 import java.io.File;
 
+// The following refs
 // https://stackoverflow.com/questions/29713587/how-to-get-the-real-path-with-action-open-document-tree-intent
 // https://gist.github.com/asifmujteba/d89ba9074bc941de1eaa#file-asfurihelper
+// with bug fixes and patches.
 public class FileUtil {
     @TargetApi(Build.VERSION_CODES.KITKAT)
     public static String getPath(final Context context, final Uri uri) {
@@ -29,15 +31,18 @@ public class FileUtil {
                 final String docId = DocumentsContract.getDocumentId(uri);
                 final String[] split = docId.split(":");
                 final String type = split[0];
-
-                if ("primary".equalsIgnoreCase(type)) {
-                    return Environment.getExternalStorageDirectory() + "/" + split[1];
-                }
-
                 // NOTE: It's not a good idea to use storage root as Graph root.
                 String remain = "";
                 if (split.length == 2) {
                     remain = split[1];
+                }
+
+                if ("primary".equalsIgnoreCase(type)) {
+                    return Environment.getExternalStorageDirectory() + "/" + remain;
+                } else if ("home".equalsIgnoreCase(type)) {
+                    return Environment.getExternalStorageDirectory() + "/Documents/" + remain;
+                } else if ("downloads".equalsIgnoreCase(type)) {
+                    return Environment.getExternalStorageDirectory() + "/Download/" + remain; // No 's' here
                 }
 
                 File dir = null;
