@@ -55,6 +55,9 @@
    :pdf/close                    {:binding "alt+x"
                                   :fn      #(state/set-state! :pdf/current nil)}
 
+   :pdf/find                     {:binding "alt+f"
+                                  :fn      pdf-utils/open-finder}
+
    :auto-complete/complete       {:binding "enter"
                                   :fn      ui-handler/auto-complete-complete}
 
@@ -412,7 +415,8 @@
     :shortcut.handler/pdf
     (-> (build-category-map [:pdf/previous-page
                              :pdf/next-page
-                             :pdf/close])
+                             :pdf/close
+                             :pdf/find])
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/auto-complete
@@ -644,6 +648,7 @@
    [:pdf/previous-page
     :pdf/next-page
     :pdf/close
+    :pdf/find
     :command/toggle-favorite
     :command/run
     :command-palette/toggle

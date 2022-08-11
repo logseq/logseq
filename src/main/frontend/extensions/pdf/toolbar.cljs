@@ -139,19 +139,28 @@
 
     (rum/use-effect!
      (fn []
+       (when-let [^js el-viewer (and viewer (js/document.querySelector "#pdf-layout-container"))]
+         (let [handler (fn [^js e]
+                         (when-let [^js target (and (string/blank? (.-value (rum/deref *el-input)))
+                                                    (.-target e))]
+                           (when (and (not= "Search" (.-title target))
+                                      (not (.contains (rum/deref *el-finder) target)))
+                             (close-finder!))))]
+           (.addEventListener el-viewer "click" handler)
+           #(.removeEventListener el-viewer "click" handler))))
+     [viewer])
+
+    (rum/use-effect!
+     (fn []
        (when-let [^js bus (.-eventBus viewer)]
-         (.on bus "updatefindmatchescount" #(do
-                                              ;(prn "==> matches" %)
-                                              (let [matches (bean/->clj (.-matchesCount %))]
-                                                (set-matches! matches)
-                                                (set-find-state! (fn [s] (merge s matches))))))
-         (.on bus "updatefindcontrolstate" #(do
-                                              ;(prn "==> state" %)
-                                              (set-find-state!
-                                               (merge
-                                                {:status (get find-status (.-state %))
-                                                 :query  (.-rawQuery %)}
-                                                (bean/->clj (.-matchesCount %))))))))
+         (.on bus "updatefindmatchescount" #(let [matches (bean/->clj (.-matchesCount %))]
+                                              (set-matches! matches)
+                                              (set-find-state! (fn [s] (merge s matches)))))
+         (.on bus "updatefindcontrolstate" #(set-find-state!
+                                             (merge
+                                              {:status (get find-status (.-state %))
+                                               :query  (.-rawQuery %)}
+                                              (bean/->clj (.-matchesCount %)))))))
      [viewer])
 
     (rum/use-effect!
@@ -168,38 +177,42 @@
        :tab-index -1}
 
       [:div.input-inner.flex.items-center
-       [:input
-        {:placeholder "search"
-         :type        "text"
-         :ref         *el-input
-         :auto-focus  true
-         :value       input
-         :on-change   (fn [^js e]
-                        (set-input! (.-value (.-target e)))
-                        (set-entered-active? false))
+       [:div.input-wrap
+        [:input
+         {:placeholder "search"
+          :type        "text"
+          :ref         *el-input
+          :auto-focus  true
+          :value       input
+          :on-change   (fn [^js e]
+                         (set-input! (.-value (.-target e)))
+                         (set-entered-active? false))
 
-         :on-key-up   (fn [^js e]
-                        (case (.-which e)
-                          13                                ;; enter
-                          (do
-                            (do-find! :again)
-                            (set-entered-active? true))
+          :on-key-up   (fn [^js e]
+                         (case (.-which e)
+                           13                               ;; enter
+                           (do
+                             (do-find! :again)
+                             (set-entered-active? true))
 
-                          27                                ;; esc
-                          (if (string/blank? input)
-                            (close-finder!)
-                            (do
-                              (reset-finder!)
-                              (set-input! "")))
+                           27                               ;; esc
+                           (if (string/blank? input)
+                             (close-finder!)
+                             (do
+                               (reset-finder!)
+                               (set-input! "")))
 
-                          :dune))}]
+                           :dune))}]]
 
        (ui/button (ui/icon "letter-case")
                   :class (string/join " " (util/classnames [{:active case-sensitive?}]))
                   :intent "true" :small? true :on-click #(set-case-sensitive? (not case-sensitive?)))
        (ui/button (ui/icon "chevron-up") :intent "true" :small? true :on-click #(do (do-find! {:type :again :prev? true}) (util/stop %)))
        (ui/button (ui/icon "chevron-down") :intent "true" :small? true :on-click #(do (do-find! {:type :again}) (util/stop %)))
-       (ui/button (ui/icon "x") :intent "true" :small? true :on-click close-finder!)]
+       (ui/button (ui/icon "x") :intent "true" :small? true :on-click close-finder!)
+
+       (when entered-active?
+         (ui/button (ui/icon "arrow-back") :title "Enter to search" :class "icon-enter" :intent "true" :small? true))]
 
       [:div.result-inner
        (when-let [status (and entered-active?

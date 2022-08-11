@@ -181,6 +181,13 @@
     (js-invoke js/window.lsPdfViewer "previousPage")
     (catch js/Error _e nil)))
 
+(defn open-finder
+  []
+  (try
+    (when-let [^js el (js/document.querySelector ".extensions__pdf-toolbar a[title=Search]")]
+      (.click el))
+    (catch js/Error _e nil)))
+
 (comment
  (fix-selection-text-breakline "this is a\ntest paragraph")
  (fix-selection-text-breakline "he is 1\n8 years old")

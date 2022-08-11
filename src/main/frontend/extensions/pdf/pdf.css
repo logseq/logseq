@@ -239,7 +239,7 @@ input::-webkit-inner-spin-button {
 
   &-finder {
     &-wrap.hls-popup-wrap {
-      right: -12px;
+      right: -6px;
       left: unset;
       bottom: unset;
       height: auto;
@@ -250,14 +250,29 @@ input::-webkit-inner-spin-button {
       width: 360px;
 
       > .input-inner {
-        @apply p-2;
+        @apply p-2 relative;
+
+        .input-wrap {
+          @apply mr-1.5 border border-gray-300;
+          border-radius: 4px;
+
+          &:active, &:focus-within {
+            border-color: transparent;
+          }
+        }
 
         input {
-          @apply flex-1 bg-gray-200 border border-gray-300 mr-1.5;
+          @apply flex-1 bg-gray-200;
 
-          padding: 2px 5px;
+          padding: 1px 5px;
           border-radius: 4px;
           color: black;
+          outline: none;
+          border: 2px solid transparent;
+
+          &:focus {
+            border: 2px solid rgba(16, 107, 163, 0.75);
+          }
         }
 
         .ui__button {
@@ -273,8 +288,15 @@ input::-webkit-inner-spin-button {
           &.active .ti {
             color: black !important;
           }
+
+          &.icon-enter {
+            @apply absolute opacity-80;
+
+            right: 145px;
+          }
         }
       }
+
       > .result-inner {
         @apply text-gray-800;
       }
