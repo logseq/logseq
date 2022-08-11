@@ -184,12 +184,12 @@
     page))
 
 (defn create-ref-block!
-  [{:keys [id content page]}]
+  [{:keys [id content page properties]}]
   (when-let [pdf-current (:pdf/current @state/state)]
     (when-let [ref-page (resolve-ref-page pdf-current)]
-      (if-let [ref-block (db-model/get-block-by-uuid id)]
+      (if-let [ref-block (db-model/query-block-by-uuid id)]
         (do
-          (js/console.debug "[existed ref block]" ref-block)
+          (println "[existed ref block]" ref-block)
           ref-block)
         (let [text (:text content)
               wrap-props #(if-let [stamp (:image content)]
@@ -201,6 +201,7 @@
                   :properties  (wrap-props
                                  {:ls-type "annotation"
                                   :hl-page page
+                                  :hl-color (:color properties)
                                   ;; force custom uuid
                                   :id      (str id)})}))))))
 

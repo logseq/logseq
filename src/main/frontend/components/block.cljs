@@ -2051,6 +2051,10 @@
                {:blockid       (str uuid)
                 :data-type (name block-type)
                 :style {:width "100%"}}
+
+                (not (string/blank? (:hl-color properties)))
+                (assoc :data-hl-color (:hl-color properties))
+
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
                                         (block-content-on-mouse-down e block block-id content edit-input-id))))]

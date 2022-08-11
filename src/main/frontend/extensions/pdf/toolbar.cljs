@@ -64,7 +64,7 @@
        (ui/toggle area-dashed? #(set-area-dashed? (not area-dashed?)) true)]
 
       [:div.extensions__pdf-settings-item.toggle-input
-       [:a.is-info.w-full.text-gray-400
+       [:a.is-info.w-full.text-gray-500
         {:title    "Document metadata"
          :on-click #(p/let [ret (pdf-utils/get-meta-data$ _viewer)]
                       (state/set-modal! (make-docinfo-in-modal ret)))}

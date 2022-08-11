@@ -190,6 +190,7 @@ input::-webkit-inner-spin-button {
 
     &-item {
       display: flex;
+      color: rgb(115, 115, 115);
 
       &.theme-picker {
         justify-content: center;
@@ -685,6 +686,47 @@ input::-webkit-inner-spin-button {
       }
     }
   }
+
+  &[data-hl-color=green] {
+    a.prefix-link {
+      &:before {
+        content: "🟢 ";
+      }
+    }
+  }
+
+  &[data-hl-color=purple] {
+    a.prefix-link {
+      &:before {
+        content: "🟣 ";
+      }
+    }
+  }
+
+  &[data-hl-color=blue] {
+    a.prefix-link {
+      &:before {
+        content: "🔵 ";
+      }
+    }
+  }
+
+  &[data-hl-color=yellow] {
+    a.prefix-link {
+      &:before {
+        content: "🟡 ";
+      }
+    }
+  }
+
+  &[data-hl-color=red] {
+    a.prefix-link {
+      &:before {
+        content: "🔴 ";
+      }
+    }
+  }
+
 }
 
 body[data-page] {
