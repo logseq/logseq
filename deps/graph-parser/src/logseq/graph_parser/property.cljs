@@ -15,6 +15,12 @@
        (map #(str (name (key %)) (str colons " ") (val %)))
        (string/join "\n")))
 
+(defn property-value-from-content
+  "Extracts full property value from block content"
+  [property content]
+  (second (re-find (re-pattern (str property colons "\\s+(.*)"))
+                   content)))
+
 (defn properties-ast?
   [block]
   (and

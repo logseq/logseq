@@ -157,6 +157,8 @@
              distinct)
     []))
 
+;; TODO: Use text/parse-property to determine refs rather than maintain this similar
+;; implementation to parse-property
 (defn- get-page-ref-names-from-properties
   [format properties user-config]
   (let [page-refs (->>
@@ -175,7 +177,9 @@
                                  (not (gp-mldoc/link? format v)))
                             (let [v (string/trim v)
                                   result (if (:property-values-allow-links-and-text? user-config)
-                                           (text/extract-page-refs-and-tags v)
+                                           (if (gp-util/wrapped-by-quotes? v)
+                                             []
+                                             (text/extract-page-refs-and-tags v))
                                            (text/split-page-refs-without-brackets v {:un-brackets? false}))]
                               (if (coll? result)
                                 (map text/page-ref-un-brackets! result)

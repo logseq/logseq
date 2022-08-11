@@ -214,7 +214,9 @@
     (parse-long v)))
 
 (def ^:private page-ref-or-tag-re
-  (re-pattern (str "#?" (page-ref/->page-ref-re-str "(.*?)") "|#(\\S+)")))
+  (re-pattern (str "#?" (page-ref/->page-ref-re-str "(.*?)") "|"
+                   ;; Don't capture punctuation at end of a tag
+                   "#([\\S]+[^\\s.!,])")))
 
 (defn extract-page-refs-and-tags
   "Returns set of page-refs and tags in given string or returns string if none

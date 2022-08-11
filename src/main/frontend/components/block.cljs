@@ -63,6 +63,7 @@
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.util.block-ref :as block-ref]
@@ -1803,9 +1804,15 @@
   [:span ", "])
 
 (rum/defc property-cp
-  [config block k v]
-  (let [date (and (= k :date) (date/get-locale-string (str v)))
-        property-pages-enabled? (contains? #{true nil} (:property-pages/enabled? (state/get-config)))]
+  [config block k value]
+  (let [date (and (= k :date) (date/get-locale-string (str value)))
+        user-config (state/get-config)
+        ;; In this mode and when value is a set of refs, display full property text
+        ;; because :block/properties value only contains refs but user wants to see text
+        v (if (and (:property-values-allow-links-and-text? user-config) (coll? value))
+            (gp-property/property-value-from-content (name k) (:block/content block))
+            value)
+        property-pages-enabled? (contains? #{true nil} (:property-pages/enabled? user-config))]
     [:div
      (if property-pages-enabled?
        (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})

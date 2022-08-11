@@ -70,6 +70,32 @@
   (testing "Sort order and persistence of 10 properties"
     (test-property-order 10)))
 
+(defn- quoted-property-values-test
+  [user-config]
+  (let [conn (ldb/start-conn)
+        _ (graph-parser/parse-file conn
+                                   "foo.md"
+                                   "- desc:: \"#foo is not a ref\""
+                                   {:extract-options {:user-config user-config}})
+        block (->> (d/q '[:find (pull ?b [* {:block/refs [*]}])
+                       :in $
+                       :where [?b :block/properties]]
+                     @conn)
+                (map first)
+                first)]
+    (is (= {:desc "\"#foo is not a ref\""}
+           (:block/properties block))
+        "Quoted value is unparsed")
+    (is (= ["desc"]
+           (map :block/original-name (:block/refs block)))
+        "No refs from property value")))
+
+(deftest quoted-property-values
+  (testing "With default config"
+    (quoted-property-values-test {}))
+  (testing "With :property-values-allow-links-and-text config"
+    (quoted-property-values-test {:property-values-allow-links-and-text? true})))
+
 (deftest page-properties-persistence
   (testing "Non-string property values"
     (let [conn (ldb/start-conn)]
@@ -84,21 +110,6 @@
                        @conn)
                   (map (comp :block/properties first))
                   first)))))
-
-  (testing "Other special property cases"
-    (let [conn (ldb/start-conn)]
-      (graph-parser/parse-file conn
-                               "foo.md"
-                               "- desc:: \"true\""
-                               {})
-      (is (= {:desc "\"true\""}
-             (->> (d/q '[:find (pull ?b [*])
-                         :in $
-                         :where [?b :block/properties]]
-                       @conn)
-                  (map (comp :block/properties first))
-                  first))
-          "Quoted values are unparsed")))
 
   (testing "Linkable built-in properties"
     (let [conn (ldb/start-conn)
