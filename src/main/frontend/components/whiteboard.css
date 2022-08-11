@@ -14,7 +14,7 @@
 }
 
 .dashboard-card {
-  @apply rounded flex flex-col gap-1 overflow-hidden font-medium;
+  @apply rounded-lg flex flex-col gap-1 overflow-hidden font-medium;
   height: 300px;
 }
 
