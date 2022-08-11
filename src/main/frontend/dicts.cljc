@@ -1,6 +1,6 @@
 (ns ^:bb-compatible frontend.dicts
-    "Provides dictionary entries for most of the application"
-    #?(:cljs (:require [shadow.resource :as rc])))
+  "Provides dictionary entries for most of the application"
+  #?(:cljs (:require [shadow.resource :as rc])))
 
 (def ^:large-vars/data-var dicts
   {:en {:tutorial/text #?(:cljs (rc/inline "tutorial-en.md")
@@ -739,20 +739,20 @@
         :file/last-modified-at "Laatst aangepast op"
         :file/name "Bestandsnaam"
         :file/no-data "Geen gegevens"
-        
+
         :file-sync/graph-deleted "Het huidige remote grafiek is verwijderd"
         :file-sync/other-user-graph "De huidige lokale grafiek is gebonden aan de remote grafiek van de andere gebruiker. Dus kan de synchronisatie niet starten."
-        
+
         :format/markdown "Markdown"
         :format/org-mode "Org mode"
         :format/preferred-mode "Wat is u favoriete mode?"
-        
+
         :graph/persist "Logseq is de interne status aan het synchroniseren, wacht alstublieft enkele seconden."
         :graph/persist-error "Interne status sync mislukt."
         :graph/save "Opslaan..."
         :graph/save-error "Opslaan mislukt"
         :graph/save-success "Opslaan succesvol"
-        
+
         :help/about "Over Logseq"
         :help/awesome-logseq "Awesome Logseq"
         :help/block-content-autocomplete "Blokinhoud (brontekst, citaten, zoekopdrachten, enz.) autocomplete"
@@ -781,10 +781,10 @@
         :help/start "Aan de slag"
         :help/terms "Voorwaarden"
         :help/working-with-lists "(werken met lijsten)"
-        
+
         :journal/go-to "Ga naar bestanden"
         :journal/multiple-files-with-different-formats "Het lijkt erop dat u meerdere Journaalbestanden (met verschillende formaten) heeft voor dezelfde maand, alstublieft slechts één journaalbestand bewaren voor elke maand."
-        
+
         :left-side-bar/journals "Journalen"
         :left-side-bar/nav-favorites "Favorieten"
         :left-side-bar/nav-recent-pages "Recent"
@@ -792,7 +792,7 @@
         :left-side-bar/new-page "Nieuwe pagina"
 
         :linked-references/filter-search "Zoeken in gelinkte pagina's"
-        
+
         :on-boarding/add-graph "Grafiek toevoegen"
         :on-boarding/demo-graph "Dit is een demo grafiek, wijzigingen worden niet opgeslagen totdat u een lokale map opent."
         :on-boarding/new-graph-desc-1 "Logseq ondersteunt zowel Markdown als Org-mode. U kunt een bestaande map openen of een nieuwe aanmaken op uw apparaat, een map is ook gewoon bekend als een folder. Uw gegevens worden alleen op dit apparaat opgeslagen."
@@ -832,11 +832,11 @@
         :page/unfavorite "Pagina uit favorieten verwijderen"
         :page/updated-at "Bijgewerkt op"
         :page/version-history "Controleer pagina geschiedenis"
-        
+
         :paginates/next "Volgende"
         :paginates/pages "Totaal {1} pagina's"
         :paginates/prev "Vorige"
-        
+
         :pdf/copy-ref "Kopieer ref"
         :pdf/copy-text "Kopieer tekst"
         :pdf/linked-ref "Gekoppelde referenties"
@@ -873,12 +873,12 @@
         :plugin/update "Update"
         :plugin/update-available "Update beschikbaar"
         :plugin/updating "Bijwerken"
-        
+
         :reference/linked "Gelinkte referentie"
         :reference/unlinked-ref "Ongelinkte verwijzingen"
-        
+
         :repo/download-zip "Download alle bestanden als een zip"
-        
+
         :right-side-bar/all-pages "Alle pagina's"
         :right-side-bar/block-ref "Blok verwijzingen"
         :right-side-bar/contents "Inhoud"
@@ -902,7 +902,7 @@
         :select.graph/add-graph "Ja, voeg nog een grafiek toe"
         :select.graph/empty-placeholder-description "Geen overeenkomende grafieken. Wilt u er een toevoegen?"
         :select.graph/prompt "Selecteer een grafiek"
-        
+
         :settings-page/auto-updater "Auto updater"
         :settings-page/clear "Verwijder"
         :settings-page/clear-cache "Cache wissen"

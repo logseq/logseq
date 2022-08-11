@@ -1,10 +1,10 @@
 (ns ^:bb-compatible frontend.modules.shortcut.dicts
-    "Provides dictionary entries for shortcuts")
+  "Provides dictionary entries for shortcuts")
 
 (defn- decorate-namespace [k]
-       (let [n (name k)
-             ns (namespace k)]
-            (keyword (str "command." ns) n)))
+  (let [n (name k)
+        ns (namespace k)]
+    (keyword (str "command." ns) n)))
 
 (def ^:large-vars/data-var all-default-keyboard-shortcuts
   {:date-picker/complete         "Date picker: Choose selected day"
@@ -1599,4 +1599,3 @@
         :command.git/commit                              "Wykonaj GIT COMMIT z wiadomością"
         }
 })
-
