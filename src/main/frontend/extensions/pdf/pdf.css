@@ -267,6 +267,11 @@ input::-webkit-inner-spin-button {
 
           .ti {
             font-weight: bold;
+            color: #989898;
+          }
+
+          &.active .ti {
+            color: black !important;
           }
         }
       }
@@ -507,7 +512,7 @@ input::-webkit-inner-spin-button {
     border-radius: 4px;
     width: 320px;
     overflow-y: auto;
-    background-color: #e9e9e9;
+    background-color: #e3e7e8;
     outline: none;
     box-shadow: 0 2px 4px 0 rgba(134, 134, 134, 0.59);
 

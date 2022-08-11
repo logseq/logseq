@@ -109,7 +109,7 @@
   (let [*el-finder    (rum/use-ref nil)
         *el-input     (rum/use-ref nil)
         ^js bus       (.-eventBus viewer)
-        [case-sensitive?, set-case-sensitive?] (rum/use-state false)
+        [case-sensitive?, set-case-sensitive?] (rum/use-state nil)
         [input, set-input!] (rum/use-state "")
         [matches, set-matches!] (rum/use-state {:current 0 :total 0})
         [find-state, set-find-state!] (rum/use-state {:status nil :current 0 :total 0 :query ""})
@@ -154,6 +154,12 @@
                                                 (bean/->clj (.-matchesCount %))))))))
      [viewer])
 
+    (rum/use-effect!
+     (fn []
+       (when-not (nil? case-sensitive?)
+         (do-find! :casesensitivitychange)))
+     [case-sensitive?])
+
     [:div.extensions__pdf-finder-wrap.hls-popup-wrap.visible
      {:on-click #()}
 
@@ -188,20 +194,23 @@
 
                           :dune))}]
 
-       (ui/button (ui/icon "letter-case") :intent "true" :small? true :on-click close-finder!)
+       (ui/button (ui/icon "letter-case")
+                  :class (string/join " " (util/classnames [{:active case-sensitive?}]))
+                  :intent "true" :small? true :on-click #(set-case-sensitive? (not case-sensitive?)))
        (ui/button (ui/icon "chevron-up") :intent "true" :small? true :on-click #(do (do-find! {:type :again :prev? true}) (util/stop %)))
-       (ui/button (ui/icon "chevron-down") :intent "true" :small? true :on-click #(do (do-find! {:type :again}) (util/stop %)))]
+       (ui/button (ui/icon "chevron-down") :intent "true" :small? true :on-click #(do (do-find! {:type :again}) (util/stop %)))
+       (ui/button (ui/icon "x") :intent "true" :small? true :on-click close-finder!)]
 
       [:div.result-inner
        (when-let [status (and entered-active?
                               (not (string/blank? input))
                               (:status find-state))]
          (if-not (= ::not-found status)
-           [:div.flex.px-3.py-3.text-xs.opacity-80
+           [:div.flex.px-3.py-3.text-xs.opacity-90
             (apply max (map :current [find-state matches])) " of "
             (:total find-state)
             (str " matches (\"" (:query find-state) "\")")]
-           [:div.px-3.py-3.text-xs.opacity-80.text-red-500 "Not found."])
+           [:div.px-3.py-3.text-xs.opacity-80.text-red-600 "Not found."])
          )
        ]]]))
 
