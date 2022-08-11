@@ -13,19 +13,13 @@
 }
 
 .logseq-tldraw-wrapper {
-  width: 100%;
-  height: 100%;
-  position: relative;
-  display: flex;
-  flex-direction: column;
+  @apply flex flex-col w-full h-full relative;
 }
 
 .tl-toolbar {
-  position: absolute;
-  top: 0;
-  width: 100%;
+  @apply absolute top-0 w-full flex;
+
   grid-row: 1;
-  display: flex;
   align-items: center;
   padding: 8px;
   color: black;
@@ -37,33 +31,27 @@
 }
 
 .tl-action-bar {
-  position: absolute;
-  bottom: 0;
+  @apply absolute bottom-0 flex border-0;
+
   border-radius: 12px 12px 0 0;
   left: 53px;
-  display: flex;
   align-items: center;
   gap: 12px;
   padding: 8px;
   color: black;
-  border: none;
   z-index: 100000;
   user-select: none;
   background: var(--ls-primary-background-color);
   box-shadow: var(--shadow-medium);
 
   > button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    @apply text-sm rounded border-0 inline-flex items-center justify-center;
+
     height: 32px;
     padding: 0 8px;
-    border-radius: 4px;
     color: var(--ls-primary-text-color);
-    font-size: 14px;
     font-family: var(--ls-font-family);
     background: none;
-    border: none;
     cursor: pointer;
     opacity: 1;
     white-space: nowrap;
@@ -113,6 +101,8 @@
 }
 
 .tl-contextbar {
+  @apply relative flex text-sm;
+
   pointer-events: all;
   position: relative;
   background-color: #fff;
@@ -120,10 +110,8 @@
   padding: 8px 12px;
   border-radius: 8px;
   white-space: nowrap;
-  display: flex;
   gap: 12px;
   align-items: stretch;
-  font-size: 14px;
   will-change: transform, contents;
   box-shadow: var(--shadow-medium);
   z-index: 1000;
@@ -200,14 +188,11 @@
 }
 
 .tl-statusbar {
-  position: absolute;
+  @apply absolute flex items-center w-full bottom-0;
+
   font-family: monospace;
   font-size: 10px;
-  bottom: 0;
   grid-row: 3;
-  width: 100%;
-  display: flex;
-  align-items: center;
   padding: 8px;
   color: black;
   z-index: 100000;
@@ -219,13 +204,9 @@
 }
 
 .tl-primary-tools {
-  display: flex;
-  position: absolute;
+  @apply absolute h-full top-0 flex items-center justify-center;
+
   right: 30px;
-  top: 0;
-  height: 100%;
-  align-items: center;
-  justify-content: center;
   pointer-events: none;
   gap: 8px;
   z-index: 10000;
@@ -235,17 +216,12 @@
   padding: 8px;
 
   .tl-button {
-    position: relative;
+    @apply relative flex items-center justify-center text-base rounded border-0;
+
     height: 28px;
     width: 28px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
     font-family: var(--ls-font-family);
     background: none;
-    border: none;
     cursor: pointer;
     color: var(--ls-primary-text-color);
 
@@ -261,7 +237,8 @@
 }
 
 .tl-tools-floating-panel {
-  display: flex;
+  @apply flex;
+
   flex-flow: column;
   border-radius: 8px;
   overflow: hidden;
@@ -273,29 +250,26 @@
 }
 
 .floating-panel[data-tool-locked='true'] > .tl-button[data-selected='true']::after {
+  @apply block absolute;
+
   content: '';
-  display: block;
   height: 6px;
   width: 6px;
   border: 2px solid var(--color-selectedContrast);
   background-color: var(--color-selectedFill);
-  position: absolute;
   bottom: -4px;
   left: calc(50% - 5px);
   border-radius: 100%;
 }
 
 .tl-text-shape-wrapper {
-  position: absolute;
+  @apply absolute p-0 m-0 h-full w-full;
+
   white-space: pre-wrap;
   overflow-wrap: break-word;
   border: 1px solid transparent;
-  margin: 0;
-  padding: 0;
   z-index: 9999;
   user-select: none;
-  width: 100%;
-  height: 100%;
   min-height: 1;
   min-width: 1;
   line-height: 1;
@@ -309,13 +283,9 @@
 }
 
 .tl-text-shape-input {
-  position: absolute;
-  top: 0;
-  left: 0;
+  @apply absolute inset-0 inline-block border-0 overflow-hidden;
+
   z-index: 1;
-  width: 100%;
-  height: 100%;
-  border: none;
   resize: none;
   padding: inherit;
   font-family: inherit;
@@ -330,9 +300,7 @@
   white-space: inherit;
   overflow-wrap: inherit;
   font-weight: inherit;
-  overflow: hidden;
   backface-visibility: hidden;
-  display: inline-block;
   pointer-events: all;
   user-select: text;
   -webkit-user-select: text;
@@ -348,14 +316,8 @@
 }
 
 .tl-text-label-wrapper {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  @apply absolute inset-0 flex items-center justify-center;
+
   pointer-events: none;
   user-select: none;
   font-family: var(--ls-font-family);
@@ -378,12 +340,9 @@
 }
 
 .tl-text-label-textarea {
-  position: absolute;
-  top: 0;
-  left: 0;
+  @apply absolute inset-0;
+
   z-index: 1;
-  width: 100%;
-  height: 100%;
   border: none;
   padding: 4px;
   resize: none;
@@ -425,7 +384,8 @@
 }
 
 .tl-preview-minimap-toggle {
-  position: absolute;
+  @apply absolute flex items-center justify-center text-sm;
+
   top: 60px;
   right: 50px;
   z-index: 1;
@@ -435,10 +395,6 @@
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
   background: white;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
 
   &[data-active='true'] {
     background: #eee;
@@ -455,47 +411,41 @@
 }
 
 .tl-quick-search-indicator {
+  @apply absolute flex items-center	justify-center;
+
   background-color: var(--ls-secondary-background-color);
   font-size: 22px;
-  position: absolute;
   right: calc(100% + 12px);
   height: 34px;
   width: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   border-radius: 50%;
   top: calc(50% - 17px);
 }
 
 .tl-quick-search-input-container {
-  display: flex;
-  align-items: center;
-  font-size: 16px;
+  @apply flex items-center rounded-lg text-base;
+
   background-color: var(--ls-secondary-background-color);
   padding: 6px 16px;
-  border-radius: 8px;
   box-shadow: var(--shadow-small);
 }
 
 .tl-quick-search-input-filter {
-  display: flex;
-  align-items: center;
+  @apply flex items-center text-sm;
+
   background: rgba(0, 0, 0, 0.1);
   padding: 2px 8px;
   white-space: nowrap;
   gap: 8px;
   border-radius: 5px;
   margin-right: 8px;
-  font-size: 14px;
 }
 
 .tl-quick-search-input-filter-remove {
+  @apply flex items-center justify-center;
+
   width: 16px;
   height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   border-radius: 50%;
   background-color: var(--ls-block-bullet-border-color);
 
@@ -513,11 +463,8 @@
 }
 
 .tl-quick-search-input {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  @apply absolute inset-0;
+
   outline: none;
 }
 
@@ -528,28 +475,25 @@
 }
 
 .tl-quick-search-options {
-  position: absolute;
+  @apply absolute left-0 w-full flex;
+
   top: calc(100% + 12px);
-  left: 0;
   background-color: var(--ls-primary-background-color);
   max-height: 300px;
   min-width: 460px;
   box-shadow: var(--shadow-large);
-  width: 100%;
   overflow-y: auto;
-  display: flex;
   flex-direction: column;
   border-radius: 8px;
   overscroll-behavior: none;
 }
 
 .tl-quick-search-option {
-  display: flex;
+  @apply flex text-sm;
+
   flex-flow: column;
   padding: 8px 16px;
   cursor: pointer;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
   gap: 0.5em;
 
   &[data-focused=true] {
@@ -576,27 +520,25 @@
 }
 
 .tl-logseq-portal-container {
+  @apply flex flex-col rounded-lg;
+
   width: calc(100% - 2px);
   height: calc(100% - 2px);
   transform: translate(1px, 1px);
   overscroll-behavior: none;
-  display: flex;
-  flex-direction: column;
   opacity: 1;
-  border-radius: 8px;
 }
 
 .tl-logseq-portal-header {
+  @apply flex items-center w-full;
+
   height: 40px;
-  width: 100%;
   flex-shrink: 0;
   background: transparent;
-  display: flex;
   color: var(--ls-title-text-color);
   border-top-left-radius: 8px;
   border-top-right-radius: 8px;
   padding: 0 1rem;
-  align-items: center;
   gap: 0.5em;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -608,39 +550,33 @@
 }
 
 .tl-type-tag {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  @apply flex items-center justify-center rounded text-base;
+
   flex-shrink: 0;
-  font-size: 16px;
   width: 20px;
   height: 20px;
   line-height: 1;
   color: #fff;
   background: rgba(0, 0, 0, 0.5);
-  border-radius: 4px;
   order: 0;
   flex-grow: 0;
 }
 
 .tl-html-container > iframe {
-  height: 100% !important;
-  width: 100% !important;
+  @apply h-full w-full !important;
   margin: 0;
 }
 
 .tl-logseq-cp-container {
-  width: 100%;
-  border-radius: 8px;
+  @apply h-full w-full rounded-lg;
+
   overscroll-behavior: none;
-  height: 100%;
   flex: 1 1 0%;
   cursor: default;
 }
 
 .tl-highlighted {
-  padding: 0;
-  border-radius: 0;
+  @apply p-0 rounded-none;
 }
 
 .logseq-img-icon {
@@ -651,11 +587,7 @@
 }
 
 .tl-target-not-found {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  width: 100%;
+  @apply flex h-full w-full items-center justify-center;
 }
 
 html[data-theme='light'] {
