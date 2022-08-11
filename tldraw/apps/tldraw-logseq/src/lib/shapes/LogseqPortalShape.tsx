@@ -308,6 +308,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           }
         })
       }
+      return uuid
     }, [])
 
     const optionsWrapperRef = React.useRef<HTMLDivElement>(null)
@@ -328,7 +329,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     type Option = {
       actionIcon: 'search' | 'circle-plus'
-      onChosen: () => void
+      onChosen: () => boolean // return true if the action was handled
       element: React.ReactNode
     }
 
@@ -345,7 +346,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       options.push({
         actionIcon: 'circle-plus',
         onChosen: () => {
-          onAddBlock(q)
+          return !!onAddBlock(q)
         },
         element: (
           <div className="tl-quick-search-option-row">
@@ -368,6 +369,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           actionIcon: 'circle-plus',
           onChosen: () => {
             finishCreating(q)
+            return true
           },
           element: (
             <div className="tl-quick-search-option-row">
@@ -386,6 +388,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             actionIcon: 'search',
             onChosen: () => {
               setSearchFilter('B')
+              return true
             },
             element: (
               <div className="tl-quick-search-option-row">
@@ -398,6 +401,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             actionIcon: 'search',
             onChosen: () => {
               setSearchFilter('P')
+              return true
             },
             element: (
               <div className="tl-quick-search-option-row">
@@ -417,6 +421,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               actionIcon: 'search' as 'search',
               onChosen: () => {
                 finishCreating(page)
+                return true
               },
               element: (
                 <div className="tl-quick-search-option-row">
@@ -441,7 +446,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 onChosen: () => {
                   if (block) {
                     finishCreating(uuid)
+                    return true
                   }
+                  return false
                 },
                 element: block ? (
                   <>
@@ -552,7 +559,14 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                   setPrefixIcon(actionIcon)
                   setFocusedOptionIdx(index)
                 }}
-                onClick={onChosen}
+                // we have to use mousedown && stop propagation, otherwise some 
+                // default behavior of clicking the rendered elements will happen
+                onMouseDown={e => {
+                  if (onChosen()) {
+                    e.stopPropagation()
+                    e.preventDefault()
+                  }
+                }}
               >
                 {element}
               </div>
