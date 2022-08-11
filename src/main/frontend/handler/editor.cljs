@@ -2439,7 +2439,10 @@
       (state/exit-editing-and-set-selected-blocks! [block]))))
 
 (defn- select-up-down [direction]
-  (let [selected (first (state/get-selection-blocks))
+  (let [selected-blocks (state/get-selection-blocks)
+        selected (case direction
+                   :up (first selected-blocks)
+                   :down (last selected-blocks))
         f (case direction
             :up util/get-prev-block-non-collapsed
             :down util/get-next-block-non-collapsed)
@@ -3068,7 +3071,7 @@
         (state/editing?)
         (keydown-up-down-handler direction)
 
-        (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
+        (state/selection?)
         (select-up-down direction)
 
         :else
@@ -3097,20 +3100,24 @@
 
 (defn open-selected-block!
   [direction e]
-  (when-let [block-id (some-> (state/get-selection-blocks)
-                              first
-                              (dom/attr "blockid")
-                              uuid)]
-    (util/stop e)
-    (let [block    {:block/uuid block-id}
-          block-id (-> (state/get-selection-blocks)
-                       first
-                       (gobj/get "id")
-                       (string/replace "ls-block" "edit-block"))
-          left?    (= direction :left)]
-      (edit-block! block
-                   (if left? 0 :max)
-                   block-id))))
+  (let [selected-blocks (state/get-selection-blocks)
+        f (case direction
+            :left first
+            :right last)]
+    (when-let [block-id (some-> selected-blocks
+                                f
+                                (dom/attr "blockid")
+                                uuid)]
+      (util/stop e)
+      (let [block    {:block/uuid block-id}
+            block-id (-> selected-blocks
+                         f
+                         (gobj/get "id")
+                         (string/replace "ls-block" "edit-block"))
+            left?    (= direction :left)]
+        (edit-block! block
+                    (if left? 0 :max)
+                    block-id)))))
 
 (defn shortcut-left-right [direction]
   (fn [e]
@@ -3121,7 +3128,7 @@
           (util/stop e)
           (keydown-arrow-handler direction))
 
-        (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
+        (state/selection?)
         (do
           (util/stop e)
           (open-selected-block! direction e))
@@ -3183,14 +3190,12 @@
               :or {semantic? false}}]
    (when block-id
      (if-let [block (db-model/query-block-by-uuid block-id)]
-       (and
-        (not (util/collapsed? block))
-        (or (db-model/has-children? block-id)
-            (and
-             (:outliner/block-title-collapse-enabled? (state/get-config))
-             (block-with-title? (:block/format block)
-                                (:block/content block)
-                                semantic?))))
+       (or (db-model/has-children? block-id)
+           (and
+            (:outliner/block-title-collapse-enabled? (state/get-config))
+            (block-with-title? (:block/format block)
+                               (:block/content block)
+                               semantic?)))
        false))))
 
 (defn all-blocks-with-level
@@ -3277,6 +3282,8 @@
                 (let [block {:block/uuid block-id
                              :block/collapsed? value}]
                   (outliner-core/save-block! block)))))))
+      (doseq [block-id block-ids]
+        (state/set-collapsed-block! block-id value))
       (let [block-id (first block-ids)
             input-pos (or (state/get-edit-pos) :max)]
         ;; update editing input content
@@ -3289,13 +3296,11 @@
 (defn collapse-block! [block-id]
   (when (collapsable? block-id)
     (when-not (skip-collapsing-in-db?)
-      (set-blocks-collapsed! [block-id] true)))
-  (state/set-collapsed-block! block-id true))
+      (set-blocks-collapsed! [block-id] true))))
 
 (defn expand-block! [block-id]
   (when-not (skip-collapsing-in-db?)
-    (set-blocks-collapsed! [block-id] false)
-    (state/set-collapsed-block! block-id false)))
+    (set-blocks-collapsed! [block-id] false)))
 
 (defn expand!
   ([e] (expand! e false))
@@ -3368,12 +3373,15 @@
 
 (defn collapse-all!
   ([]
-   (collapse-all! nil))
-  ([block-id]
+   (collapse-all! nil {}))
+  ([block-id {:keys [collapse-self?]
+              :or {collapse-self? true}}]
    (let [blocks (all-blocks-with-level {:incremental? false
                                         :expanded? true
                                         :root-block block-id})
-         block-ids (map :block/uuid blocks)]
+         block-ids (cond->> (mapv :block/uuid blocks)
+                     (not collapse-self?)
+                     (remove #{block-id}))]
      (set-blocks-collapsed! block-ids true))))
 
 (defn expand-all!
@@ -3392,6 +3400,14 @@
     (if all-expanded?
       (collapse-all!)
       (expand-all!))))
+
+(defn toggle-open-block-children! [block-id]
+  (let [all-expanded? (empty? (all-blocks-with-level {:incremental? false
+                                                      :collapse? true
+                                                      :root-block block-id}))]
+    (if all-expanded?
+      (collapse-all! block-id {:collapse-self? false})
+      (expand-all! block-id))))
 
 (defn select-all-blocks!
   []
@@ -3479,8 +3495,7 @@
   (or
    (and
     (or (:ref? config) (:custom-query? config))
-    (>= (inc (:block/level block))
-        (state/get-ref-open-blocks-level))
+    (>= (:block/level block) (state/get-ref-open-blocks-level))
     ;; has children
     (first (:block/_parent (db/entity (:db/id block)))))
    (util/collapsed? block)))
