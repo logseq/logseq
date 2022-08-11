@@ -3133,13 +3133,16 @@
 (defn shortcut-left-right [direction]
   (fn [e]
     (when-not (auto-complete?)
-      (util/stop e)
       (cond
         (state/editing?)
-        (keydown-arrow-handler direction)
+        (do
+          (util/stop e)
+          (keydown-arrow-handler direction))
 
         (state/selection?)
-        (open-selected-block! direction e)
+        (do
+          (util/stop e)
+          (open-selected-block! direction e))
 
         :else
         nil))))
@@ -3198,14 +3201,12 @@
               :or {semantic? false}}]
    (when block-id
      (if-let [block (db-model/query-block-by-uuid block-id)]
-       (and
-        (not (util/collapsed? block))
-        (or (db-model/has-children? block-id)
-            (and
-             (:outliner/block-title-collapse-enabled? (state/get-config))
-             (block-with-title? (:block/format block)
-                                (:block/content block)
-                                semantic?))))
+       (or (db-model/has-children? block-id)
+           (and
+            (:outliner/block-title-collapse-enabled? (state/get-config))
+            (block-with-title? (:block/format block)
+                               (:block/content block)
+                               semantic?)))
        false))))
 
 (defn all-blocks-with-level
@@ -3284,14 +3285,16 @@
         value (boolean value)]
     (when repo
       (outliner-tx/transact!
-       {:outliner-op :collapse-expand-blocks}
-       (doseq [block-id block-ids]
-         (when-let [block (db/entity [:block/uuid block-id])]
-           (let [current-value (:block/collapsed? block)]
-             (when-not (= current-value value)
-               (let [block {:block/uuid block-id
-                            :block/collapsed? value}]
-                 (outliner-core/save-block! block)))))))
+        {:outliner-op :collapse-expand-blocks}
+        (doseq [block-id block-ids]
+          (when-let [block (db/entity [:block/uuid block-id])]
+            (let [current-value (:block/collapsed? block)]
+              (when-not (= current-value value)
+                (let [block {:block/uuid block-id
+                             :block/collapsed? value}]
+                  (outliner-core/save-block! block)))))))
+      (doseq [block-id block-ids]
+        (state/set-collapsed-block! block-id value))
       (let [block-id (first block-ids)
             input-pos (or (state/get-edit-pos) :max)]
         ;; update editing input content
@@ -3304,13 +3307,11 @@
 (defn collapse-block! [block-id]
   (when (collapsable? block-id)
     (when-not (skip-collapsing-in-db?)
-      (set-blocks-collapsed! [block-id] true)))
-  (state/set-collapsed-block! block-id true))
+      (set-blocks-collapsed! [block-id] true))))
 
 (defn expand-block! [block-id]
   (when-not (skip-collapsing-in-db?)
-    (set-blocks-collapsed! [block-id] false)
-    (state/set-collapsed-block! block-id false)))
+    (set-blocks-collapsed! [block-id] false)))
 
 (defn expand!
   ([e] (expand! e false))
@@ -3383,12 +3384,15 @@
 
 (defn collapse-all!
   ([]
-   (collapse-all! nil))
-  ([block-id]
+   (collapse-all! nil {}))
+  ([block-id {:keys [collapse-self?]
+              :or {collapse-self? true}}]
    (let [blocks (all-blocks-with-level {:incremental? false
                                         :expanded? true
                                         :root-block block-id})
-         block-ids (map :block/uuid blocks)]
+         block-ids (cond->> (mapv :block/uuid blocks)
+                     (not collapse-self?)
+                     (remove #{block-id}))]
      (set-blocks-collapsed! block-ids true))))
 
 (defn expand-all!
@@ -3407,6 +3411,14 @@
     (if all-expanded?
       (collapse-all!)
       (expand-all!))))
+
+(defn toggle-open-block-children! [block-id]
+  (let [all-expanded? (empty? (all-blocks-with-level {:incremental? false
+                                                      :collapse? true
+                                                      :root-block block-id}))]
+    (if all-expanded?
+      (collapse-all! block-id {:collapse-self? false})
+      (expand-all! block-id))))
 
 (defn select-all-blocks!
   []
@@ -3494,8 +3506,7 @@
   (or
    (and
     (or (:ref? config) (:custom-query? config))
-    (>= (inc (:block/level block))
-        (state/get-ref-open-blocks-level))
+    (>= (:block/level block) (state/get-ref-open-blocks-level))
     ;; has children
     (first (:block/_parent (db/entity (:db/id block)))))
    (util/collapsed? block)))

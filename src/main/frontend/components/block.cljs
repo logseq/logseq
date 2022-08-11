@@ -22,8 +22,8 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
-            [frontend.db.react :as react]
             [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
@@ -64,8 +64,8 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -571,7 +571,10 @@
           inner (page-inner config
                             page-name-in-block
                             page-name
-                            redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?)]
+                            redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?)
+          inner (if whiteboard-page?
+                  [:<> [:span.text-gray-500 (ui/icon "whiteboard") " "] inner]
+                  inner)]
       (cond
         (:breadcrumb? config)
         (or (:block/original-name page)
@@ -635,20 +638,17 @@
 (rum/defc page-reference < rum/reactive
   [html-export? s {:keys [nested-link? block-uuid id] :as config} label]
   (let [show-brackets? (state/show-brackets?)
-        contents-page? (= "contents" (string/lower-case (str id)))
-        whiteboard? (model/whiteboard-page? s)]
+        contents-page? (= "contents" (string/lower-case (str id)))]
     (if (string/ends-with? s ".excalidraw")
       [:div.draw {:on-click (fn [e]
                               (.stopPropagation e))}
        (excalidraw s block-uuid)]
       [:span.page-reference
-       {:data-ref s
-        :class (str (if whiteboard? " whiteboard-page-ref" ""))}
+       {:data-ref s}
        (when (and (or show-brackets? nested-link?)
                   (not html-export?)
                   (not contents-page?))
          [:span.text-gray-500.bracket page-ref/left-brackets])
-       (when whiteboard? [:span.text-gray-500.tie.tie-whiteboard " "])
        (let [s (string/trim s)]
          (page-cp (assoc config
                          :label (mldoc/plain->text label)
@@ -1533,16 +1533,8 @@
       (util/stop e))
     (route-handler/redirect-to-page! uuid)))
 
-(defn- toggle-block-children
-  [_e children]
-  (let [block-ids (map :block/uuid children)]
-    (dorun
-     (if (some editor-handler/collapsable? block-ids)
-       (map editor-handler/collapse-block! block-ids)
-       (map editor-handler/expand-block! block-ids)))))
-
 (rum/defc block-children < rum/reactive
-  [config children collapsed?]
+  [config block children collapsed?]
   (let [ref? (:ref? config)
         query? (:custom-query? config)
         children (when (coll? children)
@@ -1552,7 +1544,9 @@
                (not collapsed?))
       (let [doc-mode? (state/sub :document/mode?)]
         [:div.block-children-container.flex {:style {:margin-left (if doc-mode? 18 29)}}
-         [:div.block-children-left-border {:on-click (fn [event] (toggle-block-children event children))}]
+         [:div.block-children-left-border
+          {:on-click (fn [_]
+                       (editor-handler/toggle-open-block-children! (:block/uuid block)))}]
          [:div.block-children.w-full {:style    {:display     (if collapsed? "none" "")}}
           (for [child children]
             (when (map? child)
@@ -2092,10 +2086,6 @@
           (seq title)
           (build-block-title config block)
 
-          ;; (= block-type :whiteboard-shape)
-          ;; [:<> (ui/icon "whiteboard-element")
-          ;;  (inline config (first (:block/title block)))]
-
           :else
           nil)]
 
@@ -2473,7 +2463,7 @@
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
-        block (if navigated?
+        block (if (or navigated? custom-query?)
                 (let [block (db/pull [:block/uuid navigating-block])
                       blocks (db/get-paginated-blocks repo (:db/id block)
                                                       {:scoped-block-id (:db/id block)})
@@ -2578,7 +2568,7 @@
       (when @*show-right-menu?
         (block-right-menu config block edit?))]
 
-     (block-children config children collapsed?)
+     (block-children config block children collapsed?)
 
      (dnd-separator-wrapper block block-id slide? false false)]))
 
@@ -2594,7 +2584,7 @@
 
                (or (:ref? config) (:custom-query? config))
                (state/set-collapsed-block! block-id
-                                           (editor-handler/block-default-collapsed? block config))
+                                           (boolean (editor-handler/block-default-collapsed? block config)))
 
                :else
                nil)
