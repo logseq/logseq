@@ -1533,16 +1533,8 @@
       (util/stop e))
     (route-handler/redirect-to-page! uuid)))
 
-(defn- toggle-block-children
-  [_e children]
-  (let [block-ids (map :block/uuid children)]
-    (dorun
-     (if (some editor-handler/collapsable? block-ids)
-       (map editor-handler/collapse-block! block-ids)
-       (map editor-handler/expand-block! block-ids)))))
-
 (rum/defc block-children < rum/reactive
-  [config children collapsed?]
+  [config block children collapsed?]
   (let [ref? (:ref? config)
         query? (:custom-query? config)
         children (when (coll? children)
@@ -1552,7 +1544,9 @@
                (not collapsed?))
       (let [doc-mode? (state/sub :document/mode?)]
         [:div.block-children-container.flex {:style {:margin-left (if doc-mode? 18 29)}}
-         [:div.block-children-left-border {:on-click (fn [event] (toggle-block-children event children))}]
+         [:div.block-children-left-border
+          {:on-click (fn [_]
+                       (editor-handler/toggle-open-block-children! (:block/uuid block)))}]
          [:div.block-children.w-full {:style    {:display     (if collapsed? "none" "")}}
           (for [child children]
             (when (map? child)
@@ -2469,7 +2463,7 @@
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
-        block (if navigated?
+        block (if (or navigated? custom-query?)
                 (let [block (db/pull [:block/uuid navigating-block])
                       blocks (db/get-paginated-blocks repo (:db/id block)
                                                       {:scoped-block-id (:db/id block)})
@@ -2574,7 +2568,7 @@
       (when @*show-right-menu?
         (block-right-menu config block edit?))]
 
-     (block-children config children collapsed?)
+     (block-children config block children collapsed?)
 
      (dnd-separator-wrapper block block-id slide? false false)]))
 
@@ -2590,7 +2584,7 @@
 
                (or (:ref? config) (:custom-query? config))
                (state/set-collapsed-block! block-id
-                                           (editor-handler/block-default-collapsed? block config))
+                                           (boolean (editor-handler/block-default-collapsed? block config)))
 
                :else
                nil)
