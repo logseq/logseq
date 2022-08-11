@@ -22,8 +22,8 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
-            [frontend.db.react :as react]
             [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
@@ -64,8 +64,8 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.util.page-ref :as page-ref]
             [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -571,7 +571,10 @@
           inner (page-inner config
                             page-name-in-block
                             page-name
-                            redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?)]
+                            redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?)
+          inner (if whiteboard-page?
+                  [:<> [:span.text-gray-500 (ui/icon "whiteboard") " "] inner]
+                  inner)]
       (cond
         (:breadcrumb? config)
         (or (:block/original-name page)
@@ -635,20 +638,17 @@
 (rum/defc page-reference < rum/reactive
   [html-export? s {:keys [nested-link? block-uuid id] :as config} label]
   (let [show-brackets? (state/show-brackets?)
-        contents-page? (= "contents" (string/lower-case (str id)))
-        whiteboard? (model/whiteboard-page? s)]
+        contents-page? (= "contents" (string/lower-case (str id)))]
     (if (string/ends-with? s ".excalidraw")
       [:div.draw {:on-click (fn [e]
                               (.stopPropagation e))}
        (excalidraw s block-uuid)]
       [:span.page-reference
-       {:data-ref s
-        :class (str (if whiteboard? " whiteboard-page-ref" ""))}
+       {:data-ref s}
        (when (and (or show-brackets? nested-link?)
                   (not html-export?)
                   (not contents-page?))
          [:span.text-gray-500.bracket page-ref/left-brackets])
-       (when whiteboard? [:span.text-gray-500.tie.tie-whiteboard " "])
        (let [s (string/trim s)]
          (page-cp (assoc config
                          :label (mldoc/plain->text label)
@@ -2091,10 +2091,6 @@
         (cond
           (seq title)
           (build-block-title config block)
-
-          ;; (= block-type :whiteboard-shape)
-          ;; [:<> (ui/icon "whiteboard-element")
-          ;;  (inline config (first (:block/title block)))]
 
           :else
           nil)]
