@@ -145,6 +145,7 @@
                  :resume
                  :exception-decrypt-failed
                  :remote->local-full-sync-failed
+                 :local->remote-full-sync-failed
                  })
 
 (s/def ::sync-event (s/keys :req-un [::event ::data]))
@@ -915,7 +916,8 @@
                                      :pause
                                      :resume
                                      :exception-decrypt-failed
-                                     :remote->local-full-sync-failed]))
+                                     :remote->local-full-sync-failed
+                                     :local->remote-full-sync-failed]))
   ([topics]
    (util/drain-chan debug-print-sync-events-loop-stop-chan)
    (let [topic&chs (map (juxt identity #(chan 10)) topics)
@@ -2375,7 +2377,9 @@
           (.schedule this ::stop nil nil)
           unknown
           (do
-            (debug/pprint "full-sync" unknown)
+            (put-sync-event! {:event :local->remote-full-sync-failed
+                              :data {:graph-uuid graph-uuid
+                                     :epoch (tc/to-epoch (t/now))}})
             (.schedule this ::idle nil nil))))))
 
   (remote->local-full-sync [this _next-state]
@@ -2604,7 +2608,7 @@
                   (offer! remote->local-full-sync-chan true)
                   (offer! full-sync-chan true))))))))))
 
-;;; some add-watches
+;;; ### some add-watches
 
 ;; TOOD: replace this logic by pause/resume state
 (defonce _watch-network
@@ -2627,19 +2631,30 @@
                  (<sync-stop)))))
 
 
-;;; some sync events handler
+;;; ### some sync events handler
 
 ;; re-exec remote->local-full-sync when it failed before
 (def re-remote->local-full-sync-chan (chan 1))
 (async/sub sync-events-publication :remote->local-full-sync-failed re-remote->local-full-sync-chan)
 (go-loop []
   (let [{{graph-uuid :graph-uuid} :data} (<! re-remote->local-full-sync-chan)
-        {:keys [current-syncing-graph-uuid state]}
+        {:keys [current-syncing-graph-uuid]}
         (state/get-file-sync-state (state/get-current-repo))]
-    (when (and (= graph-uuid current-syncing-graph-uuid)
-               (= state ::idle))
+    (when (= graph-uuid current-syncing-graph-uuid)
       (offer! remote->local-full-sync-chan true))
     (recur)))
+
+;; re-exec local->remote-full-sync when it failed
+(def re-local->remote-full-sync-chan (chan 1))
+(async/sub sync-events-publication :local->remote-full-sync-failed re-local->remote-full-sync-chan)
+(go-loop []
+  (let [{{graph-uuid :graph-uuid} :data} (<! re-local->remote-full-sync-chan)
+        {:keys [current-syncing-graph-uuid]} (state/get-file-sync-state (state/get-current-repo))]
+    (when (= graph-uuid current-syncing-graph-uuid)
+      (offer! full-sync-chan true))
+    (recur)))
+
+
 
 ;;; debug funcs
 (comment
