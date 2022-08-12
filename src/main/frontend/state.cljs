@@ -1636,7 +1636,8 @@
 (defn edit-in-query-or-refs-component
   []
   (let [config (last (get-editor-args))]
-    (or (:custom-query? config) (:ref? config))))
+    {:custom-query? (:custom-query? config)
+     :ref? (:ref? config)}))
 
 (defn set-auth-id-token
   [id-token]
