@@ -33,9 +33,9 @@
 ;; ::refs
 ;; get BLOCKS referencing PAGE or BLOCK
 (s/def ::refs (s/tuple #(= ::refs %) int?))
+;; ::refs-count
+;; get refs count
 (s/def ::refs-count int?)
-;; FIXME: this react-query has performance issues
-(s/def ::page-unlinked-refs (s/tuple #(= ::page-unlinked-refs %) int?))
 
 ;; custom react-query
 (s/def ::custom any?)
@@ -47,7 +47,6 @@
                                 :page<-pages ::page<-pages
                                 :refs ::refs
                                 :refs-count ::refs-count
-                                :page-unlinked-refs ::page-unlinked-refs
                                 :custom ::custom))
 
 (s/def ::affected-keys (s/coll-of ::react-query-keys))
@@ -133,14 +132,16 @@
 (defn add-query-component!
   [key component]
   (when (and key component)
-    (swap! query-components assoc component key)))
+    (swap! query-components update component (fn [col] (set (conj col key))))))
 
 (defn remove-query-component!
   [component]
-  (when-let [query (get @query-components component)]
-    (let [matched-queries (filter #(= query %) (vals @query-components))]
-      (when (= 1 (count matched-queries))
-        (remove-q! query))))
+  (when-let [queries (get @query-components component)]
+    (let [all-queries (apply concat (vals @query-components))]
+      (doseq [query queries]
+        (let [matched-queries (filter #(= query %) all-queries)]
+          (when (= 1 (count matched-queries))
+            (remove-q! query))))))
   (swap! query-components dissoc component))
 
 ;; TODO: rename :custom to :query/custom
@@ -216,7 +217,6 @@
   "Get affected queries through transaction datoms."
   [{:keys [tx-data db-before]}]
   {:post [(s/valid? ::affected-keys %)]}
-  (def debug-tx-data tx-data)
   (let [blocks (->> (filter (fn [datom] (contains? #{:block/left :block/parent :block/page} (:a datom))) tx-data)
                     (map :v)
                     (distinct))
@@ -239,26 +239,23 @@
                                     blocks [[::block (:db/id block)]]
                                     path-refs (:block/path-refs block)
                                     path-refs' (mapcat (fn [ref]
-                                                         [[::refs-count (:db/id ref)]
+                                                         [
+                                                          ;; [::refs-count (:db/id ref)]
                                                           [::refs (:db/id ref)]]) path-refs)
-                                    others (when page-id
-                                             [[::page-blocks page-id]])]
-                                (concat blocks others path-refs')))))
+                                    page-blocks (when page-id
+                                                  [[::page-blocks page-id]])]
+                                (concat blocks page-blocks path-refs')))))
                         blocks)
-
-                       (when-let [current-page-id (:db/id (get-current-page))]
-                         [[::page<-pages current-page-id]])
 
                        (mapcat
                         (fn [ref]
-                          (let [entity (db-utils/entity ref)]
-                            (conj
-                             [[::refs-count (:db/id entity)]
-                              [::refs (:db/id entity)]]
-                             (if (:block/name entity) ; page
-                               [::page-blocks ref]
-                               [::page-blocks (:db/id (:block/page entity))]))))
-                         refs))
+                          [
+                           ;; [::refs-count (:db/id entity)]
+                           [::refs ref]])
+                        refs)
+
+                       (when-let [current-page-id (:db/id (get-current-page))]
+                         [[::page<-pages current-page-id]]))
         others (->>
                 (keys @query-state)
                 (filter (fn [ks]

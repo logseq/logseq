@@ -1328,7 +1328,7 @@
 
 (defn input-idle?
   [repo & {:keys [diff]
-           :or {diff 2000}}]
+           :or {diff 1000}}]
   (when repo
     (or
       (when-let [last-time (get-in @state [:editor/last-input-time repo])]
