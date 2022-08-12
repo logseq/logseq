@@ -1213,7 +1213,7 @@
              aliases (set/difference pages #{page-id})]
          (->>
           (react/q repo
-            [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
+            [:frontend.db.react/refs page-id]
             {:query-fn (fn []
                          (let [entities (mapcat (fn [id]
                                                   (:block/_path-refs (db-utils/entity id))) pages)
@@ -1242,16 +1242,15 @@
           page? (:block/name block)
           result (if page?
                    (let [pages (page-alias-set repo (:block/name block))]
-                     (d/q
-                       '[:find [?block ...]
-                         :in $ [?ref-page ...] ?id
-                         :where
-                         [?block :block/refs ?ref-page]
-                         [?block :block/page ?p]
-                         [(not= ?p ?id)]]
-                       (conn/get-db repo)
-                       pages
-                       id))
+                     @(react/q repo [:frontend.db.react/refs-count id] {}
+                        '[:find [?block ...]
+                          :in $ [?ref-page ...] ?id
+                          :where
+                          [?block :block/refs ?ref-page]
+                          [?block :block/page ?p]
+                          [(not= ?p ?id)]]
+                        pages
+                        id))
                    (:block/_refs block))]
       (count result))))
 
@@ -1322,7 +1321,7 @@
    (when-let [repo (state/get-current-repo)]
      (when (conn/get-db repo)
        (let [block (db-utils/entity [:block/uuid block-uuid])
-             query-result (->> (react/q repo [:frontend.db.react/page<-blocks-or-block<-blocks
+             query-result (->> (react/q repo [:frontend.db.react/refs
                                               (:db/id block)]
                                  {}
                                  '[:find [(pull ?ref-block ?block-attrs) ...]

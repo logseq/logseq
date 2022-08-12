@@ -30,10 +30,10 @@
 ;; ::page<-pages
 ;; get PAGES referencing PAGE
 (s/def ::page<-pages (s/tuple #(= ::page<-pages %) int?))
-;; ::page<-blocks-or-block<-blocks
+;; ::refs
 ;; get BLOCKS referencing PAGE or BLOCK
-(s/def ::page<-blocks-or-block<-blocks
-  (s/tuple #(= ::page<-blocks-or-block<-blocks %) int?))
+(s/def ::refs (s/tuple #(= ::refs %) int?))
+(s/def ::refs-count int?)
 ;; FIXME: this react-query has performance issues
 (s/def ::page-unlinked-refs (s/tuple #(= ::page-unlinked-refs %) int?))
 
@@ -45,7 +45,8 @@
                                 :block-and-children ::block-and-children
                                 :journals ::journals
                                 :page<-pages ::page<-pages
-                                :page<-blocks-or-block<-blocks ::page<-blocks-or-block<-blocks
+                                :refs ::refs
+                                :refs-count ::refs-count
                                 :page-unlinked-refs ::page-unlinked-refs
                                 :custom ::custom))
 
@@ -215,10 +216,11 @@
   "Get affected queries through transaction datoms."
   [{:keys [tx-data db-before]}]
   {:post [(s/valid? ::affected-keys %)]}
+  (def debug-tx-data tx-data)
   (let [blocks (->> (filter (fn [datom] (contains? #{:block/left :block/parent :block/page} (:a datom))) tx-data)
                     (map :v)
                     (distinct))
-        refs (->> (filter (fn [datom] (= :block/refs (:a datom))) tx-data)
+        refs (->> (filter (fn [datom] (contains? #{:block/refs :block/path-refs} (:a datom))) tx-data)
                   (map :v)
                   (distinct))
         other-blocks (->> (filter (fn [datom] (= "block" (namespace (:a datom)))) tx-data)
@@ -235,26 +237,32 @@
                                              (when (:block/name block) (:db/id block))
                                              (:db/id (:block/page block)))
                                     blocks [[::block (:db/id block)]]
+                                    path-refs (:block/path-refs block)
+                                    path-refs' (mapcat (fn [ref]
+                                                         [[::refs-count (:db/id ref)]
+                                                          [::refs (:db/id ref)]]) path-refs)
                                     others (when page-id
                                              [[::page-blocks page-id]])]
-                                (concat blocks others)))))
+                                (concat blocks others path-refs')))))
                         blocks)
 
                        (when-let [current-page-id (:db/id (get-current-page))]
                          [[::page<-pages current-page-id]])
 
-                       (map (fn [ref]
-                              (let [entity (db-utils/entity ref)]
-                                (if (:block/name entity) ; page
-                                  [::page-blocks ref]
-                                  [::page-blocks (:db/id (:block/page entity))])))
+                       (mapcat
+                        (fn [ref]
+                          (let [entity (db-utils/entity ref)]
+                            (conj
+                             [[::refs-count (:db/id entity)]
+                              [::refs (:db/id entity)]]
+                             (if (:block/name entity) ; page
+                               [::page-blocks ref]
+                               [::page-blocks (:db/id (:block/page entity))]))))
                          refs))
         others (->>
                 (keys @query-state)
                 (filter (fn [ks]
-                          (contains? #{::block-and-children
-                                       ::page<-blocks-or-block<-blocks}
-                                     (second ks))))
+                          (contains? #{::block-and-children} (second ks))))
                 (map (fn [v] (vec (rest v)))))]
     (->>
      (util/concat-without-nil
