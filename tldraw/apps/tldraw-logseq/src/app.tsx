@@ -67,7 +67,7 @@ export const App = function App(props: LogseqTldrawProps): JSX.Element {
     handlers: props.handlers,
   }
 
-  const onFileDrop = useFileDrop()
+  const onFileDrop = useFileDrop(contextValue)
   const onPaste = usePaste(contextValue)
   const onQuickAdd = useQuickAdd()
 

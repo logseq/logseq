@@ -420,9 +420,11 @@ export class TLApp<
 
   paste = (e?: ClipboardEvent, shiftKey?: boolean) => {
     if (!this.editingShape) {
+      const fileList = e?.clipboardData?.files
       this.notify('paste', {
         point: this.inputs.currentPoint,
         shiftKey: !!shiftKey,
+        files: fileList ? Array.from(fileList) : undefined,
       })
     }
   }

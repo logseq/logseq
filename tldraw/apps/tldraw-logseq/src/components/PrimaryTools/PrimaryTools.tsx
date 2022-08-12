@@ -35,7 +35,7 @@ export const PrimaryTools = observer(function PrimaryTools() {
           data-selected={selectedToolId === 'select'}
           onClick={handleToolClick}
         >
-          <TablerIcon name="click" />
+          <TablerIcon name="select-cursor" />
         </Button>
         <Button
           title="Draw tool"
@@ -68,7 +68,7 @@ export const PrimaryTools = observer(function PrimaryTools() {
           onClick={handleToolClick}
           onDoubleClick={handleToolDoubleClick}
         >
-          <TablerIcon name="line" />
+          <TablerIcon name="connector" />
         </Button>
         <Button
           title="Text tool"
@@ -77,7 +77,7 @@ export const PrimaryTools = observer(function PrimaryTools() {
           onClick={handleToolClick}
           onDoubleClick={handleToolDoubleClick}
         >
-          <TablerIcon name="text-resize" />
+          <TablerIcon name="text" />
         </Button>
         <Button
           title="Logseq Portal tool"
