@@ -865,17 +865,14 @@
 (defn get-block-children-ids
   [repo block-uuid]
   (when-let [db (conn/get-db repo)]
-    (let [eid (:db/id (db-utils/entity repo [:block/uuid block-uuid]))]
-      (->> (d/q
-             '[:find ?id
-               :in $ ?p %
-               :where
-               (child ?p ?c)
-               [?c :block/uuid ?id]]
-             db
-             eid
-             rules)
-           (apply concat)))))
+    (when-let [eid (:db/id (db-utils/entity repo [:block/uuid block-uuid]))]
+      (let [get-children-ids (fn get-children-ids [eid]
+                               (mapcat
+                                (fn [datom]
+                                  (let [id (first datom)]
+                                    (cons (:block/uuid (d/entity db id)) (get-children-ids id))))
+                                (d/datoms db :avet :block/parent eid)))]
+        (get-children-ids eid)))))
 
 (defn get-block-immediate-children
   "Doesn't include nested children."
