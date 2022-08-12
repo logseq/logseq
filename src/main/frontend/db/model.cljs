@@ -355,28 +355,29 @@
   ([blocks parent]
    (sort-by-left blocks parent {:check? true}))
   ([blocks parent {:keys [check?]}]
-   (when check?
-     (when (not= (count blocks) (count (set (map :block/left blocks))))
-       (let [duplicates (->> (map (comp :db/id :block/left) blocks)
-                             frequencies
-                             (filter (fn [[_k v]] (> v 1)))
-                             (map (fn [[k _v]]
-                                    (let [left (db-utils/pull k)]
-                                      {:left left
-                                       :duplicates (->>
-                                                    (filter (fn [block]
-                                                              (= k (:db/id (:block/left block))))
-                                                            blocks)
-                                                    (map #(select-keys % [:db/id :block/level :block/content :block/file])))}))))]
-         #_(util/pprint duplicates)))
-     (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node"))
+   (let [blocks (util/distinct-by :db/id blocks)]
+     (when check?
+      (when (not= (count blocks) (count (set (map :block/left blocks))))
+        (let [duplicates (->> (map (comp :db/id :block/left) blocks)
+                              frequencies
+                              (filter (fn [[_k v]] (> v 1)))
+                              (map (fn [[k _v]]
+                                     (let [left (db-utils/pull k)]
+                                       {:left left
+                                        :duplicates (->>
+                                                     (filter (fn [block]
+                                                               (= k (:db/id (:block/left block))))
+                                                             blocks)
+                                                     (map #(select-keys % [:db/id :block/level :block/content :block/file])))}))))]
+          (util/pprint duplicates)))
+      (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node"))
 
-   (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
-     (loop [block parent
-            result []]
-       (if-let [next (get left->blocks (:db/id block))]
-         (recur next (conj result next))
-         (vec result))))))
+     (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
+       (loop [block parent
+              result []]
+         (if-let [next (get left->blocks (:db/id block))]
+           (recur next (conj result next))
+           (vec result)))))))
 
 (defn try-sort-by-left
   [blocks parent]

@@ -345,16 +345,16 @@
                        custom?
                        kv?))
               (let [{:keys [query query-fn]} cache
-                    query-or-refs? (state/edit-in-query-or-refs-component)]
+                    {:keys [custom-query?]} (state/edit-in-query-or-refs-component)]
                 (util/profile
                  (str "refresh! " (rest k))
                  (when (or query query-fn)
                    (try
-                     (let [f #(execute-query! repo-url db k tx cache {:skip-query-time-check? query-or-refs?})]
+                     (let [f #(execute-query! repo-url db k tx cache {:skip-query-time-check? custom-query?})]
                        ;; Detects whether user is editing in a custom query, if so, execute the query immediately
-                       (if (or query-or-refs? (not custom?))
-                         (f)
-                         (async/put! (state/get-reactive-custom-queries-chan) [f query])))
+                       (if (and custom? (not custom-query?))
+                         (async/put! (state/get-reactive-custom-queries-chan) [f query])
+                         (f)))
                      (catch js/Error e
                        (js/console.error e)))))))))))))
 
