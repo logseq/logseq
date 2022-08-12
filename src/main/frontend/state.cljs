@@ -1327,12 +1327,13 @@
         (>= (- now last-time) 3000)))))
 
 (defn input-idle?
-  [repo]
+  [repo & {:keys [diff]
+           :or {diff 2000}}]
   (when repo
     (or
       (when-let [last-time (get-in @state [:editor/last-input-time repo])]
         (let [now (util/time-ms)]
-          (>= (- now last-time) 500)))
+          (>= (- now last-time) diff)))
       ;; not in editing mode
       (not (get-edit-input-id)))))
 

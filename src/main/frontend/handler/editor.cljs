@@ -1806,7 +1806,7 @@
     (reset! *auto-save-timeout
             (js/setTimeout
              (fn []
-               (when (state/input-idle? repo)
+               (when (state/input-idle? repo :diff 500)
                  (state/set-editor-op! :auto-save)
                  ; don't auto-save for page's properties block
                  (save-current-block! {:skip-properties? true})
