@@ -378,6 +378,13 @@
          (recur next (conj result next))
          (vec result))))))
 
+(defn try-sort-by-left
+  [blocks parent]
+  (let [result' (sort-by-left blocks parent {:check? false})]
+    (if (= (count result') (count blocks))
+      result'
+      blocks)))
+
 (defn sort-by-left-recursive
   [form]
   (walk/postwalk (fn [f]
