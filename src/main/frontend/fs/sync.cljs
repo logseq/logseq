@@ -2047,8 +2047,12 @@
                  (not (contains-path? (get-ignored-files) (relative-path e))) ;not ignored
                  (contains-path? (get-monitor-dirs) (relative-path e)) ; dir is monitored
                  ;; download files will also trigger file-change-events, ignore them
-                 (not (contains? (:recent-remote->local-files @*sync-state)
-                                 (<! (<file-change-event=>recent-remote->local-file-item e))))))))
+                 (let [r (not (contains? (:recent-remote->local-files @*sync-state)
+                                         (<! (<file-change-event=>recent-remote->local-file-item e))))]
+                   (when (and (false? r)
+                              (seq (:recent-remote->local-files @*sync-state)))
+                     (println :debug (:recent-remote->local-files @*sync-state) e))
+                   r)))))
 
     (set-remote->local-syncer! [_ s] (set! remote->local-syncer s))
 
