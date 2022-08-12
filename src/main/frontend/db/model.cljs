@@ -456,6 +456,11 @@
         parent-sibling
         (get-next-outdented-block db (:db/id parent))))))
 
+(defn top-block?
+  [block]
+  (= (:db/id (:block/parent block))
+     (:db/id (:block/page block))))
+
 (defn get-block-parent
   ([block-id]
    (get-block-parent (state/get-current-repo) block-id))
@@ -463,11 +468,6 @@
    (when-let [db (conn/get-db repo)]
      (when-let [block (d/entity db [:block/uuid block-id])]
        (:block/parent block)))))
-
-(defn top-block?
-  [block]
-  (= (:db/id (:block/parent block))
-     (:db/id (:block/page block))))
 
 ;; non recursive query
 (defn get-block-parents
@@ -482,13 +482,6 @@
        (if-let [parent (get-block-parent repo block-id)]
          (recur (:block/uuid parent) (conj parents parent) (inc d))
          parents)))))
-
-(comment
-  (defn get-immediate-children-v2
-    [repo block-id]
-    (d/pull (conn/get-db repo)
-            '[:block/_parent]
-            [:block/uuid block-id])))
 
 ;; Use built-in recursive
 (defn get-block-parents-v2

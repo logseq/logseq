@@ -213,11 +213,31 @@
       (let [page-name (util/page-name-sanity-lc page)]
         (db-utils/entity [:block/name page-name])))))
 
+(defn- get-block-parents
+  [db id]
+  (let [get-parent (fn [id] (:db/id (:block/parent (d/entity db id))))]
+    (loop [result [id]
+           id id]
+      (if-let [parent (get-parent id)]
+        (recur (conj result parent) parent)
+        result))))
+
+(defn- get-blocks-parents-from-both-dbs
+  [db-after db-before block-entities]
+  (let [current-db-parent-ids (->> (set (keep :block/parent block-entities))
+                                   (mapcat (fn [parent]
+                                             (get-block-parents db-after (:db/id parent)))))
+        before-db-parent-ids (->> (map :db/id block-entities)
+                                  (mapcat (fn [id]
+                                            (get-block-parents db-before id))))]
+    (set (concat current-db-parent-ids before-db-parent-ids))))
+
 (defn get-affected-queries-keys
   "Get affected queries through transaction datoms."
-  [{:keys [tx-data db-before]}]
+  [{:keys [tx-data db-before db-after]}]
   {:post [(s/valid? ::affected-keys %)]}
-  (let [blocks (->> (filter (fn [datom] (contains? #{:block/left :block/parent :block/page} (:a datom))) tx-data)
+  (let [repo (state/get-current-repo)
+        blocks (->> (filter (fn [datom] (contains? #{:block/left :block/parent :block/page} (:a datom))) tx-data)
                     (map :v)
                     (distinct))
         refs (->> (filter (fn [datom] (contains? #{:block/refs :block/path-refs} (:a datom))) tx-data)
@@ -226,26 +246,27 @@
         other-blocks (->> (filter (fn [datom] (= "block" (namespace (:a datom)))) tx-data)
                           (map :e))
         blocks (-> (concat blocks other-blocks) distinct)
+        block-entities (keep (fn [block-id]
+                              (let [block-id (if (and (string? block-id) (util/uuid-string? block-id))
+                                               [:block/uuid block-id]
+                                               block-id)]
+                                (db-utils/entity block-id))) blocks)
         affected-keys (concat
                        (mapcat
-                        (fn [block-id]
-                          (let [block-id (if (and (string? block-id) (util/uuid-string? block-id))
-                                           [:block/uuid block-id]
-                                           block-id)]
-                            (when-let [block (db-utils/entity block-id)]
-                              (let [page-id (or
-                                             (when (:block/name block) (:db/id block))
-                                             (:db/id (:block/page block)))
-                                    blocks [[::block (:db/id block)]]
-                                    path-refs (:block/path-refs block)
-                                    path-refs' (mapcat (fn [ref]
-                                                         [
-                                                          ;; [::refs-count (:db/id ref)]
-                                                          [::refs (:db/id ref)]]) path-refs)
-                                    page-blocks (when page-id
-                                                  [[::page-blocks page-id]])]
-                                (concat blocks page-blocks path-refs')))))
-                        blocks)
+                        (fn [block]
+                          (let [page-id (or
+                                         (when (:block/name block) (:db/id block))
+                                         (:db/id (:block/page block)))
+                                blocks [[::block (:db/id block)]]
+                                path-refs (:block/path-refs block)
+                                path-refs' (mapcat (fn [ref]
+                                                     [
+                                                      ;; [::refs-count (:db/id ref)]
+                                                      [::refs (:db/id ref)]]) path-refs)
+                                page-blocks (when page-id
+                                              [[::page-blocks page-id]])]
+                            (concat blocks page-blocks path-refs')))
+                        block-entities)
 
                        (mapcat
                         (fn [ref]
@@ -256,15 +277,17 @@
 
                        (when-let [current-page-id (:db/id (get-current-page))]
                          [[::page<-pages current-page-id]]))
-        others (->>
-                (keys @query-state)
-                (filter (fn [ks]
-                          (contains? #{::block-and-children} (second ks))))
-                (map (fn [v] (vec (rest v)))))]
+        parent-ids (get-blocks-parents-from-both-dbs db-after db-before block-entities)
+        block-children-keys (->>
+                             (keys @query-state)
+                             (keep (fn [ks]
+                                     (when (and (= ::block-and-children (second ks))
+                                                (contains? parent-ids (last ks)))
+                                       (vec (rest ks))))))]
     (->>
      (util/concat-without-nil
       affected-keys
-      others)
+      block-children-keys)
      set)))
 
 (defn- execute-query!
