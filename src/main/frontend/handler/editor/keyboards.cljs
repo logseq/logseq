@@ -15,8 +15,17 @@
      (fn [_state e event]
        (let [target (.-target e)]
          (cond
-           (state/get-editor-action)
+           (contains?
+            #{:commands :block-commands
+              :page-search :page-search-hashtag :block-search :template-search
+              :property-search :property-value-search
+              :datepicker}
+            (state/get-editor-action))
            (state/clear-editor-action!) ;; FIXME: This should probably be handled as a keydown handler in editor, but this handler intercepts Esc first
+
+           ;; editor/input component handles Escape directly, so just prevent handling it here
+           (= :input (state/get-editor-action))
+           nil
 
            (d/has-class? target "bottom-action") ;; FIXME: not particular case
            (.preventDefault e)

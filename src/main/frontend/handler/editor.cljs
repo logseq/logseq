@@ -1729,6 +1729,13 @@
       :markdown (util/format "![%s](%s)" label link)
       :org (util/format "[[%s]]"))))
 
+(defn handle-command-input-close [id]
+  (state/set-editor-show-input! nil)
+  (when-let [saved-cursor (state/get-editor-last-pos)]
+    (when-let [input (gdom/getElement id)]
+      (.focus input)
+      (cursor/move-cursor-to input saved-cursor))))
+
 (defn handle-command-input [command id format m]
   ;; TODO: Add error handling for when user doesn't provide a required field.
   ;; (The current behavior is to just revert back to the editor.)
@@ -1752,12 +1759,7 @@
 
     nil)
 
-  (state/set-editor-show-input! nil)
-
-  (when-let [saved-cursor (state/get-editor-last-pos)]
-    (when-let [input (gdom/getElement id)]
-      (.focus input)
-      (cursor/move-cursor-to input saved-cursor))))
+  (handle-command-input-close id))
 
 (defn get-search-q
   []
