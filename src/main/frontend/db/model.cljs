@@ -1172,21 +1172,19 @@
    (get-page-referenced-blocks-full (state/get-current-repo) page options))
   ([repo page options]
    (when repo
-     (when (conn/get-db repo)
+     (when-let [db (conn/get-db repo)]
        (let [page-id (:db/id (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)]))
              pages (page-alias-set repo page)
              aliases (set/difference pages #{page-id})]
          (->>
-          (react/q repo
-            [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
-            {}
+          (d/q
             '[:find [(pull ?block ?block-attrs) ...]
               :in $ [?ref-page ...] ?block-attrs
               :where
               [?block :block/path-refs ?ref-page]]
+            db
             pages
             (butlast block-attrs))
-          react
           (remove (fn [block] (= page-id (:db/id (:block/page block)))))
           db-utils/group-by-page
           (map (fn [[k blocks]]
@@ -1209,8 +1207,7 @@
          (->>
           (react/q repo
             [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
-            {:use-cache? false
-             :query-fn (fn []
+            {:query-fn (fn []
                          (let [entities (mapcat (fn [id]
                                                   (:block/_path-refs (db-utils/entity id))) pages)
                                blocks (map (fn [e] {:block/parent (:block/parent e)
@@ -1311,8 +1308,6 @@
              (sort-by-left-recursive)
              db-utils/group-by-page)))))
 
-;; TODO: Replace recursive queries with datoms index implementation
-;; see https://github.com/tonsky/datascript/issues/130#issuecomment-169520434
 (defn get-block-referenced-blocks
   ([block-uuid]
    (get-block-referenced-blocks block-uuid {}))
@@ -1322,14 +1317,14 @@
        (let [block (db-utils/entity [:block/uuid block-uuid])
              query-result (->> (react/q repo [:frontend.db.react/page<-blocks-or-block<-blocks
                                               (:db/id block)]
-                                        {:use-cache? false}
-                                        '[:find [(pull ?ref-block ?block-attrs) ...]
-                                          :in $ ?block-uuid ?block-attrs
-                                          :where
-                                          [?block :block/uuid ?block-uuid]
-                                          [?ref-block :block/refs ?block]]
-                                        block-uuid
-                                        block-attrs)
+                                 {}
+                                 '[:find [(pull ?ref-block ?block-attrs) ...]
+                                   :in $ ?block-uuid ?block-attrs
+                                   :where
+                                   [?block :block/uuid ?block-uuid]
+                                   [?ref-block :block/refs ?block]]
+                                 block-uuid
+                                 block-attrs)
                                react
                                (sort-by-left-recursive))]
          (db-utils/group-by-page query-result))))))

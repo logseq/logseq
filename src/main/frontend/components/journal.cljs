@@ -19,7 +19,7 @@
 
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}
-  [repo page _format]
+  [repo page]
   (when-let [page-e (db/pull [:block/name (util/page-name-sanity-lc page)])]
     (page/page-blocks-cp repo page-e {})))
 
@@ -56,9 +56,9 @@
         (gp-util/capitalize-all title)]]
 
       (if today?
-        (blocks-cp repo page format)
+        (blocks-cp repo page)
         (ui/lazy-visible
-         (fn [] (blocks-cp repo page format))
+         (fn [] (blocks-cp repo page))
          {:debug-id (str "journal-blocks " page)}))
 
       {})

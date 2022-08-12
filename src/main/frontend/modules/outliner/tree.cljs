@@ -66,8 +66,8 @@
                  root-block (assoc root-block :block/children result)]
              [root-block])))))))
 
-(defn- tree [flat-nodes root-id]
-  (let [children (group-by :block/parent flat-nodes)
+(defn- tree [parent->children root]
+  (let [root-id (:db/id root)
         nodes (fn nodes [parent-id level]
                 (mapv (fn [b]
                         (let [b' (assoc b :block/level (inc level))
@@ -75,8 +75,12 @@
                           (if (seq children)
                             (assoc b' :block/children children)
                             b')))
-                      (get children {:db/id parent-id})))]
-    (nodes root-id 1)))
+                      (get parent->children {:db/id parent-id})))
+        children (nodes root-id 1)
+        root' (assoc root :block/level 1)]
+    (if (seq children)
+      (assoc root' :block/children children)
+      root')))
 
 (defn non-consecutive-blocks->vec-tree
   "`blocks` need to be in the same page."
@@ -85,25 +89,12 @@
                              :block/uuid (:block/uuid e)
                              :block/parent {:db/id (:db/id (:block/parent e))}
                              :block/page {:db/id (:db/id (:block/page e))}}) blocks)
-        blocks (model/sort-page-random-blocks blocks)
-        id->parent (zipmap (map :db/id blocks)
-                           (map (comp :db/id :block/parent) blocks))
-        top-level-ids (set (remove #(id->parent (id->parent %)) (map :db/id blocks)))
-        ;; Separate blocks into parent and children groups [parent-children, parent-children]
-        blocks' (loop [blocks blocks
-                       result []]
-                  (if-let [block (first blocks)]
-                    (if (top-level-ids (:db/id block))
-                      (let [block' (assoc block :block/level 1)]
-                        (recur (rest blocks) (conj result [block'])))
-                      (recur (rest blocks) (conj (vec (butlast result))
-                                                 (conj (last result) block))))
-                    result))]
-    (map (fn [[parent & children]]
-           (if (seq children)
-             (assoc parent :block/children
-                    (tree children (:db/id parent)))
-             parent)) blocks')))
+        parent->children (group-by :block/parent blocks)
+        id->blocks (zipmap (map :db/id blocks) blocks)
+        top-level-blocks (filter #(nil?
+                                   (id->blocks
+                                    (:db/id (:block/parent (id->blocks (:db/id %)))))) blocks)]
+    (map #(tree parent->children %) top-level-blocks)))
 
 (defn- sort-blocks-aux
   [parents parent-groups]

@@ -24,13 +24,9 @@
 ;; get block&children react-query
 (s/def ::block-and-children (s/tuple #(= ::block-and-children %) uuid?))
 
-(s/def ::block-direct-children (s/tuple #(= ::block-direct-children %) uuid?))
 ;; ::journals
 ;; get journal-list react-query
 (s/def ::journals (s/tuple #(= ::journals %)))
-;; ::page->pages
-;; get PAGES referenced by PAGE
-(s/def ::page->pages (s/tuple #(= ::page->pages %) int?))
 ;; ::page<-pages
 ;; get PAGES referencing PAGE
 (s/def ::page<-pages (s/tuple #(= ::page<-pages %) int?))
@@ -40,22 +36,17 @@
   (s/tuple #(= ::page<-blocks-or-block<-blocks %) int?))
 ;; FIXME: this react-query has performance issues
 (s/def ::page-unlinked-refs (s/tuple #(= ::page-unlinked-refs %) int?))
-;; ::block<-block-ids
-;; get BLOCK-IDS referencing BLOCK
-(s/def ::block<-block-ids (s/tuple #(= ::block<-block-ids %) int?))
+
 ;; custom react-query
 (s/def ::custom any?)
 
 (s/def ::react-query-keys (s/or :block ::block
                                 :page-blocks ::page-blocks
                                 :block-and-children ::block-and-children
-                                :block-direct-children ::block-direct-children
                                 :journals ::journals
-                                :page->pages ::page->pages
                                 :page<-pages ::page<-pages
                                 :page<-blocks-or-block<-blocks ::page<-blocks-or-block<-blocks
                                 :page-unlinked-refs ::page-unlinked-refs
-                                :block<-block-ids ::block<-block-ids
                                 :custom ::custom))
 
 (s/def ::affected-keys (s/coll-of ::react-query-keys))
@@ -245,21 +236,12 @@
                                              (:db/id (:block/page block)))
                                     blocks [[::block (:db/id block)]]
                                     others (when page-id
-                                             (let [db-after-parent-uuid (:block/uuid (:block/parent block))
-                                                   db-before-parent-uuid (:block/uuid (:block/parent (d/entity db-before
-                                                                                                               [:block/uuid (:block/uuid block)])))]
-                                               [[::page-blocks page-id]
-                                                [::page->pages page-id]
-                                                [::block-direct-children db-after-parent-uuid]
-                                                (when (and db-before-parent-uuid
-                                                           (not= db-before-parent-uuid db-after-parent-uuid))
-                                                  [::block-direct-children db-before-parent-uuid])]))]
+                                             [[::page-blocks page-id]])]
                                 (concat blocks others)))))
                         blocks)
 
                        (when-let [current-page-id (:db/id (get-current-page))]
-                         [[::page->pages current-page-id]
-                          [::page<-pages current-page-id]])
+                         [[::page<-pages current-page-id]])
 
                        (map (fn [ref]
                               (let [entity (db-utils/entity ref)]
@@ -336,15 +318,17 @@
                        kv?))
               (let [{:keys [query query-fn]} cache
                     query-or-refs? (state/edit-in-query-or-refs-component)]
-                (when (or query query-fn)
-                  (try
-                    (let [f #(execute-query! repo-url db k tx cache {:skip-query-time-check? query-or-refs?})]
-                      ;; Detects whether user is editing in a custom query, if so, execute the query immediately
-                      (if (or query-or-refs? (not custom?))
-                        (f)
-                        (async/put! (state/get-reactive-custom-queries-chan) [f query])))
-                    (catch js/Error e
-                      (js/console.error e))))))))))))
+                (util/profile
+                 (str "refresh! " (rest k))
+                 (when (or query query-fn)
+                   (try
+                     (let [f #(execute-query! repo-url db k tx cache {:skip-query-time-check? query-or-refs?})]
+                       ;; Detects whether user is editing in a custom query, if so, execute the query immediately
+                       (if (or query-or-refs? (not custom?))
+                         (f)
+                         (async/put! (state/get-reactive-custom-queries-chan) [f query])))
+                     (catch js/Error e
+                       (js/console.error e)))))))))))))
 
 (defn set-key-value
   [repo-url key value]
