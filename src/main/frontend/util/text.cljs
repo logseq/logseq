@@ -89,7 +89,7 @@
   "Get all indexes of `value` in the string `s`."
   [s value {:keys [before?] :or {before? true}}]
   (if (= value "")
-    (if before? [0] [(dec (count s))])
+    (if before? [0] [(count s)]) ;; Hack: this prevents unnecessary work in wrapped-by?
     (loop [acc []
           i 0]
      (if-let [i (string/index-of s value i)]
@@ -99,10 +99,12 @@
 (defn wrapped-by?
   "`pos` must be wrapped by `before` and `and` in string `value`, e.g. ((a|b))"
   [value pos before end]
+  ;; Increment 'before' matches by (length of before string - 0.5) to make them be just before the cursor position they precede.
+  ;; Increment 'after' matches by 0.5 to make them be just after the cursor position they follow.
   (let [before-matches (->> (get-string-all-indexes value before {:before? true})
-                            (map (fn [i] [i :before])))
+                            (map (fn [i] [(+ i (- (count before) 0.5)) :before])))
         end-matches (->> (get-string-all-indexes value end {:before? false})
-                         (map (fn [i] [i :end])))
+                         (map (fn [i] [(+ i 0.5) :end])))
         indexes (sort-by first (concat before-matches end-matches [[pos :between]]))
         ks (map second indexes)
         q [:before :between :end]]

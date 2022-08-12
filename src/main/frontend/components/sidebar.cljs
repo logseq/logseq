@@ -71,9 +71,11 @@
   (let [original-name (db-model/get-page-original-name name)
         whiteboard-page? (db-model/whiteboard-page? name)]
     [:a {:on-click (fn [e]
-                     (let [name (util/safe-page-name-sanity-lc name)]
+                     (let [name (util/safe-page-name-sanity-lc name)
+                           source-page (db-model/get-alias-source-page (state/get-current-repo) name) 
+                           name (if (empty? source-page) name (:block/name source-page))]
                        (if (and (gobj/get e "shiftKey") (not whiteboard-page?))
-                         (when-let [page-entity (db/entity [:block/name name])]
+                         (when-let [page-entity (if (empty? source-page) (db/entity [:block/name name]) source-page)]
                            (state/sidebar-add-block!
                             (state/get-current-repo)
                             (:db/id page-entity)
@@ -275,7 +277,7 @@
             :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
             :icon  "whiteboard"}))]]
 
-      (when (and left-sidebar-open? (not config/publishing?)) (favorites t))
+      (when left-sidebar-open? (favorites t))
 
       (when (and left-sidebar-open? (not config/publishing?)) (recent-pages t))
 
