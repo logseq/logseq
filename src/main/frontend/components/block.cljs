@@ -3280,7 +3280,7 @@
          {:class (when doc-mode? "document-mode")}
          (lazy-blocks config blocks' flat-blocks)]))))
 
-(rum/defcs breadcrumb-with-container < rum/reactive
+(rum/defcs breadcrumb-with-container < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [first-block (ffirst (:rum/args state))]
              (assoc state
