@@ -9,6 +9,9 @@ const extendedIcons = [
   'references-show',
   'whiteboard',
   'whiteboard-element',
+  'select-cursor',
+  'text',
+  'connector'
 ]
 
 const cx = (...args: (string | undefined)[]) => args.join(' ')
@@ -18,6 +21,6 @@ export const TablerIcon = ({
   className,
   ...props
 }: { name: string } & React.HTMLAttributes<HTMLElement>) => {
-  const classNamePrefix = extendedIcons.includes(name) ? `ti tie-` : `ti ti-`
+  const classNamePrefix = extendedIcons.includes(name) ? `tie tie-` : `ti ti-`
   return <i className={cx(classNamePrefix + name, className)} {...props} />
 }
