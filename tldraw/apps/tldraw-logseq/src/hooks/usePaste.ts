@@ -241,7 +241,7 @@ export function usePaste(context: LogseqContextValue) {
         return false
       }
 
-      if (files) {
+      if (files && files.length > 0) {
         await handleFiles(files)
       } else {
         for (const item of await navigator.clipboard.read()) {
