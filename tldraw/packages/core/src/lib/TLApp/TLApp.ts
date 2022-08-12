@@ -164,6 +164,15 @@ export class TLApp<
         },
       },
       {
+        keys: 'mod+shift+v',
+        fn: (_, __, e) => {
+          if (!this.editingShape) {
+            e.preventDefault()
+            this.paste(undefined, true)
+          }
+        },
+      },
+      {
         keys: ['delete', 'backspace'],
         fn: () => {
           const { selectedTool } = this
