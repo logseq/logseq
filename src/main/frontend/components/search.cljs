@@ -122,6 +122,9 @@
     :new-page
     (page-handler/create! search-q {:redirect? true})
 
+    :new-whiteboard
+    (route/redirect-to-whiteboard! search-q)
+
     :page
     (let [data (or alias data)]
       (cond
@@ -201,6 +204,10 @@
        [:div.text.font-bold (str (t :new-page) ": ")
         [:span.ml-1 (str "\"" (string/trim search-q) "\"")]]
 
+       :new-whiteboard
+       [:div.text.font-bold (str (t :new-whiteboard) ": ")
+        [:span.ml-1 (str "\"" (string/trim search-q) "\"")]]
+
        :page
        [:span {:data-page-ref data}
         (when alias
@@ -248,7 +255,9 @@
                       (nil? result)
                       all?)
                    []
-                   [{:type :new-page}]) ;; todo: add new whiteboard
+                   (if (state/enable-whiteboards?)
+                     [{:type :new-page} {:type :new-whiteboard}]
+                     [{:type :new-page}]))
         result (cond
                  config/publishing?
                  (concat pages files blocks)

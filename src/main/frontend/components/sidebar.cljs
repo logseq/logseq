@@ -272,7 +272,7 @@
         (when (state/enable-whiteboards?)
           (sidebar-item
            {:class "whiteboard"
-            :title "Whiteboards"
+            :title (t :right-side-bar/whiteboards)
             :href  (rfe/href :whiteboards)
             :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
             :icon  "whiteboard"}))]]
