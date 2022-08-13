@@ -236,8 +236,7 @@
   "Get affected queries through transaction datoms."
   [{:keys [tx-data db-before db-after]}]
   {:post [(s/valid? ::affected-keys %)]}
-  (let [repo (state/get-current-repo)
-        blocks (->> (filter (fn [datom] (contains? #{:block/left :block/parent :block/page} (:a datom))) tx-data)
+  (let [blocks (->> (filter (fn [datom] (contains? #{:block/left :block/parent :block/page} (:a datom))) tx-data)
                     (map :v)
                     (distinct))
         refs (->> (filter (fn [datom] (contains? #{:block/refs :block/path-refs} (:a datom))) tx-data)
