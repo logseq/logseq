@@ -35,7 +35,7 @@
   []
   (let [lg-dir (str (.getPath app "home") "/.logseq")]
     (if-not (fs/existsSync lg-dir)
-      (and (fs/mkdirSync lg-dir) lg-dir)
+      (do (fs/mkdirSync lg-dir) lg-dir)
       lg-dir)))
 
 (defn get-ls-default-plugins
