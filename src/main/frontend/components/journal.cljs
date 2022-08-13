@@ -24,7 +24,7 @@
     (page/page-blocks-cp repo page-e {})))
 
 (rum/defc journal-cp < rum/reactive
-  [[title format]]
+  [title]
   (let [;; Don't edit the journal title
         page (string/lower-case title)
         repo (state/sub :git/current-repo)
@@ -77,9 +77,9 @@
   [:div#journals
    (ui/infinite-list
     "main-content-container"
-    (for [{:block/keys [name format]} latest-journals]
+    (for [{:block/keys [name]} latest-journals]
       [:div.journal-item.content {:key name}
-       (journal-cp [name format])])
+       (journal-cp name)])
     {:has-more (page-handler/has-more-journals?)
      :more-class "text-4xl"
      :on-top-reached page-handler/create-today-journal!
