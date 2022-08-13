@@ -103,7 +103,7 @@ jobs:
 
       - name: Set Build Environment Variables
         run: |
-          echo "ENABLE_FILE_SYNC=${{ inputs.build-target == 'true' || github.event.inputs.enable-file-sync == 'true' }}" >> $GITHUB_ENV
+          echo "ENABLE_FILE_SYNC=${{ inputs.enable-file-sync == 'true' || github.event.inputs.enable-file-sync == 'true' }}" >> $GITHUB_ENV
 
       - name: Compile CLJS - android variant, use es6 instead of es-next
         run: yarn install && yarn release-android-app
