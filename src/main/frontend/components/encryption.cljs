@@ -68,6 +68,13 @@
         *input-ref-1 (rum/create-ref)
         remote-pw? (= type :input-pwd-remote)
         loading? (state/sub [:ui/loading? :set-graph-password])
+        pw-strength (when (and init-graph-keys
+                               (not (string/blank? @*password)))
+                      (util/check-password-strength @*password))
+        can-submit? #(if init-graph-keys
+                       (and (>= (count @*password) 6)
+                            (>= (:id pw-strength) 1))
+                       true)
         set-remote-graph-pwd-result (state/sub [:file-sync/set-remote-graph-password-result])
 
         submit-handler
@@ -130,6 +137,7 @@
             "Unlock this remote graph!"
             "Decrypt this graph"))]]
 
+      ;; decrypt remote graph with one password
       (when (and remote-pw? (not init-graph-keys))
         [:<>
 
@@ -151,6 +159,7 @@
              [:span.scale-125.pr-1 (ui/icon "bulb" {:class "text-md mr-1"})]
              [:span "Please enter the password for this graph to continue syncing."]])]])
 
+      ;; secure this remote graph
       (when (and remote-pw? init-graph-keys)
         (let [pattern-ok? #(>= (count @*password) 6)]
           [:<>
@@ -174,7 +183,26 @@
                     [:span "Password fields are matching!"])
                   [:span "Enter your chosen password again!"]))
               [:span "Choose a strong and hard to guess password!"])
-            ]]))
+            ]
+
+           ;; password strength checker
+           (when-not (string/blank? @*password)
+             [:<>
+              [:div.input-hints.text-sm.py-2.px-3.rounded.mb-2.-mt-1.5.flex.items-center.space-x-3
+               (let [included-set (set (:contains pw-strength))]
+                 (for [i ["lowercase" "uppercase" "number" "symbol"]
+                       :let [included? (contains? included-set i)]]
+                   [:span.strength-item
+                    {:key i
+                     :class (when included? "included")}
+                    (ui/icon (if included? "check" "x") {:class "mr-1"})
+                    [:span.capitalize i]
+                    ]))]
+
+              [:div.input-pw-strength
+               [:div.indicator.flex
+                (for [i (range 4)]
+                  [:i {:key i :class (when (>= (int (:id pw-strength)) i) "active")} i])]]])]))
 
       [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
        {:type        "password"
@@ -224,7 +252,7 @@
                   (when loading?
                     [:span.ml-1 (ui/loading "" {:class "w-4 h-4"})])]
 
-                 :disabled loading?
+                 :disabled (or (not (can-submit?)) loading?)
                  :on-click submit-handler)]]))
 
 (defn input-password

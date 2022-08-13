@@ -107,10 +107,11 @@
       overflow: overlay;
       width: 94vw;
       max-height: 85vh;
-      padding: 2rem;
+      padding: 2rem 1.5rem;
 
       @screen md {
         min-width: 720px;
+        padding: 2rem;
         width: auto;
 
         .ls-card, .ls-search {

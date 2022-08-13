@@ -332,6 +332,53 @@
 
     > .input-hints {
       background-color: var(--ls-primary-background-color);
+      flex-wrap: wrap;
+
+      .strength-item {
+        @apply flex items-center leading-none opacity-60 mr-2;
+
+        .ti {
+          @apply scale-75;
+        }
+
+        &.included {
+          @apply text-green-700 font-bold;
+
+          .ti {
+            @apply scale-90 font-bold;
+          }
+        }
+      }
+    }
+
+    > .input-pw-strength {
+      > .indicator {
+        @apply space-x-1.5;
+
+        > i {
+          @apply flex-1 bg-gray-200 overflow-hidden cursor-help opacity-90;
+
+          font-size: 0;
+          height: 5px;
+          border-radius: 2px;
+
+          &.active:first-child {
+            @apply bg-red-500;
+          }
+
+          &.active:nth-child(2) {
+            @apply bg-yellow-300;
+          }
+
+          &.active:nth-child(3) {
+            @apply bg-blue-400;
+          }
+
+          &.active:last-child {
+            @apply bg-green-500;
+          }
+        }
+      }
     }
 
     > .cloud-tip {

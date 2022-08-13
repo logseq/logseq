@@ -7,6 +7,7 @@
             ["@capacitor/status-bar" :refer [^js StatusBar Style]]
             ["grapheme-splitter" :as GraphemeSplitter]
             ["remove-accents" :as removeAccents]
+            ["check-password-strength" :refer [passwordStrength]]
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
@@ -50,12 +51,17 @@
        (re-find pattern s))))
 
 #?(:cljs
-  (do
-    (def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
-    (defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
-    (defn uuid-string?
-      [s]
-      (safe-re-find exactly-uuid-pattern s))))
+   (do
+     (def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
+     (defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
+     (defn uuid-string?
+       [s]
+       (safe-re-find exactly-uuid-pattern s))
+     (defn check-password-strength [input]
+       (when-let [^js ret (and (string? input)
+                               (not (string/blank? input))
+                               (passwordStrength input))]
+         (bean/->clj ret)))))
 
 #?(:cljs
    (defn ios?
