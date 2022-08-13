@@ -71,12 +71,20 @@
       "** hello\n\na:: b")))
 
 (deftest test-get-property-keys
-  (are [x y] (= x y)
-    (property/get-property-keys :org "hello\n:PROPERTIES:\n:x1: y1\n:x2: y2\n:END:\n")
-    ["X1" "X2"]
+  (testing "org mode"
+    (are [x y] (= x y)
+        (property/get-property-keys :org "hello\n:PROPERTIES:\n:x1: y1\n:x2: y2\n:END:\n")
+        ["X1" "X2"]
 
-    (property/get-property-keys :org "hello\n:PROPERTIES:\n:END:\n")
-    nil))
+        (property/get-property-keys :org "hello\n:PROPERTIES:\n:END:\n")
+        nil))
+  (testing "markdown mode"
+    (are [x y] (= x y)
+        (property/get-property-keys :markdown "hello\nx1:: y1\nx2:: y2\n")
+        ["X1" "X2"]
+
+        (property/get-property-keys :markdown "hello\n")
+        nil)))
 
 (deftest test-insert-property
   (are [x y] (= x y)

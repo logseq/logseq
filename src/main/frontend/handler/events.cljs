@@ -631,6 +631,10 @@
   (when (= dir (config/get-repo-dir repo))
     (fs/watch-dir! dir)))
 
+(defmethod handle :file/alter [[_ repo path content]]
+  (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]
+    (ui-handler/re-render-root!)))
+
 (defn run!
   []
   (let [chan (state/get-events-chan)]

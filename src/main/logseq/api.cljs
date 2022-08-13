@@ -442,6 +442,11 @@
   [block-uuid]
   (editor-handler/open-block-in-sidebar! (uuid block-uuid)))
 
+(def ^:export select_block
+  (fn [block-uuid]
+    (when-let [block (db-model/get-block-by-uuid block-uuid)]
+      (editor-handler/select-block! (:block/uuid block)) nil)))
+
 (def ^:export edit_block
   (fn [block-uuid ^js opts]
     (when-let [block-uuid (and block-uuid (uuid block-uuid))]
@@ -545,7 +550,9 @@
 (def ^:export get_current_block
   (fn [^js opts]
     (let [block (state/get-edit-block)
-          block (or block (some-> (first (state/get-selection-blocks))
+          block (or block
+                    (some-> (or (first (state/get-selection-blocks))
+                                (gdom/getElement (state/get-editing-block-dom-id)))
                             (.getAttribute "blockid")
                             (db-model/get-block-by-uuid)))]
       (get_block (:db/id block) opts))))
@@ -617,7 +624,7 @@
   (when-let [page (and page-name-or-uuid (db-model/get-page page-name-or-uuid))]
     (let [page-name (:block/name page)
           ref-blocks (if page-name
-                       (db-model/get-page-referenced-blocks page-name)
+                       (db-model/get-page-referenced-blocks-full page-name)
                        (db-model/get-block-referenced-blocks (:block/uuid page)))
           ref-blocks (and (seq ref-blocks) (into [] ref-blocks))]
       (bean/->js (normalize-keyword-for-json ref-blocks)))))
@@ -706,7 +713,11 @@
             result (apply d/q query db resolved-inputs)]
         (clj->js result)))))
 
-(def ^:export custom_query db/custom-query)
+(defn ^:export custom_query
+  [query-string]
+  (let [result (let [query (cljs.reader/read-string query-string)]
+                 (db/custom-query {:query query}))]
+    (bean/->js (normalize-keyword-for-json (flatten @result)))))
 
 (defn ^:export download_graph_db
   []

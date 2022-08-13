@@ -161,11 +161,12 @@
   [text]
 
   (when-not (string/blank? text)
-    (let [sp "@#~#@"]
+    (let [sp "|#|"]
       (-> text
           (string/replace #"[\r\n]+" sp)
           (string/replace (str "-" sp) "")
-          (string/replace sp " ")))))
+          (string/replace #"\|#\|([a-zA-Z_])" " $1")
+          (string/replace sp "")))))
 
 ;; TODO: which viewer instance?
 (defn next-page
@@ -179,3 +180,10 @@
   (try
     (js-invoke js/window.lsPdfViewer "previousPage")
     (catch js/Error _e nil)))
+
+(comment
+ (fix-selection-text-breakline "this is a\ntest paragraph")
+ (fix-selection-text-breakline "he is 1\n8 years old")
+ (fix-selection-text-breakline "这是一个\n\n段落")
+ (fix-selection-text-breakline "これ\n\nは、段落")
+ (fix-selection-text-breakline "this is a te-\nst paragraph"))

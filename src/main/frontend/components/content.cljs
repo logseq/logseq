@@ -22,6 +22,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.util.block-ref :as block-ref]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -207,7 +208,7 @@
           (ui/menu-link
            {:key      "Copy block ref"
             :on-click (fn [_e]
-                        (editor-handler/copy-block-ref! block-id #(str "((" % "))")))}
+                        (editor-handler/copy-block-ref! block-id block-ref/->block-ref))}
            "Copy block ref")
 
           (ui/menu-link
@@ -238,7 +239,7 @@
           (if (srs/card-block? block)
             (ui/menu-link
              {:key      "Preview Card"
-              :on-click #(srs/preview block-id)}
+              :on-click #(srs/preview (:db/id block))}
              "Preview Card")
             (ui/menu-link
              {:key      "Make a Card"
@@ -260,7 +261,7 @@
           (ui/menu-link
            {:key      "Collapse all"
             :on-click (fn [_e]
-                        (editor-handler/collapse-all! block-id))}
+                        (editor-handler/collapse-all! block-id {}))}
            "Collapse all")
 
           (when (state/sub [:plugin/simple-commands])

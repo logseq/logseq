@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
+            [frontend.components.scheduled-deadlines :as scheduled]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -56,11 +57,16 @@
 
       (if today?
         (blocks-cp repo page format)
-        (ui/lazy-visible (fn [] (blocks-cp repo page format)) page))
+        (ui/lazy-visible
+         (fn [] (blocks-cp repo page format))
+         {:debug-id (str "journal-blocks " page)}))
 
       {})
 
      (page/today-queries repo today? false)
+
+     (when today?
+       (scheduled/scheduled-and-deadlines page))
 
      (rum/with-key
        (reference/references title)

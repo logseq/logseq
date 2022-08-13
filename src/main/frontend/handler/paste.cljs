@@ -5,6 +5,7 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.util.block-ref :as block-ref]
             [clojure.string :as string]
             [frontend.util :as util]
             [frontend.handler.editor :as editor-handler]
@@ -15,7 +16,6 @@
             ["/frontend/utils" :as utils]
             [frontend.commands :as commands]
             [cljs.core.match :refer [match]]
-            [logseq.graph-parser.text :as text]
             [frontend.handler.notification :as notification]
             [frontend.util.text :as text-util]
             [frontend.format.mldoc :as mldoc]
@@ -26,7 +26,7 @@
   (when-let [editing-block (state/get-edit-block)]
     (let [page-id (:db/id (:block/page editing-block))
           blocks (block/extract-blocks
-                  (mldoc/->edn text (gp-mldoc/default-config format)) text true format)
+                  (mldoc/->edn text (gp-mldoc/default-config format)) text format {})
           blocks' (gp-block/with-parent-and-left page-id blocks)]
       (editor-handler/paste-blocks blocks' {}))))
 
@@ -68,7 +68,8 @@
         internal-paste? (and
                          (seq (:copy/blocks copied-blocks))
                          ;; not copied from the external clipboard
-                         (= text (:copy/content copied-blocks)))]
+                         (= (string/trimr text)
+                            (string/trimr (:copy/content copied-blocks))))]
     (if internal-paste?
       (let [blocks (:copy/blocks copied-blocks)]
         (when (seq blocks)
@@ -80,9 +81,9 @@
                (not (string/blank? (util/get-selected-text))))
           (editor-handler/html-link-format! text)
 
-          (and (text/block-ref? text)
-               (editor-handler/wrapped-by? input "((" "))"))
-          (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil)
+          (and (block-ref/block-ref? text)
+               (editor-handler/wrapped-by? input block-ref/left-parens block-ref/right-parens))
+          (commands/simple-insert! (state/get-edit-input-id) (block-ref/get-block-ref-id text) nil)
 
           :else
           ;; from external

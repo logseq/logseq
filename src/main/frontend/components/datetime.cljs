@@ -10,7 +10,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defonce default-timestamp-value {:time ""
                                   :repeater {}})
@@ -160,7 +161,7 @@
              (when-not deadline-or-schedule?
                ;; similar to page reference
                (editor-handler/insert-command! id
-                                               (util/format "[[%s]]" journal)
+                                               (page-ref/->page-ref journal)
                                                format
                                                nil)
                (state/clear-editor-action!)

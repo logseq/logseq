@@ -113,10 +113,13 @@
         min-width: 720px;
         width: auto;
 
-        .ls-card {
+        .ls-card, .ls-search {
           width: 740px;
           min-height: 60vh;
-          max-height: 740px;
+        }
+
+        .ls-search {
+          width: var(--ls-main-content-max-width);
         }
       }
     }

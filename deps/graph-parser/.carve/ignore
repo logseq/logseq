@@ -4,3 +4,17 @@ logseq.graph-parser.cli/parse-graph
 logseq.graph-parser.mldoc/ast-export-markdown
 ;; API
 logseq.graph-parser.property/register-built-in-properties
+;; API
+logseq.graph-parser.util.block-ref/left-and-right-parens
+;; API
+logseq.graph-parser.util.block-ref/->block-ref
+;; API
+logseq.graph-parser.util.block-ref/block-ref?
+;; API
+logseq.graph-parser.util.block-ref/get-all-block-ref-ids
+;; API
+logseq.graph-parser.util.page-ref/left-and-right-brackets
+;; API
+logseq.graph-parser.util.page-ref/->page-ref
+;; API
+logseq.graph-parser.util.page-ref/get-page-name!

@@ -63,8 +63,7 @@
                  conn (conn/get-db repo false)
                  editor-cursor (state/get-current-edit-block-and-position)
                  meta (merge opts {:editor-cursor editor-cursor})
-                 rs (d/transact! conn txs (assoc meta
-                                                 :outliner/transact? true))]
+                 rs (d/transact! conn txs (assoc meta :outliner/transact? true))]
              (when true                 ; TODO: add debug flag
                (let [eids (distinct (mapv first (:tx-data rs)))
                      left&parent-list (->>

@@ -335,6 +335,11 @@
             {:keys [path localDocumentsPath]} (p/chain
                                                (.pickFolder mobile-util/folder-picker)
                                                #(js->clj % :keywordize-keys true))
+            {:keys [path localDocumentsPath]} (-> (.pickFolder mobile-util/folder-picker)
+                                                  (p/then #(js->clj % :keywordize-keys true))
+                                                  (p/catch (fn [e]
+                                                             (js/alert (str e))
+                                                             nil))) ;; NOTE: Can not pick folder, let it crash
             _ (when (and (mobile-util/native-ios?)
                          (not (or (local-container-path? path localDocumentsPath)
                                   (mobile-util/iCloud-container-path? path))))

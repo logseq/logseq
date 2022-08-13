@@ -8,6 +8,7 @@ import android.os.Environment;
 import android.os.Build;
 import android.provider.DocumentsContract;
 import android.provider.Settings;
+import android.util.Log;
 
 import androidx.activity.result.ActivityResult;
 import androidx.documentfile.provider.DocumentFile;
@@ -56,9 +57,17 @@ public class FolderPicker extends Plugin {
         Uri treeUri = result.getData().getData();
         Uri docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri,
                 DocumentsContract.getTreeDocumentId(treeUri));
+
         try {
-            ret.put("path", FileUtil.getPath(context, docUri));
-            call.resolve(ret);
+            Log.i("Logseq/FolderPicker", "Got uri " + docUri);
+            String path = FileUtil.getPath(context, docUri);
+            Log.i("Logseq/FolderPicker", "Convert to path " + FileUtil.getPath(context, docUri));
+            if (path == null || path.isEmpty()) {
+                call.reject("Cannot support this directory type: " + docUri);
+            } else {
+                ret.put("path", path);
+                call.resolve(ret);
+            }
         } catch (Exception e) {
             call.reject(e.toString() + "\n Debug: " + treeUri.toString());
         }

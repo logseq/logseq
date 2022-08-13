@@ -90,7 +90,6 @@
 
     a.restart {
       position: relative;
-      cursor: pointer !important;
       display: flex;
       align-items: center;
 
@@ -102,6 +101,7 @@
       > strong {
         display: inline-block;
         padding-left: 2px;
+        cursor: pointer;
       }
     }
   }
