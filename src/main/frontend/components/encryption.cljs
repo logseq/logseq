@@ -201,8 +201,11 @@
 
               [:div.input-pw-strength
                [:div.indicator.flex
-                (for [i (range 4)]
-                  [:i {:key i :class (when (>= (int (:id pw-strength)) i) "active")} i])]]])]))
+                (for [i (range 4)
+                      :let [title (get ["Too weak" "Weak" "Medium" "Strong"] i)]]
+                  [:i {:key i
+                       :title title
+                       :class (when (>= (int (:id pw-strength)) i) "active")} i])]]])]))
 
       [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
        {:type        "password"
