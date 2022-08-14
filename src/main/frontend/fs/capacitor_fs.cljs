@@ -332,9 +332,6 @@
         result)))
   (open-dir [_this _ok-handler]
     (p/let [_    (when (= (mobile-util/platform) "android") (check-permission-android))
-            {:keys [path localDocumentsPath]} (p/chain
-                                               (.pickFolder mobile-util/folder-picker)
-                                               #(js->clj % :keywordize-keys true))
             {:keys [path localDocumentsPath]} (-> (.pickFolder mobile-util/folder-picker)
                                                   (p/then #(js->clj % :keywordize-keys true))
                                                   (p/catch (fn [e]
