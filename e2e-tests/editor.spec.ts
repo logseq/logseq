@@ -180,7 +180,7 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
     }
 })
 
-test('copy and paste block after editing new block', async ({ page, block }) => {
+test('copy and paste block after editing new block #5962', async ({ page, block }) => {
   await createRandomPage(page)
 
   // Create a block and copy it in block-select mode
@@ -197,7 +197,7 @@ test('copy and paste block after editing new block', async ({ page, block }) => 
   await page.keyboard.press('Enter')
   await page.waitForTimeout(100)
   await page.keyboard.press('Enter')
-  
+
   await page.waitForTimeout(100)
   // Create a new block with some text
   await page.keyboard.insertText("Typed block")
@@ -287,7 +287,7 @@ test('pressing up and down should NOT close autocomplete menu', async ({ page, b
     await page.waitForTimeout(100)
     await autocompleteMenu.expectVisible(modalName)
     await expect(await block.selectionStart()).toEqual(cursorPos)
-    
+
     await page.keyboard.press('ArrowDown')
     await page.waitForTimeout(100)
     await autocompleteMenu.expectVisible(modalName)
@@ -402,5 +402,53 @@ test('pressing backspace and remaining inside of brackets should NOT close autoc
     await page.keyboard.press('Backspace')
     await page.waitForTimeout(100)
     await autocompleteMenu.expectVisible(modalName)
+  }})
+test('press escape when autocomplete menu is open, should close autocomplete menu only #6270', async ({ page, block }) => {
+  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['/', 'commands']]) {
+    await createRandomPage(page)
+
+    // Open the action modal
+    await block.mustFill('text ')
+    await page.waitForTimeout(550)
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char) // Type it one character at a time, because too quickly can fail to trigger it sometimes
+    }
+    await page.waitForTimeout(100)
+    await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
+    await page.waitForTimeout(100)
+
+    // Press escape; should close action modal instead of exiting edit mode
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(100)
+    await expect(page.locator(`[data-modal-name="${modalName}"]`)).not.toBeVisible()
+    await page.waitForTimeout(1000)
+    expect(await block.isEditing()).toBe(true)
+  }
+})
+
+test('press escape when link/image dialog is open, should restore focus to input', async ({ page, block }) => {
+  for (const [commandTrigger, modalName] of [['/link', 'commands']]) {
+    await createRandomPage(page)
+
+    // Open the action modal
+    await block.mustFill('')
+    await page.waitForTimeout(550)
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char) // Type it one character at a time, because too quickly can fail to trigger it sometimes
+    }
+    await page.waitForTimeout(100)
+    await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
+    await page.waitForTimeout(100)
+
+    // Press enter to open the link dialog
+    await page.keyboard.press('Enter')
+    await expect(page.locator(`[data-modal-name="input"]`)).toBeVisible()
+
+    // Press escape; should close link dialog and restore focus to the block textarea
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(100)
+    await expect(page.locator(`[data-modal-name="input"]`)).not.toBeVisible()
+    await page.waitForTimeout(1000)
+    expect(await block.isEditing()).toBe(true)
   }
 })

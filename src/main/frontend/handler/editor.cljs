@@ -1729,6 +1729,13 @@
       :markdown (util/format "![%s](%s)" label link)
       :org (util/format "[[%s]]"))))
 
+(defn handle-command-input-close [id]
+  (state/set-editor-show-input! nil)
+  (when-let [saved-cursor (state/get-editor-last-pos)]
+    (when-let [input (gdom/getElement id)]
+      (.focus input)
+      (cursor/move-cursor-to input saved-cursor))))
+
 (defn handle-command-input [command id format m]
   ;; TODO: Add error handling for when user doesn't provide a required field.
   ;; (The current behavior is to just revert back to the editor.)
@@ -1752,12 +1759,7 @@
 
     nil)
 
-  (state/set-editor-show-input! nil)
-
-  (when-let [saved-cursor (state/get-editor-last-pos)]
-    (when-let [input (gdom/getElement id)]
-      (.focus input)
-      (cursor/move-cursor-to input saved-cursor))))
+  (handle-command-input-close id))
 
 (defn close-autocomplete-if-outside
   [input]
@@ -2862,7 +2864,7 @@
           (when (and (not editor-action) (not non-enter-processed?))
             (cond
               ;; When you type text inside square brackets
-              (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp"} k))
+              (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp" "Escape"} k))
                    (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
               (let [orig-pos (cursor/get-caret-pos input)
                     value (gobj/get input "value")

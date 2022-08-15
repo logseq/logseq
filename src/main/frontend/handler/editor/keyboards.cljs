@@ -14,8 +14,20 @@
      :on-hide
      (fn [_state e event]
        (let [target (.-target e)]
-         (if (d/has-class? target "bottom-action") ;; FIXME: not particular case
-           (.preventDefault e)
+         (cond
+           (contains?
+            #{:commands :block-commands
+              :page-search :page-search-hashtag :block-search :template-search
+              :property-search :property-value-search
+              :datepicker}
+            (state/get-editor-action))
+           (state/clear-editor-action!) ;; FIXME: This should probably be handled as a keydown handler in editor, but this handler intercepts Esc first
+
+           ;; editor/input component handles Escape directly, so just prevent handling it here
+           (= :input (state/get-editor-action))
+           nil
+
+           :else
            (let [{:keys [on-hide value]} (editor-handler/get-state)]
              (when on-hide
                (on-hide value event))

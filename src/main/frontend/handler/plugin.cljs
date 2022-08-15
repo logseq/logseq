@@ -591,89 +591,94 @@
   (let [el (js/document.createElement "div")]
     (.appendChild js/document.body el)
     (rum/mount
-      (lsp-indicator) el))
+     (lsp-indicator) el))
 
   (state/set-state! :plugin/indicator-text "LOADING")
 
-  (p/then
-    (p/let [root (get-ls-dotdir-root)
-            _ (.setupPluginCore js/LSPlugin (bean/->js {:localUserConfigRoot root :dotConfigRoot root}))
+  (-> (p/let [root            (get-ls-dotdir-root)
+              _               (.setupPluginCore js/LSPlugin (bean/->js {:localUserConfigRoot root :dotConfigRoot root}))
 
-            clear-commands! (fn [pid]
-                              ;; commands
-                              (unregister-plugin-slash-command pid)
-                              (invoke-exported-api "unregister_plugin_simple_command" pid)
-                              (invoke-exported-api "uninstall_plugin_hook" pid)
-                              (unregister-plugin-ui-items pid)
-                              (unregister-plugin-resources pid))
+              clear-commands! (fn [pid]
+                                ;; commands
+                                (unregister-plugin-slash-command pid)
+                                (invoke-exported-api "unregister_plugin_simple_command" pid)
+                                (invoke-exported-api "uninstall_plugin_hook" pid)
+                                (unregister-plugin-ui-items pid)
+                                (unregister-plugin-resources pid))
 
-            _ (doto js/LSPluginCore
-                (.on "registered"
-                     (fn [^js pl]
-                       (register-plugin
-                         (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
+              _               (doto js/LSPluginCore
+                                (.on "registered"
+                                     (fn [^js pl]
+                                       (register-plugin
+                                        (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
 
-                (.on "reloaded"
-                     (fn [^js pl]
-                       (register-plugin
-                         (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
+                                (.on "reloaded"
+                                     (fn [^js pl]
+                                       (register-plugin
+                                        (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
 
-                (.on "unregistered" (fn [pid]
-                                      (let [pid (keyword pid)]
-                                        ;; effects
-                                        (unregister-plugin-themes pid)
-                                        ;; plugins
-                                        (swap! state/state medley/dissoc-in [:plugin/installed-plugins pid])
-                                        ;; commands
-                                        (clear-commands! pid))))
+                                (.on "unregistered" (fn [pid]
+                                                      (let [pid (keyword pid)]
+                                                        ;; effects
+                                                        (unregister-plugin-themes pid)
+                                                        ;; plugins
+                                                        (swap! state/state medley/dissoc-in [:plugin/installed-plugins pid])
+                                                        ;; commands
+                                                        (clear-commands! pid))))
 
-                (.on "unlink-plugin" (fn [pid]
-                                       (let [pid (keyword pid)]
-                                         (ipc/ipc "uninstallMarketPlugin" (name pid)))))
+                                (.on "unlink-plugin" (fn [pid]
+                                                       (let [pid (keyword pid)]
+                                                         (ipc/ipc "uninstallMarketPlugin" (name pid)))))
 
-                (.on "beforereload" (fn [^js pl]
-                                      (let [pid (.-id pl)]
-                                        (clear-commands! pid)
-                                        (unregister-plugin-themes pid false))))
+                                (.on "beforereload" (fn [^js pl]
+                                                      (let [pid (.-id pl)]
+                                                        (clear-commands! pid)
+                                                        (unregister-plugin-themes pid false))))
 
-                (.on "disabled" (fn [pid]
-                                  (clear-commands! pid)
-                                  (unregister-plugin-themes pid)))
+                                (.on "disabled" (fn [pid]
+                                                  (clear-commands! pid)
+                                                  (unregister-plugin-themes pid)))
 
-                (.on "themes-changed" (fn [^js themes]
-                                       (swap! state/state assoc :plugin/installed-themes
-                                              (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
+                                (.on "themes-changed" (fn [^js themes]
+                                                        (swap! state/state assoc :plugin/installed-themes
+                                                               (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
 
-                (.on "theme-selected" (fn [^js theme]
-                                        (let [theme (bean/->clj theme)
-                                              url (:url theme)
-                                              mode (:mode theme)]
-                                          (when mode
-                                            (state/set-custom-theme! mode theme)
-                                            (state/set-theme-mode! mode))
-                                          (hook-plugin-app :theme-changed theme)
-                                          (state/set-state! :plugin/selected-theme url))))
+                                (.on "theme-selected" (fn [^js theme]
+                                                        (let [theme (bean/->clj theme)
+                                                              url   (:url theme)
+                                                              mode  (:mode theme)]
+                                                          (when mode
+                                                            (state/set-custom-theme! mode theme)
+                                                            (state/set-theme-mode! mode))
+                                                          (hook-plugin-app :theme-changed theme)
+                                                          (state/set-state! :plugin/selected-theme url))))
 
-                (.on "reset-custom-theme" (fn [^js themes]
-                                            (let [themes (bean/->clj themes)
-                                                  custom-theme (dissoc themes :mode)
-                                                  mode (:mode themes)]
-                                              (state/set-custom-theme! {:light (if (nil? (:light custom-theme)) {:mode "light"} (:light custom-theme))
-                                                                        :dark (if (nil? (:dark custom-theme)) {:mode "dark"} (:dark custom-theme))})
-                                              (state/set-theme-mode! mode))))
+                                (.on "reset-custom-theme" (fn [^js themes]
+                                                            (let [themes       (bean/->clj themes)
+                                                                  custom-theme (dissoc themes :mode)
+                                                                  mode         (:mode themes)]
+                                                              (state/set-custom-theme! {:light (if (nil? (:light custom-theme)) {:mode "light"} (:light custom-theme))
+                                                                                        :dark  (if (nil? (:dark custom-theme)) {:mode "dark"} (:dark custom-theme))})
+                                                              (state/set-theme-mode! mode))))
 
-                (.on "settings-changed" (fn [id ^js settings]
-                                          (let [id (keyword id)]
-                                            (when (and settings
-                                                       (contains? (:plugin/installed-plugins @state/state) id))
-                                              (update-plugin-settings-state id (bean/->clj settings)))))))
+                                (.on "settings-changed" (fn [id ^js settings]
+                                                          (let [id (keyword id)]
+                                                            (when (and settings
+                                                                       (contains? (:plugin/installed-plugins @state/state) id))
+                                                              (update-plugin-settings-state id (bean/->clj settings)))))))
 
-            default-plugins (get-user-default-plugins)
+              default-plugins (get-user-default-plugins)
 
-            _ (.register js/LSPluginCore (bean/->js (if (seq default-plugins) default-plugins [])) true)])
-    #(do
-       (state/set-state! :plugin/indicator-text "END")
-       (callback))))
+              _               (.register js/LSPluginCore (bean/->js (if (seq default-plugins) default-plugins [])) true)])
+
+      (p/then
+       (fn []
+         (state/set-state! :plugin/indicator-text "END")
+         (callback)))
+      (p/catch
+       (fn [^js e]
+         (log/error :setup-plugin-system-error e)
+         (state/set-state! :plugin/indicator-text (str "Fatal: " e))))))
 
 (defn setup!
   "setup plugin core handler"

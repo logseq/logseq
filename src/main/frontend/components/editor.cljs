@@ -298,8 +298,12 @@
                 (let [[_id on-submit] (:rum/args state)
                       command (:command (first input-option))]
                   (on-submit command @input-value))
-                (reset! input-value nil))))})))
-  [state _id on-submit]
+                (reset! input-value nil))))
+       ;; escape
+       27 (fn [_state _e]
+            (let [[id _on-submit on-cancel] (:rum/args state)]
+              (on-cancel id)))})))
+  [state _id on-submit _on-cancel]
   (when (= :input (state/sub :editor/action))
     (when-let [action-data (state/sub :editor/action-data)]
       (let [{:keys [pos options]} action-data
@@ -556,7 +560,9 @@
       (= :input action)
       (animated-modal "input" (input id
                                      (fn [command m]
-                                       (editor-handler/handle-command-input command id format m)))
+                                       (editor-handler/handle-command-input command id format m))
+                                     (fn []
+                                       (editor-handler/handle-command-input-close id)))
                       true)
 
       (= :zotero action)
