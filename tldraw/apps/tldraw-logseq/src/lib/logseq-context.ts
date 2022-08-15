@@ -27,6 +27,8 @@ export interface LogseqContextValue {
     addNewBlock: (content: string) => string // returns the new block uuid
     queryBlockByUUID: (uuid: string) => any
     isWhiteboardPage: (pageName: string) => boolean
+    saveAsset: (file: File) => Promise<string>
+    makeAssetUrl: (relativeUrl: string) => string
   }
 }
 

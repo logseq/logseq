@@ -4,11 +4,22 @@ import { HTMLContainer, TLComponentProps } from '@tldraw/react'
 import { TLAsset, TLImageShape, TLImageShapeProps } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import type { CustomStyleProps } from './style-props'
+import { LogseqContext } from '~lib/logseq-context'
 
 export interface ImageShapeProps extends TLImageShapeProps, CustomStyleProps {
   type: 'image'
   assetId: string
   opacity: number
+}
+
+declare global {
+  interface Window {
+    logseq?: {
+      api?: {
+        make_asset_url?: (url: string) => string
+      }
+    }
+  }
 }
 
 export class ImageShape extends TLImageShape<ImageShapeProps> {
@@ -44,12 +55,14 @@ export class ImageShape extends TLImageShape<ImageShapeProps> {
       ? clipping
       : [clipping, clipping, clipping, clipping]
 
+    const { handlers } = React.useContext(LogseqContext)
+
     return (
       <HTMLContainer {...events} opacity={isErasing ? 0.2 : opacity}>
         <div style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
           {asset && (
             <img
-              src={asset.src}
+              src={handlers ? handlers.makeAssetUrl(asset.src) : asset.src}
               draggable={false}
               style={{
                 position: 'relative',
@@ -91,10 +104,12 @@ export class ImageShape extends TLImageShape<ImageShapeProps> {
         ? clipping
         : [clipping, clipping, clipping, clipping]
 
+      const make_asset_url = window.logseq?.api?.make_asset_url
+
       return (
         <foreignObject width={bounds.width} height={bounds.height}>
           <img
-            src={asset.src}
+            src={make_asset_url ? make_asset_url(asset.src) : asset.src}
             draggable={false}
             style={{
               position: 'relative',

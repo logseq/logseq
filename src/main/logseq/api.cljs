@@ -857,6 +857,8 @@
   (p/let [_ (el/persist-dbs!)]
          true))
 
+(def ^:export make_asset_url editor-handler/make-asset-url)
+
 (defn ^:export __debug_state
   [path]
   (-> (if (string? path)

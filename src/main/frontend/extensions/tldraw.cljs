@@ -3,6 +3,7 @@
             [frontend.components.block :as block]
             [frontend.components.page :as page]
             [frontend.db.model :as model]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.search :as search]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.rum :as r]
@@ -32,16 +33,26 @@
   [props]
   (block/page-cp {:preview? true} {:block/name (gobj/get props "pageName")}))
 
-(defn create-block-shape-by-id [e]
+(defn create-block-shape-by-id
+  [e]
   (when-let [block (block/get-dragging-block)]
     (let [uuid (:block/uuid block)
           client-x (gobj/get e "clientX")
           client-y (gobj/get e "clientY")]
       (whiteboard-handler/add-new-block-shape! uuid client-x client-y))))
 
-(defn search-handler [q]
+(defn search-handler
+  [q]
   (p/let [results (search/search q)]
     (clj->js results)))
+
+(defn save-asset-handler
+  [file]
+  (-> (editor-handler/save-assets! nil (state/get-current-repo) [(js->clj file)])
+      (p/then
+       (fn [res]
+         (when-let [[asset-file-name _ full-file-path] (and (seq res) (first res))]
+           (editor-handler/resolve-relative-path (or full-file-path asset-file-name)))))))
 
 (rum/defc tldraw-app
   [name block-id]
@@ -71,6 +82,8 @@
                 :handlers (clj->js {:search search-handler
                                     :queryBlockByUUID #(clj->js (model/query-block-by-uuid (parse-uuid %)))
                                     :isWhiteboardPage model/whiteboard-page?
+                                    :saveAsset save-asset-handler
+                                    :makeAssetUrl editor-handler/make-asset-url
                                     :addNewBlock (fn [content]
                                                    (str (whiteboard-handler/add-new-block! name content)))})
                 :onMount (fn [app] (set-tln ^js app))

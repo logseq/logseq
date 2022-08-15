@@ -1,4 +1,4 @@
-import { uniqueId } from '@tldraw/core'
+import { uniqueId, fileToBase64 } from '@tldraw/core'
 import React from 'react'
 import ReactDOM from 'react-dom'
 import { App as TldrawApp } from 'tldraw-logseq'
@@ -136,6 +136,10 @@ const searchHandler = q => {
   })
 }
 
+const saveAssets = async files => {
+  return Promise.all(files.map(fileToBase64))
+}
+
 export default function App() {
   const [theme, setTheme] = React.useState('light')
 
@@ -152,8 +156,10 @@ export default function App() {
         handlers={{
           search: searchHandler,
           addNewBlock: () => uniqueId(),
-          queryBlockByUUID: (uuid) => ({uuid, content: 'some random content'}),
-          isWhiteboardPage: () => false
+          queryBlockByUUID: uuid => ({ uuid, content: 'some random content' }),
+          isWhiteboardPage: () => false,
+          saveAssets,
+          makeAssetUrl: a => a,
         }}
         model={documentModel}
         onPersist={onPersist}
