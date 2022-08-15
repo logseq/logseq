@@ -70,7 +70,9 @@
     (when (and (not-empty name) (not-empty (gobj/get data "currentPageId")))
       [:div.draw.tldraw.whiteboard.relative.w-full.h-full
        {:style {:overscroll-behavior "none"}
-        :on-blur #(state/set-block-component-editing-mode! false)
+        :on-blur (fn [e] 
+                   (when (#{"INPUT" "TEXTAREA"} (.-tagName (gobj/get e "target")))
+                     (state/clear-edit!)))
         :on-drop create-block-shape-by-id
         ;; wheel -> overscroll may cause browser navigation
         :on-wheel util/stop-propagation}

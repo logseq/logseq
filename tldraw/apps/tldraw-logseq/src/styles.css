@@ -260,7 +260,7 @@
   padding: 4px;
   gap: 8px;
 
-  .tl-button:hover {
+  .tl-button:not([data-selected='true']):hover {
     background-color: var(--ls-tertiary-background-color);
   }
 }
