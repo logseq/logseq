@@ -68,14 +68,15 @@
 
 (defn- tree [flat-nodes root-id]
   (let [children (group-by :block/parent flat-nodes)
-        nodes (fn nodes [parent-id]
-                (map (fn [b]
-                       (let [children (nodes (:db/id b))]
-                         (if (seq children)
-                           (assoc b :block/children children)
-                           b)))
-                  (children {:db/id parent-id})))]
-    (nodes root-id)))
+        nodes (fn nodes [parent-id level]
+                (mapv (fn [b]
+                        (let [b' (assoc b :block/level (inc level))
+                              children (nodes (:db/id b) (inc level))]
+                          (if (seq children)
+                            (assoc b' :block/children children)
+                            b')))
+                      (get children {:db/id parent-id})))]
+    (nodes root-id 1)))
 
 (defn non-consecutive-blocks->vec-tree
   "`blocks` need to be in the same page."
@@ -88,12 +89,15 @@
         id->parent (zipmap (map :db/id blocks)
                            (map (comp :db/id :block/parent) blocks))
         top-level-ids (set (remove #(id->parent (id->parent %)) (map :db/id blocks)))
+        ;; Separate blocks into parent and children groups [parent-children, parent-children]
         blocks' (loop [blocks blocks
                        result []]
                   (if-let [block (first blocks)]
                     (if (top-level-ids (:db/id block))
-                      (recur (rest blocks) (conj result [block]))
-                      (recur (rest blocks) (conj (vec (butlast result)) (conj (last result) block))))
+                      (let [block' (assoc block :block/level 1)]
+                        (recur (rest blocks) (conj result [block'])))
+                      (recur (rest blocks) (conj (vec (butlast result))
+                                                 (conj (last result) block))))
                     result))]
     (map (fn [[parent & children]]
            (if (seq children)

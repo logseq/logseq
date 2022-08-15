@@ -713,7 +713,11 @@
             result (apply d/q query db resolved-inputs)]
         (clj->js result)))))
 
-(def ^:export custom_query db/custom-query)
+(defn ^:export custom_query
+  [query-string]
+  (let [result (let [query (cljs.reader/read-string query-string)]
+                 (db/custom-query {:query query}))]
+    (bean/->js (normalize-keyword-for-json (flatten @result)))))
 
 (defn ^:export download_graph_db
   []
