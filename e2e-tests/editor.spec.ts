@@ -180,7 +180,7 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
     }
 })
 
-test('copy and paste block after editing new block', async ({ page, block }) => {
+test('copy and paste block after editing new block #5962', async ({ page, block }) => {
   await createRandomPage(page)
 
   // Create a block and copy it in block-select mode
@@ -197,7 +197,7 @@ test('copy and paste block after editing new block', async ({ page, block }) => 
   await page.keyboard.press('Enter')
   await page.waitForTimeout(100)
   await page.keyboard.press('Enter')
-  
+
   await page.waitForTimeout(100)
   // Create a new block with some text
   await page.keyboard.insertText("Typed block")
@@ -210,4 +210,304 @@ test('copy and paste block after editing new block', async ({ page, block }) => 
   }
 
   await expect(page.locator('text="Typed block"')).toHaveCount(1);
+})
+
+test('undo and redo after starting an action should not destroy text #6267', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  // Get one piece of undo state onto the stack
+  await block.mustFill('text1 ')
+  await page.waitForTimeout(550) // Wait for 500ms autosave period to expire
+
+  // Then type more, start an action prompt, and undo
+  await page.keyboard.type('text2 ')
+  for (const char of '[[') {
+    await page.keyboard.type(char)
+  }
+  await expect(page.locator(`[data-modal-name="page-search"]`)).toBeVisible()
+  if (IsMac) {
+    await page.keyboard.press('Meta+z')
+  } else {
+    await page.keyboard.press('Control+z')
+  }
+  await page.waitForTimeout(100)
+
+  // Should close the action menu when we undo the action prompt
+  await expect(page.locator(`[data-modal-name="page-search"]`)).not.toBeVisible()
+
+  // It should undo to the last saved state, and not erase the previous undo action too
+  await expect(page.locator('text="text1"')).toHaveCount(1)
+
+  // And it should keep what was undone as a redo action
+  if (IsMac) {
+    await page.keyboard.press('Meta+Shift+z')
+  } else {
+    await page.keyboard.press('Control+Shift+z')
+  }
+  await expect(page.locator('text="text2"')).toHaveCount(1)
+})
+
+test('undo after starting an action should close the action menu #6269', async ({ page, block }) => {
+  for (const [commandTrigger, modalName] of [['/', 'commands'], ['[[', 'page-search']]) {
+    await createRandomPage(page)
+
+    // Open the action modal
+    await block.mustType('text1 ')
+    await page.waitForTimeout(550)
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+    }
+    await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
+
+    // Undo, removing "/today", and closing the action modal
+    if (IsMac) {
+      await page.keyboard.press('Meta+z')
+    } else {
+      await page.keyboard.press('Control+z')
+    }
+    await page.waitForTimeout(100)
+    await expect(page.locator('text="/today"')).toHaveCount(0)
+    await expect(page.locator(`[data-modal-name="${modalName}"]`)).not.toBeVisible()
+  }
+})
+
+test('#6266 moving cursor outside of brackets should close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
+  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+    // First, left arrow
+    await createRandomPage(page)
+
+    await block.mustFill('')
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+      await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
+    }
+    await autocompleteMenu.expectVisible(modalName)
+
+    await page.keyboard.press('ArrowLeft')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectHidden(modalName)
+
+    // Then, right arrow
+    await createRandomPage(page)
+
+    await block.mustFill('')
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+      await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
+    }
+    await autocompleteMenu.expectVisible(modalName)
+
+    await page.waitForTimeout(100)
+    // Move cursor outside of the space strictly between the double brackets
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectHidden(modalName)
+  }
+})
+
+// Old logic would fail this because it didn't do the check if @search-timeout was set
+test('#6266 moving cursor outside of parens immediately after searching should still close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
+  for (const [commandTrigger, modalName] of [['((', 'block-search']]) {
+    await createRandomPage(page)
+
+    // Open the autocomplete menu
+    // TODO: Maybe remove these "text " entries in tests that don't need them
+    await block.mustFill('')
+    await page.waitForTimeout(550)
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+      await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
+    }
+    await page.waitForTimeout(100)
+    await page.keyboard.type("some block search text")
+    await autocompleteMenu.expectVisible(modalName)
+
+    // Move cursor outside of the space strictly between the double parens
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectHidden(modalName)
+  }
+})
+
+test('pressing up and down should NOT close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
+  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+    await createRandomPage(page)
+
+    // Open the autocomplete menu
+    await block.mustFill('')
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+      await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
+    }
+    await autocompleteMenu.expectVisible(modalName)
+    const cursorPos = await block.selectionStart()
+
+    await page.keyboard.press('ArrowUp')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+    await expect(await block.selectionStart()).toEqual(cursorPos)
+
+    await page.keyboard.press('ArrowDown')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+    await expect(await block.selectionStart()).toEqual(cursorPos)
+  }
+})
+
+test('moving cursor inside of brackets should NOT close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
+  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+    await createRandomPage(page)
+
+    // Open the autocomplete menu
+    await block.mustFill('')
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+      await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
+    }
+    await page.waitForTimeout(100)
+    if (commandTrigger === '[[') {
+      await autocompleteMenu.expectVisible(modalName)
+    }
+
+    await page.keyboard.type("search")
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+
+    // Move cursor, still inside the brackets
+    await page.keyboard.press('ArrowLeft')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+  }
+})
+
+test('moving cursor inside of brackets when autocomplete menu is closed should NOT open autocomplete menu', async ({ page, block, autocompleteMenu }) => {
+  // Note: (( behaves differently and doesn't auto-trigger when typing in it after exiting the search prompt once
+  for (const [commandTrigger, modalName] of [['[[', 'page-search']]) {
+    await createRandomPage(page)
+
+    // Open the autocomplete menu
+    await block.mustFill('')
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+      await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
+    }
+    await autocompleteMenu.expectVisible(modalName)
+
+    await block.escapeEditing()
+    await autocompleteMenu.expectHidden(modalName)
+
+    // Move cursor left until it's inside the brackets; shouldn't open autocomplete menu
+    await page.locator('.block-content').click()
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectHidden(modalName)
+
+    await page.keyboard.press('ArrowLeft')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectHidden(modalName)
+
+    await page.keyboard.press('ArrowLeft')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectHidden(modalName)
+
+    // Type a letter, this should open the autocomplete menu
+    await page.keyboard.type('z')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+  }
+})
+
+test('selecting text inside of brackets should NOT close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
+  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+    await createRandomPage(page)
+
+    // Open the autocomplete menu
+    await block.mustFill('')
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+      await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
+    }
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+
+    await page.keyboard.type("some page search text")
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+
+    // Select some text within the brackets
+    await page.keyboard.press('Shift+ArrowLeft')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+  }
+})
+
+test('pressing backspace and remaining inside of brackets should NOT close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
+  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+    await createRandomPage(page)
+
+    // Open the autocomplete menu
+    await block.mustFill('')
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+      await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
+    }
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+
+    await page.keyboard.type("some page search text")
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+
+    // Delete one character inside the brackets
+    await page.keyboard.press('Backspace')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+  }})
+test('press escape when autocomplete menu is open, should close autocomplete menu only #6270', async ({ page, block }) => {
+  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['/', 'commands']]) {
+    await createRandomPage(page)
+
+    // Open the action modal
+    await block.mustFill('text ')
+    await page.waitForTimeout(550)
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char) // Type it one character at a time, because too quickly can fail to trigger it sometimes
+    }
+    await page.waitForTimeout(100)
+    await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
+    await page.waitForTimeout(100)
+
+    // Press escape; should close action modal instead of exiting edit mode
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(100)
+    await expect(page.locator(`[data-modal-name="${modalName}"]`)).not.toBeVisible()
+    await page.waitForTimeout(1000)
+    expect(await block.isEditing()).toBe(true)
+  }
+})
+
+test('press escape when link/image dialog is open, should restore focus to input', async ({ page, block }) => {
+  for (const [commandTrigger, modalName] of [['/link', 'commands']]) {
+    await createRandomPage(page)
+
+    // Open the action modal
+    await block.mustFill('')
+    await page.waitForTimeout(550)
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char) // Type it one character at a time, because too quickly can fail to trigger it sometimes
+    }
+    await page.waitForTimeout(100)
+    await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
+    await page.waitForTimeout(100)
+
+    // Press enter to open the link dialog
+    await page.keyboard.press('Enter')
+    await expect(page.locator(`[data-modal-name="input"]`)).toBeVisible()
+
+    // Press escape; should close link dialog and restore focus to the block textarea
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(100)
+    await expect(page.locator(`[data-modal-name="input"]`)).not.toBeVisible()
+    await page.waitForTimeout(1000)
+    expect(await block.isEditing()).toBe(true)
+  }
 })

@@ -19,12 +19,12 @@
 
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}
-  [repo page _format]
+  [repo page]
   (when-let [page-e (db/pull [:block/name (util/page-name-sanity-lc page)])]
     (page/page-blocks-cp repo page-e {})))
 
 (rum/defc journal-cp < rum/reactive
-  [[title format]]
+  [title]
   (let [;; Don't edit the journal title
         page (string/lower-case title)
         repo (state/sub :git/current-repo)
@@ -56,9 +56,9 @@
         (gp-util/capitalize-all title)]]
 
       (if today?
-        (blocks-cp repo page format)
+        (blocks-cp repo page)
         (ui/lazy-visible
-         (fn [] (blocks-cp repo page format))
+         (fn [] (blocks-cp repo page))
          {:debug-id (str "journal-blocks " page)}))
 
       {})
@@ -77,9 +77,9 @@
   [:div#journals
    (ui/infinite-list
     "main-content-container"
-    (for [{:block/keys [name format]} latest-journals]
+    (for [{:block/keys [name]} latest-journals]
       [:div.journal-item.content {:key name}
-       (journal-cp [name format])])
+       (journal-cp name)])
     {:has-more (page-handler/has-more-journals?)
      :more-class "text-4xl"
      :on-top-reached page-handler/create-today-journal!
