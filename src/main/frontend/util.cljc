@@ -1077,6 +1077,18 @@
 
 (defn keyname [key] (str (namespace key) "/" (name key)))
 
+#?(:cljs
+   (defn select-highlight!
+     [blocks]
+     (doseq [block blocks]
+       (d/add-class! block "selected noselect"))))
+
+#?(:cljs
+   (defn select-unhighlight!
+     [blocks]
+     (doseq [block blocks]
+       (d/remove-class! block "selected" "noselect"))))
+
 (defn batch [in max-time handler buf-atom]
   (async/go-loop [buf buf-atom t (async/timeout max-time)]
     (let [[v p] (async/alts! [in t])]
