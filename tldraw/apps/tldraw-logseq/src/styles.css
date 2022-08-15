@@ -212,7 +212,6 @@
   z-index: 10000;
   flex-flow: column;
   border-radius: 8px;
-  overflow: hidden;
   padding: 8px;
 
   .tl-button {
@@ -241,12 +240,29 @@
 
   flex-flow: column;
   border-radius: 8px;
-  overflow: hidden;
   padding: 4px;
   gap: 8px;
   background-color: var(--color-panel);
   box-shadow: var(--shadow-medium);
   pointer-events: all;
+}
+
+.tl-geometry-tools-pane-anchor {
+  @apply relative;
+}
+
+.tl-geometry-tools-pane {
+  @apply absolute flex flex-col items-center justify-center;
+  right: 100%;
+  top: calc(50% - 52px);
+  background-color: var(--ls-secondary-background-color);
+  border-radius: 8px;
+  padding: 4px;
+  gap: 8px;
+
+  .tl-button:hover {
+    background-color: var(--ls-tertiary-background-color);
+  }
 }
 
 .floating-panel[data-tool-locked='true'] > .tl-button[data-selected='true']::after {
@@ -496,7 +512,7 @@
   cursor: pointer;
   gap: 0.5em;
 
-  &[data-focused=true] {
+  &[data-focused='true'] {
     background-color: var(--ls-menu-hover-color, #f4f5f7);
   }
 }
@@ -546,7 +562,7 @@
 
   .page-ref {
     color: var(--ls-title-text-color);
-  }  
+  }
 }
 
 .tl-type-tag {

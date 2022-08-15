@@ -40,6 +40,56 @@ const ToolButton = observer(({ id, icon, title, ...props }: ToolButtonProps) => 
   )
 })
 
+const GeometryToolButtons = observer(() => {
+  const geometries = [
+    {
+      id: 'box',
+      icon: 'rectangle',
+      title: 'Rectangle',
+    },
+    {
+      id: 'ellipse',
+      icon: 'circle',
+      title: 'Circle',
+    },
+    {
+      id: 'polygon',
+      icon: 'triangle',
+      title: 'Triangle',
+    },
+  ]
+
+  const app = useApp()
+  const [activeGeomId, setActiveGeomId] = React.useState(
+    () => (geometries.find(geo => geo.id === app.selectedTool.id) ?? geometries[0]).id
+  )
+
+  const [paneActive, setPaneActive] = React.useState(false)
+
+  React.useEffect(() => {
+    setActiveGeomId(prevId => {
+      return geometries.find(geo => geo.id === app.selectedTool.id)?.id ?? prevId
+    })
+  }, [app.selectedTool.id])
+
+  return (
+    <div
+      className="tl-geometry-tools-pane-anchor"
+      onMouseEnter={() => setPaneActive(true)}
+      onMouseLeave={() => setPaneActive(false)}
+    >
+      {<ToolButton {...geometries.find(geo => geo.id === activeGeomId)!} />}
+      {paneActive && (
+        <div className="tl-geometry-tools-pane">
+          {geometries.map(props => (
+            <ToolButton key={props.id} {...props} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+})
+
 export const PrimaryTools = observer(function PrimaryTools() {
   const app = useApp()
 
@@ -52,6 +102,7 @@ export const PrimaryTools = observer(function PrimaryTools() {
         <ToolButton title="Eraser" id="erase" icon="eraser" />
         <ToolButton title="Connector" id="line" icon="connector" />
         <ToolButton title="Text" id="text" icon="text" />
+        <GeometryToolButtons />
         <ToolButton title="Logseq Portal" id="logseq-portal" icon={<LogseqIcon />} />
       </div>
     </div>
