@@ -359,7 +359,7 @@
                              (block-ref-custom-context-menu-content block block-ref))
                             (state/set-state! :block-ref/context nil))
 
-                          (state/selection?)
+                          (and (state/selection?) (not (d/has-class? target "bullet")))
                           (common-handler/show-custom-context-menu!
                            e
                            (custom-context-menu-content))
