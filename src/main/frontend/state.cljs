@@ -691,12 +691,24 @@
   []
   (:selection/blocks @state))
 
-(defn get-selection-block-ids
-  []
-  (->> (sub :selection/blocks)
+(defn- get-selected-block-ids
+  [blocks]
+  (->> blocks
        (keep #(when-let [id (dom/attr % "blockid")]
                 (uuid id)))
        (distinct)))
+
+(defn get-selection-block-ids
+  []
+  (get-selected-block-ids (get-selection-blocks)))
+
+(defn sub-block-selected?
+  [block-uuid]
+  (rum/react
+   (rum/derived-atom [state] [::select-block block-uuid]
+     (fn [state]
+       (contains? (set (get-selected-block-ids (:selection/blocks state)))
+                  block-uuid)))))
 
 (defn get-selection-start-block-or-first
   []

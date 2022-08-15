@@ -2353,7 +2353,6 @@
     (when (and
            (state/in-selection-mode?)
            (non-dragging? e))
-      (util/stop e)
       (editor-handler/highlight-selection-area! block-id))))
 
 (defn- block-mouse-leave
@@ -2457,8 +2456,7 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
-        selected-blocks (set (state/get-selection-block-ids))
-        selected? (contains? selected-blocks uuid)]
+        selected? (state/sub-block-selected? uuid)]
     [:div.ls-block
      (cond->
        {:id block-id
