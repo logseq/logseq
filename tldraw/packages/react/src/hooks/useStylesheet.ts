@@ -119,7 +119,6 @@ const tlcss = css`
     cursor: var(--tl-cursor) !important;
     box-sizing: border-box;
     color: var(--tl-foreground);
-    will-change: transform;
   }
 
   .tl-overlay {
@@ -167,7 +166,6 @@ const tlcss = css`
     left: 0px;
     transform-origin: center center;
     contain: layout style size;
-    will-change: transform;
   }
 
   .tl-positioned {

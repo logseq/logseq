@@ -123,7 +123,6 @@ export function usePaste(context: LogseqContextValue) {
         try {
           const data = JSON.parse(rawText)
           if (data.type === 'logseq/whiteboard-shapes') {
-            debugger
             const shapes = data.shapes as TLShapeModel[]
             const commonBounds = BoundsUtils.getCommonBounds(
               shapes.map(shape => ({
