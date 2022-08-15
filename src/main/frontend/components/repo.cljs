@@ -84,9 +84,9 @@
                                            (ui/make-confirm-modal
                                             {:title      [:div
                                                           {:style {:max-width 700}}
-                                                          (str "Are you sure you want to permanently delete graph \"" GraphName "\" from remote?")]
+                                                          (str "Are you sure to permanently delete the graph \"" GraphName "\" from our server?")]
                                              :sub-title   [:div.small.mt-1
-                                                           "Notice that the deleted graph can't be recovered, so we highly recommend you download it before deletion."]
+                                                           "Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]
                                              :on-confirm (fn [_ {:keys [close-fn]}]
                                                            (close-fn)
                                                            (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] true)
