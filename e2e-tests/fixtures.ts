@@ -3,7 +3,7 @@ import * as path from 'path'
 import { test as base, expect, ConsoleMessage, Locator } from '@playwright/test';
 import { ElectronApplication, Page, BrowserContext, _electron as electron } from 'playwright'
 import { loadLocalGraph, openLeftSidebar, randomString } from './utils';
-import { LogseqFixtures } from './types';
+import { autocompleteMenu, LogseqFixtures } from './types';
 
 let electronApp: ElectronApplication
 let context: BrowserContext
@@ -215,6 +215,30 @@ export const test = base.extend<LogseqFixtures>({
       }
     }
     use(block)
+  },
+
+  autocompleteMenu: async ({ }, use) => {
+    const autocompleteMenu: autocompleteMenu = {
+      expectVisible: async (modalName?: string) => {
+        const modal = page.locator(modalName ? `[data-modal-name="${modalName}"]` : `[data-modal-name]`)
+        if (await modal.isVisible()) {
+          await page.waitForTimeout(100)
+          await expect(modal).toBeVisible()
+        } else {
+          await modal.waitFor({ state: 'visible', timeout: 1000 })
+        }
+      },
+      expectHidden: async (modalName?: string) => {
+        const modal = page.locator(modalName ? `[data-modal-name="${modalName}"]` : `[data-modal-name]`)
+        if (!await modal.isVisible()) {
+          await page.waitForTimeout(100)
+          await expect(modal).not.toBeVisible()
+        } else {
+          await modal.waitFor({ state: 'hidden', timeout: 1000 })
+        }
+      }
+    }
+    await use(autocompleteMenu)
   },
 
   context: async ({ }, use) => {

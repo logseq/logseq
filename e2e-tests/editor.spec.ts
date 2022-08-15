@@ -197,7 +197,7 @@ test('copy and paste block after editing new block #5962', async ({ page, block 
   await page.keyboard.press('Enter')
   await page.waitForTimeout(100)
   await page.keyboard.press('Enter')
-  
+
   await page.waitForTimeout(100)
   // Create a new block with some text
   await page.keyboard.insertText("Typed block")
@@ -212,6 +212,197 @@ test('copy and paste block after editing new block #5962', async ({ page, block 
   await expect(page.locator('text="Typed block"')).toHaveCount(1);
 })
 
+test('#6266 moving cursor outside of brackets should close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
+  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+    // First, left arrow
+    await createRandomPage(page)
+
+    await block.mustFill('')
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+      await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
+    }
+    await autocompleteMenu.expectVisible(modalName)
+
+    await page.keyboard.press('ArrowLeft')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectHidden(modalName)
+
+    // Then, right arrow
+    await createRandomPage(page)
+
+    await block.mustFill('')
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+      await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
+    }
+    await autocompleteMenu.expectVisible(modalName)
+
+    await page.waitForTimeout(100)
+    // Move cursor outside of the space strictly between the double brackets
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectHidden(modalName)
+  }
+})
+
+// Old logic would fail this because it didn't do the check if @search-timeout was set
+test('#6266 moving cursor outside of parens immediately after searching should still close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
+  for (const [commandTrigger, modalName] of [['((', 'block-search']]) {
+    await createRandomPage(page)
+
+    // Open the autocomplete menu
+    // TODO: Maybe remove these "text " entries in tests that don't need them
+    await block.mustFill('')
+    await page.waitForTimeout(550)
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+      await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
+    }
+    await page.waitForTimeout(100)
+    await page.keyboard.type("some block search text")
+    await autocompleteMenu.expectVisible(modalName)
+
+    // Move cursor outside of the space strictly between the double parens
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectHidden(modalName)
+  }
+})
+
+test('pressing up and down should NOT close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
+  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+    await createRandomPage(page)
+
+    // Open the autocomplete menu
+    await block.mustFill('')
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+      await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
+    }
+    await autocompleteMenu.expectVisible(modalName)
+    const cursorPos = await block.selectionStart()
+
+    await page.keyboard.press('ArrowUp')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+    await expect(await block.selectionStart()).toEqual(cursorPos)
+
+    await page.keyboard.press('ArrowDown')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+    await expect(await block.selectionStart()).toEqual(cursorPos)
+  }
+})
+
+test('moving cursor inside of brackets should NOT close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
+  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+    await createRandomPage(page)
+
+    // Open the autocomplete menu
+    await block.mustFill('')
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+      await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
+    }
+    await page.waitForTimeout(100)
+    if (commandTrigger === '[[') {
+      await autocompleteMenu.expectVisible(modalName)
+    }
+
+    await page.keyboard.type("search")
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+
+    // Move cursor, still inside the brackets
+    await page.keyboard.press('ArrowLeft')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+  }
+})
+
+test('moving cursor inside of brackets when autocomplete menu is closed should NOT open autocomplete menu', async ({ page, block, autocompleteMenu }) => {
+  // Note: (( behaves differently and doesn't auto-trigger when typing in it after exiting the search prompt once
+  for (const [commandTrigger, modalName] of [['[[', 'page-search']]) {
+    await createRandomPage(page)
+
+    // Open the autocomplete menu
+    await block.mustFill('')
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+      await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
+    }
+    await autocompleteMenu.expectVisible(modalName)
+
+    await block.escapeEditing()
+    await autocompleteMenu.expectHidden(modalName)
+
+    // Move cursor left until it's inside the brackets; shouldn't open autocomplete menu
+    await page.locator('.block-content').click()
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectHidden(modalName)
+
+    await page.keyboard.press('ArrowLeft')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectHidden(modalName)
+
+    await page.keyboard.press('ArrowLeft')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectHidden(modalName)
+
+    // Type a letter, this should open the autocomplete menu
+    await page.keyboard.type('z')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+  }
+})
+
+test('selecting text inside of brackets should NOT close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
+  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+    await createRandomPage(page)
+
+    // Open the autocomplete menu
+    await block.mustFill('')
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+      await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
+    }
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+
+    await page.keyboard.type("some page search text")
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+
+    // Select some text within the brackets
+    await page.keyboard.press('Shift+ArrowLeft')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+  }
+})
+
+test('pressing backspace and remaining inside of brackets should NOT close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
+  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+    await createRandomPage(page)
+
+    // Open the autocomplete menu
+    await block.mustFill('')
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+      await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
+    }
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+
+    await page.keyboard.type("some page search text")
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+
+    // Delete one character inside the brackets
+    await page.keyboard.press('Backspace')
+    await page.waitForTimeout(100)
+    await autocompleteMenu.expectVisible(modalName)
+  }})
 test('press escape when autocomplete menu is open, should close autocomplete menu only #6270', async ({ page, block }) => {
   for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['/', 'commands']]) {
     await createRandomPage(page)

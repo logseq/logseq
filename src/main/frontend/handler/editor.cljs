@@ -1761,34 +1761,22 @@
 
   (handle-command-input-close id))
 
-(defn get-search-q
-  []
-  (when-let [id (state/get-edit-input-id)]
-    (when-let [input (gdom/getElement id)]
-      (let [current-pos (cursor/pos input)
-            pos (state/get-editor-last-pos)
-            edit-content (or (state/sub [:editor/content id]) "")]
-        (or
-         @*selected-text
-         (gp-util/safe-subs edit-content pos current-pos))))))
-
 (defn close-autocomplete-if-outside
   [input]
   (when (and input
              (state/get-editor-action)
              (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets)))
-    (when (get-search-q)
-      (let [value (gobj/get input "value")
-            pos (state/get-editor-last-pos)
-            current-pos (cursor/pos input)
-            between (gp-util/safe-subs value (min pos current-pos) (max pos current-pos))]
-        (when (and between
-                   (or
-                    (string/includes? between "[")
-                    (string/includes? between "]")
-                    (string/includes? between "(")
-                    (string/includes? between ")")))
-          (state/clear-editor-action!))))))
+    (let [value (gobj/get input "value")
+          pos (state/get-editor-last-pos)
+          current-pos (cursor/pos input)
+          between (gp-util/safe-subs value (min pos current-pos) (max pos current-pos))]
+      (when (and between
+                 (or
+                  (string/includes? between "[")
+                  (string/includes? between "]")
+                  (string/includes? between "(")
+                  (string/includes? between ")")))
+        (state/clear-editor-action!)))))
 
 (defn resize-image!
   [block-id metadata full_text size]
@@ -2803,7 +2791,7 @@
         nil))))
 
 (defn ^:large-vars/cleanup-todo keyup-handler
-  [_state input input-id search-timeout]
+  [_state input input-id]
   (fn [e key-code]
     (when-not (util/event-is-composing? e)
       (let [current-pos (cursor/pos input)
@@ -2924,11 +2912,11 @@
                 (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
                 (state/set-editor-show-block-commands!))
 
-              (nil? @search-timeout)
-              (close-autocomplete-if-outside input)
-
               :else
               nil)))
+        
+        (close-autocomplete-if-outside input)
+        
         (when-not (or (= k "Shift") is-processed?)
           (state/set-last-key-code! {:key-code key-code
                                      :code code
