@@ -39,7 +39,7 @@
     (let [uuid (:block/uuid block)
           client-x (gobj/get e "clientX")
           client-y (gobj/get e "clientY")]
-      (whiteboard-handler/add-new-block-shape! uuid client-x client-y))))
+      (whiteboard-handler/add-new-block-portal-shape! uuid client-x client-y))))
 
 (defn search-handler
   [q]

@@ -2,6 +2,7 @@
   (:require [datascript.core :as d]
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
+            [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -162,11 +163,13 @@
    :size [400, 0]
    :type "logseq-portal"})
 
-(defn add-new-block-shape!
+(defn add-new-block-portal-shape!
+  "Given the block id and the point, add a new shape to the referenced block."
   [block-id client-x client-y]
   (let [api (get-tldr-api)
         point (js->clj (.. (get-tldr-app) -viewport (getPagePoint #js[client-x client-y])))
         shape (->logseq-portal-shape block-id point)]
+    (editor-handler/set-blocks-id! [block-id])
     (.createShapes api (clj->js shape))))
 
 (defn add-new-block!
