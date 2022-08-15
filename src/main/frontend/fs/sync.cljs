@@ -733,7 +733,7 @@
                                     (js->clj r))))))
 
 
-(deftype CapacitorAPI [^:mutable _graph-uuid ^:mutable _private-key ^:mutable _public-key]
+(deftype ^:large-vars/cleanup-todo CapacitorAPI [^:mutable _graph-uuid ^:mutable _private-key ^:mutable _public-key]
   IToken
   (<get-token [this]
     (go
@@ -1721,10 +1721,6 @@
   "Immediately trigger upload of files in waiting queue"
   (chan))
 (def immediately-local->remote-mult (async/mult immediately-local->remote-chan))
-
-(def app-state-changed-chan
-  "boolean value, means active or not"
-  (chan 1))
 
 (def pause-resume-chan
   "false -> pause, true -> resume.

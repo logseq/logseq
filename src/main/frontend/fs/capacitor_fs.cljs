@@ -251,7 +251,7 @@
      :webkit-allow-full-screen "webkitallowfullscreen"
      :height "100%"}]])
 
-(defrecord Capacitorfs []
+(defrecord ^:large-vars/cleanup-todo Capacitorfs []
   protocol/Fs
   (mkdir! [_this dir]
     (-> (.mkdir Filesystem

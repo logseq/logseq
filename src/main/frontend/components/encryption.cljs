@@ -51,7 +51,7 @@
   (fn [close-fn]
     (encryption-dialog-inner repo-url close-fn)))
 
-(rum/defcs input-password-inner < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo input-password-inner < rum/reactive
   (rum/local "" ::password)
   (rum/local "" ::pw-confirm)
   (rum/local false ::pw-confirm-focused?)
