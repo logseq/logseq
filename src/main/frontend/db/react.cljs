@@ -116,13 +116,14 @@
 
 (defn add-q!
   [k query time inputs result-atom transform-fn query-fn inputs-fn]
-  (swap! query-state assoc k {:query query
-                              :query-time time
-                              :inputs inputs
-                              :result result-atom
-                              :transform-fn transform-fn
-                              :query-fn query-fn
-                              :inputs-fn inputs-fn})
+  (let [time' (int (util/safe-parse-float time))]
+    (swap! query-state assoc k {:query query
+                               :query-time time'
+                               :inputs inputs
+                               :result result-atom
+                               :transform-fn transform-fn
+                               :query-fn query-fn
+                               :inputs-fn inputs-fn}))
   result-atom)
 
 (defn remove-q!
