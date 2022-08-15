@@ -131,12 +131,14 @@
           (.toBlob canvas' callback))
         ))))
 
-(defn update-hl-area-block!
+(defn update-hl-block!
   [highlight]
-  (when-let [block (and (area-highlight? highlight)
-                        (db-model/get-block-by-uuid (:id highlight)))]
-    (editor-handler/set-block-property!
-      (:block/uuid block) :hl-stamp (get-in highlight [:content :image]))))
+  (when-let [block (db-model/get-block-by-uuid (:id highlight))]
+    (doseq [[k v] {:hl-stamp (if (area-highlight? highlight)
+                               (get-in highlight [:content :image])
+                               (js/Date.now))
+                   :hl-color (get-in highlight [:properties :color])}]
+      (editor-handler/set-block-property! (:block/uuid block) k v))))
 
 (defn unlink-hl-area-image$
   [^js _viewer current hl]

@@ -293,7 +293,8 @@ input::-webkit-inner-spin-button {
           &.icon-enter {
             @apply absolute opacity-80;
 
-            right: 145px;
+            right: -1px;
+            top: 2px;
           }
         }
       }

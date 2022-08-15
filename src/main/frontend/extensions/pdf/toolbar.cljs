@@ -153,14 +153,16 @@
     (rum/use-effect!
      (fn []
        (when-let [^js bus (.-eventBus viewer)]
-         (.on bus "updatefindmatchescount" #(let [matches (bean/->clj (.-matchesCount %))]
-                                              (set-matches! matches)
-                                              (set-find-state! (fn [s] (merge s matches)))))
-         (.on bus "updatefindcontrolstate" #(set-find-state!
-                                             (merge
-                                              {:status (get find-status (.-state %))
-                                               :query  (.-rawQuery %)}
-                                              (bean/->clj (.-matchesCount %)))))))
+         (.on bus "updatefindmatchescount" (fn [^js e]
+                                             (let [matches (bean/->clj (.-matchesCount e))]
+                                               (set-matches! matches)
+                                               (set-find-state! (fn [s] (merge s matches))))))
+         (.on bus "updatefindcontrolstate" (fn [^js e]
+                                             (set-find-state!
+                                              (merge
+                                               {:status (get find-status (.-state e))
+                                                :query  (.-rawQuery e)}
+                                               (bean/->clj (.-matchesCount e))))))))
      [viewer])
 
     (rum/use-effect!
@@ -177,7 +179,7 @@
        :tab-index -1}
 
       [:div.input-inner.flex.items-center
-       [:div.input-wrap
+       [:div.input-wrap.relative
         [:input
          {:placeholder "search"
           :type        "text"
@@ -202,17 +204,17 @@
                                (reset-finder!)
                                (set-input! "")))
 
-                           :dune))}]]
+                           :dune))}]
+
+        (when entered-active?
+         (ui/button (ui/icon "arrow-back") :title "Enter to search" :class "icon-enter" :intent "true" :small? true))]
 
        (ui/button (ui/icon "letter-case")
                   :class (string/join " " (util/classnames [{:active case-sensitive?}]))
                   :intent "true" :small? true :on-click #(set-case-sensitive? (not case-sensitive?)))
        (ui/button (ui/icon "chevron-up") :intent "true" :small? true :on-click #(do (do-find! {:type :again :prev? true}) (util/stop %)))
        (ui/button (ui/icon "chevron-down") :intent "true" :small? true :on-click #(do (do-find! {:type :again}) (util/stop %)))
-       (ui/button (ui/icon "x") :intent "true" :small? true :on-click close-finder!)
-
-       (when entered-active?
-         (ui/button (ui/icon "arrow-back") :title "Enter to search" :class "icon-enter" :intent "true" :small? true))]
+       (ui/button (ui/icon "x") :intent "true" :small? true :on-click close-finder!)]
 
       [:div.result-inner
        (when-let [status (and entered-active?

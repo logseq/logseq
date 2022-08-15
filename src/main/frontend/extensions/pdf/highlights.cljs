@@ -484,7 +484,7 @@
                                                     #(= (:id (second %)) (:id hl))
                                                     (medley/indexed highlights))]
                              (set-highlights! (assoc-in highlights [target-idx] hl))
-                             (pdf-assets/update-hl-area-block! hl))))
+                             (pdf-assets/update-hl-block! hl))))
 
         del-hl!        (fn [hl] (when-let [id (:id hl)] (set-highlights! (into [] (remove #(= id (:id %)) highlights)))))]
 
