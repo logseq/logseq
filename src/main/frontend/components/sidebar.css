@@ -79,6 +79,16 @@
 
   .dropdown-wrapper {
     min-width: 180px;
+    margin-top: 1px;
+
+    .menu-link {
+      padding: 5px 15px;
+      opacity: .8;
+
+      &:hover {
+        opacity: 1;
+      }
+    }
   }
 
   .page-icon {

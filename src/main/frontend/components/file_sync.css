@@ -6,15 +6,10 @@
 
     a.cloud {
       position: relative;
-      opacity: 1 !important;
       cursor: pointer;
 
       &:active {
         opacity: .5 !important;
-      }
-
-      .ti {
-        opacity: .5;
       }
 
       &:hover .ti {

@@ -159,13 +159,12 @@
                             repo-path (if local? (db/get-repo-name url) GraphName )
                             short-repo-name (if local? (text-util/get-graph-name-from-path repo-path) GraphName)]
                         (when short-repo-name
-                          {:title        [:span.flex.items-center short-repo-name
+                          {:title        [:span.flex.items-center.whitespace-nowrap short-repo-name
                                           (when remote? [:span.pl-1
                                                          {:title (str "<" GraphName "> #" GraphUUID)}
                                                          (ui/icon "cloud")])]
                            :hover-detail repo-path ;; show full path on hover
-                           :options      {:class    "ml-1"
-                                          :on-click (fn [e]
+                           :options      {:on-click (fn [e]
                                                       (if (gobj/get e "shiftKey")
                                                         (state/pub-event! [:graph/open-new-window url])
                                                         (if-not local?
@@ -235,7 +234,7 @@
                            {:modal-class (util/hiccup->class
                                            "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")}
                            (> (count repos) 1)              ; show switch to if there are multiple repos
-                           (assoc :links-header [:div.font-medium.text-sm.opacity-60.px-4.pt-2
+                           (assoc :links-header [:div.font-medium.text-sm.opacity-60.px-4.pt-2.pb-1
                                                  "Switch to:"]))]
         (when (seq repos)
           (ui/dropdown-with-links render-content links links-header))))))
