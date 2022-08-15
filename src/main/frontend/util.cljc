@@ -1075,18 +1075,6 @@
   (= (get-relative-path "a/b/c/d/g.org" "a/b/c/e/f.org")
      "../e/f.org"))
 
-#?(:cljs
-   (defn select-highlight!
-     [blocks]
-     (doseq [block blocks]
-       (d/add-class! block "selected noselect"))))
-
-#?(:cljs
-   (defn select-unhighlight!
-     [blocks]
-     (doseq [block blocks]
-       (d/remove-class! block "selected" "noselect"))))
-
 (defn keyname [key] (str (namespace key) "/" (name key)))
 
 (defn batch [in max-time handler buf-atom]

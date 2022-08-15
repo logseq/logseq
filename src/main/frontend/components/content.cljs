@@ -367,7 +367,7 @@
                           (and block-id (parse-uuid block-id))
                           (let [block (.closest target ".ls-block")]
                             (when block
-                              (util/select-highlight! [block]))
+                              (state/conj-selection-block! block :down))
                             (common-handler/show-custom-context-menu!
                             e
                             (block-context-menu-content target (uuid block-id))))
