@@ -653,23 +653,24 @@
      [:div.cp__settings-inner.md:flex
 
       [:aside.md:w-64 {:style {:min-width "10rem"}}
-       [:ul
-        (for [[label text icon]
-              [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
-               [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
+       [:ul.settings-menu
+        (for [[label id text icon]
+              [[:general "general" (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
+               [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
                (when-not (mobile-util/native-platform?)
-                 [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
-               [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]
+                 [:git "git" (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
+               [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]
                (when plugins-of-settings
-                 [:plugins-setting (t :settings-of-plugins) (ui/icon "puzzle")])]]
+                 [:plugins-setting "plugins" (t :settings-of-plugins) (ui/icon "puzzle")])]]
 
           (when label
-            [:li
+            [:li.settings-menu-item
              {:key      text
               :class    (util/classnames [{:active (= label (first @*active))}])
               :on-click #(reset! *active [label (first @*active)])}
 
-             [:a.flex.items-center
+             [:a.flex.items-center.settings-menu-link
+             {:data-id id}
               icon
               [:strong text]]]))]]
 
