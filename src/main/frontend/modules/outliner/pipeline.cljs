@@ -23,7 +23,10 @@
 (defn compute-block-path-refs
   [tx-meta blocks]
   (let [repo (state/get-current-repo)
-        blocks (remove :block/name blocks)]
+        blocks (remove :block/name blocks)
+        blocks (if (= (:outliner-op tx-meta) :insert-blocks)
+                 (butlast blocks)
+                 blocks)]
     (when (:outliner-op tx-meta)
       (when (react/path-refs-need-recalculated? tx-meta)
         (let [*computed-ids (atom #{})]
@@ -61,7 +64,9 @@
                (not (:compute-new-refs? tx-meta)))
       (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
             repo (state/get-current-repo)
-            refs-tx (set (compute-block-path-refs (:tx-meta tx-report) blocks))
+            refs-tx (util/profile
+                     "Compute path refs: "
+                     (set (compute-block-path-refs (:tx-meta tx-report) blocks)))
             truncate-refs-tx (map (fn [m] [:db/retract (:db/id m) :block/path-refs]) refs-tx)
             tx (util/concat-without-nil truncate-refs-tx refs-tx)
             tx-report' (if (seq tx)
