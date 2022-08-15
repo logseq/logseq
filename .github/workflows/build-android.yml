@@ -7,19 +7,31 @@ on:
   workflow_dispatch:
     inputs:
       build-target:
-        description: 'Build Target ("nightly"/"beta"/"non-release")'
-        type: string
+        description: 'Build Target (Release Type)'
+        type: choice
         required: true
-        default: "beta"
+        options:
+          - beta
+          - nightly
+          - non-release
+        default: "non-release"
       git-ref:
         description: "Build from Git Ref(master)"
         required: true
         default: "master"
+      enable-file-sync:
+        description: 'Build with file sync support'
+        type: boolean
+        required: true
+        default: false
   workflow_call:
     inputs:
       build-target:
         type: string
         required: true
+      enable-file-sync:
+        description: 'Build with file sync support'
+        type: boolean
     secrets:
       ANDROID_KEYSTORE:
         required: true
@@ -89,11 +101,15 @@ jobs:
           sed -i 's/defonce version ".*"/defonce version "${{ steps.ref.outputs.version }}"/g' src/main/frontend/version.cljs
           sed -i 's/versionName ".*"/versionName "${{ steps.ref.outputs.version }}"/g' android/app/build.gradle
 
+      - name: Set Build Environment Variables
+        run: |
+          echo "ENABLE_FILE_SYNC=${{ inputs.enable-file-sync == 'true' || github.event.inputs.enable-file-sync == 'true' }}" >> $GITHUB_ENV
+
       - name: Compile CLJS - android variant, use es6 instead of es-next
         run: yarn install && yarn release-android-app
 
       - name: Upload Sentry Sourcemaps (beta only)
-        if: ${{ inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta' }}
+        if: ${{ github.repository == 'logseq/logseq' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta') }}
         run: |
           curl -sL https://sentry.io/get-cli/ | bash
           release_name="logseq-android@${{ steps.ref.outputs.version }}"

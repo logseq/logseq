@@ -35,7 +35,7 @@
   []
   (let [lg-dir (str (.getPath app "home") "/.logseq")]
     (if-not (fs/existsSync lg-dir)
-      (and (fs/mkdirSync lg-dir) lg-dir)
+      (do (fs/mkdirSync lg-dir) lg-dir)
       lg-dir)))
 
 (defn get-ls-default-plugins
@@ -46,7 +46,7 @@
         dirs (js->clj (fs/readdirSync plugins-root #js{"withFileTypes" true}))
         dirs (->> dirs
                   (filter #(.isDirectory %))
-                  (filter #(not (string/starts-with? (.-name %) "_")))
+                  (filter (fn [f] (not (some #(string/starts-with? (.-name f) %) ["_" "."]))))
                   (map #(path/join plugins-root (.-name %))))]
     dirs))
 

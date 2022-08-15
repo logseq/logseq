@@ -298,8 +298,12 @@
                 (let [[_id on-submit] (:rum/args state)
                       command (:command (first input-option))]
                   (on-submit command @input-value))
-                (reset! input-value nil))))})))
-  [state _id on-submit]
+                (reset! input-value nil))))
+       ;; escape
+       27 (fn [_state _e]
+            (let [[id _on-submit on-cancel] (:rum/args state)]
+              (on-cancel id)))})))
+  [state _id on-submit _on-cancel]
   (when (= :input (state/sub :editor/action))
     (when-let [action-data (state/sub :editor/action-data)]
       (let [{:keys [pos options]} action-data
@@ -420,11 +424,11 @@
    {:not-matched-handler (editor-handler/keydown-not-matched-handler format)}))
 
 (defn- set-up-key-up!
-  [state input input-id search-timeout]
+  [state input input-id]
   (mixins/on-key-up
    state
    {}
-   (editor-handler/keyup-handler state input input-id search-timeout)))
+   (editor-handler/keyup-handler state input input-id)))
 
 (def search-timeout (atom nil))
 
@@ -434,7 +438,7 @@
         input-id id
         input (gdom/getElement input-id)]
     (set-up-key-down! state format)
-    (set-up-key-up! state input input-id search-timeout)))
+    (set-up-key-up! state input input-id)))
 
 (def starts-with? clojure.string/starts-with?)
 
@@ -556,7 +560,9 @@
       (= :input action)
       (animated-modal "input" (input id
                                      (fn [command m]
-                                       (editor-handler/handle-command-input command id format m)))
+                                       (editor-handler/handle-command-input command id format m))
+                                     (fn []
+                                       (editor-handler/handle-command-input-close id)))
                       true)
 
       (= :zotero action)
