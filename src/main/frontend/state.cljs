@@ -715,7 +715,6 @@
 
 (defn conj-selection-block!
   [block direction]
-  (dom/add-class! block "selected noselect")
   (swap! state assoc
          :selection/mode true
          :selection/blocks (-> (conj (vec (:selection/blocks @state)) block)
@@ -724,10 +723,18 @@
 
 (defn drop-last-selection-block!
   []
-  (let [last-block (peek (vec (:selection/blocks @state)))]
+  (let [direction (:selection/direction @state)
+        up? (= direction :up)
+        blocks (:selection/blocks @state)
+        last-block (if up?
+                     (first blocks)
+                     (peek (vec blocks)))
+        blocks' (if up?
+                  (rest blocks)
+                  (pop (vec blocks)))]
     (swap! state assoc
            :selection/mode true
-           :selection/blocks (pop (vec (:selection/blocks @state))))
+           :selection/blocks blocks')
     last-block))
 
 (defn get-selection-direction
