@@ -18,7 +18,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
     type: 'polygon',
     point: [0, 0],
     size: [100, 100],
-    sides: 5,
+    sides: 3,
     ratio: 1,
     isFlippedY: false,
     stroke: '#000000',

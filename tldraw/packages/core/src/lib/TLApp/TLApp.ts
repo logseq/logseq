@@ -4,6 +4,7 @@
 import { Vec } from '@tldraw/vec'
 import { action, computed, makeObservable, observable, transaction } from 'mobx'
 import { GRID_SIZE } from '~constants'
+
 import {
   TLInputs,
   TLPage,
@@ -11,9 +12,8 @@ import {
   TLSelectTool,
   TLShape,
   TLShapeConstructor,
-  TLShapeModel,
-  TLToolConstructor,
-  TLViewport,
+  TLShapeModel, TLToolConstructor,
+  TLViewport
 } from '~lib'
 import { TLApi } from '~lib/TLApi'
 import { TLCursors } from '~lib/TLCursors'
@@ -27,7 +27,7 @@ import type {
   TLStateEvents,
   TLSubscription,
   TLSubscriptionEventInfo,
-  TLSubscriptionEventName,
+  TLSubscriptionEventName
 } from '~types'
 import { BoundsUtils, KeyUtils } from '~utils'
 import { TLHistory } from '../TLHistory'
@@ -81,6 +81,8 @@ export class TLApp<
   readonly cursors = new TLCursors()
   readonly viewport = new TLViewport()
   readonly settings = new TLSettings()
+
+  Tools: TLToolConstructor<S, K>[] = []
 
   dispose() {
     super.dispose()
@@ -457,7 +459,10 @@ export class TLApp<
 
   selectTool = this.transition
 
-  registerTools = this.registerStates
+  registerTools(tools: TLToolConstructor<S, K>[]) {
+    this.Tools = tools
+    return this.registerStates(tools)
+  }
 
   /* ------------------ Editing Shape ----------------- */
 
@@ -673,7 +678,7 @@ export class TLApp<
     const { selectedShapesArray } = this
     return (
       this.isIn('select') &&
-      !this.isInAny('select.translating', 'select.pinching') &&
+      !this.isInAny('select.translating', 'select.pinching', 'select.rotating') &&
       ((selectedShapesArray.length === 1 && !selectedShapesArray[0]?.hideSelection) ||
         selectedShapesArray.length > 1)
     )
@@ -718,7 +723,7 @@ export class TLApp<
         'select.pointingResizeHandle'
       ) &&
       selectedShapesArray.length > 0 &&
-      !selectedShapesArray.every(shape => shape.hideRotateHandle)
+      !selectedShapesArray.some(shape => shape.hideRotateHandle)
     )
   }
 

@@ -67,7 +67,7 @@
              (do (. api selectShapes block-id)
                  (. api zoomToSelection)))))
        nil) [name block-id tln])
-    (when (and name (not-empty (gobj/get data "currentPageId")))
+    (when (and (not-empty name) (not-empty (gobj/get data "currentPageId")))
       [:div.draw.tldraw.whiteboard.relative.w-full.h-full
        {:style {:overscroll-behavior "none"}
         :on-blur #(state/set-block-component-editing-mode! false)

@@ -17,12 +17,15 @@ import { useQuickAdd } from '~hooks/useQuickAdd'
 import { LogseqContext, LogseqContextValue } from '~lib/logseq-context'
 import { Shape, shapes } from '~lib/shapes'
 import {
+  BoxTool,
+  EllipseTool,
   HighlighterTool,
   HTMLTool,
   LineTool,
   LogseqPortalTool,
   NuEraseTool,
   PencilTool,
+  PolygonTool,
   TextTool,
   YouTubeTool,
 } from '~lib/tools'
@@ -32,10 +35,10 @@ const components: TLReactComponents<Shape> = {
 }
 
 const tools: TLReactToolConstructor<Shape>[] = [
-  // BoxTool,
+  BoxTool,
   // DotTool,
-  // EllipseTool,
-  // PolygonTool,
+  EllipseTool,
+  PolygonTool,
   NuEraseTool,
   HighlighterTool,
   LineTool,

@@ -54,3 +54,14 @@ export const shapes: TLReactShapeConstructor<Shape>[] = [
   HTMLShape,
   LogseqPortalShape,
 ]
+
+declare global {
+  interface Window {
+    logseq?: {
+      api?: {
+        make_asset_url?: (url: string) => string
+        edit_block?: (uuid: string) => void
+      }
+    }
+  }
+}

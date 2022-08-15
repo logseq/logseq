@@ -12,16 +12,6 @@ export interface ImageShapeProps extends TLImageShapeProps, CustomStyleProps {
   opacity: number
 }
 
-declare global {
-  interface Window {
-    logseq?: {
-      api?: {
-        make_asset_url?: (url: string) => string
-      }
-    }
-  }
-}
-
 export class ImageShape extends TLImageShape<ImageShapeProps> {
   static id = 'image'
 

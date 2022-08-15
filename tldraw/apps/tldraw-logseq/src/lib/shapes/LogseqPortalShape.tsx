@@ -300,12 +300,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         finishCreating(uuid)
         // wait until the editor is mounted
         setTimeout(() => {
-          // @ts-expect-error ???
-          const logseqApi = window.logseq?.api as any
-          if (logseqApi) {
-            app.setEditingShape(this)
-            logseqApi.edit_block(uuid)
-          }
+          app.setEditingShape(this)
+          window.logseq?.api?.edit_block?.(uuid)
         })
       }
       return uuid
@@ -559,7 +555,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                   setPrefixIcon(actionIcon)
                   setFocusedOptionIdx(index)
                 }}
-                // we have to use mousedown && stop propagation, otherwise some 
+                // we have to use mousedown && stop propagation, otherwise some
                 // default behavior of clicking the rendered elements will happen
                 onMouseDown={e => {
                   if (onChosen()) {
