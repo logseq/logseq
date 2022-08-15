@@ -55,14 +55,14 @@
   (try
     (let [dom-node (rum/dom-node state)]
       (when-let [dom-node (or node dom-node)]
-        (or (false? outside?)
-            (listen state js/window "mousedown"
-                    (fn [e]
-                      (let [target (.. e -target)]
-                        ;; If the click target is outside of current node
-                        (when (and (not (dom/contains dom-node target))
-                                   (not (.contains (.-classList target) "ignore-outside-event")))
-                          (on-hide state e :click))))))
+        (let [click-fn (fn [e]
+                         (let [target (.. e -target)]
+                           ;; If the click target is outside of current node
+                           (when (and (not (dom/contains dom-node target))
+                                      (not (.contains (.-classList target) "ignore-outside-event")))
+                             (on-hide state e :click))))]
+          (when-not (false? outside?)
+            (listen state js/window "mouseup" click-fn)))
         (listen state js/window "keydown"
                 (fn [e]
                   (case (.-keyCode e)
