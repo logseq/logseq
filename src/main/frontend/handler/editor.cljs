@@ -1417,8 +1417,12 @@
 (defn make-asset-url
   [path] ;; path start with "/assets" or compatible for "../assets"
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))
-        path (string/replace path "../" "/")]
+        path (string/replace path "../" "/")
+        data-url? (string/starts-with? path "data:")]
     (cond
+      data-url?
+      path ;; just return the original
+      
       (util/electron?)
       (str "assets://" repo-dir path)
 
