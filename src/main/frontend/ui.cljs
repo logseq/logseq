@@ -943,8 +943,7 @@
            inViewState (useInView #js {:rootMargin "100px"
                                        :triggerOnce trigger-once?
                                        :onChange (fn [in-view? entry]
-                                                   (let [self-top (.-top (.-boundingClientRect entry))
-                                                         time' (util/time-ms)]
+                                                   (let [self-top (.-top (.-boundingClientRect entry))]
                                                      (when (or (and (not visible?) in-view?)
                                                                ;; hide only the components below the current top for better ux
                                                                (and visible? (not in-view?) (> self-top 0)))
