@@ -323,8 +323,6 @@
   (when-let [outliner-op (:outliner-op tx-meta)]
     (not (or
           (contains? #{:collapse-expand-blocks :delete-blocks} outliner-op)
-          ;; ignore move up/down since it doesn't affect the refs for any blocks
-          (contains? #{:move-blocks-up-down} (:move-op tx-meta))
           (:undo? tx-meta) (:redo? tx-meta)))))
 
 (defn refresh!
