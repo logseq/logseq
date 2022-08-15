@@ -1076,7 +1076,7 @@
                                   (= "true" (dom/attr block "data-query")))) blocks)
           dom-blocks (if (seq dom-blocks) dom-blocks
                          (remove (fn [block]
-                                   (or (= "true" (dom/attr block "data-transclude")))) blocks))]
+                                   (= "true" (dom/attr block "data-transclude"))) blocks))]
       (when (seq dom-blocks)
         (let [repo (state/get-current-repo)
               block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
