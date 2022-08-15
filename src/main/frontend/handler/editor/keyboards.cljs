@@ -11,7 +11,7 @@
     (mixins/hide-when-esc-or-outside
      state
      :on-hide
-     (fn [_state e event]
+     (fn [_state _e event]
        (cond
          (contains?
           #{:commands :block-commands
