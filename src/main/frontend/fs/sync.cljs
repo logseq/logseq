@@ -24,8 +24,7 @@
             [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.encrypt :as encrypt]
-            [medley.core :refer [dedupe-by]]
-            [rum.core :as rum]))
+            [medley.core :refer [dedupe-by]]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
