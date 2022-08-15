@@ -27,9 +27,6 @@
            (= :input (state/get-editor-action))
            nil
 
-           (d/has-class? target "bottom-action") ;; FIXME: not particular case
-           (.preventDefault e)
-
            :else
            (let [{:keys [on-hide value]} (editor-handler/get-state)]
              (when on-hide
