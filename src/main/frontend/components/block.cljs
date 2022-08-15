@@ -2411,7 +2411,9 @@
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
-        block (if (or navigated? custom-query?)
+        block (if (or navigated?
+                      custom-query?
+                      (and ref? (:block/uuid config)))
                 (let [block (db/pull [:block/uuid navigating-block])
                       blocks (db/get-paginated-blocks repo (:db/id block)
                                                       {:scoped-block-id (:db/id block)})
