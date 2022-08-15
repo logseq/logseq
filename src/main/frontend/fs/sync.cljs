@@ -1726,7 +1726,6 @@
 (def app-state-changed-chan
   "boolean value, means active or not"
   (chan 1))
-(def app-state-changed-mult (async/mult app-state-changed-chan))
 
 (def pause-resume-chan
   "false -> pause, true -> resume.
@@ -1734,21 +1733,10 @@
   (chan 1))
 (def pause-resume-mult (async/mult pause-resume-chan))
 
-(defonce _watch-app-state-change
-  (add-watch (rum/cursor state/state :mobile/app-state-change) "sync"
-             (fn [_ _ _ {:keys [is-active?]}]
-               (offer! pause-resume-chan is-active?))))
-
 (def recent-edited-chan
   "Triggered when there is content editing"
   (chan 1))
 (def recent-edited-mult (async/mult recent-edited-chan))
-
-(defonce _watch-last-input-time
-  (add-watch (rum/cursor state/state :editor/last-input-time) "sync"
-             (fn [_ _ _ _]
-               (offer! recent-edited-chan true))))
-
 
 ;;; ### sync state
 
@@ -1767,10 +1755,6 @@
 (defn resume-state--add-local->remote-state
   [graph-uuid local-changes]
   (swap! *resume-state assoc graph-uuid {:local->remote local-changes}))
-
-(defn resume-state--add-local->remote-full-sync-state
-  [graph-uuid]
-  (swap! *resume-state assoc graph-uuid {:local->remote-full-sync true}))
 
 (defn resume-state--reset
   [graph-uuid]
@@ -2622,24 +2606,24 @@
 ;;; ### some add-watches
 
 ;; TOOD: replace this logic by pause/resume state
-(defonce _watch-network
-  (add-watch (rum/cursor state/state :network/online?) "sync-manage"
-             (fn [_k _r o n]
-               (cond
-                 (and (true? o) (false? n))
-                 (<sync-stop)
+;; (defonce _watch-network
+;;   (add-watch (rum/cursor state/state :network/online?) "sync-manage"
+;;              (fn [_k _r o n]
+;;                (cond
+;;                  (and (true? o) (false? n))
+;;                  (<sync-stop)
 
-                 (and (false? o) (true? n))
-                 (sync-start)
+;;                  (and (false? o) (true? n))
+;;                  (sync-start)
 
-                 :else
-                 nil))))
+;;                  :else
+;;                  nil))))
 
-(defonce _watch-id-token
-  (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
-             (fn [_k _r _o n]
-               (when (nil? n)
-                 (<sync-stop)))))
+;; (defonce _watch-id-token
+;;   (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
+;;              (fn [_k _r _o n]
+;;                (when (nil? n)
+;;                  (<sync-stop)))))
 
 
 ;;; ### some sync events handler
