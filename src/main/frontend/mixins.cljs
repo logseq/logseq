@@ -1,7 +1,7 @@
 (ns frontend.mixins
   (:require [rum.core :as rum]
             [goog.dom :as dom]
-            [frontend.util :refer [profile]]
+            [frontend.util :refer [profile] :as util]
             [frontend.state :as state])
   (:import [goog.events EventHandler]))
 
@@ -26,30 +26,6 @@
      (detach state)
      (dissoc state ::event-handler))})
 
-;; (defn timeout-mixin
-;;   "The setTimeout mixin."
-;;   [name t f]
-;;   {:will-mount
-;;    (fn [state]
-;;      (assoc state name (util/set-timeout t f)))
-;;    :will-unmount
-;;    (fn [state]
-;;      (let [timeout (get state name)]
-;;        (util/clear-timeout timeout)
-;;        (dissoc state name)))})
-
-;; (defn interval-mixin
-;;   "The setInterval mixin."
-;;   [name t f]
-;;   {:will-mount
-;;    (fn [state]
-;;      (assoc state name (util/set-interval t f)))
-;;    :will-unmount
-;;    (fn [state]
-;;      (when-let [interval (get state name)]
-;;        (util/clear-interval interval))
-;;      (dissoc state name))})
-
 (defn hide-when-esc-or-outside
   [state & {:keys [on-hide node visibilitychange? outside?]}]
   (try
@@ -58,8 +34,10 @@
         (let [click-fn (fn [e]
                          (let [target (.. e -target)]
                            ;; If the click target is outside of current node
-                           (when (and (not (dom/contains dom-node target))
-                                      (not (.contains (.-classList target) "ignore-outside-event")))
+                           (when (and
+                                  (not (util/input? dom-node))
+                                  (not (dom/contains dom-node target))
+                                  (not (.contains (.-classList target) "ignore-outside-event")))
                              (on-hide state e :click))))]
           (when-not (false? outside?)
             (listen state js/window "mouseup" click-fn)))
