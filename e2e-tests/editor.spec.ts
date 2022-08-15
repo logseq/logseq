@@ -212,6 +212,65 @@ test('copy and paste block after editing new block #5962', async ({ page, block 
   await expect(page.locator('text="Typed block"')).toHaveCount(1);
 })
 
+test('undo and redo after starting an action should not destroy text #6267', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  // Get one piece of undo state onto the stack
+  await block.mustFill('text1 ')
+  await page.waitForTimeout(550) // Wait for 500ms autosave period to expire
+
+  // Then type more, start an action prompt, and undo
+  await page.keyboard.type('text2 ')
+  for (const char of '[[') {
+    await page.keyboard.type(char)
+  }
+  await expect(page.locator(`[data-modal-name="page-search"]`)).toBeVisible()
+  if (IsMac) {
+    await page.keyboard.press('Meta+z')
+  } else {
+    await page.keyboard.press('Control+z')
+  }
+  await page.waitForTimeout(100)
+
+  // Should close the action menu when we undo the action prompt
+  await expect(page.locator(`[data-modal-name="page-search"]`)).not.toBeVisible()
+
+  // It should undo to the last saved state, and not erase the previous undo action too
+  await expect(page.locator('text="text1"')).toHaveCount(1)
+
+  // And it should keep what was undone as a redo action
+  if (IsMac) {
+    await page.keyboard.press('Meta+Shift+z')
+  } else {
+    await page.keyboard.press('Control+Shift+z')
+  }
+  await expect(page.locator('text="text2"')).toHaveCount(1)
+})
+
+test('undo after starting an action should close the action menu #6269', async ({ page, block }) => {
+  for (const [commandTrigger, modalName] of [['/', 'commands'], ['[[', 'page-search']]) {
+    await createRandomPage(page)
+
+    // Open the action modal
+    await block.mustType('text1 ')
+    await page.waitForTimeout(550)
+    for (const char of commandTrigger) {
+      await page.keyboard.type(char)
+    }
+    await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
+
+    // Undo, removing "/today", and closing the action modal
+    if (IsMac) {
+      await page.keyboard.press('Meta+z')
+    } else {
+      await page.keyboard.press('Control+z')
+    }
+    await page.waitForTimeout(100)
+    await expect(page.locator('text="/today"')).toHaveCount(0)
+    await expect(page.locator(`[data-modal-name="${modalName}"]`)).not.toBeVisible()
+  }
+})
+
 test('#6266 moving cursor outside of brackets should close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
   for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
     // First, left arrow
