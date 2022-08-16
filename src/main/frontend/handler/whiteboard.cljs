@@ -165,12 +165,12 @@
    :type "logseq-portal"})
 
 (defn add-new-block-portal-shape!
-  "Given the block id and the point, add a new shape to the referenced block."
-  [block-id client-x client-y]
+  "Given the block uuid and the point, add a new shape to the referenced block."
+  [block-uuid client-x client-y]
   (let [api (get-tldr-api)
         point (js->clj (.. (get-tldr-app) -viewport (getPagePoint #js[client-x client-y])))
-        shape (->logseq-portal-shape block-id point)]
-    (editor-handler/set-blocks-id! [block-id])
+        shape (->logseq-portal-shape block-uuid point)]
+    (editor-handler/set-blocks-id! [block-uuid])
     (.createShapes api (clj->js shape))))
 
 (defn add-new-block!

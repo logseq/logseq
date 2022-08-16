@@ -61,6 +61,7 @@ declare global {
       api?: {
         make_asset_url?: (url: string) => string
         edit_block?: (uuid: string) => void
+        set_blocks_id?: (uuids: string[]) => void
       }
     }
   }

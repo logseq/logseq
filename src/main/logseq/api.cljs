@@ -859,6 +859,8 @@
 
 (def ^:export make_asset_url editor-handler/make-asset-url)
 
+(def ^:export set_blocks_id #(editor-handler/set-blocks-id! (map uuid %)))
+
 (defn ^:export __debug_state
   [path]
   (-> (if (string? path)

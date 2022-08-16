@@ -442,6 +442,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 onChosen: () => {
                   if (block) {
                     finishCreating(uuid)
+                    window.logseq?.api?.set_blocks_id?.([uuid])
                     return true
                   }
                   return false
