@@ -12,6 +12,8 @@
             [frontend.handler.user :as user]
             [frontend.fs :as fs]))
 
+(def *beta-unavailable? (volatile! false))
+
 (def hiding-login&file-sync (not config/enable-file-sync?))
 (def refresh-file-sync-component (atom false))
 
@@ -191,3 +193,7 @@
       (recur))
 
     #(async/unsub p topic c)))
+
+(defn reset-user-state! []
+  (vreset! *beta-unavailable? false)
+  (state/set-state! :file-sync/onboarding-state nil))

@@ -10,7 +10,7 @@
             [frontend.db.model :as db-model]
             [frontend.fs :as fs]
             [frontend.fs.sync :as fs-sync]
-            [frontend.handler.file-sync :as file-sync-handler]
+            [frontend.handler.file-sync :refer [*beta-unavailable?] :as file-sync-handler]
             [frontend.handler.notification :as notifications]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
@@ -28,8 +28,6 @@
 
 (declare maybe-onboarding-show)
 (declare open-icloud-graph-clone-picker)
-
-(def *beta-unavailable? (volatile! false))
 
 (rum/defc clone-local-icloud-graph-panel
   [repo graph-name close-fn]

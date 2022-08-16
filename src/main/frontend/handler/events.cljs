@@ -82,7 +82,8 @@
 
 (defmethod handle :user/logout [[_]]
   (file-sync-handler/reset-session-graphs)
-  (sync/remove-all-pwd!))
+  (sync/remove-all-pwd!)
+  (file-sync-handler/reset-user-state!))
 
 (defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (db/set-key-value repo :ast/version db-schema/ast-version)
