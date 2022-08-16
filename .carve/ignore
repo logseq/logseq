@@ -76,3 +76,6 @@ frontend.util.property/add-page-properties
 frontend.test.node-test-runner/main
 ;; Test runner for nbb
 logseq.graph-parser.nbb-test-runner/run-tests
+;; For debugging
+frontend.fs.sync/debug-print-sync-events-loop
+frontend.fs.sync/stop-debug-print-sync-events-loop

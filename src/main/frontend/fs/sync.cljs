@@ -25,7 +25,8 @@
             [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.encrypt :as encrypt]
-            [medley.core :refer [dedupe-by]]))
+            [medley.core :refer [dedupe-by]]
+            [rum.core :as rum]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -1729,11 +1730,20 @@
   see also `*resume-state`"
   (chan 1))
 (def pause-resume-mult (async/mult pause-resume-chan))
+(def app-state-changed-cursor (rum/cursor state/state :mobile/app-state-change))
+(add-watch app-state-changed-cursor "sync"
+           (fn [_ _ _ {:keys [is-active?]}]
+             (offer! pause-resume-chan is-active?)))
 
 (def recent-edited-chan
   "Triggered when there is content editing"
   (chan 1))
 (def recent-edited-mult (async/mult recent-edited-chan))
+(def last-input-time-cursor (rum/cursor state/state :editor/last-input-time))
+(add-watch last-input-time-cursor "sync"
+           (fn [_ _ _ _]
+             (offer! recent-edited-chan true)))
+
 
 ;;; ### sync state
 
@@ -1752,6 +1762,10 @@
 (defn resume-state--add-local->remote-state
   [graph-uuid local-changes]
   (swap! *resume-state assoc graph-uuid {:local->remote local-changes}))
+
+;; (defn resume-state--add-local->remote-full-sync-state
+;;   [graph-uuid]
+;;   (swap! *resume-state assoc graph-uuid {:local->remote-full-sync true}))
 
 (defn resume-state--reset
   [graph-uuid]
@@ -2603,24 +2617,25 @@
 ;;; ### some add-watches
 
 ;; TOOD: replace this logic by pause/resume state
-;; (defonce _watch-network
-;;   (add-watch (rum/cursor state/state :network/online?) "sync-manage"
-;;              (fn [_k _r o n]
-;;                (cond
-;;                  (and (true? o) (false? n))
-;;                  (<sync-stop)
+(def network-online-cursor (rum/cursor state/state :network/online?))
+(add-watch network-online-cursor "sync-manage"
+           (fn [_k _r o n]
+             (cond
+               (and (true? o) (false? n))
+               (<sync-stop)
 
-;;                  (and (false? o) (true? n))
-;;                  (sync-start)
+               (and (false? o) (true? n))
+               (sync-start)
 
-;;                  :else
-;;                  nil))))
+               :else
+               nil)))
 
-;; (defonce _watch-id-token
-;;   (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
-;;              (fn [_k _r _o n]
-;;                (when (nil? n)
-;;                  (<sync-stop)))))
+(def auth-id-token-cursor (rum/cursor state/state :auth/id-token))
+(add-watch auth-id-token-cursor "sync-manage"
+           (fn [_k _r _o n]
+             (when (nil? n)
+               (<sync-stop))))
+
 
 
 ;;; ### some sync events handler
