@@ -691,12 +691,24 @@
   []
   (:selection/blocks @state))
 
-(defn get-selection-block-ids
-  []
-  (->> (sub :selection/blocks)
+(defn- get-selected-block-ids
+  [blocks]
+  (->> blocks
        (keep #(when-let [id (dom/attr % "blockid")]
                 (uuid id)))
        (distinct)))
+
+(defn get-selection-block-ids
+  []
+  (get-selected-block-ids (get-selection-blocks)))
+
+(defn sub-block-selected?
+  [block-uuid]
+  (rum/react
+   (rum/derived-atom [state] [::select-block block-uuid]
+     (fn [state]
+       (contains? (set (get-selected-block-ids (:selection/blocks state)))
+                  block-uuid)))))
 
 (defn get-selection-start-block-or-first
   []
@@ -715,7 +727,6 @@
 
 (defn conj-selection-block!
   [block direction]
-  (dom/add-class! block "selected noselect")
   (swap! state assoc
          :selection/mode true
          :selection/blocks (-> (conj (vec (:selection/blocks @state)) block)
@@ -724,10 +735,18 @@
 
 (defn drop-last-selection-block!
   []
-  (let [last-block (peek (vec (:selection/blocks @state)))]
+  (let [direction (:selection/direction @state)
+        up? (= direction :up)
+        blocks (:selection/blocks @state)
+        last-block (if up?
+                     (first blocks)
+                     (peek (vec blocks)))
+        blocks' (if up?
+                  (rest blocks)
+                  (pop (vec blocks)))]
     (swap! state assoc
            :selection/mode true
-           :selection/blocks (pop (vec (:selection/blocks @state))))
+           :selection/blocks blocks')
     last-block))
 
 (defn get-selection-direction
@@ -1327,12 +1346,13 @@
         (>= (- now last-time) 3000)))))
 
 (defn input-idle?
-  [repo]
+  [repo & {:keys [diff]
+           :or {diff 1000}}]
   (when repo
     (or
       (when-let [last-time (get-in @state [:editor/last-input-time repo])]
         (let [now (util/time-ms)]
-          (>= (- now last-time) 500)))
+          (>= (- now last-time) diff)))
       ;; not in editing mode
       (not (get-edit-input-id)))))
 
@@ -1635,7 +1655,8 @@
 (defn edit-in-query-or-refs-component
   []
   (let [config (last (get-editor-args))]
-    (or (:custom-query? config) (:ref? config))))
+    {:custom-query? (:custom-query? config)
+     :ref? (:ref? config)}))
 
 (defn set-auth-id-token
   [id-token]

@@ -2353,7 +2353,6 @@
     (when (and
            (state/in-selection-mode?)
            (non-dragging? e))
-      (util/stop e)
       (editor-handler/highlight-selection-area! block-id))))
 
 (defn- block-mouse-leave
@@ -2412,7 +2411,9 @@
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
-        block (if (or navigated? custom-query?)
+        block (if (or navigated?
+                      custom-query?
+                      (and ref? (:block/uuid config)))
                 (let [block (db/pull [:block/uuid navigating-block])
                       blocks (db/get-paginated-blocks repo (:db/id block)
                                                       {:scoped-block-id (:db/id block)})
@@ -2457,8 +2458,7 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
-        selected-blocks (set (state/get-selection-block-ids))
-        selected? (contains? selected-blocks uuid)]
+        selected? (state/sub-block-selected? uuid)]
     [:div.ls-block
      (cond->
        {:id block-id
@@ -2797,7 +2797,8 @@
   (let [dsl-query? (:dsl-query? config)
         query-atom (:query-atom state)
         repo (state/get-current-repo)
-        query-time (react/get-query-time query)
+        query-time (or (react/get-query-time query)
+                       (react/get-query-time q))
         view-fn (if (keyword? view) (state/sub [:config repo :query/views view]) view)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
@@ -3280,7 +3281,7 @@
          {:class (when doc-mode? "document-mode")}
          (lazy-blocks config blocks' flat-blocks)]))))
 
-(rum/defcs breadcrumb-with-container < rum/reactive
+(rum/defcs breadcrumb-with-container < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [first-block (ffirst (:rum/args state))]
              (assoc state

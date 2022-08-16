@@ -204,8 +204,8 @@
 
 (defn clear-selection!
   []
-  (util/select-unhighlight! (dom/by-class "selected"))
-  (state/clear-selection!))
+  (state/clear-selection!)
+  (util/select-unhighlight! (dom/by-class "selected")))
 
 (defn- text-range-by-lst-fst-line [content [direction pos]]
   (case direction
@@ -1073,7 +1073,10 @@
     ;; remove embeds, references and queries
     (let [dom-blocks (remove (fn [block]
                               (or (= "true" (dom/attr block "data-transclude"))
-                                  (= "true" (dom/attr block "data-query")))) blocks)]
+                                  (= "true" (dom/attr block "data-query")))) blocks)
+          dom-blocks (if (seq dom-blocks) dom-blocks
+                         (remove (fn [block]
+                                   (= "true" (dom/attr block "data-transclude"))) blocks))]
       (when (seq dom-blocks)
         (let [repo (state/get-current-repo)
               block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
@@ -1219,8 +1222,7 @@
 
 (defn clear-last-selected-block!
   []
-  (let [block (state/drop-last-selection-block!)]
-    (util/select-unhighlight! [block])))
+  (state/drop-last-selection-block!))
 
 (defn highlight-selection-area!
   [end-block]
@@ -1235,18 +1237,18 @@
 (defn- select-block-up-down
   [direction]
   (cond
-      ;; when editing, quit editing and select current block
+    ;; when editing, quit editing and select current block
     (state/editing?)
     (state/exit-editing-and-set-selected-blocks! [(gdom/getElement (state/get-editing-block-dom-id))])
 
-      ;; when selection and one block selected, select next block
+    ;; when selection and one block selected, select next block
     (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
     (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
           element (f (first (state/get-selection-blocks)))]
       (when element
         (state/conj-selection-block! element direction)))
 
-      ;; if same direction, keep conj on same direction
+    ;; if same direction, keep conj on same direction
     (and (state/selection?) (= direction (state/get-selection-direction)))
     (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
           first-last (if (= :up direction) first last)
@@ -1254,7 +1256,7 @@
       (when element
         (state/conj-selection-block! element direction)))
 
-      ;; if different direction, keep clear until one left
+    ;; if different direction, keep clear until one left
     (state/selection?)
     (clear-last-selected-block!))
   nil)
@@ -1806,7 +1808,7 @@
     (reset! *auto-save-timeout
             (js/setTimeout
              (fn []
-               (when (state/input-idle? repo)
+               (when (state/input-idle? repo :diff 500)
                  (state/set-editor-op! :auto-save)
                  ; don't auto-save for page's properties block
                  (save-current-block! {:skip-properties? true})

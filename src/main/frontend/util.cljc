@@ -1075,6 +1075,8 @@
   (= (get-relative-path "a/b/c/d/g.org" "a/b/c/e/f.org")
      "../e/f.org"))
 
+(defn keyname [key] (str (namespace key) "/" (name key)))
+
 #?(:cljs
    (defn select-highlight!
      [blocks]
@@ -1086,8 +1088,6 @@
      [blocks]
      (doseq [block blocks]
        (d/remove-class! block "selected" "noselect"))))
-
-(defn keyname [key] (str (namespace key) "/" (name key)))
 
 (defn batch [in max-time handler buf-atom]
   (async/go-loop [buf buf-atom t (async/timeout max-time)]
