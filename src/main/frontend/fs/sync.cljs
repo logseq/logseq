@@ -897,19 +897,56 @@
 ;;; remote api exceptions ends
 
 ;;; ### sync events
-(def ^:private sync-events-chan
-  "`SyncManager` will put some internal sync events to this chan.
-  see also spec `::sync-event`"
-  (chan (async/sliding-buffer 1000)))
 
-(def sync-events-publication
-  "see also spec `::event` for topic list"
+;; "`SyncManager` will put some internal sync events to this chan.
+;;   see also spec `::sync-event`"
+(defonce ^:private sync-events-chan
+  (chan (async/sliding-buffer 1000)))
+;; see also spec `::event` for topic list
+(defonce sync-events-publication
   (async/pub sync-events-chan :event))
 
 (defn- put-sync-event!
   [val]
   {:pre [(s/valid? ::sync-event val)]}
   (async/put! sync-events-chan val))
+
+(def ^:private debug-print-sync-events-loop-stop-chan (chan 1))
+(defn debug-print-sync-events-loop
+  ([] (debug-print-sync-events-loop [:created-local-version-file
+                                     :finished-local->remote
+                                     :finished-remote->local
+                                     :pause
+                                     :resume
+                                     :exception-decrypt-failed
+                                     :remote->local-full-sync-failed
+                                     :local->remote-full-sync-failed]))
+  ([topics]
+   (util/drain-chan debug-print-sync-events-loop-stop-chan)
+   (let [topic&chs (map (juxt identity #(chan 10)) topics)
+         out-ch (chan 10)
+         out-mix (async/mix out-ch)]
+     (doseq [[topic ch] topic&chs]
+       (async/sub sync-events-publication topic ch)
+       (async/admix out-mix ch))
+     (go-loop []
+       (let [{:keys [val stop]}
+             (async/alt!
+               debug-print-sync-events-loop-stop-chan {:stop true}
+               out-ch ([v] {:val v}))]
+         (cond
+           stop (do (async/unmix-all out-mix)
+                    (doseq [[topic ch] topic&chs]
+                      (async/unsub sync-events-publication topic ch)))
+
+           val (do (pp/pprint [:debug :sync-event val])
+                   (recur))))))))
+
+
+(defn stop-debug-print-sync-events-loop
+  []
+  (offer! debug-print-sync-events-loop-stop-chan true))
+
 
 (comment
   ;; sub one type event example:
@@ -933,42 +970,6 @@
   (offer! sync-events-chan {:event :finished-remote->local :data :xxx})
   (poll! c4-out)
   (poll! c4-out)
-
-  (def ^:private debug-print-sync-events-loop-stop-chan (chan 1))
-  (defn debug-print-sync-events-loop
-    ([] (debug-print-sync-events-loop [:created-local-version-file
-                                       :finished-local->remote
-                                       :finished-remote->local
-                                       :pause
-                                       :resume
-                                       :exception-decrypt-failed
-                                       :remote->local-full-sync-failed
-                                       :local->remote-full-sync-failed]))
-    ([topics]
-     (util/drain-chan debug-print-sync-events-loop-stop-chan)
-     (let [topic&chs (map (juxt identity #(chan 10)) topics)
-           out-ch (chan 10)
-           out-mix (async/mix out-ch)]
-       (doseq [[topic ch] topic&chs]
-         (async/sub sync-events-publication topic ch)
-         (async/admix out-mix ch))
-       (go-loop []
-         (let [{:keys [val stop]}
-               (async/alt!
-                 debug-print-sync-events-loop-stop-chan {:stop true}
-                 out-ch ([v] {:val v}))]
-           (cond
-             stop (do (async/unmix-all out-mix)
-                      (doseq [[topic ch] topic&chs]
-                        (async/unsub sync-events-publication topic ch)))
-
-             val (do (pp/pprint [:debug :sync-event val])
-                     (recur))))))))
-
-  (defn stop-debug-print-sync-events-loop
-    []
-    (offer! debug-print-sync-events-loop-stop-chan true))
-
   )
 
 ;;; sync events ends
@@ -2028,7 +2029,7 @@
                  ;; download files will also trigger file-change-events, ignore them
                  (let [r (not (contains? (:recent-remote->local-files @*sync-state)
                                          (<! (<file-change-event=>recent-remote->local-file-item e))))]
-                   (when (and (false? r)
+                   (when (and (true? r)
                               (seq (:recent-remote->local-files @*sync-state)))
                      (println :debug (:recent-remote->local-files @*sync-state) e))
                    r)))))
@@ -2648,7 +2649,7 @@
 
 ;;; debug funcs
 (comment
-  (<get-remote-all-files-meta remoteapi graph-uuid)
+  ;; (<get-remote-all-files-meta remoteapi graph-uuid)
   (<get-local-all-files-meta rsapi graph-uuid
                              (config/get-repo-dir (state/get-current-repo)))
   (def base-path (config/get-repo-dir (state/get-current-repo)))
