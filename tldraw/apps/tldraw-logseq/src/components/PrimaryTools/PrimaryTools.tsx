@@ -1,4 +1,4 @@
-import { TLSelectTool } from '@tldraw/core'
+import { TLMoveTool, TLSelectTool } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
@@ -22,7 +22,7 @@ const ToolButton = observer(({ id, icon, title, ...props }: ToolButtonProps) => 
   )
 
   // Tool must exist
-  const Tool = app.Tools?.find(T => T.id === id) ?? TLSelectTool
+  const Tool = [...app.Tools, TLSelectTool, TLMoveTool]?.find(T => T.id === id)
 
   const shortcut = ((Tool as any)['shortcut'] as string[])?.[0]
 
@@ -97,6 +97,7 @@ export const PrimaryTools = observer(function PrimaryTools() {
     <div className="tl-primary-tools">
       <div className="tl-tools-floating-panel" data-tool-locked={app.settings.isToolLocked}>
         <ToolButton title="Select" id="select" icon="select-cursor" />
+        <ToolButton title="Move" id="move" icon={app.isIn('move.panning') ? "hand-grab" : "hand-stop" } />
         <ToolButton title="Draw" id="pencil" icon="ballpen" />
         <ToolButton title="Highlight" id="highlighter" icon="highlight" />
         <ToolButton title="Eraser" id="erase" icon="eraser" />

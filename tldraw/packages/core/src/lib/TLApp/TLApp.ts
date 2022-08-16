@@ -7,13 +7,15 @@ import { GRID_SIZE } from '~constants'
 
 import {
   TLInputs,
+  TLMoveTool,
   TLPage,
   TLPageModel,
   TLSelectTool,
   TLShape,
   TLShapeConstructor,
-  TLShapeModel, TLToolConstructor,
-  TLViewport
+  TLShapeModel,
+  TLToolConstructor,
+  TLViewport,
 } from '~lib'
 import { TLApi } from '~lib/TLApi'
 import { TLCursors } from '~lib/TLCursors'
@@ -27,7 +29,7 @@ import type {
   TLStateEvents,
   TLSubscription,
   TLSubscriptionEventInfo,
-  TLSubscriptionEventName
+  TLSubscriptionEventName,
 } from '~types'
 import { BoundsUtils, KeyUtils } from '~utils'
 import { TLHistory } from '../TLHistory'
@@ -51,7 +53,7 @@ export class TLApp<
     Tools?: TLToolConstructor<S, K>[]
   ) {
     super()
-    this._states = [TLSelectTool]
+    this._states = [TLSelectTool, TLMoveTool]
     this.history.pause()
     if (this.states && this.states.length > 0) {
       this.registerStates(this.states)
@@ -840,10 +842,24 @@ export class TLApp<
   }
 
   readonly onKeyDown: TLEvents<S, K>['keyboard'] = (info, e) => {
+    if (!this.editingShape && e['key'] === ' ' && !this.isIn('move')) {
+      e.stopPropagation()
+      e.preventDefault()
+      const prevTool = this.selectedTool
+      this.transition('move', { prevTool })
+      this.selectedTool.transition('idleHold')
+      return
+    }
     this.inputs.onKeyDown(e)
   }
 
   readonly onKeyUp: TLEvents<S, K>['keyboard'] = (info, e) => {
+    if (!this.editingShape && e['key'] === ' ' && this.isIn('move')) {
+      this.selectedTool.transition('idle', { exit: true })
+      e.stopPropagation()
+      e.preventDefault()
+      return
+    }
     this.inputs.onKeyUp(e)
   }
 
