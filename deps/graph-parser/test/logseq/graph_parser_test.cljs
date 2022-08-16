@@ -15,7 +15,6 @@
       :block/format :markdown}),
     :pages
     ({:block/format :markdown,
-      :block/original-name "Foo"
       :block/properties {:title "my whiteboard foo"}})})
 
 (deftest parse-file
@@ -57,18 +56,21 @@
   
   (testing "parsing whiteboard page"
     (let [conn (ldb/start-conn)]
-      (graph-parser/parse-file conn "whiteboards/foo.edn" (pr-str foo-edn) {})
-      (is (= {:block/name "foo" :block/file {:file/path "whiteboards/foo.edn"}}
-             (let [blocks (d/q '[:find (pull ?b [* {:block/parent
-                                                    [:block/name
-                                                     {:block/file
-                                                      [:file/path]}]}])
-                                 :in $
-                                 :where [?b :block/content] [(missing? $ ?b :block/name)]]
-                               @conn)
-                   parent (:block/parent (ffirst blocks))]
-               parent))
-          "parsed block in the whiteboard page has correct parent page"))))
+      (graph-parser/parse-file conn "/whiteboards/Foo.edn" (pr-str foo-edn) {})
+      (let [blocks (d/q '[:find (pull ?b [* {:block/page
+                                             [:block/name
+                                              :block/original-name
+                                              {:block/file
+                                               [:file/path]}]}])
+                          :in $
+                          :where [?b :block/content] [(missing? $ ?b :block/name)]]
+                        @conn)
+            parent (:block/page (ffirst blocks))]
+        (is (= {:block/name "foo" 
+                :block/original-name "Foo"
+                :block/file {:file/path "/whiteboards/Foo.edn"}}
+               parent)
+            "parsed block in the whiteboard page has correct parent page")))))
 
 (defn- test-property-order [num-properties]
   (let [conn (ldb/start-conn)

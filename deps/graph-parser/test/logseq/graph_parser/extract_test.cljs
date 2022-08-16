@@ -74,10 +74,7 @@
       :block/format :markdown}),
     :pages
     ({:block/format :markdown,
-      :block/original-name "Foo"
       :block/properties {:title "my whiteboard foo"}})})
-
-(extract/extract-whiteboard-edn "/whiteboards/foo.edn" (pr-str foo-edn) {})
 
 (deftest test-extract-whiteboard-edn
   []

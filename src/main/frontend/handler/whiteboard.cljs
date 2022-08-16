@@ -54,10 +54,8 @@
     (merge block additional-props)))
 
 (defn- tldr-page->blocks-tx [page-name tldr-data]
-  (let [original-page-name page-name
-        page-name (util/page-name-sanity-lc page-name)
+  (let [page-name (util/page-name-sanity-lc page-name)
         page-block {:block/name page-name
-                    :block/original-name original-page-name
                     :block/whiteboard? true
                     :block/properties (dissoc tldr-data :shapes)}
         ;; todo: use get-paginated-blocks instead?

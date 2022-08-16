@@ -225,7 +225,11 @@
         {:keys [pages blocks]} (gp-util/safe-read-string content)
         page-block (first pages)
         page-name (filepath->page-name file)
-        page-original-name (or (:block/original-name page-block) page-name)
+        page-original-name (-> (:block/original-name page-block)
+                               (#(cond (nil? %) page-name
+                                       (= (gp-util/page-name-sanity-lc %)
+                                          (gp-util/page-name-sanity-lc page-name)) page-name
+                                       :else %)))
         page-entity (build-page-entity (:block/properties page-block) file page-name page-original-name nil options)
         page-block (merge page-block page-entity (when-not (:block/uuid page-block) {:block/uuid (d/squuid)}))
         blocks (->> blocks
