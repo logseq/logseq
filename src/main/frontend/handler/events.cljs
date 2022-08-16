@@ -134,9 +134,11 @@
                             {:before     #(notification/show!
                                            (ui/loading (t :graph/save))
                                            :warning)
-                             :on-success #(notification/show!
-                                           (ui/loading (t :graph/save-success))
-                                           :warning)
+                             :on-success #(do
+                                            (notification/clear-all!)
+                                            (notification/show!
+                                             (t :graph/save-success)
+                                             :success))
                              :on-error   #(notification/show!
                                            (t :graph/save-error)
                                            :error)}))
