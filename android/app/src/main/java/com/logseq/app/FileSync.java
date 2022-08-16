@@ -29,12 +29,18 @@ public class FileSync extends Plugin {
 
     @PluginMethod()
     public void keygen(PluginCall call) {
-        String[] keyPairs = RSFileSync.keygen();
-        JSObject data = new JSObject();
-
-        data.put("secretKey", keyPairs[0]);
-        data.put("publicKey", keyPairs[1]);
-        call.resolve(data);
+        call.setKeepAlive(true);
+        Thread runner = new Thread() {
+            @Override
+            public void run() {
+                String[] keyPairs = RSFileSync.keygen();
+                JSObject data = new JSObject();
+                data.put("secretKey", keyPairs[0]);
+                data.put("publicKey", keyPairs[1]);
+                call.resolve(data);
+            }
+        };
+        runner.start();
     }
 
     @PluginMethod()
@@ -71,90 +77,121 @@ public class FileSync extends Plugin {
 
     @PluginMethod()
     public void encryptFnames(PluginCall call) {
-        JSArray filePaths = call.getArray("filePaths");
-        String[] raw;
-        try {
-            raw = RSFileSync.encryptFilenames(filePaths.toList());
-            if (raw != null) {
-                JSObject ret = new JSObject();
-                ret.put("value", JSArray.from(raw));
-                call.resolve(ret);
+        call.setKeepAlive(true);
+
+        Thread runner = new Thread() {
+            @Override
+            public void run() {
+                JSArray filePaths = call.getArray("filePaths");
+                String[] raw;
+                try {
+                    raw = RSFileSync.encryptFilenames(filePaths.toList());
+                    if (raw != null) {
+                        JSObject ret = new JSObject();
+                        ret.put("value", JSArray.from(raw));
+                        call.resolve(ret);
+                    }
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                    call.reject("cannot encrypt fnames: " + e.toString());
+                }
             }
-        } catch (JSONException e) {
-            e.printStackTrace();
-            call.reject("cannot encrypt fnames: " + e.toString());
-        }
+        };
+        runner.start();
     }
 
     @PluginMethod()
     public void decryptFnames(PluginCall call) {
-        JSArray filePaths = call.getArray("filePaths");
-        String[] raw;
-        try {
-            raw = RSFileSync.decryptFilenames(filePaths.toList());
-            if (raw != null) {
-                JSObject ret = new JSObject();
-                ret.put("value", JSArray.from(raw));
-                call.resolve(ret);
-            }
-        } catch (JSONException e) {
-            e.printStackTrace();
-            call.reject("cannot decrypt fnames: " + e.toString());
-        }
-    }
+        call.setKeepAlive(true);
 
+        Thread runner = new Thread() {
+            @Override
+            public void run() {
+                JSArray filePaths = call.getArray("filePaths");
+                String[] raw;
+                try {
+                    raw = RSFileSync.decryptFilenames(filePaths.toList());
+                    if (raw != null) {
+                        JSObject ret = new JSObject();
+                        ret.put("value", JSArray.from(raw));
+                        call.resolve(ret);
+                    }
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                    call.reject("cannot decrypt fnames: " + e.toString());
+                }
+            }
+        };
+        runner.start();
+    }
 
     //@PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
     @PluginMethod()
     public void getLocalFilesMeta(PluginCall call) throws JSONException {
         String basePath = call.getString("basePath");
         List<String> filePaths = call.getArray("filePaths").toList();
-        for (String filePath : filePaths) {
-            Log.i("FileSync", "Got file Meta " + filePath);
-        }
 
-        FileMeta[] metas = RSFileSync.getLocalFilesMeta(basePath, filePaths);
-        if (metas == null) {
-            call.reject(RSFileSync.getLastError());
-            return ;
-        }
-        JSObject dict = new JSObject();
-        for (FileMeta meta : metas) {
-            Log.i("FileSync", "got meta " + meta.toString());
-            JSObject item = new JSObject();
-            item.put("md5", meta.md5);
-            item.put("size", meta.size);
-            item.put("encryptedFname", meta.encryptedFilename);
+        call.setKeepAlive(true);
+        Thread runner = new Thread() {
+            @Override
+            public void run() {
+                for (String filePath : filePaths) {
+                    Log.i("FileSync", "Got file Meta " + filePath);
+                }
 
-            item.put("mtime", meta.mtime); // not used for now
-            dict.put(meta.filePath, item);
-        }
-        JSObject ret = new JSObject();
-        ret.put("result", dict);
-        call.resolve(ret);
+                FileMeta[] metas = RSFileSync.getLocalFilesMeta(basePath, filePaths);
+                if (metas == null) {
+                    call.reject(RSFileSync.getLastError());
+                    return;
+                }
+                JSObject dict = new JSObject();
+                for (FileMeta meta : metas) {
+                    Log.i("FileSync", "got meta " + meta.toString());
+                    JSObject item = new JSObject();
+                    item.put("md5", meta.md5);
+                    item.put("size", meta.size);
+                    item.put("encryptedFname", meta.encryptedFilename);
+
+                    item.put("mtime", meta.mtime); // not used for now
+                    dict.put(meta.filePath, item);
+                }
+                JSObject ret = new JSObject();
+                ret.put("result", dict);
+                call.resolve(ret);
+            }
+        };
+        runner.start();
     }
 
     @PluginMethod()
     public void getLocalAllFilesMeta(PluginCall call) {
-        String basePath = call.getString("basePath");
-        FileMeta[] metas = RSFileSync.getLocalAllFilesMeta(basePath);
-        if (metas == null) {
-            call.reject(RSFileSync.getLastError());
-            return ;
-        }
-        JSObject dict = new JSObject();
-        for (FileMeta meta : metas) {
-            JSObject item = new JSObject();
-            item.put("md5", meta.md5);
-            item.put("size", meta.size);
-            item.put("encryptedFname", meta.encryptedFilename);
+        call.setKeepAlive(true);
 
-            item.put("mtime", meta.mtime); // not used for now
-            dict.put(meta.filePath, item);
-        }
-        JSObject ret = new JSObject();
-        ret.put("result", dict);;
-        call.resolve(ret);
+        Thread runner = new Thread() {
+            @Override
+            public void run() {
+                String basePath = call.getString("basePath");
+                FileMeta[] metas = RSFileSync.getLocalAllFilesMeta(basePath);
+                if (metas == null) {
+                    call.reject(RSFileSync.getLastError());
+                    return;
+                }
+                JSObject dict = new JSObject();
+                for (FileMeta meta : metas) {
+                    JSObject item = new JSObject();
+                    item.put("md5", meta.md5);
+                    item.put("size", meta.size);
+                    item.put("encryptedFname", meta.encryptedFilename);
+
+                    item.put("mtime", meta.mtime); // not used for now
+                    dict.put(meta.filePath, item);
+                }
+                JSObject ret = new JSObject();
+                ret.put("result", dict);
+                call.resolve(ret);
+            }
+        };
+        runner.start();
     }
 
     @PluginMethod()
@@ -176,14 +213,21 @@ public class FileSync extends Plugin {
         String graphUUID = call.getString("graphUUID");
         String token = call.getString("token");
 
-        long code = RSFileSync.updateLocalFiles(basePath, filePaths, graphUUID, token);
-        if (code != -1) {
-            JSObject ret = new JSObject();
-            ret.put("ok", true);
-            call.resolve(ret);
-        } else {
-            call.reject(RSFileSync.getLastError());
-        }
+        call.setKeepAlive(true);
+        Thread runner = new Thread() {
+            @Override
+            public void run() {
+                long code = RSFileSync.updateLocalFiles(basePath, filePaths, graphUUID, token);
+                if (code != -1) {
+                    JSObject ret = new JSObject();
+                    ret.put("ok", true);
+                    call.resolve(ret);
+                } else {
+                    call.reject(RSFileSync.getLastError());
+                }
+            }
+        };
+        runner.start();
     }
 
     @PluginMethod()
@@ -193,14 +237,21 @@ public class FileSync extends Plugin {
         String graphUUID = call.getString("graphUUID");
         String token = call.getString("token");
 
-        long code = RSFileSync.updateLocalVersionFiles(basePath, filePaths, graphUUID, token);
-        if (code != -1) {
-            JSObject ret = new JSObject();
-            ret.put("ok", true);
-            call.resolve(ret);
-        } else {
-            call.reject(RSFileSync.getLastError());
-        }
+        call.setKeepAlive(true);
+        Thread runner = new Thread() {
+            @Override
+            public void run() {
+                long code = RSFileSync.updateLocalVersionFiles(basePath, filePaths, graphUUID, token);
+                if (code != -1) {
+                    JSObject ret = new JSObject();
+                    ret.put("ok", true);
+                    call.resolve(ret);
+                } else {
+                    call.reject(RSFileSync.getLastError());
+                }
+            }
+        };
+        runner.start();
     }
 
     @PluginMethod()
@@ -210,15 +261,22 @@ public class FileSync extends Plugin {
         String token = call.getString("token");
         long txid = call.getInt("txid").longValue();
 
-        long code = RSFileSync.deleteRemoteFiles(filePaths, graphUUID, token, txid);
-        if (code != -1) {
-            JSObject ret = new JSObject();
-            ret.put("ok", true);
-            ret.put("txid", code);
-            call.resolve(ret);
-        } else {
-            call.reject(RSFileSync.getLastError());
-        }
+        call.setKeepAlive(true);
+        Thread runner = new Thread() {
+            @Override
+            public void run() {
+                long code = RSFileSync.deleteRemoteFiles(filePaths, graphUUID, token, txid);
+                if (code != -1) {
+                    JSObject ret = new JSObject();
+                    ret.put("ok", true);
+                    ret.put("txid", code);
+                    call.resolve(ret);
+                } else {
+                    call.reject(RSFileSync.getLastError());
+                }
+            }
+        };
+        runner.start();
     }
 
     @PluginMethod()
@@ -230,14 +288,30 @@ public class FileSync extends Plugin {
         long txid = call.getInt("txid").longValue();
         // NOTE: fnameEncryption is ignored. since it's always on.
 
-        long code = RSFileSync.updateRemoteFiles(basePath, filePaths, graphUUID, token, txid);
-        if (code != -1) {
-            JSObject ret = new JSObject();
-            ret.put("ok", true);
-            ret.put("txid", code);
-            call.resolve(ret);
-        } else {
-            call.reject(RSFileSync.getLastError());
-        }
+        Thread runner = new Thread() {
+            @Override
+            public void run() {
+                long code = RSFileSync.updateRemoteFiles(basePath, filePaths, graphUUID, token, txid);
+                if (code != -1) {
+                    JSObject ret = new JSObject();
+                    ret.put("ok", true);
+                    ret.put("txid", code);
+                    call.resolve(ret);
+                } else {
+                    call.reject(RSFileSync.getLastError());
+                }
+            }
+        };
+        runner.start();
+    }
+
+    @PluginMethod()
+    public void ageEncryptWithPassphrase(PluginCall call) {
+        call.reject("unimplemented");
+    }
+
+    @PluginMethod()
+    public void ageDecryptWithPassphrase(PluginCall call) {
+        call.reject("unimplemented");
     }
 }
