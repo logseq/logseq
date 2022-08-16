@@ -230,6 +230,7 @@
                                        (= (gp-util/page-name-sanity-lc %)
                                           (gp-util/page-name-sanity-lc page-name)) page-name
                                        :else %)))
+        page-name (gp-util/page-name-sanity-lc page-name)
         page-entity (build-page-entity (:block/properties page-block) file page-name page-original-name nil options)
         page-block (merge page-block page-entity (when-not (:block/uuid page-block) {:block/uuid (d/squuid)}))
         blocks (->> blocks
