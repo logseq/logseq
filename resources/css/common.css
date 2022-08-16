@@ -901,7 +901,7 @@ button.menu:focus {
 }
 
 .menu-links-wrapper {
-  @apply py-1 rounded-md shadow-lg overflow-y-auto;
+  @apply py-2 rounded-md shadow-lg overflow-y-auto;
 
   max-height: calc(100vh - 100px) !important;
   background-color: var(--ls-primary-background-color, #fff);
