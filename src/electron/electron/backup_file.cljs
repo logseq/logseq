@@ -44,7 +44,7 @@
                :version-file-dir (get-version-file-dir repo relative-path))
         new-path (path/join dir*
                             (str (string/replace (.toISOString (js/Date.)) ":" "_")
-                                 ext))]
+                                 ".Desktop" ext))]
     (fs-extra/ensureDirSync dir*)
     (fs/writeFileSync new-path content)
     (fs/statSync new-path)

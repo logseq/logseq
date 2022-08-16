@@ -1,6 +1,7 @@
 (ns frontend.fs.watcher-handler
   (:require [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.util :as util]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor]
@@ -15,7 +16,8 @@
             [promesa.core :as p]
             [frontend.state :as state]
             [frontend.encrypt :as encrypt]
-            [frontend.fs :as fs]))
+            [frontend.fs :as fs]
+            [frontend.fs.capacitor-fs :as capacitor-fs]))
 
 ;; all IPC paths must be normalized! (via gp-util/path-normalize)
 
@@ -35,7 +37,10 @@
   [repo path content db-content mtime backup?]
   (p/let [
           ;; save the previous content in a versioned bak file to avoid data overwritten.
-          _ (when backup? (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content content))
+          _ (when-let [repo-dir (and backup? (config/get-local-dir repo))]
+              (if (util/electron?)
+                (ipc/ipc "backupDbFile"  repo-dir path db-content content)
+                (capacitor-fs/backup-file-handle-changed! repo-dir path db-content)))
           _ (file-handler/alter-file repo path content {:re-render-root? true
                                                         :from-disk? true})]
     (set-missing-block-ids! content)
