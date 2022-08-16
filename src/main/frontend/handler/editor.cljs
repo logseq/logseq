@@ -2931,9 +2931,9 @@
 
               :else
               nil)))
-        
+
         (close-autocomplete-if-outside input)
-        
+
         (when-not (or (= k "Shift") is-processed?)
           (state/set-last-key-code! {:key-code key-code
                                      :code code

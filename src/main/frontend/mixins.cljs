@@ -35,7 +35,6 @@
                          (let [target (.. e -target)]
                            ;; If the click target is outside of current node
                            (when (and
-                                  (not (util/input? dom-node))
                                   (not (dom/contains dom-node target))
                                   (not (.contains (.-classList target) "ignore-outside-event")))
                              (on-hide state e :click))))]
