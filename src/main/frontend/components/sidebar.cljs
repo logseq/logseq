@@ -59,7 +59,7 @@
   [e]
   (when-let [target (.. e -target)]
     (let [rect (.. target getBoundingClientRect)]
-     (- (.. e -pageY) (.. rect -top)))))
+      (- (.. e -pageY) (.. rect -top)))))
 
 (defn- move-up?
   [e]
@@ -71,7 +71,7 @@
   (let [original-name (db-model/get-page-original-name name)]
     [:a {:on-click (fn [e]
                      (let [name (util/safe-page-name-sanity-lc name)
-                           source-page (db-model/get-alias-source-page (state/get-current-repo) name) 
+                           source-page (db-model/get-alias-source-page (state/get-current-repo) name)
                            name (if (empty? source-page) name (:block/name source-page))]
                        (if (gobj/get e "shiftKey")
                          (when-let [page-entity (if (empty? source-page) (db/entity [:block/name name]) source-page)]
@@ -231,54 +231,54 @@
        [:div.nav-header.flex.gap-1.flex-col
         (if-let [page (:page default-home)]
           (sidebar-item
-            {:class            "home-nav"
-             :title            page
-             :on-click-handler route-handler/redirect-to-home!
-             :active           (and (not srs-open?)
-                                    (= route-name :page)
-                                    (= page (get-in route-match [:path-params :name])))
-             :icon             "home"})
+           {:class            "home-nav"
+            :title            page
+            :on-click-handler route-handler/redirect-to-home!
+            :active           (and (not srs-open?)
+                                   (= route-name :page)
+                                   (= page (get-in route-match [:path-params :name])))
+            :icon             "home"})
           (sidebar-item
-            {:class            "journals-nav"
-             :active           (and (not srs-open?)
-                                 (or (= route-name :all-journals) (= route-name :home)))
-             :title            (t :left-side-bar/journals)
-             :on-click-handler route-handler/go-to-journals!
-             :icon             "calendar"}))
+           {:class            "journals-nav"
+            :active           (and (not srs-open?)
+                                   (or (= route-name :all-journals) (= route-name :home)))
+            :title            (t :left-side-bar/journals)
+            :on-click-handler route-handler/go-to-journals!
+            :icon             "calendar"}))
 
         (when (state/enable-flashcards? (state/get-current-repo))
           [:div.flashcards-nav
            (flashcards srs-open?)])
 
         (sidebar-item
-          {:class  "graph-view-nav"
-           :title  (t :right-side-bar/graph-view)
-           :href   (rfe/href :graph)
-           :active (and (not srs-open?) (= route-name :graph))
-           :icon   "hierarchy"})
+         {:class  "graph-view-nav"
+          :title  (t :right-side-bar/graph-view)
+          :href   (rfe/href :graph)
+          :active (and (not srs-open?) (= route-name :graph))
+          :icon   "hierarchy"})
 
         (sidebar-item
-          {:class  "all-pages-nav"
-           :title  (t :right-side-bar/all-pages)
-           :href   (rfe/href :all-pages)
-           :active (and (not srs-open?) (= route-name :all-pages))
-           :icon   "files"})]]
+         {:class  "all-pages-nav"
+          :title  (t :right-side-bar/all-pages)
+          :href   (rfe/href :all-pages)
+          :active (and (not srs-open?) (= route-name :all-pages))
+          :icon   "files"})]]
 
       (when left-sidebar-open? (favorites t))
 
       (when (and left-sidebar-open? (not config/publishing?)) (recent-pages t))
 
       (when-not (mobile-util/native-platform?)
-       [:nav.px-2 {:aria-label "Sidebar"
-                   :class      "new-page"}
-        (when-not config/publishing?
-          [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
-           {:on-click (fn []
-                        (and (util/sm-breakpoint?)
-                             (state/toggle-left-sidebar!))
-                        (state/pub-event! [:go/search]))}
-           (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
-           [:span.flex-1 (t :right-side-bar/new-page)]])])]]))
+        [:nav.px-2 {:aria-label "Sidebar"
+                    :class      "new-page"}
+         (when-not config/publishing?
+           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
+            {:on-click (fn []
+                         (and (util/sm-breakpoint?)
+                              (state/toggle-left-sidebar!))
+                         (state/pub-event! [:go/search]))}
+            (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
+            [:span.flex-1 (t :right-side-bar/new-page)]])])]]))
 
 (rum/defc left-sidebar < rum/reactive
   [{:keys [left-sidebar-open? route-match]}]
@@ -421,7 +421,7 @@
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
            (when (state/mobile?)
-                  (state/set-state! :mobile/show-tabbar? true))
+             (state/set-state! :mobile/show-tabbar? true))
            state)}
   []
   (let [default-home (get-default-home-if-valid)
@@ -470,15 +470,31 @@
          :else
          [:div])])))
 
+(rum/defc render-custom-context-menu
+  [links position]
+  (let [ref (rum/use-ref nil)]
+    (rum/use-effect!
+     #(let [el (rum/deref ref)
+            {:keys [x y]} (util/calc-delta-rect-offset el js/document.documentElement)]
+        (set! (.. el -style -transform)
+              (str "translate3d(" (if (neg? x) x 0) "px," (if (neg? y) (- y 10) 0) "px" ",0)"))))
+     [:div#custom-context-menu
+      {:ref ref
+       :style {:left (str (first position) "px")
+               :top (str (second position) "px")}} links]))
+
 (rum/defc custom-context-menu < rum/reactive
   []
-  (when (state/sub :custom-context-menu/show?)
-    (when-let [links (state/sub :custom-context-menu/links)]
+  (let [show? (state/sub :custom-context-menu/show?)
+        links (state/sub :custom-context-menu/links)
+        position (state/sub :custom-context-menu/position)]
+    (when (and show? links position)
       (ui/css-transition
        {:class-names "fade"
         :timeout {:enter 500
                   :exit 300}}
-       links))))
+       (render-custom-context-menu links position)))))
+
 
 (rum/defc new-block-mode < rum/reactive
   []
@@ -619,6 +635,6 @@
                                     :db-restoring? db-restoring?})
       [:a#download.hidden]
       (when
-          (and (not config/mobile?)
-               (not config/publishing?))
-          (help-button))])))
+       (and (not config/mobile?)
+            (not config/publishing?))
+        (help-button))])))

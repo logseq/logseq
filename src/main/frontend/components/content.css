@@ -12,10 +12,8 @@
 }
 
 #custom-context-menu {
-  @apply rounded-md shadow-lg transition ease-out duration-100 transform
-  opacity-100 scale-100 absolute overflow-y-auto;
+  @apply transition ease-out duration-100 transform
+  opacity-100 scale-100 absolute;
 
-  max-height: calc(100vh - 100px) !important;;
-  overflow-y: scroll;
   z-index: calc(var(--ls-z-index-level-1) + 1);
 }

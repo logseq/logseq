@@ -84,7 +84,7 @@
 
 (rum/defc dropdown-content-wrapper [state content class]
   (let [class (or class
-                  (util/hiccup->class "origin-top-right.absolute.right-0.mt-2.rounded-md.shadow-lg"))]
+                  (util/hiccup->class "origin-top-right.absolute.right-0.mt-2"))]
     [:div.dropdown-wrapper
      {:class (str class " "
                   (case state
@@ -120,7 +120,7 @@
   (dropdown
    content-fn
    (fn [{:keys [close-fn]}]
-     [:div.py-1.rounded-md.shadow-xs
+     [:.menu-links-wrapper
       (when links-header links-header)
       (for [{:keys [options title icon hr hover-detail item]} (if (fn? links) (links) links)]
         (let [new-options
