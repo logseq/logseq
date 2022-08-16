@@ -253,13 +253,13 @@
 }
 
 .tl-geometry-tools-pane {
-  @apply absolute flex flex-col items-center justify-center;
+  @apply absolute rounded-lg flex flex-col items-center justify-center;
   right: 100%;
-  top: calc(50% - 52px);
+  top: calc(50% - 54px);
   background-color: var(--ls-secondary-background-color);
-  border-radius: 8px;
   padding: 4px;
   gap: 8px;
+  box-shadow: var(--shadow-small);
 
   .tl-button:not([data-selected='true']):hover {
     background-color: var(--ls-tertiary-background-color);
