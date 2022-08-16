@@ -170,3 +170,16 @@
           (<! (<refresh-id-token&access-token)))))
     (when-not stop-refresh
       (recur))))
+
+(defn alpha-user?
+  []
+  true
+  ;; (if config/dev?
+  ;;   true
+  ;;   (contains? (state/user-groups) "alpha-tester"))
+  )
+
+(comment
+  (defn beta-user?
+   []
+   (contains? (state/user-groups) "beta-tester")))

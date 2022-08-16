@@ -35,7 +35,8 @@
   (let [_ (state/sub :auth/id-token)
         loading? (state/sub [:ui/loading? :login])]
     (when-not (or config/publishing?
-                  (user-handler/logged-in?))
+                  (user-handler/logged-in?)
+                  (not (state/enable-sync? (state/get-current-repo))))
       [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
        [:span (t :login)]
        (when loading?
@@ -184,7 +185,8 @@
      [:div.r.flex
       (when (and (not file-sync-handler/hiding-login&file-sync)
                  current-repo
-                 (not (config/demo-graph? current-repo)))
+                 (not (config/demo-graph? current-repo))
+                 (user-handler/alpha-user?))
         (fs-sync/indicator))
 
       (when (and (not= (state/get-current-route) :home)

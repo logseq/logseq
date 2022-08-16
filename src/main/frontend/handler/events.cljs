@@ -35,6 +35,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
@@ -70,15 +71,21 @@
 (defmethod handle :user/login [[_]]
   (state/set-state! [:ui/loading? :login] false)
   (async/go
-    (async/<! (file-sync-handler/load-session-graphs))
-    (p/let [repos (repo-handler/refresh-repos!)]
-      (when-let [repo (state/get-current-repo)]
-        (when (some #(and (= (:url %) repo)
-                          (vector? (:sync-meta %))
-                          (util/uuid-string? (first (:sync-meta %)))
-                          (util/uuid-string? (second (:sync-meta %)))) repos)
-          (file-sync-restart!))
-        (file-sync/maybe-onboarding-show :welcome)))))
+    (let [result (async/<! (sync/<user-info sync/remoteapi))]
+      (when (seq result)
+        (state/set-state! :user/info result)
+
+        (let [status (if (user-handler/alpha-user?) :welcome :unavailable)]
+          (when (= status :welcome)
+            (async/<! (file-sync-handler/load-session-graphs))
+            (p/let [repos (repo-handler/refresh-repos!)]
+              (when-let [repo (state/get-current-repo)]
+                (when (some #(and (= (:url %) repo)
+                                 (vector? (:sync-meta %))
+                                 (util/uuid-string? (first (:sync-meta %)))
+                                 (util/uuid-string? (second (:sync-meta %)))) repos)
+                 (file-sync-restart!)))))
+          (file-sync/maybe-onboarding-show status))))))
 
 (defmethod handle :user/logout [[_]]
   (file-sync-handler/reset-session-graphs)

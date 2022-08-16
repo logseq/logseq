@@ -14,6 +14,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.state :as state]
@@ -374,7 +375,7 @@
       :else
       (notification/show! (str "The page \"" value "\" doesn't exist yet. Please create that page first, and then try again.") :warning))))
 
-(defn journal-row [t enable-journals?]
+(defn journal-row [enable-journals?]
   (toggle "enable_journals"
           (t :settings-page/enable-journals)
           enable-journals?
@@ -398,7 +399,7 @@
 ;;             (let [value (not enable-block-timestamps?)]
 ;;               (config-handler/set-config! :feature/enable-block-timestamps? value)))))
 
-(defn encryption-row [t enable-encryption?]
+(defn encryption-row [enable-encryption?]
   (toggle "enable_encryption"
           (t :settings-page/enable-encryption)
           enable-encryption?
@@ -423,15 +424,15 @@
                       (route-handler/redirect! {:to :shortcut-setting}))
      :-for         "customize_shortcuts"}))
 
-(defn zotero-settings-row [_t]
+(defn zotero-settings-row []
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "zotero_settings"}
-    "Zotero settings"]
+    "Zotero"]
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div
      (ui/button
-       "Zotero settings"
+       "Settings"
        :class "text-sm p-1"
        :style {:margin-top "0px"}
        :on-click
@@ -548,8 +549,6 @@
         preferred-date-format (state/get-date-formatter)
         preferred-workflow (state/get-preferred-workflow)
         enable-timetracking? (state/enable-timetracking?)
-        enable-journals? (state/enable-journals? current-repo)
-        enable-encryption? (state/enable-encryption? current-repo)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)
         enable-tooltip? (state/enable-tooltip?)
@@ -570,23 +569,7 @@
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (tooltip-row t enable-tooltip?))
      (timetracking-row t enable-timetracking?)
-     (journal-row t enable-journals?)
-     (when (not enable-journals?)
-       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-        [:label.block.text-sm.font-medium.leading-5.opacity-70
-         {:for "default page"}
-         (t :settings-page/home-default-page)]
-        [:div.mt-1.sm:mt-0.sm:col-span-2
-         [:div.max-w-lg.rounded-md.sm:max-w-xs
-          [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
-           {:default-value (state/sub-default-home-page)
-            :on-blur       update-home-page
-            :on-key-press  (fn [e]
-                             (when (= "Enter" (util/ekey e))
-                               (update-home-page e)))}]]]])
-     (encryption-row t enable-encryption?)
      (enable-all-pages-public-row t enable-all-pages-public?)
-     (zotero-settings-row t)
      (auto-push-row t current-repo enable-git-auto-push?)]))
 
 (rum/defc settings-git
@@ -619,14 +602,57 @@
      (when (and util/mac? (util/electron?)) (app-auto-update-row t))
      (usage-diagnostics-row t instrument-disabled?)
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
-     (when (and (util/electron?) config/enable-plugins?) (plugin-system-switcher-row))
-     (flashcards-switcher-row enable-flashcards?)
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (clear-cache-row t)
 
      (ui/admonition
        :warning
        [:p "Clearing the cache will discard open graphs. You will lose unsaved changes."])]))
+
+(rum/defc sync-enabled-switcher
+  [enabled?]
+  (ui/toggle enabled?
+             (fn []
+               (let [value (not enabled?)]
+                 (storage/set :logseq-sync-enabled value)
+                 (state/set-state! :feature/enable-sync? value)))
+             true))
+
+(defn sync-switcher-row [enabled?]
+  (row-with-button-action
+   {:left-label (str (t :settings-page/sync) " 🔐")
+    :action (sync-enabled-switcher enabled?)}))
+
+(rum/defc settings-features < rum/reactive
+  []
+  (let [current-repo (state/get-current-repo)
+        enable-journals? (state/enable-journals? current-repo)
+        enable-encryption? (state/enable-encryption? current-repo)
+        enable-flashcards? (state/enable-flashcards? current-repo)
+        enable-sync? (state/enable-sync? current-repo)]
+    [:div.panel-wrap.is-features.mb-8
+     (journal-row enable-journals?)
+     (when (not enable-journals?)
+       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+        [:label.block.text-sm.font-medium.leading-5.opacity-70
+         {:for "default page"}
+         (t :settings-page/home-default-page)]
+        [:div.mt-1.sm:mt-0.sm:col-span-2
+         [:div.max-w-lg.rounded-md.sm:max-w-xs
+          [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
+           {:default-value (state/sub-default-home-page)
+            :on-blur       update-home-page
+            :on-key-press  (fn [e]
+                             (when (= "Enter" (util/ekey e))
+                               (update-home-page e)))}]]]])
+     (when (and (util/electron?) config/enable-plugins?) (plugin-system-switcher-row))
+     (flashcards-switcher-row enable-flashcards?)
+     (zotero-settings-row)
+     (encryption-row enable-encryption?)
+     [:div
+      [:hr]
+      [:h2.mb-4 "Alpha test (sponsors only)"]
+      (when (util/electron?) (sync-switcher-row enable-sync?))]]))
 
 (rum/defcs settings
   < (rum/local [:general :general] ::active)
@@ -657,9 +683,12 @@
         (for [[label text icon]
               [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
                [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
-               (when-not (mobile-util/native-platform?)
+               (when (and
+                      (util/electron?)
+                      (not (file-sync-handler/synced-file-graph? current-repo)))
                  [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
                [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]
+               [:features (t :settings-page/tab-features) (ui/icon "bulb" {:style {:font-size 20}})]
                (when plugins-of-settings
                  [:plugins-setting (t :settings-of-plugins) (ui/icon "puzzle")])]]
 
@@ -694,5 +723,8 @@
 
          :advanced
          (settings-advanced current-repo)
+
+         :features
+         (settings-features)
 
          nil)]]]))

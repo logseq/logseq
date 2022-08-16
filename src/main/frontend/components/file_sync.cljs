@@ -529,19 +529,20 @@
       (ui/button "Start syncing"
                  :disabled loading?
                  :on-click (fn []
-                             (async/go
-                               (set-loading? true)
-                               (let [ex-time (get (async/<! (fs-sync/<user-info fs-sync/remoteapi)) :ExpireTime)]
-                                 (if (and (number? ex-time)
-                                          (< ex-time (js/Date.now)))
-                                   (do
-                                     (vreset! *beta-unavailable? true)
-                                     (maybe-onboarding-show :unavailable))
+                             (set-loading? true)
+                             (let [result (:user/info @state/state)
+                                   ex-time (:ExpireTime result)
+                                   user-groups (set (:UserGroups result))]
+                               (if (and (number? ex-time)
+                                        (< ex-time (js/Date.now)))
+                                 (do
+                                   (vreset! *beta-unavailable? true)
+                                   (maybe-onboarding-show :unavailable))
 
-                                   ;; Logseq sync available
-                                   (maybe-onboarding-show :sync-initiate))
-                                 (close-fn)
-                                 (set-loading? false)))
+                                 ;; Logseq sync available
+                                 (maybe-onboarding-show :sync-initiate))
+                               (close-fn)
+                               (set-loading? false))
                              ))]]))
 
 (rum/defc onboarding-unavailable-file-sync
@@ -559,7 +560,7 @@
     [:br]
     "to our users, we need a little more time to test it. That’s why we decided to first roll it out only to our "
     [:br]
-    "charitable OpenCollective backers. We can notify you once it becomes available for you."]
+    "charitable OpenCollective sponsors. We can notify you once it becomes available for you."]
 
    [:div.pt-6.flex.justify-end.space-x-2
     (ui/button "Close" :on-click close-fn :background "gray" :class "opacity-60")]])
@@ -582,22 +583,22 @@
     [:div "and sync it as well."]]
 
    [:div.cloud-tip.rounded-md.mt-6
-    ;; TODO: better words
     [:div.items-center.pt-6.opacity-90.flex.justify-center
      [:span.pr-2 (ui/icon "bell-ringing" {:class "font-semibold"})]
-     [:strong "Logseq Sync is still in Beta and the plan is not final!"]]
+     [:strong "Logseq Sync is still in Beta and we're working on a Pro plan!"]]
 
-    [:ul.flex.py-6.px-4
-     [:li.it
-      [:h1.dark:text-white "1"]
-      [:h2 "Remote Graphs"]]
-     [:li.it
-      [:h1.dark:text-white "50" [:sup "MB"]]
-      [:h2 "Storage per Graph"]]
+    ;; [:ul.flex.py-6.px-4
+    ;;  [:li.it
+    ;;   [:h1.dark:text-white "10"]
+    ;;   [:h2 "Remote Graphs"]]
+    ;;  [:li.it
+    ;;   [:h1.dark:text-white "5G"]
+    ;;   [:h2 "Storage per Graph"]]
 
-     [:li.it
-      [:h1.dark:text-white "50" [:sup "MB"]]
-      [:h2 "Total Storage"]]]]
+    ;;  [:li.it
+    ;;   [:h1.dark:text-white "50G"]
+    ;;   [:h2 "Total Storage"]]]
+    ]
 
    [:div.pt-6.flex.justify-end.space-x-2
     (ui/button "Done" :on-click close-fn)]])

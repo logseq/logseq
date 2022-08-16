@@ -241,7 +241,9 @@
      :encryption/graph-parsing?             false
 
      :ui/loading?                           {}
-     :file-sync/set-remote-graph-password-result {}})))
+     :file-sync/set-remote-graph-password-result {}
+     :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
+     })))
 
 ;; block uuid -> {content(String) -> ast}
 (def blocks-ast-cache (atom {}))
@@ -389,6 +391,14 @@
   ([repo]
    (not (false? (:feature/enable-flashcards?
                  (get (sub-config) repo))))))
+
+(defn user-groups
+  []
+  (set (get-in @state [:user/info :UserGroups])))
+
+(defn enable-sync?
+  [repo]
+  (sub :feature/enable-sync?))
 
 (defn export-heading-to-list?
   []
