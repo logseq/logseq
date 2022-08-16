@@ -137,7 +137,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                 isSelected={selectedShapesSet.has(shape)}
                 isErasing={erasingShapesSet.has(shape)}
                 meta={meta}
-                zIndex={(selectedShapesSet.has(shape) ? 2000 : 1000) + i}
+                zIndex={1000 + i}
                 onEditingEnd={onEditingEnd}
               />
             ))}

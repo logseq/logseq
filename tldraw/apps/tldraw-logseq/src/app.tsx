@@ -18,6 +18,7 @@ import { LogseqContext, LogseqContextValue } from '~lib/logseq-context'
 import { Shape, shapes } from '~lib/shapes'
 import {
   BoxTool,
+  // DotTool,
   EllipseTool,
   HighlighterTool,
   HTMLTool,

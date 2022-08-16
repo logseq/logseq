@@ -544,6 +544,10 @@
   transform: translate(1px, 1px);
   overscroll-behavior: none;
   opacity: 1;
+
+  &[data-collapsed='true'] {
+    @apply overflow-hidden;
+  }
 }
 
 .tl-logseq-portal-header {

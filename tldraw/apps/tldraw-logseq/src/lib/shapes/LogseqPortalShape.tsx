@@ -728,6 +728,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           ) : (
             <div
               className="tl-logseq-portal-container"
+              data-collapsed={this.props.collapsed}
               style={{
                 background: this.props.compact ? 'transparent' : fill,
                 boxShadow: isBinding

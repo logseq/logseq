@@ -44,7 +44,7 @@ const GeometryToolButtons = observer(() => {
   const geometries = [
     {
       id: 'box',
-      icon: 'rectangle',
+      icon: 'square',
       title: 'Rectangle',
     },
     {

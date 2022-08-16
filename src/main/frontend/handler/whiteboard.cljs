@@ -45,8 +45,8 @@
 (defn- block->shape [block]
   (:block/properties block))
 
-(defn- shape->block [shape page-name]
-  (let [properties (assoc shape :ls-type :whiteboard-shape)
+(defn- shape->block [shape page-name idx]
+  (let [properties (assoc shape :ls-type :whiteboard-shape :index idx)
         block {:block/page {:block/name (util/page-name-sanity-lc page-name)}
                :block/parent {:block/name page-name}
                :block/properties properties}
@@ -68,7 +68,9 @@
                                                                       :block/properties [:ls-type]
                                                                       {:block/parent [:block/uuid]}]})
         shapes (:shapes tldr-data)
-        blocks (mapv #(shape->block % page-name) shapes)
+        ;; we should maintain the order of the shapes in the page
+        ;; bring back/forward is depending on this ordering
+        blocks (map-indexed (fn [idx shape] (shape->block shape page-name idx)) shapes)
         block-ids (->> shapes
                        (map (fn [shape] (when (= (:blockType shape) "B")
                                           (uuid (:pageId shape)))))
@@ -94,7 +96,8 @@
   (let [id (str (:block/uuid page-block))
         shapes (->> blocks
                     (map block->shape)
-                    (filter #(= :whiteboard-shape (:ls-type %))))
+                    (filter #(= :whiteboard-shape (:ls-type %)))
+                    (sort-by :index))
         page-properties (:block/properties page-block)
         assets (:assets page-properties)
         page-properties (dissoc page-properties :assets)]
