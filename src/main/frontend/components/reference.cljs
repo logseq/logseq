@@ -174,7 +174,7 @@
 (rum/defc references
   [page-name]
   (ui/catch-error
-   (ui/component-error "Linked References: Unexpected error")
+   (ui/component-error "Linked References: Unexpected error. Please re-index your graph first.")
    (ui/lazy-visible
     (fn []
       (references* page-name))
