@@ -135,6 +135,25 @@
                                      :recursive true}))
     (truncate-old-versioned-files! backup-dir)))
 
+(defn backup-file-handle-changed!
+  [repo-dir file-path content]
+  (let [repo-dir (js/decodeURI repo-dir)
+        file-path (js/decodeURI file-path)
+        backup-root (util/node-path.join repo-dir backup-dir)
+        backup-dir-parent (util/node-path.dirname file-path)
+        backup-dir-parent (string/replace backup-dir-parent repo-dir "")
+        backup-dir-name (util/node-path.name file-path)
+        file-extname (util/node-path.extname file-path)
+        new-path (util/node-path.join
+                  backup-root backup-dir-parent backup-dir-name
+                  (str (string/replace (.toISOString (js/Date.)) ":" "_") ".Mobile" file-extname))]
+    (prn "====> Ready Backup mobile file::" repo-dir "++++" file-path "++++" new-path)
+    (.writeFile Filesystem (clj->js {:data content
+                                     :path new-path
+                                     :encoding (.-UTF8 Encoding)
+                                     :recursive true}))
+    (truncate-old-versioned-files! backup-dir)))
+
 (defn- write-file-impl!
   [_this repo _dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
   (if skip-compare?
@@ -180,6 +199,7 @@
                                                          :recursive true}))
                  mtime (-> (js->clj stat :keywordize-keys true)
                            :mtime)]
+           (prn "====>>> Write File:" path "\n matched?" contents-matched?)
            (when-not contents-matched?
              (backup-file repo-dir path disk-content ext))
            (db/set-file-last-modified-at! repo path mtime)
