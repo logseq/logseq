@@ -87,6 +87,31 @@
                          (page-handler/unfavorite-page! page-original-name)
                          (page-handler/favorite-page! page-original-name)))}}
 
+          (when (or (util/electron?) file-sync-graph-uuid)
+            {:title   (t :page/version-history)
+             :options {:on-click
+                       (fn []
+                         (cond
+                           file-sync-graph-uuid
+                           (state/pub-event! [:graph/pick-page-histories file-sync-graph-uuid page-name])
+
+                           (util/electron?)
+                           (shell/get-file-latest-git-log page 100)
+
+                           :else
+                           nil))
+                       :class "cp__btn_history_version"}})
+
+          (when (or (util/electron?)
+                    (mobile-util/native-platform?))
+            {:title   (t :page/copy-page-url)
+             :options {:on-click #(util/copy-to-clipboard!
+                                   (url-util/get-logseq-graph-page-url nil repo page-original-name))}})
+
+          (when-not contents?
+            {:title   (t :page/delete)
+             :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
+
           (when-not (mobile-util/native-platform?)
             {:title (t :page/presentation-mode)
              :options {:on-click (fn []
@@ -105,16 +130,6 @@
              {:title   (t :page/open-with-default-app)
               :options {:on-click #(js/window.apis.openPath file-path)}}])
 
-          (when (or (util/electron?)
-                    (mobile-util/native-platform?))
-            {:title   (t :page/copy-page-url)
-             :options {:on-click #(util/copy-to-clipboard!
-                                   (url-util/get-logseq-graph-page-url nil repo page-original-name))}})
-
-          (when-not contents?
-            {:title   (t :page/delete)
-             :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
-
           (when (state/get-current-page)
             {:title   (t :export-page)
              :options {:on-click #(state/set-modal!
@@ -130,22 +145,8 @@
                           (if public? false true))
                          (state/close-modal!))}})
 
-          (when (or (util/electron?) file-sync-graph-uuid)
-            {:title   (t :page/version-history)
-             :options {:on-click
-                       (fn []
-                         (cond
-                           file-sync-graph-uuid
-                           (state/pub-event! [:graph/pick-page-histories file-sync-graph-uuid page-name])
-
-                           (util/electron?)
-                           (shell/get-file-latest-git-log page 100)
-
-                           :else
-                           nil))
-                       :class "cp__btn_history_version"}})
-
-          (when (and (util/electron?) file-path)
+          (when (and (util/electron?) file-path
+                     (not (file-sync-handler/synced-file-graph? repo)))
             {:title   (t :page/open-backup-directory)
              :options {:on-click
                        (fn []

@@ -71,7 +71,7 @@
   (let [original-name (db-model/get-page-original-name name)]
     [:a {:on-click (fn [e]
                      (let [name (util/safe-page-name-sanity-lc name)
-                           source-page (db-model/get-alias-source-page (state/get-current-repo) name) 
+                           source-page (db-model/get-alias-source-page (state/get-current-repo) name)
                            name (if (empty? source-page) name (:block/name source-page))]
                        (if (gobj/get e "shiftKey")
                          (when-let [page-entity (if (empty? source-page) (db/entity [:block/name name]) source-page)]
@@ -262,14 +262,7 @@
           :title  (t :right-side-bar/all-pages)
           :href   (rfe/href :all-pages)
           :active (and (not srs-open?) (= route-name :all-pages))
-          :icon   "files"})
-
-        (sidebar-item
-         {:class  "all-graphs-view-nav"
-          :title  (t :all-graphs)
-          :href   (rfe/href :repos)
-          :active (and (not srs-open?) (= route-name :repos))
-          :icon   "database"})]]
+          :icon   "files"})]]
 
       (when left-sidebar-open? (favorites t))
 

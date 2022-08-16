@@ -20,7 +20,8 @@
             [frontend.components.encryption :as encryption]
             [frontend.encrypt :as e]
             [cljs.core.async :as async :refer [go <!]]
-            [frontend.handler.file-sync :as file-sync]))
+            [frontend.handler.file-sync :as file-sync]
+            [reitit.frontend.easy :as rfe]))
 
 (rum/defc add-repo
   [args]
@@ -184,17 +185,14 @@
                       :options (cond->
                                 {:on-click
                                  (fn []
-                                   (state/pub-event! [:graph/ask-for-re-index *multiple-windows?]))})}
-        new-window-link (when (util/electron?)
-                          {:title        (t :open-new-window)
-                           :options {:on-click #(state/pub-event! [:graph/open-new-window nil])}})]
+                                   (state/pub-event! [:graph/ask-for-re-index *multiple-windows?]))})}]
     (->>
      (concat repo-links
              [(when (seq repo-links) {:hr true})
               {:title (t :new-graph) :options {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)}}
+              {:title (t :all-graphs) :options {:href (rfe/href :repos)}}
               refresh-link
-              reindex-link
-              new-window-link])
+              reindex-link])
      (remove nil?))))
 
 (rum/defcs repos-dropdown < rum/reactive
