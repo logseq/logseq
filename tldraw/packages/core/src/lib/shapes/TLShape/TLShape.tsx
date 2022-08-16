@@ -355,7 +355,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   getShapeSVGJsx(opts: any) {
     // Do not need to consider the original point here
     const bounds = this.getBounds()
-    const { stroke, strokeWidth, opacity, fill } = this.props as any
+    const { stroke, strokeWidth, opacity, fill, borderRadius } = this.props as any
     return (
       <rect
         fill={fill}
@@ -364,6 +364,8 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
         fillOpacity={opacity ?? 0.2}
         width={bounds.width}
         height={bounds.height}
+        rx={borderRadius}
+        ry={borderRadius}
       />
     )
   }

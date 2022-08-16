@@ -36,7 +36,12 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
     return (
       <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
         <g transform={`translate(${x}, ${y})`}>
-          <polygon className={isSelected ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'} points={path} />
+          <polygon
+            className={
+              isSelected || fill !== 'transparent' ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'
+            }
+            points={path}
+          />
           <polygon
             points={path}
             stroke={stroke}

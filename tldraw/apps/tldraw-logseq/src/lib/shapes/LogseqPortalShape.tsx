@@ -778,21 +778,26 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return (
       <>
         <rect
-          stroke={this.props.stroke}
-          strokeWidth={this.props.strokeWidth ?? 2}
-          fill="#aaa"
-          width={bounds.width}
-          height={HEADER_HEIGHT}
-        />
-        <rect
-          y={HEADER_HEIGHT}
           fill={this.props.fill}
           stroke={this.props.stroke}
           strokeWidth={this.props.strokeWidth ?? 2}
           fillOpacity={this.props.opacity ?? 0.2}
           width={bounds.width}
-          height={bounds.height - HEADER_HEIGHT}
+          rx={8}
+          ry={8}
+          height={bounds.height}
         />
+        {!this.props.compact && (
+          <rect
+            fill="#aaa"
+            x={1}
+            y={1}
+            width={bounds.width - 2}
+            height={HEADER_HEIGHT - 2}
+            rx={8}
+            ry={8}
+          />
+        )}
         <text
           style={{
             transformOrigin: 'top left',

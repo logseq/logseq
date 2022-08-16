@@ -159,21 +159,21 @@
     &[data-state='checked'] {
       background: #8ec2c2;
     }
-  }
 
-  .switch-input-thumb {
-    display: block;
-    width: 16px;
-    height: 16px;
-    background-color: white;
-    border-radius: 9999px;
-    transition: transform 100ms ease 0s;
-    transform: translateX(3px);
-    will-change: transform;
-  }
-
-  &[data-state='checked'] {
-    transform: translateX(17px);
+    .switch-input-thumb {
+      display: block;
+      width: 16px;
+      height: 16px;
+      background-color: white;
+      border-radius: 9999px;
+      transition: transform 100ms ease 0s;
+      transform: translateX(3px);
+      will-change: transform;
+    }
+  
+    &[data-state='checked'] .switch-input-thumb {
+      transform: translateX(17px);
+    }
   }
 
   .tl-text-input {

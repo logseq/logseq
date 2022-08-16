@@ -36,7 +36,7 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
     return (
       <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
         <ellipse
-          className={isSelected ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
+          className={isSelected || fill !== 'transparent' ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
           cx={w / 2}
           cy={h / 2}
           rx={Math.max(0.01, (w - strokeWidth) / 2)}

@@ -9,6 +9,7 @@ import { observer } from 'mobx-react-lite'
 import type { TextShape, Shape } from '~lib/shapes'
 import { NumberInput } from '~components/inputs/NumberInput'
 import { ColorInput } from '~components/inputs/ColorInput'
+import { SwitchInput } from '../inputs/SwitchInput'
 
 const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets }) => {
   const app = useApp()
@@ -17,26 +18,39 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets }) => {
 
   const updateStroke = React.useCallback<React.ChangeEventHandler<HTMLInputElement>>(e => {
     shapes.forEach(shape => shape.update({ stroke: e.currentTarget.value }))
+    app.persist()
   }, [])
 
   const updateFill = React.useCallback<React.ChangeEventHandler<HTMLInputElement>>(e => {
     shapes.forEach(shape => shape.update({ fill: e.currentTarget.value }))
+    app.persist()
   }, [])
 
   const updateStrokeWidth = React.useCallback<React.ChangeEventHandler<HTMLInputElement>>(e => {
     shapes.forEach(shape => shape.update({ strokeWidth: +e.currentTarget.value }))
+    app.persist()
   }, [])
 
   const updateOpacity = React.useCallback<React.ChangeEventHandler<HTMLInputElement>>(e => {
     shapes.forEach(shape => shape.update({ opacity: +e.currentTarget.value }))
+    app.persist()
   }, [])
 
   const updateFontSize = React.useCallback<React.ChangeEventHandler<HTMLInputElement>>(e => {
     textShapes.forEach(shape => shape.update({ fontSize: +e.currentTarget.value }))
+    app.persist()
   }, [])
 
   const updateFontWeight = React.useCallback<React.ChangeEventHandler<HTMLInputElement>>(e => {
     textShapes.forEach(shape => shape.update({ fontWeight: +e.currentTarget.value }))
+    app.persist()
+  }, [])
+
+  const updateTransparent = React.useCallback(transparent => {
+    // const transparent = shapes.some(s => s.props.fill !== 'transparent')
+    console.log(transparent)
+    shapes.forEach(shape => shape.update({ fill: transparent ? 'transparent' : '#fff' }))
+    app.persist()
   }, [])
 
   React.useLayoutEffect(() => {
@@ -59,9 +73,9 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets }) => {
   if (!app) return null
 
   const textShapes = shapes.filter(shape => shape.type === 'text') as TextShape[]
-
   const ShapeContent =
     shapes.length === 1 && 'ReactContextBar' in shapes[0] ? shapes[0]['ReactContextBar'] : null
+  const transparent = shapes.every(s => s.props.fill === 'transparent')
 
   return (
     <HTMLContainer centered>
@@ -71,7 +85,12 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets }) => {
         ) : (
           <>
             <ColorInput label="Stroke" value={shapes[0].props.stroke} onChange={updateStroke} />
-            <ColorInput label="Fill" value={shapes[0].props.fill} onChange={updateFill} />
+            {!transparent && <ColorInput label="Fill" value={shapes[0].props.fill} onChange={updateFill} />}
+            <SwitchInput
+              label="Transparent"
+              checked={transparent}
+              onCheckedChange={updateTransparent}
+            />
             <NumberInput
               label="Width"
               value={Math.max(...shapes.map(shape => shape.props.strokeWidth))}
