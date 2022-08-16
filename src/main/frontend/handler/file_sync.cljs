@@ -182,11 +182,12 @@
 
     (async/sub p topic c)
 
-    (async/go
+    (async/go-loop []
       (let [{:keys [data]} (async/<! c)]
         (when (and (:file-change-events data)
                    (= :page (state/get-current-route)))
           (state/pub-event!
-           [:file-sync/maybe-onboarding-show :sync-history]))))
+           [:file-sync/maybe-onboarding-show :sync-history])))
+      (recur))
 
     #(async/unsub p topic c)))

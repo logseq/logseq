@@ -9,6 +9,7 @@
             [cljs.spec.alpha :as s]
             [clojure.set :as set]
             [clojure.string :as string]
+            [clojure.pprint :as pp]
             [electron.ipc :as ipc]
             [goog.string :as gstring]
             [frontend.config :as config]
