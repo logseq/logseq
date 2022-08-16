@@ -6,10 +6,15 @@
 
     a.cloud {
       position: relative;
+      opacity: 1 !important;
       cursor: pointer;
 
       &:active {
         opacity: .5 !important;
+      }
+
+      .ti {
+        opacity: .5;
       }
 
       &:hover .ti {
@@ -454,6 +459,16 @@ html[data-theme='light'] {
 
       > .input-hints {
         background-color: #e1e1e1;
+      }
+    }
+  }
+}
+
+html:not(.is-electron) {
+  .cp__file-sync {
+    &-indicator {
+      a.cloud .ti {
+        opacity: .9;
       }
     }
   }
