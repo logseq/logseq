@@ -7,7 +7,6 @@
             [cljs.core.async.impl.channels]
             [cljs.core.async.interop :refer [p->c]]
             [cljs.spec.alpha :as s]
-            [cljs.pprint :as pp]
             [clojure.set :as set]
             [clojure.string :as string]
             [electron.ipc :as ipc]
@@ -25,8 +24,7 @@
             [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.encrypt :as encrypt]
-            [medley.core :refer [dedupe-by]]
-            [rum.core :as rum]))
+            [medley.core :refer [dedupe-by]]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -735,7 +733,7 @@
                                     (js->clj r))))))
 
 
-(deftype CapacitorAPI [^:mutable _graph-uuid ^:mutable _private-key ^:mutable _public-key]
+(deftype ^:large-vars/cleanup-todo CapacitorAPI [^:mutable _graph-uuid ^:mutable _private-key ^:mutable _public-key]
   IToken
   (<get-token [this]
     (go
@@ -913,41 +911,6 @@
   {:pre [(s/valid? ::sync-event val)]}
   (async/put! sync-events-chan val))
 
-(def ^:private debug-print-sync-events-loop-stop-chan (chan 1))
-(defn debug-print-sync-events-loop
-  ([] (debug-print-sync-events-loop [:created-local-version-file
-                                     :finished-local->remote
-                                     :finished-remote->local
-                                     :pause
-                                     :resume
-                                     :exception-decrypt-failed
-                                     :remote->local-full-sync-failed
-                                     :local->remote-full-sync-failed]))
-  ([topics]
-   (util/drain-chan debug-print-sync-events-loop-stop-chan)
-   (let [topic&chs (map (juxt identity #(chan 10)) topics)
-         out-ch (chan 10)
-         out-mix (async/mix out-ch)]
-     (doseq [[topic ch] topic&chs]
-       (async/sub sync-events-publication topic ch)
-       (async/admix out-mix ch))
-     (go-loop []
-       (let [{:keys [val stop]}
-             (async/alt!
-               debug-print-sync-events-loop-stop-chan {:stop true}
-               out-ch ([v] {:val v}))]
-         (cond
-           stop (do (async/unmix-all out-mix)
-                    (doseq [[topic ch] topic&chs]
-                      (async/unsub sync-events-publication topic ch)))
-
-           val (do (pp/pprint [:debug :sync-event val])
-                   (recur))))))))
-
-(defn stop-debug-print-sync-events-loop
-  []
-  (offer! debug-print-sync-events-loop-stop-chan true))
-
 (comment
   ;; sub one type event example:
   (def c1 (chan 10))
@@ -970,6 +933,42 @@
   (offer! sync-events-chan {:event :finished-remote->local :data :xxx})
   (poll! c4-out)
   (poll! c4-out)
+
+  (def ^:private debug-print-sync-events-loop-stop-chan (chan 1))
+  (defn debug-print-sync-events-loop
+    ([] (debug-print-sync-events-loop [:created-local-version-file
+                                       :finished-local->remote
+                                       :finished-remote->local
+                                       :pause
+                                       :resume
+                                       :exception-decrypt-failed
+                                       :remote->local-full-sync-failed
+                                       :local->remote-full-sync-failed]))
+    ([topics]
+     (util/drain-chan debug-print-sync-events-loop-stop-chan)
+     (let [topic&chs (map (juxt identity #(chan 10)) topics)
+           out-ch (chan 10)
+           out-mix (async/mix out-ch)]
+       (doseq [[topic ch] topic&chs]
+         (async/sub sync-events-publication topic ch)
+         (async/admix out-mix ch))
+       (go-loop []
+         (let [{:keys [val stop]}
+               (async/alt!
+                 debug-print-sync-events-loop-stop-chan {:stop true}
+                 out-ch ([v] {:val v}))]
+           (cond
+             stop (do (async/unmix-all out-mix)
+                      (doseq [[topic ch] topic&chs]
+                        (async/unsub sync-events-publication topic ch)))
+
+             val (do (pp/pprint [:debug :sync-event val])
+                     (recur))))))))
+
+  (defn stop-debug-print-sync-events-loop
+    []
+    (offer! debug-print-sync-events-loop-stop-chan true))
+
   )
 
 ;;; sync events ends
@@ -1723,32 +1722,16 @@
   (chan))
 (def immediately-local->remote-mult (async/mult immediately-local->remote-chan))
 
-(def app-state-changed-chan
-  "boolean value, means active or not"
-  (chan 1))
-(def app-state-changed-mult (async/mult app-state-changed-chan))
-
 (def pause-resume-chan
   "false -> pause, true -> resume.
   see also `*resume-state`"
   (chan 1))
 (def pause-resume-mult (async/mult pause-resume-chan))
 
-(defonce _watch-app-state-change
-  (add-watch (rum/cursor state/state :mobile/app-state-change) "sync"
-             (fn [_ _ _ {:keys [is-active?]}]
-               (offer! pause-resume-chan is-active?))))
-
 (def recent-edited-chan
   "Triggered when there is content editing"
   (chan 1))
 (def recent-edited-mult (async/mult recent-edited-chan))
-
-(defonce _watch-last-input-time
-  (add-watch (rum/cursor state/state :editor/last-input-time) "sync"
-             (fn [_ _ _ _]
-               (offer! recent-edited-chan true))))
-
 
 ;;; ### sync state
 
@@ -1767,10 +1750,6 @@
 (defn resume-state--add-local->remote-state
   [graph-uuid local-changes]
   (swap! *resume-state assoc graph-uuid {:local->remote local-changes}))
-
-(defn resume-state--add-local->remote-full-sync-state
-  [graph-uuid]
-  (swap! *resume-state assoc graph-uuid {:local->remote-full-sync true}))
 
 (defn resume-state--reset
   [graph-uuid]
@@ -2622,24 +2601,24 @@
 ;;; ### some add-watches
 
 ;; TOOD: replace this logic by pause/resume state
-(defonce _watch-network
-  (add-watch (rum/cursor state/state :network/online?) "sync-manage"
-             (fn [_k _r o n]
-               (cond
-                 (and (true? o) (false? n))
-                 (<sync-stop)
+;; (defonce _watch-network
+;;   (add-watch (rum/cursor state/state :network/online?) "sync-manage"
+;;              (fn [_k _r o n]
+;;                (cond
+;;                  (and (true? o) (false? n))
+;;                  (<sync-stop)
 
-                 (and (false? o) (true? n))
-                 (sync-start)
+;;                  (and (false? o) (true? n))
+;;                  (sync-start)
 
-                 :else
-                 nil))))
+;;                  :else
+;;                  nil))))
 
-(defonce _watch-id-token
-  (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
-             (fn [_k _r _o n]
-               (when (nil? n)
-                 (<sync-stop)))))
+;; (defonce _watch-id-token
+;;   (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
+;;              (fn [_k _r _o n]
+;;                (when (nil? n)
+;;                  (<sync-stop)))))
 
 
 ;;; ### some sync events handler

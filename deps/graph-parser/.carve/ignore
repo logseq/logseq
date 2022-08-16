@@ -18,3 +18,5 @@ logseq.graph-parser.util.page-ref/left-and-right-brackets
 logseq.graph-parser.util.page-ref/->page-ref
 ;; API
 logseq.graph-parser.util.page-ref/get-page-name!
+;; API
+logseq.graph-parser.config/remove-asset-protocol

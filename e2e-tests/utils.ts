@@ -42,6 +42,8 @@ export async function createRandomPage(page: Page) {
   await page.fill('[placeholder="Search or create page"]', randomTitle)
   // Click text=/.*New page: "new page".*/
   await page.click('text=/.*New page: ".*/')
+  // Wait for h1 to be from our new page
+  await page.waitForSelector(`h1 >> text="${randomTitle}"`, { state: 'visible' })
   // wait for textarea of first block
   await page.waitForSelector('textarea >> nth=0', { state: 'visible' })
 

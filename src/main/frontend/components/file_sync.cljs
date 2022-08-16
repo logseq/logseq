@@ -160,7 +160,7 @@
       (ui/button "Cancel" :background "gray" :class "opacity-50" :on-click close-fn)
       (ui/button "Create remote graph" :on-click on-confirm)]]))
 
-(rum/defcs indicator <
+(rum/defcs ^:large-vars/cleanup-todo indicator <
   rum/reactive
   {:will-mount   (fn [state]
                    (let [unsub-fn (file-sync-handler/setup-file-sync-event-listeners)]

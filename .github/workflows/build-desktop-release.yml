@@ -38,6 +38,11 @@ on:
         type: boolean
         required: true
         default: true
+      build-android:
+        description: 'Build Android App'
+        type: boolean
+        required: true
+        default: true
   schedule: # Every workday at the 2 P.M. (UTC) we run a scheduled nightly build
     - cron: '0 14 * * MON-FRI'
 
@@ -49,6 +54,12 @@ jobs:
   compile-cljs:
     runs-on: ubuntu-18.04
     steps:
+      - name: Check build options
+        if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta') && github.event.inputs.git-ref != 'master' }}
+        run: |
+          echo "::error title=CheckFail::Nightly and Beta Release MUST be built from master"
+          exit 1
+
       - name: Check out Git repository
         uses: actions/checkout@v2
         with:
@@ -96,6 +107,14 @@ jobs:
           pkgver=$(node ./scripts/get-pkg-version.js "${{ github.event.inputs.build-target }}")
           echo ::set-output name=version::$pkgver
 
+      - name: Do Not Overwrite Existing Release
+        if: ${{ github.event.inputs.build-target == 'beta' }}
+        run: |
+          if curl -f "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.ref.outputs.version }}" &>/dev/null; then
+            echo "::error title=CheckFail::Release already exists"
+            exit 1
+          fi
+
       - name: Update Nightly APP Version
         if: ${{ github.event.inputs.build-target == 'nightly' || github.event_name == 'schedule' }}
         run: |
@@ -128,7 +147,7 @@ jobs:
         working-directory: ./static
 
       - name: Upload Sentry Sourcemaps (beta only)
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
+        if: ${{ github.repository == 'logseq/logseq' && github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
         run: |
           curl -sL https://sentry.io/get-cli/ | bash
           release_name="logseq@${{ steps.ref.outputs.version }}"
@@ -284,6 +303,7 @@ jobs:
             ${{ runner.os }}-yarn-
 
       - name: Signing By Apple Developer ID
+        if: ${{ github.repository == 'logseq/logseq' }}
         uses: apple-actions/import-codesign-certs@v1
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
@@ -351,6 +371,7 @@ jobs:
             ${{ runner.os }}-arm64-yarn-
 
       - name: Signing By Apple Developer ID
+        if: ${{ github.repository == 'logseq/logseq' }}
         uses: apple-actions/import-codesign-certs@v1
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
@@ -389,9 +410,11 @@ jobs:
 
   # reuse workflow via workflow_call
   build-android:
-    uses: logseq/logseq/.github/workflows/build-android.yml@master
+    uses: ./.github/workflows/build-android.yml
+    if: ${{ github.event_name == 'schedule' || github.event.inputs.build-android == 'true' }}
     with:
       build-target: "${{ github.event.inputs.build-target }}"
+      enable-file-sync: "${{ github.event.inputs.enable-file-sync == 'true' }}"
     secrets:
       ANDROID_KEYSTORE: "${{ secrets.ANDROID_KEYSTORE }}"
       ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
@@ -466,8 +489,8 @@ jobs:
   release:
     # NOTE: For now, we only have beta channel to be released on Github
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows, build-android ]
-    runs-on: ubuntu-18.04
+    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows ]
+    runs-on: ubuntu-latest
     steps:
       - name: Download MacOS x64 Artifacts
         uses: actions/download-artifact@v2
@@ -495,6 +518,7 @@ jobs:
 
       - name: Download Android Artifacts
         uses: actions/download-artifact@v2
+        if: ${{ github.event_name == 'schedule' || github.event.inputs.build-android == 'true' }}
         with:
           name: logseq-android-builds
           path: ./
