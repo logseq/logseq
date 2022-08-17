@@ -911,11 +911,13 @@
 
 (defn icon
   ([class] (icon class nil))
-  ([class opts]
-   [:i (merge {:class (str "ti ti-" class
-                           (when (:class opts)
-                             (str " " (string/trim (:class opts)))))}
-              (dissoc opts :class))]))
+  ([class {:keys [extension?] :as opts}]
+   [:i (merge {:class (util/format
+                       (str "%s-" class
+                            (when (:class opts)
+                              (str " " (string/trim (:class opts)))))
+                       (if extension? "tie tie" "ti ti"))}
+              (dissoc opts :class :extension?))]))
 
 (rum/defc with-shortcut < rum/reactive
   [shortcut-key position content]

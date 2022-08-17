@@ -688,7 +688,8 @@
                       (not (file-sync-handler/synced-file-graph? current-repo)))
                  [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
                [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]
-               [:features (t :settings-page/tab-features) (ui/icon "bulb" {:style {:font-size 20}})]
+               [:features (t :settings-page/tab-features) (ui/icon "app-feature" {:style {:font-size 20}
+                                                                                  :extension? true})]
                (when plugins-of-settings
                  [:plugins-setting (t :settings-of-plugins) (ui/icon "puzzle")])]]
 
