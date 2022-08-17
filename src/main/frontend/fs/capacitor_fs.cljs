@@ -116,11 +116,11 @@
     (str repo-dir backup-dir "/" relative-path)))
 
 (defn- truncate-old-versioned-files!
-  "reserve the latest 3 version files"
+  "reserve the latest 6 version files"
   [dir]
   (p/let [files (readdir dir)
           files (js->clj files :keywordize-keys true)
-          old-versioned-files (drop 3 (reverse (sort-by :mtime files)))]
+          old-versioned-files (drop 6 (reverse (sort-by :mtime files)))]
     (mapv (fn [file]
             (.deleteFile Filesystem (clj->js {:path (js/encodeURI (:uri file))})))
           old-versioned-files)))
@@ -144,14 +144,14 @@
         backup-dir-parent (string/replace backup-dir-parent repo-dir "")
         backup-dir-name (util/node-path.name file-path)
         file-extname (util/node-path.extname file-path)
-        new-path (util/safe-path-join
-                  backup-root backup-dir-parent backup-dir-name
-                  (str (string/replace (.toISOString (js/Date.)) ":" "_") "." (mobile-util/platform) file-extname))]
+        file-root (util/safe-path-join backup-root backup-dir-parent backup-dir-name)
+        file-path (util/safe-path-join file-root
+                                       (str (string/replace (.toISOString (js/Date.)) ":" "_") "." (mobile-util/platform) file-extname))]
     (.writeFile Filesystem (clj->js {:data      content
-                                     :path      (js/encodeURI new-path)
+                                     :path      (js/encodeURI file-path)
                                      :encoding  (.-UTF8 Encoding)
                                      :recursive true}))
-    (truncate-old-versioned-files! backup-dir)))
+    (truncate-old-versioned-files! (js/encodeURI file-root))))
 
 (defn- write-file-impl!
   [_this repo _dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
