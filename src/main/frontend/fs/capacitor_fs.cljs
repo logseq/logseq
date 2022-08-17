@@ -148,9 +148,9 @@
                   backup-root backup-dir-parent backup-dir-name
                   (str (string/replace (.toISOString (js/Date.)) ":" "_") ".Mobile" file-extname))]
     (prn "====> Ready Backup mobile file::" repo-dir "++++" file-path "++++" new-path)
-    (.writeFile Filesystem (clj->js {:data content
-                                     :path new-path
-                                     :encoding (.-UTF8 Encoding)
+    (.writeFile Filesystem (clj->js {:data      content
+                                     :path      (js/encodeURI new-path)
+                                     :encoding  (.-UTF8 Encoding)
                                      :recursive true}))
     (truncate-old-versioned-files! backup-dir)))
 
@@ -308,6 +308,7 @@
       (p/let [stat (p/catch
                     (.stat Filesystem (clj->js {:path path}))
                     (fn [_e] :not-found))]
+        ;; `path` is full-path
         (write-file-impl! this repo dir path content opts stat))))
   (rename! [_this _repo old-path new-path]
     (let [[old-path new-path] (map #(get-file-path "" %) [old-path new-path])]
