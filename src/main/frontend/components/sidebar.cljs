@@ -538,6 +538,7 @@
   rum/reactive
   (mixins/event-mixin
    (fn [state]
+     (mixins/listen state js/window "click" hide-context-menu-and-clear-selection)
      (mixins/listen state js/window "keydown"
                     (fn [e]
                       (when (= 27 (.-keyCode e))

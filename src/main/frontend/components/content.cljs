@@ -206,7 +206,7 @@
           {:key      "Copy as"
            :on-click (fn [_]
                        (state/set-modal! #(export/export-blocks [block-id])))}
-          "Copy as")
+          "Copy as...")
 
          (ui/menu-link
           {:key      "Cut"
