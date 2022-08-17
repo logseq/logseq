@@ -10,13 +10,17 @@ export function useKeyboardEvents(ref: React.RefObject<HTMLDivElement>) {
 
   React.useEffect(() => {
     const onKeyDown: TLReactCustomEvents['keyboard'] = e => {
-      callbacks.onKeyDown?.({ type: TLTargetType.Canvas, order: -1 }, e)
-      shiftKeyDownRef.current = e.shiftKey
+      if (ref.current?.contains(document.activeElement)) {
+        callbacks.onKeyDown?.({ type: TLTargetType.Canvas, order: -1 }, e)
+        shiftKeyDownRef.current = e.shiftKey
+      }
     }
 
     const onKeyUp: TLReactCustomEvents['keyboard'] = e => {
-      callbacks.onKeyUp?.({ type: TLTargetType.Canvas, order: -1 }, e)
-      shiftKeyDownRef.current = e.shiftKey
+      if (ref.current?.contains(document.activeElement)) {
+        callbacks.onKeyUp?.({ type: TLTargetType.Canvas, order: -1 }, e)
+        shiftKeyDownRef.current = e.shiftKey
+      }
     }
 
     const onPaste = (e: ClipboardEvent) => {
