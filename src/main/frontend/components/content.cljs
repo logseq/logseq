@@ -171,7 +171,7 @@
                         (editor-handler/remove-block-property! block-id "background-color"))}
            "Clear"]]
          
-         [:hr.my-1]
+         [:hr.menu-separator]
 
          (ui/menu-link
           {:key      "Open in sidebar"
@@ -179,7 +179,7 @@
                        (editor-handler/open-block-in-sidebar! block-id))}
           "Open in sidebar")
 
-         [:hr.my-1]
+         [:hr.menu-separator]
 
          (ui/menu-link
           {:key      "Copy block ref"
@@ -216,7 +216,7 @@
                        (editor-handler/cut-block! block-id))}
           "Cut")
 
-         [:hr.my-1]
+         [:hr.menu-separator]
 
          (ui/menu-link
           {:key      "Convert heading"
@@ -240,7 +240,7 @@
              :on-click #(srs/make-block-a-card! block-id)}
             "Make a Card"))
 
-         [:hr.my-1]
+         [:hr.menu-separator]
 
          (ui/menu-link
           {:key      "Expand all"

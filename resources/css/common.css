@@ -914,6 +914,12 @@ button.menu:focus {
   user-select: none;
 }
 
+.menu-separator {
+  @apply my-1;
+
+  opacity: .5;
+}
+
 a.login {
   color: var(--ls-link-text-color, #444);
 }
