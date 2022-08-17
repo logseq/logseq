@@ -487,6 +487,10 @@
   (if (string? s)
     (string/lower-case s) s))
 
+#?(:cljs
+   (defn safe-path-join [prefix & paths]
+     (apply node-path.join (cons prefix paths))))
+
 (defn trim-safe
   [s]
   (when s
