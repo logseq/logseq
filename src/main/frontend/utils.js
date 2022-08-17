@@ -317,7 +317,8 @@ export const nodePath = Object.assign({}, path, {
 
     try {
       orURI = new URL(input)
-      input = input.replace(orURI.protocol, '')
+      input = input.replace(orURI.protocol + '//', '')
+        .replace(orURI.protocol, '')
         .replace(/^\/+/, '/')
     } catch (_e) {}
 
