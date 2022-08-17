@@ -53,4 +53,10 @@ export class TLSelectTool<
     PinchingState,
     EditingShapeState,
   ]
+
+  returnTo = ''
+
+  onEnter = (info: { fromId: string, returnTo: string } & any) => {
+    this.returnTo = info?.returnTo
+  }
 }

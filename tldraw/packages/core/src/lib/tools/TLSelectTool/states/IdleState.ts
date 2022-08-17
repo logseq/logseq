@@ -11,9 +11,9 @@ export class IdleState<
   static id = 'idle'
 
   onEnter = (info: { fromId: string } & any) => {
-    // if (info.fromId === 'editingShape') {
-    //   this.onPointerDown(info as any, {} as any)
-    // }
+    if (info.fromId === 'pinching' && this.parent.returnTo) {
+      this.app.transition(this.parent.returnTo)
+    }
   }
 
   onExit = () => {

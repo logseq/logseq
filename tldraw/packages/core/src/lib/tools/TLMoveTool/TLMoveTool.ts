@@ -1,6 +1,6 @@
 import { TLApp, TLShape, TLTool } from '~lib'
-import { TLCursor, TLEventMap } from '~types'
-import { IdleHoldState, IdleState, PanningState } from './states'
+import { TLCursor, TLEventMap, TLStateEvents } from '~types'
+import { IdleHoldState, IdleState, PanningState, PinchingState } from './states'
 
 export class TLMoveTool<
   S extends TLShape = TLShape,
@@ -10,7 +10,7 @@ export class TLMoveTool<
   static id = 'move'
   static shortcut = ['h']
 
-  static states = [IdleState, IdleHoldState, PanningState]
+  static states = [IdleState, IdleHoldState, PanningState, PinchingState]
 
   static initial = 'idle'
 
@@ -20,5 +20,14 @@ export class TLMoveTool<
 
   onEnter = (info: any) => {
     this.prevTool = info?.prevTool
+  }
+
+  onKeyDown: TLStateEvents<S>['onKeyDown'] = (info, e) => {
+    switch (e.key) {
+      case 'Escape': {
+        this.app.transition('select')
+        break
+      }
+    }
   }
 }

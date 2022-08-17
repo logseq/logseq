@@ -1,5 +1,5 @@
 import { TLApp, TLShape, TLToolState } from '~lib'
-import type { TLEventMap, TLStateEvents } from '~types'
+import type { TLEventMap, TLEvents, TLStateEvents } from '~types'
 import type { TLMoveTool } from '../TLMoveTool'
 
 export class IdleHoldState<
@@ -13,5 +13,9 @@ export class IdleHoldState<
   onPointerDown: TLStateEvents<S, K>['onPointerDown'] = (info, e) => {
     if (info.order) return
     this.tool.transition('panning', { prevState: 'idleHold' })
+  }
+
+  onPinchStart: TLEvents<S>['pinch'] = (info, event) => {
+    this.tool.transition('pinching', { info, event })
   }
 }

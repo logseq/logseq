@@ -16,8 +16,8 @@ export class IdleState<
   }
 
   onPinchStart: TLStateEvents<S, K>['onPinchStart'] = (...args) => {
-    this.app.transition('select', { returnTo: 'draw' })
-    this.app.onPinchStart?.(...args)
+    this.app.transition('select', { returnTo: this.app.currentState.id })
+    this.app._events.onPinchStart?.(...args)
   }
 
   onKeyDown: TLStateEvents<S>['onKeyDown'] = (info, e) => {
