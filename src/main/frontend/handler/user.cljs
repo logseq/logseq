@@ -173,11 +173,8 @@
 
 (defn alpha-user?
   []
-  true
-  ;; (if config/dev?
-  ;;   true
-  ;;   (contains? (state/user-groups) "alpha-tester"))
-  )
+  (or config/dev?
+      (contains? (state/user-groups) "alpha-tester")))
 
 (comment
   (defn beta-user?
