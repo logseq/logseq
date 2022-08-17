@@ -51,6 +51,9 @@ export class EditingShapeState<
           e.stopPropagation()
           this.app.setSelectedShapes([this.editingShape])
           this.tool.transition('idle')
+
+          // Blur all inputs when exit idle
+          document.querySelectorAll<HTMLElement>('input,textarea').forEach(el => el.blur())
         })
         break
       }
