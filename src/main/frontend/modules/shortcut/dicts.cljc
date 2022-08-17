@@ -1331,6 +1331,7 @@
              :command.graph/remove                   "Bir grafiği kaldır"
              :command.graph/add                      "Grafik ekle"
              :command.graph/save                     "Mevcut grafiği diske kaydet"
+             :command.graph/re-index                 "Mevcut grafiği yeniden oluştur"
              :command.command/run                    "Git komutunu çalıştır"
              :command.go/home                        "Ana sayfaya git"
              :command.go/all-pages                   "Bütün sayfalara git"
