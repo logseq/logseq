@@ -641,7 +641,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     this.persist = () => app.persist()
     const isMoving = useCameraMovingRef()
-    const isSelected = app.selectedIds.has(this.id)
+    const isSelected = app.selectedIds.has(this.id) && app.selectedIds.size === 1
 
     const isCreating = app.isIn('logseq-portal.creating') && !pageId
     const tlEventsEnabled =
