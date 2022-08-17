@@ -59,13 +59,13 @@ export class CreatingState extends TLToolState<
 
   onExit = () => {
     if (!this.creatingShape) return
-    this.app.clearEditingShape()
     this.app.history.resume()
 
     if (this.creatingShape?.props.pageId) {
       this.app.setSelectedShapes([this.creatingShape.id])
     } else {
       this.app.deleteShapes([this.creatingShape.id])
+      this.app.clearEditingShape()
     }
   }
 }
