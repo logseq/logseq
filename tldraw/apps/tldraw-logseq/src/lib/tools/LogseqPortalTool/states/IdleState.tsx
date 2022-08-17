@@ -1,4 +1,4 @@
-import { TLApp, TLCursor, TLToolState } from '@tldraw/core'
+import { TLApp, TLCursor, TLStateEvents, TLToolState } from '@tldraw/core'
 import type { TLReactEventMap, TLReactEvents } from '@tldraw/react'
 import type { Shape } from '~lib/shapes'
 import type { LogseqPortalTool } from '../LogseqPortalTool'
