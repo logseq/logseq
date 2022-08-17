@@ -37,10 +37,13 @@
   [repo path content db-content mtime backup?]
   (p/let [
           ;; save the previous content in a versioned bak file to avoid data overwritten.
-          _ (when-let [repo-dir (and backup? (config/get-local-dir repo))]
-              (if (util/electron?)
-                (ipc/ipc "backupDbFile"  repo-dir path db-content content)
-                (capacitor-fs/backup-file-handle-changed! repo-dir path db-content)))
+          _ (-> (when-let [repo-dir (and backup? (config/get-local-dir repo))]
+                  (prn "⚠️Bak File: " path)
+                  (if (util/electron?)
+                    (ipc/ipc "backupDbFile" repo-dir path db-content content)
+                    (capacitor-fs/backup-file-handle-changed! repo-dir path db-content)))
+                (p/catch #(js/console.error "❌ Bak Error: " path %)))
+
           _ (file-handler/alter-file repo path content {:re-render-root? true
                                                         :from-disk? true})]
     (set-missing-block-ids! content)
