@@ -721,7 +721,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           style={{
             width: '100%',
             height: '100%',
-            pointerEvents: isEditing ? 'all' : 'none',
+            pointerEvents: !isMoving && (isEditing || isSelected) ? 'all' : 'none',
           }}
         >
           {isCreating ? (
