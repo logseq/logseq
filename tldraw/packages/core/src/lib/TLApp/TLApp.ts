@@ -529,6 +529,9 @@ export class TLApp<
     } else {
       this.selectionRotation = 0
     }
+    if (shapes.length === 0) {
+      this.clearEditingShape()
+    }
     return this
   }
 
