@@ -144,11 +144,11 @@
                                           (editor-handler/set-block-property! block-id :template-including-parent false))
                                         (state/hide-custom-context-menu!)))))))])
       (ui/menu-link
-       {:key "Make template"
+       {:key "Make a Template"
         :on-click (fn [e]
                     (util/stop e)
                     (reset! edit? true))}
-       "Make template"))))
+       "Make a Template"))))
 
 (rum/defc ^:large-vars/cleanup-todo block-context-menu-content
   [_target block-id]
@@ -156,7 +156,7 @@
       (let [properties (:block/properties block)
             heading? (true? (:heading properties))]
         [:.menu-links-wrapper
-         [:div.flex-row.flex.justify-between.py-4.pl-2
+         [:div.flex-row.flex.justify-between.pb-2.pt-1.pl-2
           [:div.flex-row.flex.justify-between
            (for [color block-background-colors]
              [:a.m-2.shadow-sm
@@ -170,22 +170,16 @@
             :on-click (fn [_e]
                         (editor-handler/remove-block-property! block-id "background-color"))}
            "Clear"]]
-
-         (ui/menu-link
-          {:key      "Convert heading"
-           :on-click (fn [_e]
-                       (if heading?
-                         (editor-handler/remove-block-property! block-id :heading)
-                         (editor-handler/set-block-property! block-id :heading true)))}
-          (if heading?
-            "Convert back to a block"
-            "Convert to a heading"))
+         
+         [:hr.my-1]
 
          (ui/menu-link
           {:key      "Open in sidebar"
            :on-click (fn [_e]
                        (editor-handler/open-block-in-sidebar! block-id))}
           "Open in sidebar")
+
+         [:hr.my-1]
 
          (ui/menu-link
           {:key      "Copy block ref"
@@ -210,13 +204,31 @@
                            (editor-handler/copy-block-ref! block-id tap-f)))}
             "Copy block URL"))
 
-         (block-template block-id)
-
          (ui/menu-link
           {:key      "Copy as"
            :on-click (fn [_]
                        (state/set-modal! #(export/export-blocks [block-id])))}
           "Copy as")
+
+         (ui/menu-link
+          {:key      "Cut"
+           :on-click (fn [_e]
+                       (editor-handler/cut-block! block-id))}
+          "Cut")
+
+         [:hr.my-1]
+
+         (ui/menu-link
+          {:key      "Convert heading"
+           :on-click (fn [_e]
+                       (if heading?
+                         (editor-handler/remove-block-property! block-id :heading)
+                         (editor-handler/set-block-property! block-id :heading true)))}
+          (if heading?
+            "Convert back to a block"
+            "Convert to a heading"))
+
+         (block-template block-id)
 
          (if (srs/card-block? block)
            (ui/menu-link
@@ -228,11 +240,7 @@
              :on-click #(srs/make-block-a-card! block-id)}
             "Make a Card"))
 
-         (ui/menu-link
-          {:key      "Cut"
-           :on-click (fn [_e]
-                       (editor-handler/cut-block! block-id))}
-          "Cut")
+         [:hr.my-1]
 
          (ui/menu-link
           {:key      "Expand all"
