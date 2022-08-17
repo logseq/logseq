@@ -177,7 +177,7 @@ export class TLApp<
         },
       },
       {
-        keys: ['delete', 'backspace'],
+        keys: ['del', 'backspace'],
         fn: () => {
           const { selectedTool } = this
           if (
