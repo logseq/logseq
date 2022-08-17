@@ -470,6 +470,14 @@
          :else
          [:div])])))
 
+(defn- hide-context-menu-and-clear-selection
+  [e]
+  (state/hide-custom-context-menu!)
+  (when-not (or (gobj/get e "shiftKey")
+                (util/meta-key? e)
+                (state/get-edit-input-id))
+    (editor-handler/clear-selection!)))
+
 (rum/defc render-custom-context-menu
   [links position]
   (let [ref (rum/use-ref nil)]
@@ -478,10 +486,12 @@
             {:keys [x y]} (util/calc-delta-rect-offset el js/document.documentElement)]
         (set! (.. el -style -transform)
               (str "translate3d(" (if (neg? x) x 0) "px," (if (neg? y) (- y 10) 0) "px" ",0)"))))
+    [:<>
+     [:div.menu-backdrop {:on-mouse-down (fn [e] (hide-context-menu-and-clear-selection e))}]
      [:div#custom-context-menu
       {:ref ref
        :style {:left (str (first position) "px")
-               :top (str (second position) "px")}} links]))
+               :top (str (second position) "px")}} links]]))
 
 (rum/defc custom-context-menu < rum/reactive
   []
@@ -523,20 +533,11 @@
                    (state/sidebar-add-block! (state/get-current-repo) "help" :help))}
       "?"]]))
 
-(defn- hide-context-menu-and-clear-selection
-  [e]
-  (state/hide-custom-context-menu!)
-  (when-not (or (gobj/get e "shiftKey")
-                (util/meta-key? e)
-                (state/get-edit-input-id))
-    (editor-handler/clear-selection!)))
-
 (rum/defcs ^:large-vars/cleanup-todo sidebar <
   (mixins/modal :modal/show?)
   rum/reactive
   (mixins/event-mixin
    (fn [state]
-     (mixins/listen state js/window "click" hide-context-menu-and-clear-selection)
      (mixins/listen state js/window "keydown"
                     (fn [e]
                       (when (= 27 (.-keyCode e))

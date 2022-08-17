@@ -908,6 +908,12 @@ button.menu:focus {
   min-width: 12rem;
 }
 
+.menu-backdrop {
+  @apply w-full h-full fixed top-0 left-0;
+
+  z-index: var(--ls-z-index-level-1);
+}
+
 .menu-link {
   background-color: var(--ls-primary-background-color, #fff);
   color: var(--ls-primary-text-color);
