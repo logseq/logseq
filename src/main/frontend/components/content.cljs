@@ -156,20 +156,18 @@
       (let [properties (:block/properties block)
             heading? (true? (:heading properties))]
         [:.menu-links-wrapper
-         [:div.flex-row.flex.justify-between.pb-2.pt-1.pl-2
+         [:div.flex-row.flex.justify-between.pb-2.pt-1.px-2
           [:div.flex-row.flex.justify-between
            (for [color block-background-colors]
              [:a.m-2.shadow-sm
               {:on-click (fn [_e]
                            (editor-handler/set-block-property! block-id "background-color" color))}
-              [:div.heading-bg {:style {:background-color color}}]])]
-          [:a.text-sm
-           {:title    (t :remove-background)
-            :style    {:margin-right 14
-                       :margin-top   4}
-            :on-click (fn [_e]
-                        (editor-handler/remove-block-property! block-id "background-color"))}
-           "Clear"]]
+              [:div.heading-bg {:style {:background-color color}}]])
+           [:a.m-2.shadow-sm
+            {:title    (t :remove-background)
+             :on-click (fn [_e]
+                         (editor-handler/remove-block-property! block-id "background-color"))}
+            [:div.heading-bg.border {:style {:border-color "var(--color-level-6)"}} #_(ui/icon "x")]]]]
          
          [:hr.menu-separator]
 
