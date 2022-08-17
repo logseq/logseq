@@ -138,7 +138,7 @@
                            [:div {:style {:margin-right "8px"
                                           :margin-left  "4px"}} title]]))]
           (if hr
-            [:hr.my-1 {:key "dropdown-hr"}]
+            [:hr.menu-separator {:key "dropdown-hr"}]
             (rum/with-key
               (menu-link new-options child)
               title))))
