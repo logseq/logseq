@@ -844,6 +844,14 @@ i.ti {
   border-radius: 50%;
   width: 12px;
   height: 12px;
+
+  &.remove {
+    @apply border flex items-center justify-center;
+
+    font-size: 11px;
+    box-sizing: border-box;
+    border-color: var(--border-color);
+  }
 }
 
 /** endregion **/
