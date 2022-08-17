@@ -20,39 +20,39 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
       >
         <DropdownMenuPrimitive.Arrow style={{ fill: 'white' }}></DropdownMenuPrimitive.Arrow>
         <DropdownMenuPrimitive.Item
-          className="tl-zoom-menu-dropdown-item"
+          className="menu-link tl-zoom-menu-dropdown-item"
           onSelect={preventEvent}
           onClick={app.api.zoomToFit}
         >
           Zoom to Fit <div className="tl-zoom-menu-right-slot"></div>
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
-          className="tl-zoom-menu-dropdown-item"
+          className="menu-link tl-zoom-menu-dropdown-item"
           onSelect={preventEvent}
           onClick={app.api.zoomToSelection}
         >
-          Zoom to Selection <div className="tl-zoom-menu-right-slot">⌘+Minus</div>
+          Zoom to Selection <div className="tl-zoom-menu-right-slot"><span className="keyboard-shortcut"><code>⌘</code> <code>-</code></span></div>
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
-          className="tl-zoom-menu-dropdown-item"
+          className="menu-link tl-zoom-menu-dropdown-item"
           onSelect={preventEvent}
           onClick={app.api.zoomIn}
         >
-          Zoom In <div className="tl-zoom-menu-right-slot">⌘+Plus</div>
+          Zoom In <div className="tl-zoom-menu-right-slot"><span className="keyboard-shortcut"><code>⌘</code> <code>+</code></span></div>
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
-          className="tl-zoom-menu-dropdown-item"
+          className="menu-link tl-zoom-menu-dropdown-item"
           onSelect={preventEvent}
           onClick={app.api.zoomOut}
         >
-          Zoom Out <div className="tl-zoom-menu-right-slot">⌘+Minus</div>
+          Zoom Out <div className="tl-zoom-menu-right-slot"><span className="keyboard-shortcut"><code>⌘</code> <code>-</code></span></div>
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
-          className="tl-zoom-menu-dropdown-item"
+          className="menu-link tl-zoom-menu-dropdown-item"
           onSelect={preventEvent}
           onClick={app.api.resetZoom}
         >
-          Reset Zoom <div className="tl-zoom-menu-right-slot">⇧+0</div>
+          Reset Zoom <div className="tl-zoom-menu-right-slot"><span className="keyboard-shortcut"><code>⇧</code> <code>0</code></span></div>
         </DropdownMenuPrimitive.Item>
       </DropdownMenuPrimitive.Content>
     </DropdownMenuPrimitive.Root>

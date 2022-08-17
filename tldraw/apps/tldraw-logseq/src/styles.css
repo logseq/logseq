@@ -65,41 +65,34 @@
 }
 
 .tl-zoom-menu-dropdown-menu-button {
+  @apply py-2 rounded shadow-lg;
   opacity: 100%;
-  background-color: var(--color-panel);
-  border-radius: 6px;
-  padding: 5px;
-  box-shadow: 0 10px 38px -10px rgba(22, 23, 24, 0.35), 0 10px 20px -15px rgba(22, 23, 24, 0.2);
+  background-color:  var(--ls-primary-background-color);
+
 
   > span svg {
-    fill: var(--color-panel) !important;
+    display: none !important;
   }
 }
 
 .tl-zoom-menu-dropdown-item {
+  @apply flex items-center px-4 py-1 text-sm !important;
   min-width: 220px;
   all: unset;
-  font-size: 13px;
-  line-height: 1;
   color: black;
-  border-radius: 3px;
-  display: flex;
-  align-items: center;
   height: 25px;
-  padding: 0 5px;
-  position: relative;
   user-select: none;
   color: var(--color-text);
 
   &:hover {
-    background-color: var(--color-hover);
+    cursor: pointer;
+    background-color: var(--ls-menu-hover-color);
   }
 }
 
 .tl-zoom-menu-right-slot {
   margin-left: auto;
   padding-left: 20px;
-  color: var(--color-text);
 }
 
 .tl-contextbar {
