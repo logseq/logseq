@@ -1,7 +1,6 @@
 (ns frontend.fs.watcher-handler
   (:require [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.util :as util]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor]
@@ -12,12 +11,10 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [lambdaisland.glogi :as log]
-            [electron.ipc :as ipc]
             [promesa.core :as p]
             [frontend.state :as state]
             [frontend.encrypt :as encrypt]
-            [frontend.fs :as fs]
-            [frontend.fs.capacitor-fs :as capacitor-fs]))
+            [frontend.fs :as fs]))
 
 ;; all IPC paths must be normalized! (via gp-util/path-normalize)
 
@@ -37,12 +34,10 @@
   [repo path content db-content mtime backup?]
   (p/let [
           ;; save the previous content in a versioned bak file to avoid data overwritten.
-          _ (-> (when-let [repo-dir (and backup? (config/get-local-dir repo))]
-                  (prn "⚠️Bak File: " path)
-                  (if (util/electron?)
-                    (ipc/ipc "backupDbFile" repo-dir path db-content content)
-                    (capacitor-fs/backup-file-handle-changed! repo-dir path db-content)))
-                (p/catch #(js/console.error "❌ Bak Error: " path %)))
+          _ (when backup?
+              (-> (when-let [repo-dir (config/get-local-dir repo)]
+                    (file-handler/backup-file! repo-dir path db-content content))
+                  (p/catch #(js/console.error "❌ Bak Error: " path %))))
 
           _ (file-handler/alter-file repo path content {:re-render-root? true
                                                         :from-disk? true})]
