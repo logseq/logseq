@@ -1,9 +1,8 @@
 {
   "version": "0.0.0-dev",
-  "name": "tldraw-logseq",
+  "name": "@tldraw/logseq",
   "license": "MIT",
-  "main": "dist/index.js",
-  "module": "dist/index.mjs",
+  "module": "./src/index.ts",
   "scripts": {
     "build": "zx build.mjs",
     "build:packages": "yarn build",

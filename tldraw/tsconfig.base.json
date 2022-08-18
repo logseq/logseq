@@ -14,7 +14,7 @@
     "experimentalDecorators": true,
     "useDefineForClassFields": true,
     "incremental": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "lib": ["dom", "esnext"],
     "module": "esnext",
     "moduleResolution": "node",

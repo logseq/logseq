@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as React from 'react'
+import type * as React from 'react'
 import type { TLReactApp, TLReactShape, TLReactShapeConstructor } from '~lib'
 import { AppProvider } from '~components'
 import type {

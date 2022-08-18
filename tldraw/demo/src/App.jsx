@@ -1,7 +1,7 @@
 import { uniqueId, fileToBase64 } from '@tldraw/core'
 import React from 'react'
 import ReactDOM from 'react-dom'
-import { App as TldrawApp } from 'tldraw-logseq'
+import { App as TldrawApp } from '@tldraw/logseq'
 
 const storingKey = 'playground.index'
 
