@@ -137,16 +137,23 @@
 
 (defn backup-file-handle-changed!
   [repo-dir file-path content]
-  (let [repo-dir (js/decodeURI repo-dir)
-        file-path (js/decodeURI file-path)
-        backup-root (util/safe-path-join repo-dir backup-dir)
+  (let [divider-schema    "://"
+        file-schema       (string/split file-path divider-schema)
+        file-schema       (if (> (count file-schema) 1) (first file-schema) "")
+        dir-schema?       (and (string? repo-dir)
+                               (string/includes? repo-dir divider-schema))
+        repo-dir          (if-not dir-schema?
+                            (str file-schema divider-schema repo-dir) repo-dir)
+        repo-dir          (js/decodeURI repo-dir)
+        file-path         (js/decodeURI file-path)
+        backup-root       (util/safe-path-join repo-dir backup-dir)
         backup-dir-parent (util/node-path.dirname file-path)
         backup-dir-parent (string/replace backup-dir-parent repo-dir "")
-        backup-dir-name (util/node-path.name file-path)
-        file-extname (.extname util/node-path file-path)
-        file-root (util/safe-path-join backup-root backup-dir-parent backup-dir-name)
-        file-path (util/safe-path-join file-root
-                                       (str (string/replace (.toISOString (js/Date.)) ":" "_") "." (mobile-util/platform) file-extname))]
+        backup-dir-name   (util/node-path.name file-path)
+        file-extname      (.extname util/node-path file-path)
+        file-root         (util/safe-path-join backup-root backup-dir-parent backup-dir-name)
+        file-path         (util/safe-path-join file-root
+                                               (str (string/replace (.toISOString (js/Date.)) ":" "_") "." (mobile-util/platform) file-extname))]
     (.writeFile Filesystem (clj->js {:data      content
                                      :path      (js/encodeURI file-path)
                                      :encoding  (.-UTF8 Encoding)
