@@ -1,44 +1,52 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from 'react'
-import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
+import { TLAsset, TLBoxShape, TLBoxShapeProps, TLImageShape, TLImageShapeProps } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
-import { CustomStyleProps, withClampedStyles } from './style-props'
+import type { CustomStyleProps } from './style-props'
 import { useCameraMovingRef } from '~hooks/useCameraMoving'
 import type { Shape } from '~lib'
+import { LogseqContext } from '~lib/logseq-context'
 
-export interface HTMLShapeProps extends TLBoxShapeProps, CustomStyleProps {
-  type: 'html'
-  html: string
+export interface VideoShapeProps extends TLBoxShapeProps, CustomStyleProps {
+  type: 'video'
+  assetId: string
+  opacity: number
 }
 
-export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
-  static id = 'html'
+export class VideoShape extends TLBoxShape<VideoShapeProps> {
+  static id = 'video'
 
-  static defaultProps: HTMLShapeProps = {
-    id: 'html',
-    type: 'html',
+  static defaultProps: VideoShapeProps = {
+    id: 'video1',
     parentId: 'page',
+    type: 'video',
     point: [0, 0],
-    size: [600, 0],
+    size: [100, 100],
     stroke: '#000000',
     fill: '#ffffff',
     strokeWidth: 2,
     opacity: 1,
-    html: '',
+    assetId: '',
+    clipping: 0,
+    isAspectRatioLocked: true,
   }
 
-  canChangeAspectRatio = true
   canFlip = false
   canEdit = true
-  hideContextBar = true
+  canChangeAspectRatio = false
 
-  ReactComponent = observer(({ events, isErasing, isEditing }: TLComponentProps) => {
+  ReactComponent = observer(({ events, isErasing, asset, isEditing }: TLComponentProps) => {
     const {
-      props: { opacity, html },
+      props: {
+        opacity,
+        size: [w, h],
+      },
     } = this
+
     const isMoving = useCameraMovingRef()
     const app = useApp<Shape>()
+
     const isSelected = app.selectedIds.has(this.id)
 
     const tlEventsEnabled =
@@ -53,16 +61,7 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
       [tlEventsEnabled]
     )
 
-    const anchorRef = React.useRef<HTMLDivElement>(null)
-
-    React.useEffect(() => {
-      if (this.props.size[1] === 0 && anchorRef.current) {
-        this.update({
-          size: [this.props.size[0], anchorRef.current.offsetHeight],
-        })
-        app.persist(true)
-      }
-    }, [])
+    const { handlers } = React.useContext(LogseqContext)
 
     return (
       <HTMLContainer
@@ -77,17 +76,15 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
           onWheelCapture={stop}
           onPointerDown={stop}
           onPointerUp={stop}
-          className="tl-html-container"
+          className="tl-video-container"
           style={{
             pointerEvents: !isMoving && (isEditing || isSelected) ? 'all' : 'none',
             overflow: isEditing ? 'auto' : 'hidden',
           }}
         >
-          <div
-            ref={anchorRef}
-            className="tl-html-anchor"
-            dangerouslySetInnerHTML={{ __html: html.trim() }}
-          />
+          {asset && (
+            <video controls src={handlers ? handlers.makeAssetUrl(asset.src) : asset.src} />
+          )}
         </div>
       </HTMLContainer>
     )
@@ -101,12 +98,4 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
     } = this
     return <rect width={w} height={h} fill="transparent" />
   })
-
-  validateProps = (props: Partial<HTMLShapeProps>) => {
-    if (props.size !== undefined) {
-      props.size[0] = Math.max(props.size[0], 1)
-      props.size[1] = Math.max(props.size[1], 1)
-    }
-    return withClampedStyles(props)
-  }
 }

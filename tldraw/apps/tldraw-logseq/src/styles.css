@@ -170,7 +170,7 @@
       transform: translateX(3px);
       will-change: transform;
     }
-  
+
     &[data-state='checked'] .switch-input-thumb {
       transform: translateX(17px);
     }
@@ -581,12 +581,20 @@
 }
 
 .tl-html-container {
-  @apply h-full w-full m-0 relative flex;
+  @apply h-full w-full m-0 relative;
   user-select: text;
 
   > iframe {
     @apply h-full w-full !important;
     margin: 0;
+  }
+}
+
+.tl-video-container {
+  @apply h-full w-full m-0 relative;
+
+  > video {
+    @apply h-full w-full m-0 relative;
   }
 }
 

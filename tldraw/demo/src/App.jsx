@@ -136,10 +136,6 @@ const searchHandler = q => {
   })
 }
 
-const saveAssets = async files => {
-  return Promise.all(files.map(fileToBase64))
-}
-
 export default function App() {
   const [theme, setTheme] = React.useState('light')
 
@@ -158,7 +154,7 @@ export default function App() {
           addNewBlock: () => uniqueId(),
           queryBlockByUUID: uuid => ({ uuid, content: 'some random content' }),
           isWhiteboardPage: () => false,
-          saveAssets,
+          saveAsset: fileToBase64,
           makeAssetUrl: a => a,
         }}
         model={documentModel}

@@ -10,7 +10,7 @@ import {
 import type { TLReactCallbacks } from '@tldraw/react'
 import * as React from 'react'
 import { NIL as NIL_UUID } from 'uuid'
-import { HTMLShape, LogseqPortalShape, Shape, YouTubeShape } from '~lib'
+import { HTMLShape, LogseqPortalShape, Shape, YouTubeShape, ImageShape, VideoShape } from '~lib'
 import type { LogseqContextValue } from '~lib/logseq-context'
 
 const isValidURL = (url: string) => {
@@ -28,11 +28,11 @@ export function usePaste(context: LogseqContextValue) {
   return React.useCallback<TLReactCallbacks<Shape>['onPaste']>(
     async (app, { point, shiftKey, files }) => {
       const assetId = uniqueId()
-      interface ImageAsset extends TLAsset {
+      interface VideoImageAsset extends TLAsset {
         size: number[]
       }
 
-      const assetsToCreate: ImageAsset[] = []
+      const assetsToCreate: VideoImageAsset[] = []
       const shapesToCreate: Shape['props'][] = []
       const bindingsToCreate: TLBinding[] = []
 
@@ -43,6 +43,7 @@ export function usePaste(context: LogseqContextValue) {
       // TODO: handle PDF?
       async function handleFiles(files: File[]) {
         const IMAGE_EXTENSIONS = ['.png', '.svg', '.jpg', '.jpeg', '.gif']
+        const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogg']
 
         for (const file of files) {
           // Get extension, verify that it's an image
@@ -51,9 +52,10 @@ export function usePaste(context: LogseqContextValue) {
             continue
           }
           const extension = extensionMatch[0].toLowerCase()
-          if (!IMAGE_EXTENSIONS.includes(extension)) {
+          if (![...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS].includes(extension)) {
             continue
           }
+          const isVideo = VIDEO_EXTENSIONS.includes(extension)
           try {
             // Turn the image into a base64 dataurl
             const dataurl = await createAsset(file)
@@ -63,16 +65,17 @@ export function usePaste(context: LogseqContextValue) {
             // Do we already have an asset for this image?
             const existingAsset = Object.values(app.assets).find(asset => asset.src === dataurl)
             if (existingAsset) {
-              assetsToCreate.push(existingAsset as ImageAsset)
+              assetsToCreate.push(existingAsset as VideoImageAsset)
               continue
             }
             // Create a new asset for this image
-            const asset: ImageAsset = {
+            const asset: VideoImageAsset = {
               id: assetId,
-              type: 'image',
+              type: isVideo ? 'video' : 'image',
               src: dataurl,
-              size: await getSizeFromSrc(handlers.makeAssetUrl(dataurl)),
+              size: await getSizeFromSrc(handlers.makeAssetUrl(dataurl), isVideo),
             }
+            console.log(asset)
             assetsToCreate.push(asset)
           } catch (error) {
             console.error(error)
@@ -277,7 +280,7 @@ export function usePaste(context: LogseqContextValue) {
       const allShapesToAdd: TLShapeModel[] = [
         // assets to images
         ...assetsToCreate.map((asset, i) => ({
-          type: 'image',
+          ...(asset.type === 'video' ? VideoShape : ImageShape).defaultProps,
           // TODO: Should be place near the last edited shape
           point: [point[0] - asset.size[0] / 2 + i * 16, point[1] - asset.size[1] / 2 + i * 16],
           size: asset.size,

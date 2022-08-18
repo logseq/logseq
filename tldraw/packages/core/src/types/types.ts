@@ -105,7 +105,7 @@ export interface TLOffset {
 
 export interface TLAsset {
   id: string
-  type: any
+  type: string
   src: string
 }
 
