@@ -156,8 +156,6 @@
                                (string/includes? repo-dir divider-schema))
         repo-dir          (if-not dir-schema?
                             (str file-schema divider-schema repo-dir) repo-dir)
-        repo-dir          (js/decodeURI repo-dir)
-        file-path         (js/decodeURI file-path)
         backup-root       (util/safe-path-join repo-dir backup-dir)
         backup-dir-parent (util/node-path.dirname file-path)
         backup-dir-parent (string/replace backup-dir-parent repo-dir "")

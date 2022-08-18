@@ -331,7 +331,7 @@
                                    (string/starts-with? dir "content:"))
                              dir
                              (str "file:///" (string/replace dir #"^/+" "")))]
-                   (str (string/replace dir #"/+$" "") "/" relative-path))
+                   (util/safe-path-join dir relative-path))
 
                  (= "/" (first relative-path))
                  (subs relative-path 1)
@@ -339,6 +339,14 @@
                  :else
                  relative-path)]
       (and (not-empty path) (gp-util/path-normalize path)))))
+
+(defn get-page-file-path
+  "Get the path to the page file for the given page. This is used when creating new files."
+  [repo-url sub-dir page-name ext]
+  (let [page-basename (if (mobile-util/native-platform?)
+                        (util/url-encode page-name)
+                        page-name)]
+    (get-file-path repo-url (str sub-dir "/" page-basename "." ext))))
 
 (defn get-config-path
   ([]
