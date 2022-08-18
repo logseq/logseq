@@ -282,7 +282,7 @@ export function usePaste(context: LogseqContextValue) {
         ...assetsToCreate.map((asset, i) => ({
           ...(asset.type === 'video' ? VideoShape : ImageShape).defaultProps,
           // TODO: Should be place near the last edited shape
-          point: [point[0] - asset.size[0] / 2 + i * 16, point[1] - asset.size[1] / 2 + i * 16],
+          point: [point[0] - asset.size[0] / 4 + i * 16, point[1] - asset.size[1] / 4 + i * 16],
           size: Vec.div(asset.size, 2),
           assetId: asset.id,
           opacity: 1,
