@@ -133,7 +133,7 @@ public class FsWatcher extends Plugin {
         // path.
         File f = new File(path);
         obj.put("path", Uri.fromFile(f));
-        obj.put("dir", mPath);
+        obj.put("dir", "file://" + mPath);
 
         switch (event) {
             case FileObserver.CLOSE_WRITE:
