@@ -6,6 +6,8 @@ import { makeObservable, runInAction } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { TablerIcon } from '~components/icons'
+import { NumberInput } from '~components/inputs/NumberInput'
+import { SelectInput, SelectOption } from '~components/inputs/SelectInput'
 import { SwitchInput } from '~components/inputs/SwitchInput'
 import { useCameraMovingRef } from '~hooks/useCameraMoving'
 import type { Shape } from '~lib'
@@ -21,10 +23,47 @@ export interface LogseqPortalShapeProps extends TLBoxShapeProps, CustomStyleProp
   collapsed?: boolean
   compact?: boolean
   collapsedHeight?: number
+  scaleLevel?: 'sm' | 'md' | 'lg'
 }
 
 interface LogseqQuickSearchProps {
   onChange: (id: string) => void
+}
+
+const sizeOptions: SelectOption[] = [
+  {
+    label: 'Extra Small',
+    value: 'xs',
+  },
+  {
+    label: 'Small',
+    value: 'sm',
+  },
+  {
+    label: 'Medium',
+    value: 'md',
+  },
+  {
+    label: 'Large',
+    value: 'lg',
+  },
+  {
+    label: 'Extra Large',
+    value: 'xl',
+  },
+  {
+    label: '2 Extra Large',
+    value: 'xxl',
+  },
+]
+
+const sizeToScale = {
+  xs: 0.5,
+  sm: 0.8,
+  md: 1,
+  lg: 1.5,
+  xl: 2,
+  xxl: 3,
 }
 
 const LogseqTypeTag = ({
@@ -123,6 +162,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     pageId: '',
     collapsed: false,
     compact: false,
+    scaleLevel: 'md',
   }
 
   hideRotateHandle = true
@@ -188,6 +228,16 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const app = useApp<Shape>()
     return (
       <>
+        <SelectInput
+          options={sizeOptions}
+          value={this.props.scaleLevel ?? 'md'}
+          onValueChange={v => {
+            this.update({
+              scaleLevel: v,
+            })
+            app.persist()
+          }}
+        />
         {this.props.blockType !== 'B' && (
           <SwitchInput
             label="Collapsed"
@@ -618,6 +668,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         ref={cpRefContainer}
         className="tl-logseq-cp-container"
         style={{
+          width: 'calc(100% / var(--ls-portal-scale))',
+          height: 'calc((100% - var(--ls-header-height)) / var(--ls-portal-scale))',
+          transform: `scale(var(--ls-portal-scale))`,
           overflow: this.props.compact ? 'visible' : 'auto',
         }}
       >
@@ -633,7 +686,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   ReactComponent = observer((componentProps: TLComponentProps) => {
     const { events, isErasing, isEditing, isBinding } = componentProps
     const {
-      props: { opacity, pageId, stroke, fill },
+      props: { opacity, pageId, stroke, fill, scaleLevel },
     } = this
 
     const app = useApp<Shape>()
@@ -655,6 +708,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       },
       [tlEventsEnabled]
     )
+
+    const scaleRatio = sizeToScale[scaleLevel ?? 'md']
 
     // It is a bit weird to update shapes here. Is there a better place?
     React.useEffect(() => {
@@ -740,6 +795,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 '--ls-primary-background-color': !fill?.startsWith('var') ? fill : undefined,
                 '--ls-primary-text-color': !stroke?.startsWith('var') ? stroke : undefined,
                 '--ls-title-text-color': !stroke?.startsWith('var') ? stroke : undefined,
+                '--ls-portal-scale': scaleRatio,
+                '--ls-header-height': this.getHeaderHeight() + 'px'
               }}
             >
               {!this.props.compact && !targetNotFound && (

@@ -1,19 +1,21 @@
 import { TLResizeCorner, TLResizeEdge, TLRotateCorner } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import { SVGContainer } from '~components'
+import { useApp } from '~hooks'
 import type { TLReactShape } from '~lib'
 import type { TLSelectionComponentProps } from '~types'
-import { CornerHandle, EdgeHandle, RotateHandle } from './handles'
+import { CornerHandle, EdgeHandle } from './handles'
 import { RotateCornerHandle } from './handles/RotateCornerHandle'
 
 export const SelectionForeground = observer(function SelectionForeground<S extends TLReactShape>({
   bounds,
-  zoom,
   showResizeHandles,
   showRotateHandles,
   shapes,
 }: TLSelectionComponentProps<S>) {
+  const app = useApp()
   const { width, height } = bounds
+  const zoom = app.viewport.camera.zoom
 
   const size = 8 / zoom
   const targetSize = 6 / zoom
@@ -132,9 +134,6 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
           />
         </>
       )}
-      {/* {showRotateHandles && (
-        <RotateHandle cx={width / 2} cy={0 - targetSize * 2} size={size} targetSize={targetSize} />
-      )} */}
     </SVGContainer>
   )
 })

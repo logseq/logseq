@@ -90,7 +90,6 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
 }: Partial<TLCanvasProps<S>>) {
   const rContainer = React.useRef<HTMLDivElement>(null)
   const { viewport, components, meta } = useRendererContext()
-  const { zoom } = viewport.camera
   const app = useApp()
   const onBoundsChange = React.useCallback((bounds: TLBounds) => {
     app.inputs.updateContainerOffset([bounds.minX, bounds.minY])
@@ -117,7 +116,6 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
           {components.SelectionBackground && selectedShapes && selectionBounds && showSelection && (
             <Container data-type="SelectionBackground" bounds={selectionBounds} zIndex={2}>
               <components.SelectionBackground
-                zoom={zoom}
                 shapes={selectedShapes}
                 bounds={selectionBounds}
                 showResizeHandles={showResizeHandles}
@@ -164,7 +162,6 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                   zIndex={editingShape && selectedShapes.includes(editingShape) ? 1002 : 10002}
                 >
                   <components.SelectionForeground
-                    zoom={zoom}
                     shapes={selectedShapes}
                     bounds={selectionBounds}
                     showResizeHandles={showResizeHandles}

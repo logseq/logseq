@@ -41,7 +41,6 @@ export interface TLShapeProps {
   isGenerated?: boolean
   isSizeLocked?: boolean
   isAspectRatioLocked?: boolean
-  logseqLink?: string
 }
 
 export interface TLResizeStartInfo {

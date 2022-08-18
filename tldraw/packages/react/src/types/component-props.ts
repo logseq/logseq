@@ -6,7 +6,6 @@ import type { TLReactShape } from '~lib'
 /* ------------------- Components ------------------- */
 
 export type TLSelectionComponentProps<S extends TLReactShape = TLReactShape> = {
-  zoom: number
   shapes: S[]
   bounds: TLBounds
   showResizeHandles?: boolean

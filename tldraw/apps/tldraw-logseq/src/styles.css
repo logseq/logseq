@@ -248,6 +248,45 @@
   pointer-events: all;
 }
 
+.tl-select-input-trigger {
+  @apply flex items-center;
+  border: 1px solid var(--ls-secondary-background-color);
+  background-color: var(--ls-tertiary-background-color);
+  min-width: 160px;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 16px;
+  height: 100%;
+}
+
+.tl-select-input-trigger-value {
+  @apply flex items-center items-start flex-1;
+}
+
+.tl-select-input-viewport {
+  border-radius: 8px;
+  background-color: var(--ls-secondary-background-color);
+}
+
+.tl-select-input-select-item {
+  cursor: default;
+  padding: 4px 12px;
+
+  &[data-state='unchecked']:hover {
+    background-color: var(--ls-tertiary-background-color);
+    color: var(--ls-primary-text-color);
+  }
+
+  &[data-state='checked'] {
+    background-color: #4285f4;
+    color: #fff;
+  }
+}
+
+.tl-select-input-content {
+  z-index: 100;
+}
+
 .tl-geometry-tools-pane-anchor {
   @apply relative;
 }
@@ -601,9 +640,13 @@
 .tl-logseq-cp-container {
   @apply h-full w-full rounded-lg;
 
+  top: var(--ls-header-height);
+  left: 0;
   overscroll-behavior: none;
   flex: 1 1 0%;
   cursor: default;
+  transform-origin: top left;
+  position: absolute;
 }
 
 .tl-highlighted {

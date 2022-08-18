@@ -1782,6 +1782,13 @@
     node-addon-api "^3.2.1"
     node-gyp-build "^4.3.0"
 
+"@radix-ui/number@1.0.0":
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/@radix-ui/number/-/number-1.0.0.tgz#4c536161d0de750b3f5d55860fc3de46264f897b"
+  integrity sha512-Ofwh/1HX69ZfJRiRBMTy7rgjAzHmwe4kW9C9Y99HTRUcYLUuVT0KESFj15rPjRgKJs20GPq8Bm5aEDJ8DuA3vA==
+  dependencies:
+    "@babel/runtime" "^7.13.10"
+
 "@radix-ui/primitive@1.0.0":
   version "1.0.0"
   resolved "https://registry.yarnpkg.com/@radix-ui/primitive/-/primitive-1.0.0.tgz#e1d8ef30b10ea10e69c76e896f608d9276352253"
@@ -1973,6 +1980,34 @@
     "@radix-ui/react-use-callback-ref" "1.0.0"
     "@radix-ui/react-use-controllable-state" "1.0.0"
 
+"@radix-ui/react-select@^1.0.0":
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/@radix-ui/react-select/-/react-select-1.0.0.tgz#16d91f493a18e471d40fc06b1faff516b5686784"
+  integrity sha512-GfbVBxx7JPvytNT+0XYCFCOImEMmpl0Vg7hhifLaLV7p5zRottFMgQ7qrrxw8v6B8buKXz41kWYMrdRrWqsZaQ==
+  dependencies:
+    "@babel/runtime" "^7.13.10"
+    "@radix-ui/number" "1.0.0"
+    "@radix-ui/primitive" "1.0.0"
+    "@radix-ui/react-collection" "1.0.0"
+    "@radix-ui/react-compose-refs" "1.0.0"
+    "@radix-ui/react-context" "1.0.0"
+    "@radix-ui/react-direction" "1.0.0"
+    "@radix-ui/react-dismissable-layer" "1.0.0"
+    "@radix-ui/react-focus-guards" "1.0.0"
+    "@radix-ui/react-focus-scope" "1.0.0"
+    "@radix-ui/react-id" "1.0.0"
+    "@radix-ui/react-label" "1.0.0"
+    "@radix-ui/react-portal" "1.0.0"
+    "@radix-ui/react-primitive" "1.0.0"
+    "@radix-ui/react-slot" "1.0.0"
+    "@radix-ui/react-use-callback-ref" "1.0.0"
+    "@radix-ui/react-use-controllable-state" "1.0.0"
+    "@radix-ui/react-use-layout-effect" "1.0.0"
+    "@radix-ui/react-use-previous" "1.0.0"
+    "@radix-ui/react-visually-hidden" "1.0.0"
+    aria-hidden "^1.1.1"
+    react-remove-scroll "2.5.4"
+
 "@radix-ui/react-slot@1.0.0":
   version "1.0.0"
   resolved "https://registry.yarnpkg.com/@radix-ui/react-slot/-/react-slot-1.0.0.tgz#7fa805b99891dea1e862d8f8fbe07f4d6d0fd698"
@@ -2048,6 +2083,14 @@
   dependencies:
     "@babel/runtime" "^7.13.10"
     "@radix-ui/react-use-layout-effect" "1.0.0"
+
+"@radix-ui/react-visually-hidden@1.0.0":
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/@radix-ui/react-visually-hidden/-/react-visually-hidden-1.0.0.tgz#4d69d7e3b6d21ee4678ed6de5215dcd068394401"
+  integrity sha512-MwAhMdX+n6S4InwRKSnpUsp+lLkYG6izQF56ul6guSX2mBBLOMV9Frx7xJlkEe2GjKLzbNuHhaCS6e5gopmZNA==
+  dependencies:
+    "@babel/runtime" "^7.13.10"
+    "@radix-ui/react-primitive" "1.0.0"
 
 "@radix-ui/rect@1.0.0":
   version "1.0.0"
