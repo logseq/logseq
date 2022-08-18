@@ -85,7 +85,6 @@
 (defn backup-file!
   "Backup db content to bak directory"
   [repo-url path db-content content]
-  (prn ::debug repo-url)
   (cond
     (util/electron?)
     (ipc/ipc "backupDbFile" repo-url path db-content content)
