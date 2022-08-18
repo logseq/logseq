@@ -8,6 +8,7 @@ import {
   validUUID,
 } from '@tldraw/core'
 import type { TLReactCallbacks } from '@tldraw/react'
+import Vec from '@tldraw/vec'
 import * as React from 'react'
 import { NIL as NIL_UUID } from 'uuid'
 import { HTMLShape, LogseqPortalShape, Shape, YouTubeShape, ImageShape, VideoShape } from '~lib'
@@ -75,7 +76,6 @@ export function usePaste(context: LogseqContextValue) {
               src: dataurl,
               size: await getSizeFromSrc(handlers.makeAssetUrl(dataurl), isVideo),
             }
-            console.log(asset)
             assetsToCreate.push(asset)
           } catch (error) {
             console.error(error)
@@ -283,7 +283,7 @@ export function usePaste(context: LogseqContextValue) {
           ...(asset.type === 'video' ? VideoShape : ImageShape).defaultProps,
           // TODO: Should be place near the last edited shape
           point: [point[0] - asset.size[0] / 2 + i * 16, point[1] - asset.size[1] / 2 + i * 16],
-          size: asset.size,
+          size: Vec.div(asset.size, 2),
           assetId: asset.id,
           opacity: 1,
         })),
