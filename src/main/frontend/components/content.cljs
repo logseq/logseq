@@ -59,33 +59,39 @@
    (ui/menu-link
     {:key "cut"
      :on-click #(editor-handler/cut-selection-blocks true)}
-    "Cut")
+    "Cut"
+    nil)
    (ui/menu-link
     {:key "copy"
      :on-click editor-handler/copy-selection-blocks}
-    "Copy")
+    "Copy"
+    nil)
    (ui/menu-link
     {:key "copy as"
      :on-click (fn [_]
                  (let [block-uuids (editor-handler/get-selected-toplevel-block-uuids)]
                    (state/set-modal!
                     #(export/export-blocks block-uuids))))}
-    "Copy as...")
+    "Copy as..."
+    nil)
    (ui/menu-link
     {:key "copy block refs"
      :on-click editor-handler/copy-block-refs}
-    "Copy block refs")
+    "Copy block refs"
+    nil)
    (ui/menu-link
     {:key "copy block embeds"
      :on-click editor-handler/copy-block-embeds}
-    "Copy block embeds")
+    "Copy block embeds"
+    nil)
    
    [:hr.menu-separator]
 
    (ui/menu-link
     {:key "cycle todos"
      :on-click editor-handler/cycle-todos!}
-    "Cycle todos")])
+    "Cycle todos")]
+    nil)
 
 ;; FIXME: Make it configurable
 (def block-background-colors
@@ -151,7 +157,8 @@
         :on-click (fn [e]
                     (util/stop e)
                     (reset! edit? true))}
-       "Make a Template"))))
+       "Make a Template"
+       nil))))
 
 (rum/defc ^:large-vars/cleanup-todo block-context-menu-content
   [_target block-id]
@@ -178,7 +185,8 @@
           {:key      "Open in sidebar"
            :on-click (fn [_e]
                        (editor-handler/open-block-in-sidebar! block-id))}
-          "Open in sidebar")
+          "Open in sidebar"
+          ["shift" "click"])
 
          [:hr.menu-separator]
 
@@ -186,13 +194,15 @@
           {:key      "Copy block ref"
            :on-click (fn [_e]
                        (editor-handler/copy-block-ref! block-id block-ref/->block-ref))}
-          "Copy block ref")
+          "Copy block ref"
+          nil)
 
          (ui/menu-link
           {:key      "Copy block embed"
            :on-click (fn [_e]
                        (editor-handler/copy-block-ref! block-id #(util/format "{{embed ((%s))}}" %)))}
-          "Copy block embed")
+          "Copy block embed"
+          nil)
 
           ;; TODO Logseq protocol mobile support
          (when (util/electron?)
@@ -203,19 +213,22 @@
                                tap-f (fn [block-id]
                                        (url-util/get-logseq-graph-uuid-url nil current-repo block-id))]
                            (editor-handler/copy-block-ref! block-id tap-f)))}
-            "Copy block URL"))
+            "Copy block URL"
+            nil))
 
          (ui/menu-link
           {:key      "Copy as"
            :on-click (fn [_]
                        (state/set-modal! #(export/export-blocks [block-id])))}
-          "Copy as...")
+          "Copy as..."
+          nil)
 
          (ui/menu-link
           {:key      "Cut"
            :on-click (fn [_e]
                        (editor-handler/cut-block! block-id))}
-          "Cut")
+          "Cut"
+          nil)
 
          [:hr.menu-separator]
 
@@ -227,7 +240,8 @@
                          (editor-handler/set-block-property! block-id :heading true)))}
           (if heading?
             "Convert back to a block"
-            "Convert to a heading"))
+            "Convert to a heading")
+          nil)
 
          (block-template block-id)
 
@@ -235,11 +249,13 @@
            (ui/menu-link
             {:key      "Preview Card"
              :on-click #(srs/preview (:db/id block))}
-            "Preview Card")
+            "Preview Card"
+            nil)
            (ui/menu-link
             {:key      "Make a Card"
              :on-click #(srs/make-block-a-card! block-id)}
-            "Make a Flashcard"))
+            "Make a Flashcard"
+            nil))
 
          [:hr.menu-separator]
 
@@ -247,13 +263,15 @@
           {:key      "Expand all"
            :on-click (fn [_e]
                        (editor-handler/expand-all! block-id))}
-          "Expand all")
+          "Expand all"
+          nil)
 
          (ui/menu-link
           {:key      "Collapse all"
            :on-click (fn [_e]
                        (editor-handler/collapse-all! block-id {}))}
-          "Collapse all")
+          "Collapse all"
+          nil)
 
          (when (state/sub [:plugin/simple-commands])
            (when-let [cmds (state/get-plugins-commands-with-type :block-context-menu-item)]
@@ -262,7 +280,8 @@
                 {:key      key
                  :on-click #(commands/exec-plugin-simple-command!
                              pid (assoc cmd :uuid block-id) action)}
-                label))))
+                label
+                nil))))
 
          (when (state/sub [:ui/developer-mode?])
            (ui/menu-link
@@ -278,7 +297,8 @@
                                         :on-click #(.writeText js/navigator.clipboard block-data))]
                             :success
                             false)))}
-            "(Dev) Show block data"))])))
+            "(Dev) Show block data"
+            nil))])))
 
 (rum/defc block-ref-custom-context-menu-content
   [block block-ref-id]
@@ -291,23 +311,28 @@
                     (state/get-current-repo)
                     block-ref-id
                     :block-ref))}
-      "Open in sidebar")
+      "Open in sidebar"
+      ["shift" "click"])
      (ui/menu-link
       {:key "copy"
        :on-click (fn [] (editor-handler/copy-current-ref block-ref-id))}
-      "Copy this reference")
+      "Copy this reference"
+      nil)
      (ui/menu-link
       {:key "delete"
        :on-click (fn [] (editor-handler/delete-current-ref! block block-ref-id))}
-      "Delete this reference")
+      "Delete this reference"
+      nil)
      (ui/menu-link
       {:key "replace-with-text"
        :on-click (fn [] (editor-handler/replace-ref-with-text! block block-ref-id))}
-      "Replace with text")
+      "Replace with text"
+      nil)
      (ui/menu-link
       {:key "replace-with-embed"
        :on-click (fn [] (editor-handler/replace-ref-with-embed! block block-ref-id))}
-      "Replace with embed")]))
+      "Replace with embed"
+      nil)]))
 
 (rum/defc page-title-custom-context-menu-content
   [page]
@@ -319,7 +344,8 @@
           (merge
            {:key title}
            options)
-          title))])))
+          title
+          nil))])))
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
