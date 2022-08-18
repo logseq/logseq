@@ -23,6 +23,7 @@ export type TLContextBarProps<S extends TLReactShape = TLReactShape> = {
   scaledBounds: TLBounds
   rotation: number
   offsets: TLOffset
+  hidden: boolean
 }
 
 export type TLContextBarComponent<S extends TLReactShape = TLReactShape> = (

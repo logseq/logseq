@@ -11,7 +11,7 @@ import { NumberInput } from '~components/inputs/NumberInput'
 import { ColorInput } from '~components/inputs/ColorInput'
 import { SwitchInput } from '../inputs/SwitchInput'
 
-const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets }) => {
+const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) => {
   const app = useApp()
   const rSize = React.useRef<[number, number] | null>(null)
   const rContextBar = React.useRef<HTMLDivElement>(null)
@@ -79,13 +79,19 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets }) => {
 
   return (
     <HTMLContainer centered>
-      <div ref={rContextBar} className="tl-contextbar">
+      <div
+        ref={rContextBar}
+        className="tl-contextbar"
+        style={{ pointerEvents: hidden ? 'none' : 'all' }}
+      >
         {ShapeContent ? (
           <ShapeContent />
         ) : (
           <>
             <ColorInput label="Stroke" value={shapes[0].props.stroke} onChange={updateStroke} />
-            {!transparent && <ColorInput label="Fill" value={shapes[0].props.fill} onChange={updateFill} />}
+            {!transparent && (
+              <ColorInput label="Fill" value={shapes[0].props.fill} onChange={updateFill} />
+            )}
             <SwitchInput
               label="Transparent"
               checked={transparent}

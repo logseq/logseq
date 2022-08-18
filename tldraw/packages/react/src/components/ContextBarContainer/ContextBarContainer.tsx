@@ -75,6 +75,7 @@ export const ContextBarContainer = observer(function ContextBarContainer<S exten
       onPointerDown={stopEventPropagation}
     >
       <ContextBar
+        hidden={hidden}
         shapes={shapes}
         bounds={bounds}
         offsets={offsets}
