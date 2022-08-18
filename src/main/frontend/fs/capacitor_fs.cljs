@@ -149,9 +149,16 @@
 
 (defn backup-file-handle-changed!
   [repo-dir file-path content]
-  (let [repo-dir (js/decodeURI repo-dir)
-        file-path (js/decodeURI file-path)
-        backup-root (util/safe-path-join repo-dir backup-dir)
+  (let [divider-schema    "://"
+        file-schema       (string/split file-path divider-schema)
+        file-schema       (if (> (count file-schema) 1) (first file-schema) "")
+        dir-schema?       (and (string? repo-dir)
+                               (string/includes? repo-dir divider-schema))
+        repo-dir          (if-not dir-schema?
+                            (str file-schema divider-schema repo-dir) repo-dir)
+        repo-dir          (js/decodeURI repo-dir)
+        file-path         (js/decodeURI file-path)
+        backup-root       (util/safe-path-join repo-dir backup-dir)
         backup-dir-parent (util/node-path.dirname file-path)
         backup-dir-parent (string/replace backup-dir-parent repo-dir "")
         backup-dir-name (util/node-path.name file-path)
@@ -197,7 +204,6 @@
          (p/let [result (<write-file-with-utf8 path content)
                  mtime (-> (js->clj stat :keywordize-keys true)
                            :mtime)]
-           (prn "====>>> Write File:" path "matched?" contents-matched?)
            (when-not contents-matched?
              (backup-file repo-dir path disk-content ext))
            (db/set-file-last-modified-at! repo path mtime)
