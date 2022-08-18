@@ -143,41 +143,41 @@ test(
   })
 
 test('copy & paste block ref and replace its content', async ({ page, block }) => {
-    await createRandomPage(page)
+  await createRandomPage(page)
 
-    await block.mustFill('Some random text')
-    // FIXME: copy instantly will make content disappear
-    await page.waitForTimeout(1000)
-    if (IsMac) {
-        await page.keyboard.press('Meta+c')
-    } else {
-        await page.keyboard.press('Control+c')
-    }
+  await block.mustFill('Some random text')
+  // FIXME: copy instantly will make content disappear
+  await page.waitForTimeout(1000)
+  if (IsMac) {
+    await page.keyboard.press('Meta+c')
+  } else {
+    await page.keyboard.press('Control+c')
+  }
 
-    await page.press('textarea >> nth=0', 'Enter')
-    if (IsMac) {
-        await page.keyboard.press('Meta+v')
-    } else {
-        await page.keyboard.press('Control+v')
-    }
-    await page.keyboard.press('Enter')
+  await page.press('textarea >> nth=0', 'Enter')
+  if (IsMac) {
+    await page.keyboard.press('Meta+v')
+  } else {
+    await page.keyboard.press('Control+v')
+  }
+  await page.keyboard.press('Enter')
 
-    const blockRef = page.locator('.block-ref >> text="Some random text"');
+  const blockRef = page.locator('.block-ref >> text="Some random text"');
 
-    // Check if the newly created block-ref has the same referenced content
-    await expect(blockRef).toHaveCount(1);
+  // Check if the newly created block-ref has the same referenced content
+  await expect(blockRef).toHaveCount(1);
 
-    // Move cursor into the block ref
-    for (let i = 0; i < 4; i++) {
-        await page.press('textarea >> nth=0', 'ArrowLeft')
-}
+  // Move cursor into the block ref
+  for (let i = 0; i < 4; i++) {
+    await page.press('textarea >> nth=0', 'ArrowLeft')
+  }
 
-    // Trigger replace-block-reference-with-content-at-point
-    if (IsMac) {
-        await page.keyboard.press('Meta+Shift+r')
-    } else {
-        await page.keyboard.press('Control+Shift+v')
-    }
+  // Trigger replace-block-reference-with-content-at-point
+  if (IsMac) {
+    await page.keyboard.press('Meta+Shift+r')
+  } else {
+    await page.keyboard.press('Control+Shift+v')
+  }
 })
 
 test('copy and paste block after editing new block #5962', async ({ page, block }) => {
@@ -204,9 +204,9 @@ test('copy and paste block after editing new block #5962', async ({ page, block 
 
   // Quickly paste the copied block
   if (IsMac) {
-      await page.keyboard.press('Meta+v')
+    await page.keyboard.press('Meta+v')
   } else {
-      await page.keyboard.press('Control+v')
+    await page.keyboard.press('Control+v')
   }
 
   await expect(page.locator('text="Typed block"')).toHaveCount(1);
@@ -216,13 +216,13 @@ test('undo and redo after starting an action should not destroy text #6267', asy
   await createRandomPage(page)
 
   // Get one piece of undo state onto the stack
-  await block.mustFill('text1 ')
-  await page.waitForTimeout(550) // Wait for 500ms autosave period to expire
+  await block.mustType('text1 ')
+  await page.waitForTimeout(500) // Wait for 500ms autosave period to expire
 
   // Then type more, start an action prompt, and undo
-  await page.keyboard.type('text2 ')
+  await page.keyboard.type('text2 ', { delay: 50 })
   for (const char of '[[') {
-    await page.keyboard.type(char)
+    await page.keyboard.type(char, { delay: 50 })
   }
   await expect(page.locator(`[data-modal-name="page-search"]`)).toBeVisible()
   if (IsMac) {
@@ -461,7 +461,8 @@ test('pressing backspace and remaining inside of brackets should NOT close autoc
     await page.keyboard.press('Backspace')
     await page.waitForTimeout(100)
     await autocompleteMenu.expectVisible(modalName)
-  }})
+  }
+})
 test('press escape when autocomplete menu is open, should close autocomplete menu only #6270', async ({ page, block }) => {
   for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['/', 'commands']]) {
     await createRandomPage(page)
