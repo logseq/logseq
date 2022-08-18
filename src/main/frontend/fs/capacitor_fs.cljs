@@ -143,7 +143,7 @@
         backup-dir-parent (util/node-path.dirname file-path)
         backup-dir-parent (string/replace backup-dir-parent repo-dir "")
         backup-dir-name (util/node-path.name file-path)
-        file-extname (util/node-path.extname file-path)
+        file-extname (.extname util/node-path file-path)
         file-root (util/safe-path-join backup-root backup-dir-parent backup-dir-name)
         file-path (util/safe-path-join file-root
                                        (str (string/replace (.toISOString (js/Date.)) ":" "_") "." (mobile-util/platform) file-extname))]
@@ -282,7 +282,7 @@
                    (string/replace-first path "file://" "")
                    path)
             repo-dir (config/get-local-dir repo)
-            recycle-dir (str repo-dir config/app-name "/.recycle")
+            recycle-dir (str repo-dir config/app-name "/.recycle") ;; logseq/.recycle
             file-name (-> (string/replace path repo-dir "")
                           (string/replace "/" "_")
                           (string/replace "\\" "_"))

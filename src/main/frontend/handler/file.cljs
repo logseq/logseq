@@ -8,11 +8,13 @@
             [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
+            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
+            [electron.ipc :as ipc]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile]
@@ -79,6 +81,20 @@
         (p/catch (fn [error]
                    (log/error :nfs/load-files-error repo-url)
                    (log/error :exception error))))))
+
+(defn backup-file!
+  "Backup db content to bak directory"
+  [repo-url path db-content content]
+  (prn ::debug repo-url)
+  (cond
+    (util/electron?)
+    (ipc/ipc "backupDbFile" repo-url path db-content content)
+
+    (or (mobile/native-ios?) (mobile/native-android?))
+    (capacitor-fs/backup-file-handle-changed! repo-url path db-content)
+
+    :else
+    nil))
 
 (defn- page-exists-in-another-file
   "Conflict of files towards same page"
