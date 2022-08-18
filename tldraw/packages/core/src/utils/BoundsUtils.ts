@@ -323,15 +323,16 @@ export class BoundsUtils {
     handle: TLResizeCorner | TLResizeEdge | 'center',
     delta: number[],
     rotation = 0,
-    isAspectRatioLocked = false,
-    [canResizeX, canResizeY] = [true, true]
+    isAspectRatioLocked = false
   ): TLBounds & { scaleX: number; scaleY: number } {
     // Create top left and bottom right corners.
     const [ax0, ay0] = [bounds.minX, bounds.minY]
     const [ax1, ay1] = [bounds.maxX, bounds.maxY]
+
     // Create a second set of corners for the new box.
     let [bx0, by0] = [bounds.minX, bounds.minY]
     let [bx1, by1] = [bounds.maxX, bounds.maxY]
+
     // If the drag is on the center, just translate the bounds.
     if (handle === 'center') {
       return {
@@ -345,11 +346,14 @@ export class BoundsUtils {
         scaleY: 1,
       }
     }
+
     // Counter rotate the delta. This lets us make changes as if
     // the (possibly rotated) boxes were axis aligned.
     const [dx, dy] = Vec.rot(delta, -rotation)
+
     /*
 1. Delta
+
 Use the delta to adjust the new box by changing its corners.
 The dragging handle (corner or edge) will determine which 
 corners should change.
@@ -368,6 +372,7 @@ corners should change.
         break
       }
     }
+
     switch (handle) {
       case TLResizeEdge.Left:
       case TLResizeCorner.TopLeft:
@@ -382,24 +387,32 @@ corners should change.
         break
       }
     }
+
     const aw = ax1 - ax0
     const ah = ay1 - ay0
+
     const scaleX = (bx1 - bx0) / aw
     const scaleY = (by1 - by0) / ah
+
     const flipX = scaleX < 0
     const flipY = scaleY < 0
+
     const bw = Math.abs(bx1 - bx0)
     const bh = Math.abs(by1 - by0)
+
     /*
-    2. Aspect ratio
-    If the aspect ratio is locked, adjust the corners so that the
-    new box's aspect ratio matches the original aspect ratio.
-    */
+2. Aspect ratio
+
+If the aspect ratio is locked, adjust the corners so that the
+new box's aspect ratio matches the original aspect ratio.
+*/
+
     if (isAspectRatioLocked) {
       const ar = aw / ah
       const isTall = ar < bw / bh
       const tw = bw * (scaleY < 0 ? 1 : -1) * (1 / ar)
       const th = bh * (scaleX < 0 ? 1 : -1) * ar
+
       switch (handle) {
         case TLResizeCorner.TopLeft: {
           if (isTall) by0 = by1 + tw
@@ -439,17 +452,22 @@ corners should change.
         }
       }
     }
+
     /*
 3. Rotation
+
 If the bounds are rotated, get a Vector from the rotated anchor
 corner in the inital bounds to the rotated anchor corner in the
 result's bounds. Subtract this Vector from the result's corners,
 so that the two anchor points (initial and result) will be equal.
 */
+
     if (rotation % (Math.PI * 2) !== 0) {
       let cv = [0, 0]
+
       const c0 = Vec.med([ax0, ay0], [ax1, ay1])
       const c1 = Vec.med([bx0, by0], [bx1, by1])
+
       switch (handle) {
         case TLResizeCorner.TopLeft: {
           cv = Vec.sub(Vec.rotWith([bx1, by1], c1, rotation), Vec.rotWith([ax1, ay1], c0, rotation))
@@ -496,16 +514,26 @@ so that the two anchor points (initial and result) will be equal.
           break
         }
       }
+
       ;[bx0, by0] = Vec.sub([bx0, by0], cv)
       ;[bx1, by1] = Vec.sub([bx1, by1], cv)
     }
+
     /*
 4. Flips
+
 If the axes are flipped (e.g. if the right edge has been dragged
 left past the initial left edge) then swap points on that axis.
 */
-    if (bx1 < bx0) [bx1, bx0] = [bx0, bx1]
-    if (by1 < by0) [by1, by0] = [by0, by1]
+
+    if (bx1 < bx0) {
+      ;[bx1, bx0] = [bx0, bx1]
+    }
+
+    if (by1 < by0) {
+      ;[by1, by0] = [by0, by1]
+    }
+
     return {
       minX: bx0,
       minY: by0,

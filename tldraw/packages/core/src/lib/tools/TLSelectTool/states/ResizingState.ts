@@ -184,28 +184,30 @@ export class ResizingState<
         rotation *= -1
       }
       // If the shape is aspect ratio locked or size locked...
-      if (isAspectRatioLocked || !canResizeAny || shape.props.isSizeLocked) {
-        relativeBounds.width = initialShapeBounds.width
-        relativeBounds.height = initialShapeBounds.height
-        if (isAspectRatioLocked) {
-          // Scale the width and height to the longer dimension
-          relativeBounds.width *= resizeDimension
-          relativeBounds.height *= resizeDimension
-        }
-        // Find the center using the inner transform origin
-        center = [
-          nextBounds.minX +
-            (scaleX < 0 ? 1 - innerTransformOrigin[0] : innerTransformOrigin[0]) *
-              (nextBounds.width - relativeBounds.width) +
-            relativeBounds.width / 2,
-          nextBounds.minY +
-            (scaleY < 0 ? 1 - innerTransformOrigin[1] : innerTransformOrigin[1]) *
-              (nextBounds.height - relativeBounds.height) +
-            relativeBounds.height / 2,
-        ]
-        // Position the bounds at the center
-        relativeBounds = BoundsUtils.centerBounds(relativeBounds, center)
-      }
+      // FIXME: the following is buggy
+      // if (isAspectRatioLocked || !canResizeAny || shape.props.isSizeLocked) {
+      //   // console.log('aspect ratio locked', isAspectRatioLocked, canResizeAny, shape.props.isSizeLocked)
+      //   relativeBounds.width = initialShapeBounds.width
+      //   relativeBounds.height = initialShapeBounds.height
+      //   if (isAspectRatioLocked) {
+      //     // Scale the width and height to the longer dimension
+      //     relativeBounds.width *= resizeDimension
+      //     relativeBounds.height *= resizeDimension
+      //   }
+      //   // Find the center using the inner transform origin
+      //   center = [
+      //     nextBounds.minX +
+      //       (scaleX < 0 ? 1 - innerTransformOrigin[0] : innerTransformOrigin[0]) *
+      //         (nextBounds.width - relativeBounds.width) +
+      //       relativeBounds.width / 2,
+      //     nextBounds.minY +
+      //       (scaleY < 0 ? 1 - innerTransformOrigin[1] : innerTransformOrigin[1]) *
+      //         (nextBounds.height - relativeBounds.height) +
+      //       relativeBounds.height / 2,
+      //   ]
+      //   // Position the bounds at the center
+      //   relativeBounds = BoundsUtils.centerBounds(relativeBounds, center)
+      // }
       shape.onResize(initialShapeProps, {
         center,
         rotation,
