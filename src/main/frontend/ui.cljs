@@ -109,11 +109,31 @@
         (when @open?
           (dropdown-content-wrapper dropdown-state modal-content modal-class))))]))
 
+;; `sequence` can be a list of symbols, a list of strings, or a string
+(defn render-keyboard-shortcut [sequence]
+  (let [sequence (if (string? sequence)
+                   (-> sequence ;; turn string into sequence
+                       (string/trim)
+                       (string/lower-case)
+                       (string/split  #" |\+"))
+                   sequence)]
+    [:span.keyboard-shortcut
+     (map-indexed (fn [i key]
+                    [:code {:key i}
+                   ;; Display "cmd" rather than "meta" to the user to describe the Mac
+                   ;; mod key, because that's what the Mac keyboards actually say.
+                     (if (or (= :meta key) (= "meta" key))
+                       (util/meta-key-name)
+                       (name key))])
+                  sequence)]))
+
 (rum/defc menu-link
-  [options child]
-  [:a.block.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
+  [options child shortcut]
+  [:a.flex.justify-between.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
    options
-   child])
+   [:span child]
+   (when shortcut
+     [:span.ml-1 (render-keyboard-shortcut shortcut)])])
 
 (rum/defc dropdown-with-links
   [content-fn links {:keys [links-header links-footer] :as opts}]
@@ -444,24 +464,6 @@
      [:span.switcher.transform.transition.ease-in-out.duration-200
       {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
        :aria-hidden "true"}]]]))
-
-;; `sequence` can be a list of symbols, a list of strings, or a string
-(defn render-keyboard-shortcut [sequence]
-  (let [sequence (if (string? sequence)
-                   (-> sequence ;; turn string into sequence
-                       (string/trim)
-                       (string/lower-case)
-                       (string/split  #" |\+"))
-                   sequence)]
-    [:span.keyboard-shortcut
-     (map-indexed (fn [i key]
-                    [:code {:key i}
-                   ;; Display "cmd" rather than "meta" to the user to describe the Mac
-                   ;; mod key, because that's what the Mac keyboards actually say.
-                     (if (or (= :meta key) (= "meta" key))
-                       (util/meta-key-name)
-                       (name key))])
-                  sequence)]))
 
 (defn keyboard-shortcut-from-config [shortcut-name]
   (let [default-binding (:binding (get shortcut-config/all-default-keyboard-shortcuts shortcut-name))
