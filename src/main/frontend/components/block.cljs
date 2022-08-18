@@ -519,7 +519,7 @@
                                     (for [[idx page] (medley/indexed namespace)]
                                       (when (and (string? page) page)
                                         (let [full-page (->> (take (inc idx) namespace)
-                                                            (string/join "/"))]
+                                                             (string/join "/"))]
                                           (page-reference false full-page {:preview? true} page))))
                                     (interpose [:span.mx-2.opacity-30 "/"])))]
                                [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
