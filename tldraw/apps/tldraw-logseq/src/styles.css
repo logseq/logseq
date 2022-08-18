@@ -294,9 +294,6 @@
   backface-visibility: hidden;
   pointer-events: all;
   vertical-align: baseline;
-  -webkit-user-drag: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
 }
 
 .tl-text-shape-input {
@@ -320,7 +317,6 @@
   backface-visibility: hidden;
   pointer-events: all;
   user-select: text;
-  -webkit-user-select: text;
 }
 
 .tl-stroke-hitarea {
@@ -544,6 +540,7 @@
   transform: translate(1px, 1px);
   overscroll-behavior: none;
   opacity: 1;
+  user-select: text;
 
   &[data-collapsed='true'] {
     @apply overflow-hidden;

@@ -2242,6 +2242,7 @@
                               (let [id' (swap! *blocks-container-id inc)]
                                 (reset! *init-blocks-container-id id')
                                 id'))
+        block-el-id (str "ls-block-" blocks-container-id "-" uuid)
         config {:id (str uuid)
                 :db/id (:db/id block-entity)
                 :block? true
@@ -2253,7 +2254,7 @@
       [:div.single-block
        {:class (str block-uuid)
         :id (str "ls-block-" blocks-container-id "-" block-uuid)}
-       (block-content-or-editor config block edit-input-id uuid (:block/heading-level block) edit? true)])))
+       (block-content-or-editor config block edit-input-id block-el-id (:block/heading-level block) edit? true)])))
 
 (rum/defc single-block-cp
   [block-uuid]
