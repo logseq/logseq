@@ -70,7 +70,7 @@
                  (let [block-uuids (editor-handler/get-selected-toplevel-block-uuids)]
                    (state/set-modal!
                     #(export/export-blocks block-uuids))))}
-    "Copy as")
+    "Copy as...")
    (ui/menu-link
     {:key "copy block refs"
      :on-click editor-handler/copy-block-refs}
@@ -79,6 +79,9 @@
     {:key "copy block embeds"
      :on-click editor-handler/copy-block-embeds}
     "Copy block embeds")
+   
+   [:hr.menu-separator]
+
    (ui/menu-link
     {:key "cycle todos"
      :on-click editor-handler/cycle-todos!}
@@ -236,7 +239,7 @@
            (ui/menu-link
             {:key      "Make a Card"
              :on-click #(srs/make-block-a-card! block-id)}
-            "Make a Card"))
+            "Make a Flashcard"))
 
          [:hr.menu-separator]
 
