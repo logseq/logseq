@@ -167,7 +167,7 @@
             {:title    (t :remove-background)
              :on-click (fn [_e]
                          (editor-handler/remove-block-property! block-id "background-color"))}
-            [:div.heading-bg.remove (ui/icon "x")]]]]
+            [:div.heading-bg.remove "-"]]]]
          
          [:hr.menu-separator]
 
