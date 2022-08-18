@@ -349,6 +349,6 @@
   (watch-dir! [_this dir]
     (p/do!
      (.unwatch mobile-util/fs-watcher)
-     (.watch mobile-util/fs-watcher #js {:path dir})))
+     (.watch mobile-util/fs-watcher (clj->js {:path dir}))))
   (unwatch-dir! [_this _dir]
     (.unwatch mobile-util/fs-watcher)))

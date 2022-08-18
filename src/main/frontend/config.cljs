@@ -311,6 +311,9 @@
   [repo-url relative-path]
   (when (and repo-url relative-path)
     (let [path (cond
+                 (demo-graph?)
+                 nil
+
                  (and (util/electron?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)]
                    (if (string/starts-with? relative-path dir)
@@ -335,7 +338,7 @@
 
                  :else
                  relative-path)]
-      (gp-util/path-normalize path))))
+      (and (not-empty path) (gp-util/path-normalize path)))))
 
 (defn get-config-path
   ([]
