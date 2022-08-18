@@ -205,7 +205,6 @@
                                                          :recursive true}))
                  mtime (-> (js->clj stat :keywordize-keys true)
                            :mtime)]
-           (prn "====>>> Write File:" path "\n matched?" contents-matched?)
            (when-not contents-matched?
              (backup-file repo-dir path disk-content ext))
            (db/set-file-last-modified-at! repo path mtime)
