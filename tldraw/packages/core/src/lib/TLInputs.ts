@@ -38,7 +38,7 @@ export class TLInputs<K extends TLEventMap> {
   ) {
     if ('clientX' in event) {
       this.previousScreenPoint = this.currentScreenPoint
-      this.currentScreenPoint = Vec.add([event.clientX, event.clientY], this.containerOffset)
+      this.currentScreenPoint = Vec.sub([event.clientX, event.clientY], this.containerOffset)
     }
     if ('shiftKey' in event) {
       this.shiftKey = event.shiftKey
