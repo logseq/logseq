@@ -101,7 +101,9 @@
   (when-let [page-name (:block/name page)]
     (let [current-file (:file/path (db/get-page-file repo-url page-name))]
       (when (not= file current-file)
-       current-file))))
+        (prn ::debug-page-exist-warn repo-url page file)
+        (js/console.trace)
+        current-file))))
 
 (defn- get-delete-blocks [repo-url first-page file]
   (let [delete-blocks (->
@@ -292,7 +294,7 @@
         path (str config/app-name "/" config/metadata-file)
         file-path (str "/" path)
         default-content (if encrypted? "{:db/encrypted? true}" "{}")]
-    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
+    (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
         (reset-file! repo-url path default-content)))))
@@ -303,7 +305,7 @@
         path (str config/app-name "/" config/pages-metadata-file)
         file-path (str "/" path)
         default-content "{}"]
-    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
+    (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
         (reset-file! repo-url path default-content)))))

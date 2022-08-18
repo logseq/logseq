@@ -454,9 +454,12 @@
   (let [type (.-event event)
         payload (-> event
                     (js->clj :keywordize-keys true)
-                    (update :path js/decodeURI))]
+                    ; (update :path js/decodeURI)
+                    )
+        ;; TODO: remove this
+        payload' (-> payload (update :path js/decodeURI))]
     (fs-watcher/handle-changed! type payload)
-    (sync/file-watch-handler type payload)))
+    (sync/file-watch-handler type payload')))
 
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))

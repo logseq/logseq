@@ -305,6 +305,7 @@
     path
     (util/node-path.join (get-repo-dir repo-url) path)))
 
+;; FIXME: There is another get-file-path at src/main/frontend/fs/capacitor_fs.cljs
 (defn get-file-path
   "Normalization happens here"
   [repo-url relative-path]
@@ -319,7 +320,7 @@
 
                  (and (mobile-util/native-ios?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)]
-                   (js/decodeURI (str dir relative-path)))
+                   (str dir relative-path))
 
                  (and (mobile-util/native-android?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)
