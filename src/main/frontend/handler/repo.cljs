@@ -184,7 +184,6 @@
 
 (defn- parse-and-load-file!
   [repo-url file {:keys [new-graph? verbose]}]
-  ;; POS1
   (try
     (file-handler/alter-file repo-url
                              (:file/path file)
@@ -217,7 +216,6 @@
 (defn- parse-files-and-create-default-files-inner!
   [repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts]
   (let [supported-files (graph-parser/filter-files files)
-        _ (prn ::debug-sup-files supported-files)
         delete-data (->> (concat delete-files delete-blocks)
                          (remove nil?))
         chan (async/to-chan! supported-files)

@@ -66,9 +66,7 @@
                                   (case v
                                     "NSFileTypeDirectory" "directory"
                                     "NSFileTypeRegular" "file"
-                                    v)))
-              ; #(do (prn ::debug-stat %)   %)
-               )
+                                    v))))
       (p/catch (fn [error]
                  (js/console.error "stat Error: " path ": " error)
                  nil))))
@@ -82,13 +80,6 @@
                      result
                      (p/let [d (first dirs)
                              files (<readdir d)
-                             ;;files (-> files
-                              ;;         js->clj
-                              ;;         (get "files" []))
-                             ;; _ (prn ::debug-files-0 files)
-                             ;; remove hidden files starts with '.'
-                             ;; remove any uri contains '#' for '%'
-                             ;; remove 'bak' dir
                              files (->> files
                                         (remove (fn [file]
                                                   (or (string/starts-with? file ".")
@@ -104,10 +95,7 @@
                                                     (if (mobile-util/native-ios?)
                                                       (js/encodeURI file)
                                                       file)))))
-                             _ (prn ::debug-files-2 files)
                              files-with-stats (p/all (mapv <stat files))
-                             ;; _ (prn ::debug-file-with-states files-with-stats)
-                             ;;
                              files-dir (->> files-with-stats
                                             (filterv #(= (:type %) "directory"))
                                             (mapv :uri))
@@ -125,7 +113,6 @@
                                                #(assoc file-result :content %))))))]
                        (p/recur (concat result files-result)
                                 (concat (rest dirs) files-dir)))))]
-    (prn ::debug-readdir result)
     (js->clj result :keywordize-keys true)))
 
 (defn- contents-matched?
@@ -177,7 +164,6 @@
 
 (defn- write-file-impl!
   [_this repo _dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
-  (prn ::write-file repo _dir path)
   (if skip-compare?
     (p/catch
      (p/let [result (<write-file-with-utf8 path content)]
@@ -342,7 +328,6 @@
             _ (js/console.log "Opening or Creating graph at directory: " path)
             files (readdir path)
             files (js->clj files :keywordize-keys true)]
-      ;; (prn ::debug-open-dir (into [] (concat [{:path path}] files)))
       (into [] (concat [{:path path}] files))))
   (get-files [_this path-or-handle _ok-handler]
     (readdir path-or-handle))

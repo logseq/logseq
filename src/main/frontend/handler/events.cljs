@@ -453,9 +453,7 @@
 (defmethod handle :file-watcher/changed [[_ ^js event]]
   (let [type (.-event event)
         payload (-> event
-                    (js->clj :keywordize-keys true)
-                    ; (update :path js/decodeURI)
-                    )
+                    (js->clj :keywordize-keys true))
         ;; TODO: remove this
         payload' (-> payload (update :path js/decodeURI))]
     (fs-watcher/handle-changed! type payload)
