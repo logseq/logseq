@@ -220,10 +220,7 @@ test('undo and redo after starting an action should not destroy text #6267', asy
   await page.waitForTimeout(550) // Wait for 500ms autosave period to expire
 
   // Then type more, start an action prompt, and undo
-  await page.keyboard.type('text2 ')
-  for (const char of '[[') {
-    await page.keyboard.type(char)
-  }
+  await page.keyboard.type('text2 [[')
   await expect(page.locator(`[data-modal-name="page-search"]`)).toBeVisible()
   if (IsMac) {
     await page.keyboard.press('Meta+z')

@@ -1766,19 +1766,11 @@
 (defn close-autocomplete-if-outside
   [input]
   (when (and input
-             (state/get-editor-action)
-             (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets)))
-    (let [value (gobj/get input "value")
-          pos (state/get-editor-last-pos)
-          current-pos (cursor/pos input)
-          between (gp-util/safe-subs value (min pos current-pos) (max pos current-pos))]
-      (when (and between
-                 (or
-                  (string/includes? between "[")
-                  (string/includes? between "]")
-                  (string/includes? between "(")
-                  (string/includes? between ")")))
-        (state/clear-editor-action!)))))
+             (contains? #{:page-search :page-search-hashtag :block-search} (state/get-editor-action))
+             (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
+             (not (wrapped-by? input block-ref/left-parens block-ref/right-parens))
+             (not (wrapped-by? input "#" "")))
+    (state/clear-editor-action!)))
 
 (defn resize-image!
   [block-id metadata full_text size]
@@ -2915,7 +2907,9 @@
                 (state/set-editor-show-block-commands!))
 
               :else
-              (close-autocomplete-if-outside input))))
+              nil)))
+
+        (close-autocomplete-if-outside input)
 
         (when-not (or (= k "Shift") is-processed?)
           (state/set-last-key-code! {:key-code key-code
