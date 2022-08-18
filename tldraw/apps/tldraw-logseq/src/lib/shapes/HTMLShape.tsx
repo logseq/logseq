@@ -79,19 +79,14 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
           onPointerUp={stop}
           className="tl-html-container"
           style={{
-            width: '100%',
-            height: '100%',
             pointerEvents: isEditing ? 'all' : 'none',
-            userSelect: 'all',
-            position: 'relative',
-            margin: 0,
             overflow: isEditing ? 'auto' : 'hidden',
           }}
         >
           <div
             ref={anchorRef}
             className="tl-html-anchor"
-            dangerouslySetInnerHTML={{ __html: html }}
+            dangerouslySetInnerHTML={{ __html: html.trim() }}
           />
         </div>
       </HTMLContainer>

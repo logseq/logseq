@@ -580,9 +580,14 @@
   flex-grow: 0;
 }
 
-.tl-html-container > iframe {
-  @apply h-full w-full !important;
-  margin: 0;
+.tl-html-container {
+  @apply h-full w-full m-0 relative flex;
+  user-select: text;
+
+  > iframe {
+    @apply h-full w-full !important;
+    margin: 0;
+  }
 }
 
 .tl-logseq-cp-container {
