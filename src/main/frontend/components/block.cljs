@@ -512,13 +512,16 @@
                                       :font-weight    500
                                       :max-height     600
                                       :padding-bottom 64}}
-                             (if (and (string? page-original-name) (string/includes? page-original-name "/"))
+                             (if (and (string? page-original-name) (text/namespace-page? page-original-name))
                                [:div.my-2
-                                (->>
-                                  (for [page (string/split page-original-name #"/")]
-                                    (when (and (string? page) page)
-                                      (page-reference false page {} nil)))
-                                  (interpose [:span.mx-2.opacity-30 "/"]))]
+                                (let [namespace (string/split page-original-name #"/")]
+                                  (->>
+                                    (for [[idx page] (medley/indexed namespace)]
+                                      (when (and (string? page) page)
+                                        (let [full-page (->> (take (inc idx) namespace)
+                                                            (string/join "/"))]
+                                          (page-reference false full-page {} page))))
+                                    (interpose [:span.mx-2.opacity-30 "/"])))]
                                [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
                                                         page-original-name
                                                         [:span
