@@ -10,6 +10,7 @@
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
+            [clojure.pprint]
             [dommy.core :as d]
             [frontend.mobile.util :refer [native-platform?]]
             [logseq.graph-parser.util :as gp-util]
@@ -894,11 +895,6 @@
    (defn url-encode
      [string]
      (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
-
-#?(:cljs
-   (defn url-decode
-     [string]
-     (some-> string str (js/decodeURIComponent))))
 
 (def windows-reserved-chars #"[:\\*\\?\"<>|]+")
 
