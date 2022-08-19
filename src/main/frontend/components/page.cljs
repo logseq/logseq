@@ -192,12 +192,14 @@
 
 (rum/defcs page-title < rum/reactive
   (rum/local false ::edit?)
+  (rum/local "" ::input-value)
   {:init (fn [state]
            (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
   [state page-name icon title _format fmt-journal?]
   (when title
     (let [*title-value (get state ::title-value)
           *edit? (get state ::edit?)
+          *input-value (get state ::input-value)
           input-ref (rum/create-ref)
           repo (state/get-current-repo)
           hls-file? (pdf-assets/hls-file? title)
@@ -264,6 +266,7 @@
                          (:db/id page)
                          :page))
                       (when (and (not hls-file?) (not fmt-journal?))
+                        (reset! *input-value (if untitled? "" old-name))
                         (reset! *edit? true))))}
        (when (not= icon "") [:span.page-icon icon])
        [:div.page-title-sizer-wrapper.relative
@@ -278,14 +281,16 @@
                              :width "100%"
                              :font-weight "inherit"}
              :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
-             :default-value (if untitled? "" old-name)
+             :value         (rum/react *input-value)
              :on-change     (fn [^js e]
                               (let [value (util/evalue e)]
-                                (reset! *title-value (string/trim value))))
+                                (reset! *title-value (string/trim value))
+                                (reset! *input-value value)))
              :on-blur       blur-fn
              :on-key-down   (fn [^js e]
                               (when (= (gobj/get e "key") "Enter")
                                 (blur-fn e)))
+             :placeholder   (when untitled? (t :untitled))
              :on-key-up     (fn [^js e]
                             ;; Esc
                               (when (= 27 (.-keyCode e))
@@ -295,12 +300,13 @@
                          (when untitled? (reset! *title-value ""))
                          (js/setTimeout #(when-let [input (rum/deref input-ref)] (.select input))))}]])
         [:span.title.inline-block
-         {:data-ref page-name
+         {:data-value (rum/react *input-value)
+          :data-ref page-name
           :style {:opacity (when @*edit? 0)
                   :pointer-events "none"
                   :font-weight "inherit"
-                  :min-width "40px"}}
-         (cond @*edit? (rum/react *title-value)
+                  :min-width "80px"}}
+         (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
                untitled? [:span.opacity-50 (t :untitled)]
                :else title)]]])))
 

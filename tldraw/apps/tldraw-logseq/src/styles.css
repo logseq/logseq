@@ -521,6 +521,7 @@
 }
 
 .tl-quick-search-input-hidden {
+  white-space: pre;
   opacity: 0;
   min-width: 240px;
   min-height: 24px;

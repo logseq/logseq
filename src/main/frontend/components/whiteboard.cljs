@@ -83,14 +83,11 @@
 
 (defn- get-page-display-name
   [page-name]
-  (let [untitled? (parse-uuid page-name)
-        page-entity (model/get-page page-name)]
-    (if untitled?
-      [:span.opacity-50 (t :untitled)]
-      (or
-       (get-in page-entity [:block/properties :title] nil)
-       (:block/original-name page-entity)
-       page-name))))
+  (let [page-entity (model/get-page page-name)]
+    (or
+     (get-in page-entity [:block/properties :title] nil)
+     (:block/original-name page-entity)
+     page-name)))
 
 ;; This is not accurate yet
 ;; (defn- get-page-human-update-time
@@ -108,7 +105,10 @@
       (route-handler/redirect-to-whiteboard! page-name))}
    [:div.dashboard-card-title
     [:div.flex.w-full
-     [:div.dashboard-card-title-name (get-page-display-name page-name)]
+     [:div.dashboard-card-title-name
+      (if (parse-uuid page-name)
+        [:span.opacity-50 (t :untitled)]
+        (get-page-display-name page-name))]
      [:div.flex-1]
      (page-refs-count page-name nil)]
     ;; [:div.flex.w-full
