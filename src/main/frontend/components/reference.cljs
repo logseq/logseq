@@ -14,7 +14,6 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [rum.core :as rum]
-            [clojure.set :as set]
             [frontend.modules.outliner.tree :as tree]))
 
 (defn- frequencies-sort
@@ -26,8 +25,7 @@
   [:div.flex.gap-1.flex-wrap
    (for [[ref-name ref-count] filtered-references]
      (when ref-name
-       (let [lc-reference (string/lower-case ref-name)
-             filtered (get filters lc-reference)]
+       (let [lc-reference (string/lower-case ref-name)]
          (ui/button
            [:span
             ref-name
@@ -111,7 +109,7 @@
                       {:hiccup ref-hiccup})]))
 
 (rum/defc references-inner
-  [page-name filters filtered-ref-blocks top-level-ids]
+  [page-name filters filtered-ref-blocks]
   [:div.references-blocks
    (let [ref-hiccup (block/->hiccup filtered-ref-blocks
                                     {:id page-name
@@ -177,11 +175,9 @@
   (when page-name
     (let [page-name (string/lower-case page-name)
           *ref-pages (::ref-pages state)
-          page-entity (db/entity [:block/name page-name])
           repo (state/get-current-repo)
           filters-atom (get state ::filters)
           filter-state (rum/react filters-atom)
-          id (:db/id page-entity)
           ref-blocks (db/get-page-referenced-blocks page-name)
           aliases (db/page-alias-set repo page-name)
           top-level-blocks (filter (fn [b] (some aliases (set (map :db/id (:block/refs b))))) ref-blocks)

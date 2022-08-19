@@ -13,9 +13,7 @@
    [frontend.state :as state]
    [frontend.util :as util]
    [goog.dom :as gdom]
-   [logseq.graph-parser.block :as gp-block]
-   [frontend.modules.instrumentation.posthog :as posthog]
-   [cljs-bean.core :as bean]))
+   [logseq.graph-parser.block :as gp-block]))
 
 ;;  Fns
 

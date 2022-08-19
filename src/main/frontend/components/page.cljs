@@ -142,7 +142,7 @@
               hiccup-config (common-handler/config-with-document-mode hiccup-config)
               hiccup (component-block/->hiccup page-blocks hiccup-config {})]
           [:div
-           (page-blocks-inner page-name page-blocks hiccup sidebar? block-id (or block-id page-name))
+           (page-blocks-inner page-name page-blocks hiccup sidebar? block-id)
            (when-not config/publishing?
              (let [args (if block-id
                           {:block-uuid block-id}
