@@ -442,6 +442,9 @@
   [block-uuid]
   (editor-handler/open-block-in-sidebar! (uuid block-uuid)))
 
+(defn new_block_uuid []
+  (str (db/new-block-id)))
+
 (def ^:export select_block
   (fn [block-uuid]
     (when-let [block (db-model/get-block-by-uuid block-uuid)]
@@ -456,7 +459,7 @@
 
 (def ^:export insert_block
   (fn [block-uuid-or-page-name content ^js opts]
-    (let [{:keys [before sibling isPageBlock properties]} (bean/->clj opts)
+    (let [{:keys [before sibling isPageBlock customUUID properties]} (bean/->clj opts)
           page-name (and isPageBlock block-uuid-or-page-name)
           block-uuid (if isPageBlock nil (uuid block-uuid-or-page-name))
           block-uuid' (if (and (not sibling) before block-uuid)
@@ -477,11 +480,12 @@
                     before?)
           new-block (editor-handler/api-insert-new-block!
                       content
-                      {:block-uuid block-uuid'
-                       :sibling?   sibling?
-                       :before?    before?
-                       :page       page-name
-                       :properties properties})]
+                      {:block-uuid  block-uuid'
+                       :sibling?    sibling?
+                       :before?     before?
+                       :page        page-name
+                       :custom-uuid customUUID
+                       :properties  properties})]
       (bean/->js (normalize-keyword-for-json new-block)))))
 
 (def ^:export insert_batch_block
