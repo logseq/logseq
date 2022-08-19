@@ -6,8 +6,7 @@
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
             [frontend.db :as db]
-            [clojure.set :as set]
-            [datascript.core :as d]))
+            [clojure.set :as set]))
 
 (defn updated-page-hook
   [_tx-report page]

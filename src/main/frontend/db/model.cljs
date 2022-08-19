@@ -1219,25 +1219,6 @@
           :entities
           (remove (fn [block] (= page-id (:db/id (:block/page block)))))))))))
 
-(defn get-linked-references-count
-  [id]
-  (when-let [block (db-utils/entity id)]
-    (let [repo (state/get-current-repo)
-          page? (:block/name block)
-          result (if page?
-                   (let [pages (page-alias-set repo (:block/name block))]
-                     @(react/q repo [:frontend.db.react/refs-count id] {}
-                        '[:find [?block ...]
-                          :in $ [?ref-page ...] ?id
-                          :where
-                          [?block :block/refs ?ref-page]
-                          [?block :block/page ?p]
-                          [(not= ?p ?id)]]
-                        pages
-                        id))
-                   (:block/_refs block))]
-      (count result))))
-
 (defn get-date-scheduled-or-deadlines
   [journal-title]
   (when-let [date (date/journal-title->int journal-title)]
