@@ -33,10 +33,6 @@
 ;; ::refs
 ;; get BLOCKS referencing PAGE or BLOCK
 (s/def ::refs (s/tuple #(= ::refs %) int?))
-;; ::refs-count
-;; get refs count
-(s/def ::refs-count int?)
-
 ;; custom react-query
 (s/def ::custom any?)
 
@@ -46,7 +42,6 @@
                                 :journals ::journals
                                 :page<-pages ::page<-pages
                                 :refs ::refs
-                                :refs-count ::refs-count
                                 :custom ::custom))
 
 (s/def ::affected-keys (s/coll-of ::react-query-keys))
@@ -260,9 +255,7 @@
                                 blocks [[::block (:db/id block)]]
                                 path-refs (:block/path-refs block)
                                 path-refs' (mapcat (fn [ref]
-                                                     [
-                                                      ;; [::refs-count (:db/id ref)]
-                                                      [::refs (:db/id ref)]]) path-refs)
+                                                     [[::refs (:db/id ref)]]) path-refs)
                                 page-blocks (when page-id
                                               [[::page-blocks page-id]])]
                             (concat blocks page-blocks path-refs')))
@@ -270,9 +263,7 @@
 
                        (mapcat
                         (fn [ref]
-                          [
-                           ;; [::refs-count (:db/id entity)]
-                           [::refs ref]])
+                          [[::refs ref]])
                         refs)
 
                        (when-let [current-page-id (:db/id (get-current-page))]

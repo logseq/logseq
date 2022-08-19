@@ -10,3 +10,7 @@
   padding-left: 0.5rem;
   align-items: center;
 }
+
+.references-blocks .breadcrumb {
+  margin-left: 1.5rem;
+}

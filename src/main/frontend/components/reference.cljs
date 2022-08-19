@@ -13,7 +13,9 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [clojure.set :as set]
+            [frontend.modules.outliner.tree :as tree]))
 
 (defn- frequencies-sort
   [references]
@@ -80,16 +82,10 @@
      (content/content block-id
                       {:hiccup ref-hiccup})]))
 
-(rum/defc references-inner < rum/reactive db-mixins/query
-  [page-name block-id filters *filtered-ref-blocks ref-pages]
+(rum/defc references-inner
+  [page-name filters filtered-ref-blocks top-level-ids]
   [:div.references-blocks
-   (let [ref-blocks (if block-id
-                      (db/get-block-referenced-blocks block-id)
-                      (db/get-page-referenced-blocks page-name))
-         filtered-ref-blocks (if block-id
-                               ref-blocks
-                               (block-handler/get-filtered-ref-blocks ref-blocks filters ref-pages))
-         ref-hiccup (block/->hiccup filtered-ref-blocks
+   (let [ref-hiccup (block/->hiccup filtered-ref-blocks
                                     {:id page-name
                                      :ref? true
                                      :breadcrumb-show? true
@@ -97,24 +93,21 @@
                                      :editor-box editor/box
                                      :filters filters}
                                     {})]
-     (reset! *filtered-ref-blocks filtered-ref-blocks)
      (content/content page-name {:hiccup ref-hiccup}))])
 
 (rum/defc references-cp
-  [repo page-entity page-name block-id filters-atom filter-state n-ref]
+  [page-name filters filters-atom filter-state total filter-n filtered-ref-blocks ref-pages]
   (let [threshold (state/get-linked-references-collapsed-threshold)
-        default-collapsed? (>= n-ref threshold)
-        filters (when (seq filter-state)
-                  (-> (group-by second filter-state)
-                      (update-vals #(map first %))))
-        *filtered-ref-blocks (atom nil)
-        *collapsed? (atom nil)
-        ref-pages (when-not block-id
-                    (block-handler/get-blocks-refed-pages repo page-entity))]
+        default-collapsed? (>= total threshold)
+        *collapsed? (atom nil)]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
-      [:h2.font-bold.opacity-50 (str n-ref " Linked Reference"
-                                     (when (> n-ref 1) "s"))]
+      [:h2.font-bold.opacity-50 (str
+                                 (when (seq filters)
+                                   (str filter-n " of "))
+                                 total
+                                 " Linked Reference"
+                                 (when (> total 1) "s"))]
       [:a.filter.fade-link
        {:title "Filter"
         :on-mouse-over (fn [_e]
@@ -140,7 +133,7 @@
                           :style {:fontSize 24}})]]
 
      (fn []
-       (references-inner page-name block-id filters *filtered-ref-blocks ref-pages))
+       (references-inner page-name filters filtered-ref-blocks))
 
      {:default-collapsed? default-collapsed?
       :title-trigger? true
@@ -164,12 +157,42 @@
           id (if block-id
                (:db/id (db/pull [:block/uuid block-id]))
                (:db/id page-entity))
-          n-ref (model-db/get-linked-references-count id)]
-      (when (or (seq filter-state) (> n-ref 0))
+          ref-blocks (if block-id
+                       (db/get-block-referenced-blocks block-id)
+                       (db/get-page-referenced-blocks page-name))
+          aliases (when-not block-id (db/page-alias-set repo page-name))
+          top-level-blocks (if block-id
+                             ref-blocks
+                             (filter (fn [b] (some aliases (set (map :db/id (:block/refs b))))) ref-blocks))
+          top-level-blocks-ids (set (map :db/id top-level-blocks))
+          filters (when (seq filter-state)
+                    (-> (group-by second filter-state)
+                        (update-vals #(map first %))))
+          filtered-ref-blocks (if block-id
+                                ref-blocks
+                                (block-handler/filter-blocks ref-blocks filters))
+          total (count top-level-blocks)
+          filtered-top-blocks (filter (fn [b] (top-level-blocks-ids (:db/id b))) filtered-ref-blocks)
+          filter-n (count filtered-top-blocks)
+          result (->> (group-by :block/page filtered-top-blocks)
+                      (map (fn [[page blocks]]
+                             (let [blocks (sort-by (fn [b] (not= (:db/id page) (:db/id (:block/parent b)))) blocks)
+                                   result (map (fn [block]
+                                                 (let [children-ids (set (model-db/get-block-children-ids repo (:block/uuid block)))
+                                                       filtered-children (filter (fn [b] (children-ids (:block/uuid b))) filtered-ref-blocks)
+                                                       refs (when-not (contains? top-level-blocks-ids (:db/id (:block/parent block)))
+                                                              (block-handler/get-blocks-refed-pages aliases (cons block filtered-children)))
+                                                       block' (assoc (tree/block-entity->map block)
+                                                                     :block/children (tree/non-consecutive-blocks->vec-tree filtered-children))]
+                                                   [block' refs])) blocks)
+                                   blocks' (map first result)]
+                               [[page blocks'] (mapcat second result)]))))
+          filtered-ref-blocks' (map first result)
+          ref-pages (mapcat second result)]
+      (when (or (seq filter-state) (> filter-n 0))
         [:div.references.flex-1.flex-row
          [:div.content.pt-6
-          (references-cp repo page-entity page-name block-id
-                         filters-atom filter-state n-ref)]]))))
+          (references-cp page-name filters filters-atom filter-state total filter-n filtered-ref-blocks' ref-pages)]]))))
 
 (rum/defc references
   [page-name]
