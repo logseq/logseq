@@ -573,7 +573,7 @@
 }
 
 .tl-logseq-portal-container {
-  @apply flex flex-col rounded-lg absolute transition;
+  @apply flex flex-col rounded-lg absolute;
 
   top: 0;
   left: 0;
