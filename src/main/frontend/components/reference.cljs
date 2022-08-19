@@ -22,8 +22,9 @@
   (sort-by second #(> %1 %2) references))
 
 (rum/defcs filter-dialog-inner < rum/reactive (rum/local "" ::filterSearch)
-  [state filters-atom _close-fn references page-name]
+  [state filters-atom _close-fn *references page-name]
   (let [filter-search (get state ::filterSearch)
+        references (rum/react *references)
         filtered-references  (frequencies-sort
                               (if (= @filter-search "")
                                 references
@@ -64,9 +65,9 @@
                  ref-name [:sub " " ref-count]])))]))]))
 
 (defn filter-dialog
-  [filters-atom references page-name]
+  [filters-atom *references page-name]
   (fn [close-fn]
-    (filter-dialog-inner filters-atom close-fn references page-name)))
+    (filter-dialog-inner filters-atom close-fn *references page-name)))
 
 (rum/defc block-linked-references < rum/reactive db-mixins/query
   [block-id]
@@ -96,7 +97,7 @@
      (content/content page-name {:hiccup ref-hiccup}))])
 
 (rum/defc references-cp
-  [page-name filters filters-atom filter-state total filter-n filtered-ref-blocks ref-pages]
+  [page-name filters filters-atom filter-state total filter-n filtered-ref-blocks *ref-pages]
   (let [threshold (state/get-linked-references-collapsed-threshold)
         default-collapsed? (>= total threshold)
         *collapsed? (atom nil)]
@@ -117,10 +118,8 @@
         :on-mouse-down (fn [e]
                          (util/stop-propagation e))
         :on-click (fn []
-                    (let [ref-pages (map :block/original-name ref-pages)
-                          references (frequencies ref-pages)]
-                      (state/set-modal! (filter-dialog filters-atom references page-name)
-                                        {:center? true})))}
+                    (state/set-modal! (filter-dialog filters-atom *ref-pages page-name)
+                                      {:center? true}))}
        (ui/icon "filter" {:class (cond
                                    (empty? filter-state)
                                    ""
@@ -141,6 +140,7 @@
                         (reset! *collapsed? collapsed-atom))})))
 
 (rum/defcs references* < rum/reactive db-mixins/query
+  (rum/local nil ::ref-pages)
   {:init (fn [state]
            (let [page-name (first (:rum/args state))
                  filters (when page-name
@@ -149,6 +149,7 @@
   [state page-name]
   (when page-name
     (let [page-name (string/lower-case page-name)
+          *ref-pages (::ref-pages state)
           page-entity (db/entity [:block/name page-name])
           repo (state/get-current-repo)
           filters-atom (get state ::filters)
@@ -188,11 +189,15 @@
                                    blocks' (map first result)]
                                [[page blocks'] (mapcat second result)]))))
           filtered-ref-blocks' (map first result)
-          ref-pages (mapcat second result)]
+          ref-pages (->>
+                     (mapcat second result)
+                     (map :block/original-name)
+                     frequencies)]
+      (reset! *ref-pages ref-pages)
       (when (or (seq filter-state) (> filter-n 0))
         [:div.references.flex-1.flex-row
          [:div.content.pt-6
-          (references-cp page-name filters filters-atom filter-state total filter-n filtered-ref-blocks' ref-pages)]]))))
+          (references-cp page-name filters filters-atom filter-state total filter-n filtered-ref-blocks' *ref-pages)]]))))
 
 (rum/defc references
   [page-name]
