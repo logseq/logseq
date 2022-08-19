@@ -48,17 +48,14 @@
                                 references
                                 (search/fuzzy-search references @filter-search :limit 500 :extract-fn first)))
         filters (rum/react filters-atom)
-        extract-fn (fn [matches]
-                     (filter (fn [[page _]]
-                               (contains?
-                                matches
-                                (util/page-name-sanity-lc page))) filtered-references))
-        includes (extract-fn (set (keep (fn [[page include?]]
-                                          (when include? page)) filters)))
-        excludes (->> filters
-                      (keep (fn [[page include?]]
-                              (let [page' (model-db/get-page-original-name page)]
-                                (when-not include? [page'])))))]
+        includes (keep (fn [[page include?]]
+                         (let [page' (model-db/get-page-original-name page)]
+                           (when include? [page'])))
+                       filters)
+        excludes (keep (fn [[page include?]]
+                         (let [page' (model-db/get-page-original-name page)]
+                           (when-not include? [page'])))
+                       filters)]
     [:div.ls-filters.filters
      [:div.sm:flex.sm:items-start
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
@@ -84,7 +81,9 @@
         :auto-focus true
         :on-change (fn [e]
                      (reset! filter-search (util/evalue e)))}]]
-     (let [refs (remove (set (concat includes excludes)) filtered-references)]
+     (let [all-filters (set (keys filters))
+           refs (remove (fn [[page _]] (all-filters (util/page-name-sanity-lc page)))
+                        filtered-references)]
        (when (seq refs)
          [:div.mt-4
           (filtered-refs page-name filters filters-atom refs)]))]))
