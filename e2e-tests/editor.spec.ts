@@ -295,6 +295,7 @@ test('#6266 moving cursor outside of brackets should close autocomplete menu', a
       await page.keyboard.type(char)
       await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
     }
+    await page.waitForTimeout(100)
     await autocompleteMenu.expectVisible(modalName)
 
     await page.waitForTimeout(100)
