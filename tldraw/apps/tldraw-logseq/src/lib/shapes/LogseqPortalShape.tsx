@@ -716,6 +716,17 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       [tlEventsEnabled]
     )
 
+    // There are some other portal sharing the same page id are selected
+    const portalSelected =
+      app.selectedShapesArray.length === 1 &&
+      app.selectedShapesArray.some(
+        shape =>
+          shape.type === 'logseq-portal' &&
+          shape.props.id !== this.props.id &&
+          pageId &&
+          (shape as LogseqPortalShape).props['pageId'] === pageId
+      )
+
     const scaleRatio = levelToScale[scaleLevel ?? 'md']
 
     // It is a bit weird to update shapes here. Is there a better place?
@@ -792,6 +803,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             <div
               className="tl-logseq-portal-container"
               data-collapsed={this.props.collapsed}
+              data-page-id={pageId}
+              data-portal-selected={portalSelected}
               style={{
                 background: this.props.compact ? 'transparent' : fill,
                 boxShadow: isBinding

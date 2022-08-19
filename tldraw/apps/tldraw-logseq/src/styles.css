@@ -572,7 +572,7 @@
 }
 
 .tl-logseq-portal-container {
-  @apply flex flex-col rounded-lg absolute;
+  @apply flex flex-col rounded-lg absolute transition;
 
   top: 0;
   left: 0;
@@ -584,6 +584,10 @@
 
   &[data-collapsed='true'] {
     @apply overflow-hidden;
+  }
+
+  &[data-portal-selected='true'] {
+    filter: brightness(0.9);
   }
 }
 
