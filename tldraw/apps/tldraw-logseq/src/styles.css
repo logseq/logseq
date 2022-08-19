@@ -572,14 +572,15 @@
 }
 
 .tl-logseq-portal-container {
-  @apply flex flex-col rounded-lg;
+  @apply flex flex-col rounded-lg absolute;
 
-  width: calc(100% - 2px);
-  height: calc(100% - 2px);
+  top: 0;
+  left: 0;
   transform: translate(1px, 1px);
   overscroll-behavior: none;
   opacity: 1;
   user-select: text;
+  transform-origin: top left;
 
   &[data-collapsed='true'] {
     @apply overflow-hidden;
@@ -640,14 +641,9 @@
 .tl-logseq-cp-container {
   @apply h-full w-full rounded-lg;
 
-  top: var(--ls-header-height);
-  left: 0;
   overscroll-behavior: none;
   flex: 1 1 0%;
   cursor: default;
-  transform-origin: top left;
-  position: absolute;
-  min-height: 40px;
 }
 
 .tl-highlighted {

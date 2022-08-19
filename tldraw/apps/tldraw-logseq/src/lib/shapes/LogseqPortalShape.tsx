@@ -678,9 +678,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         ref={cpRefContainer}
         className="tl-logseq-cp-container"
         style={{
-          width: 'calc(100% / var(--ls-portal-scale))',
-          height: 'calc((100% - var(--ls-header-height)) / var(--ls-portal-scale))',
-          transform: `scale(var(--ls-portal-scale))`,
           overflow: this.props.compact ? 'visible' : 'auto',
         }}
       >
@@ -801,12 +798,13 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                   ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
                   : 'none',
                 color: stroke,
+                width: `calc(100% / ${scaleRatio})`,
+                height: `calc(100% / ${scaleRatio})`,
+                transform: `scale(${scaleRatio})`,
                 // @ts-expect-error ???
                 '--ls-primary-background-color': !fill?.startsWith('var') ? fill : undefined,
                 '--ls-primary-text-color': !stroke?.startsWith('var') ? stroke : undefined,
                 '--ls-title-text-color': !stroke?.startsWith('var') ? stroke : undefined,
-                '--ls-portal-scale': scaleRatio,
-                '--ls-header-height': this.getHeaderHeight() + 'px',
               }}
             >
               {!this.props.compact && !targetNotFound && (
