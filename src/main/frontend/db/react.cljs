@@ -235,7 +235,10 @@
   (let [blocks (->> (filter (fn [datom] (contains? #{:block/left :block/parent :block/page} (:a datom))) tx-data)
                     (map :v)
                     (distinct))
-        refs (->> (filter (fn [datom] (contains? #{:block/refs :block/path-refs} (:a datom))) tx-data)
+        refs (->> (filter (fn [datom]
+                            (when (contains? #{:block/refs :block/path-refs} (:a datom))
+                              (not= (:v datom)
+                                    (:db/id (:block/page (db-utils/entity (:e datom))))))) tx-data)
                   (map :v)
                   (distinct))
         other-blocks (->> (filter (fn [datom] (= "block" (namespace (:a datom)))) tx-data)
@@ -254,8 +257,9 @@
                                          (:db/id (:block/page block)))
                                 blocks [[::block (:db/id block)]]
                                 path-refs (:block/path-refs block)
-                                path-refs' (mapcat (fn [ref]
-                                                     [[::refs (:db/id ref)]]) path-refs)
+                                path-refs' (keep (fn [ref]
+                                                   (when-not (= (:db/id ref) page-id)
+                                                     [::refs (:db/id ref)])) path-refs)
                                 page-blocks (when page-id
                                               [[::page-blocks page-id]])]
                             (concat blocks page-blocks path-refs')))
