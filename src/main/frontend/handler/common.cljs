@@ -2,7 +2,6 @@
   (:require [cljs-bean.core :as bean]
             [cljs.reader :as reader]
             [clojure.string :as string]
-            [dommy.core :as d]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
