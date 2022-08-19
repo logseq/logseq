@@ -160,7 +160,7 @@
           (if hr
             [:hr.menu-separator {:key "dropdown-hr"}]
             (rum/with-key
-              (menu-link new-options child)
+              (menu-link new-options child nil)
               title))))
       (when links-footer links-footer)])
    opts))
@@ -438,7 +438,7 @@
                                        (if (and (gobj/get e "shiftKey") on-shift-chosen)
                                          (on-shift-chosen item)
                                          (on-chosen item)))}
-                     (if item-render (item-render item chosen?) item)))]]
+                     (if item-render (item-render item chosen?) item) nil))]]
 
              (if get-group-name
                (if-let [group-name (get-group-name item)]
