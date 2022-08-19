@@ -187,9 +187,12 @@
     [:span.whiteboard-page-title
      {:style {:color "var(--ls-primary-text-color)"
               :user-select "none"}}
-     (page/page-title name [:span.tie.tie-whiteboard
-                            {:style {:font-size "0.9em"}}]
-                      (get-page-display-name name) nil false)]
+     (page/page-title name
+                      [:span.tie.tie-whiteboard
+                       {:style {:font-size "0.9em"}}]
+                      (get-page-display-name name)
+                      nil
+                      false)]
 
     (page-refs-count name
                      "text-md px-3 py-1 cursor-default whiteboard-page-refs-count"
