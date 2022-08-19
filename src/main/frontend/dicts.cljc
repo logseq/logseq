@@ -55,6 +55,7 @@
         :highlight "Highlight"
         :strikethrough "Strikethrough"
         :code "Code"
+        :untitled "Untitled"
         :right-side-bar/help "Help"
         :right-side-bar/switch-theme "Theme modes"
         :right-side-bar/theme "{1} theme"
@@ -617,8 +618,7 @@
         :user/delete-your-account "Ihr Konto löschen"
 
         :file-sync/other-user-graph "Aktuelle lokale Grafik ist an das Remote-Graph des anderen Benutzers gebunden. Kann also nicht mit der Synchronisierung beginnen."
-        :file-sync/graph-deleted "Das aktuelle Ferndiagramm wurde gelöscht"
-        }
+        :file-sync/graph-deleted "Das aktuelle Ferndiagramm wurde gelöscht"}
    :nl {
         :all-files "Alle bestanden"
         :all-graphs "Alle grafieken"
@@ -1158,6 +1158,7 @@
            :highlight "高亮"
            :strikethrough "删除线"
            :code "代码"
+           :untitled "未命名"
            :discourse-title "我们的论坛"
            :export-datascript-edn "导出 datascript EDN"
            :export-edn "导出为 EDN"

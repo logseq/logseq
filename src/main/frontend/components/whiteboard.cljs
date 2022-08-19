@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
+            [frontend.context.i18n :refer [t]]
             [frontend.db.model :as model]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
@@ -82,10 +83,14 @@
 
 (defn- get-page-display-name
   [page-name]
-  (let [page-entity (model/get-page page-name)]
-    (or (get-in page-entity [:block/properties :title] nil)
-        (:block/original-name page-entity)
-        page-name)))
+  (let [untitled? (parse-uuid page-name)
+        page-entity (model/get-page page-name)]
+    (if untitled?
+      [:span.opacity-50 (t :untitled)]
+      (or
+       (get-in page-entity [:block/properties :title] nil)
+       (:block/original-name page-entity)
+       page-name))))
 
 ;; This is not accurate yet
 ;; (defn- get-page-human-update-time
