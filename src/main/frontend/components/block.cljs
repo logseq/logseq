@@ -2144,9 +2144,13 @@
       [:div.more (ui/icon "dots-circle-horizontal" {:style {:fontSize 16}})])]])
 
 (rum/defcs block-content-or-editor < rum/reactive
-  (rum/local true :hide-block-refs?)
+  {:init (fn [state]
+           (let [[config block] (:rum/args state)
+                 inline-block-refs-hide? (not= (:id config) (str (:block/uuid block)))]
+             (assoc state ::hide-block-refs? (atom inline-block-refs-hide?))))}
   [state config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
-  (let [*hide-block-refs? (get state :hide-block-refs?)
+  (let [*hide-block-refs? (get state ::hide-block-refs?)
+        hide-block-refs? (rum/react *hide-block-refs?)
         editor-box (get config :editor-box)
         editor-id (str "editor-" edit-input-id)
         slide? (:slide? config)
@@ -2202,7 +2206,7 @@
 
            (block-refs-count block *hide-block-refs?)]]
 
-         (when (and (not @*hide-block-refs?) (> refs-count 0))
+         (when (and (not hide-block-refs?) (> refs-count 0))
            (let [refs-cp (state/get-component :block/linked-references)]
              (refs-cp uuid)))]))))
 

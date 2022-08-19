@@ -181,24 +181,15 @@
           repo (state/get-current-repo)
           filters-atom (get state ::filters)
           filter-state (rum/react filters-atom)
-          block-id (parse-uuid page-name)
-          id (if block-id
-               (:db/id (db/pull [:block/uuid block-id]))
-               (:db/id page-entity))
-          ref-blocks (if block-id
-                       (db/get-block-referenced-blocks block-id)
-                       (db/get-page-referenced-blocks page-name))
-          aliases (when-not block-id (db/page-alias-set repo page-name))
-          top-level-blocks (if block-id
-                             ref-blocks
-                             (filter (fn [b] (some aliases (set (map :db/id (:block/refs b))))) ref-blocks))
+          id (:db/id page-entity)
+          ref-blocks (db/get-page-referenced-blocks page-name)
+          aliases (db/page-alias-set repo page-name)
+          top-level-blocks (filter (fn [b] (some aliases (set (map :db/id (:block/refs b))))) ref-blocks)
           top-level-blocks-ids (set (map :db/id top-level-blocks))
           filters (when (seq filter-state)
                     (-> (group-by second filter-state)
                         (update-vals #(map first %))))
-          filtered-ref-blocks (if block-id
-                                ref-blocks
-                                (block-handler/filter-blocks ref-blocks filters))
+          filtered-ref-blocks (block-handler/filter-blocks ref-blocks filters)
           total (count top-level-blocks)
           filtered-top-blocks (filter (fn [b] (top-level-blocks-ids (:db/id b))) filtered-ref-blocks)
           filter-n (count filtered-top-blocks)

@@ -142,7 +142,7 @@
               hiccup-config (common-handler/config-with-document-mode hiccup-config)
               hiccup (component-block/->hiccup page-blocks hiccup-config {})]
           [:div
-           (page-blocks-inner page-name page-blocks hiccup sidebar? block-id)
+           (page-blocks-inner page-name page-blocks hiccup sidebar? block-id (or block-id page-name))
            (when-not config/publishing?
              (let [args (if block-id
                           {:block-uuid block-id}
@@ -394,10 +394,11 @@
          (tagged-pages repo page-name))
 
        ;; referenced blocks
-       [:div {:key "page-references"}
-        (rum/with-key
-          (reference/references route-page-name)
-          (str route-page-name "-refs"))]
+       (when-not block?
+         [:div {:key "page-references"}
+          (rum/with-key
+            (reference/references route-page-name)
+            (str route-page-name "-refs"))])
 
        (when-not block?
          [:div
