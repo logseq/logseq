@@ -40,16 +40,6 @@ test('close context menu by clicking on a menu item', async ({ page }) => {
     await expect(page.locator('#custom-context-menu')).toHaveCount(0)
 })
 
-test('close context menu by right clicking on empty space', async ({ page }) => {
-    await createRandomPage(page)
-  
-    await page.locator('span.bullet-container >> nth=0').click({button: "right"})
-
-    await page.mouse.click(0, 200, {button: "right"})
-
-    await expect(page.locator('#custom-context-menu')).toHaveCount(0)
-})
-
 test('close context menu by clicking on a block', async ({ page }) => {
     await createRandomPage(page)
 
