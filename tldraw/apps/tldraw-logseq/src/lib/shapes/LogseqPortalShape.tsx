@@ -6,7 +6,6 @@ import { makeObservable, runInAction } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { TablerIcon } from '~components/icons'
-import { NumberInput } from '~components/inputs/NumberInput'
 import { SelectInput, SelectOption } from '~components/inputs/SelectInput'
 import { SwitchInput } from '~components/inputs/SwitchInput'
 import { useCameraMovingRef } from '~hooks/useCameraMoving'
@@ -23,7 +22,7 @@ export interface LogseqPortalShapeProps extends TLBoxShapeProps, CustomStyleProp
   collapsed?: boolean
   compact?: boolean
   collapsedHeight?: number
-  scaleLevel?: 'sm' | 'md' | 'lg'
+  scaleLevel?: SizeLevel
 }
 
 interface LogseqQuickSearchProps {
@@ -57,7 +56,7 @@ const sizeOptions: SelectOption[] = [
   },
 ]
 
-const sizeToScale = {
+const levelToScale = {
   xs: 0.5,
   sm: 0.8,
   md: 1,
@@ -65,6 +64,8 @@ const sizeToScale = {
   xl: 2,
   xxl: 3,
 }
+
+type SizeLevel = keyof typeof levelToScale
 
 const LogseqTypeTag = ({
   type,
@@ -232,10 +233,19 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           options={sizeOptions}
           value={this.props.scaleLevel ?? 'md'}
           onValueChange={v => {
+            const newSize = Vec.mul(
+              this.props.size,
+              levelToScale[(v as SizeLevel) ?? 'md'] / levelToScale[this.props.scaleLevel ?? 'md']
+            )
             this.update({
               scaleLevel: v,
             })
-            app.persist()
+            setTimeout(() => {
+              this.update({
+                size: newSize,
+              })
+              app.persist()
+            })
           }}
         />
         {this.props.blockType !== 'B' && (
@@ -709,7 +719,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       [tlEventsEnabled]
     )
 
-    const scaleRatio = sizeToScale[scaleLevel ?? 'md']
+    const scaleRatio = levelToScale[scaleLevel ?? 'md']
 
     // It is a bit weird to update shapes here. Is there a better place?
     React.useEffect(() => {
@@ -796,7 +806,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 '--ls-primary-text-color': !stroke?.startsWith('var') ? stroke : undefined,
                 '--ls-title-text-color': !stroke?.startsWith('var') ? stroke : undefined,
                 '--ls-portal-scale': scaleRatio,
-                '--ls-header-height': this.getHeaderHeight() + 'px'
+                '--ls-header-height': this.getHeaderHeight() + 'px',
               }}
             >
               {!this.props.compact && !targetNotFound && (
@@ -824,8 +834,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
   validateProps = (props: Partial<LogseqPortalShapeProps>) => {
     if (props.size !== undefined) {
-      props.size[0] = Math.max(props.size[0], 240)
-      props.size[1] = Math.max(props.size[1], HEADER_HEIGHT)
+      const scale = levelToScale[this.props.scaleLevel ?? 'md']
+      props.size[0] = Math.max(props.size[0], 240 * scale)
+      props.size[1] = Math.max(props.size[1], HEADER_HEIGHT * scale)
     }
     return withClampedStyles(props)
   }

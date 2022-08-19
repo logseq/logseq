@@ -647,6 +647,7 @@
   cursor: default;
   transform-origin: top left;
   position: absolute;
+  min-height: 40px;
 }
 
 .tl-highlighted {
