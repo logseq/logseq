@@ -90,11 +90,12 @@
      page-name)))
 
 ;; This is not accurate yet
-;; (defn- get-page-human-update-time
-;;   [page-name]
-;;   (let [page-entity (model/get-page page-name)
-;;         updated-at (:block/updated-at page-entity)]
-;;     (str "Edited at " (util/time-ago (js/Date. updated-at)))))
+(defn- get-page-human-update-time
+  [page-name]
+  (let [page-entity (model/get-page page-name)
+        {:block/keys [updated-at created-at]} page-entity]
+    (str (if (= created-at updated-at) "Created " "Edited ")
+         (util/time-ago (js/Date. updated-at)))))
 
 (rum/defc dashboard-preview-card
   [page-name]
@@ -105,17 +106,15 @@
       (route-handler/redirect-to-whiteboard! page-name))}
    [:div.dashboard-card-title
     [:div.flex.w-full
-     [:div.dashboard-card-title-name
+     [:div.dashboard-card-title-name.font-bold
       (if (parse-uuid page-name)
         [:span.opacity-50 (t :untitled)]
         (get-page-display-name page-name))]
+     [:div.flex-1]]
+    [:div.flex.w-full.opacity-50
+     [:div (get-page-human-update-time page-name)]
      [:div.flex-1]
-     (page-refs-count page-name nil)]
-    ;; [:div.flex.w-full
-    ;;  [:div (get-page-human-update-time page-name)]
-    ;;  [:div.flex-1]
-    ;;  (page-refs-count page-name)]
-    ]
+     (page-refs-count page-name nil)]]
    [:div.p-4.h-64.flex.justify-center
     (tldraw-preview page-name)]])
 
@@ -150,7 +149,9 @@
 
 (rum/defc whiteboard-dashboard
   []
-  (let [whiteboards (model/get-all-whiteboards (state/get-current-repo))
+  (let [whiteboards (->> (model/get-all-whiteboards (state/get-current-repo))
+                         (sort-by :block/updated-at)
+                         reverse)
         whiteboard-names (map :block/name whiteboards)
         ref (rum/use-ref nil)
         rect (use-component-size ref)

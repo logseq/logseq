@@ -3,6 +3,7 @@
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
             [frontend.handler.editor :as editor-handler]
+            [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -55,9 +56,12 @@
 
 (defn- tldr-page->blocks-tx [page-name tldr-data]
   (let [page-name (util/page-name-sanity-lc page-name)
-        page-block {:block/name page-name
-                    :block/whiteboard? true
-                    :block/properties (dissoc tldr-data :shapes)}
+        page-entity (model/get-page page-name)
+        page-block (merge {:block/name page-name
+                           :block/whiteboard? true
+                           :block/properties (dissoc tldr-data :shapes)}
+                          (when page-entity (select-keys page-entity [:block/created-at])))
+        page-block (outliner/block-with-timestamps page-block)
         ;; todo: use get-paginated-blocks instead?
         existing-blocks (model/get-page-blocks-no-cache (state/get-current-repo)
                                                         page-name

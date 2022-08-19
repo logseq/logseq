@@ -48,7 +48,7 @@
      db/pull
      block)))
 
-(defn- block-with-timestamps
+(defn block-with-timestamps
   [block]
   (let [updated-at (util/time-ms)
         block (cond->

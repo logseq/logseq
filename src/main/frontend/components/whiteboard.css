@@ -51,7 +51,7 @@
 }
 
 .dashboard-card-title {
-  @apply px-4 py-1 flex flex-col;
+  @apply px-4 py-3 flex flex-col;
   gap: 4px;
   border-bottom: 1px solid var(--ls-border-color);
   background-color: var(--ls-secondary-background-color);
