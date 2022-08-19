@@ -21,14 +21,46 @@
   [references]
   (sort-by second #(> %1 %2) references))
 
+(defn filtered-refs
+  [page-name filters filters-atom filtered-references]
+  [:div.flex.gap-1.flex-wrap
+   (for [[ref-name ref-count] filtered-references]
+     (when ref-name
+       (let [lc-reference (string/lower-case ref-name)
+             filtered (get filters lc-reference)]
+         (ui/button
+           [:span
+            ref-name
+            (when ref-count [:sup " " ref-count])]
+           :on-click (fn [e]
+                       (swap! filters-atom #(if (nil? (get filters lc-reference))
+                                              (assoc % lc-reference (not (.-shiftKey e)))
+                                              (dissoc % lc-reference)))
+                       (page-handler/save-filter! page-name @filters-atom))
+           :small? true
+           :intent "link"
+           :key ref-name))))])
+
 (rum/defcs filter-dialog-inner < rum/reactive (rum/local "" ::filterSearch)
-  [state filters-atom _close-fn *references page-name]
+  [state filters-atom *references page-name]
   (let [filter-search (get state ::filterSearch)
         references (rum/react *references)
         filtered-references  (frequencies-sort
                               (if (= @filter-search "")
                                 references
-                                (search/fuzzy-search references @filter-search :limit 500 :extract-fn first)))]
+                                (search/fuzzy-search references @filter-search :limit 500 :extract-fn first)))
+        filters (rum/react filters-atom)
+        extract-fn (fn [matches]
+                     (filter (fn [[page _]]
+                               (contains?
+                                matches
+                                (util/page-name-sanity-lc page))) filtered-references))
+        includes (extract-fn (set (keep (fn [[page include?]]
+                                          (when include? page)) filters)))
+        excludes (->> filters
+                      (keep (fn [[page include?]]
+                              (let [page' (model-db/get-page-original-name page)]
+                                (when-not include? [page'])))))]
     [:div.ls-filters.filters
      [:div.sm:flex.sm:items-start
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
@@ -37,6 +69,16 @@
        [:h3#modal-headline.text-lg.leading-6.font-medium "Filter"]
        [:span.text-xs
         "Click to include and shift-click to exclude. Click again to remove."]]]
+     (when (seq filters)
+       [:div.cp__filters.mb-4.ml-2
+        (when (seq includes)
+          [:div.flex.flex-row.flex-wrap.center-items
+           [:div.mr-1.font-medium.py-1 "Includes: "]
+           (filtered-refs page-name filters filters-atom includes)])
+        (when (seq excludes)
+          [:div.flex.flex-row.flex-wrap
+           [:div.mr-1.font-medium.py-1 "Excludes: " ]
+           (filtered-refs page-name filters filters-atom excludes)])])
      [:div.cp__filters-input-panel.flex
       (ui/icon "search")
       [:input.cp__filters-input.w-full
@@ -44,30 +86,15 @@
         :auto-focus true
         :on-change (fn [e]
                      (reset! filter-search (util/evalue e)))}]]
-     (when (seq filtered-references)
-       (let [filters (rum/react filters-atom)]
-         [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1.flex-wrap
-          (for [[ref-name ref-count] filtered-references]
-            (when ref-name
-              (let [lc-reference (string/lower-case ref-name)
-                    filtered (get filters lc-reference)
-                    color (condp = filtered
-                            true "text-green-400"
-                            false "text-red-400"
-                            nil)]
-                [:button.border.rounded.px-1.mb-1.mr-1.select-none
-                 {:key ref-name :class color :style {:border-color "currentColor"}
-                  :on-click (fn [e]
-                              (swap! filters-atom #(if (nil? (get filters lc-reference))
-                                                     (assoc % lc-reference (not (.-shiftKey e)))
-                                                     (dissoc % lc-reference)))
-                              (page-handler/save-filter! page-name @filters-atom))}
-                 ref-name [:sub " " ref-count]])))]))]))
+     (let [refs (remove (set (concat includes excludes)) filtered-references)]
+       (when (seq refs)
+         [:div.mt-4
+          (filtered-refs page-name filters filters-atom refs)]))]))
 
 (defn filter-dialog
   [filters-atom *references page-name]
-  (fn [close-fn]
-    (filter-dialog-inner filters-atom close-fn *references page-name)))
+  (fn []
+    (filter-dialog-inner filters-atom *references page-name)))
 
 (rum/defc block-linked-references < rum/reactive db-mixins/query
   [block-id]

@@ -147,7 +147,7 @@
 
 (defn button
   [text & {:keys [background href class intent on-click small? large?]
-           :or {small? false large? false}
+           :or   {small? false large? false}
            :as   option}]
   (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center")
         klass (if background (string/replace klass "indigo" background) klass)
