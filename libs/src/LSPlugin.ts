@@ -552,6 +552,12 @@ export interface IEditorProxy extends Record<string, any> {
   ) => Promise<Array<PageEntity> | null>
 
   /**
+   * Create an uuid string for specific block id(uuid)
+   * @added 0.0.8
+   */
+  newBlockUUID: () => Promise<string>
+
+  /**
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-reddit-hot-news
    *
    * @param srcBlock
