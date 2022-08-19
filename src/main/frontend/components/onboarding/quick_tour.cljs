@@ -127,7 +127,7 @@
     :buttons        [{:text "Continue" :action (fn []
                                                  (some->> (js/document.querySelector ".cp__file-sync-indicator a.button")
                                                           (.click))
-                                                 (.complete jsTour))}]
+                                                 (.hide jsTour))}]
     :popperOptions  {:modifiers [{:name    "preventOverflow"
                                   :options {:padding 20}}
                                  {:name    "offset"
@@ -140,7 +140,7 @@
     :attachTo       {:element ".cp__file-sync-indicator" :on "bottom"}
     :canClickTarget true
     :buttons        [{:text "Got it!" :action (fn []
-                                                (.complete jsTour)
+                                                (.hide jsTour)
                                                 (js/setTimeout #(state/pub-event! [:file-sync/maybe-onboarding-show :congrats]) 3000))}]
     :popperOptions  {:modifiers [{:name    "preventOverflow"
                                   :options {:padding 20}}
@@ -151,12 +151,12 @@
    {:id                "sync-history"
     :text              (h/render-html [:section [:h2 "⏱ Go back in time!"]
                                        [:p "With file sync you can now go through older versions of this page and revert back to them if you like!"]])
-    :attachTo          {:element ".cp__btn_history_version" :on "left"}
+    :attachTo          {:element ".cp__btn_history_version" :on (if (util/mobile?) "bottom" "left")}
     :beforeShowPromise #(when-let [^js target (js/document.querySelector ".toolbar-dots-btn")]
                           (.click target)
                           (p/delay 300))
     :canClickTarget    true
-    :buttons           [{:text "Got it!" :action (.-complete jsTour)}]
+    :buttons           [{:text "Got it!" :action (.-hide jsTour)}]
     :popperOptions     {:modifiers [{:name    "preventOverflow"
                                      :options {:padding 20}}
                                     {:name    "offset"
@@ -192,9 +192,20 @@
                        (let [^js inst (js/Shepherd.Tour.
                                        (bean/->js
                                         {:useModalOverlay    true
-                                         :defaultStepOptions {:classes  "cp__onboarding-quick-tour"
+                                         :defaultStepOptions {:classes  "cp__onboarding-quick-tour ignore-outside-event"
                                                               :scrollTo false}}))
                              steps    (create-steps-file-sync! inst)]
+
+                         (.on inst "show"
+                              (fn []
+                                (js/setTimeout
+                                 #(let [step (.-currentStep inst)]
+                                    (when-let [^js overlay (and step (.contains (.-classList (.-el step)) "ignore-outside-event")
+                                                                (js/document.querySelector ".shepherd-modal-overlay-container"))]
+                                      (.add (.-classList overlay) "ignore-outside-event")
+                                      (some-> (.-target step)
+                                              (.addEventListener "click" (fn [] (.hide inst))))))
+                                 1000)))
 
                          (doseq [step steps]
                            (.addStep inst (bean/->js step)))
