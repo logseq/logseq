@@ -90,8 +90,8 @@
    (ui/menu-link
     {:key "cycle todos"
      :on-click editor-handler/cycle-todos!}
-    "Cycle todos")]
-    nil)
+    "Cycle todos"
+    nil)])
 
 ;; FIXME: Make it configurable
 (def block-background-colors
