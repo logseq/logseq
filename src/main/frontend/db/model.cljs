@@ -1205,7 +1205,8 @@
          (->>
           (react/q repo
             [:frontend.db.react/refs page-id]
-            {:query-fn (fn []
+            {:use-cache? false
+             :query-fn (fn []
                          (let [entities (mapcat (fn [id]
                                                   (:block/_path-refs (db-utils/entity id))) pages)
                                blocks (map (fn [e] {:block/parent (:block/parent e)
@@ -1216,15 +1217,7 @@
             nil)
           react
           :entities
-          (remove (fn [block] (= page-id (:db/id (:block/page block)))))
-          db-utils/group-by-page
-          (map (fn [[k blocks]]
-                 (let [k (if (contains? aliases (:db/id k))
-                           {:db/id (:db/id k)
-                            :block/alias? true
-                            :block/journal-day (:block/journal-day k)}
-                           k)]
-                   [k blocks])))))))))
+          (remove (fn [block] (= page-id (:db/id (:block/page block)))))))))))
 
 (defn get-linked-references-count
   [id]

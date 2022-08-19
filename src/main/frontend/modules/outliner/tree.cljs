@@ -84,14 +84,19 @@
       (assoc root' :block/children children)
       root')))
 
+(defn block-entity->map
+  [e]
+  {:db/id (:db/id e)
+   :block/uuid (:block/uuid e)
+   :block/parent {:db/id (:db/id (:block/parent e))}
+   :block/left {:db/id (:db/id (:block/left e))}
+   :block/page (:block/page e)
+   :block/refs (:block/refs e)})
+
 (defn non-consecutive-blocks->vec-tree
   "`blocks` need to be in the same page."
   [blocks]
-  (let [blocks (map (fn [e] {:db/id (:db/id e)
-                             :block/uuid (:block/uuid e)
-                             :block/parent {:db/id (:db/id (:block/parent e))}
-                             :block/left {:db/id (:db/id (:block/left e))}
-                             :block/page {:db/id (:db/id (:block/page e))}}) blocks)
+  (let [blocks (map block-entity->map blocks)
         parent->children (group-by :block/parent blocks)
         id->blocks (zipmap (map :db/id blocks) blocks)
         top-level-blocks (filter #(nil?
