@@ -3322,23 +3322,24 @@
    (cond
      (and (:ref? config) (:group-by-page? config))
      [:div.flex.flex-col
-      (for [[page parent-blocks] blocks]
-        (ui/lazy-visible
-         (fn []
-           (let [alias? (:block/alias? page)
-                 page (db/entity (:db/id page))]
-             [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                          (:ref? config)
-                          (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
-              (ui/foldable
-               [:div
-                (page-cp config page)
-                (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-               (for [block parent-blocks]
-                 (rum/with-key
-                   (breadcrumb-with-container block config)
-                   (:db/id block)))
-               {:debug-id page})]))))]
+      (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
+        (for [[page parent-blocks] blocks]
+         (ui/lazy-visible
+          (fn []
+            (let [alias? (:block/alias? page)
+                  page (db/entity (:db/id page))]
+              [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
+                           (:ref? config)
+                           (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
+               (ui/foldable
+                [:div
+                 (page-cp config page)
+                 (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+                (for [block parent-blocks]
+                  (rum/with-key
+                    (breadcrumb-with-container block config)
+                    (:db/id block)))
+                {:debug-id page})])))))]
 
      (and (:custom-query? config) (:group-by-page? config))
      [:div.flex.flex-col
