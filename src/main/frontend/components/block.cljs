@@ -514,14 +514,12 @@
                                       :padding-bottom 64}}
                              (if (and (string? page-original-name) (text/namespace-page? page-original-name))
                                [:div.my-2
-                                (let [namespace (string/split page-original-name #"/")]
-                                  (->>
-                                    (for [[idx page] (medley/indexed namespace)]
-                                      (when (and (string? page) page)
-                                        (let [full-page (->> (take (inc idx) namespace)
-                                                             (string/join "/"))]
-                                          (page-reference false full-page {:preview? true} page))))
-                                    (interpose [:span.mx-2.opacity-30 "/"])))]
+                                (->>
+                                  (for [namespace-page (gp-util/split-namespace-pages page-original-name)]
+                                    (when (and (string? namespace-page) namespace-page)
+                                      (let [label (second (gp-util/split-last "/" namespace-page))]
+                                        (page-reference false namespace-page {:preview? true} label))))
+                                  (interpose [:span.mx-2.opacity-30 "/"]))]
                                [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
                                                         page-original-name
                                                         [:span
