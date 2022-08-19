@@ -305,11 +305,15 @@
     path
     (util/node-path.join (get-repo-dir repo-url) path)))
 
+;; FIXME: There is another get-file-path at src/main/frontend/fs/capacitor_fs.cljs
 (defn get-file-path
   "Normalization happens here"
   [repo-url relative-path]
   (when (and repo-url relative-path)
     (let [path (cond
+                 (demo-graph?)
+                 nil
+
                  (and (util/electron?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)]
                    (if (string/starts-with? relative-path dir)
@@ -319,7 +323,7 @@
 
                  (and (mobile-util/native-ios?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)]
-                   (js/decodeURI (str dir relative-path)))
+                   (str dir relative-path))
 
                  (and (mobile-util/native-android?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)
@@ -327,14 +331,22 @@
                                    (string/starts-with? dir "content:"))
                              dir
                              (str "file:///" (string/replace dir #"^/+" "")))]
-                   (str (string/replace dir #"/+$" "") "/" relative-path))
+                   (util/safe-path-join dir relative-path))
 
                  (= "/" (first relative-path))
                  (subs relative-path 1)
 
                  :else
                  relative-path)]
-      (gp-util/path-normalize path))))
+      (and (not-empty path) (gp-util/path-normalize path)))))
+
+(defn get-page-file-path
+  "Get the path to the page file for the given page. This is used when creating new files."
+  [repo-url sub-dir page-name ext]
+  (let [page-basename (if (mobile-util/native-platform?)
+                        (util/url-encode page-name)
+                        page-name)]
+    (get-file-path repo-url (str sub-dir "/" page-basename "." ext))))
 
 (defn get-config-path
   ([]

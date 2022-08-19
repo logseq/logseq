@@ -18,27 +18,58 @@
     []
     (.ensureDocuments mobile-util/ios-file-container)))
 
-(defn check-permission-android []
-  (p/let [permission (.checkPermissions Filesystem)
-          permission (-> permission
-                         bean/->clj
-                         :publicStorage)]
-    (when-not (= permission "granted")
-      (p/do!
-       (.requestPermissions Filesystem)))))
+(when (mobile-util/native-android?)
+  (defn- android-check-permission []
+    (p/let [permission (.checkPermissions Filesystem)
+            permission (-> permission
+                           bean/->clj
+                           :publicStorage)]
+      (when-not (= permission "granted")
+        (p/do!
+         (.requestPermissions Filesystem))))))
 
-(defn- clean-uri
-  [uri]
-  (when (string? uri)
-    (util/url-decode uri)))
+(defn- <write-file-with-utf8
+  [path content]
+  (when-not (string/blank? path)
+    (-> (p/chain (.writeFile Filesystem (clj->js {:path path
+                                                  :data content
+                                                  :encoding (.-UTF8 Encoding)
+                                                  :recursive true}))
+                 #(js->clj % :keywordize-keys true))
+        (p/catch (fn [error]
+                   (js/console.error "writeFile Error: " path ": " error)
+                   nil)))))
 
-(defn- read-file-utf8
+(defn- <read-file-with-utf8
   [path]
   (when-not (string/blank? path)
-    (.readFile Filesystem
-               (clj->js
-                {:path path
-                 :encoding (.-UTF8 Encoding)}))))
+    (-> (p/chain (.readFile Filesystem (clj->js {:path path
+                                                 :encoding (.-UTF8 Encoding)}))
+                 #(js->clj % :keywordize-keys true)
+                 #(get % :data nil))
+        (p/catch (fn [error]
+                   (js/console.error "readFile Error: " path ": " error)
+                   nil)))))
+
+(defn- <readdir [path]
+  (-> (p/chain (.readdir Filesystem (clj->js {:path path}))
+               js->clj
+               #(get % "files" nil))
+      (p/catch (fn [error]
+                 (js/console.error "readdir Error: " path ": " error)
+                 nil))))
+
+(defn- <stat [path]
+  (-> (p/chain (.stat Filesystem (clj->js {:path path}))
+               #(js->clj % :keywordize-keys true)
+               #(update % :type (fn [v]
+                                  (case v
+                                    "NSFileTypeDirectory" "directory"
+                                    "NSFileTypeRegular" "file"
+                                    v))))
+      (p/catch (fn [error]
+                 (js/console.error "stat Error: " path ": " error)
+                 nil))))
 
 (defn readdir
   "readdir recursively"
@@ -48,10 +79,7 @@
                    (if (empty? dirs)
                      result
                      (p/let [d (first dirs)
-                             files (.readdir Filesystem (clj->js {:path d}))
-                             files (-> files
-                                       js->clj
-                                       (get "files" []))
+                             files (<readdir d)
                              files (->> files
                                         (remove (fn [file]
                                                   (or (string/starts-with? file ".")
@@ -61,44 +89,31 @@
                                                       (= file "bak")))))
                              files (->> files
                                         (map (fn [file]
+                                               ;; TODO: use uri-join
                                                (str (string/replace d #"/+$" "")
                                                     "/"
                                                     (if (mobile-util/native-ios?)
-                                                      (util/url-encode file)
+                                                      (js/encodeURI file)
                                                       file)))))
-                             files-with-stats (p/all
-                                               (mapv
-                                                (fn [file]
-                                                  (p/chain
-                                                   (.stat Filesystem (clj->js {:path file}))
-                                                   #(js->clj % :keywordize-keys true)))
-                                                files))
+                             files-with-stats (p/all (mapv <stat files))
                              files-dir (->> files-with-stats
-                                            (filterv
-                                             (fn [{:keys [type]}]
-                                               (contains? #{"directory" "NSFileTypeDirectory"} type)))
+                                            (filterv #(= (:type %) "directory"))
                                             (mapv :uri))
                              files-result
                              (p/all
                               (->> files-with-stats
-                                   (filter
-                                    (fn [{:keys [type]}]
-                                      (contains? #{"file" "NSFileTypeRegular"} type)))
+                                   (filter #(= (:type %) "file"))
                                    (filter
                                     (fn [{:keys [uri]}]
                                       (some #(string/ends-with? uri %)
                                             [".md" ".markdown" ".org" ".edn" ".css"])))
                                    (mapv
                                     (fn [{:keys [uri] :as file-result}]
-                                      (p/chain
-                                       (read-file-utf8 uri)
-                                       #(js->clj % :keywordize-keys true)
-                                       :data
-                                       #(assoc file-result :content %))))))]
+                                      (p/chain (<read-file-with-utf8 uri)
+                                               #(assoc file-result :content %))))))]
                        (p/recur (concat result files-result)
-                                (concat (rest dirs) files-dir)))))
-          result (js->clj result :keywordize-keys true)]
-    (map (fn [result] (update result :uri clean-uri)) result)))
+                                (concat (rest dirs) files-dir)))))]
+    (js->clj result :keywordize-keys true)))
 
 (defn- contents-matched?
   [disk-content db-content]
@@ -113,36 +128,50 @@
   [repo-dir path ext]
   (let [relative-path (-> (string/replace path repo-dir "")
                           (string/replace (str "." ext) ""))]
-    (str repo-dir backup-dir "/" relative-path)))
+    (util/safe-path-join repo-dir (str backup-dir "/" relative-path))))
 
 (defn- truncate-old-versioned-files!
-  "reserve the latest 3 version files"
+  "reserve the latest 6 version files"
   [dir]
   (p/let [files (readdir dir)
           files (js->clj files :keywordize-keys true)
-          old-versioned-files (drop 3 (reverse (sort-by :mtime files)))]
+          old-versioned-files (drop 6 (reverse (sort-by :mtime files)))]
     (mapv (fn [file]
-            (.deleteFile Filesystem (clj->js {:path (js/encodeURI (:uri file))})))
+            (.deleteFile Filesystem (clj->js {:path (:uri file)})))
           old-versioned-files)))
 
 (defn backup-file
   [repo-dir path content ext]
   (let [backup-dir (get-backup-dir repo-dir path ext)
         new-path (str backup-dir "/" (string/replace (.toISOString (js/Date.)) ":" "_") "." ext)]
-    (.writeFile Filesystem (clj->js {:data content
-                                     :path new-path
-                                     :encoding (.-UTF8 Encoding)
-                                     :recursive true}))
+    (<write-file-with-utf8 new-path content)
     (truncate-old-versioned-files! backup-dir)))
+
+(defn backup-file-handle-changed!
+  [repo-dir file-path content]
+  (let [divider-schema    "://"
+        file-schema       (string/split file-path divider-schema)
+        file-schema       (if (> (count file-schema) 1) (first file-schema) "")
+        dir-schema?       (and (string? repo-dir)
+                               (string/includes? repo-dir divider-schema))
+        repo-dir          (if-not dir-schema?
+                            (str file-schema divider-schema repo-dir) repo-dir)
+        backup-root       (util/safe-path-join repo-dir backup-dir)
+        backup-dir-parent (util/node-path.dirname file-path)
+        backup-dir-parent (string/replace backup-dir-parent repo-dir "")
+        backup-dir-name (util/node-path.name file-path)
+        file-extname (.extname util/node-path file-path)
+        file-root (util/safe-path-join backup-root backup-dir-parent backup-dir-name)
+        file-path (util/safe-path-join file-root
+                                       (str (string/replace (.toISOString (js/Date.)) ":" "_") "." (mobile-util/platform) file-extname))]
+    (<write-file-with-utf8 file-path content)
+    (truncate-old-versioned-files! file-root)))
 
 (defn- write-file-impl!
   [_this repo _dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
   (if skip-compare?
     (p/catch
-     (p/let [result (.writeFile Filesystem (clj->js {:path path
-                                                     :data content
-                                                     :encoding (.-UTF8 Encoding)
-                                                     :recursive true}))]
+     (p/let [result (<write-file-with-utf8 path content)]
        (when ok-handler
          (ok-handler repo path result)))
      (fn [error]
@@ -150,16 +179,12 @@
          (error-handler error)
          (log/error :write-file-failed error))))
 
-    (p/let [disk-content (-> (p/chain (read-file-utf8 path)
-                                      #(js->clj % :keywordize-keys true)
-                                      :data)
-                             (p/catch (fn [error]
-                                        (js/console.error error)
-                                        nil)))
+    ;; Compare with disk content and backup if not equal
+    (p/let [disk-content (<read-file-with-utf8 path)
             disk-content (or disk-content "")
             repo-dir (config/get-local-dir repo)
-            ext (string/lower-case (util/get-file-ext path))
-            db-content (or old-content (db/get-file repo (js/decodeURI path)) "")
+            ext (util/get-file-ext path)
+            db-content (or old-content (db/get-file repo path) "")
             contents-matched? (contents-matched? disk-content db-content)
             pending-writes (state/get-write-chan-length)]
       (cond
@@ -174,10 +199,7 @@
 
         :else
         (->
-         (p/let [result (.writeFile Filesystem (clj->js {:path path
-                                                         :data content
-                                                         :encoding (.-UTF8 Encoding)
-                                                         :recursive true}))
+         (p/let [result (<write-file-with-utf8 path content)
                  mtime (-> (js->clj stat :keywordize-keys true)
                            :mtime)]
            (when-not contents-matched?
@@ -186,7 +208,7 @@
            (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
                              (encrypt/decrypt content)
                              content)]
-             (db/set-file-content! repo (js/decodeURI path) content))
+             (db/set-file-content! repo path content))
            (when ok-handler
              (ok-handler repo path result))
            result)
@@ -196,25 +218,19 @@
                       (log/error :write-file-failed error)))))))))
 
 (defn get-file-path [dir path]
-  (let [[dir path] (map #(some-> %
-                                 js/decodeURI)
-                        [dir path])
-        dir (some-> dir (string/replace #"/+$" ""))
-        path (some-> path (string/replace #"^/+" ""))
-        path (cond (nil? path)
-                   dir
+  (let [dir (some-> dir (string/replace #"/+$" ""))
+        path (some-> path (string/replace #"^/+" ""))]
+    (cond (nil? path)
+          dir
 
-                   (nil? dir)
-                   path
+          (nil? dir)
+          path
 
-                   (string/starts-with? path dir)
-                   path
+          (string/starts-with? path dir)
+          path
 
-                   :else
-                   (str dir "/" path))]
-    (if (mobile-util/native-ios?)
-      (js/encodeURI (js/decodeURI path))
-      path)))
+          :else
+          (str dir "/" path))))
 
 (defn- local-container-path?
   "Check whether `path' is logseq's container `localDocumentsPath' on iOS"
@@ -263,7 +279,7 @@
                    (string/replace-first path "file://" "")
                    path)
             repo-dir (config/get-local-dir repo)
-            recycle-dir (str repo-dir config/app-name "/.recycle")
+            recycle-dir (str repo-dir config/app-name "/.recycle") ;; logseq/.recycle
             file-name (-> (string/replace path repo-dir "")
                           (string/replace "/" "_")
                           (string/replace "\\" "_"))
@@ -276,11 +292,7 @@
   (read-file [_this dir path _options]
     (let [path (get-file-path dir path)]
       (->
-       (p/let [content (read-file-utf8 path)
-               content (-> (js->clj content :keywordize-keys true)
-                           :data
-                           clj->js)]
-         content)
+       (<read-file-with-utf8 path)
        (p/catch (fn [error]
                   (log/error :read-file-failed error))))))
   (write-file! [this repo dir path content opts]
@@ -288,6 +300,7 @@
       (p/let [stat (p/catch
                     (.stat Filesystem (clj->js {:path path}))
                     (fn [_e] :not-found))]
+        ;; `path` is full-path
         (write-file-impl! this repo dir path content opts stat))))
   (rename! [_this _repo old-path new-path]
     (let [[old-path new-path] (map #(get-file-path "" %) [old-path new-path])]
@@ -306,16 +319,17 @@
                                          }))]
         result)))
   (open-dir [_this _ok-handler]
-    (p/let [_    (when (= (mobile-util/platform) "android") (check-permission-android))
+    (p/let [_ (when (mobile-util/native-android?) (android-check-permission))
             {:keys [path localDocumentsPath]} (-> (.pickFolder mobile-util/folder-picker)
                                                   (p/then #(js->clj % :keywordize-keys true))
                                                   (p/catch (fn [e]
                                                              (js/alert (str e))
-                                                             nil))) ;; NOTE: Can not pick folder, let it crash
+                                                             nil))) ;; NOTE: If pick folder fails, let it crash
             _ (when (and (mobile-util/native-ios?)
                          (not (or (local-container-path? path localDocumentsPath)
                                   (mobile-util/iCloud-container-path? path))))
                 (state/pub-event! [:modal/show-instruction]))
+            _ (js/console.log "Opening or Creating graph at directory: " path)
             files (readdir path)
             files (js->clj files :keywordize-keys true)]
       (into [] (concat [{:path path}] files))))
@@ -324,6 +338,6 @@
   (watch-dir! [_this dir]
     (p/do!
      (.unwatch mobile-util/fs-watcher)
-     (.watch mobile-util/fs-watcher #js {:path dir})))
+     (.watch mobile-util/fs-watcher (clj->js {:path dir}))))
   (unwatch-dir! [_this _dir]
     (.unwatch mobile-util/fs-watcher)))
