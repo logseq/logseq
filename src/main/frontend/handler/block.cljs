@@ -251,7 +251,7 @@
 
 (defn get-blocks-refed-pages
   [aliases ref-blocks]
-  (let [refs (->> (mapcat (fn [b] (conj (:block/refs b) (:block/page b))) ref-blocks)
+  (let [refs (->> (mapcat (fn [b] (conj (:block/path-refs b) (:block/page b))) ref-blocks)
                   distinct
                   (remove #(aliases (:db/id %))))]
     (keep (fn [ref]
@@ -275,6 +275,6 @@
                     (seq (set/intersection exclude-ids ids)))))
 
         (seq include-ids)
-        (remove (fn [block]
+        (filter (fn [block]
                   (let [ids (set (map :db/id (:block/path-refs block)))]
-                    (empty? (set/intersection include-ids ids)))))))))
+                    (set/subset? include-ids ids))))))))
