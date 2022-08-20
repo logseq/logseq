@@ -2202,24 +2202,25 @@
                                            (editor-handler/unhighlight-blocks!)
                                            (state/set-editing! edit-input-id (:block/content block) block ""))}})
             (block-content config block edit-input-id block-id slide?))]
-          [:div.flex.flex-row.items-center
-           (when (and (:embed? config)
-                      (:embed-parent config))
-             [:a.opacity-70.hover:opacity-100.svg-small.inline
-              {:on-mouse-down (fn [e]
-                                (util/stop e)
-                                (when-let [block (:embed-parent config)]
-                                  (editor-handler/edit-block! block :max (:block/uuid block))))}
-              svg/edit])
+          (when-not hide-block-refs-count?
+            [:div.flex.flex-row.items-center
+             (when (and (:embed? config)
+                        (:embed-parent config))
+               [:a.opacity-70.hover:opacity-100.svg-small.inline
+                {:on-mouse-down (fn [e]
+                                  (util/stop e)
+                                  (when-let [block (:embed-parent config)]
+                                    (editor-handler/edit-block! block :max (:block/uuid block))))}
+                svg/edit])
 
-           (when block-reference-only?
-             [:a.opacity-70.hover:opacity-100.svg-small.inline
-              {:on-mouse-down (fn [e]
-                                (util/stop e)
-                                (editor-handler/edit-block! block :max (:block/uuid block)))}
-              svg/edit])
+             (when block-reference-only?
+               [:a.opacity-70.hover:opacity-100.svg-small.inline
+                {:on-mouse-down (fn [e]
+                                  (util/stop e)
+                                  (editor-handler/edit-block! block :max (:block/uuid block)))}
+                svg/edit])
 
-           (when-not hide-block-refs-count? (block-refs-count block *hide-block-refs?))]]
+             (block-refs-count block *hide-block-refs?)])]
 
          (when (and (not @*hide-block-refs?) (> refs-count 0))
            (let [refs-cp (state/get-component :block/linked-references)]

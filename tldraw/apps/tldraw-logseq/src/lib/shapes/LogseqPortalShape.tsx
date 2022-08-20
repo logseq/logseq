@@ -210,7 +210,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           }
           updateSize()
           // Hacky, I know 🤨
-          this.getInnerHeight = () => updateSize()[1] + 2 // 2 is a hack to compensate for the border
+          this.getInnerHeight = () => updateSize()[1]
           const resizeObserver = new ResizeObserver(() => {
             updateSize()
           })
@@ -657,7 +657,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     React.useEffect(() => {
       if (this.shouldAutoResizeHeight()) {
-        const newHeight = innerHeight + this.getHeaderHeight() + 2
+        const newHeight = innerHeight + this.getHeaderHeight()
         if (innerHeight && newHeight !== this.props.size[1]) {
           this.update({
             size: [this.props.size[0], newHeight],
