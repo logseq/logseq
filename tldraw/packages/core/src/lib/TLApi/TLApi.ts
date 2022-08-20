@@ -159,10 +159,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     const viewport = this.app.viewport
     viewport.update({
       zoom: 1,
-      point: Vec.sub(
-        Vec.sub(this.app.inputs.originScreenPoint, Vec.mul(this.app.inputs.containerOffset, 2)),
-        this.app.inputs.originPoint
-      ),
+      point: Vec.sub(this.app.inputs.originScreenPoint, this.app.inputs.originPoint),
     })
     return this
   }

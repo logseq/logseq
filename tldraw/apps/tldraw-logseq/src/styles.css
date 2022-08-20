@@ -123,8 +123,7 @@
   }
 
   .input {
-    display: flex;
-    flex-direction: column;
+    @apply flex items-center;
     gap: 4px;
   }
 
@@ -249,18 +248,18 @@
 }
 
 button.tl-select-input-trigger {
-  @apply flex items-center;
+  @apply flex items-center py-1 px-3;
   border: 1px solid var(--ls-secondary-background-color);
   background-color: var(--ls-tertiary-background-color);
   min-width: 160px;
   border-radius: 8px;
-  padding: 0 12px;
   font-size: 16px;
   height: 100%;
 }
 
 .tl-select-input-trigger-value {
-  @apply flex items-center items-start flex-1;
+  @apply flex items-center justify-start flex-1;
+  line-height: 24px;
 }
 
 .tl-select-input-viewport {
