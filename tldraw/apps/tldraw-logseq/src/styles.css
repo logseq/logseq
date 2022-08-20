@@ -287,6 +287,7 @@ button.tl-select-input-trigger {
 
 .tl-select-input-content {
   z-index: 100;
+  font-family: var(--ls-font-family);
 }
 
 .tl-geometry-tools-pane-anchor {
@@ -638,11 +639,12 @@ button.tl-select-input-trigger {
 .tl-html-container {
   @apply h-full w-full m-0 relative;
   user-select: text;
+}
 
-  > iframe {
-    @apply h-full w-full !important;
-    margin: 0;
-  }
+.tl-html-anchor,
+.tl-html-anchor > iframe {
+  @apply h-full w-full !important;
+  margin: 0;
 }
 
 .tl-video-container {
