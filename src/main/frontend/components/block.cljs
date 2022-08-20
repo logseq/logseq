@@ -2559,7 +2559,7 @@
   (let [repo (state/get-current-repo)
         ref? (:ref? config)
         custom-query? (boolean (:custom-query? config))]
-    (if (and ref? (not custom-query?) (not (:ref-query-child? config)))
+    (if (and (or ref? custom-query?) (not (:ref-query-child? config)))
       (ui/lazy-visible
        (fn [] (block-container-inner state repo config block)))
       (block-container-inner state repo config block))))
@@ -2943,7 +2943,8 @@
    (ui/block-error "Query Error:" {:content (:query q)})
    (ui/lazy-visible
     (fn [] (custom-query* config q))
-    {:debug-id q})))
+    {:debug-id q
+     :trigger-once? false})))
 
 (defn admonition
   [config type result]
@@ -3363,7 +3364,8 @@
                    (rum/with-key
                      (breadcrumb-with-container block config)
                      (:db/id block)))
-                 {:debug-id page})])))))]
+                 {:debug-id page
+                  :trigger-once? false})])))))]
 
      (and (:group-by-page? config)
           (vector? (first blocks)))
