@@ -112,6 +112,7 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
               if (shape.nonce !== serializedShape.nonce) {
                 shape.update(serializedShape, true)
                 shape.nonce = serializedShape.nonce!
+                shape.setLastSerialized(serializedShape)
               }
               shapesMap.delete(serializedShape.id)
             } else {

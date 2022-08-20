@@ -14,6 +14,7 @@ import { LogseqContext, SearchResult } from '~lib/logseq-context'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
 const HEADER_HEIGHT = 40
+const AUTO_RESIZE_THRESHOLD = 1
 
 export interface LogseqPortalShapeProps extends TLBoxShapeProps, CustomStyleProps {
   type: 'logseq-portal'
@@ -310,7 +311,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   autoResizeHeight(replace: boolean = false) {
     setTimeout(() => {
       const height = this.getAutoResizeHeight()
-      if (height !== null) {
+      if (height !== null && Math.abs(height - this.props.size[1]) > AUTO_RESIZE_THRESHOLD) {
         this.update({
           size: [this.props.size[0], height],
         })
@@ -658,7 +659,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     React.useEffect(() => {
       if (this.shouldAutoResizeHeight()) {
         const newHeight = innerHeight + this.getHeaderHeight()
-        if (innerHeight && newHeight !== this.props.size[1]) {
+        if (innerHeight && Math.abs(newHeight - this.props.size[1]) > AUTO_RESIZE_THRESHOLD) {
           this.update({
             size: [this.props.size[0], newHeight],
           })
