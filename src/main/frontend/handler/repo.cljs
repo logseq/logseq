@@ -388,7 +388,7 @@
   [repo]
   (p/let [_ (state/set-db-restoring! true)
           _ (db/restore-graph! repo)]
-         (file-handler/restore-config! repo false)
+         (file-handler/restore-config! repo)
          ;; Don't have to unlisten the old listerner, as it will be destroyed with the conn
          (db/listen-and-persist! repo)
          (ui-handler/add-style-if-exists!)
