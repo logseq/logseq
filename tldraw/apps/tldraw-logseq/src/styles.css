@@ -28,7 +28,7 @@
   z-index: 100000;
   user-select: none;
   background: white;
-  border-bottom: 1px solid black;
+  border-bottom: 1px solid var(--ls-secondary-border-color);
   font-size: inherit;
 }
 
@@ -107,7 +107,7 @@
 
   pointer-events: all;
   position: relative;
-  background-color: #fff;
+  background-color: var(--ls-secondary-background-color);
   color: #a4b5b6;
   padding: 8px 12px;
   border-radius: 8px;
@@ -198,7 +198,7 @@
   z-index: 100000;
   user-select: none;
   background: white;
-  border-top: 1px solid black;
+  border-top: 1px solid var(--ls-secondary-border-color);
   flex-shrink: 0;
   height: 32px;
 }
@@ -249,12 +249,13 @@
 
 button.tl-select-input-trigger {
   @apply flex items-center py-1 px-3;
-  border: 1px solid var(--ls-secondary-background-color);
-  background-color: var(--ls-tertiary-background-color);
+  border: 1px solid var(--ls-secondary-border-color);
+  background-color: var(--ls-quaternary-background-color);
   min-width: 160px;
   border-radius: 8px;
   font-size: 16px;
   height: 100%;
+  color: var(--ls-secondary-text-color);
 }
 
 .tl-select-input-trigger-value {
@@ -270,6 +271,8 @@ button.tl-select-input-trigger {
 .tl-select-input-select-item {
   cursor: default;
   padding: 4px 12px;
+
+  color: var(--ls-secondary-text-color);
 
   &[data-state='unchecked']:hover {
     background-color: var(--ls-tertiary-background-color);
@@ -690,5 +693,29 @@ html[data-theme='dark'] {
 
   .tl-logseq-portal-header {
     backdrop-filter: brightness(1.2);
+  }
+}
+
+.tl-toggle-group-input {
+  @apply rounded overflow-hidden;
+  border: 1px solid var(--ls-secondary-border-color);
+}
+
+.tl-toggle-group-input-button {
+  @apply inline-flex items-center justify-center;
+  border-right: 1px solid var(--ls-secondary-border-color);
+  height: 32px;
+  width: 32px;
+  color: var(--ls-secondary-text-color);
+  opacity: 0.3;
+
+  &:last-of-type {
+    border-right: none;
+  }
+
+  &[data-state='on'] {
+    background-color: var(--ls-tertiary-background-color);
+    color: var(--ls-primary-text-color);
+    opacity: 1;
   }
 }

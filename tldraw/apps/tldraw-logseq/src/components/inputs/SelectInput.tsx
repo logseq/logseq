@@ -7,7 +7,7 @@ export interface SelectOption {
   label: React.ReactNode
 }
 
-interface SelectInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+interface SelectInputProps extends React.HTMLAttributes<HTMLElement> {
   options: SelectOption[]
   value: string
   onValueChange: (value: string) => void
@@ -27,7 +27,7 @@ export function SelectInput({ options, value, onValueChange, ...rest }: SelectIn
           <div className="tl-select-input-trigger-value">
             <Select.Value />
           </div>
-          <Select.Icon>
+          <Select.Icon style={{ lineHeight: 1 }}>
             <TablerIcon name={isOpen ? 'chevron-up' : 'chevron-down'} />
           </Select.Icon>
         </Select.Trigger>

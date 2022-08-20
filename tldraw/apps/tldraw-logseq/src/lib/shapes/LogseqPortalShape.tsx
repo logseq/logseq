@@ -30,33 +30,6 @@ interface LogseqQuickSearchProps {
   onChange: (id: string) => void
 }
 
-const sizeOptions: SelectOption[] = [
-  {
-    label: 'Extra Small',
-    value: 'xs',
-  },
-  {
-    label: 'Small',
-    value: 'sm',
-  },
-  {
-    label: 'Medium',
-    value: 'md',
-  },
-  {
-    label: 'Large',
-    value: 'lg',
-  },
-  {
-    label: 'Extra Large',
-    value: 'xl',
-  },
-  {
-    label: '2 Extra Large',
-    value: 'xxl',
-  },
-]
-
 const levelToScale = {
   xs: 0.5,
   sm: 0.8,
@@ -222,6 +195,26 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     }
   }
 
+  @computed get scaleLevel() {
+    return this.props.scaleLevel ?? 'md'
+  }
+
+  @action setScaleLevel = (v?: SizeLevel) => {
+    const newSize = Vec.mul(
+      this.props.size,
+      levelToScale[(v as SizeLevel) ?? 'md'] / levelToScale[this.props.scaleLevel ?? 'md']
+    )
+    this.update({
+      scaleLevel: v,
+    })
+    setTimeout(() => {
+      this.update({
+        size: newSize,
+      })
+      this.persist?.()
+    })
+  }
+
   useComponentSize<T extends HTMLElement>(ref: React.RefObject<T> | null, selector = '') {
     const [size, setSize] = React.useState<[number, number]>([0, 0])
     const app = useApp<Shape>()
@@ -251,48 +244,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     }, [ref, selector])
     return size
   }
-
-  ReactContextBar = observer(() => {
-    const app = useApp<Shape>()
-    return (
-      <>
-        <SelectInput
-          options={sizeOptions}
-          value={this.props.scaleLevel ?? 'md'}
-          onValueChange={v => {
-            const newSize = Vec.mul(
-              this.props.size,
-              levelToScale[(v as SizeLevel) ?? 'md'] / levelToScale[this.props.scaleLevel ?? 'md']
-            )
-            this.update({
-              scaleLevel: v,
-            })
-            setTimeout(() => {
-              this.update({
-                size: newSize,
-              })
-              app.persist()
-            })
-          }}
-        />
-        {this.props.blockType !== 'B' && (
-          <SwitchInput
-            label="Collapsed"
-            checked={this.props.collapsed}
-            onCheckedChange={this.setCollapsed}
-          />
-        )}
-
-        {this.props.blockType === 'B' && (
-          <SwitchInput
-            label="Compact"
-            checked={this.props.compact}
-            onCheckedChange={this.setCollapsed}
-          />
-        )}
-      </>
-    )
-  })
 
   shouldAutoResizeHeight() {
     return this.props.blockType === 'B' && this.props.compact

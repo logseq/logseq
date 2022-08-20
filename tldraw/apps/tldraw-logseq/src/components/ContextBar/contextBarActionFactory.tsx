@@ -3,6 +3,7 @@ import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import { TablerIcon } from '~components/icons'
 import { SelectInput, SelectOption } from '~components/inputs/SelectInput'
+import { ToggleGroupInput, ToggleGroupInputOption } from '~components/inputs/ToggleGroupInput'
 import { LogseqPortalShape, Shape } from '~lib'
 
 export const contextBarActionTypes = [
@@ -27,18 +28,18 @@ const LogseqPortalViewModeAction = observer(() => {
   ) as LogseqPortalShape[]
 
   const collapsed = shapes.every(s => s.collapsed)
-  const ViewModeOptions: SelectOption[] = [
+  const ViewModeOptions: ToggleGroupInputOption[] = [
     {
       value: '0',
-      label: <TablerIcon name="layout-navbar-expand" />,
+      icon: 'layout-navbar-expand',
     },
     {
       value: '1',
-      label: <TablerIcon name="layout-navbar-collapse" />,
+      icon: 'layout-navbar-collapse',
     },
   ]
   return (
-    <SelectInput
+    <ToggleGroupInput
       options={ViewModeOptions}
       value={collapsed ? '1' : '0'}
       onValueChange={v => {
@@ -50,12 +51,61 @@ const LogseqPortalViewModeAction = observer(() => {
   )
 })
 
+const ScaleLevelAction = observer(() => {
+  const app = useApp<Shape>()
+  const shapes = app.selectedShapesArray.filter(
+    s => s.props.type === LogseqPortalShape.defaultProps.type
+  ) as LogseqPortalShape[]
+
+  const scaleLevel = new Set(shapes.map(s => s.scaleLevel)).size > 1 ? '' : shapes[0].scaleLevel
+  const sizeOptions: SelectOption[] = [
+    {
+      label: 'Extra Small',
+      value: 'xs',
+    },
+    {
+      label: 'Small',
+      value: 'sm',
+    },
+    {
+      label: 'Medium',
+      value: 'md',
+    },
+    {
+      label: 'Large',
+      value: 'lg',
+    },
+    {
+      label: 'Extra Large',
+      value: 'xl',
+    },
+    {
+      label: '2 Extra Large',
+      value: 'xxl',
+    },
+  ]
+  return (
+    <SelectInput
+      options={sizeOptions}
+      value={scaleLevel}
+      onValueChange={v => {
+        if (v) {
+          shapes.forEach(shape => {
+            shape.setScaleLevel(v as LogseqPortalShape['props']['scaleLevel'])
+          })
+        }
+      }}
+    />
+  )
+})
+
 contextBarActionMapping.set('LogseqPortalViewMode', LogseqPortalViewModeAction)
+contextBarActionMapping.set('ScaleLevel', ScaleLevelAction)
 
 type ShapeType = Shape['props']['type']
 
 const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
-  'logseq-portal': ['LogseqPortalViewMode'],
+  'logseq-portal': ['LogseqPortalViewMode', 'ScaleLevel'],
 }
 
 export const getContextBarActionsForType = (type: ShapeType) => {
