@@ -101,8 +101,6 @@
   (when-let [page-name (:block/name page)]
     (let [current-file (:file/path (db/get-page-file repo-url page-name))]
       (when (not= file current-file)
-        (prn ::debug-page-exist-warn repo-url page file)
-        (js/console.trace)
         current-file))))
 
 (defn- get-delete-blocks [repo-url first-page file]
