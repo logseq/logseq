@@ -163,6 +163,20 @@
       :init-collapsed (fn [collapsed-atom]
                         (reset! *collapsed? collapsed-atom))})))
 
+(defn- get-filtered-children
+  [block parent->blocks]
+  (let [children (get parent->blocks (:db/id block))]
+    (set
+     (loop [blocks children
+            result (vec children)]
+       (if (empty? blocks)
+         result
+         (let [fb (first blocks)
+               children (get parent->blocks (:db/id fb))]
+           (recur
+            (concat children (rest blocks))
+            (conj result fb))))))))
+
 (rum/defcs references* < rum/reactive db-mixins/query
   (rum/local nil ::ref-pages)
   {:init (fn [state]
@@ -188,16 +202,15 @@
           total (count top-level-blocks)
           filtered-top-blocks (filter (fn [b] (top-level-blocks-ids (:db/id b))) filtered-ref-blocks)
           filter-n (count filtered-top-blocks)
+          parent->blocks (group-by (fn [x] (:db/id (x :block/parent))) filtered-ref-blocks)
           result (->> (group-by :block/page filtered-top-blocks)
                       (map (fn [[page blocks]]
                              (let [blocks (sort-by (fn [b] (not= (:db/id page) (:db/id (:block/parent b)))) blocks)
                                    result (map (fn [block]
-                                                 (let [children-ids (set (model-db/get-block-children-ids repo (:block/uuid block)))
-                                                       filtered-children (filter (fn [b] (children-ids (:block/uuid b))) filtered-ref-blocks)
+                                                 (let [filtered-children (get-filtered-children block parent->blocks)
                                                        refs (when-not (contains? top-level-blocks-ids (:db/id (:block/parent block)))
                                                               (block-handler/get-blocks-refed-pages aliases (cons block filtered-children)))
-                                                       block' (assoc (tree/block-entity->map block)
-                                                                     :block/children (tree/non-consecutive-blocks->vec-tree filtered-children))]
+                                                       block' (assoc (tree/block-entity->map block) :block/children filtered-children)]
                                                    [block' refs])) blocks)
                                    blocks' (map first result)]
                                [[page blocks'] (mapcat second result)]))))
