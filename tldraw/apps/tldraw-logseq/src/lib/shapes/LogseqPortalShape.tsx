@@ -6,6 +6,7 @@ import { action, computed, makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { TablerIcon } from '~components/icons'
+import { TextInput } from '~components/inputs/TextInput'
 import { useCameraMovingRef } from '~hooks/useCameraMoving'
 import type { Shape } from '~lib'
 import { LogseqContext, SearchResult } from '~lib/logseq-context'
@@ -538,22 +539,19 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               </div>
             </div>
           )}
-          <div className="tl-quick-search-input-sizer" data-value={q}>
-            <div className="tl-quick-search-input-hidden">{q}</div>
-            <input
-              ref={rInput}
-              type="text"
-              value={q}
-              placeholder="Create or search your graph..."
-              onChange={q => setQ(q.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  finishCreating(q)
-                }
-              }}
-              className="tl-quick-search-input"
-            />
-          </div>
+          <TextInput
+            ref={rInput}
+            type="text"
+            value={q}
+            className="tl-quick-search-input"
+            placeholder="Create or search your graph..."
+            onChange={q => setQ(q.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                finishCreating(q)
+              }
+            }}
+          />
         </div>
         <div className="tl-quick-search-options" ref={optionsWrapperRef}>
           {options.map(({ actionIcon, onChosen, element }, index) => {

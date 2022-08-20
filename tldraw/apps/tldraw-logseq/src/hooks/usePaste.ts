@@ -23,6 +23,14 @@ const isValidURL = (url: string) => {
   }
 }
 
+const safeParseJson = (json: string) => {
+  try {
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
+
 export function usePaste(context: LogseqContextValue) {
   const { handlers } = context
 
@@ -123,9 +131,9 @@ export function usePaste(context: LogseqContextValue) {
       }
 
       function handleTldrawShapes(rawText: string) {
+        const data = safeParseJson(rawText)
         try {
-          const data = JSON.parse(rawText)
-          if (data.type === 'logseq/whiteboard-shapes') {
+          if (data?.type === 'logseq/whiteboard-shapes') {
             const shapes = data.shapes as TLShapeModel[]
             assetsToClone = data.assets as TLAsset[]
             const commonBounds = BoundsUtils.getCommonBounds(
@@ -191,15 +199,15 @@ export function usePaste(context: LogseqContextValue) {
 
       function handleURL(rawText: string) {
         if (isValidURL(rawText)) {
-          const getYoutubeId = (url: string) => {
-            const match = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#&?]*).*/)
-            return match && match[2].length === 11 ? match[2] : null
+          const isYoutubeUrl = (url: string) => {
+            const youtubeRegex = /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
+            return youtubeRegex.test(url)
           }
-          const youtubeId = getYoutubeId(rawText)
-          if (youtubeId) {
+          console.log(rawText)
+          if (isYoutubeUrl(rawText)) {
             shapesToCreate.push({
               ...YouTubeShape.defaultProps,
-              embedId: youtubeId,
+              url: rawText,
               point: [point[0], point[1]],
             })
             return true

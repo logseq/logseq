@@ -4,8 +4,9 @@ import { observer } from 'mobx-react-lite'
 import React from 'react'
 import { TablerIcon } from '~components/icons'
 import { SelectInput, SelectOption } from '~components/inputs/SelectInput'
+import { TextInput } from '~components/inputs/TextInput'
 import { ToggleGroupInput, ToggleGroupInputOption } from '~components/inputs/ToggleGroupInput'
-import { LogseqPortalShape, Shape } from '~lib'
+import { LogseqPortalShape, Shape, YouTubeShape } from '~lib'
 import { LogseqContext } from '~lib/logseq-context'
 
 export const contextBarActionTypes = [
@@ -15,12 +16,13 @@ export const contextBarActionTypes = [
   'StrokeColor',
   'NoStroke',
   'ScaleLevel',
+  'YoutubeLink',
   'LogseqPortalViewMode',
   'OpenPage',
 ] as const
 
 type ContextBarActionType = typeof contextBarActionTypes[number]
-const singleShapeActions: ContextBarActionType[] = ['OpenPage']
+const singleShapeActions: ContextBarActionType[] = ['YoutubeLink', 'OpenPage']
 
 const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 
@@ -131,14 +133,28 @@ const OpenPageAction = observer(() => {
   )
 })
 
+const YoutubeLinkAction = observer(() => {
+  const app = useApp<Shape>()
+  const shape = app.selectedShapesArray.find(
+    s => s.props.type === YouTubeShape.defaultProps.type
+  ) as YouTubeShape
+  const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    shape.onYoutubeLinkChange(e.target.value)
+  }, [])
+
+  return <TextInput className="tl-youtube-link" value={`${shape.props.url}`} onChange={handleChange} />
+})
+
 contextBarActionMapping.set('LogseqPortalViewMode', LogseqPortalViewModeAction)
 contextBarActionMapping.set('ScaleLevel', ScaleLevelAction)
 contextBarActionMapping.set('OpenPage', OpenPageAction)
+contextBarActionMapping.set('YoutubeLink', YoutubeLinkAction)
 
 type ShapeType = Shape['props']['type']
 
 const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
   'logseq-portal': ['LogseqPortalViewMode', 'ScaleLevel', 'OpenPage'],
+  youtube: ['YoutubeLink'],
 }
 
 const getContextBarActionTypes = (type: ShapeType) => {

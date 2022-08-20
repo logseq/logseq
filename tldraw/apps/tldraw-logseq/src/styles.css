@@ -512,21 +512,29 @@ button.tl-select-input-trigger {
   }
 }
 
-.tl-quick-search-input-sizer {
+.tl-input {
   position: relative;
 }
 
-.tl-quick-search-input {
+.tl-input-sizer {
+  position: relative;
+}
+
+.tl-text-input {
   @apply absolute inset-0;
 
   outline: none;
 }
 
-.tl-quick-search-input-hidden {
+.tl-input-hidden {
   white-space: pre;
   opacity: 0;
-  min-width: 240px;
   min-height: 24px;
+  min-width: 60px;
+}
+
+.tl-quick-search-input {
+  min-width: 240px;
 }
 
 .tl-quick-search-options {
@@ -737,4 +745,11 @@ html[data-theme='dark'] {
 .tl-contextbar-separator {
   background-color: var(--ls-border-color);
   width: 1px;
+}
+
+.tl-youtube-link {
+  border-radius: 8px;
+  color: var(--ls-primary-text-color);
+  box-shadow: 0 0 0 1px var(--ls-secondary-border-color);
+  padding: 4px 14px;
 }

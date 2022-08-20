@@ -5,10 +5,11 @@ import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 import { TextInput } from '~components/inputs/TextInput'
+import { action, computed } from 'mobx'
 
 export interface YouTubeShapeProps extends TLBoxShapeProps, CustomStyleProps {
   type: 'youtube'
-  embedId: string
+  url: string
 }
 
 export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
@@ -24,7 +25,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
     fill: '#ffffff',
     strokeWidth: 2,
     opacity: 1,
-    embedId: '',
+    url: '',
   }
 
   aspectRatio = 480 / 853
@@ -35,35 +36,22 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
 
   canEdit = true
 
-  ReactContextBar = observer(() => {
-    const { embedId } = this.props
-    const rInput = React.useRef<HTMLInputElement>(null)
-    const app = useApp()
-    const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-      const url = e.currentTarget.value
-      const match = url.match(
-        /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
-      )
-      const embedId = match?.[1] ?? url ?? ''
-      this.update({ embedId, size: YouTubeShape.defaultProps.size })
-      app.persist()
-    }, [])
-    return (
-      <>
-        <TextInput
-          ref={rInput}
-          label="Youtube Video ID"
-          type="text"
-          value={embedId}
-          onChange={handleChange}
-        />
-      </>
+  @computed get embedId() {
+    const url = this.props.url
+    const match = url.match(
+      /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
     )
-  })
+    const embedId = match?.[1] ?? url ?? ''
+    return embedId
+  }
+
+  @action onYoutubeLinkChange = (url: string) => {
+    this.update({ url, size: YouTubeShape.defaultProps.size })
+  }
 
   ReactComponent = observer(({ events, isErasing, isEditing }: TLComponentProps) => {
     const {
-      props: { opacity, embedId },
+      props: { opacity },
     } = this
     return (
       <HTMLContainer
@@ -83,7 +71,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
             position: 'relative',
           }}
         >
-          {embedId ? (
+          {this.embedId ? (
             <div
               style={{
                 overflow: 'hidden',
@@ -103,7 +91,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
                 }}
                 width="853"
                 height="480"
-                src={`https://www.youtube.com/embed/${embedId}`}
+                src={`https://www.youtube.com/embed/${this.embedId}`}
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
