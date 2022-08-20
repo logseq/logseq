@@ -396,7 +396,7 @@
               (state/set-current-repo! current-repo)
               (db/listen-and-persist! current-repo)
               (db/persist-if-idle! current-repo)
-              (file-handler/restore-config! current-repo false)
+              (file-handler/restore-config! current-repo)
               (.watch mobile-util/fs-watcher #js {:path current-repo-dir})
               (when graph-switch-f (graph-switch-f current-repo true)))))))))
 

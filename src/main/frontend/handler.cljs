@@ -84,7 +84,7 @@
        {:repos repos}
        old-db-schema
        (fn [repo]
-         (file-handler/restore-config! repo false)))
+         (file-handler/restore-config! repo)))
       (p/then
        (fn []
          ;; try to load custom css only for current repo

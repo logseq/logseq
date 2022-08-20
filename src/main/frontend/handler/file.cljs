@@ -55,9 +55,9 @@
   (keep-formats files (gp-config/img-formats)))
 
 (defn restore-config!
-  ([repo-url project-changed-check?]
-   (restore-config! repo-url nil project-changed-check?))
-  ([repo-url config-content _project-changed-check?]
+  ([repo-url]
+   (restore-config! repo-url nil))
+  ([repo-url config-content]
    (let [config-content (if config-content config-content
                             (common-handler/get-config repo-url))]
      (when config-content
@@ -193,7 +193,7 @@
     (util/p-handle (write-file!)
                    (fn [_]
                      (when (= path (config/get-config-path repo))
-                       (restore-config! repo true))
+                       (restore-config! repo))
                      (when (= path (config/get-custom-css-path repo))
                        (ui-handler/add-style-if-exists!))
                      (when re-render-root? (ui-handler/re-render-root!)))
