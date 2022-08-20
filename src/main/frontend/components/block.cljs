@@ -655,7 +655,7 @@
                  name)))
 
 (declare blocks-container)
-
+(declare breadcrumb-with-container)
 (defn- edit-parent-block [e config]
   (when-not (state/editing?)
     (.stopPropagation e)
@@ -671,13 +671,13 @@
         :on-double-click #(edit-parent-block % config)
         :on-mouse-down (fn [e] (.stopPropagation e))}
        [:div.px-3.pt-1.pb-2
-        (blocks-container blocks (assoc config
-                                        :db/id (:db/id block)
-                                        :id (str uuid)
-                                        :embed-id uuid
-                                        :embed? true
-                                        :embed-parent (:block config)
-                                        :ref? false))]])))
+        (breadcrumb-with-container blocks (assoc config
+                                                 :db/id (:db/id block)
+                                                 :id (str uuid)
+                                                 :embed-id uuid
+                                                 :embed? true
+                                                 :embed-parent (:block config)
+                                                 :ref? false))]])))
 
 (rum/defc page-embed < rum/reactive db-mixins/query
   [config page-name]
@@ -1363,6 +1363,8 @@
 
       (= name "embed")
       (macro-embed-cp config arguments)
+      (= name "embed-path")
+      (macro-embed-cp (assoc config :breadcrumb-show? true) arguments)
 
       (and plugin-handler/lsp-enabled? (= name "renderer"))
       (when-let [block-uuid (str (:block/uuid config))]
