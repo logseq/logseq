@@ -2251,7 +2251,7 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         block (block/parse-title-and-body block)]
     (when (:block/content block)
-      [:div.single-block
+      [:div.single-block.ls-block
        {:class (str block-uuid)
         :id (str "ls-block-" blocks-container-id "-" block-uuid)}
        (block-content-or-editor config block edit-input-id block-el-id (:block/heading-level block) edit? true)])))
