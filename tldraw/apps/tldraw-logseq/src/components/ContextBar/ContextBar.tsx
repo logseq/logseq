@@ -1,57 +1,18 @@
-import * as React from 'react'
 import {
+  getContextBarTranslation,
   HTMLContainer,
   TLContextBarComponent,
   useApp,
-  getContextBarTranslation,
 } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
-import type { TextShape, Shape } from '~lib/shapes'
-import { NumberInput } from '~components/inputs/NumberInput'
-import { ColorInput } from '~components/inputs/ColorInput'
-import { SwitchInput } from '../inputs/SwitchInput'
+import * as React from 'react'
+import type { Shape } from '~lib/shapes'
+import { getContextBarActionsForTypes } from './contextBarActionFactory'
 
 const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) => {
   const app = useApp()
   const rSize = React.useRef<[number, number] | null>(null)
   const rContextBar = React.useRef<HTMLDivElement>(null)
-
-  const updateStroke = React.useCallback<React.ChangeEventHandler<HTMLInputElement>>(e => {
-    shapes.forEach(shape => shape.update({ stroke: e.currentTarget.value }))
-    app.persist()
-  }, [])
-
-  const updateFill = React.useCallback<React.ChangeEventHandler<HTMLInputElement>>(e => {
-    shapes.forEach(shape => shape.update({ fill: e.currentTarget.value }))
-    app.persist()
-  }, [])
-
-  const updateStrokeWidth = React.useCallback<React.ChangeEventHandler<HTMLInputElement>>(e => {
-    shapes.forEach(shape => shape.update({ strokeWidth: +e.currentTarget.value }))
-    app.persist()
-  }, [])
-
-  const updateOpacity = React.useCallback<React.ChangeEventHandler<HTMLInputElement>>(e => {
-    shapes.forEach(shape => shape.update({ opacity: +e.currentTarget.value }))
-    app.persist()
-  }, [])
-
-  const updateFontSize = React.useCallback<React.ChangeEventHandler<HTMLInputElement>>(e => {
-    textShapes.forEach(shape => shape.update({ fontSize: +e.currentTarget.value }))
-    app.persist()
-  }, [])
-
-  const updateFontWeight = React.useCallback<React.ChangeEventHandler<HTMLInputElement>>(e => {
-    textShapes.forEach(shape => shape.update({ fontWeight: +e.currentTarget.value }))
-    app.persist()
-  }, [])
-
-  const updateTransparent = React.useCallback(transparent => {
-    // const transparent = shapes.some(s => s.props.fill !== 'transparent')
-    console.log(transparent)
-    shapes.forEach(shape => shape.update({ fill: transparent ? 'transparent' : '#fff' }))
-    app.persist()
-  }, [])
 
   React.useLayoutEffect(() => {
     setTimeout(() => {
@@ -72,63 +33,21 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) 
 
   if (!app) return null
 
-  const textShapes = shapes.filter(shape => shape.type === 'text') as TextShape[]
-  const ShapeContent =
-    shapes.length === 1 && 'ReactContextBar' in shapes[0] ? shapes[0]['ReactContextBar'] : null
-  const transparent = shapes.every(s => s.props.fill === 'transparent')
+  const Actions = getContextBarActionsForTypes(shapes.map(s => s.props.type))
 
   return (
     <HTMLContainer centered>
-      <div
-        ref={rContextBar}
-        className="tl-contextbar"
-        style={{ pointerEvents: hidden ? 'none' : 'all' }}
-      >
-        {ShapeContent ? (
-          <ShapeContent />
-        ) : (
-          <>
-            <ColorInput label="Stroke" value={shapes[0].props.stroke} onChange={updateStroke} />
-            {!transparent && (
-              <ColorInput label="Fill" value={shapes[0].props.fill} onChange={updateFill} />
-            )}
-            <SwitchInput
-              label="Transparent"
-              checked={transparent}
-              onCheckedChange={updateTransparent}
-            />
-            <NumberInput
-              label="Width"
-              value={Math.max(...shapes.map(shape => shape.props.strokeWidth))}
-              onChange={updateStrokeWidth}
-              style={{ width: 48 }}
-            />
-            <NumberInput
-              label="Opacity"
-              value={Math.max(...shapes.map(shape => shape.props.opacity))}
-              onChange={updateOpacity}
-              step={0.1}
-              style={{ width: 48 }}
-            />
-            {textShapes.length > 0 ? (
-              <>
-                <NumberInput
-                  label="Size"
-                  value={Math.max(...textShapes.map(shape => shape.props.fontSize))}
-                  onChange={updateFontSize}
-                  style={{ width: 48 }}
-                />
-                <NumberInput
-                  label=" Weight"
-                  value={Math.max(...textShapes.map(shape => shape.props.fontWeight))}
-                  onChange={updateFontWeight}
-                  style={{ width: 48 }}
-                />
-              </>
-            ) : null}
-          </>
-        )}
-      </div>
+      {Actions.length > 0 && (
+        <div
+          ref={rContextBar}
+          className="tl-contextbar"
+          style={{ pointerEvents: hidden ? 'none' : 'all' }}
+        >
+          {Actions.map((Action, idx) => (
+            <Action key={idx} />
+          ))}
+        </div>
+      )}
     </HTMLContainer>
   )
 }

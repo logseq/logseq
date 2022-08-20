@@ -2,7 +2,7 @@
 import { TLBoxShape, TLBoxShapeProps, TLResizeInfo, validUUID } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import Vec from '@tldraw/vec'
-import { makeObservable, runInAction } from 'mobx'
+import { action, computed, makeObservable, runInAction } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { TablerIcon } from '~components/icons'
@@ -196,6 +196,32 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return false
   }
 
+  @computed get collapsed() {
+    return this.props.blockType === 'B' ? this.props.compact : this.props.collapsed
+  }
+
+  @action setCollapsed = (collapsed: boolean) => {
+    if (this.props.blockType === 'B') {
+      this.update({ compact: collapsed })
+      this.canResize[1] = !collapsed
+      if (!collapsed) {
+        // this will also persist the state, so we can skip persist call
+        this.autoResizeHeight()
+      } else {
+        this.persist?.()
+      }
+    } else {
+      const originalHeight = this.props.size[1]
+      this.canResize[1] = !collapsed
+      this.update({
+        collapsed: collapsed,
+        size: [this.props.size[0], collapsed ? HEADER_HEIGHT : this.props.collapsedHeight],
+        collapsedHeight: collapsed ? originalHeight : this.props.collapsedHeight,
+      })
+      this.persist?.()
+    }
+  }
+
   useComponentSize<T extends HTMLElement>(ref: React.RefObject<T> | null, selector = '') {
     const [size, setSize] = React.useState<[number, number]>([0, 0])
     const app = useApp<Shape>()
@@ -253,21 +279,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           <SwitchInput
             label="Collapsed"
             checked={this.props.collapsed}
-            onCheckedChange={collapsing => {
-              runInAction(() => {
-                const originalHeight = this.props.size[1]
-                this.canResize[1] = !collapsing
-                this.update({
-                  collapsed: collapsing,
-                  size: [
-                    this.props.size[0],
-                    collapsing ? HEADER_HEIGHT : this.props.collapsedHeight,
-                  ],
-                  collapsedHeight: collapsing ? originalHeight : this.props.collapsedHeight,
-                })
-                app.persist()
-              })
-            }}
+            onCheckedChange={this.setCollapsed}
           />
         )}
 
@@ -275,18 +287,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           <SwitchInput
             label="Compact"
             checked={this.props.compact}
-            onCheckedChange={compact => {
-              runInAction(() => {
-                this.update({ compact })
-                this.canResize[1] = !compact
-                if (!compact) {
-                  // this will also persist the state, so we can skip persist call
-                  this.autoResizeHeight()
-                } else {
-                  app.persist()
-                }
-              })
-            }}
+            onCheckedChange={this.setCollapsed}
           />
         )}
       </>
