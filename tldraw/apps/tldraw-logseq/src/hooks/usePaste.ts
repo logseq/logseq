@@ -28,12 +28,12 @@ export function usePaste(context: LogseqContextValue) {
 
   return React.useCallback<TLReactCallbacks<Shape>['onPaste']>(
     async (app, { point, shiftKey, files }) => {
-      const assetId = uniqueId()
       interface VideoImageAsset extends TLAsset {
         size: number[]
       }
 
-      const assetsToCreate: VideoImageAsset[] = []
+      const imageAssetsToCreate: VideoImageAsset[] = []
+      let assetsToClone: TLAsset[] = []
       const shapesToCreate: Shape['props'][] = []
       const bindingsToCreate: TLBinding[] = []
 
@@ -66,17 +66,17 @@ export function usePaste(context: LogseqContextValue) {
             // Do we already have an asset for this image?
             const existingAsset = Object.values(app.assets).find(asset => asset.src === dataurl)
             if (existingAsset) {
-              assetsToCreate.push(existingAsset as VideoImageAsset)
+              imageAssetsToCreate.push(existingAsset as VideoImageAsset)
               continue
             }
             // Create a new asset for this image
             const asset: VideoImageAsset = {
-              id: assetId,
+              id: uniqueId(),
               type: isVideo ? 'video' : 'image',
               src: dataurl,
               size: await getSizeFromSrc(handlers.makeAssetUrl(dataurl), isVideo),
             }
-            assetsToCreate.push(asset)
+            imageAssetsToCreate.push(asset)
           } catch (error) {
             console.error(error)
           }
@@ -127,6 +127,7 @@ export function usePaste(context: LogseqContextValue) {
           const data = JSON.parse(rawText)
           if (data.type === 'logseq/whiteboard-shapes') {
             const shapes = data.shapes as TLShapeModel[]
+            assetsToClone = data.assets as TLAsset[]
             const commonBounds = BoundsUtils.getCommonBounds(
               shapes.map(shape => ({
                 minX: shape.point?.[0] ?? point[0],
@@ -179,6 +180,7 @@ export function usePaste(context: LogseqContextValue) {
                 })
               }
             })
+
             return true
           }
         } catch (err) {
@@ -279,7 +281,7 @@ export function usePaste(context: LogseqContextValue) {
 
       const allShapesToAdd: TLShapeModel[] = [
         // assets to images
-        ...assetsToCreate.map((asset, i) => ({
+        ...imageAssetsToCreate.map((asset, i) => ({
           ...(asset.type === 'video' ? VideoShape : ImageShape).defaultProps,
           // TODO: Should be place near the last edited shape
           point: [point[0] - asset.size[0] / 4 + i * 16, point[1] - asset.size[1] / 4 + i * 16],
@@ -297,8 +299,9 @@ export function usePaste(context: LogseqContextValue) {
       })
 
       app.wrapUpdate(() => {
-        if (assetsToCreate.length > 0) {
-          app.createAssets(assetsToCreate)
+        const allAssets = [...imageAssetsToCreate, ...assetsToClone]
+        if (allAssets.length > 0) {
+          app.createAssets(allAssets)
         }
         if (allShapesToAdd.length > 0) {
           app.createShapes(allShapesToAdd)

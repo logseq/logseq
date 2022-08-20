@@ -422,6 +422,10 @@ export class TLApp<
       const tldrawString = JSON.stringify({
         type: 'logseq/whiteboard-shapes',
         shapes: this.selectedShapesArray.map(shape => shape.serialized),
+        // pasting into other whiteboard may require this if any shape uses asset
+        assets: this.getCleanUpAssets().filter(asset => {
+          return this.selectedShapesArray.some(shape => shape.props.assetId === asset.id)
+        })
       })
       navigator.clipboard.write([
         new ClipboardItem({
