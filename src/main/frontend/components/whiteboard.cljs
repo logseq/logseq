@@ -201,7 +201,7 @@
                       false)]
 
     (page-refs-count name
-                     "text-md px-3 py-1 cursor-default whiteboard-page-refs-count"
+                     "text-md px-3 py-2 cursor-default whiteboard-page-refs-count"
                      (fn [open?] [:<> "Reference" (ui/icon (if open? "references-hide" "references-show"))]))]
    (tldraw-app name block-id)])
 

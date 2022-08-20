@@ -248,7 +248,7 @@
   pointer-events: all;
 }
 
-.tl-select-input-trigger {
+button.tl-select-input-trigger {
   @apply flex items-center;
   border: 1px solid var(--ls-secondary-background-color);
   background-color: var(--ls-tertiary-background-color);

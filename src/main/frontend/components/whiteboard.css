@@ -90,6 +90,7 @@
 .whiteboard-page-refs-count {
   border-radius: 8px;
   background: var(--ls-primary-background-color);
+  height: 38px;
 }
 
 .whiteboard-page-refs-count:hover,
@@ -107,15 +108,22 @@
   border-radius: 0 0 12px 12px;
   z-index: 2000;
   gap: 4px;
+  line-height: 1.4;
 }
 
 .whiteboard-page-title {
-  @apply inline-flex px-2;
+  @apply inline-flex px-2 py-1;
   font-size: 20px;
   border-radius: 8px;
+  border: 1px solid transparent;
   background: var(--ls-secondary-background-color);
 }
 
 .whiteboard-page-title:hover {
   background-color: var(--ls-tertiary-background-color);
+}
+
+.whiteboard-page-title:focus-within {
+  border: 1px solid var(--ls-border-color);
+  box-shadow: 0 0 0 4px var(--ls-focus-ring-color);
 }
