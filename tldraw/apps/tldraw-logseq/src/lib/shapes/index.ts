@@ -42,7 +42,6 @@ export * from './PolygonShape'
 export * from './TextShape'
 export * from './YouTubeShape'
 
-
 export const shapes: TLReactShapeConstructor<Shape>[] = [
   BoxShape,
   DotShape,
@@ -66,6 +65,7 @@ declare global {
         make_asset_url?: (url: string) => string
         edit_block?: (uuid: string) => void
         set_blocks_id?: (uuids: string[]) => void
+        open_external_link?: (url: string) => void
       }
     }
   }

@@ -63,12 +63,10 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
         {...events}
       >
         <div
+          className="rounded-lg w-full h-full relative overflow-hidden shadow-xl"
           style={{
-            width: '100%',
-            height: '100%',
             pointerEvents: isEditing ? 'all' : 'none',
             userSelect: 'none',
-            position: 'relative',
           }}
         >
           {this.embedId ? (
@@ -81,14 +79,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
               }}
             >
               <iframe
-                style={{
-                  left: 0,
-                  top: 0,
-                  height: '100%',
-                  width: '100%',
-                  position: 'absolute',
-                  margin: 0,
-                }}
+                className="absolute inset-0 w-full h-full m-0"
                 width="853"
                 height="480"
                 src={`https://www.youtube.com/embed/${this.embedId}`}
@@ -100,16 +91,9 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
             </div>
           ) : (
             <div
+              className="w-full h-full flex items-center justify-center p-4"
               style={{
-                width: '100%',
-                height: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                overflow: 'hidden',
-                justifyContent: 'center',
-                backgroundColor: '#ffffff',
-                border: '1px solid rgb(52, 52, 52)',
-                padding: 16,
+                backgroundColor: 'var(--ls-primary-background-color)',
               }}
             >
               <svg

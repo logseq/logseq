@@ -142,7 +142,18 @@ const YoutubeLinkAction = observer(() => {
     shape.onYoutubeLinkChange(e.target.value)
   }, [])
 
-  return <TextInput className="tl-youtube-link" value={`${shape.props.url}`} onChange={handleChange} />
+  return (
+    <span className="flex gap-3">
+      <TextInput className="tl-youtube-link" value={`${shape.props.url}`} onChange={handleChange} />
+      <button
+        className="tl-contextbar-button"
+        type="button"
+        onClick={() => window.logseq?.api?.open_external_link?.(shape.props.url)}
+      >
+        <TablerIcon name="external-link" />
+      </button>
+    </span>
+  )
 })
 
 contextBarActionMapping.set('LogseqPortalViewMode', LogseqPortalViewModeAction)
