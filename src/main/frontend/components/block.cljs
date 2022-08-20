@@ -3340,9 +3340,10 @@
                  (page-cp config page)
                  (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
                 (for [block parent-blocks]
-                  (rum/with-key
-                    (breadcrumb-with-container block config)
-                    (:db/id block)))
+                  (let [block' (update block :block/children tree/non-consecutive-blocks->vec-tree)]
+                    (rum/with-key
+                      (breadcrumb-with-container block' config)
+                      (:db/id block'))))
                 {:debug-id page})])))))]
 
      (and (:custom-query? config) (:group-by-page? config))
