@@ -105,9 +105,9 @@
    [:editor/search-page :embed]))
 
 (defn embed-block
-  []
-  [[:editor/input "{{embed (())}}" {:last-pattern (state/get-editor-command-trigger)
-                                    :backward-pos 4}]
+  [options]
+  [[:editor/input (str "{{embed" (if (options :breadcrumbs?) "-path" "") " (())}}") {:last-pattern (state/get-editor-command-trigger)
+                                                                                    :backward-pos 4}]
    [:editor/search-block :embed]])
 
 (defn get-preferred-workflow
@@ -223,7 +223,8 @@
      ["Page embed" (embed-page) "Embed a page here"]
      ["Block reference" [[:editor/input block-ref/left-and-right-parens {:backward-pos 2}]
                          [:editor/search-block :reference]] "Create a backlink to a block"]
-     ["Block embed" (embed-block) "Embed a block here" "Embed a block here"]
+     ["Block embed" (embed-block {:breadcrumbs? false}) "Embed a block here" "Embed a block here"]
+     ["Block embed with path" (embed-block {:breadcrumbs? true}) "Embed a block here with breadcrumbs" "Embed a block here with breadcrumbs"]
      ["Link" (link-steps) "Create a HTTP link"]
      ["Image link" (image-link-steps) "Create a HTTP link to a image"]
      (when (state/markdown?)
