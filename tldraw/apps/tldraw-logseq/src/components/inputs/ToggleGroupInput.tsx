@@ -27,6 +27,7 @@ export function ToggleGroupInput({ options, value, onValueChange, ...rest }: Sel
               className="tl-toggle-group-input-button"
               key={option.value}
               value={option.value}
+              disabled={option.value === value}
             >
               <TablerIcon name={option.icon} />
             </ToggleGroup.Item>

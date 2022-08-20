@@ -1,7 +1,6 @@
 import { isNonNullable } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
-import { TablerIcon } from '~components/icons'
 import { SelectInput, SelectOption } from '~components/inputs/SelectInput'
 import { ToggleGroupInput, ToggleGroupInputOption } from '~components/inputs/ToggleGroupInput'
 import { LogseqPortalShape, Shape } from '~lib'
@@ -30,12 +29,12 @@ const LogseqPortalViewModeAction = observer(() => {
   const collapsed = shapes.every(s => s.collapsed)
   const ViewModeOptions: ToggleGroupInputOption[] = [
     {
-      value: '0',
-      icon: 'layout-navbar-expand',
+      value: '1',
+      icon: 'object-compact',
     },
     {
-      value: '1',
-      icon: 'layout-navbar-collapse',
+      value: '0',
+      icon: 'object-expanded',
     },
   ]
   return (
