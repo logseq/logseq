@@ -1364,7 +1364,9 @@
       (= name "embed")
       (macro-embed-cp config arguments)
       (= name "embed-path")
-      (macro-embed-cp (assoc config :breadcrumb-show? true) arguments)
+      (macro-embed-cp (assoc config 
+                             :breadcrumb-show? true
+                             :show-page? true) arguments)
 
       (and plugin-handler/lsp-enabled? (= name "renderer"))
       (when-let [block-uuid (str (:block/uuid config))]
@@ -3310,7 +3312,7 @@
     [:div
      (when (:breadcrumb-show? config)
        (breadcrumb config (state/get-current-repo) navigating-block
-                   {:show-page? false
+                   {:show-page? (config :show-page?)
                     :navigating-block *navigating-block}))
      (blocks-container blocks (assoc config
                                      :breadcrumb-show? false
