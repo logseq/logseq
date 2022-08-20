@@ -249,7 +249,7 @@
 
 button.tl-select-input-trigger {
   @apply flex items-center py-1 px-3;
-  border: 1px solid var(--ls-secondary-border-color);
+  box-shadow: 0 0 0 1px var(--ls-secondary-border-color);
   background-color: var(--ls-quaternary-background-color);
   min-width: 160px;
   border-radius: 8px;
@@ -698,7 +698,7 @@ html[data-theme='dark'] {
 
 .tl-toggle-group-input {
   @apply rounded overflow-hidden;
-  border: 1px solid var(--ls-secondary-border-color);
+  box-shadow: 0 0 0 1px var(--ls-secondary-border-color);
 }
 
 .tl-toggle-group-input-button {
@@ -713,9 +713,28 @@ html[data-theme='dark'] {
     border-right: none;
   }
 
+  &:hover {
+    background-color: var(--ls-tertiary-background-color);
+  }
+
   &[data-state='on'] {
     background-color: var(--ls-tertiary-background-color);
     color: var(--ls-primary-text-color);
     opacity: 1;
   }
+}
+
+.tl-contextbar-button {
+  @apply rounded inline-flex items-center justify-center;
+  height: 32px;
+  width: 32px;
+
+  &:hover {
+    background-color: var(--ls-tertiary-background-color);
+  }
+}
+
+.tl-contextbar-separator {
+  background-color: var(--ls-border-color);
+  width: 1px;
 }

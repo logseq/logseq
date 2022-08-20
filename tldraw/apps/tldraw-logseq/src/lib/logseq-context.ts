@@ -29,6 +29,8 @@ export interface LogseqContextValue {
     isWhiteboardPage: (pageName: string) => boolean
     saveAsset: (file: File) => Promise<string>
     makeAssetUrl: (relativeUrl: string) => string
+    sidebarAddBlock: (uuid: string, type: 'block' | 'page') => void
+    redirectToPage: (uuidOrPageName: string) => void
   }
 }
 

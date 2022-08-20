@@ -5,9 +5,11 @@ import {
   useApp,
 } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
+import * as Separator from '@radix-ui/react-separator'
+
 import * as React from 'react'
 import type { Shape } from '~lib/shapes'
-import { getContextBarActionsForTypes } from './contextBarActionFactory'
+import { getContextBarActionsForTypes as getContextBarActionsForShapes } from './contextBarActionFactory'
 
 const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) => {
   const app = useApp()
@@ -33,7 +35,7 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) 
 
   if (!app) return null
 
-  const Actions = getContextBarActionsForTypes(shapes.map(s => s.props.type))
+  const Actions = getContextBarActionsForShapes(shapes)
 
   return (
     <HTMLContainer centered>
@@ -44,7 +46,12 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) 
           style={{ pointerEvents: hidden ? 'none' : 'all' }}
         >
           {Actions.map((Action, idx) => (
-            <Action key={idx} />
+            <React.Fragment key={idx}>
+              <Action />
+              {idx < Actions.length - 1 && (
+                <Separator.Root className="tl-contextbar-separator" orientation="vertical" />
+              )}
+            </React.Fragment>
           ))}
         </div>
       )}

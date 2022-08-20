@@ -1,22 +1,26 @@
 import { isNonNullable } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
+import React from 'react'
+import { TablerIcon } from '~components/icons'
 import { SelectInput, SelectOption } from '~components/inputs/SelectInput'
 import { ToggleGroupInput, ToggleGroupInputOption } from '~components/inputs/ToggleGroupInput'
 import { LogseqPortalShape, Shape } from '~lib'
+import { LogseqContext } from '~lib/logseq-context'
 
 export const contextBarActionTypes = [
+  // Order matters
   'NoFill',
-  'LogseqPortalViewMode',
-  'ScaleLevel',
   'ColorAccent',
   'StrokeColor',
   'NoStroke',
+  'ScaleLevel',
+  'LogseqPortalViewMode',
   'OpenPage',
-  'OpenInRightSidebar',
 ] as const
 
 type ContextBarActionType = typeof contextBarActionTypes[number]
+const singleShapeActions: ContextBarActionType[] = ['OpenPage']
 
 const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 
@@ -98,30 +102,69 @@ const ScaleLevelAction = observer(() => {
   )
 })
 
+const OpenPageAction = observer(() => {
+  const { handlers } = React.useContext(LogseqContext)
+  const app = useApp<Shape>()
+  const shapes = app.selectedShapesArray.filter(
+    s => s.props.type === LogseqPortalShape.defaultProps.type
+  ) as LogseqPortalShape[]
+  const shape = shapes[0]
+  const { pageId, blockType } = shape.props
+
+  return (
+    <span className="flex gap-1">
+      <button
+        className="tl-contextbar-button"
+        type="button"
+        onClick={() => handlers?.sidebarAddBlock(pageId, blockType === 'B' ? 'block' : 'page')}
+      >
+        <TablerIcon name="layout-sidebar-right" />
+      </button>
+      <button
+        className="tl-contextbar-button"
+        type="button"
+        onClick={() => handlers?.redirectToPage(pageId)}
+      >
+        <TablerIcon name="external-link" />
+      </button>
+    </span>
+  )
+})
+
 contextBarActionMapping.set('LogseqPortalViewMode', LogseqPortalViewModeAction)
 contextBarActionMapping.set('ScaleLevel', ScaleLevelAction)
+contextBarActionMapping.set('OpenPage', OpenPageAction)
 
 type ShapeType = Shape['props']['type']
 
 const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
-  'logseq-portal': ['LogseqPortalViewMode', 'ScaleLevel'],
+  'logseq-portal': ['LogseqPortalViewMode', 'ScaleLevel', 'OpenPage'],
 }
 
-export const getContextBarActionsForType = (type: ShapeType) => {
-  return (shapeMapping[type] ?? [])
-    .map(actionType => contextBarActionMapping.get(actionType))
-    .filter(isNonNullable)
+const getContextBarActionTypes = (type: ShapeType) => {
+  return (shapeMapping[type] ?? []).filter(isNonNullable)
 }
 
-export const getContextBarActionsForTypes = (types: ShapeType[]) => {
-  const actions = new Set(types.length > 0 ? getContextBarActionsForType(types[0]) : [])
-  for (let i = 1; i < types.length && actions.size > 0; i++) {
-    const actionsForType = getContextBarActionsForType(types[i])
-    actions.forEach(action => {
-      if (!actionsForType.includes(action)) {
-        actions.delete(action)
+export const getContextBarActionsForTypes = (shapes: Shape[]) => {
+  const types = shapes.map(s => s.props.type)
+  const actionTypes = new Set(shapes.length > 0 ? getContextBarActionTypes(types[0]) : [])
+  for (let i = 1; i < types.length && actionTypes.size > 0; i++) {
+    const otherActionTypes = getContextBarActionTypes(types[i])
+    actionTypes.forEach(action => {
+      if (!otherActionTypes.includes(action)) {
+        actionTypes.delete(action)
       }
     })
   }
-  return Array.from(actions)
+  if (shapes.length > 1) {
+    singleShapeActions.forEach(action => {
+      if (actionTypes.has(action)) {
+        actionTypes.delete(action)
+      }
+    })
+  }
+
+  return Array.from(actionTypes)
+    .sort((a, b) => contextBarActionTypes.indexOf(a) - contextBarActionTypes.indexOf(b))
+    .map(action => contextBarActionMapping.get(action)!)
 }

@@ -4,6 +4,7 @@
             [frontend.components.page :as page]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.rum :as r]
@@ -54,6 +55,24 @@
          (when-let [[asset-file-name _ full-file-path] (and (seq res) (first res))]
            (editor-handler/resolve-relative-path (or full-file-path asset-file-name)))))))
 
+(def tldraw-renderers {:Page page-cp
+                       :Block block-cp
+                       :Breadcrumb breadcrumb
+                       :PageNameLink page-name-link})
+
+(def tldraw-handlers {:search search-handler
+                      :queryBlockByUUID #(clj->js (model/query-block-by-uuid (parse-uuid %)))
+                      :isWhiteboardPage model/whiteboard-page?
+                      :saveAsset save-asset-handler
+                      :makeAssetUrl editor-handler/make-asset-url
+                      :addNewBlock (fn [content]
+                                     (str (whiteboard-handler/add-new-block! name content)))
+                      :sidebarAddBlock (fn [uuid type]
+                                         (state/sidebar-add-block! (state/get-current-repo)
+                                                                   (:db/id (model/get-page uuid))
+                                                                   (keyword type)))
+                      :redirectToPage route-handler/redirect-to-page!})
+
 (rum/defc tldraw-app
   [name block-id]
   (let [data (whiteboard-handler/page-name->tldr! name block-id)
@@ -77,17 +96,8 @@
         ;; wheel -> overscroll may cause browser navigation
         :on-wheel util/stop-propagation}
 
-       (tldraw {:renderers {:Page page-cp
-                            :Block block-cp
-                            :Breadcrumb breadcrumb
-                            :PageNameLink page-name-link}
-                :handlers (clj->js {:search search-handler
-                                    :queryBlockByUUID #(clj->js (model/query-block-by-uuid (parse-uuid %)))
-                                    :isWhiteboardPage model/whiteboard-page?
-                                    :saveAsset save-asset-handler
-                                    :makeAssetUrl editor-handler/make-asset-url
-                                    :addNewBlock (fn [content]
-                                                   (str (whiteboard-handler/add-new-block! name content)))})
+       (tldraw {:renderers tldraw-renderers
+                :handlers tldraw-handlers
                 :onMount (fn [app] (set-tln ^js app))
                 :onPersist (fn [app]
                              (let [document (gobj/get app "serialized")]
