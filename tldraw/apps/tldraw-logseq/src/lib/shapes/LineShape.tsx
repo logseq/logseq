@@ -32,7 +32,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     },
     stroke: 'var(--ls-primary-text-color, #000)',
     fill: '#ffffff',
-    noFill: false,
+    noFill: true,
     strokeType: 'line',
     strokeWidth: 1,
     opacity: 1,

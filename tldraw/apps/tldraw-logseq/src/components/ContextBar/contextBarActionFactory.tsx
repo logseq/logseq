@@ -78,8 +78,16 @@ const EditAction = observer(() => {
       type="button"
       onClick={() => {
         app.api.editShape(shape)
+        app.api.zoomToSelection()
         if (shape.props.type === 'logseq-portal') {
-          window.logseq?.api?.edit_block?.(shape.props.pageId)
+          let uuid = shape.props.pageId
+          if (shape.props.blockType === 'P') {
+            const firstNonePropertyBlock = window.logseq?.api
+              ?.get_page_blocks_tree?.(shape.props.pageId)
+              .find(b => !('propertiesOrder' in b))
+            uuid = firstNonePropertyBlock.uuid
+          }
+          window.logseq?.api?.edit_block?.(uuid)
         }
       }}
     >
@@ -258,7 +266,8 @@ const SwatchAction = observer(() => {
     })
   }, [])
 
-  return <ColorInput value={shapes[0].props.fill} onChange={handleChange} />
+  const value = shapes[0].props.noFill ? shapes[0].props.stroke : shapes[0].props.fill
+  return <ColorInput value={value} onChange={handleChange} />
 })
 
 const StrokeTypeAction = observer(() => {
