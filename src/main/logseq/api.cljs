@@ -461,6 +461,14 @@
   (fn [block-uuid-or-page-name content ^js opts]
     (let [{:keys [before sibling isPageBlock customUUID properties]} (bean/->clj opts)
           page-name (and isPageBlock block-uuid-or-page-name)
+          custom-uuid (or customUUID (:id properties))
+          _ (when (not (string/blank? custom-uuid))
+              (when-not (util/uuid-string? custom-uuid)
+                (throw (js/Error.
+                        (util/format "Illegal custom block UUID pattern (%s)." custom-uuid))))
+              (when (db-model/query-block-by-uuid custom-uuid)
+                (throw (js/Error.
+                        (util/format "Custom block UUID existed (%s)." custom-uuid)))))
           block-uuid (if isPageBlock nil (uuid block-uuid-or-page-name))
           block-uuid' (if (and (not sibling) before block-uuid)
                         (let [block (db/entity [:block/uuid block-uuid])
@@ -484,8 +492,9 @@
                        :sibling?    sibling?
                        :before?     before?
                        :page        page-name
-                       :custom-uuid customUUID
-                       :properties  properties})]
+                       :custom-uuid custom-uuid
+                       :properties  (merge properties
+                                           (when custom-uuid {:id custom-uuid}))})]
       (bean/->js (normalize-keyword-for-json new-block)))))
 
 (def ^:export insert_batch_block
