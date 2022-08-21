@@ -756,7 +756,8 @@
                    (remove nil?))]
       (doseq [id ids]
         (let [block (db/pull [:block/uuid id])]
-          (set-marker block))))))
+          (when (not-empty (:block/content block))
+            (set-marker block)))))))
 
 (defn cycle-todo!
   []
