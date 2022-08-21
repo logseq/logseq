@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { TLBoxShape, TLBoxShapeProps, TLResizeInfo, validUUID } from '@tldraw/core'
+import { delay, TLBoxShape, TLBoxShapeProps, TLResizeInfo, validUUID } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import Vec from '@tldraw/vec'
 import { action, computed, makeObservable } from 'mobx'
@@ -131,7 +131,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     collapsedHeight: 0,
     stroke: 'var(--ls-primary-text-color)',
     fill: 'var(--ls-secondary-background-color)',
+    noFill: false,
     strokeWidth: 2,
+    strokeType: 'line',
     opacity: 1,
     pageId: '',
     collapsed: false,
@@ -190,7 +192,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         size: [this.props.size[0], collapsed ? HEADER_HEIGHT : this.props.collapsedHeight],
         collapsedHeight: collapsed ? originalHeight : this.props.collapsedHeight,
       })
-      this.persist?.()
     }
   }
 
@@ -198,7 +199,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return this.props.scaleLevel ?? 'md'
   }
 
-  @action setScaleLevel = (v?: SizeLevel) => {
+  @action setScaleLevel = async (v?: SizeLevel) => {
     const newSize = Vec.mul(
       this.props.size,
       levelToScale[(v as SizeLevel) ?? 'md'] / levelToScale[this.props.scaleLevel ?? 'md']
@@ -206,11 +207,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     this.update({
       scaleLevel: v,
     })
-    setTimeout(() => {
-      this.update({
-        size: newSize,
-      })
-      this.persist?.()
+    await delay()
+    this.update({
+      size: newSize,
     })
   }
 
@@ -312,7 +311,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         finishCreating(uuid)
         // wait until the editor is mounted
         setTimeout(() => {
-          app.setEditingShape(this)
+          app.api.editShape(this)
           window.logseq?.api?.edit_block?.(uuid)
         })
       }

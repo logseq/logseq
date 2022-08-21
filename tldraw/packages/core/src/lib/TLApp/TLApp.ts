@@ -425,7 +425,7 @@ export class TLApp<
         // pasting into other whiteboard may require this if any shape uses asset
         assets: this.getCleanUpAssets().filter(asset => {
           return this.selectedShapesArray.some(shape => shape.props.assetId === asset.id)
-        })
+        }),
       })
       navigator.clipboard.write([
         new ClipboardItem({

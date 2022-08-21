@@ -1,13 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as React from 'react'
 import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
-import { CustomStyleProps, withClampedStyles } from './style-props'
+import * as React from 'react'
 import { useCameraMovingRef } from '~hooks/useCameraMoving'
 import type { Shape } from '~lib'
+import { withClampedStyles } from './style-props'
 
-export interface HTMLShapeProps extends TLBoxShapeProps, CustomStyleProps {
+export interface HTMLShapeProps extends TLBoxShapeProps {
   type: 'html'
   html: string
 }
@@ -21,10 +21,6 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
     parentId: 'page',
     point: [0, 0],
     size: [600, 0],
-    stroke: '#000000',
-    fill: '#ffffff',
-    strokeWidth: 2,
-    opacity: 1,
     html: '',
   }
 
@@ -35,7 +31,7 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
 
   ReactComponent = observer(({ events, isErasing, isEditing }: TLComponentProps) => {
     const {
-      props: { opacity, html },
+      props: { html },
     } = this
     const isMoving = useCameraMovingRef()
     const app = useApp<Shape>()
@@ -58,7 +54,7 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
     React.useEffect(() => {
       if (this.props.size[1] === 0 && anchorRef.current) {
         this.update({
-          size: [this.props.size[0], anchorRef.current.offsetHeight],
+          size: [this.props.size[0], anchorRef.current.offsetHeight || 400],
         })
         app.persist(true)
       }
@@ -69,7 +65,7 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
         style={{
           overflow: 'hidden',
           pointerEvents: 'all',
-          opacity: isErasing ? 0.2 : opacity,
+          opacity: isErasing ? 0.2 : 1,
         }}
         {...events}
       >

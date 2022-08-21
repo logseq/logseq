@@ -7,6 +7,7 @@ import { getStraightArrowHeadPoints } from './arrowHelpers'
 interface ShapeStyles {
   stroke: string
   strokeWidth: number
+  strokeType: 'line' | 'dashed'
   fill: string
 }
 
@@ -44,11 +45,11 @@ export const Arrow = React.memo(function StraightArrow({
       <path className="tl-stroke-hitarea" d={path} />
       <path
         d={path}
-        fill={style.stroke}
         strokeWidth={sw}
         stroke={style.stroke}
         strokeLinecap="round"
         strokeLinejoin="round"
+        strokeDasharray={style.strokeType === 'dashed' ? '8 4' : undefined}
         pointerEvents="stroke"
       />
       {startArrowHead && (

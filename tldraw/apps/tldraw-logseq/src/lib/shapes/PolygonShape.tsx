@@ -23,6 +23,8 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
     isFlippedY: false,
     stroke: '#000000',
     fill: '#ffffff',
+    noFill: false,
+    strokeType: 'line',
     strokeWidth: 2,
     opacity: 1,
   }
@@ -30,24 +32,25 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
   ReactComponent = observer(({ events, isErasing, isSelected }: TLComponentProps) => {
     const {
       offset: [x, y],
-      props: { stroke, fill, strokeWidth, opacity },
+      props: { stroke, fill, noFill, strokeWidth, opacity, strokeType },
     } = this
     const path = this.getVertices(strokeWidth / 2).join()
     return (
       <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
         <g transform={`translate(${x}, ${y})`}>
           <polygon
-            className={
-              isSelected || fill !== 'transparent' ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'
-            }
+            className={isSelected || !noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
             points={path}
           />
           <polygon
             points={path}
-            stroke={stroke}
-            fill={fill}
+            stroke={noFill ? fill : stroke}
+            fill={noFill ? 'none' : fill}
             strokeWidth={strokeWidth}
+            rx={2}
+            ry={2}
             strokeLinejoin="round"
+            strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
           />
         </g>
       </SVGContainer>
@@ -70,5 +73,34 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
   validateProps = (props: Partial<PolygonShapeProps>) => {
     if (props.sides !== undefined) props.sides = Math.max(props.sides, 3)
     return withClampedStyles(props)
+  }
+
+  /**
+   * Get a svg group element that can be used to render the shape with only the props data. In the
+   * base, draw any shape as a box. Can be overridden by subclasses.
+   */
+  getShapeSVGJsx(opts: any) {
+    // Do not need to consider the original point here
+    const {
+      offset: [x, y],
+      props: { stroke, fill, noFill, strokeWidth, opacity, strokeType },
+    } = this
+    const path = this.getVertices(strokeWidth / 2).join()
+
+    return (
+      <g transform={`translate(${x}, ${y})`} opacity={opacity}>
+        <polygon className={!noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'} points={path} />
+        <polygon
+          points={path}
+          stroke={noFill ? fill : stroke}
+          fill={noFill ? 'none' : fill}
+          strokeWidth={strokeWidth}
+          rx={2}
+          ry={2}
+          strokeLinejoin="round"
+          strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
+        />
+      </g>
+    )
   }
 }

@@ -135,15 +135,15 @@
 
   .color-input-wrapper {
     overflow: hidden;
-    height: 18px;
-    width: 46px;
+    height: 20px;
+    width: 20px;
     border-radius: 2px;
     margin: 2px;
     box-shadow: 0 0 0 2px var(--ls-tertiary-background-color);
   }
 
   .color-input {
-    transform: translate(-4px, -4px) scale(1.5);
+    transform: translate(-50%, -50%) scale(4);
   }
 
   .switch-input-root {
@@ -734,6 +734,22 @@ html[data-theme='dark'] {
   }
 }
 
+.tl-toggle-input {
+  @apply inline-flex items-center justify-center;
+  height: 32px;
+  width: 32px;
+  color: var(--ls-secondary-text-color);
+  opacity: 0.3;
+  &:hover {
+    background-color: var(--ls-tertiary-background-color);
+  }
+  &[data-state='on'] {
+    background-color: var(--ls-tertiary-background-color);
+    color: var(--ls-primary-text-color);
+    opacity: 1;
+  }
+}
+
 .tl-contextbar-button {
   @apply rounded inline-flex items-center justify-center;
   height: 32px;
@@ -754,4 +770,18 @@ html[data-theme='dark'] {
   color: var(--ls-primary-text-color);
   box-shadow: 0 0 0 1px var(--ls-secondary-border-color);
   padding: 4px 14px;
+}
+
+.tl-hitarea-stroke {
+  fill: none;
+  stroke: transparent;
+  pointer-events: stroke;
+  stroke-width: min(100px, calc(24px * var(--tl-scale)));
+}
+
+.tl-hitarea-fill {
+  fill: transparent;
+  stroke: transparent;
+  pointer-events: all;
+  stroke-width: min(100px, calc(24px * var(--tl-scale)));
 }

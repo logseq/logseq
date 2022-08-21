@@ -20,6 +20,11 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     return this
   }
 
+  editShape = (shape: string | S | undefined): this => {
+    this.app.transition('select').selectedTool.transition('editingShape', { shape })
+    return this
+  }
+
   /**
    * Set the hovered shape.
    *

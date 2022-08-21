@@ -26,7 +26,9 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
     points: [],
     isComplete: false,
     stroke: 'var(--tl-foreground, #000)',
-    fill: '#ffffff',
+    fill: 'var(--tl-foreground, #000)',
+    noFill: true,
+    strokeType: 'line',
     strokeWidth: 2,
     opacity: 1,
   }
@@ -69,7 +71,7 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
   getShapeSVGJsx() {
     const {
       pointsPath,
-      props: { stroke, strokeWidth },
+      props: { stroke, noFill, strokeWidth, strokeType },
     } = this
     return (
       <path
@@ -78,6 +80,7 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
         stroke={stroke}
         fill={stroke}
         pointerEvents="all"
+        strokeDasharray={strokeType === 'dashed' ? '12 4' : undefined}
       />
     )
   }

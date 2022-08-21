@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as React from 'react'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
@@ -20,9 +19,11 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
     type: 'box',
     point: [0, 0],
     size: [100, 100],
-    borderRadius: 0,
+    borderRadius: 2,
     stroke: '#000000',
     fill: '#ffffff',
+    noFill: false,
+    strokeType: 'line',
     strokeWidth: 2,
     opacity: 1,
   }
@@ -33,7 +34,9 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
         size: [w, h],
         stroke,
         fill,
+        noFill,
         strokeWidth,
+        strokeType,
         borderRadius,
         opacity,
       },
@@ -43,7 +46,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
       <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
         {isBinding && <BindingIndicator strokeWidth={strokeWidth} size={[w, h]} />}
         <rect
-          className={isSelected || fill !== 'transparent' ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
+          className={isSelected || !noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
           x={strokeWidth / 2}
           y={strokeWidth / 2}
           rx={borderRadius}
@@ -60,8 +63,9 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
           width={Math.max(0.01, w - strokeWidth)}
           height={Math.max(0.01, h - strokeWidth)}
           strokeWidth={strokeWidth}
-          stroke={stroke}
-          fill={fill}
+          stroke={noFill ? fill : stroke}
+          strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
+          fill={noFill ? 'none' : fill}
         />
       </SVGContainer>
     )

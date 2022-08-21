@@ -1,14 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as React from 'react'
+import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
-import { TLAsset, TLBoxShape, TLBoxShapeProps, TLImageShape, TLImageShapeProps } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
-import type { CustomStyleProps } from './style-props'
+import * as React from 'react'
 import { useCameraMovingRef } from '~hooks/useCameraMoving'
 import type { Shape } from '~lib'
 import { LogseqContext } from '~lib/logseq-context'
 
-export interface VideoShapeProps extends TLBoxShapeProps, CustomStyleProps {
+export interface VideoShapeProps extends TLBoxShapeProps {
   type: 'video'
   assetId: string
   opacity: number
@@ -23,9 +22,6 @@ export class VideoShape extends TLBoxShape<VideoShapeProps> {
     type: 'video',
     point: [0, 0],
     size: [100, 100],
-    stroke: '#000000',
-    fill: '#ffffff',
-    strokeWidth: 2,
     opacity: 1,
     assetId: '',
     clipping: 0,

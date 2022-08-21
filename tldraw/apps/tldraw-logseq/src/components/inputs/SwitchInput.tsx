@@ -7,7 +7,6 @@ interface SwitchInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 export function SwitchInput({ label, onCheckedChange, checked, ...rest }: SwitchInputProps) {
   return (
     <div {...rest} className="input">
-      <label htmlFor={`switch-${label}`}>{label}</label>
       <Switch.Root
         className="switch-input-root"
         checked={checked}

@@ -203,7 +203,6 @@ export function usePaste(context: LogseqContextValue) {
             const youtubeRegex = /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
             return youtubeRegex.test(url)
           }
-          console.log(rawText)
           if (isYoutubeUrl(rawText)) {
             shapesToCreate.push({
               ...YouTubeShape.defaultProps,

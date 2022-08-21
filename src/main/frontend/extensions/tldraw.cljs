@@ -60,18 +60,19 @@
                        :Breadcrumb breadcrumb
                        :PageNameLink page-name-link})
 
-(def tldraw-handlers {:search search-handler
-                      :queryBlockByUUID #(clj->js (model/query-block-by-uuid (parse-uuid %)))
-                      :isWhiteboardPage model/whiteboard-page?
-                      :saveAsset save-asset-handler
-                      :makeAssetUrl editor-handler/make-asset-url
-                      :addNewBlock (fn [content]
-                                     (str (whiteboard-handler/add-new-block! name content)))
-                      :sidebarAddBlock (fn [uuid type]
-                                         (state/sidebar-add-block! (state/get-current-repo)
-                                                                   (:db/id (model/get-page uuid))
-                                                                   (keyword type)))
-                      :redirectToPage route-handler/redirect-to-page!})
+(defn get-tldraw-handlers [name]
+  {:search search-handler
+   :queryBlockByUUID #(clj->js (model/query-block-by-uuid (parse-uuid %)))
+   :isWhiteboardPage model/whiteboard-page?
+   :saveAsset save-asset-handler
+   :makeAssetUrl editor-handler/make-asset-url
+   :addNewBlock (fn [content]
+                  (str (whiteboard-handler/add-new-block! name content)))
+   :sidebarAddBlock (fn [uuid type]
+                      (state/sidebar-add-block! (state/get-current-repo)
+                                                (:db/id (model/get-page uuid))
+                                                (keyword type)))
+   :redirectToPage route-handler/redirect-to-page!})
 
 (rum/defc tldraw-app
   [name block-id]
@@ -97,7 +98,7 @@
         :on-wheel util/stop-propagation}
 
        (tldraw {:renderers tldraw-renderers
-                :handlers tldraw-handlers
+                :handlers (get-tldraw-handlers name)
                 :onMount (fn [app] (set-tln ^js app))
                 :onPersist (fn [app]
                              (let [document (gobj/get app "serialized")]

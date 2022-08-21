@@ -1,13 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as React from 'react'
 import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
-import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
-import { observer } from 'mobx-react-lite'
-import { CustomStyleProps, withClampedStyles } from './style-props'
-import { TextInput } from '~components/inputs/TextInput'
+import { HTMLContainer, TLComponentProps } from '@tldraw/react'
 import { action, computed } from 'mobx'
+import { observer } from 'mobx-react-lite'
+import { withClampedStyles } from './style-props'
 
-export interface YouTubeShapeProps extends TLBoxShapeProps, CustomStyleProps {
+export interface YouTubeShapeProps extends TLBoxShapeProps {
   type: 'youtube'
   url: string
 }
@@ -21,10 +19,6 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
     parentId: 'page',
     point: [0, 0],
     size: [600, 320],
-    stroke: '#000000',
-    fill: '#ffffff',
-    strokeWidth: 2,
-    opacity: 1,
     url: '',
   }
 
@@ -50,15 +44,12 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
   }
 
   ReactComponent = observer(({ events, isErasing, isEditing }: TLComponentProps) => {
-    const {
-      props: { opacity },
-    } = this
     return (
       <HTMLContainer
         style={{
           overflow: 'hidden',
           pointerEvents: 'all',
-          opacity: isErasing ? 0.2 : opacity,
+          opacity: isErasing ? 0.2 : 1,
         }}
         {...events}
       >
