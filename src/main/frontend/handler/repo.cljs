@@ -277,10 +277,12 @@
   (spec/validate :repos/url repo-url)
   (route-handler/redirect-to-home!)
   (state/set-parsing-state! {:graph-loading? true})
-  (let [config (or (state/get-config repo-url)
-                   (when-let [content (some-> (first (filter #(= (config/get-config-path repo-url) (:file/path %)) nfs-files))
+  (let [config (or (when-let [content (some-> (first (filter #(= (config/get-config-path repo-url) (:file/path %)) nfs-files))
                                               :file/content)]
-                     (common-handler/read-config content)))
+                     (common-handler/read-config content))
+                   (state/get-config repo-url))
+        ;; NOTE: Use config while parsing. Make sure it's the corrent journal title format
+        _ (state/set-config! repo-url config)
         relate-path-fn (fn [m k]
                          (some-> (get m k)
                                  (string/replace (js/decodeURI (config/get-local-dir repo-url)) "")))
@@ -386,7 +388,7 @@
   [repo]
   (p/let [_ (state/set-db-restoring! true)
           _ (db/restore-graph! repo)]
-         (file-handler/restore-config! repo false)
+         (file-handler/restore-config! repo)
          ;; Don't have to unlisten the old listerner, as it will be destroyed with the conn
          (db/listen-and-persist! repo)
          (ui-handler/add-style-if-exists!)
