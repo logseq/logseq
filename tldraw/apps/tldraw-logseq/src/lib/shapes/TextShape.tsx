@@ -34,7 +34,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     borderRadius: 0,
     stroke: 'var(--tl-foreground, #000)',
     fill: '#ffffff',
-    noFill: false,
+    noFill: true,
     strokeType: 'line',
     strokeWidth: 2,
     opacity: 1,
