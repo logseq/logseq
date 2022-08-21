@@ -396,7 +396,7 @@
               (state/set-current-repo! current-repo)
               (db/listen-and-persist! current-repo)
               (db/persist-if-idle! current-repo)
-              (file-handler/restore-config! current-repo false)
+              (file-handler/restore-config! current-repo)
               (.watch mobile-util/fs-watcher #js {:path current-repo-dir})
               (when graph-switch-f (graph-switch-f current-repo true)))))))))
 
@@ -453,10 +453,11 @@
 (defmethod handle :file-watcher/changed [[_ ^js event]]
   (let [type (.-event event)
         payload (-> event
-                    (js->clj :keywordize-keys true)
-                    (update :path js/decodeURI))]
+                    (js->clj :keywordize-keys true))
+        ;; TODO: remove this
+        payload' (-> payload (update :path js/decodeURI))]
     (fs-watcher/handle-changed! type payload)
-    (sync/file-watch-handler type payload)))
+    (sync/file-watch-handler type payload')))
 
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))

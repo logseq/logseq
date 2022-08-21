@@ -37,7 +37,7 @@
         repos (util/distinct-by :url repos)]
     (if (seq repos)
       [:div#graphs
-       [:h1.title "All Graphs"]
+       [:h1.title (t :all-graphs)]
        [:p.ml-2.opacity-70
         "A \"graph\" in Logseq means a local directory."]
 
@@ -49,9 +49,9 @@
             (ui/button
               (t :open-a-directory)
               :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])]
-        (for [{:keys [id url] :as repo} repos]
+        (for [{:keys [url] :as repo} repos]
           (let [local? (config/local-db? url)]
-            [:div.flex.justify-between.mb-4 {:key id}
+            [:div.flex.justify-between.mb-4 {:key (str "id-" url)}
              (if local?
                (let [local-dir (config/get-local-dir url)
                      graph-name (text-util/get-graph-name-from-path local-dir)]
@@ -71,7 +71,7 @@
                {:title "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk."
                 :on-click (fn []
                             (repo-handler/remove-repo! repo))}
-               "Unlink"]]]))]]
+               (t :unlink)]]]))]]
       (widgets/add-graph))))
 
 (defn refresh-cb []
