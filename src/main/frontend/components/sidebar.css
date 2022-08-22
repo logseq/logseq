@@ -61,8 +61,7 @@
   height: 100%;
   padding-top: 12px;
   width: var(--ls-left-sidebar-sm-width);
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: visible;
   background-color: var(--ls-primary-background-color);
   transition: transform .3s;
   transform: translateX(-100%);
@@ -74,7 +73,7 @@
     height: calc(100vh - var(--ls-headbar-inner-top-padding) - 50px);
     margin-top: 40px;
     padding-bottom: 60px;
-    overflow-y: auto;
+    width: 100%;
   }
 
   .dropdown-wrapper {

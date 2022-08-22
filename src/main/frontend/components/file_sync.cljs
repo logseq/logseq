@@ -580,8 +580,8 @@
      [:span "pages to manage your remote graph or switch to another local graph "]]
     [:div "and sync it as well."]]
 
-   [:div.cloud-tip.rounded-md.mt-6
-    [:div.items-center.pt-6.opacity-90.flex.justify-center
+   [:div.cloud-tip.rounded-md.mt-6.py-4
+    [:div.items-center.opacity-90.flex.justify-center
      [:span.pr-2 (ui/icon "bell-ringing" {:class "font-semibold"})]
      [:strong "Logseq Sync is still in Beta and we're working on a Pro plan!"]]
 
