@@ -124,7 +124,8 @@
                                     [:p "Clicking here will start the process of uploading your local files to an encrypted remote graph."]])
     :attachTo       {:element ".cp__file-sync-indicator" :on "bottom"}
     :canClickTarget true
-    :buttons        [{:text "Continue" :action (fn []
+    :buttons        [{:text "Cancel" :classes "bg-gray" :action (fn [] (.hide jsTour))}
+                     {:text "Continue" :action (fn []
                                                  (some->> (js/document.querySelector ".cp__file-sync-indicator a.button")
                                                           (.click))
                                                  (.hide jsTour))}]
