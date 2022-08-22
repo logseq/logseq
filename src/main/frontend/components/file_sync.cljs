@@ -55,9 +55,7 @@
                                  :else
                                  nil)
                                (.then #(do
-                                         (notifications/show! (str "Cloned to => "
-                                                                   (config/get-string-repo-dir dest-dir))
-                                                              :success)
+                                         (notifications/show! (str "Cloned to => " dest-dir) :success)
                                          (web-nfs/ls-dir-files-with-path! dest-dir)
                                          (repo-handler/remove-repo! {:url repo})
                                          (close-fn)))
@@ -76,14 +74,14 @@
      [:div.folder-tip.flex.flex-col.items-center
       [:h3
        [:span (ui/icon "folder") [:label.pl-0.5 (js/decodeURIComponent graph-name)]]]
-      [:h4.px-6 (config/get-string-repo-dir graph-dir)]
+      [:h4.px-6 (config/get-string-repo-dir repo)]
 
       (when (not (string/blank? selected-path))
         [:h5.text-xs.pt-1.-mb-1.flex.items-center.leading-none
          (if (mobile-util/iCloud-container-path? selected-path)
            [:span.inline-block.pr-1.text-red-600.scale-75 (ui/icon "alert-circle")]
            [:span.inline-block.pr-1.text-green-600.scale-75 (ui/icon "circle-check")])
-         (config/get-string-repo-dir selected-path)])
+         selected-path])
 
       [:div.out-icloud
        (ui/button
