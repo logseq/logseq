@@ -194,7 +194,7 @@
           ref-blocks (db/get-page-referenced-blocks page-name)
           page-id (:db/id (db/entity repo [:block/name page-name]))
           aliases (db/page-alias-set repo page-name)
-          aliases-exclude-self (remove #{page-id} aliases)
+          aliases-exclude-self (set (remove #{page-id} aliases))
           top-level-blocks (filter (fn [b] (some aliases (set (map :db/id (:block/refs b))))) ref-blocks)
           top-level-blocks-ids (set (map :db/id top-level-blocks))
           filters (when (seq filter-state)
