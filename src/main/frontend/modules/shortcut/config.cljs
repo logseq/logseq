@@ -249,6 +249,10 @@
                                                 (editor-handler/escape-editing)
                                                 (route-handler/go-to-search! :global))}
 
+   :go/electron-find-in-page       {:binding "mod+f"
+                                    :fn      #(when (util/electron?)
+                                                (search-handler/electron-find-in-page!))}
+
    :go/journals                    {:binding "g j"
                                     :fn      route-handler/go-to-journals!}
 
@@ -501,6 +505,7 @@
                           :ui/toggle-brackets
                           :go/search-in-page
                           :go/search
+                          :go/electron-find-in-page
                           :go/backward
                           :go/forward
                           :search/re-index
@@ -553,6 +558,7 @@
     :editor/select-all-blocks
     :go/search
     :go/search-in-page
+    :go/electron-find-in-page
     :editor/undo
     :editor/redo
     :editor/copy

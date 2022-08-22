@@ -9,7 +9,8 @@
             [promesa.core :as p]
             [logseq.graph-parser.text :as text]
             [frontend.util.drawer :as drawer]
-            [frontend.util.property :as property]))
+            [frontend.util.property :as property]
+            [electron.ipc :as ipc]))
 
 (defn add-search-to-recent!
   [repo q]
@@ -47,6 +48,34 @@
                           :files (search/file-search q)}))
                search-key (if more? :search/more-result :search/result)]
            (swap! state/state assoc search-key result)))))))
+
+(defn electron-find-in-page!
+  ([]
+   (electron-find-in-page! nil))
+  ([on-success]
+   (when (util/electron?)
+     (let [{:keys [active? backward? q]} (:ui/find-in-search @state/state)
+           option (cond->
+                    {}
+
+                    (not active?)
+                    (assoc :findNext true)
+
+                    backward?
+                    (assoc :forward false))]
+       (when-not active? (state/set-state! [:ui/find-in-search :active?] true))
+       (when-not (string/blank? q)
+         (ipc/ipc "find-in-page" q option)
+         (when on-success
+           (js/setTimeout #(on-success) 500)))))))
+
+(defn electron-exit-find-in-page!
+  [& {:keys [clear-state?]
+      :or {clear-state? true}}]
+  (when (util/electron?)
+    (ipc/ipc "clear-find-in-page")
+    (when clear-state?
+      (state/set-state! :ui/find-in-search nil))))
 
 (defn clear-search!
   ([]

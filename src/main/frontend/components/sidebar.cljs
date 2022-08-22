@@ -12,6 +12,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
+            [frontend.components.find-in-page :as find-in-page]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -332,6 +333,9 @@
                     :route-match route-match})
 
      [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
+
+      (when (util/electron?)
+        (find-in-page/search))
 
       (when show-action-bar?
         (action-bar/action-bar))

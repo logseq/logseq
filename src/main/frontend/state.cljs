@@ -231,6 +231,8 @@
      :file-sync/download-init-progress      nil
 
      :encryption/graph-parsing?             false
+
+     :ui/find-in-search                     nil
      })))
 
 ;; block uuid -> {content(String) -> ast}
