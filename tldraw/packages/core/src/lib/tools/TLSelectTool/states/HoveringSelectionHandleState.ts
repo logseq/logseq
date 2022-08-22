@@ -77,7 +77,7 @@ export class HoveringSelectionHandleState<
           break
         }
         case TLTargetType.Selection: {
-          selectedShape.autoResize?.({})
+          selectedShape.onResetBounds?.({})
           if (this.app.selectedShapesArray.length === 1) {
             this.tool.transition('editingShape', {
               type: TLTargetType.Shape,
@@ -91,7 +91,7 @@ export class HoveringSelectionHandleState<
       const asset = selectedShape.props.assetId
         ? this.app.assets[selectedShape.props.assetId]
         : undefined
-      selectedShape.autoResize({ asset })
+      selectedShape.onResetBounds({ asset })
       this.tool.transition('idle')
     }
   }

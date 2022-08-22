@@ -642,6 +642,10 @@ button.tl-select-input-trigger {
   transform-origin: top left;
 }
 
+.tl-html-anchor {
+  width: fit-content;
+}
+
 .tl-html-anchor > iframe {
   @apply h-full w-full !important;
   margin: 0;

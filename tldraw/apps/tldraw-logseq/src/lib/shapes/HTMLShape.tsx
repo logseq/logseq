@@ -61,10 +61,11 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
 
   onResetBounds = (info?: TLResetBoundsInfo) => {
     if (this.htmlAnchorRef.current) {
+      const rect = this.htmlAnchorRef.current.getBoundingClientRect()
       this.update({
         size: [
-          this.props.size[0],
-          Math.max(Math.min(this.htmlAnchorRef.current.offsetHeight || 400, 800), 10),
+          Math.max(Math.min(rect.width || 400, 800), 10),
+          Math.max(Math.min(rect.height || 400, 800), 10),
         ],
       })
     }
