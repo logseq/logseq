@@ -412,6 +412,7 @@ export interface IAppProxy {
 
   // hook events
   onCurrentGraphChanged: IUserHook
+  onGraphAfterIndexed: IUserHook<{repo: string}>
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
   onThemeChanged: IUserHook<Partial<{name: string, mode: string, pid: string, url: string}>>
   onBlockRendererSlotted: IUserSlotHook<{ uuid: BlockUUID }>
