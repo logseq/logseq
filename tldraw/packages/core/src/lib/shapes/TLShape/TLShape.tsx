@@ -57,7 +57,10 @@ export interface TLResizeInfo {
   transformOrigin: number[]
 }
 
-export interface TLResetBoundsInfo {}
+export interface TLResetBoundsInfo {
+  zoom: number
+  asset?: TLAsset
+}
 
 export interface TLHandleChangeInfo {
   id: string

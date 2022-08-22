@@ -112,7 +112,7 @@ const ResetBoundsAction = observer(() => {
       type="button"
       onClick={() => {
         shapes.forEach(s => {
-          s.onResetBounds()
+          s.onResetBounds({ zoom: app.viewport.camera.zoom })
         })
         app.persist()
       }}

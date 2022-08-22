@@ -62,11 +62,10 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
   onResetBounds = (info?: TLResetBoundsInfo) => {
     if (this.htmlAnchorRef.current) {
       const rect = this.htmlAnchorRef.current.getBoundingClientRect()
+      const [w, h] = Vec.div([rect.width, rect.height], info?.zoom ?? 1)
+      const clamp = (v: number) => Math.max(Math.min(v || 400, 1400), 10)
       this.update({
-        size: [
-          Math.max(Math.min(rect.width || 400, 800), 10),
-          Math.max(Math.min(rect.height || 400, 800), 10),
-        ],
+        size: [clamp(w), clamp(h)],
       })
     }
     return this
