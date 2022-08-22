@@ -131,8 +131,9 @@
   [{:keys [on-click]}]
   (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
     [:button.#left-menu.cp__header-left-menu.button.icon
-     {:on-click on-click}
-      (ui/icon "menu-2" {:title "Toggle left menu" :style {:fontSize ui/icon-size}})]))
+     {:title "Toggle left menu"
+      :on-click on-click}
+      (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]))
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [current-repo t]}]
@@ -249,11 +250,12 @@
          (when current-repo ;; this is for the Search button
            (ui/with-shortcut :go/search "right"
              [:button.button.icon#search-button
-              {:on-click #(do (when (or (mobile-util/native-android?)
+              {:title "Search"
+               :on-click #(do (when (or (mobile-util/native-android?)
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))
                               (state/pub-event! [:go/search]))}
-              (ui/icon "search" {:title "Search" :style {:fontSize ui/icon-size}})]))])
+              (ui/icon "search" {:style {:fontSize ui/icon-size}})]))])
       (when (mobile-util/native-platform?)
         (if (or (state/home?) custom-home-page?)
           left-menu

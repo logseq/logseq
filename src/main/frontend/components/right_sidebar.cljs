@@ -25,9 +25,9 @@
   (when-not (util/mobile?)
     (ui/with-shortcut :ui/toggle-right-sidebar "left"
       [:button.button.icon.fade-link.toggle-right-sidebar
-       {:on-click ui-handler/toggle-right-sidebar!}
-       (ui/icon "layout-sidebar-right" {:title "Toggle right sidebar"
-                                        :style {:fontSize "20px"}})])))
+       {:title "Toggle right sidebar"
+        :on-click ui-handler/toggle-right-sidebar!}
+       (ui/icon "layout-sidebar-right" {:style {:fontSize "20px"}})])))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]
