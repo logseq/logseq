@@ -132,7 +132,7 @@
   (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
     [:button.#left-menu.cp__header-left-menu.button.icon
      {:on-click on-click}
-      (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]))
+      (ui/icon "menu-2" {:title "Toggle left menu" :style {:fontSize ui/icon-size}})]))
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [current-repo t]}]
@@ -253,7 +253,7 @@
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))
                               (state/pub-event! [:go/search]))}
-              (ui/icon "search" {:style {:fontSize ui/icon-size}})]))])
+              (ui/icon "search" {:title "Search" :style {:fontSize ui/icon-size}})]))])
       (when (mobile-util/native-platform?)
         (if (or (state/home?) custom-home-page?)
           left-menu
