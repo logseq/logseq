@@ -26,7 +26,8 @@
 (rum/defc home-button []
   (ui/with-shortcut :go/home "left"
     [:button.button.icon.inline
-     {:on-click #(do
+     {:title "Home"
+      :on-click #(do
                    (when (mobile-util/native-iphone?)
                      (state/set-left-sidebar-open! false))
                    (route-handler/redirect-to-home!))}
@@ -143,7 +144,8 @@
     (ui/dropdown-with-links
      (fn [{:keys [toggle-fn]}]
        [:button.button.icon
-        {:on-click toggle-fn}
+        {:title "More"
+         :on-click toggle-fn}
         (ui/icon "dots" {:style {:fontSize ui/icon-size}})])
      (->>
       [(when (state/enable-editing?)
