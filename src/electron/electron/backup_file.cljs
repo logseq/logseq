@@ -25,11 +25,11 @@
   (get-backup-dir* repo relative-path version-file-dir))
 
 (defn- truncate-old-versioned-files!
-  "reserve the latest 3 version files"
+  "reserve the latest 6 version files"
   [dir]
   (let [files (fs/readdirSync dir (clj->js {:withFileTypes true}))
         files (mapv #(.-name %) files)
-        old-versioned-files (drop 3 (reverse (sort files)))]
+        old-versioned-files (drop 6 (reverse (sort files)))]
     (doseq [file old-versioned-files]
       (fs-extra/removeSync (path/join dir file)))))
 
@@ -44,7 +44,7 @@
                :version-file-dir (get-version-file-dir repo relative-path))
         new-path (path/join dir*
                             (str (string/replace (.toISOString (js/Date.)) ":" "_")
-                                 ext))]
+                                 ".Desktop" ext))]
     (fs-extra/ensureDirSync dir*)
     (fs/writeFileSync new-path content)
     (fs/statSync new-path)

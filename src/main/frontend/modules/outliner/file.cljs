@@ -25,14 +25,18 @@
   [repo page-db-id]
   (let [page-block (db/pull repo '[*] page-db-id)
         page-db-id (:db/id page-block)
-        blocks (model/get-page-blocks-no-cache repo (:block/name page-block))]
-    (when-not (and (= 1 (count blocks))
-                   (string/blank? (:block/content (first blocks)))
-                   (nil? (:block/file page-block)))
-      (let [tree (tree/blocks->vec-tree repo blocks (:block/name page-block))]
-        (if page-block
-          (file/save-tree page-block tree)
-          (js/console.error (str "can't find page id: " page-db-id)))))))
+        blocks-count (model/get-page-blocks-count repo page-db-id)]
+    (if (and (> blocks-count 500)
+             (not (state/input-idle? repo :diff 3000)))           ; long page
+      (async/put! write-chan [repo page-db-id])
+      (let [blocks (model/get-page-blocks-no-cache repo (:block/name page-block))]
+        (when-not (and (= 1 (count blocks))
+                       (string/blank? (:block/content (first blocks)))
+                       (nil? (:block/file page-block)))
+          (let [tree (tree/blocks->vec-tree repo blocks (:block/name page-block))]
+            (if page-block
+              (file/save-tree page-block tree)
+              (js/console.error (str "can't find page id: " page-db-id)))))))))
 
 (defn write-files!
   [pages]

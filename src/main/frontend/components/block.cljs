@@ -2098,14 +2098,18 @@
                  (not (:slide? config)))
         (properties-cp config block))
 
-      (when (and (not block-ref-with-title?) (seq body))
-        [:div.block-body {:style {:display (if (and collapsed? (seq title)) "none" "")}}
-         ;; TODO: consistent id instead of the idx (since it could be changed later)
-         (let [body (block/trim-break-lines! (:block/body block))]
-           (for [[idx child] (medley/indexed body)]
-             (when-let [block (markup-element-cp config child)]
-               (rum/with-key (block-child block)
-                 (str uuid "-" idx)))))])
+      (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
+        (when (and (not block-ref-with-title?)
+                   (seq body)
+                   (or (not title-collapse-enabled?)
+                       (and title-collapse-enabled? (not collapsed?))))
+         [:div.block-body
+          ;; TODO: consistent id instead of the idx (since it could be changed later)
+          (let [body (block/trim-break-lines! (:block/body block))]
+            (for [[idx child] (medley/indexed body)]
+              (when-let [block (markup-element-cp config child)]
+                (rum/with-key (block-child block)
+                  (str uuid "-" idx)))))]))
 
       (case (:block/warning block)
         :multiple-blocks
@@ -2147,9 +2151,10 @@
       [:div.more (ui/icon "dots-circle-horizontal" {:style {:fontSize 16}})])]])
 
 (rum/defcs block-content-or-editor < rum/reactive
-  (rum/local true :hide-block-refs?)
+  (rum/local true ::hide-block-refs?)
   [state config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
-  (let [*hide-block-refs? (get state :hide-block-refs?)
+  (let [*hide-block-refs? (get state ::hide-block-refs?)
+        hide-block-refs? @*hide-block-refs?
         editor-box (get config :editor-box)
         editor-id (str "editor-" edit-input-id)
         slide? (:slide? config)
@@ -2205,7 +2210,7 @@
 
            (block-refs-count block *hide-block-refs?)]]
 
-         (when (and (not @*hide-block-refs?) (> refs-count 0))
+         (when (and (not hide-block-refs?) (> refs-count 0))
            (let [refs-cp (state/get-component :block/linked-references)]
              (refs-cp uuid)))]))))
 
@@ -2360,7 +2365,6 @@
     (when (and
            (state/in-selection-mode?)
            (non-dragging? e))
-      (util/stop e)
       (editor-handler/highlight-selection-area! block-id))))
 
 (defn- block-mouse-leave
@@ -2419,7 +2423,7 @@
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
-        block (if (or navigated? custom-query?)
+        block (if navigated?
                 (let [block (db/pull [:block/uuid navigating-block])
                       blocks (db/get-paginated-blocks repo (:db/id block)
                                                       {:scoped-block-id (:db/id block)})
@@ -2464,8 +2468,7 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
-        selected-blocks (set (state/get-selection-block-ids))
-        selected? (contains? selected-blocks uuid)]
+        selected? (state/sub-block-selected? uuid)]
     [:div.ls-block
      (cond->
        {:id block-id
@@ -2563,7 +2566,7 @@
   (let [repo (state/get-current-repo)
         ref? (:ref? config)
         custom-query? (boolean (:custom-query? config))]
-    (if (and ref? (not custom-query?) (not (:ref-query-child? config)))
+    (if (and (or ref? custom-query?) (not (:ref-query-child? config)))
       (ui/lazy-visible
        (fn [] (block-container-inner state repo config block)))
       (block-container-inner state repo config block))))
@@ -2804,7 +2807,8 @@
   (let [dsl-query? (:dsl-query? config)
         query-atom (:query-atom state)
         repo (state/get-current-repo)
-        query-time (react/get-query-time query)
+        query-time (or (react/get-query-time query)
+                       (react/get-query-time q))
         view-fn (if (keyword? view) (state/sub [:config repo :query/views view]) view)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
@@ -2946,7 +2950,8 @@
    (ui/block-error "Query Error:" {:content (:query q)})
    (ui/lazy-visible
     (fn [] (custom-query* config q))
-    {:debug-id q})))
+    {:debug-id q
+     :trigger-once? false})))
 
 (defn admonition
   [config type result]
@@ -3287,13 +3292,13 @@
          {:class (when doc-mode? "document-mode")}
          (lazy-blocks config blocks' flat-blocks)]))))
 
-(rum/defcs breadcrumb-with-container < rum/reactive
+(rum/defcs breadcrumb-with-container < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [first-block (ffirst (:rum/args state))]
              (assoc state
                     ::initial-block    first-block
                     ::navigating-block (atom (:block/uuid first-block)))))}
-  [state blocks config]
+  [state block config]
   (let [repo (state/get-current-repo)
         *navigating-block (::navigating-block state)
         navigating-block (rum/react *navigating-block)
@@ -3306,10 +3311,10 @@
                  (let [block navigating-block-entity]
                    (db/get-paginated-blocks repo (:db/id block)
                                             {:scoped-block-id (:db/id block)}))
-                 blocks)]
+                 [block])]
     [:div
      (when (:breadcrumb-show? config)
-       (breadcrumb config (state/get-current-repo) navigating-block
+       (breadcrumb config (state/get-current-repo) (or navigating-block (:block/uuid block))
                    {:show-page? false
                     :navigating-block *navigating-block}))
      (blocks-container blocks (assoc config
@@ -3324,8 +3329,7 @@
    (cond-> option
      (:document/mode? config) (assoc :class "doc-mode"))
    (cond
-     (and (or (:ref? config) (:custom-query? config))
-          (:group-by-page? config))
+     (and (:custom-query? config) (:group-by-page? config))
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page blocks] blocks]
@@ -3333,8 +3337,7 @@
            (fn []
              (let [alias? (:block/alias? page)
                    page (db/entity (:db/id page))
-                   blocks (tree/non-consecutive-blocks->vec-tree blocks)
-                   parent-blocks (group-by :block/parent blocks)]
+                   blocks' (tree/non-consecutive-blocks->vec-tree blocks)]
                [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                             (:ref? config)
                             (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
@@ -3342,11 +3345,34 @@
                  [:div
                   (page-cp config page)
                   (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-                 (for [[parent blocks] parent-blocks]
+                 (for [block blocks']
                    (rum/with-key
-                     (breadcrumb-with-container blocks config)
-                     (:db/id parent)))
-                 {:debug-id page})])))))]
+                     (breadcrumb-with-container block config)
+                     (:db/id block)))
+                 {:debug-id page
+                  :trigger-once? false})])))))]
+
+     (and (:ref? config) (:group-by-page? config))
+     [:div.flex.flex-col
+      (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
+        (for [[page parent-blocks] blocks]
+         (ui/lazy-visible
+          (fn []
+            (let [alias? (:block/alias? page)
+                  page (db/entity (:db/id page))]
+              [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
+                           (:ref? config)
+                           (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
+               (ui/foldable
+                [:div
+                 (page-cp config page)
+                 (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+                (for [block parent-blocks]
+                  (let [block' (update block :block/children tree/non-consecutive-blocks->vec-tree)]
+                    (rum/with-key
+                      (breadcrumb-with-container block' config)
+                      (:db/id block'))))
+                {:debug-id page})])))))]
 
      (and (:group-by-page? config)
           (vector? (first blocks)))

@@ -964,12 +964,13 @@
       (when nav?
         [:aside.md:w-64 {:style {:min-width "10rem"}}
          (let [plugins (plugin-handler/get-enabled-plugins-if-setting-schema)]
-           [:ul
+           [:ul.settings-plugin-list
             (for [{:keys [id name title icon]} plugins]
               [:li
                {:class (util/classnames [{:active (= id focused)}])}
-               [:a.flex.items-center
-                {:on-click #(do (state/set-state! :plugin/focused-settings id))}
+               [:a.flex.items-center.settings-plugin-item
+                {:data-id id
+                 :on-click #(do (state/set-state! :plugin/focused-settings id))}
                 (if (and icon (not (string/blank? icon)))
                   [:img.icon {:src icon}]
                   svg/folder)
@@ -977,6 +978,7 @@
 
       [:article
        [:div.panel-wrap
+        {:data-id focused}
         (when-let [^js pl (and focused (= @*cache focused)
                                (plugin-handler/get-plugin-inst focused))]
           (ui/catch-error
