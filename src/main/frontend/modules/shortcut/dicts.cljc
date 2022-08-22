@@ -77,6 +77,7 @@
    :editor/zoom-out                "Zoom out editing block / Backwards otherwise"
    :ui/toggle-brackets             "Toggle whether to display brackets"
    :go/search-in-page              "Search in the current page"
+   :go/electron-find-in-page       "Find in page"
    :go/search                      "Full text search"
    :go/journals                    "Go to journals"
    :go/backward                    "Backwards"
