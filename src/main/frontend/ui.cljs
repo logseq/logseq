@@ -147,7 +147,7 @@
 
 (defn button
   [text & {:keys [background href class intent on-click small? large?]
-           :or {small? false large? false}
+           :or   {small? false large? false}
            :as   option}]
   (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center")
         klass (if background (string/replace klass "indigo" background) klass)
@@ -936,24 +936,17 @@
   ([content-fn]
    (lazy-visible content-fn nil))
   ([content-fn {:keys [trigger-once? _debug-id]
-                :or {trigger-once? false}}]
+                :or {trigger-once? true}}]
    (if (or (util/mobile?) (mobile-util/native-platform?))
      (content-fn)
      (let [[visible? set-visible!] (rum/use-state false)
-           [last-changed-time set-last-changed-time!] (rum/use-state nil)
            inViewState (useInView #js {:rootMargin "100px"
                                        :triggerOnce trigger-once?
                                        :onChange (fn [in-view? entry]
-                                                   (let [self-top (.-top (.-boundingClientRect entry))
-                                                         time' (util/time-ms)]
-                                                     (when (and
-                                                            (or (and (not visible?) in-view?)
-                                                                ;; hide only the components below the current top for better ux
-                                                                (and visible? (not in-view?) (> self-top 0)))
-                                                            (or (nil? last-changed-time)
-                                                                (and (some? last-changed-time)
-                                                                     (> (- time' last-changed-time) 50))))
-                                                       (set-last-changed-time! time')
+                                                   (let [self-top (.-top (.-boundingClientRect entry))]
+                                                     (when (or (and (not visible?) in-view?)
+                                                               ;; hide only the components below the current top for better ux
+                                                               (and visible? (not in-view?) (> self-top 0)))
                                                        (set-visible! in-view?))))})
            ref (.-ref inViewState)]
        (lazy-visible-inner visible? content-fn ref)))))

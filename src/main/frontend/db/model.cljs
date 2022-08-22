@@ -1205,7 +1205,8 @@
          (->>
           (react/q repo
             [:frontend.db.react/refs page-id]
-            {:query-fn (fn []
+            {:use-cache? false
+             :query-fn (fn []
                          (let [entities (mapcat (fn [id]
                                                   (:block/_path-refs (db-utils/entity id))) pages)
                                blocks (map (fn [e] {:block/parent (:block/parent e)
@@ -1216,34 +1217,7 @@
             nil)
           react
           :entities
-          (remove (fn [block] (= page-id (:db/id (:block/page block)))))
-          db-utils/group-by-page
-          (map (fn [[k blocks]]
-                 (let [k (if (contains? aliases (:db/id k))
-                           {:db/id (:db/id k)
-                            :block/alias? true
-                            :block/journal-day (:block/journal-day k)}
-                           k)]
-                   [k blocks])))))))))
-
-(defn get-linked-references-count
-  [id]
-  (when-let [block (db-utils/entity id)]
-    (let [repo (state/get-current-repo)
-          page? (:block/name block)
-          result (if page?
-                   (let [pages (page-alias-set repo (:block/name block))]
-                     @(react/q repo [:frontend.db.react/refs-count id] {}
-                        '[:find [?block ...]
-                          :in $ [?ref-page ...] ?id
-                          :where
-                          [?block :block/refs ?ref-page]
-                          [?block :block/page ?p]
-                          [(not= ?p ?id)]]
-                        pages
-                        id))
-                   (:block/_refs block))]
-      (count result))))
+          (remove (fn [block] (= page-id (:db/id (:block/page block)))))))))))
 
 (defn get-date-scheduled-or-deadlines
   [journal-title]
