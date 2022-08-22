@@ -140,6 +140,8 @@ export interface AppUserConfigs {
 
   currentGraph: string
   showBracket: boolean
+  enabledFlashcards: boolean
+  enabledJournals: boolean
 
   [key: string]: any
 }

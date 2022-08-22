@@ -102,7 +102,15 @@
          :preferred-start-of-week (state/get-start-of-week)
          :current-graph         (state/get-current-repo)
          :show-brackets         (state/show-brackets?)
+         :enabled-journals      (state/enable-journals?)
+         :enabled-flashcards    (state/enable-flashcards?)
          :me                    (state/get-me)}))))
+
+(def ^:export get_current_graph_configs
+  (fn []
+    (some-> (get (:config @state/state) (state/get-current-repo))
+            (normalize-keyword-for-json)
+            (bean/->js))))
 
 (def ^:export get_current_graph
   (fn []

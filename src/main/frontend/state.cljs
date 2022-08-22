@@ -368,9 +368,11 @@
                  (get (sub-config) (get-current-repo))))))
 
 (defn enable-journals?
-  [repo]
-  (not (false? (:feature/enable-journals?
-                (get (sub-config) repo)))))
+  ([]
+   (enable-journals? (get-current-repo)))
+  ([repo]
+   (not (false? (:feature/enable-journals?
+                 (get (sub-config) repo))))))
 
 (defn enable-flashcards?
   ([]
