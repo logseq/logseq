@@ -532,7 +532,7 @@
                                    ex-time (:ExpireTime result)
                                    user-groups (set (:UserGroups result))]
                                (if (and (number? ex-time)
-                                        (< ex-time (js/Date.now)))
+                                        (< (* ex-time 1000) (js/Date.now)))
                                  (do
                                    (vreset! *beta-unavailable? true)
                                    (maybe-onboarding-show :unavailable))
