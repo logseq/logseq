@@ -45,11 +45,11 @@
               (sync/graph-count-exceed-limit? r))
           nil
 
-          (= 404 (get-in (ex-data r) [:err :status]))
-          (notification/show! (str "Create graph failed: already existed graph: " name) :warning)
+          (contains? #{400 404} (get-in (ex-data r) [:err :status]))
+          (notification/show! (str "Create graph failed: already existed graph: " name) :warning true nil 4000)
 
           :else
-          (notification/show! (str "Create graph failed:" r) :warning false))))))
+          (notification/show! (str "Create graph failed:" r) :warning true nil 4000))))))
 
 (defn <delete-graph
   [graph-uuid]
