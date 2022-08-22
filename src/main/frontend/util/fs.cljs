@@ -81,7 +81,7 @@
   [input]
   (string/replace input "_" "%5F"))
 
-(defn- encode-url-percnt
+(defn- encode-url-percent
   [input]
   (string/replace input "%" "%25"))
 
@@ -121,7 +121,7 @@
   [title]
   (some-> title
           gp-util/page-name-sanity ;; we want to preserve the case sensitive nature of most file systems, don't lowercase
-          (string/replace gp-util/url-encoded-pattern encode-url-percnt) ;; pre-encode % in title on demand
+          (string/replace gp-util/url-encoded-pattern encode-url-percent) ;; pre-encode % in title on demand
           (string/replace reserved-chars-pattern url-encode-file-name)
           (escape-windows-reserved-filebodies) ;; do this before the lowbar encoding to avoid ambiguity
           (escape-namespace-slashes-and-multilowbars)))

@@ -1,65 +1,22 @@
-(ns logseq.graph-parser.test.docs-graph-helper
-  "Helper fns for setting up and running tests against docs graph"
-  (:require ["fs" :as fs]
-            ["child_process" :as child-process]
-            [cljs.test :refer [is testing]]
+(ns frontend.handler.repo-conversion-test
+  "Repo tests of directory conversion"
+  (:require [cljs.test :refer [deftest use-fixtures is testing]]
             [clojure.string :as string]
+            [logseq.graph-parser.cli :as gp-cli]
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [logseq.graph-parser.config :as gp-config]
+            [frontend.test.helper :as test-helper]
+            [frontend.handler.page :as page-handler]
+            [frontend.handler.conversion :as conversion-handler]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.db.conn :as conn]
             [datascript.core :as d]))
 
-;; Helper fns for test setup
-;; =========================
-(defn- sh
-  "Run shell cmd synchronously and print to inherited streams by default. Aims
-    to be similar to babashka.tasks/shell"
-  [cmd opts]
-  (child-process/spawnSync (first cmd)
-                           (clj->js (rest cmd))
-                           (clj->js (merge {:stdio "inherit"} opts))))
+(use-fixtures :each {:before test-helper/start-test-db!
+                     :after test-helper/destroy-test-db!})
 
-(defn clone-docs-repo-if-not-exists
-  [dir branch]
-  (when-not (.existsSync fs dir)
-    (sh ["git" "clone" "--depth" "1" "-b" branch "-c" "advice.detachedHead=false"
-         "https://github.com/logseq/docs" dir] {})))
-
-
-;; Fns for common test assertions
-;; ==============================
-(defn get-top-block-properties
-  [db]
-  (->> (d/q '[:find (pull ?b [*])
-              :where
-              [?b :block/properties]
-              [(missing? $ ?b :block/name)]]
-            db)
-       (map first)
-       (map (fn [m] (zipmap (keys (:block/properties m)) (repeat 1))))
-       (apply merge-with +)
-       (filter #(>= (val %) 5))
-       (into {})))
-
-(defn get-all-page-properties
-  [db]
-  (->> (d/q '[:find (pull ?b [*])
-              :where
-              [?b :block/properties]
-              [?b :block/name]]
-            db)
-       (map first)
-       (map (fn [m] (zipmap (keys (:block/properties m)) (repeat 1))))
-       (apply merge-with +)
-       (into {})))
-
-(defn get-block-format-counts
-  [db]
-  (->> (d/q '[:find (pull ?b [*]) :where [?b :block/format]] db)
-       (map first)
-       (group-by :block/format)
-       (map (fn [[k v]] [k (count v)]))
-       (into {})))
-
-(defn- query-assertions
+(defn- query-assertions-v067
   [db files]
   (testing "Query based stats"
     (is (= (->> files
@@ -92,8 +49,8 @@
                 (into {})))
         "Task marker counts")
 
-    (is (= {:markdown 3141 :org 460} ;; 2 pages for namespaces are not parsed
-           (get-block-format-counts db))
+    (is (= {:markdown 3143 :org 460}
+           (docs-graph-helper/get-block-format-counts db))
         "Block format counts")
 
     (is (= {:title 98 :id 98
@@ -101,14 +58,14 @@
             :card-last-score 6 :card-repeats 6 :card-next-schedule 6
             :card-last-interval 6 :card-ease-factor 6 :card-last-reviewed 6
             :alias 6 :logseq.macro-arguments 94 :logseq.macro-name 94}
-           (get-top-block-properties db))
+           (docs-graph-helper/get-top-block-properties db))
         "Counts for top block properties")
 
     (is (= {:title 98
             :alias 6
             :tags 2 :permalink 2
             :name 1 :type 1 :related 1 :sample 1 :click 1 :id 1 :example 1}
-           (get-all-page-properties db))
+           (docs-graph-helper/get-all-page-properties db))
         "Counts for all page properties")
 
     (is (= {:block/scheduled 2
@@ -132,8 +89,7 @@
                 set))
         "Has correct namespaces")))
 
-;; TODO update me to the number of the latest version of doc when namespace is updated
-(defn docs-graph-assertions
+(defn docs-graph-assertions-v067
   "These are common assertions that should pass in both graph-parser and main
   logseq app. It is important to run these in both contexts to ensure that the
   functionality in frontend.handler.repo and logseq.graph-parser remain the
@@ -143,7 +99,7 @@
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
     (is (= 211 (count files)) "Correct file count")
-    (is (= 41874 (count (d/datoms db :eavt))) "Correct datoms count")
+    (is (= 41672 (count (d/datoms db :eavt))) "Correct datoms count")
 
     (is (= 3600
            (ffirst
@@ -158,4 +114,34 @@
                  db)))
         "Advanced query count"))
 
-  (query-assertions db files))
+  (query-assertions-v067 db files))
+
+(defn- conversion-dir-ver3
+  [path]
+  (let [original-body (gp-util/path->file-body path)
+        ;; only test file name parsing, don't consider title prop overriding
+        rename-target (conversion-handler/calc-dir-ver-3-rename-target original-body nil)]
+    (if rename-target
+      (do (prn "conversion dir-ver3: " original-body " -> " rename-target)
+          (#'page-handler/compute-new-file-path path rename-target))
+      path)))
+
+(defn- convert-graph-files-path
+  "Given a list of files, converts them according to the given conversion function"
+  [files conversion-fn]
+  (map (fn [file]
+         (assoc file :file/path (conversion-fn (:file/path file)))) files))
+
+;; Integration test that test parsing a large graph like docs
+;; Check if file name conversion from old version of docs is working
+(deftest ^:integration convert-v067-filesnames-parse-and-load-files-to-db
+  (let [graph-dir "src/test/docs"
+        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.6.7")
+        files (gp-cli/build-graph-files graph-dir)
+        ;; Converting the v0.6.7 ver docs graph under the old namespace naming rule to the new one (:repo/dir-version 0->3)
+        files (convert-graph-files-path files conversion-dir-ver3)
+        _ (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false :verbose false})
+        db (conn/get-db test-helper/test-db)]
+
+    ;; Result under new naming rule after conversion should be the same as the old one
+    (docs-graph-assertions-v067 db (map :file/path files))))

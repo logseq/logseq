@@ -3,7 +3,6 @@
 (ns frontend.handler.conversion
   (:require [clojure.string :as string]
             [promesa.core :as p]
-            [goog.string :as gstring]
             [logseq.graph-parser.util :as gp-util]
             [frontend.idb :as idb]
             [frontend.util.fs :as fs-util]
@@ -111,8 +110,7 @@
 
 (defn- is-dir-ver-3-result?
   [file-body]
-  (or (string/includes? file-body "__")
-      (not= file-body (gstring/unescapeEntities file-body))))
+  (string/includes? file-body "__"))
 
 (defn- is-dir-ver-3-manual-title-prop?
   [file-body prop-title]
@@ -130,7 +128,7 @@
   ;;     pdf name handling is buggy
   ;;   2) avoid cycle conversion 
   ;;     don't show items that likely to be converted 
-  ;;     (with `_0x` or `__` included)
+  ;;     (with `__` included)
   ;;   3) prop title also creates `__` likely, and it will not cause cycle conversion
   ;;     so always pass if `prop-title` provides
   (when (and (not (is-dir-ver-3-manual-title-prop? file-body prop-title))

@@ -119,7 +119,7 @@
 (defmethod handle :graph/refresh [_]
   (repo-handler/refresh-repos!))
 
-;; FIXME: awful multi-arty function. 
+;; FIXME: awful multi-arty function.
 ;; Should use a `-impl` function instead of the awful `skip-ios-check?` param with nested callback.
 (defn- graph-switch
   ([graph]
@@ -321,7 +321,7 @@
   (p/let [content (when content (encrypt/decrypt content))]
     (state/set-modal! #(git-component/file-specific-version path hash content))))
 
-;; Hook on a graph is ready to be shown to the user. 
+;; Hook on a graph is ready to be shown to the user.
 ;; It's different from :graph/resotred, as :graph/restored is for window reloaded
 (defmethod handle :graph/ready
   [[_ repo]]

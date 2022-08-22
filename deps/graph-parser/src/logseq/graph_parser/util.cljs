@@ -14,7 +14,8 @@
     string))
 
 (defn path-normalize
-  "Normalize file path (for reading paths from FS, not required by writting)"
+  "Normalize file path (for reading paths from FS, not required by writting)
+   Keep capitalization senstivity"
   [s]
   (.normalize s "NFC"))
 
@@ -119,7 +120,7 @@
           (remove-boundary-slashes)
           (path-normalize)))
 
-(defn validize-namespaces
+(defn make-valid-namespaces
   "Remove those empty namespaces from title to make it a valid page name."
   [title]
   (->> (string/split title "/")
@@ -134,7 +135,7 @@
   (some-> file-name
           (decode-namespace-underlines)
           (string/replace url-encoded-pattern safe-url-decode)
-          (validize-namespaces)))
+          (make-valid-namespaces)))
 
 (defn page-name-sanity-lc
   "Sanitize the query string for a page name (mandate for :block/name)"

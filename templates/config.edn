@@ -88,11 +88,6 @@
  ;; For more, see https://github.com/logseq/logseq/issues/672
  ;; :org-mode/insert-file-link? true
 
- ;; If you prefer to use the file name as the page title
- ;; instead of the first heading's title
- ;; the only option for now is `file`
- ;; :page-name-order "file"
-
  ;; Setup custom shortcuts under `:shortcuts` key
  ;; Syntax:
  ;; 1. `+` means keys pressing simultaneously. eg: `ctrl+shift+a`

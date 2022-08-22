@@ -94,64 +94,58 @@
         current-file))))
 
 (defn- get-delete-blocks [repo-url first-page file]
-  (let [delete-blocks (->
+  (let [current-file  (page-exists-in-another-file repo-url first-page file)
+        delete-blocks (->
                        (concat
                         (db/delete-file-blocks! repo-url file)
                         (when first-page (db/delete-page-blocks repo-url (:block/name first-page))))
                        (distinct))]
-    delete-blocks))
-
-(defn- resolve-file-conflict
-  "When a new file is replacing the current file of a page, transact the delete operation.
-   Addressing the Chokodar inconsistent behavior under macOS (FsEvent) on renaming files
-     between capitalizations. It only fire `add` event for that, while the expected events are
-     `unlink` then `add`.
-   Hope our own native file watcher will fix it :)"
-  [repo-url first-page file transact!]
-  (when-let [current-file (page-exists-in-another-file repo-url first-page file)]
-    (when (not= file current-file)
-      (p/let [dir     (config/get-repo-dir repo-url)
-              exists? (fs/file-exists? dir current-file)]
-        ;; if the `:file/path` still exists, the adding is conflict
-        ;; notificate the error
-        ;; if the `:file/path` is not exists, then the file is replaced 
-        ;; clean the items to avoid conflict 
+    (when (and current-file (not= file current-file))
+      (p/let [exists? (fs/file-exists? (config/get-repo-dir repo-url) current-file)]
         (if exists?
           (let [error (str "Page already exists with another file: " current-file ", current file: " file)]
             (state/pub-event! [:notification/show
                                {:content error
                                 :status :error
                                 :clear? false}]))
-          (transact! (distinct (db/delete-file-blocks! repo-url current-file))))))))
+          ;; File doesn't exist anymore
+          ;; Happens when a new file is replacing the current file of a page, and the current file is deleted
+          ;; Addressing the Chokodar inconsistent behavior under macOS (FsEvent) on renaming files
+          ;;   between capitalizations. It only fire `add` event for that, while the expected events are
+          ;;   `unlink` then `add`.
+          ;; Hope our own native file watcher will fix it :)
+          (db/transact! repo-url (concat (db/delete-file-blocks! repo-url current-file)
+                                         (db/delete-files [current-file]))))))
+    delete-blocks))
+
+(defn- convert-win32-path
+  "Legacy logic for converting paths on Windows
+   What case the win32 logic be triggered?"
+  [repo-url file]
+  (let [electron-local-repo? (and (util/electron?)
+                                  (config/local-db? repo-url))]
+    (cond
+      (and electron-local-repo?
+           util/win32?
+           (utils/win32 file))
+      file
+
+      (and electron-local-repo? (or
+                                 util/win32?
+                                 (not= "/" (first file))))
+      (str (config/get-repo-dir repo-url) "/" file)
+
+      :else
+      file)))
 
 (defn reset-file!
   ([repo-url file content]
    (reset-file! repo-url file content {}))
   ([repo-url file content {:keys [verbose] :as options}]
    (try
-     (let [electron-local-repo? (and (util/electron?)
-                                    (config/local-db? repo-url))
-          file (cond
-                 (and electron-local-repo?
-                      util/win32?
-                      (utils/win32 file))
-                 file
-
-                 (and electron-local-repo? (or
-                                            util/win32?
-                                            (not= "/" (first file))))
-                 (str (config/get-repo-dir repo-url) "/" file)
-
-                 (and (mobile/native-android?) (not= "/" (first file)))
-                 file
-
-                 (and (mobile/native-ios?) (not= "/" (first file)))
-                 file
-
-                 :else
-                 file)
-          file (gp-util/path-normalize file)
-          new? (nil? (db/entity [:file/path file]))]
+     (let [file (convert-win32-path repo-url file)
+           file (gp-util/path-normalize file)
+           new? (nil? (db/entity [:file/path file]))]
       (:tx
        (graph-parser/parse-file
         (db/get-db repo-url false)
@@ -160,11 +154,9 @@
         (merge (dissoc options :verbose)
                {:new? new?
                 :delete-blocks-fn   (partial get-delete-blocks repo-url)
-                :resolve-replace-fn (partial resolve-file-conflict repo-url)
                 :extract-options (merge
                                   {:user-config (state/get-config)
                                    :date-formatter (state/get-date-formatter)
-                                   :page-name-order (state/page-name-order)
                                    :block-pattern (config/get-block-pattern (gp-util/get-format file))
                                    :supported-formats (gp-config/supported-formats)
                                    :uri-encoded? (util/mobile?)}
