@@ -450,7 +450,7 @@
   [block-uuid]
   (editor-handler/open-block-in-sidebar! (uuid block-uuid)))
 
-(defn new_block_uuid []
+(defn ^:export new_block_uuid []
   (str (db/new-block-id)))
 
 (def ^:export select_block
