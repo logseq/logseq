@@ -1,6 +1,7 @@
-import { isNonNullable, debounce, Decoration, TLLineShapeProps } from '@tldraw/core'
+import { debounce, Decoration, isNonNullable } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
+import { darken } from 'polished'
 import React from 'react'
 import { TablerIcon } from '~components/icons'
 import { ColorInput } from '~components/inputs/ColorInput'
@@ -12,7 +13,6 @@ import {
   ToggleGroupMultipleInput,
 } from '~components/inputs/ToggleGroupInput'
 import { ToggleInput } from '~components/inputs/ToggleInput'
-import { tint } from 'polished'
 import type {
   BoxShape,
   EllipseShape,
@@ -276,7 +276,7 @@ const SwatchAction = observer(() => {
   const handleChange = React.useMemo(() => {
     let latestValue = ''
     const handler: React.ChangeEventHandler<HTMLInputElement> = e => {
-      const strokeColor = tint(0.4, latestValue)
+      const strokeColor = darken(0.3, latestValue)
       shapes.forEach(s => {
         const strokeOnly = noStrokeShapes.includes(s.props.type)
         s.update(
