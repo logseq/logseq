@@ -339,10 +339,6 @@
      (when e (.stopPropagation e))))
 
 #?(:cljs
-   (defn cur-doc-top []
-     (.. js/document -documentElement -scrollTop)))
-
-#?(:cljs
    (defn element-top [elem top]
      (when elem
        (if (.-offsetParent elem)

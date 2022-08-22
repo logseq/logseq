@@ -259,40 +259,6 @@
     (and (not= current-id id)
          (db/entity [:block/uuid id]))))
 
-(defn- attach-page-properties-if-exists!
-  [block]
-  (if (and (:block/pre-block? block)
-           (seq (:block/properties block)))
-    (let [page-properties (:block/properties block)
-          str->page (fn [n] (block/page-name->map n true))
-          refs (->> page-properties
-                    (filter (fn [[_ v]] (coll? v)))
-                    (vals)
-                    (apply concat)
-                    (set)
-                    (map str->page)
-                    (concat (:block/refs block))
-                    (util/distinct-by :block/name))
-          {:keys [tags alias]} page-properties
-          page-tx (let [id (:db/id (:block/page block))
-                        retract-attributes (when id
-                                             (mapv (fn [attribute]
-                                                     [:db/retract id attribute])
-                                                   [:block/properties :block/tags :block/alias]))
-                        tags (->> (map str->page tags) (remove nil?))
-                        alias (->> (map str->page alias) (remove nil?))
-                        tx (cond-> {:db/id id
-                                    :block/properties page-properties}
-                             (seq tags)
-                             (assoc :block/tags tags)
-                             (seq alias)
-                             (assoc :block/alias alias))]
-                    (conj retract-attributes tx))]
-      (assoc block
-             :block/refs refs
-             :db/other-tx page-tx))
-    block))
-
 (defn- remove-non-existed-refs!
   [refs]
   (remove (fn [x] (or
@@ -385,7 +351,6 @@
                 block
                 (dissoc block :block/pre-block?))
         block (update block :block/refs remove-non-existed-refs!)
-        block (attach-page-properties-if-exists! block)
         new-properties (merge
                         (select-keys properties (property/hidden-properties))
                         (:block/properties block))]

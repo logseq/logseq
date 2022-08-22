@@ -270,11 +270,6 @@ html.is-mobile {
   }
 }
 
-.dropdown-wrapper {
-  background-color: var(--ls-primary-background-color, #fff);
-  min-width: 12rem;
-}
-
 .dropdown-caret {
   display: inline-block;
   width: 0;

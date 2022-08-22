@@ -59,6 +59,7 @@
   (db/set-key-value repo :ast/version db-schema/ast-version)
   (search-handler/rebuild-indices!)
   (db/persist! repo)
+  (plugin-handler/hook-plugin-app :graph-after-indexed {:repo repo :empty-graph? empty-graph?})
   (when (state/setups-picker?)
     (if empty-graph?
       (route-handler/redirect! {:to :import :query-params {:from "picker"}})
