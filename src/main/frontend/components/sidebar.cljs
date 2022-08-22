@@ -332,7 +332,7 @@
      (left-sidebar {:left-sidebar-open? left-sidebar-open?
                     :route-match route-match})
 
-     [:main#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
+     [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
 
       (when (util/electron?)
         (find-in-page/search))
@@ -598,7 +598,7 @@
                        (editor-handler/unhighlight-blocks!)
                        (util/fix-open-external-with-shift! e))}
 
-     [:div.theme-inner
+     [:main.theme-inner
       {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?
                                  :ls-right-sidebar-open sidebar-open?
                                  :ls-wide-mode wide-mode?}])}
