@@ -182,17 +182,19 @@
   {:init (fn [state]
            (let [page-name (first (:rum/args state))
                  filters (when page-name
-                           (atom (page-handler/get-filters (string/lower-case page-name))))]
+                           (atom (page-handler/get-filters (util/page-name-sanity-lc page-name))))]
              (assoc state ::filters filters)))}
   [state page-name]
   (when page-name
-    (let [page-name (string/lower-case page-name)
+    (let [page-name (util/page-name-sanity-lc page-name)
           *ref-pages (::ref-pages state)
           repo (state/get-current-repo)
           filters-atom (get state ::filters)
           filter-state (rum/react filters-atom)
           ref-blocks (db/get-page-referenced-blocks page-name)
+          page-id (:db/id (db/entity repo [:block/name page-name]))
           aliases (db/page-alias-set repo page-name)
+          aliases-exclude-self (remove #{page-id} aliases)
           top-level-blocks (filter (fn [b] (some aliases (set (map :db/id (:block/refs b))))) ref-blocks)
           top-level-blocks-ids (set (map :db/id top-level-blocks))
           filters (when (seq filter-state)
@@ -212,8 +214,13 @@
                                                               (block-handler/get-blocks-refed-pages aliases (cons block filtered-children)))
                                                        block' (assoc (tree/block-entity->map block) :block/children filtered-children)]
                                                    [block' refs])) blocks)
-                                   blocks' (map first result)]
-                               [[page blocks'] (mapcat second result)]))))
+                                   blocks' (map first result)
+                                   page' (if (contains? aliases-exclude-self (:db/id page))
+                                           {:db/id (:db/id page)
+                                            :block/alias? true
+                                            :block/journal-day (:block/journal-day page)}
+                                           page)]
+                               [[page' blocks'] (mapcat second result)]))))
           filtered-ref-blocks' (map first result)
           ref-pages (->>
                      (mapcat second result)
