@@ -8,7 +8,7 @@ import * as React from 'react'
 import { TablerIcon } from '~components/icons'
 import { TextInput } from '~components/inputs/TextInput'
 import { useCameraMovingRef } from '~hooks/useCameraMoving'
-import type { Shape } from '~lib'
+import type { Shape, SizeLevel } from '~lib'
 import { LogseqContext, SearchResult } from '~lib/logseq-context'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
@@ -37,8 +37,6 @@ const levelToScale = {
   xl: 2,
   xxl: 3,
 }
-
-type SizeLevel = keyof typeof levelToScale
 
 const LogseqTypeTag = ({
   type,

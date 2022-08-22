@@ -55,7 +55,7 @@ const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
   line: ['Edit', 'Swatch', 'ArrowMode'],
   pencil: ['Swatch'],
   highlighter: ['Swatch'],
-  text: ['Edit', 'Swatch'],
+  text: ['Edit', 'Swatch', 'ScaleLevel'],
 }
 
 const noStrokeShapes = Object.entries(shapeMapping)
@@ -154,7 +154,7 @@ const ScaleLevelAction = observer(() => {
       value: 'xl',
     },
     {
-      label: '2 Extra Large',
+      label: 'Huge',
       value: 'xxl',
     },
   ]

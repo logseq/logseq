@@ -90,7 +90,6 @@
 .whiteboard-page-refs-count {
   border-radius: 8px;
   background: var(--ls-primary-background-color);
-  height: 38px;
 }
 
 .whiteboard-page-refs-count:hover,
