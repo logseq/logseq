@@ -87,7 +87,7 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
         this.update({
           size: [
             this.props.size[0],
-            Math.max(Math.min(anchorRef.current.offsetHeight || 400, 800), 400),
+            Math.max(Math.min(anchorRef.current.offsetHeight || 400, 800), 10),
           ],
         })
         app.persist(true)
