@@ -72,7 +72,10 @@
                       (state/sidebar-add-block! (state/get-current-repo)
                                                 (:db/id (model/get-page uuid))
                                                 (keyword type)))
-   :redirectToPage route-handler/redirect-to-page!})
+   :redirectToPage (fn [page-name]
+                     (if (model/whiteboard-page? page-name)
+                         (route-handler/redirect-to-whiteboard! page-name)
+                         (route-handler/redirect-to-page! page-name)))})
 
 (rum/defc tldraw-app
   [name block-id]
