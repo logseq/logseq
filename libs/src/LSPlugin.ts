@@ -555,7 +555,7 @@ export interface IEditorProxy extends Record<string, any> {
   ) => Promise<Array<PageEntity> | null>
 
   /**
-   * Create an uuid string for specific block id(uuid)
+   * Create a unique UUID string which can then be assigned to a block.
    * @added 0.0.8
    */
   newBlockUUID: () => Promise<string>
@@ -574,6 +574,7 @@ export interface IEditorProxy extends Record<string, any> {
       before: boolean
       sibling: boolean
       isPageBlock: boolean
+      customUUID: string
       properties: {}
     }>
   ) => Promise<BlockEntity | null>

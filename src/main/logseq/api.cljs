@@ -476,7 +476,7 @@
                         (util/format "Illegal custom block UUID pattern (%s)." custom-uuid))))
               (when (db-model/query-block-by-uuid custom-uuid)
                 (throw (js/Error.
-                        (util/format "Custom block UUID existed (%s)." custom-uuid)))))
+                        (util/format "Custom block UUID already exists (%s)." custom-uuid)))))
           block-uuid (if isPageBlock nil (uuid block-uuid-or-page-name))
           block-uuid' (if (and (not sibling) before block-uuid)
                         (let [block (db/entity [:block/uuid block-uuid])
