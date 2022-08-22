@@ -56,6 +56,7 @@ const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
   pencil: ['Swatch'],
   highlighter: ['Swatch'],
   text: ['Edit', 'Swatch', 'ScaleLevel'],
+  html: ['ScaleLevel'],
 }
 
 const noStrokeShapes = Object.entries(shapeMapping)

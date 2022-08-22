@@ -1,15 +1,27 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
+import { delay, TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
+import Vec from '@tldraw/vec'
+import { action, computed } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { useCameraMovingRef } from '~hooks/useCameraMoving'
-import type { Shape } from '~lib'
+import type { Shape, SizeLevel } from '~lib'
 import { withClampedStyles } from './style-props'
 
 export interface HTMLShapeProps extends TLBoxShapeProps {
   type: 'html'
   html: string
+  scaleLevel?: SizeLevel
+}
+
+const levelToScale = {
+  xs: 0.5,
+  sm: 0.8,
+  md: 1,
+  lg: 1.5,
+  xl: 2,
+  xxl: 3,
 }
 
 export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
@@ -27,11 +39,28 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
   canChangeAspectRatio = true
   canFlip = false
   canEdit = true
-  hideContextBar = true
+
+  @computed get scaleLevel() {
+    return this.props.scaleLevel ?? 'md'
+  }
+
+  @action setScaleLevel = async (v?: SizeLevel) => {
+    const newSize = Vec.mul(
+      this.props.size,
+      levelToScale[(v as SizeLevel) ?? 'md'] / levelToScale[this.props.scaleLevel ?? 'md']
+    )
+    this.update({
+      scaleLevel: v,
+    })
+    await delay()
+    this.update({
+      size: newSize,
+    })
+  }
 
   ReactComponent = observer(({ events, isErasing, isEditing }: TLComponentProps) => {
     const {
-      props: { html },
+      props: { html, scaleLevel },
     } = this
     const isMoving = useCameraMovingRef()
     const app = useApp<Shape>()
@@ -51,10 +80,15 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
 
     const anchorRef = React.useRef<HTMLDivElement>(null)
 
+    const scaleRatio = levelToScale[scaleLevel ?? 'md']
+
     React.useEffect(() => {
       if (this.props.size[1] === 0 && anchorRef.current) {
         this.update({
-          size: [this.props.size[0], anchorRef.current.offsetHeight || 400],
+          size: [
+            this.props.size[0],
+            Math.max(Math.min(anchorRef.current.offsetHeight || 400, 800), 400),
+          ],
         })
         app.persist(true)
       }
@@ -77,6 +111,9 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
           style={{
             pointerEvents: !isMoving && (isEditing || isSelected) ? 'all' : 'none',
             overflow: isEditing ? 'auto' : 'hidden',
+            width: `calc(100% / ${scaleRatio})`,
+            height: `calc(100% / ${scaleRatio})`,
+            transform: `scale(${scaleRatio})`,
           }}
         >
           <div
