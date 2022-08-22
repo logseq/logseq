@@ -13,7 +13,7 @@
 
 (rum/defc container
   [{:keys [route theme on-click current-repo nfs-granted? db-restoring?
-           settings-open? sidebar-open? system-theme? sidebar-blocks-len]} child]
+           settings-open? sidebar-open? system-theme? sidebar-blocks-len preferred-language]} child]
   (let [mounted-fn (use-mounted)
         [restored-sidebar? set-restored-sidebar?] (rum/use-state false)]
 
@@ -27,6 +27,10 @@
         (ui/apply-custom-theme-effect! theme)
         (plugin-handler/hook-plugin-app :theme-mode-changed {:mode theme} nil))
      [theme])
+
+    (rum/use-effect!
+     #(let [doc js/document.documentElement]
+        (.setAttribute doc "lang" preferred-language)))
 
     (rum/use-effect!
      #(when (and restored-sidebar?
@@ -68,10 +72,10 @@
                     config/publishing?
                     ;; other graphs exists
                     (seq repos))
-            (route-handler/redirect! {:to :repo-add})
-            (do
-              (ui-handler/restore-right-sidebar-state!)
-              (set-restored-sidebar? true))))))
+             (route-handler/redirect! {:to :repo-add})
+             (do
+               (ui-handler/restore-right-sidebar-state!)
+               (set-restored-sidebar? true))))))
      [db-restoring?])
 
     (rum/use-effect!
