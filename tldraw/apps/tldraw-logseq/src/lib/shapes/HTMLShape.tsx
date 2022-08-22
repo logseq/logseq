@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { delay, TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
+import { delay, TLBoxShape, TLBoxShapeProps, TLResetBoundsInfo } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import Vec from '@tldraw/vec'
 import { action, computed } from 'mobx'
@@ -39,6 +39,7 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
   canChangeAspectRatio = true
   canFlip = false
   canEdit = true
+  htmlAnchorRef = React.createRef<HTMLDivElement>()
 
   @computed get scaleLevel() {
     return this.props.scaleLevel ?? 'md'
@@ -56,6 +57,18 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
     this.update({
       size: newSize,
     })
+  }
+
+  onResetBounds = (info?: TLResetBoundsInfo) => {
+    if (this.htmlAnchorRef.current) {
+      this.update({
+        size: [
+          this.props.size[0],
+          Math.max(Math.min(this.htmlAnchorRef.current.offsetHeight || 400, 800), 10),
+        ],
+      })
+    }
+    return this
   }
 
   ReactComponent = observer(({ events, isErasing, isEditing }: TLComponentProps) => {
@@ -78,18 +91,11 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
       [tlEventsEnabled]
     )
 
-    const anchorRef = React.useRef<HTMLDivElement>(null)
-
     const scaleRatio = levelToScale[scaleLevel ?? 'md']
 
     React.useEffect(() => {
-      if (this.props.size[1] === 0 && anchorRef.current) {
-        this.update({
-          size: [
-            this.props.size[0],
-            Math.max(Math.min(anchorRef.current.offsetHeight || 400, 800), 10),
-          ],
-        })
+      if (this.props.size[1] === 0) {
+        this.onResetBounds()
         app.persist(true)
       }
     }, [])
@@ -117,7 +123,7 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
           }}
         >
           <div
-            ref={anchorRef}
+            ref={this.htmlAnchorRef}
             className="tl-html-anchor"
             dangerouslySetInnerHTML={{ __html: html.trim() }}
           />

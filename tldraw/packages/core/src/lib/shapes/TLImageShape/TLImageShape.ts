@@ -38,7 +38,7 @@ export class TLImageShape<
     assetId: '',
   }
 
-  onResetBounds = (info: TLResetBoundsInfo<TLImageAsset>) => {
+  autoResize = (info: TLResetBoundsInfo<TLImageAsset>) => {
     const { clipping, size, point } = this.props
     if (clipping) {
       const [t, r, b, l] = Array.isArray(clipping)

@@ -16,6 +16,7 @@ import { tint } from 'polished'
 import type {
   BoxShape,
   EllipseShape,
+  HTMLShape,
   LineShape,
   LogseqPortalShape,
   PencilShape,
@@ -31,6 +32,7 @@ export const contextBarActionTypes = [
   'Edit',
   'Swatch',
   'NoFill',
+  'ResetBounds',
   'StrokeType',
   'ScaleLevel',
   'YoutubeLink',
@@ -47,7 +49,7 @@ const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 type ShapeType = Shape['props']['type']
 
 const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
-  'logseq-portal': ['Edit', 'LogseqPortalViewMode', 'ScaleLevel', 'OpenPage'],
+  'logseq-portal': ['Edit', 'LogseqPortalViewMode', 'ScaleLevel', 'OpenPage', 'ResetBounds'],
   youtube: ['YoutubeLink'],
   box: ['Swatch', 'NoFill', 'StrokeType'],
   ellipse: ['Swatch', 'NoFill', 'StrokeType'],
@@ -55,8 +57,8 @@ const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
   line: ['Edit', 'Swatch', 'ArrowMode'],
   pencil: ['Swatch'],
   highlighter: ['Swatch'],
-  text: ['Edit', 'Swatch', 'ScaleLevel'],
-  html: ['ScaleLevel'],
+  text: ['Edit', 'Swatch', 'ScaleLevel', 'ResetBounds'],
+  html: ['ScaleLevel', 'ResetBounds'],
 }
 
 const noStrokeShapes = Object.entries(shapeMapping)
@@ -93,6 +95,29 @@ const EditAction = observer(() => {
       }}
     >
       <TablerIcon name="text" />
+    </button>
+  )
+})
+
+const ResetBoundsAction = observer(() => {
+  const app = useApp<Shape>()
+  const shapes = filterShapeByAction<LogseqPortalShape | TextShape | HTMLShape>(
+    app.selectedShapesArray,
+    'ResetBounds'
+  )
+
+  return (
+    <button
+      className="tl-contextbar-button"
+      type="button"
+      onClick={() => {
+        shapes.forEach(s => {
+          s.onResetBounds()
+        })
+        app.persist()
+      }}
+    >
+      <TablerIcon name="dimensions" />
     </button>
   )
 })
@@ -354,6 +379,7 @@ const ArrowModeAction = observer(() => {
 })
 
 contextBarActionMapping.set('Edit', EditAction)
+contextBarActionMapping.set('ResetBounds', ResetBoundsAction)
 contextBarActionMapping.set('LogseqPortalViewMode', LogseqPortalViewModeAction)
 contextBarActionMapping.set('ScaleLevel', ScaleLevelAction)
 contextBarActionMapping.set('OpenPage', OpenPageAction)

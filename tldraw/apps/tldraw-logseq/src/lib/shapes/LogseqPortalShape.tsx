@@ -1,5 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { delay, TLBoxShape, TLBoxShapeProps, TLResizeInfo, validUUID } from '@tldraw/core'
+import {
+  delay,
+  TLBoxShape,
+  TLBoxShapeProps,
+  TLResetBoundsInfo,
+  TLResizeInfo,
+  validUUID,
+} from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import Vec from '@tldraw/vec'
 import { action, computed, makeObservable } from 'mobx'
@@ -172,16 +179,16 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return this.props.blockType === 'B' ? this.props.compact : this.props.collapsed
   }
 
-  @action setCollapsed = (collapsed: boolean) => {
+  @action setCollapsed = async (collapsed: boolean) => {
     if (this.props.blockType === 'B') {
       this.update({ compact: collapsed })
       this.canResize[1] = !collapsed
       if (!collapsed) {
         // this will also persist the state, so we can skip persist call
-        this.autoResizeHeight()
-      } else {
-        this.persist?.()
+        await delay()
+        this.onResetBounds()
       }
+      this.persist?.()
     } else {
       const originalHeight = this.props.size[1]
       this.canResize[1] = !collapsed
@@ -256,17 +263,15 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return null
   }
 
-  autoResizeHeight(replace: boolean = false) {
-    setTimeout(() => {
-      const height = this.getAutoResizeHeight()
-      if (height !== null && Math.abs(height - this.props.size[1]) > AUTO_RESIZE_THRESHOLD) {
-        this.update({
-          size: [this.props.size[0], height],
-        })
-        this.persist?.(replace)
-        this.initialHeightCalculated = true
-      }
-    })
+  onResetBounds = (info?: TLResetBoundsInfo) => {
+    const height = this.getAutoResizeHeight()
+    if (height !== null && Math.abs(height - this.props.size[1]) > AUTO_RESIZE_THRESHOLD) {
+      this.update({
+        size: [this.props.size[0], height],
+      })
+      this.initialHeightCalculated = true
+    }
+    return this
   }
 
   onResize = (initialProps: any, info: TLResizeInfo): this => {
@@ -615,7 +620,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     React.useEffect(() => {
       if (!this.initialHeightCalculated) {
-        this.autoResizeHeight(true)
+        setTimeout(() => {
+          this.onResetBounds()
+          app.persist(true)
+        })
       }
     }, [this.initialHeightCalculated])
 

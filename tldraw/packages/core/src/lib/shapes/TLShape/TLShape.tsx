@@ -57,9 +57,7 @@ export interface TLResizeInfo {
   transformOrigin: number[]
 }
 
-export interface TLResetBoundsInfo<T extends TLAsset> {
-  asset?: T
-}
+export interface TLResetBoundsInfo {}
 
 export interface TLHandleChangeInfo {
   id: string
@@ -306,7 +304,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
     return new this.constructor(this.serialized)
   }
 
-  onResetBounds = (info: TLResetBoundsInfo<any>) => {
+  onResetBounds = (info?: TLResetBoundsInfo) => {
     return this
   }
 
