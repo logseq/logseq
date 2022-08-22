@@ -19,6 +19,8 @@ export class DotShape extends TLDotShape<DotShapeProps> {
     radius: 4,
     stroke: '#000000',
     fill: '#ffffff',
+    noFill: false,
+    strokeType: 'line',
     strokeWidth: 2,
     opacity: 1,
   }

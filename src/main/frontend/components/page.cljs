@@ -190,29 +190,33 @@
               original-name]])]
          {:default-collapsed? false})]])))
 
-(rum/defcs page-title <
+(rum/defcs page-title < rum/reactive
   (rum/local false ::edit?)
+  (rum/local "" ::input-value)
   {:init (fn [state]
            (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
   [state page-name icon title _format fmt-journal?]
   (when title
     (let [*title-value (get state ::title-value)
           *edit? (get state ::edit?)
+          *input-value (get state ::input-value)
           input-ref (rum/create-ref)
           repo (state/get-current-repo)
           hls-file? (pdf-assets/hls-file? title)
+          whiteboard-page? (model/whiteboard-page? page-name)
+          untitled? (and whiteboard-page? (parse-uuid page-name)) ;; normal page cannot be untitled right?
           title (if hls-file?
                   (pdf-assets/human-hls-filename-display title)
                   (if fmt-journal? (date/journal-title->custom-format title) title))
           old-name (or title page-name)
+          collide? #(and (not= (util/page-name-sanity-lc page-name)
+                               (util/page-name-sanity-lc @*title-value))
+                         (db/page-exists? page-name)
+                         (db/page-exists? @*title-value))
           confirm-fn (fn []
-                       (let [new-page-name (string/trim @*title-value)
-                             merge? (and (not= (util/page-name-sanity-lc page-name)
-                                               (util/page-name-sanity-lc @*title-value))
-                                         (db/page-exists? page-name)
-                                         (db/page-exists? @*title-value))]
+                       (let [new-page-name (string/trim @*title-value)]
                          (ui/make-confirm-modal
-                          {:title         (if merge?
+                          {:title         (if (collide?)
                                             (str "Page “" @*title-value "” already exists, merge to it?")
                                             (str "Do you really want to change the page name to “" new-page-name "”?"))
                            :on-confirm    (fn [_e {:keys [close-fn]}]
@@ -222,12 +226,13 @@
                            :on-cancel     (fn []
                                             (reset! *title-value old-name)
                                             (gobj/set (rum/deref input-ref) "value" old-name)
-                                            (reset! *edit? true))})))
+                                            (reset! *edit? true)
+                                            (.focus (rum/deref input-ref)))})))
           rollback-fn #(do
                          (reset! *title-value old-name)
                          (gobj/set (rum/deref input-ref) "value" old-name)
                          (reset! *edit? false)
-                         (notification/show! "Illegal page name, can not rename!" :warning))
+                         (when-not untitled? (notification/show! "Illegal page name, can not rename!" :warning)))
           blur-fn (fn [e]
                     (when (gp-util/wrapped-by-quotes? @*title-value)
                       (swap! *title-value gp-util/unquote-string)
@@ -239,51 +244,71 @@
                       (string/blank? @*title-value)
                       (rollback-fn)
 
+                      (and (collide?) whiteboard-page?)
+                      (notification/show! (str "Page “" @*title-value "” already exists!") :error)
+
+                      untitled?
+                      (page-handler/rename! (or title page-name) @*title-value)
+
                       :else
                       (state/set-modal! (confirm-fn)))
                     (util/stop e))]
-      (if @*edit?
-        [:span
-         {:class (util/classnames [{:editing @*edit?}])
-          :style {:width "600px"}}
-         [:input.edit-input
-          {:type          "text"
-           :ref           input-ref
-           :auto-focus    true
-           :style         {:outline "none"
-                           :width "100%"
-                           :font-weight 600}
-           :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
-           :default-value old-name
-           :on-change     (fn [^js e]
-                            (let [value (util/evalue e)]
-                              (reset! *title-value (string/trim value))))
-           :on-blur       blur-fn
-           :on-key-down   (fn [^js e]
-                            (when (= (gobj/get e "key") "Enter")
-                              (blur-fn e)))
-           :on-key-up     (fn [^js e]
+      [:h1.page-title.flex.gap-1
+       {:on-mouse-down (fn [e]
+                         (when (util/right-click? e)
+                           (state/set-state! :page-title/context {:page page-name})))
+        :on-click (fn [e]
+                    (.preventDefault e)
+                    (if (gobj/get e "shiftKey")
+                      (when-let [page (db/pull repo '[*] [:block/name page-name])]
+                        (state/sidebar-add-block!
+                         repo
+                         (:db/id page)
+                         :page))
+                      (when (and (not hls-file?) (not fmt-journal?))
+                        (reset! *input-value (if untitled? "" old-name))
+                        (reset! *edit? true))))}
+       (when (not= icon "") [:span.page-icon icon])
+       [:div.page-title-sizer-wrapper.relative
+        (when (rum/react *edit?)
+          [:span.absolute.inset-0
+           {:class (util/classnames [{:editing @*edit?}])}
+           [:input.edit-input
+            {:type          "text"
+             :ref           input-ref
+             :auto-focus    true
+             :style         {:outline "none"
+                             :width "100%"
+                             :font-weight "inherit"}
+             :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
+             :value         (rum/react *input-value)
+             :on-change     (fn [^js e]
+                              (let [value (util/evalue e)]
+                                (reset! *title-value (string/trim value))
+                                (reset! *input-value value)))
+             :on-blur       blur-fn
+             :on-key-down   (fn [^js e]
+                              (when (= (gobj/get e "key") "Enter")
+                                (blur-fn e)))
+             :placeholder   (when untitled? (t :untitled))
+             :on-key-up     (fn [^js e]
                             ;; Esc
-                            (when (= 27 (.-keyCode e))
-                              (reset! *title-value old-name)
-                              (reset! *edit? false)))
-           :on-focus (fn [] (js/setTimeout #(.select input-ref.current)))}]]
-        [:a.page-title {:on-mouse-down (fn [e]
-                                         (when (util/right-click? e)
-                                           (state/set-state! :page-title/context {:page page-name})))
-                        :on-click (fn [e]
-                                    (.preventDefault e)
-                                    (if (gobj/get e "shiftKey")
-                                      (when-let [page (db/pull repo '[*] [:block/name page-name])]
-                                        (state/sidebar-add-block!
-                                         repo
-                                         (:db/id page)
-                                         :page))
-                                      (when (and (not hls-file?) (not fmt-journal?))
-                                        (reset! *edit? true))))}
-         [:span.title {:data-ref page-name}
-          (when (not= icon "") [:span.page-icon icon])
-          title]]))))
+                              (when (= 27 (.-keyCode e))
+                                (reset! *title-value old-name)
+                                (reset! *edit? false)))
+             :on-focus (fn []
+                         (when untitled? (reset! *title-value ""))
+                         (js/setTimeout #(when-let [input (rum/deref input-ref)] (.select input))))}]])
+        [:span.title.inline-block
+         {:data-value (rum/react *input-value)
+          :data-ref page-name
+          :style {:opacity (when @*edit? 0)
+                  :pointer-events "none"
+                  :font-weight "inherit"
+                  :min-width "80px"}}
+         (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
+               untitled? [:span.opacity-50 (t :untitled)]
+               :else title)]]])))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]

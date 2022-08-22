@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { TLDocumentModel } from '@tldraw/core'
+import { deepEqual, TLApp, TLAsset, TLDocumentModel } from '@tldraw/core'
 import {
   AppCanvas,
   AppProvider,
@@ -58,37 +58,49 @@ interface LogseqTldrawProps {
   onPersist?: TLReactCallbacks<Shape>['onPersist']
 }
 
-export const App = function App(props: LogseqTldrawProps): JSX.Element {
-  const renderers: any = React.useMemo(() => {
+export const App = function App({
+  onPersist,
+  handlers,
+  renderers,
+  model,
+  ...rest
+}: LogseqTldrawProps): JSX.Element {
+  const memoRenders: any = React.useMemo(() => {
     return Object.fromEntries(
-      Object.entries(props.renderers).map(([key, comp]) => {
+      Object.entries(renderers).map(([key, comp]) => {
         return [key, React.memo(comp)]
       })
     )
   }, [])
   const contextValue = {
-    renderers,
-    handlers: props.handlers,
+    renderers: memoRenders,
+    handlers: handlers,
   }
 
   const onFileDrop = useFileDrop(contextValue)
   const onPaste = usePaste(contextValue)
   const onQuickAdd = useQuickAdd()
 
+  const onPersistOnDiff: TLReactCallbacks<Shape>['onPersist'] = React.useCallback(
+    (app, info) => {
+      if (!deepEqual(app.serialized, model)) {
+        onPersist?.(app, info)
+      }
+    },
+    [model]
+  )
+
   return (
-    <LogseqContext.Provider
-      value={{
-        renderers,
-        handlers: props.handlers,
-      }}
-    >
+    <LogseqContext.Provider value={contextValue}>
       <AppProvider
         Shapes={shapes}
         Tools={tools}
         onFileDrop={onFileDrop}
         onPaste={onPaste}
         onCanvasDBClick={onQuickAdd}
-        {...props}
+        onPersist={onPersistOnDiff}
+        model={model}
+        {...rest}
       >
         <div className="logseq-tldraw logseq-tldraw-wrapper">
           <AppCanvas components={components}>

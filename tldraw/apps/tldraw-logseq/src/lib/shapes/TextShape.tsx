@@ -1,8 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as React from 'react'
-import { HTMLContainer, TLComponentProps, TLTextMeasure } from '@tldraw/react'
 import { TextUtils, TLBounds, TLResizeStartInfo, TLTextShape, TLTextShapeProps } from '@tldraw/core'
+import { HTMLContainer, TLComponentProps, TLTextMeasure } from '@tldraw/react'
+import { action, computed } from 'mobx'
 import { observer } from 'mobx-react-lite'
+import * as React from 'react'
+import type { SizeLevel } from '~lib'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
 export interface TextShapeProps extends TLTextShapeProps, CustomStyleProps {
@@ -13,6 +15,16 @@ export interface TextShapeProps extends TLTextShapeProps, CustomStyleProps {
   lineHeight: number
   padding: number
   type: 'text'
+  scaleLevel?: SizeLevel
+}
+
+const levelToScale = {
+  xs: 10,
+  sm: 16,
+  md: 20,
+  lg: 32,
+  xl: 48,
+  xxl: 60,
 }
 
 export class TextShape extends TLTextShape<TextShapeProps> {
@@ -34,6 +46,8 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     borderRadius: 0,
     stroke: 'var(--tl-foreground, #000)',
     fill: '#ffffff',
+    noFill: true,
+    strokeType: 'line',
     strokeWidth: 2,
     opacity: 1,
   }
@@ -195,6 +209,18 @@ export class TextShape extends TLTextShape<TextShapeProps> {
       </HTMLContainer>
     )
   })
+
+  @computed get scaleLevel() {
+    return this.props.scaleLevel ?? 'md'
+  }
+
+  @action setScaleLevel = async (v?: SizeLevel) => {
+    this.update({
+      scaleLevel: v,
+      fontSize: levelToScale[v ?? 'md']
+    })
+    this.onResetBounds()
+  }
 
   ReactIndicator = observer(() => {
     const {

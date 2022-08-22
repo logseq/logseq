@@ -1,10 +1,8 @@
 import * as React from 'react'
 
-interface ColorInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label: string
-}
+interface ColorInputProps extends React.InputHTMLAttributes<HTMLInputElement> {}
 
-export function ColorInput({ label, value, onChange, ...rest }: ColorInputProps) {
+export function ColorInput({ value, onChange, ...rest }: ColorInputProps) {
   const ref = React.useRef<HTMLDivElement>(null)
   const [computedValue, setComputedValue] = React.useState(value)
 
@@ -21,11 +19,9 @@ export function ColorInput({ label, value, onChange, ...rest }: ColorInputProps)
 
   return (
     <div className="input" ref={ref}>
-      <label htmlFor={`color-${label}`}>{label}</label>
       <div className="color-input-wrapper">
         <input
           className="color-input"
-          name={`color-${label}`}
           type="color"
           value={computedValue}
           onChange={e => {

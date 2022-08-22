@@ -10,7 +10,6 @@ export class TLViewport {
 
   static readonly minZoom = 0.1
   static readonly maxZoom = 4
-  static readonly zooms = [0.1, 0.25, 0.5, 1, 1.5, 2, 3, 4]
 
   /* ------------------- Properties ------------------- */
 
@@ -84,17 +83,8 @@ export class TLViewport {
   }
 
   zoomIn = (): this => {
-    const zooms = TLViewport.zooms
     const { camera, bounds } = this
-    let zoom: number | undefined
-    for (let i = 1; i < zooms.length; i++) {
-      const z1 = zooms[i - 1]
-      const z2 = zooms[i]
-      if (z2 - camera.zoom <= (z2 - z1) / 2) continue
-      zoom = z2
-      break
-    }
-    if (zoom === undefined) zoom = zooms[zooms.length - 1]
+    const zoom: number = Math.min(TLViewport.maxZoom, Math.ceil((camera.zoom * 100 + 1) / 25) / 4)
     const center = [bounds.width / 2, bounds.height / 2]
     const p0 = Vec.sub(Vec.div(center, camera.zoom), center)
     const p1 = Vec.sub(Vec.div(center, zoom), center)
@@ -102,17 +92,8 @@ export class TLViewport {
   }
 
   zoomOut = (): this => {
-    const zooms = TLViewport.zooms
     const { camera, bounds } = this
-    let zoom: number | undefined
-    for (let i = zooms.length - 1; i > 0; i--) {
-      const z1 = zooms[i - 1]
-      const z2 = zooms[i]
-      if (z2 - camera.zoom >= (z2 - z1) / 2) continue
-      zoom = z1
-      break
-    }
-    if (zoom === undefined) zoom = zooms[0]
+    const zoom: number = Math.max(TLViewport.minZoom, Math.floor((camera.zoom * 100 - 1) / 25) / 4)
     const center = [bounds.width / 2, bounds.height / 2]
     const p0 = Vec.sub(Vec.div(center, camera.zoom), center)
     const p1 = Vec.sub(Vec.div(center, zoom), center)

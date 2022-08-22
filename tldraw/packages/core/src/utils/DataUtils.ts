@@ -76,11 +76,31 @@ export function fileToBase64(file: Blob): Promise<string | ArrayBuffer | null> {
   })
 }
 
-export function getSizeFromSrc(dataURL: string): Promise<number[]> {
+export function getSizeFromSrc(dataURL: string, isVideo: boolean): Promise<number[]> {
   return new Promise(resolve => {
-    const img = new Image()
-    img.onload = () => resolve([img.width, img.height])
-    img.src = dataURL
+    if (isVideo) {
+      const video = document.createElement('video')
+
+      // place a listener on it
+      video.addEventListener(
+        'loadedmetadata',
+        function () {
+          // retrieve dimensions
+          const height = this.videoHeight
+          const width = this.videoWidth
+
+          // send back result
+          resolve([width, height])
+        },
+        false
+      )
+      // start download meta-datas
+      video.src = dataURL
+    } else {
+      const img = new Image()
+      img.onload = () => resolve([img.width, img.height])
+      img.src = dataURL
+    }
   })
 }
 

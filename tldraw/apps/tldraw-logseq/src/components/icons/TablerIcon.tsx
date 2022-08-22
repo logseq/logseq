@@ -1,6 +1,6 @@
-import React from 'react'
-
 const extendedIcons = [
+  'object-compact',
+  'object-expanded',
   'block',
   'block-search',
   'page',

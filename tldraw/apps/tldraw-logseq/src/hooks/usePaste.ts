@@ -8,9 +8,10 @@ import {
   validUUID,
 } from '@tldraw/core'
 import type { TLReactCallbacks } from '@tldraw/react'
+import Vec from '@tldraw/vec'
 import * as React from 'react'
 import { NIL as NIL_UUID } from 'uuid'
-import { HTMLShape, LogseqPortalShape, Shape, YouTubeShape } from '~lib'
+import { HTMLShape, LogseqPortalShape, Shape, YouTubeShape, ImageShape, VideoShape } from '~lib'
 import type { LogseqContextValue } from '~lib/logseq-context'
 
 const isValidURL = (url: string) => {
@@ -22,17 +23,25 @@ const isValidURL = (url: string) => {
   }
 }
 
+const safeParseJson = (json: string) => {
+  try {
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
+
 export function usePaste(context: LogseqContextValue) {
   const { handlers } = context
 
   return React.useCallback<TLReactCallbacks<Shape>['onPaste']>(
     async (app, { point, shiftKey, files }) => {
-      const assetId = uniqueId()
-      interface ImageAsset extends TLAsset {
+      interface VideoImageAsset extends TLAsset {
         size: number[]
       }
 
-      const assetsToCreate: ImageAsset[] = []
+      const imageAssetsToCreate: VideoImageAsset[] = []
+      let assetsToClone: TLAsset[] = []
       const shapesToCreate: Shape['props'][] = []
       const bindingsToCreate: TLBinding[] = []
 
@@ -43,6 +52,7 @@ export function usePaste(context: LogseqContextValue) {
       // TODO: handle PDF?
       async function handleFiles(files: File[]) {
         const IMAGE_EXTENSIONS = ['.png', '.svg', '.jpg', '.jpeg', '.gif']
+        const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogg']
 
         for (const file of files) {
           // Get extension, verify that it's an image
@@ -51,9 +61,10 @@ export function usePaste(context: LogseqContextValue) {
             continue
           }
           const extension = extensionMatch[0].toLowerCase()
-          if (!IMAGE_EXTENSIONS.includes(extension)) {
+          if (![...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS].includes(extension)) {
             continue
           }
+          const isVideo = VIDEO_EXTENSIONS.includes(extension)
           try {
             // Turn the image into a base64 dataurl
             const dataurl = await createAsset(file)
@@ -63,17 +74,17 @@ export function usePaste(context: LogseqContextValue) {
             // Do we already have an asset for this image?
             const existingAsset = Object.values(app.assets).find(asset => asset.src === dataurl)
             if (existingAsset) {
-              assetsToCreate.push(existingAsset as ImageAsset)
+              imageAssetsToCreate.push(existingAsset as VideoImageAsset)
               continue
             }
             // Create a new asset for this image
-            const asset: ImageAsset = {
-              id: assetId,
-              type: 'image',
+            const asset: VideoImageAsset = {
+              id: uniqueId(),
+              type: isVideo ? 'video' : 'image',
               src: dataurl,
-              size: await getSizeFromSrc(handlers.makeAssetUrl(dataurl)),
+              size: await getSizeFromSrc(handlers.makeAssetUrl(dataurl), isVideo),
             }
-            assetsToCreate.push(asset)
+            imageAssetsToCreate.push(asset)
           } catch (error) {
             console.error(error)
           }
@@ -120,10 +131,11 @@ export function usePaste(context: LogseqContextValue) {
       }
 
       function handleTldrawShapes(rawText: string) {
+        const data = safeParseJson(rawText)
         try {
-          const data = JSON.parse(rawText)
-          if (data.type === 'logseq/whiteboard-shapes') {
+          if (data?.type === 'logseq/whiteboard-shapes') {
             const shapes = data.shapes as TLShapeModel[]
+            assetsToClone = data.assets as TLAsset[]
             const commonBounds = BoundsUtils.getCommonBounds(
               shapes.map(shape => ({
                 minX: shape.point?.[0] ?? point[0],
@@ -176,6 +188,7 @@ export function usePaste(context: LogseqContextValue) {
                 })
               }
             })
+
             return true
           }
         } catch (err) {
@@ -186,15 +199,14 @@ export function usePaste(context: LogseqContextValue) {
 
       function handleURL(rawText: string) {
         if (isValidURL(rawText)) {
-          const getYoutubeId = (url: string) => {
-            const match = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#&?]*).*/)
-            return match && match[2].length === 11 ? match[2] : null
+          const isYoutubeUrl = (url: string) => {
+            const youtubeRegex = /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
+            return youtubeRegex.test(url)
           }
-          const youtubeId = getYoutubeId(rawText)
-          if (youtubeId) {
+          if (isYoutubeUrl(rawText)) {
             shapesToCreate.push({
               ...YouTubeShape.defaultProps,
-              embedId: youtubeId,
+              url: rawText,
               point: [point[0], point[1]],
             })
             return true
@@ -276,11 +288,11 @@ export function usePaste(context: LogseqContextValue) {
 
       const allShapesToAdd: TLShapeModel[] = [
         // assets to images
-        ...assetsToCreate.map((asset, i) => ({
-          type: 'image',
+        ...imageAssetsToCreate.map((asset, i) => ({
+          ...(asset.type === 'video' ? VideoShape : ImageShape).defaultProps,
           // TODO: Should be place near the last edited shape
-          point: [point[0] - asset.size[0] / 2 + i * 16, point[1] - asset.size[1] / 2 + i * 16],
-          size: asset.size,
+          point: [point[0] - asset.size[0] / 4 + i * 16, point[1] - asset.size[1] / 4 + i * 16],
+          size: Vec.div(asset.size, 2),
           assetId: asset.id,
           opacity: 1,
         })),
@@ -294,8 +306,9 @@ export function usePaste(context: LogseqContextValue) {
       })
 
       app.wrapUpdate(() => {
-        if (assetsToCreate.length > 0) {
-          app.createAssets(assetsToCreate)
+        const allAssets = [...imageAssetsToCreate, ...assetsToClone]
+        if (allAssets.length > 0) {
+          app.createAssets(allAssets)
         }
         if (allShapesToAdd.length > 0) {
           app.createShapes(allShapesToAdd)

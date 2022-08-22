@@ -1,20 +1,10 @@
 export interface CustomStyleProps {
   stroke: string
   fill: string
+  noFill: boolean
   strokeWidth: number
+  strokeType: 'dashed' | 'line'
   opacity: number
-}
-
-export function withDefaultStyles<P>(props: P & Partial<CustomStyleProps>): P & CustomStyleProps {
-  return Object.assign(
-    {
-      stroke: '#000000',
-      fill: '#ffffff',
-      strokeWidth: 2,
-      opacity: 1,
-    },
-    props
-  )
 }
 
 export function withClampedStyles<P>(props: P & Partial<CustomStyleProps>) {

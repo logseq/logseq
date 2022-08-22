@@ -6,7 +6,6 @@ import type { TLReactShape } from '~lib'
 /* ------------------- Components ------------------- */
 
 export type TLSelectionComponentProps<S extends TLReactShape = TLReactShape> = {
-  zoom: number
   shapes: S[]
   bounds: TLBounds
   showResizeHandles?: boolean
@@ -23,6 +22,7 @@ export type TLContextBarProps<S extends TLReactShape = TLReactShape> = {
   scaledBounds: TLBounds
   rotation: number
   offsets: TLOffset
+  hidden: boolean
 }
 
 export type TLContextBarComponent<S extends TLReactShape = TLReactShape> = (

@@ -11,7 +11,6 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [lambdaisland.glogi :as log]
-            [electron.ipc :as ipc]
             [promesa.core :as p]
             [frontend.state :as state]
             [frontend.encrypt :as encrypt]
@@ -35,7 +34,11 @@
   [repo path content db-content mtime backup?]
   (p/let [
           ;; save the previous content in a versioned bak file to avoid data overwritten.
-          _ (when backup? (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content content))
+          _ (when backup?
+              (-> (when-let [repo-dir (config/get-local-dir repo)]
+                    (file-handler/backup-file! repo-dir path db-content content))
+                  (p/catch #(js/console.error "❌ Bak Error: " path %))))
+
           _ (file-handler/alter-file repo path content {:re-render-root? true
                                                         :from-disk? true})]
     (set-missing-block-ids! content)

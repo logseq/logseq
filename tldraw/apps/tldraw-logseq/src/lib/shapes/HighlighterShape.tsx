@@ -26,7 +26,9 @@ export class HighlighterShape extends TLDrawShape<HighlighterShapeProps> {
     points: [],
     isComplete: false,
     stroke: '#ffcc00',
-    fill: '#ffffff',
+    fill: '#ffcc00',
+    noFill: true,
+    strokeType: 'line',
     strokeWidth: 2,
     opacity: 1,
   }

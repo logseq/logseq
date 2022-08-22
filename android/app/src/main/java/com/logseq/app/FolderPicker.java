@@ -63,7 +63,7 @@ public class FolderPicker extends Plugin {
         if (path == null || path.isEmpty()) {
             call.reject("Cannot support this directory type: " + docUri);
         } else {
-            ret.put("path", path);
+            ret.put("path", "file://" + path);
             call.resolve(ret);
         }
     }

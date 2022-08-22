@@ -1,18 +1,26 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { TLBoxShape, TLBoxShapeProps, TLResizeInfo, validUUID } from '@tldraw/core'
+import {
+  delay,
+  TLBoxShape,
+  TLBoxShapeProps,
+  TLResetBoundsInfo,
+  TLResizeInfo,
+  validUUID,
+} from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import Vec from '@tldraw/vec'
-import { makeObservable, runInAction } from 'mobx'
+import { action, computed, makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { TablerIcon } from '~components/icons'
-import { SwitchInput } from '~components/inputs/SwitchInput'
+import { TextInput } from '~components/inputs/TextInput'
 import { useCameraMovingRef } from '~hooks/useCameraMoving'
-import type { Shape } from '~lib'
+import type { Shape, SizeLevel } from '~lib'
 import { LogseqContext, SearchResult } from '~lib/logseq-context'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
 const HEADER_HEIGHT = 40
+const AUTO_RESIZE_THRESHOLD = 1
 
 export interface LogseqPortalShapeProps extends TLBoxShapeProps, CustomStyleProps {
   type: 'logseq-portal'
@@ -21,10 +29,20 @@ export interface LogseqPortalShapeProps extends TLBoxShapeProps, CustomStyleProp
   collapsed?: boolean
   compact?: boolean
   collapsedHeight?: number
+  scaleLevel?: SizeLevel
 }
 
 interface LogseqQuickSearchProps {
   onChange: (id: string) => void
+}
+
+const levelToScale = {
+  xs: 0.5,
+  sm: 0.8,
+  md: 1,
+  lg: 1.5,
+  xl: 2,
+  xxl: 3,
 }
 
 const LogseqTypeTag = ({
@@ -118,11 +136,14 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     collapsedHeight: 0,
     stroke: 'var(--ls-primary-text-color)',
     fill: 'var(--ls-secondary-background-color)',
+    noFill: false,
     strokeWidth: 2,
+    strokeType: 'line',
     opacity: 1,
     pageId: '',
     collapsed: false,
     compact: false,
+    scaleLevel: 'md',
   }
 
   hideRotateHandle = true
@@ -154,6 +175,49 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return false
   }
 
+  @computed get collapsed() {
+    return this.props.blockType === 'B' ? this.props.compact : this.props.collapsed
+  }
+
+  @action setCollapsed = async (collapsed: boolean) => {
+    if (this.props.blockType === 'B') {
+      this.update({ compact: collapsed })
+      this.canResize[1] = !collapsed
+      if (!collapsed) {
+        // this will also persist the state, so we can skip persist call
+        await delay()
+        this.onResetBounds()
+      }
+      this.persist?.()
+    } else {
+      const originalHeight = this.props.size[1]
+      this.canResize[1] = !collapsed
+      this.update({
+        collapsed: collapsed,
+        size: [this.props.size[0], collapsed ? HEADER_HEIGHT : this.props.collapsedHeight],
+        collapsedHeight: collapsed ? originalHeight : this.props.collapsedHeight,
+      })
+    }
+  }
+
+  @computed get scaleLevel() {
+    return this.props.scaleLevel ?? 'md'
+  }
+
+  @action setScaleLevel = async (v?: SizeLevel) => {
+    const newSize = Vec.mul(
+      this.props.size,
+      levelToScale[(v as SizeLevel) ?? 'md'] / levelToScale[this.props.scaleLevel ?? 'md']
+    )
+    this.update({
+      scaleLevel: v,
+    })
+    await delay()
+    this.update({
+      size: newSize,
+    })
+  }
+
   useComponentSize<T extends HTMLElement>(ref: React.RefObject<T> | null, selector = '') {
     const [size, setSize] = React.useState<[number, number]>([0, 0])
     const app = useApp<Shape>()
@@ -169,7 +233,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           }
           updateSize()
           // Hacky, I know 🤨
-          this.getInnerHeight = () => updateSize()[1] + 2 // 2 is a hack to compensate for the border
+          this.getInnerHeight = () => updateSize()[1]
           const resizeObserver = new ResizeObserver(() => {
             updateSize()
           })
@@ -183,54 +247,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     }, [ref, selector])
     return size
   }
-
-  ReactContextBar = observer(() => {
-    const app = useApp<Shape>()
-    return (
-      <>
-        {this.props.blockType !== 'B' && (
-          <SwitchInput
-            label="Collapsed"
-            checked={this.props.collapsed}
-            onCheckedChange={collapsing => {
-              runInAction(() => {
-                const originalHeight = this.props.size[1]
-                this.canResize[1] = !collapsing
-                this.update({
-                  collapsed: collapsing,
-                  size: [
-                    this.props.size[0],
-                    collapsing ? HEADER_HEIGHT : this.props.collapsedHeight,
-                  ],
-                  collapsedHeight: collapsing ? originalHeight : this.props.collapsedHeight,
-                })
-                app.persist()
-              })
-            }}
-          />
-        )}
-
-        {this.props.blockType === 'B' && (
-          <SwitchInput
-            label="Compact"
-            checked={this.props.compact}
-            onCheckedChange={compact => {
-              runInAction(() => {
-                this.update({ compact })
-                this.canResize[1] = !compact
-                if (!compact) {
-                  // this will also persist the state, so we can skip persist call
-                  this.autoResizeHeight()
-                } else {
-                  app.persist()
-                }
-              })
-            }}
-          />
-        )}
-      </>
-    )
-  })
 
   shouldAutoResizeHeight() {
     return this.props.blockType === 'B' && this.props.compact
@@ -247,17 +263,15 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return null
   }
 
-  autoResizeHeight(replace: boolean = false) {
-    setTimeout(() => {
-      const height = this.getAutoResizeHeight()
-      if (height !== null) {
-        this.update({
-          size: [this.props.size[0], height],
-        })
-        this.persist?.(replace)
-        this.initialHeightCalculated = true
-      }
-    })
+  onResetBounds = (info?: TLResetBoundsInfo) => {
+    const height = this.getAutoResizeHeight()
+    if (height !== null && Math.abs(height - this.props.size[1]) > AUTO_RESIZE_THRESHOLD) {
+      this.update({
+        size: [this.props.size[0], height],
+      })
+      this.initialHeightCalculated = true
+    }
+    return this
   }
 
   onResize = (initialProps: any, info: TLResizeInfo): this => {
@@ -300,7 +314,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         finishCreating(uuid)
         // wait until the editor is mounted
         setTimeout(() => {
-          app.setEditingShape(this)
+          app.api.editShape(this)
           window.logseq?.api?.edit_block?.(uuid)
         })
       }
@@ -527,22 +541,19 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               </div>
             </div>
           )}
-          <div className="tl-quick-search-input-sizer" data-value={q}>
-            <div className="tl-quick-search-input-hidden">{q}</div>
-            <input
-              ref={rInput}
-              type="text"
-              value={q}
-              placeholder="Create or search your graph..."
-              onChange={q => setQ(q.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  finishCreating(q)
-                }
-              }}
-              className="tl-quick-search-input"
-            />
-          </div>
+          <TextInput
+            ref={rInput}
+            type="text"
+            value={q}
+            className="tl-quick-search-input"
+            placeholder="Create or search your graph..."
+            onChange={q => setQ(q.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                finishCreating(q)
+              }
+            }}
+          />
         </div>
         <div className="tl-quick-search-options" ref={optionsWrapperRef}>
           {options.map(({ actionIcon, onChosen, element }, index) => {
@@ -597,8 +608,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     React.useEffect(() => {
       if (this.shouldAutoResizeHeight()) {
-        const newHeight = innerHeight + this.getHeaderHeight() + 2
-        if (innerHeight && newHeight !== this.props.size[1]) {
+        const newHeight = innerHeight + this.getHeaderHeight()
+        if (innerHeight && Math.abs(newHeight - this.props.size[1]) > AUTO_RESIZE_THRESHOLD) {
           this.update({
             size: [this.props.size[0], newHeight],
           })
@@ -609,7 +620,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     React.useEffect(() => {
       if (!this.initialHeightCalculated) {
-        this.autoResizeHeight(true)
+        setTimeout(() => {
+          this.onResetBounds()
+          app.persist(true)
+        })
       }
     }, [this.initialHeightCalculated])
 
@@ -633,7 +647,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   ReactComponent = observer((componentProps: TLComponentProps) => {
     const { events, isErasing, isEditing, isBinding } = componentProps
     const {
-      props: { opacity, pageId, stroke, fill },
+      props: { opacity, pageId, stroke, fill, scaleLevel },
     } = this
 
     const app = useApp<Shape>()
@@ -655,6 +669,19 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       },
       [tlEventsEnabled]
     )
+
+    // There are some other portal sharing the same page id are selected
+    const portalSelected =
+      app.selectedShapesArray.length === 1 &&
+      app.selectedShapesArray.some(
+        shape =>
+          shape.type === 'logseq-portal' &&
+          shape.props.id !== this.props.id &&
+          pageId &&
+          (shape as LogseqPortalShape).props['pageId'] === pageId
+      )
+
+    const scaleRatio = levelToScale[scaleLevel ?? 'md']
 
     // It is a bit weird to update shapes here. Is there a better place?
     React.useEffect(() => {
@@ -730,12 +757,17 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             <div
               className="tl-logseq-portal-container"
               data-collapsed={this.props.collapsed}
+              data-page-id={pageId}
+              data-portal-selected={portalSelected}
               style={{
                 background: this.props.compact ? 'transparent' : fill,
                 boxShadow: isBinding
                   ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
                   : 'none',
                 color: stroke,
+                width: `calc(100% / ${scaleRatio})`,
+                height: `calc(100% / ${scaleRatio})`,
+                transform: `scale(${scaleRatio})`,
                 // @ts-expect-error ???
                 '--ls-primary-background-color': !fill?.startsWith('var') ? fill : undefined,
                 '--ls-primary-text-color': !stroke?.startsWith('var') ? stroke : undefined,
@@ -767,8 +799,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
   validateProps = (props: Partial<LogseqPortalShapeProps>) => {
     if (props.size !== undefined) {
-      props.size[0] = Math.max(props.size[0], 240)
-      props.size[1] = Math.max(props.size[1], HEADER_HEIGHT)
+      const scale = levelToScale[this.props.scaleLevel ?? 'md']
+      props.size[0] = Math.max(props.size[0], 240 * scale)
+      props.size[1] = Math.max(props.size[1], HEADER_HEIGHT * scale)
     }
     return withClampedStyles(props)
   }

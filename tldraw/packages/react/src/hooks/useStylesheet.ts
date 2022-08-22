@@ -418,20 +418,6 @@ const tlcss = css`
     color: var(--tl-background);
   }
 
-  .tl-hitarea-stroke {
-    fill: none;
-    stroke: transparent;
-    pointer-events: stroke;
-    stroke-width: min(100px, calc(24px * var(--tl-scale)));
-  }
-
-  .tl-hitarea-fill {
-    fill: transparent;
-    stroke: transparent;
-    pointer-events: all;
-    stroke-width: min(100px, calc(24px * var(--tl-scale)));
-  }
-
   .tl-grid {
     position: absolute;
     width: 100%;

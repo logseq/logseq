@@ -1,15 +1,17 @@
 import * as React from 'react'
 
 interface TextInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label: string
+  autoResize?: boolean
 }
 
 export const TextInput = React.forwardRef<HTMLInputElement, TextInputProps>(
-  ({ label, ...rest }, ref) => {
+  ({ autoResize = true, value, className, ...rest }, ref) => {
     return (
-      <div className="tl-input">
-        <label htmlFor={`text-${label}`}>{label}</label>
-        <input ref={ref} className="tl-text-input" name={`text-${label}`} type="text" {...rest} />
+      <div className={'tl-input' + (className ? ' ' + className : '')}>
+        <div className="tl-input-sizer">
+          <div className="tl-input-hidden">{value}</div>
+          <input ref={ref} value={value} className="tl-text-input" type="text" {...rest} />
+        </div>
       </div>
     )
   }

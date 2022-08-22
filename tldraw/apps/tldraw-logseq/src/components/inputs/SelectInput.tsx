@@ -1,16 +1,57 @@
 import * as React from 'react'
+import * as Select from '@radix-ui/react-select'
+import { TablerIcon } from '~components/icons'
 
-interface ColorInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label: string
+export interface SelectOption {
+  value: string
+  label: React.ReactNode
 }
 
-export function ColorInput({ label, ...rest }: ColorInputProps) {
+interface SelectInputProps extends React.HTMLAttributes<HTMLElement> {
+  options: SelectOption[]
+  value: string
+  onValueChange: (value: string) => void
+}
+
+export function SelectInput({ options, value, onValueChange, ...rest }: SelectInputProps) {
+  const [isOpen, setIsOpen] = React.useState(false)
   return (
-    <div className="input">
-      <label htmlFor={`color-${label}`}>{label}</label>
-      <div className="color-input-wrapper">
-        <input className="color-input" name={`color-${label}`} type="color" {...rest} />
-      </div>
+    <div {...rest} className="tl-select-input">
+      <Select.Root
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        value={value}
+        onValueChange={onValueChange}
+      >
+        <Select.Trigger className="tl-select-input-trigger">
+          <div className="tl-select-input-trigger-value">
+            <Select.Value />
+          </div>
+          <Select.Icon style={{ lineHeight: 1 }}>
+            <TablerIcon name={isOpen ? 'chevron-up' : 'chevron-down'} />
+          </Select.Icon>
+        </Select.Trigger>
+
+        <Select.Portal className="tl-select-input-portal">
+          <Select.Content className="tl-select-input-content">
+            <Select.ScrollUpButton />
+            <Select.Viewport className="tl-select-input-viewport">
+              {options.map(option => {
+                return (
+                  <Select.Item
+                    className="tl-select-input-select-item"
+                    key={option.value}
+                    value={option.value}
+                  >
+                    <Select.ItemText>{option.label}</Select.ItemText>
+                  </Select.Item>
+                )
+              })}
+            </Select.Viewport>
+            <Select.ScrollDownButton />
+          </Select.Content>
+        </Select.Portal>
+      </Select.Root>
     </div>
   )
 }

@@ -24,7 +24,11 @@ export function useKeyboardEvents(ref: React.RefObject<HTMLDivElement>) {
     }
 
     const onPaste = (e: ClipboardEvent) => {
-      if (!app.editingShape && ref.current?.contains(document.activeElement)) {
+      if (
+        !app.editingShape &&
+        ref.current?.contains(document.activeElement) &&
+        !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName ?? '')
+      ) {
         e.preventDefault()
         app.paste(e, shiftKeyDownRef.current)
       }
@@ -34,7 +38,8 @@ export function useKeyboardEvents(ref: React.RefObject<HTMLDivElement>) {
       if (
         !app.editingShape &&
         app.selectedShapes.size > 0 &&
-        ref.current?.contains(document.activeElement)
+        ref.current?.contains(document.activeElement) &&
+        !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName ?? '')
       ) {
         e.preventDefault()
         app.copy()

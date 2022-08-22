@@ -125,16 +125,12 @@
                        (date/date->file-name journal-page?)
                        (-> (or (:block/original-name page) (:block/name page))
                            (util/file-name-sanity)))
-            path (str
-                  (cond
-                    journal-page?    (config/get-journals-directory)
-                    whiteboard-page? (config/get-whiteboards-directory)
-                    :else            (config/get-pages-directory))
-                  "/"
-                  filename
-                  "."
-                  (if (= format "markdown") "md" format))
-            file-path (config/get-file-path repo path)
+            sub-dir (cond
+                      journal-page?    (config/get-journals-directory)
+                      whiteboard-page? (config/get-whiteboards-directory)
+                      :else            (config/get-pages-directory))
+            ext (if (= format "markdown") "md" format)
+            file-path (config/get-page-file-path repo sub-dir filename ext)
             file {:file/path file-path}
             tx [{:file/path file-path}
                 {:block/name (:block/name page)

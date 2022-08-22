@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
+            [frontend.context.i18n :refer [t]]
             [frontend.db.model :as model]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
@@ -83,16 +84,18 @@
 (defn- get-page-display-name
   [page-name]
   (let [page-entity (model/get-page page-name)]
-    (or (get-in page-entity [:block/properties :title] nil)
-        (:block/original-name page-entity)
-        page-name)))
+    (or
+     (get-in page-entity [:block/properties :title] nil)
+     (:block/original-name page-entity)
+     page-name)))
 
 ;; This is not accurate yet
-;; (defn- get-page-human-update-time
-;;   [page-name]
-;;   (let [page-entity (model/get-page page-name)
-;;         updated-at (:block/updated-at page-entity)]
-;;     (str "Edited at " (util/time-ago (js/Date. updated-at)))))
+(defn- get-page-human-update-time
+  [page-name]
+  (let [page-entity (model/get-page page-name)
+        {:block/keys [updated-at created-at]} page-entity]
+    (str (if (= created-at updated-at) "Created " "Edited ")
+         (util/time-ago (js/Date. updated-at)))))
 
 (rum/defc dashboard-preview-card
   [page-name]
@@ -103,14 +106,15 @@
       (route-handler/redirect-to-whiteboard! page-name))}
    [:div.dashboard-card-title
     [:div.flex.w-full
-     [:div.dashboard-card-title-name (get-page-display-name page-name)]
+     [:div.dashboard-card-title-name.font-bold
+      (if (parse-uuid page-name)
+        [:span.opacity-50 (t :untitled)]
+        (get-page-display-name page-name))]
+     [:div.flex-1]]
+    [:div.flex.w-full.opacity-50
+     [:div (get-page-human-update-time page-name)]
      [:div.flex-1]
-     (page-refs-count page-name nil)]
-    ;; [:div.flex.w-full
-    ;;  [:div (get-page-human-update-time page-name)]
-    ;;  [:div.flex-1]
-    ;;  (page-refs-count page-name)]
-    ]
+     (page-refs-count page-name nil)]]
    [:div.p-4.h-64.flex.justify-center
     (tldraw-preview page-name)]])
 
@@ -145,7 +149,9 @@
 
 (rum/defc whiteboard-dashboard
   []
-  (let [whiteboards (model/get-all-whiteboards (state/get-current-repo))
+  (let [whiteboards (->> (model/get-all-whiteboards (state/get-current-repo))
+                         (sort-by :block/updated-at)
+                         reverse)
         whiteboard-names (map :block/name whiteboards)
         ref (rum/use-ref nil)
         rect (use-component-size ref)
@@ -187,12 +193,15 @@
     [:span.whiteboard-page-title
      {:style {:color "var(--ls-primary-text-color)"
               :user-select "none"}}
-     (page/page-title name [:span.tie.tie-whiteboard
-                            {:style {:font-size "0.9em"}}]
-                      (get-page-display-name name) nil false)]
+     (page/page-title name
+                      [:span.tie.tie-whiteboard
+                       {:style {:font-size "0.9em"}}]
+                      (get-page-display-name name)
+                      nil
+                      false)]
 
     (page-refs-count name
-                     "text-md px-3 py-1 cursor-default whiteboard-page-refs-count"
+                     "text-md px-3 py-2 cursor-default whiteboard-page-refs-count"
                      (fn [open?] [:<> "Reference" (ui/icon (if open? "references-hide" "references-show"))]))]
    (tldraw-app name block-id)])
 

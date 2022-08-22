@@ -32,6 +32,8 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     },
     stroke: 'var(--ls-primary-text-color, #000)',
     fill: '#ffffff',
+    noFill: true,
+    strokeType: 'line',
     strokeWidth: 1,
     opacity: 1,
     decorations: {
@@ -151,6 +153,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       stroke,
       fill,
       strokeWidth,
+      strokeType,
       decorations,
       label,
       handles: { start, end },
@@ -163,6 +166,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
             stroke,
             fill,
             strokeWidth,
+            strokeType
           }}
           start={start.point}
           end={end.point}

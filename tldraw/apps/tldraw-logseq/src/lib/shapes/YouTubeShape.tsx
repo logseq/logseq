@@ -1,14 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as React from 'react'
 import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
-import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
+import { HTMLContainer, TLComponentProps } from '@tldraw/react'
+import { action, computed } from 'mobx'
 import { observer } from 'mobx-react-lite'
-import { CustomStyleProps, withClampedStyles } from './style-props'
-import { TextInput } from '~components/inputs/TextInput'
+import { withClampedStyles } from './style-props'
 
-export interface YouTubeShapeProps extends TLBoxShapeProps, CustomStyleProps {
+export interface YouTubeShapeProps extends TLBoxShapeProps {
   type: 'youtube'
-  embedId: string
+  url: string
 }
 
 export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
@@ -20,11 +19,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
     parentId: 'page',
     point: [0, 0],
     size: [600, 320],
-    stroke: '#000000',
-    fill: '#ffffff',
-    strokeWidth: 2,
-    opacity: 1,
-    embedId: '',
+    url: '',
   }
 
   aspectRatio = 480 / 853
@@ -35,55 +30,37 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
 
   canEdit = true
 
-  ReactContextBar = observer(() => {
-    const { embedId } = this.props
-    const rInput = React.useRef<HTMLInputElement>(null)
-    const app = useApp()
-    const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-      const url = e.currentTarget.value
-      const match = url.match(
-        /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
-      )
-      const embedId = match?.[1] ?? url ?? ''
-      this.update({ embedId, size: YouTubeShape.defaultProps.size })
-      app.persist()
-    }, [])
-    return (
-      <>
-        <TextInput
-          ref={rInput}
-          label="Youtube Video ID"
-          type="text"
-          value={embedId}
-          onChange={handleChange}
-        />
-      </>
+  @computed get embedId() {
+    const url = this.props.url
+    const match = url.match(
+      /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
     )
-  })
+    const embedId = match?.[1] ?? url ?? ''
+    return embedId
+  }
+
+  @action onYoutubeLinkChange = (url: string) => {
+    this.update({ url, size: YouTubeShape.defaultProps.size })
+  }
 
   ReactComponent = observer(({ events, isErasing, isEditing }: TLComponentProps) => {
-    const {
-      props: { opacity, embedId },
-    } = this
     return (
       <HTMLContainer
         style={{
           overflow: 'hidden',
           pointerEvents: 'all',
-          opacity: isErasing ? 0.2 : opacity,
+          opacity: isErasing ? 0.2 : 1,
         }}
         {...events}
       >
         <div
+          className="rounded-lg w-full h-full relative overflow-hidden shadow-xl"
           style={{
-            width: '100%',
-            height: '100%',
             pointerEvents: isEditing ? 'all' : 'none',
             userSelect: 'none',
-            position: 'relative',
           }}
         >
-          {embedId ? (
+          {this.embedId ? (
             <div
               style={{
                 overflow: 'hidden',
@@ -93,17 +70,10 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
               }}
             >
               <iframe
-                style={{
-                  left: 0,
-                  top: 0,
-                  height: '100%',
-                  width: '100%',
-                  position: 'absolute',
-                  margin: 0,
-                }}
+                className="absolute inset-0 w-full h-full m-0"
                 width="853"
                 height="480"
-                src={`https://www.youtube.com/embed/${embedId}`}
+                src={`https://www.youtube.com/embed/${this.embedId}`}
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
@@ -112,16 +82,9 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
             </div>
           ) : (
             <div
+              className="w-full h-full flex items-center justify-center p-4"
               style={{
-                width: '100%',
-                height: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                overflow: 'hidden',
-                justifyContent: 'center',
-                backgroundColor: '#ffffff',
-                border: '1px solid rgb(52, 52, 52)',
-                padding: 16,
+                backgroundColor: 'var(--ls-primary-background-color)',
               }}
             >
               <svg

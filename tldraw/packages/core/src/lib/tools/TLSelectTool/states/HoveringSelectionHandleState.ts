@@ -77,7 +77,9 @@ export class HoveringSelectionHandleState<
           break
         }
         case TLTargetType.Selection: {
-          selectedShape.onResetBounds?.({})
+          selectedShape.onResetBounds?.({
+            zoom: this.app.viewport.camera.zoom,
+          })
           if (this.app.selectedShapesArray.length === 1) {
             this.tool.transition('editingShape', {
               type: TLTargetType.Shape,
@@ -91,7 +93,7 @@ export class HoveringSelectionHandleState<
       const asset = selectedShape.props.assetId
         ? this.app.assets[selectedShape.props.assetId]
         : undefined
-      selectedShape.onResetBounds({ asset })
+      selectedShape.onResetBounds({ asset, zoom: this.app.viewport.camera.zoom })
       this.tool.transition('idle')
     }
   }

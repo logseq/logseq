@@ -3,10 +3,9 @@ import * as React from 'react'
 import { HTMLContainer, TLComponentProps } from '@tldraw/react'
 import { TLAsset, TLImageShape, TLImageShapeProps } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
-import type { CustomStyleProps } from './style-props'
 import { LogseqContext } from '~lib/logseq-context'
 
-export interface ImageShapeProps extends TLImageShapeProps, CustomStyleProps {
+export interface ImageShapeProps extends TLImageShapeProps {
   type: 'image'
   assetId: string
   opacity: number
@@ -21,9 +20,6 @@ export class ImageShape extends TLImageShape<ImageShapeProps> {
     type: 'image',
     point: [0, 0],
     size: [100, 100],
-    stroke: '#000000',
-    fill: '#ffffff',
-    strokeWidth: 2,
     opacity: 1,
     assetId: '',
     clipping: 0,

@@ -107,6 +107,9 @@ export class TranslatingState<
     // Blur all inputs when moving shapes
     document.querySelectorAll<HTMLElement>('input,textarea').forEach(el => el.blur())
 
+    // Clear selection
+    document.getSelection()?.empty();
+
     if (inputs.altKey) {
       this.startCloning()
     } else {

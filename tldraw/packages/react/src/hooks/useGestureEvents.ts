@@ -41,7 +41,7 @@ export function useGestureEvents(ref: React.RefObject<HTMLDivElement>) {
           order: 0,
           delta: gesture.delta,
           offset: gesture.offset,
-          point: gesture.origin,
+          point: Vec.sub(gesture.origin, inputs.containerOffset),
         },
         event
       )
@@ -58,7 +58,7 @@ export function useGestureEvents(ref: React.RefObject<HTMLDivElement>) {
           order: 0,
           delta: gesture.delta,
           offset: gesture.offset,
-          point: gesture.origin,
+          point: Vec.sub(gesture.origin, inputs.containerOffset),
         },
         event
       )
@@ -75,7 +75,7 @@ export function useGestureEvents(ref: React.RefObject<HTMLDivElement>) {
           order: 0,
           delta: gesture.delta,
           offset: gesture.offset,
-          point: gesture.origin,
+          point: Vec.sub(gesture.origin, inputs.containerOffset),
         },
         event
       )

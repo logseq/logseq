@@ -44,10 +44,15 @@ export function throttle<T extends (...args: any) => any>(
   }
 }
 
-export function debounce<T extends (...args: any[]) => void>(fn: T, ms = 0) {
+export function debounce<T extends (...args: any[]) => void>(
+  fn: T,
+  ms = 0,
+  immediateFn: T | undefined = undefined
+) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let timeoutId: number | any
   return function (...args: Parameters<T>) {
+    immediateFn?.(...args)
     clearTimeout(timeoutId)
     timeoutId = setTimeout(() => fn.apply(args), ms)
   }
@@ -74,4 +79,8 @@ export function modKey(e: any): boolean {
 
 export function isNonNullable<TValue>(value: TValue): value is NonNullable<TValue> {
   return Boolean(value)
+}
+
+export function delay(ms: number = 0) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }

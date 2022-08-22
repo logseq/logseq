@@ -28,6 +28,8 @@ export class PenShape extends TLDrawShape<PenShapeProps> {
     isComplete: false,
     stroke: '#000000',
     fill: '#ffffff',
+    noFill: false,
+    strokeType: 'line',
     strokeWidth: 2,
     opacity: 1,
   }

@@ -28,7 +28,7 @@
   z-index: 100000;
   user-select: none;
   background: white;
-  border-bottom: 1px solid black;
+  border-bottom: 1px solid var(--ls-secondary-border-color);
   font-size: inherit;
 }
 
@@ -100,7 +100,7 @@
 
   pointer-events: all;
   position: relative;
-  background-color: #fff;
+  background-color: var(--ls-secondary-background-color);
   color: #a4b5b6;
   padding: 8px 12px;
   border-radius: 8px;
@@ -116,8 +116,7 @@
   }
 
   .input {
-    display: flex;
-    flex-direction: column;
+    @apply flex items-center;
     gap: 4px;
   }
 
@@ -129,15 +128,15 @@
 
   .color-input-wrapper {
     overflow: hidden;
-    height: 18px;
-    width: 46px;
+    height: 20px;
+    width: 20px;
     border-radius: 2px;
     margin: 2px;
     box-shadow: 0 0 0 2px var(--ls-tertiary-background-color);
   }
 
   .color-input {
-    transform: translate(-4px, -4px) scale(1.5);
+    transform: translate(-50%, -50%) scale(4);
   }
 
   .switch-input-root {
@@ -163,7 +162,7 @@
       transform: translateX(3px);
       will-change: transform;
     }
-  
+
     &[data-state='checked'] .switch-input-thumb {
       transform: translateX(17px);
     }
@@ -192,7 +191,7 @@
   z-index: 100000;
   user-select: none;
   background: white;
-  border-top: 1px solid black;
+  border-top: 1px solid var(--ls-secondary-border-color);
   flex-shrink: 0;
   height: 32px;
 }
@@ -241,6 +240,49 @@
   pointer-events: all;
 }
 
+button.tl-select-input-trigger {
+  @apply flex items-center py-1 px-3;
+  box-shadow: 0 0 0 1px var(--ls-secondary-border-color);
+  background-color: var(--ls-quaternary-background-color);
+  min-width: 160px;
+  border-radius: 8px;
+  font-size: 16px;
+  height: 100%;
+  color: var(--ls-secondary-text-color);
+}
+
+.tl-select-input-trigger-value {
+  @apply flex items-center justify-start flex-1;
+  line-height: 24px;
+}
+
+.tl-select-input-viewport {
+  border-radius: 8px;
+  background-color: var(--ls-secondary-background-color);
+}
+
+.tl-select-input-select-item {
+  cursor: default;
+  padding: 4px 12px;
+
+  color: var(--ls-secondary-text-color);
+
+  &[data-state='unchecked']:hover {
+    background-color: var(--ls-tertiary-background-color);
+    color: var(--ls-primary-text-color);
+  }
+
+  &[data-state='checked'] {
+    background-color: #4285f4;
+    color: #fff;
+  }
+}
+
+.tl-select-input-content {
+  z-index: 100;
+  font-family: var(--ls-font-family);
+}
+
 .tl-geometry-tools-pane-anchor {
   @apply relative;
 }
@@ -287,9 +329,6 @@
   backface-visibility: hidden;
   pointer-events: all;
   vertical-align: baseline;
-  -webkit-user-drag: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
 }
 
 .tl-text-shape-input {
@@ -313,7 +352,6 @@
   backface-visibility: hidden;
   pointer-events: all;
   user-select: text;
-  -webkit-user-select: text;
 }
 
 .tl-stroke-hitarea {
@@ -468,20 +506,29 @@
   }
 }
 
-.tl-quick-search-input-sizer {
+.tl-input {
   position: relative;
 }
 
-.tl-quick-search-input {
+.tl-input-sizer {
+  position: relative;
+}
+
+.tl-text-input {
   @apply absolute inset-0;
 
   outline: none;
 }
 
-.tl-quick-search-input-hidden {
+.tl-input-hidden {
+  white-space: pre;
   opacity: 0;
-  min-width: 240px;
   min-height: 24px;
+  min-width: 60px;
+}
+
+.tl-quick-search-input {
+  min-width: 240px;
 }
 
 .tl-quick-search-options {
@@ -530,16 +577,22 @@
 }
 
 .tl-logseq-portal-container {
-  @apply flex flex-col rounded-lg;
+  @apply flex flex-col rounded-lg absolute;
 
-  width: calc(100% - 2px);
-  height: calc(100% - 2px);
+  top: 0;
+  left: 0;
   transform: translate(1px, 1px);
   overscroll-behavior: none;
   opacity: 1;
+  user-select: text;
+  transform-origin: top left;
 
   &[data-collapsed='true'] {
     @apply overflow-hidden;
+  }
+
+  &[data-portal-selected='true'] {
+    filter: brightness(0.9);
   }
 }
 
@@ -576,9 +629,27 @@
   flex-grow: 0;
 }
 
-.tl-html-container > iframe {
+.tl-html-container {
+  @apply h-full w-full m-0 relative;
+  user-select: text;
+  transform-origin: top left;
+}
+
+.tl-html-anchor {
+  width: fit-content;
+}
+
+.tl-html-anchor > iframe {
   @apply h-full w-full !important;
   margin: 0;
+}
+
+.tl-video-container {
+  @apply h-full w-full m-0 relative;
+
+  > video {
+    @apply h-full w-full m-0 relative;
+  }
 }
 
 .tl-logseq-cp-container {
@@ -630,4 +701,84 @@ html[data-theme='dark'] {
   .tl-logseq-portal-header {
     backdrop-filter: brightness(1.2);
   }
+}
+
+.tl-toggle-group-input {
+  @apply rounded overflow-hidden;
+  box-shadow: 0 0 0 1px var(--ls-secondary-border-color);
+}
+
+.tl-toggle-group-input-button {
+  @apply inline-flex items-center justify-center;
+  border-right: 1px solid var(--ls-secondary-border-color);
+  height: 32px;
+  width: 32px;
+  color: var(--ls-secondary-text-color);
+  opacity: 0.3;
+
+  &:last-of-type {
+    border-right: none;
+  }
+
+  &:hover {
+    background-color: var(--ls-tertiary-background-color);
+  }
+
+  &[data-state='on'] {
+    background-color: var(--ls-tertiary-background-color);
+    color: var(--ls-primary-text-color);
+    opacity: 1;
+  }
+}
+
+.tl-toggle-input {
+  @apply inline-flex items-center justify-center;
+  height: 32px;
+  width: 32px;
+  color: var(--ls-secondary-text-color);
+  opacity: 0.3;
+  &:hover {
+    background-color: var(--ls-tertiary-background-color);
+  }
+  &[data-state='on'] {
+    background-color: var(--ls-tertiary-background-color);
+    color: var(--ls-primary-text-color);
+    opacity: 1;
+  }
+}
+
+.tl-contextbar-button {
+  @apply rounded inline-flex items-center justify-center;
+  height: 32px;
+  width: 32px;
+
+  &:hover {
+    background-color: var(--ls-tertiary-background-color);
+  }
+}
+
+.tl-contextbar-separator {
+  background-color: var(--ls-border-color);
+  width: 1px;
+}
+
+.tl-youtube-link {
+  border-radius: 8px;
+  color: var(--ls-primary-text-color);
+  box-shadow: 0 0 0 1px var(--ls-secondary-border-color);
+  padding: 4px 14px;
+}
+
+.tl-hitarea-stroke {
+  fill: none;
+  stroke: transparent;
+  pointer-events: stroke;
+  stroke-width: min(100px, calc(24px * var(--tl-scale)));
+}
+
+.tl-hitarea-fill {
+  fill: transparent;
+  stroke: transparent;
+  pointer-events: all;
+  stroke-width: min(100px, calc(24px * var(--tl-scale)));
 }

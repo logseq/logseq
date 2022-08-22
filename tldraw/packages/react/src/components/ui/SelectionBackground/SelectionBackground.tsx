@@ -1,4 +1,3 @@
-import * as React from 'react'
 import { observer } from 'mobx-react-lite'
 import { useBoundsEvents } from '~hooks/useBoundsEvents'
 import { SVGContainer } from '~components'
