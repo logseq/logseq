@@ -332,7 +332,7 @@
      (left-sidebar {:left-sidebar-open? left-sidebar-open?
                     :route-match route-match})
 
-     [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
+     [:main#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
 
       (when (util/electron?)
         (find-in-page/search))
@@ -579,7 +579,8 @@
         default-home (get-default-home-if-valid)
         logged? (user-handler/logged-in?)
         show-action-bar? (state/sub :mobile/show-action-bar?)
-        show-recording-bar? (state/sub :mobile/show-recording-bar?)]
+        show-recording-bar? (state/sub :mobile/show-recording-bar?)
+        preferred-language (state/sub [:preferred-language])]
     (theme/container
      {:t             t
       :theme         theme
@@ -592,6 +593,7 @@
       :settings-open? settings-open?
       :sidebar-blocks-len (count right-sidebar-blocks)
       :system-theme? system-theme?
+      :preferred-language preferred-language
       :on-click      (fn [e]
                        (editor-handler/unhighlight-blocks!)
                        (util/fix-open-external-with-shift! e))}
