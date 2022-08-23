@@ -373,8 +373,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         ),
       })
 
-      // New page option
-      if (searchResult?.pages?.length === 0 && q) {
+      // New page option when no exact match
+      if (!searchResult?.pages.some(p => p.toLowerCase() === q.toLowerCase()) && q) {
         options.push({
           actionIcon: 'circle-plus',
           onChosen: () => {
