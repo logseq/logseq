@@ -25,7 +25,7 @@
   (when (and (= (.-code e) "Enter")
              (not (state/editing?)))
     (let [shift? (.-shiftKey e)]
-      (state/set-state! [:ui/find-in-search :backward?] shift?)
+      (state/set-state! [:ui/find-in-page :backward?] shift?)
       (search-handler/electron-find-in-page!))))
 
 (rum/defc search-inner <
@@ -50,7 +50,7 @@
       :placeholder "Find in page"
       :on-change (fn [e]
                    (let [value (util/evalue e)]
-                     (state/set-state! [:ui/find-in-search :q] value)
+                     (state/set-state! [:ui/find-in-page :q] value)
                      (if (string/blank? value)
                        (search-handler/electron-exit-find-in-page!)
                        (debounced-search))))}]]
@@ -62,7 +62,7 @@
    (ui/button
      (ui/icon "caret-up" {:style {:font-size 18}})
      :on-click (fn []
-                 (state/set-state! [:ui/find-in-search :backward?] true)
+                 (state/set-state! [:ui/find-in-page :backward?] true)
                  (search-handler/electron-find-in-page!))
      :intent "link"
      :small? true)
@@ -70,7 +70,7 @@
    (ui/button
      (ui/icon "caret-down" {:style {:font-size 18}})
      :on-click (fn []
-                 (state/set-state! [:ui/find-in-search :backward?] false)
+                 (state/set-state! [:ui/find-in-page :backward?] false)
                  (search-handler/electron-find-in-page!))
      :intent "link"
      :small? true)
@@ -84,6 +84,6 @@
 
 (rum/defc search < rum/reactive
   []
-  (let [{:keys [active?] :as opt} (state/sub :ui/find-in-search)]
+  (let [{:keys [active?] :as opt} (state/sub :ui/find-in-page)]
     (when active?
       (search-inner opt))))

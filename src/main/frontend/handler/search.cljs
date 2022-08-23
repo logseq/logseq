@@ -54,7 +54,7 @@
    (electron-find-in-page! nil))
   ([on-success]
    (when (util/electron?)
-     (let [{:keys [active? backward? q]} (:ui/find-in-search @state/state)
+     (let [{:keys [active? backward? q]} (:ui/find-in-page @state/state)
            option (cond->
                     {}
 
@@ -63,7 +63,7 @@
 
                     backward?
                     (assoc :forward false))]
-       (when-not active? (state/set-state! [:ui/find-in-search :active?] true))
+       (when-not active? (state/set-state! [:ui/find-in-page :active?] true))
        (when-not (string/blank? q)
          (ipc/ipc "find-in-page" q option)
          (when on-success
@@ -75,7 +75,7 @@
   (when (util/electron?)
     (ipc/ipc "clear-find-in-page")
     (when clear-state?
-      (state/set-state! :ui/find-in-search nil))))
+      (state/set-state! :ui/find-in-page nil))))
 
 (defn clear-search!
   ([]
