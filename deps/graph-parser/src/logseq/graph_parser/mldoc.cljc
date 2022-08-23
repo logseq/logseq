@@ -154,7 +154,8 @@
                           (remove string/blank?)))
           tags (:tags properties)
           tags (->> (->vec-concat tags filetags)
-                    (remove string/blank?))
+                    (remove string/blank?)
+                    vec)
           properties (assoc properties :tags tags :alias alias)
           properties (-> properties
                          (update :filetags (constantly filetags)))

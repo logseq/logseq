@@ -1,6 +1,6 @@
 (ns frontend.test.node-test-runner
-  "shadow-cljs test runner for :node-test that provides the same test selection
-  options as
+  "Application agnostic shadow-cljs test runner for :node-test that provides the
+  same test selection options as
   https://github.com/cognitect-labs/test-runner#invoke-with-clojure--m-clojuremain.
   This gives the user a fair amount of control over which tests and namespaces
   to call from the commandline. Once this test runner is stable enough we should
@@ -12,9 +12,7 @@
             [clojure.set :as set]
             [shadow.test :as st]
             [cljs.test :as ct]
-            ["util" :as util]
-            ;; activate humane test output for all tests
-            [pjstadig.humane-test-output]))
+            [goog.string :as gstring]))
 
 ;; Cljs.test customization
 ;; Inherit behavior from default reporter
@@ -47,10 +45,10 @@
 (defn- print-summary
   "Print help summary given args and opts strings"
   [options-summary additional-msg]
-  (println (util/format "Usage: %s [OPTIONS]\nOptions:\n%s%s"
-                        "$0"
-                        options-summary
-                        additional-msg)))
+  (println (gstring/format "Usage: %s [OPTIONS]\nOptions:\n%s%s"
+                           "$0"
+                           options-summary
+                           additional-msg)))
 
 (defn- parse-options
   "Processes a command's functionality given a cli options definition, arguments
@@ -172,9 +170,9 @@ returns selected tests and namespaces to run"
         (st/run-test-vars test-env test-vars))
       (st/run-all-tests test-env nil))))
 
-(defn main [& args]
-  (reset-test-data!)
-
+(defn parse-and-run-tests
+  "Main entry point for custom test runners"
+  [args]
   (let [{:keys [options summary]} (parse-options args cli-options)]
     (if (:help options)
       (do
@@ -182,3 +180,9 @@ returns selected tests and namespaces to run"
                        "\n\nMultiple options are ANDed. Defaults to running all tests")
         (js/process.exit 0))
       (run-tests (keys (env/get-tests)) (env/get-test-vars) options))))
+
+(defn main
+  "Main entry point if this ns is configured as a test runner"
+  [& args]
+  (reset-test-data!)
+  (parse-and-run-tests args))
