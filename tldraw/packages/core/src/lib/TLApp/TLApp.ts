@@ -485,6 +485,7 @@ export class TLApp<
   }
 
   readonly clearEditingShape = (): this => {
+    this.selectedTool.transition('idle')
     return this.setEditingShape()
   }
 

@@ -30,11 +30,12 @@ import { LogseqContext } from '~lib/logseq-context'
 export const contextBarActionTypes = [
   // Order matters
   'Edit',
+  'ResetBounds',
   'Swatch',
   'NoFill',
-  'ResetBounds',
   'StrokeType',
   'ScaleLevel',
+  // 'TextStyle',
   'YoutubeLink',
   'LogseqPortalViewMode',
   'ArrowMode',
@@ -81,7 +82,6 @@ const EditAction = observer(() => {
       type="button"
       onClick={() => {
         app.api.editShape(shape)
-        app.api.zoomToSelection()
         if (shape.props.type === 'logseq-portal') {
           let uuid = shape.props.pageId
           if (shape.props.blockType === 'P') {
@@ -378,6 +378,37 @@ const ArrowModeAction = observer(() => {
   )
 })
 
+// const TextStyleAction = observer(() => {
+//   const app = useApp<Shape>()
+//   const shapes = filterShapeByAction<TextShape>(
+//     app.selectedShapesArray,
+//     'TextStyle'
+//   )
+
+//   const StrokeTypeOptions: ToggleGroupInputOption[] = [
+//     {
+//       value: 'bold',
+//       icon: 'bold',
+//     },
+//     {
+//       value: 'italic',
+//       icon: 'italic',
+//     },
+//   ]
+
+//   const bold = shapes.every(s => s.props.fontWeight > 500 ?)
+//   const italic = shapes.every(s => s.props.fontStyle === 'italic')
+
+//   const value = [startValue ? 'start' : null, endValue ? 'end' : null].filter(isNonNullable)
+
+
+//   return (
+//     <ToggleInput className="tl-contextbar-button" pressed={noFill} onPressedChange={handleChange}>
+//       {noFill ? <TablerIcon name="eye-off" /> : <TablerIcon name="eye" />}
+//     </ToggleInput>
+//   )
+// })
+
 contextBarActionMapping.set('Edit', EditAction)
 contextBarActionMapping.set('ResetBounds', ResetBoundsAction)
 contextBarActionMapping.set('LogseqPortalViewMode', LogseqPortalViewModeAction)
@@ -388,6 +419,7 @@ contextBarActionMapping.set('NoFill', NoFillAction)
 contextBarActionMapping.set('Swatch', SwatchAction)
 contextBarActionMapping.set('StrokeType', StrokeTypeAction)
 contextBarActionMapping.set('ArrowMode', ArrowModeAction)
+// contextBarActionMapping.set('TextStyle', TextStyleAction)
 
 const getContextBarActionTypes = (type: ShapeType) => {
   return (shapeMapping[type] ?? []).filter(isNonNullable)

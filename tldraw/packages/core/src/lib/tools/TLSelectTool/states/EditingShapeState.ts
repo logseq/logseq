@@ -19,7 +19,7 @@ export class EditingShapeState<
 
   onExit = () => {
     this.app.persist()
-    this.app.clearEditingShape()
+    this.app.setEditingShape()
 
     // Blur all inputs when exit idle
     document.querySelectorAll<HTMLElement>('input,textarea').forEach(el => el.blur())
