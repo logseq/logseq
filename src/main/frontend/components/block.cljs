@@ -1967,55 +1967,56 @@
    (dom/closest target ".query-table")))
 
 (defn- block-content-on-mouse-down
-  [e block block-id _content edit-input-id]
-  (.stopPropagation e)
-  (let [target (gobj/get e "target")
-        button (gobj/get e "buttons")
-        shift? (gobj/get e "shiftKey")
-        meta? (util/meta-key? e)]
-    (if (and meta? (not (state/get-edit-input-id)))
-      (do
-        (util/stop e)
-        (state/conj-selection-block! (gdom/getElement block-id) :down)
-        (when (and block-id (not (state/get-selection-start-block)))
-          (state/set-selection-start-block! block-id)))
-      (when (contains? #{1 0} button)
-        (when-not (target-forbidden-edit? target)
-          (cond
-            (and shift? (state/get-selection-start-block-or-first))
-            (do
-              (util/stop e)
+  [e block block-id content edit-input-id]
+  (when-not (util/base64-image-included? content)
+    (.stopPropagation e)
+    (let [target (gobj/get e "target")
+          button (gobj/get e "buttons")
+          shift? (gobj/get e "shiftKey")
+          meta? (util/meta-key? e)]
+      (if (and meta? (not (state/get-edit-input-id)))
+        (do
+          (util/stop e)
+          (state/conj-selection-block! (gdom/getElement block-id) :down)
+          (when (and block-id (not (state/get-selection-start-block)))
+            (state/set-selection-start-block! block-id)))
+        (when (contains? #{1 0} button)
+          (when-not (target-forbidden-edit? target)
+            (cond
+              (and shift? (state/get-selection-start-block-or-first))
+              (do
+                (util/stop e)
+                (util/clear-selection!)
+                (editor-handler/highlight-selection-area! block-id))
+
+              shift?
               (util/clear-selection!)
-              (editor-handler/highlight-selection-area! block-id))
 
-            shift?
-            (util/clear-selection!)
+              :else
+              (do
+                (editor-handler/clear-selection!)
+                (editor-handler/unhighlight-blocks!)
+                (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
+                               cursor-range (util/caret-range (gdom/getElement block-id))
+                               {:block/keys [content format]} block
+                               content (->> content
+                                            (property/remove-built-in-properties format)
+                                            (drawer/remove-logbook))]
+                           ;; save current editing block
+                           (let [{:keys [value] :as state} (editor-handler/get-state)]
+                             (editor-handler/save-block! state value))
+                           (state/set-editing!
+                            edit-input-id
+                            content
+                            block
+                            cursor-range
+                            false))]
+                  ;; wait a while for the value of the caret range
+                  (if (util/ios?)
+                    (f)
+                    (js/setTimeout f 5))
 
-            :else
-            (do
-              (editor-handler/clear-selection!)
-              (editor-handler/unhighlight-blocks!)
-              (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
-                             cursor-range (util/caret-range (gdom/getElement block-id))
-                             {:block/keys [content format]} block
-                             content (->> content
-                                          (property/remove-built-in-properties format)
-                                          (drawer/remove-logbook))]
-                         ;; save current editing block
-                         (let [{:keys [value] :as state} (editor-handler/get-state)]
-                           (editor-handler/save-block! state value))
-                         (state/set-editing!
-                          edit-input-id
-                          content
-                          block
-                          cursor-range
-                          false))]
-                ;; wait a while for the value of the caret range
-                (if (util/ios?)
-                  (f)
-                  (js/setTimeout f 5))
-
-                (when block-id (state/set-selection-start-block! block-id))))))))))
+                  (when block-id (state/set-selection-start-block! block-id)))))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block block-id slide? top? block-content?]
