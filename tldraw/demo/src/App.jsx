@@ -139,6 +139,19 @@ const searchHandler = q => {
 export default function App() {
   const [theme, setTheme] = React.useState('light')
 
+  const [model, setModel] = React.useState(documentModel)
+
+  // Mimic external reload event
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setModel(onLoad())
+    }, 5000)
+
+    return () => {
+      clearInterval(interval)
+    }
+  }, [])
+
   return (
     <div className={`h-screen w-screen`}>
       <ThemeSwitcher theme={theme} setTheme={setTheme} />
@@ -157,7 +170,7 @@ export default function App() {
           saveAsset: fileToBase64,
           makeAssetUrl: a => a,
         }}
-        model={documentModel}
+        model={model}
         onPersist={onPersist}
       />
     </div>

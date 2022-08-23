@@ -122,7 +122,10 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
             }
           }
           // Any shapes remaining in the shapes map need to be removed
-          if (shapesMap.size > 0) page.removeShapes(...shapesMap.values())
+          // Do not remove shapes when state is in the middle of a creation
+          if (shapesMap.size > 0 && !this.app.selectedTool.isIn('creating')) {
+            page.removeShapes(...shapesMap.values())
+          }
           // Add any new shapes
           if (shapesToAdd.length > 0) page.addShapes(...shapesToAdd)
           // Remove the page from the map
