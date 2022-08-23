@@ -324,7 +324,8 @@
                                  (state/sidebar-add-block!
                                   (state/get-current-repo)
                                   (:db/id page)
-                                  :page))))
+                                  :page))
+                                (state/close-modal!)))
 
                             nil))
        :item-render (fn [{:keys [type data]}]
