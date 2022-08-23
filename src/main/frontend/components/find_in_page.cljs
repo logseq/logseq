@@ -42,8 +42,8 @@
       :node (gdom/getElement "search-in-page")
       :on-hide (fn []
                  (search-handler/electron-exit-find-in-page!)))))
-  [{:keys [q backward?]}]
-  [:div#search-in-page.flex.flex-row.absolute.top-2.right-4.shadow-lg.px-2.py-1.faster-fade-in
+  [{:keys [matches]}]
+  [:div#search-in-page.flex.flex-row.absolute.top-2.right-4.shadow-lg.px-2.py-1.faster-fade-in.items-center
    [:div.flex
     [:input#search-in-page-input.form-input.block.w-48.sm:text-sm.sm:leading-5.my-2.border-none.mr-4.outline-none
      {:auto-focus true
@@ -51,7 +51,14 @@
       :on-change (fn [e]
                    (let [value (util/evalue e)]
                      (state/set-state! [:ui/find-in-search :q] value)
-                     (debounced-search)))}]]
+                     (if (string/blank? value)
+                       (search-handler/electron-exit-find-in-page!)
+                       (debounced-search))))}]]
+   [:div.px-4.text-sm.opacity-80
+    (:activeMatchOrdinal matches 0)
+    "/"
+    (:matches matches 0)]
+
    (ui/button
      (ui/icon "caret-up" {:style {:font-size 18}})
      :on-click (fn []

@@ -124,6 +124,12 @@
                                        :on-error   error-f}]
                          (repo-handler/persist-db! repo handlers))))
 
+  (js/window.apis.on "foundInPage"
+                     (fn [data]
+                       (let [data' (bean/->clj data)]
+                         (state/set-state! [:ui/find-in-search :matches] data')
+                         true)))
+
   (js/window.apis.on "loginCallback"
                      (fn [code]
                        (user/login-callback code)))

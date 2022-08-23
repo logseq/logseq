@@ -159,7 +159,3 @@
         (.off win "enter-full-screen")
         (.off win "leave-full-screen")))
     #()))
-
-(defn get-active-window
-  []
-  (.getFocusedWindow BrowserWindow))
