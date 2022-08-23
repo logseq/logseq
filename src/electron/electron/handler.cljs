@@ -51,7 +51,8 @@
   (readdir dir))
 
 (defmethod handle :unlink [_window [_ repo path]]
-  (if (plugin/dotdir-file? path)
+  (if (or (plugin/dotdir-file? path)
+          (plugin/assetsdir-file? path))
     (fs/unlinkSync path)
     (try
       (let [file-name   (-> (string/replace path (str repo "/") "")

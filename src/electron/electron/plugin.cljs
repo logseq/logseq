@@ -22,6 +22,10 @@
   [file]
   (and file (string/starts-with? (path/normalize file) cfgs/dot-root)))
 
+(defn assetsdir-file?
+  [file]
+  (and (string? file) (string/includes? file "assets/storages")))
+
 ;; Get a release by tag name: /repos/{owner}/{repo}/releases/tags/{tag}
 ;; Get the latest release: /repos/{owner}/{repo}/releases/latest
 ;; Zipball https://api.github.com/repos/{owner}/{repo}/zipball
