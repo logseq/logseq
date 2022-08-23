@@ -146,7 +146,7 @@
    opts))
 
 (defn button
-  [text & {:keys [background href class intent on-click small? large?]
+  [text & {:keys [background href class intent on-click small? large? title]
            :or   {small? false large? false}
            :as   option}]
   (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center")
@@ -156,6 +156,7 @@
     [:button.ui__button
      (merge
       {:type  "button"
+       :title title
        :class (str (util/hiccup->class klass) " " class)}
       (dissoc option :background :class :small? :large?)
       (when href
@@ -253,6 +254,11 @@
 (defn main-node
   []
   (gdom/getElement "main-content-container"))
+
+(defn focus-element
+  [element]
+  (when-let [element ^js (gdom/getElement element)]
+    (.focus element)))
 
 (defn get-scroll-top []
   (.-scrollTop (main-node)))

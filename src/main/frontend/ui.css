@@ -243,6 +243,10 @@ html.is-mobile {
     @apply text-white;
   }
 
+  &.active {
+    color: var(--ls-link-text-color);
+  }
+
   &[intent='logseq'] {
     @apply focus:border-gray-500 dark:hover:text-gray-200;
 

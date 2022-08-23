@@ -128,6 +128,8 @@
                      (fn [data]
                        (let [data' (bean/->clj data)]
                          (state/set-state! [:ui/find-in-page :matches] data')
+                         (state/set-state! [:ui/find-in-page :searching?] false)
+                         (ui/focus-element "search-in-page-input")
                          true)))
 
   (js/window.apis.on "loginCallback"
