@@ -72,7 +72,7 @@
         whiteboard-page? (db-model/whiteboard-page? name)]
     [:a {:on-click (fn [e]
                      (let [name (util/safe-page-name-sanity-lc name)
-                           source-page (db-model/get-alias-source-page (state/get-current-repo) name) 
+                           source-page (db-model/get-alias-source-page (state/get-current-repo) name)
                            name (if (empty? source-page) name (:block/name source-page))]
                        (if (and (gobj/get e "shiftKey") (not whiteboard-page?))
                          (when-let [page-entity (if (empty? source-page) (db/entity [:block/name name]) source-page)]
@@ -484,15 +484,41 @@
          :else
          [:div])])))
 
+(defn- hide-context-menu-and-clear-selection
+  [e]
+  (state/hide-custom-context-menu!)
+  (when-not (or (gobj/get e "shiftKey")
+                (util/meta-key? e)
+                (state/get-edit-input-id))
+    (editor-handler/clear-selection!)))
+
+(rum/defc render-custom-context-menu
+  [links position]
+  (let [ref (rum/use-ref nil)]
+    (rum/use-effect!
+     #(let [el (rum/deref ref)
+            {:keys [x y]} (util/calc-delta-rect-offset el js/document.documentElement)]
+        (set! (.. el -style -transform)
+              (str "translate3d(" (if (neg? x) x 0) "px," (if (neg? y) (- y 10) 0) "px" ",0)"))))
+    [:<>
+     [:div.menu-backdrop {:on-mouse-down (fn [e] (hide-context-menu-and-clear-selection e))}]
+     [:div#custom-context-menu
+      {:ref ref
+       :style {:left (str (first position) "px")
+               :top (str (second position) "px")}} links]]))
+
 (rum/defc custom-context-menu < rum/reactive
   []
-  (when (state/sub :custom-context-menu/show?)
-    (when-let [links (state/sub :custom-context-menu/links)]
+  (let [show? (state/sub :custom-context-menu/show?)
+        links (state/sub :custom-context-menu/links)
+        position (state/sub :custom-context-menu/position)]
+    (when (and show? links position)
       (ui/css-transition
        {:class-names "fade"
         :timeout {:enter 500
                   :exit 300}}
-       links))))
+       (render-custom-context-menu links position)))))
+
 
 (rum/defc new-block-mode < rum/reactive
   []
@@ -520,14 +546,6 @@
        :on-click (fn []
                    (state/sidebar-add-block! (state/get-current-repo) "help" :help))}
       "?"]]))
-
-(defn- hide-context-menu-and-clear-selection
-  [e]
-  (state/hide-custom-context-menu!)
-  (when-not (or (gobj/get e "shiftKey")
-                (util/meta-key? e)
-                (state/get-edit-input-id))
-    (editor-handler/clear-selection!)))
 
 (rum/defcs ^:large-vars/cleanup-todo sidebar <
   (mixins/modal :modal/show?)
