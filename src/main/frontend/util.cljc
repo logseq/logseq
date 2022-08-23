@@ -79,8 +79,7 @@
    (defn electron?
      []
      (when (and js/window (gobj/get js/window "navigator"))
-       (let [ua (string/lower-case js/navigator.userAgent)]
-         (string/includes? ua " electron")))))
+       (gstring/caseInsensitiveContains js/navigator.userAgent " electron"))))
 
 #?(:cljs
    (defn mocked-open-dir-path
@@ -486,7 +485,10 @@
 
 #?(:cljs
    (defn safe-path-join [prefix & paths]
-     (apply node-path.join (cons prefix paths))))
+     (let [path (apply node-path.join (cons prefix paths))]
+       (if (and (electron?) (gstring/caseInsensitiveStartsWith path "file://"))
+         (js/decodeURIComponent (subs path 7))
+         path))))
 
 (defn trim-safe
   [s]

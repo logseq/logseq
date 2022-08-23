@@ -2662,7 +2662,7 @@
                        (surround-by? input "#" :end)
                        (= key "#"))]
       (cond
-        (and (contains? #{"ArrowLeft" "ArrowRight" "ArrowUp" "ArrowDown"} key)
+        (and (contains? #{"ArrowLeft" "ArrowRight"} key)
              (contains? #{:property-search :property-value-search} (state/get-editor-action)))
         (state/clear-editor-action!)
 

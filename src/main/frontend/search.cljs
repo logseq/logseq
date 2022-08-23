@@ -155,7 +155,7 @@
 
 (defn template-search
   ([q]
-   (template-search q 10))
+   (template-search q 100))
   ([q limit]
    (when q
      (let [q (clean-str q)
@@ -166,7 +166,7 @@
 
 (defn property-search
   ([q]
-   (property-search q 10))
+   (property-search q 100))
   ([q limit]
    (when q
      (let [q (clean-str q)
@@ -181,7 +181,7 @@
 
 (defn property-value-search
   ([property q]
-   (property-value-search property q 10))
+   (property-value-search property q 100))
   ([property q limit]
    (when q
      (let [q (clean-str q)
