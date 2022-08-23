@@ -161,8 +161,8 @@
 
 (defn ^:private write_dotdir_file
   [file content sub-root]
-  (write_rootdir_file
-   file content sub-root (plugin-handler/get-ls-dotdir-root)))
+  (some-> (plugin-handler/get-ls-dotdir-root)
+          (p/then #(write_rootdir_file file content sub-root %))))
 
 (defn ^:private write_assetsdir_file
   [file content sub-root]
@@ -182,8 +182,8 @@
 
 (defn ^:private read_dotdir_file
   [file sub-root]
-  (read_rootdir_file
-   file sub-root (plugin-handler/get-ls-dotdir-root)))
+  (some-> (plugin-handler/get-ls-dotdir-root)
+          (p/then #(read_rootdir_file file sub-root %))))
 
 (defn ^:private read_assetsdir_file
   [file sub-root]
@@ -203,7 +203,8 @@
 
 (defn ^:private unlink_dotdir_file!
   [file sub-root]
-  (unlink_rootdir_file! file sub-root (plugin-handler/get-ls-dotdir-root)))
+  (some-> (plugin-handler/get-ls-dotdir-root)
+          (p/then #(unlink_rootdir_file! file sub-root %))))
 
 (defn ^:private unlink_assetsdir_file!
   [file sub-root]

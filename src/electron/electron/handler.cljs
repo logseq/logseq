@@ -51,7 +51,8 @@
   (readdir dir))
 
 (defmethod handle :listdir [_window [_ dir flat?]]
-  (js-utils/deepReadDir dir (if (boolean? flat?) flat? true)))
+  (when (and dir (fs-extra/pathExistsSync dir))
+    (js-utils/deepReadDir dir (if (boolean? flat?) flat? true))))
 
 (defmethod handle :unlink [_window [_ repo path]]
   (if (or (plugin/dotdir-file? path)
