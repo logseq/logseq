@@ -1,10 +1,16 @@
 (ns electron.find-in-page
-  (:require [electron.window :as win]))
+  (:require [electron.utils :as utils]
+            [cljs-bean.core :as bean]))
 
 (defn find!
   [^js window search option]
   (when window
-    (.findInPage ^js (.-webContents window) search option)))
+    (let [contents ^js (.-webContents window)]
+      (.findInPage contents search option)
+      (.on contents "found-in-page"
+           (fn [_event result]
+             (utils/send-to-renderer window "foundInPage" (bean/->clj result))))
+      true)))
 
 (defn clear!
   [^js window]
