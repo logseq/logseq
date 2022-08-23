@@ -1347,4 +1347,4 @@
 #?(:cljs
    (defn base64-image-included?
      [content]
-     (string/includes? content "data:image/png;base64,")))
+     (safe-re-find #"data:image/[^;]+;base64" content)))
