@@ -251,7 +251,7 @@
 
    :go/electron-find-in-page       {:binding "mod+f"
                                     :fn      #(when (util/electron?)
-                                                (search-handler/electron-find-in-page!))}
+                                                (search-handler/open-find-in-page!))}
 
    :go/journals                    {:binding "g j"
                                     :fn      route-handler/go-to-journals!}

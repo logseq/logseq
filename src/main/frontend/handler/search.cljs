@@ -49,25 +49,31 @@
                search-key (if more? :search/more-result :search/result)]
            (swap! state/state assoc search-key result)))))))
 
+(defn open-find-in-page!
+  []
+  (when (util/electron?)
+    (let [{:keys [active?]} (:ui/find-in-page @state/state)]
+      (when-not active? (state/set-state! [:ui/find-in-page :active?] true)))))
+
 (defn electron-find-in-page!
-  ([]
-   (electron-find-in-page! nil))
-  ([on-success]
-   (when (util/electron?)
-     (let [{:keys [active? backward? q]} (:ui/find-in-page @state/state)
-           option (cond->
-                    {}
+  []
+  (when (util/electron?)
+    (let [{:keys [active? backward? match-case? q]} (:ui/find-in-page @state/state)
+          option (cond->
+                  {}
 
-                    (not active?)
-                    (assoc :findNext true)
+                   (not active?)
+                   (assoc :findNext true)
 
-                    backward?
-                    (assoc :forward false))]
-       (when-not active? (state/set-state! [:ui/find-in-page :active?] true))
-       (when-not (string/blank? q)
-         (ipc/ipc "find-in-page" q option)
-         (when on-success
-           (js/setTimeout #(on-success) 500)))))))
+                   backward?
+                   (assoc :forward false)
+                   
+                   match-case?
+                   (assoc :matchCase true))]
+      (open-find-in-page!)
+      (when-not (string/blank? q)
+          (state/set-state! [:ui/find-in-page :searching?] true)
+          (ipc/ipc "find-in-page" q option)))))
 
 (defn electron-exit-find-in-page!
   [& {:keys [clear-state?]

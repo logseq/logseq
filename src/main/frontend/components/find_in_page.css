@@ -6,7 +6,8 @@
       box-shadow: none;
   }
 
-  .ui__button[intent='link'], .ui__button[intent='link']:focus {
+  .ui__button[intent='link'],
+  .ui__button[intent='link']:focus {
       border-color: none;
   }
 

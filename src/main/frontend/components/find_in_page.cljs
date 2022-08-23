@@ -6,35 +6,23 @@
             [frontend.handler.search :as search-handler]
             [goog.dom :as gdom]
             [goog.functions :refer [debounce]]
-            [frontend.mixins :as mixins]
-            [clojure.string :as string]))
-
-(defn focus-input!
-  []
-  (when-let [element ^js (gdom/getElement "search-in-page-input")]
-    (.focus element)))
+            [frontend.mixins :as mixins]))
 
 (defn find-in-page!
   []
-  (search-handler/electron-find-in-page! focus-input!))
+  (search-handler/electron-find-in-page!))
 
 (defonce debounced-search (debounce find-in-page! 500))
 
-(defn- enter-to-search
+(defn enter-to-search
   [e]
   (when (and (= (.-code e) "Enter")
              (not (state/editing?)))
     (let [shift? (.-shiftKey e)]
       (state/set-state! [:ui/find-in-page :backward?] shift?)
-      (search-handler/electron-find-in-page!))))
+      (debounced-search))))
 
 (rum/defc search-inner <
-  {:did-mount (fn [state]
-                (js/document.addEventListener "keyup" enter-to-search)
-                state)
-   :will-unmount (fn [state]
-                   (js/document.removeEventListener "keyup" enter-to-search)
-                   state)}
   (mixins/event-mixin
    (fn [state]
      (mixins/hide-when-esc-or-outside
@@ -42,45 +30,65 @@
       :node (gdom/getElement "search-in-page")
       :on-hide (fn []
                  (search-handler/electron-exit-find-in-page!)))))
-  [{:keys [matches]}]
+  [{:keys [matches searching? match-case? q]}]
   [:div#search-in-page.flex.flex-row.absolute.top-2.right-4.shadow-lg.px-2.py-1.faster-fade-in.items-center
-   [:div.flex
-    [:input#search-in-page-input.form-input.block.w-48.sm:text-sm.sm:leading-5.my-2.border-none.mr-4.outline-none
+   [:div.flex.w-48
+    (when searching? (ui/loading nil))
+    [:input#search-in-page-input.form-input.block.sm:text-sm.sm:leading-5.my-2.border-none.mr-4.outline-none
      {:auto-focus true
+      :style {:visibility (when searching? "hidden")}
+      :type (if searching? "password" "text")
       :placeholder "Find in page"
+      :aria-label "Find in page"
+      :value q
+      :on-key-down enter-to-search
       :on-change (fn [e]
                    (let [value (util/evalue e)]
                      (state/set-state! [:ui/find-in-page :q] value)
-                     (if (string/blank? value)
-                       (search-handler/electron-exit-find-in-page!)
-                       (debounced-search))))}]]
+                     
+                       (debounced-search)))}]]
    [:div.px-4.text-sm.opacity-80
     (:activeMatchOrdinal matches 0)
     "/"
     (:matches matches 0)]
 
    (ui/button
-     (ui/icon "caret-up" {:style {:font-size 18}})
-     :on-click (fn []
-                 (state/set-state! [:ui/find-in-page :backward?] true)
-                 (search-handler/electron-find-in-page!))
-     :intent "link"
-     :small? true)
+    (ui/icon "letter-case")
+    :on-click (fn []
+                (state/update-state! [:ui/find-in-page :match-case?] not)
+                (debounced-search))
+    :intent "link"
+    :small? true
+    :class (str (when match-case? "active ") "text-lg"))
 
    (ui/button
-     (ui/icon "caret-down" {:style {:font-size 18}})
-     :on-click (fn []
-                 (state/set-state! [:ui/find-in-page :backward?] false)
-                 (search-handler/electron-find-in-page!))
-     :intent "link"
-     :small? true)
+    (ui/icon "caret-up")
+    :on-click (fn []
+                (state/set-state! [:ui/find-in-page :backward?] true)
+                (debounced-search))
+    :intent "link"
+    :small? true
+    :class "text-lg"
+    :title "Previous result")
 
    (ui/button
-     [:span.px-1 "X"]
-     :on-click (fn []
-                 (search-handler/electron-exit-find-in-page!))
-     :intent "link"
-     :small? true)])
+    (ui/icon "caret-down")
+    :on-click (fn []
+                (state/set-state! [:ui/find-in-page :backward?] false)
+                (debounced-search))
+    :intent "link"
+    :small? true
+    :class "text-lg"
+    :title "Next result")
+
+   (ui/button
+    (ui/icon "x")
+    :on-click (fn []
+                (search-handler/electron-exit-find-in-page!))
+    :intent "link"
+    :small? true
+    :class "text-lg"
+    :title "Close")])
 
 (rum/defc search < rum/reactive
   []
