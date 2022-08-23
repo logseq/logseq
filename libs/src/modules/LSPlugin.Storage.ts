@@ -9,6 +9,8 @@ export interface IAsyncStorage {
 
   hasItem(key: string): Promise<boolean>
 
+  allKeys(): Promise<Array<string>>
+
   clear(): Promise<void>
 }
 
@@ -18,8 +20,14 @@ export interface IAsyncStorage {
 class LSPluginFileStorage implements IAsyncStorage {
   /**
    * @param ctx
+   * @param opts
    */
-  constructor(private ctx: LSPluginUser) {}
+  constructor(
+    private ctx: LSPluginUser,
+    private opts?: {
+      assets: boolean
+    }
+  ) {}
 
   /**
    * plugin id
@@ -35,7 +43,7 @@ class LSPluginFileStorage implements IAsyncStorage {
   setItem(key: string, value: string): Promise<void> {
     return this.ctx.caller.callAsync(`api:call`, {
       method: 'write-plugin-storage-file',
-      args: [this.ctxId, key, value],
+      args: [this.ctxId, key, value, this.opts?.assets],
     })
   }
 
@@ -45,7 +53,7 @@ class LSPluginFileStorage implements IAsyncStorage {
   getItem(key: string): Promise<string | undefined> {
     return this.ctx.caller.callAsync(`api:call`, {
       method: 'read-plugin-storage-file',
-      args: [this.ctxId, key],
+      args: [this.ctxId, key, this.opts?.assets],
     })
   }
 
@@ -55,7 +63,17 @@ class LSPluginFileStorage implements IAsyncStorage {
   removeItem(key: string): Promise<void> {
     return this.ctx.caller.call(`api:call`, {
       method: 'unlink-plugin-storage-file',
-      args: [this.ctxId, key],
+      args: [this.ctxId, key, this.opts?.assets],
+    })
+  }
+
+  /**
+   * Get all path file keys
+   */
+  allKeys(): Promise<Array<string>> {
+    return this.ctx.caller.callAsync(`api:call`, {
+      method: 'list-plugin-storage-files',
+      args: [this.ctxId, this.opts?.assets]
     })
   }
 
@@ -65,7 +83,7 @@ class LSPluginFileStorage implements IAsyncStorage {
   clear(): Promise<void> {
     return this.ctx.caller.call(`api:call`, {
       method: 'clear-plugin-storage-files',
-      args: [this.ctxId],
+      args: [this.ctxId, this.opts?.assets],
     })
   }
 
@@ -75,7 +93,7 @@ class LSPluginFileStorage implements IAsyncStorage {
   hasItem(key: string): Promise<boolean> {
     return this.ctx.caller.callAsync(`api:call`, {
       method: 'exist-plugin-storage-file',
-      args: [this.ctxId, key],
+      args: [this.ctxId, key, this.opts?.assets],
     })
   }
 }

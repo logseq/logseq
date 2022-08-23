@@ -250,10 +250,25 @@
       exist?)))
 
 (def ^:export clear_plugin_storage_files
-  (fn [plugin-id]
-    (p/let [root (plugin-handler/get-ls-dotdir-root)
+  (fn [plugin-id assets?]
+    (p/let [root      (if (true? assets?)
+                        (config/get-current-repo-assets-root)
+                        (plugin-handler/get-ls-dotdir-root))
             plugin-id (util/node-path.basename plugin-id)]
       (fs/rmdir! (util/node-path.join root "storages" plugin-id)))))
+
+(def ^:export list_plugin_storage_files
+  (fn [plugin-id assets?]
+    (p/let [root       (if (true? assets?)
+                         (config/get-current-repo-assets-root)
+                         (plugin-handler/get-ls-dotdir-root))
+            plugin-id  (util/node-path.basename plugin-id)
+            files-path (util/node-path.join root "storages" plugin-id)
+            ^js files  (ipc/ipc :listdir files-path)]
+      (when (js-iterable? files)
+        (bean/->js
+         (map #(some-> (string/replace-first % files-path "")
+                       (string/replace #"^/+" "")) files))))))
 
 (def ^:export load_user_preferences
   (fn []

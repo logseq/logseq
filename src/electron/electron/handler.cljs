@@ -50,6 +50,9 @@
 (defmethod handle :readdir [_window [_ dir]]
   (readdir dir))
 
+(defmethod handle :listdir [_window [_ dir flat?]]
+  (js-utils/deepReadDir dir (if (boolean? flat?) flat? true)))
+
 (defmethod handle :unlink [_window [_ repo path]]
   (if (or (plugin/dotdir-file? path)
           (plugin/assetsdir-file? path))
