@@ -127,7 +127,7 @@
   (js/window.apis.on "foundInPage"
                      (fn [data]
                        (let [data' (bean/->clj data)]
-                         (state/set-state! [:ui/find-in-search :matches] data')
+                         (state/set-state! [:ui/find-in-page :matches] data')
                          true)))
 
   (js/window.apis.on "loginCallback"
