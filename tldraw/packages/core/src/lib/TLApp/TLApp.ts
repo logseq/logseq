@@ -484,7 +484,7 @@ export class TLApp<
     return this
   }
 
-  readonly clearEditingShape = (): this => {
+  readonly clearEditingState = (): this => {
     this.selectedTool.transition('idle')
     return this.setEditingShape()
   }
@@ -535,7 +535,7 @@ export class TLApp<
       this.selectionRotation = 0
     }
     if (shapes.length === 0) {
-      this.clearEditingShape()
+      this.setEditingShape()
     }
     return this
   }

@@ -36,7 +36,7 @@ export const AppCanvas = observer(function InnerApp<S extends TLReactShape>(
       cursor={app.cursors.cursor}
       cursorRotation={app.cursors.rotation}
       selectionRotation={app.selectionRotation}
-      onEditingEnd={app.clearEditingShape}
+      onEditingEnd={app.clearEditingState}
       {...props}
     />
   )
