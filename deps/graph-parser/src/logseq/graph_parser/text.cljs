@@ -256,6 +256,6 @@
        :else
        (if-some [res (parse-non-string-property-value v)]
          res
-         (if (:property-values-allow-links-and-text? config-state)
+         (if (:rich-property-values? config-state)
            (extract-page-refs-and-tags v)
            (split-page-refs-without-brackets v)))))))

@@ -176,7 +176,7 @@
                             (and (string? v)
                                  (not (gp-mldoc/link? format v)))
                             (let [v (string/trim v)
-                                  result (if (:property-values-allow-links-and-text? user-config)
+                                  result (if (:rich-property-values? user-config)
                                            (if (gp-util/wrapped-by-quotes? v)
                                              []
                                              (text/extract-page-refs-and-tags v))

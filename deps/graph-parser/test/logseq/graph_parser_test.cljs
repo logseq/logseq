@@ -93,8 +93,8 @@
 (deftest quoted-property-values
   (testing "With default config"
     (quoted-property-values-test {}))
-  (testing "With :property-values-allow-links-and-text config"
-    (quoted-property-values-test {:property-values-allow-links-and-text? true})))
+  (testing "With :rich-property-values config"
+    (quoted-property-values-test {:rich-property-values? true})))
 
 (deftest page-properties-persistence
   (testing "Non-string property values"
@@ -197,11 +197,11 @@
         :comma-prop #{"one" "two" "three"}}
        {}))
 
-    (testing "With :property-values-allow-links-and-text config"
+    (testing "With :rich-property-values config"
       (property-relationships-test
        properties
        {:single-link #{"bar"}
         :multi-link #{"Logseq" "triples" "text editor"}
         :desc #{"link"}
         :comma-prop "one, two,three"}
-       {:property-values-allow-links-and-text? true}))))
+       {:rich-property-values? true}))))

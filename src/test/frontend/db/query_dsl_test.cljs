@@ -120,8 +120,8 @@ prop-d:: nada"}])
 
   (test-helper/start-test-db!) ;; reset db
 
-  (testing "block property tests with property-values-allow-links-and-text? config"
-    (test-helper/with-config {:property-values-allow-links-and-text? true}
+  (testing "block property tests with rich-property-values? config"
+    (test-helper/with-config {:rich-property-values? true}
       (block-property-queries-test))))
 
 (defn- page-property-queries-test
@@ -191,8 +191,8 @@ prop-d:: nada"}])
 
   (test-helper/start-test-db!) ;; reset db
 
-  (testing "page property tests with property-values-allow-links-and-text? config"
-    (test-helper/with-config {:property-values-allow-links-and-text? true}
+  (testing "page property tests with rich-property-values? config"
+    (test-helper/with-config {:rich-property-values? true}
       (page-property-queries-test))))
 
 (deftest task-queries

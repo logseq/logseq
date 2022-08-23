@@ -1809,7 +1809,7 @@
         user-config (state/get-config)
         ;; In this mode and when value is a set of refs, display full property text
         ;; because :block/properties value only contains refs but user wants to see text
-        v (if (and (:property-values-allow-links-and-text? user-config) (coll? value))
+        v (if (and (:rich-property-values? user-config) (coll? value))
             (gp-property/property-value-from-content (name k) (:block/content block))
             value)
         property-pages-enabled? (contains? #{true nil} (:property-pages/enabled? user-config))]

@@ -228,8 +228,9 @@
  ;; E.g.:property-pages/excludelist #{:duration :author}
  ;; :property-pages/excludelist
 
- ;; Allows property values to contain tags, page-refs and free-form text
- ;; :property-values-allow-links-and-text? true
+ ;; Enables property values to contain a mix of tags, page-refs, special
+ ;; punctuation and free-form text
+ ;; :rich-property-values? true
 
  ;; logbook setup
  ;; :logbook/settings
