@@ -275,7 +275,7 @@
         [:div.references.mt-6.flex-1.flex-row
          [:div.content.flex-1
           (ui/foldable
-           [:h2.font-bold {:style {:opacity "0.3"}}
+           [:h2.font-bold.opacity-80
             (if @n-ref
               (str @n-ref " Unlinked Reference" (when (> @n-ref 1)
                                                   "s"))
