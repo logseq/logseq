@@ -17,7 +17,8 @@
             [frontend.ui :as ui]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.user :as user]))
+            [frontend.handler.user :as user]
+            [dommy.core :as dom]))
 
 (defn persist-dbs!
   []
@@ -128,7 +129,7 @@
                      (fn [data]
                        (let [data' (bean/->clj data)]
                          (state/set-state! [:ui/find-in-page :matches] data')
-                         (state/set-state! [:ui/find-in-page :searching?] false)
+                         (dom/remove-style! (dom/by-id "search-in-page-input") :visibility)
                          (ui/focus-element "search-in-page-input")
                          true)))
 

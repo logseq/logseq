@@ -3,26 +3,24 @@
             [frontend.ui :as ui]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.handler.search :as search-handler]
+            [frontend.handler.search :as search-handler :refer [debounced-search]]
             [goog.dom :as gdom]
-            [goog.functions :refer [debounce]]
             [frontend.mixins :as mixins]))
 
-(defn find-in-page!
-  []
-  (search-handler/electron-find-in-page!))
+(rum/defc search-input
+  [q]
+  [:div.flex.w-48
+   [:input#search-in-page-input.form-input.block.sm:text-sm.sm:leading-5.my-2.border-none.mr-4.outline-none
+    {:auto-focus true
+     :placeholder "Find in page"
+     :aria-label "Find in page"
+     :value q
+     :on-change (fn [e]
+                  (let [value (util/evalue e)]
+                    (state/set-state! [:ui/find-in-page :q] value)
+                    (debounced-search)))}]])
 
-(defonce debounced-search (debounce find-in-page! 500))
-
-(defn enter-to-search
-  [e]
-  (when (and (= (.-code e) "Enter")
-             (not (state/editing?)))
-    (let [shift? (.-shiftKey e)]
-      (state/set-state! [:ui/find-in-page :backward?] shift?)
-      (debounced-search))))
-
-(rum/defc search-inner <
+(rum/defc search-inner < rum/static
   (mixins/event-mixin
    (fn [state]
      (mixins/hide-when-esc-or-outside
@@ -30,23 +28,11 @@
       :node (gdom/getElement "search-in-page")
       :on-hide (fn []
                  (search-handler/electron-exit-find-in-page!)))))
-  [{:keys [matches searching? match-case? q]}]
+  [{:keys [matches match-case? q]}]
   [:div#search-in-page.flex.flex-row.absolute.top-2.right-4.shadow-lg.px-2.py-1.faster-fade-in.items-center
-   [:div.flex.w-48
-    (when searching? (ui/loading nil))
-    [:input#search-in-page-input.form-input.block.sm:text-sm.sm:leading-5.my-2.border-none.mr-4.outline-none
-     {:auto-focus true
-      :style {:visibility (when searching? "hidden")}
-      :type (if searching? "password" "text")
-      :placeholder "Find in page"
-      :aria-label "Find in page"
-      :value q
-      :on-key-down enter-to-search
-      :on-change (fn [e]
-                   (let [value (util/evalue e)]
-                     (state/set-state! [:ui/find-in-page :q] value)
-                     
-                       (debounced-search)))}]]
+
+   (search-input q)
+
    [:div.px-4.text-sm.opacity-80
     (:activeMatchOrdinal matches 0)
     "/"
