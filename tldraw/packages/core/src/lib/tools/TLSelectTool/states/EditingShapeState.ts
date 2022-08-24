@@ -18,6 +18,21 @@ export class EditingShapeState<
   }
 
   onExit = () => {
+    // cleanup text shapes
+    if ('text' in this.editingShape.props) {
+      // @ts-expect-error better typing
+      const newText = this.editingShape.props['text'].trim()
+
+      if (newText === '' && this.editingShape.props.type === 'text') {
+        this.app.deleteShapes([this.editingShape])
+      } else {
+        this.editingShape.onResetBounds()
+        this.editingShape.update({
+          text: newText,
+        })
+      }
+    }
+
     this.app.persist()
     this.app.setEditingShape()
 
