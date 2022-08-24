@@ -155,13 +155,11 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
         }
       }
 
-      // Any pages remaining in the pages map need to be removed
-      if (pagesMap.size > 0) this.app.removePages(Array.from(pagesMap.values()))
-
       // Add any new pages
       if (pagesToAdd.length > 0) this.app.addPages(pagesToAdd)
 
-      this.app.setCurrentPage(currentPageId)
+      // Any pages remaining in the pages map need to be removed
+      if (pagesMap.size > 0) this.app.removePages(Array.from(pagesMap.values()))
 
       this.app.setSelectedShapes(newSelectedIds).setErasingShapes([])
     } catch (e) {
