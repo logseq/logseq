@@ -333,6 +333,8 @@
                     :route-match route-match})
 
      [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
+      
+      {:tabindex "-1"}
 
       (when (util/electron?)
         (find-in-page/search))
@@ -603,10 +605,9 @@
                                  :ls-right-sidebar-open sidebar-open?
                                  :ls-wide-mode wide-mode?}])}
       [:button#skip-to-main
-       {:click #(.focus (gdom/getElement "#main-content-container"))
-        :on-key-press (fn [e]
+       {:on-key-up (fn [e]
                         (when (= (.-key e) "Enter")
-                          (.focus (gdom/getElement "#main-content-container"))))}
+                          (ui/focus-element (ui/main-node))))}
        "Skip to main content"]
       [:div.#app-container
        [:div#left-container
