@@ -1152,18 +1152,6 @@
                                db-utils/seq-flatten)]
       (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages))))
 
-(defn get-page-referenced-blocks-no-cache
-  [page-id]
-  (when-let [repo (state/get-current-repo)]
-    (->>
-     (d/q '[:find (pull ?b [*])
-            :in $ ?page-id
-            :where
-            [?b :block/refs ?page-id]]
-          (conn/get-db repo)
-          page-id)
-     (flatten))))
-
 (defn get-page-referenced-blocks-full
   ([page]
    (get-page-referenced-blocks-full (state/get-current-repo) page nil))

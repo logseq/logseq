@@ -232,6 +232,7 @@
 
      :encryption/graph-parsing?             false
 
+     :ui/find-in-page                     nil
      })))
 
 ;; block uuid -> {content(String) -> ast}

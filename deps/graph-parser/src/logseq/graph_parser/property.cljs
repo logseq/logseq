@@ -8,6 +8,19 @@
 
 (def colons "Property delimiter for markdown mode" "::")
 
+(defn ->block-content
+  "Creates a block content string from properties map"
+  [properties]
+  (->> properties
+       (map #(str (name (key %)) (str colons " ") (val %)))
+       (string/join "\n")))
+
+(defn property-value-from-content
+  "Extracts full property value from block content"
+  [property content]
+  (second (re-find (re-pattern (str property colons "\\s+(.*)"))
+                   content)))
+
 (defn properties-ast?
   [block]
   (and
@@ -60,7 +73,7 @@
   [content]
   (when content
     (and (string/includes? content properties-start)
-         (gp-util/safe-re-find properties-end-pattern content))))
+         (re-find properties-end-pattern content))))
 
 (defn ->new-properties
   "New syntax: key:: value"

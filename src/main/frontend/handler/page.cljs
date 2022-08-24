@@ -373,9 +373,9 @@
   ;; update all pages which have references to this page
   (let [repo (state/get-current-repo)
         to-page (db/entity [:block/name (util/page-name-sanity-lc new-name)])
-        blocks   (db/get-page-referenced-blocks-no-cache (:db/id page))
-        page-ids (->> (map :block/page blocks)
-                      (remove nil?)
+        blocks (:block/_refs (db/entity (:db/id page)))
+        page-ids (->> (map (fn [b]
+                             {:db/id (:db/id (:block/page b))}) blocks)
                       (set))
         tx       (->> (map (fn [{:block/keys [uuid content properties] :as block}]
                              (let [content    (let [content' (replace-old-page! content old-original-name new-name)]
@@ -389,8 +389,11 @@
                                   {:block/uuid       uuid
                                    :block/content    content
                                    :block/properties properties
-                                   :block/properties-order (map first properties)
-                                   :block/refs (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))})))) blocks)
+                                   :block/properties-order (when (seq properties)
+                                                             (map first properties))
+                                   :block/refs (->> (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))
+                                                    (map :db/id)
+                                                    (set))})))) blocks)
                       (remove nil?))]
     (db/transact! repo tx)
     (doseq [page-id page-ids]
