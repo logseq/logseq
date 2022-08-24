@@ -996,6 +996,34 @@
    [current-repo db-restoring? nfs-granted?])
   nil)
 
+(rum/defc perf-tip-content
+  [pid name url]
+  [:div
+   [:span.block.whitespace-normal
+    "The plugin "
+    [:strong.text-red-500 "#" name]
+    " takes too long to load, which affects the
+     application startup time, as well as potentially
+     causing other plugins to fail to load."]
+
+   [:path.opacity-50
+    [:small [:span.pr-1 (ui/icon "folder")] url]]
+
+   [:p
+    (ui/button "Disable now"
+               :small? true
+               :on-click
+               (fn []
+                 (-> (js/LSPluginCore.disable pid)
+                     (p/then #(do
+                                (notification/clear! pid)
+                                (notification/show!
+                                 [:span "The plugin "
+                                  [:strong.text-red-500 "#" name]
+                                  " is disabled."] :success
+                                 true nil 3000)))
+                     (p/catch #(js/console.error %)))))]])
+
 (defn open-plugins-modal!
   []
   (state/set-modal!
