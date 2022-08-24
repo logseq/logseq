@@ -33,6 +33,7 @@
   background-color: var(--ls-secondary-background-color);
   top: -100px;
   z-index: 10000;
+  transition: top 0.3s;
 
   &:focus {
     top: 20px;
