@@ -35,7 +35,7 @@ export const contextBarActionTypes = [
   'NoFill',
   'StrokeType',
   'ScaleLevel',
-  // 'TextStyle',
+  'TextStyle',
   'YoutubeLink',
   'LogseqPortalViewMode',
   'ArrowMode',
@@ -58,7 +58,7 @@ const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
   line: ['Edit', 'Swatch', 'ArrowMode'],
   pencil: ['Swatch'],
   highlighter: ['Swatch'],
-  text: ['Edit', 'Swatch', 'ScaleLevel', 'AutoResizing'],
+  text: ['Edit', 'Swatch', 'ScaleLevel', 'AutoResizing', 'TextStyle'],
   html: ['ScaleLevel', 'AutoResizing'],
 }
 
@@ -80,6 +80,7 @@ const EditAction = observer(() => {
     <button
       className="tl-contextbar-button"
       type="button"
+      title="Edit"
       onClick={() => {
         app.api.editShape(shape)
         if (shape.props.type === 'logseq-portal') {
@@ -110,6 +111,8 @@ const AutoResizingAction = observer(() => {
 
   return (
     <ToggleInput
+      title="Auto Resize"
+      toggle={shapes.every(s => s.props.type === 'logseq-portal')}
       className="tl-contextbar-button"
       pressed={pressed}
       onPressedChange={v => {
@@ -150,6 +153,7 @@ const LogseqPortalViewModeAction = observer(() => {
   ]
   return (
     <ToggleGroupInput
+      title="View Mode"
       options={ViewModeOptions}
       value={collapsed ? '1' : '0'}
       onValueChange={v => {
@@ -194,6 +198,7 @@ const ScaleLevelAction = observer(() => {
   ]
   return (
     <SelectInput
+      title="Scale Level"
       options={sizeOptions}
       value={scaleLevel}
       onValueChange={v => {
@@ -216,6 +221,7 @@ const OpenPageAction = observer(() => {
   return (
     <span className="flex gap-1">
       <button
+        title="Open Page in Right Sidebar"
         className="tl-contextbar-button"
         type="button"
         onClick={() => handlers?.sidebarAddBlock(pageId, blockType === 'B' ? 'block' : 'page')}
@@ -223,6 +229,7 @@ const OpenPageAction = observer(() => {
         <TablerIcon name="layout-sidebar-right" />
       </button>
       <button
+        title="Open Page"
         className="tl-contextbar-button"
         type="button"
         onClick={() => handlers?.redirectToPage(pageId)}
@@ -243,8 +250,14 @@ const YoutubeLinkAction = observer(() => {
 
   return (
     <span className="flex gap-3">
-      <TextInput className="tl-youtube-link" value={`${shape.props.url}`} onChange={handleChange} />
+      <TextInput
+        title="YouTube Link"
+        className="tl-youtube-link"
+        value={`${shape.props.url}`}
+        onChange={handleChange}
+      />
       <button
+        title="Open YouTube Link"
         className="tl-contextbar-button"
         type="button"
         onClick={() => window.logseq?.api?.open_external_link?.(shape.props.url)}
@@ -269,7 +282,12 @@ const NoFillAction = observer(() => {
   const noFill = shapes.every(s => s.props.noFill)
 
   return (
-    <ToggleInput className="tl-contextbar-button" pressed={noFill} onPressedChange={handleChange}>
+    <ToggleInput
+      title="Fill Toggle"
+      className="tl-contextbar-button"
+      pressed={noFill}
+      onPressedChange={handleChange}
+    >
       {noFill ? <TablerIcon name="eye-off" /> : <TablerIcon name="eye" />}
     </ToggleInput>
   )
@@ -301,7 +319,7 @@ const SwatchAction = observer(() => {
   }, [])
 
   const value = shapes[0].props.noFill ? shapes[0].props.stroke : shapes[0].props.fill
-  return <ColorInput value={value} onChange={handleChange} />
+  return <ColorInput title="Color Picker" value={value} onChange={handleChange} />
 })
 
 const StrokeTypeAction = observer(() => {
@@ -329,6 +347,7 @@ const StrokeTypeAction = observer(() => {
 
   return (
     <ToggleGroupInput
+      title="Stroke Type"
       options={StrokeTypeOptions}
       value={value}
       onValueChange={v => {
@@ -372,6 +391,7 @@ const ArrowModeAction = observer(() => {
 
   return (
     <ToggleGroupMultipleInput
+      title="Arrow Head"
       options={StrokeTypeOptions}
       value={value}
       onValueChange={v => {
@@ -386,35 +406,48 @@ const ArrowModeAction = observer(() => {
   )
 })
 
-// const TextStyleAction = observer(() => {
-//   const app = useApp<Shape>()
-//   const shapes = filterShapeByAction<TextShape>(
-//     app.selectedShapesArray,
-//     'TextStyle'
-//   )
+const TextStyleAction = observer(() => {
+  const app = useApp<Shape>()
+  const shapes = filterShapeByAction<TextShape>(app.selectedShapesArray, 'TextStyle')
 
-//   const StrokeTypeOptions: ToggleGroupInputOption[] = [
-//     {
-//       value: 'bold',
-//       icon: 'bold',
-//     },
-//     {
-//       value: 'italic',
-//       icon: 'italic',
-//     },
-//   ]
+  const bold = shapes.every(s => s.props.fontWeight > 500)
+  const italic = shapes.every(s => s.props.italic)
 
-//   const bold = shapes.every(s => s.props.fontWeight > 500 ?)
-//   const italic = shapes.every(s => s.props.fontStyle === 'italic')
-
-//   const value = [startValue ? 'start' : null, endValue ? 'end' : null].filter(isNonNullable)
-
-//   return (
-//     <ToggleInput className="tl-contextbar-button" pressed={noFill} onPressedChange={handleChange}>
-//       {noFill ? <TablerIcon name="eye-off" /> : <TablerIcon name="eye" />}
-//     </ToggleInput>
-//   )
-// })
+  return (
+    <span className="flex gap-1">
+      <ToggleInput
+        title='Bold'
+        className="tl-contextbar-button"
+        pressed={bold}
+        onPressedChange={v => {
+          shapes.forEach(shape => {
+            shape.update({
+              fontWeight: v ? 700 : 400,
+            })
+          })
+          app.persist()
+        }}
+      >
+        <TablerIcon name="bold" />
+      </ToggleInput>
+      <ToggleInput
+        title='Italic'
+        className="tl-contextbar-button"
+        pressed={italic}
+        onPressedChange={v => {
+          shapes.forEach(shape => {
+            shape.update({
+              italic: v,
+            })
+          })
+          app.persist()
+        }}
+      >
+        <TablerIcon name="italic" />
+      </ToggleInput>
+    </span>
+  )
+})
 
 contextBarActionMapping.set('Edit', EditAction)
 contextBarActionMapping.set('AutoResizing', AutoResizingAction)
@@ -426,7 +459,7 @@ contextBarActionMapping.set('NoFill', NoFillAction)
 contextBarActionMapping.set('Swatch', SwatchAction)
 contextBarActionMapping.set('StrokeType', StrokeTypeAction)
 contextBarActionMapping.set('ArrowMode', ArrowModeAction)
-// contextBarActionMapping.set('TextStyle', TextStyleAction)
+contextBarActionMapping.set('TextStyle', TextStyleAction)
 
 const getContextBarActionTypes = (type: ShapeType) => {
   return (shapeMapping[type] ?? []).filter(isNonNullable)

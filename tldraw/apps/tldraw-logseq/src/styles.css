@@ -747,6 +747,9 @@ html[data-theme='dark'] {
   &:hover {
     background-color: var(--ls-tertiary-background-color);
   }
+  &[data-toggle='false'] {
+    opacity: 1;
+  }
   &[data-state='on'] {
     background-color: var(--ls-tertiary-background-color);
     color: var(--ls-primary-text-color);

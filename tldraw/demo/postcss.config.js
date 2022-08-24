@@ -7,7 +7,7 @@ module.exports = {
     tailwindcss: {
       content: [
         './**/*.jsx',
-        '../../apps/**/*.{js,jsx,ts,tsx}',
+        '../apps/**/*.{js,jsx,ts,tsx}',
       ]
     },
     autoprefixer: {},
