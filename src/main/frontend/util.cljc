@@ -1094,8 +1094,6 @@
      (doseq [block blocks]
        (d/remove-class! block "selected" "noselect"))))
 
-(defn keyname [key] (str (namespace key) "/" (name key)))
-
 #?(:cljs
    (defn drain-chan
      "drop all stuffs in CH, and return all of them"
@@ -1164,7 +1162,7 @@
         (let [timeout (async/timeout max-time)]
           (handler @buf)
           (reset! buf [])
-          (recur buf timeout))
+          (recur buf timeout))))))
 
 
 #?(:cljs

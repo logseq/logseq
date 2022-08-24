@@ -113,42 +113,9 @@
         {remote-graphs true local-graphs false} (group-by (comp boolean :remote?) repos)]
     (if (seq repos)
       [:div#graphs
-       [:h1.title (t :all-graphs)]
-       [:p.ml-2.opacity-70
-        "A \"graph\" in Logseq means a local directory."]
+       [:h1.title (t :graph/all-graphs)]
 
        [:div.pl-1.content.mt-3
-        [:div.flex.flex-row.my-4
-         (when (or (nfs-handler/supported?)
-                   (mobile-util/native-platform?))
-           [:div.mr-8
-            (ui/button
-              (t :open-a-directory)
-              :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])]
-        (for [{:keys [url] :as repo} repos]
-          (let [local? (config/local-db? url)]
-            [:div.flex.justify-between.mb-4 {:key (str "id-" url)}
-             (if local?
-               (let [local-dir (config/get-local-dir url)
-                     graph-name (text-util/get-graph-name-from-path local-dir)]
-                 [:a {:title local-dir
-                      :on-click #(state/pub-event! [:graph/switch url])}
-                  graph-name])
-               [:a {:target "_blank"
-                    :href url}
-                (db/get-repo-path url)])
-             [:div.controls
-              (when (e/encrypted-db? url)
-                [:a.control {:title "Show encryption information about this graph"
-                             :on-click (fn []
-                                         (state/set-modal! (encryption/encryption-dialog url)))}
-                 "🔐"])
-              [:a.text-gray-400.ml-4.font-medium.text-sm
-               {:title "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk."
-                :on-click (fn []
-                            (repo-handler/remove-repo! repo))}
-               (t :unlink)]]]))]]
-      (widgets/add-graph))))
 
         [:div
          [:h2.text-lg.font-medium.my-4 (str (t :graph/local-graphs) ":")]
