@@ -127,7 +127,7 @@
         *collapsed? (atom nil)]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
-      [:h2.font-bold.opacity-50 (str
+      [:h2.font-bold.opacity-80 (str
                                  (when (seq filters)
                                    (str filter-n " of "))
                                  total
