@@ -1,7 +1,6 @@
-import * as React from 'react'
-import { useRendererContext } from '~hooks'
-import { observer } from 'mobx-react-lite'
 import { modulate } from '@tldraw/core'
+import { observer } from 'mobx-react-lite'
+import { useRendererContext } from '~hooks'
 import type { TLGridProps } from '~types/component-props'
 
 const STEPS = [
@@ -36,7 +35,7 @@ export const Grid = observer(function Grid({ size }: TLGridProps) {
               height={s}
               patternUnits="userSpaceOnUse"
             >
-              <circle className={`tl-grid-dot`} cx={gxo} cy={gyo} r={1} opacity={opacity} />
+              <circle className={`tl-grid-dot`} cx={gxo} cy={gyo} r={1.5} opacity={opacity} />
             </pattern>
           )
         })}

@@ -1,4 +1,4 @@
-import { computed, makeObservable } from 'mobx'
+import { computed, makeObservable, transaction } from 'mobx'
 import { TLApp, TLDocumentModel, TLPage, TLShape } from '~lib'
 import type { TLEventMap } from '~types'
 import { deepEqual } from '~utils'
@@ -91,82 +91,86 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
   }
 
   deserialize = (snapshot: TLDocumentModel) => {
-    const { currentPageId, selectedIds, pages } = snapshot
-    const wasPaused = this.isPaused
-    this.pause()
+    transaction(() => {
+      const { currentPageId, selectedIds, pages } = snapshot
+      const wasPaused = this.isPaused
+      this.pause()
 
-    const newSelectedIds = selectedIds.length === 0 ? Array.from(this.app.selectedIds) : selectedIds
+      const newSelectedIds =
+        selectedIds.length === 0 ? Array.from(this.app.selectedIds) : selectedIds
 
-    try {
-      const pagesMap = new Map(this.app.pages)
-      const pagesToAdd: TLPage<S, K>[] = []
+      try {
+        const pagesMap = new Map(this.app.pages)
+        const pagesToAdd: TLPage<S, K>[] = []
 
-      for (const serializedPage of pages) {
-        const page = pagesMap.get(serializedPage.id)
-        if (page !== undefined) {
-          // Update the page
-          const shapesMap = new Map(page.shapes.map(shape => [shape.props.id, shape]))
-          const shapesToAdd: S[] = []
-          for (const serializedShape of serializedPage.shapes) {
-            const shape = shapesMap.get(serializedShape.id)
-            if (shape !== undefined) {
-              // Update the shape
-              if (shape.nonce !== serializedShape.nonce) {
-                shape.update(serializedShape, true)
-                shape.nonce = serializedShape.nonce!
-                shape.setLastSerialized(serializedShape)
-              }
-              shapesMap.delete(serializedShape.id)
-            } else {
-              // Create the shape
-              const ShapeClass = this.app.getShapeClass(serializedShape.type)
-              shapesToAdd.push(new ShapeClass(serializedShape))
-            }
-          }
-
-          // Do not remove any currently selected shapes
-          newSelectedIds.forEach(id => {
-            shapesMap.delete(id)
-          })
-
-          // Any shapes remaining in the shapes map need to be removed
-          if (shapesMap.size > 0) {
-            page.removeShapes(...shapesMap.values())
-          }
-          // Add any new shapes
-          if (shapesToAdd.length > 0) page.addShapes(...shapesToAdd)
-          // Remove the page from the map
-          pagesMap.delete(serializedPage.id)
-          page.updateBindings(serializedPage.bindings)
-        } else {
-          // Create the page
-          const { id, name, shapes, bindings } = serializedPage
-          pagesToAdd.push(
-            new TLPage(this.app, {
-              id,
-              name,
-              bindings,
-              shapes: shapes.map(serializedShape => {
+        for (const serializedPage of pages) {
+          const page = pagesMap.get(serializedPage.id)
+          if (page !== undefined) {
+            // Update the page
+            const shapesMap = new Map(page.shapes.map(shape => [shape.props.id, shape]))
+            const shapesToAdd: S[] = []
+            for (const serializedShape of serializedPage.shapes) {
+              const shape = shapesMap.get(serializedShape.id)
+              if (shape !== undefined) {
+                // Update the shape
+                if (shape.nonce !== serializedShape.nonce) {
+                  shape.update(serializedShape, true)
+                  shape.nonce = serializedShape.nonce!
+                  shape.setLastSerialized(serializedShape)
+                }
+                shapesMap.delete(serializedShape.id)
+              } else {
+                // Create the shape
                 const ShapeClass = this.app.getShapeClass(serializedShape.type)
-                return new ShapeClass(serializedShape)
-              }),
+                shapesToAdd.push(new ShapeClass(serializedShape))
+              }
+            }
+
+            // Do not remove any currently selected shapes
+            newSelectedIds.forEach(id => {
+              shapesMap.delete(id)
             })
-          )
+
+            // Do not remove shapes if currently state is creating or editing
+            // Any shapes remaining in the shapes map need to be removed
+            if (shapesMap.size > 0 && !this.app.selectedTool.isInAny('creating', 'editingShape')) {
+              page.removeShapes(...shapesMap.values())
+            }
+            // Add any new shapes
+            if (shapesToAdd.length > 0) page.addShapes(...shapesToAdd)
+            // Remove the page from the map
+            pagesMap.delete(serializedPage.id)
+            page.updateBindings(serializedPage.bindings)
+          } else {
+            // Create the page
+            const { id, name, shapes, bindings } = serializedPage
+            pagesToAdd.push(
+              new TLPage(this.app, {
+                id,
+                name,
+                bindings,
+                shapes: shapes.map(serializedShape => {
+                  const ShapeClass = this.app.getShapeClass(serializedShape.type)
+                  return new ShapeClass(serializedShape)
+                }),
+              })
+            )
+          }
         }
+
+        // Add any new pages
+        if (pagesToAdd.length > 0) this.app.addPages(pagesToAdd)
+
+        // Any pages remaining in the pages map need to be removed
+        if (pagesMap.size > 0) this.app.removePages(Array.from(pagesMap.values()))
+
+        this.app.setSelectedShapes(newSelectedIds).setErasingShapes([])
+      } catch (e) {
+        console.warn(e)
       }
 
-      // Add any new pages
-      if (pagesToAdd.length > 0) this.app.addPages(pagesToAdd)
-
-      // Any pages remaining in the pages map need to be removed
-      if (pagesMap.size > 0) this.app.removePages(Array.from(pagesMap.values()))
-
-      this.app.setSelectedShapes(newSelectedIds).setErasingShapes([])
-    } catch (e) {
-      console.warn(e)
-    }
-
-    // Resume the history if not originally paused
-    if (!wasPaused) this.resume()
+      // Resume the history if not originally paused
+      if (!wasPaused) this.resume()
+    })
   }
 }

@@ -49,11 +49,13 @@ export class TLBaseLineBindingState<
 
     const nextPoint = Vec.add(handles[handleId].point, delta)
 
+
     const handleChanges = {
       [handleId]: {
         ...handles[handleId],
         // FIXME Snap not working properly
-        point: showGrid ? Vec.snap(nextPoint, currentGrid) : Vec.toFixed(nextPoint),
+        // point: showGrid ? Vec.snap(nextPoint, currentGrid) : Vec.toFixed(nextPoint)
+        point: Vec.toFixed(nextPoint),
         bindingId: undefined,
       },
     }
