@@ -226,7 +226,7 @@
                                [".favorites .bd" ".recent .bd" ".dropdown-wrapper" ".nav-header"])
                      (close-modal-fn)))}
      [:div.flex.flex-col.pb-4.wrap.gap-4
-      [:nav.px-4.flex.flex-col.gap-1 {:aria-label "Sidebar"}
+      [:nav.px-4.flex.flex-col.gap-1 {:aria-label "Navigation menu"}
        (repo/repos-dropdown)
 
        [:div.nav-header.flex.gap-1.flex-col
@@ -270,8 +270,7 @@
       (when (and left-sidebar-open? (not config/publishing?)) (recent-pages t))
 
       (when-not (mobile-util/native-platform?)
-        [:nav.px-2 {:aria-label "Sidebar"
-                    :class      "new-page"}
+        [:footer.px-2 {:class "new-page"}
          (when-not config/publishing?
            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
             {:on-click (fn []
