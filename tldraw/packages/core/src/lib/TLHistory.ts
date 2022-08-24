@@ -95,6 +95,8 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
     const wasPaused = this.isPaused
     this.pause()
 
+    const newSelectedIds = selectedIds.length === 0 ? Array.from(this.app.selectedIds) : selectedIds
+
     try {
       const pagesMap = new Map(this.app.pages)
       const pagesToAdd: TLPage<S, K>[] = []
@@ -121,9 +123,14 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
               shapesToAdd.push(new ShapeClass(serializedShape))
             }
           }
+
+          // Do not remove any currently selected shapes
+          newSelectedIds.forEach(id => {
+            shapesMap.delete(id)
+          })
+
           // Any shapes remaining in the shapes map need to be removed
-          // Do not remove shapes when state is in the middle of a creation
-          if (shapesMap.size > 0 && !this.app.selectedTool.isIn('creating')) {
+          if (shapesMap.size > 0) {
             page.removeShapes(...shapesMap.values())
           }
           // Add any new shapes
@@ -154,7 +161,9 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
       // Add any new pages
       if (pagesToAdd.length > 0) this.app.addPages(pagesToAdd)
 
-      this.app.setCurrentPage(currentPageId).setSelectedShapes(selectedIds).setErasingShapes([])
+      this.app.setCurrentPage(currentPageId)
+
+      this.app.setSelectedShapes(newSelectedIds).setErasingShapes([])
     } catch (e) {
       console.warn(e)
     }

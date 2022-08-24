@@ -30,7 +30,7 @@ import { LogseqContext } from '~lib/logseq-context'
 export const contextBarActionTypes = [
   // Order matters
   'Edit',
-  'ResetBounds',
+  'AutoResizing',
   'Swatch',
   'NoFill',
   'StrokeType',
@@ -50,7 +50,7 @@ const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 type ShapeType = Shape['props']['type']
 
 const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
-  'logseq-portal': ['Edit', 'LogseqPortalViewMode', 'ScaleLevel', 'OpenPage', 'ResetBounds'],
+  'logseq-portal': ['Edit', 'LogseqPortalViewMode', 'ScaleLevel', 'OpenPage', 'AutoResizing'],
   youtube: ['YoutubeLink'],
   box: ['Swatch', 'NoFill', 'StrokeType'],
   ellipse: ['Swatch', 'NoFill', 'StrokeType'],
@@ -58,8 +58,8 @@ const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
   line: ['Edit', 'Swatch', 'ArrowMode'],
   pencil: ['Swatch'],
   highlighter: ['Swatch'],
-  text: ['Edit', 'Swatch', 'ScaleLevel', 'ResetBounds'],
-  html: ['ScaleLevel', 'ResetBounds'],
+  text: ['Edit', 'Swatch', 'ScaleLevel', 'AutoResizing'],
+  html: ['ScaleLevel', 'AutoResizing'],
 }
 
 const noStrokeShapes = Object.entries(shapeMapping)
@@ -99,26 +99,34 @@ const EditAction = observer(() => {
   )
 })
 
-const ResetBoundsAction = observer(() => {
+const AutoResizingAction = observer(() => {
   const app = useApp<Shape>()
   const shapes = filterShapeByAction<LogseqPortalShape | TextShape | HTMLShape>(
     app.selectedShapesArray,
-    'ResetBounds'
+    'AutoResizing'
   )
 
+  const pressed = shapes.every(s => s.props.isAutoResizing)
+
   return (
-    <button
+    <ToggleInput
       className="tl-contextbar-button"
-      type="button"
-      onClick={() => {
+      pressed={pressed}
+      onPressedChange={v => {
         shapes.forEach(s => {
-          s.onResetBounds({ zoom: app.viewport.camera.zoom })
+          if (s.props.type === 'logseq-portal') {
+            s.update({
+              isAutoResizing: v,
+            })
+          } else {
+            s.onResetBounds({ zoom: app.viewport.camera.zoom })
+          }
         })
         app.persist()
       }}
     >
       <TablerIcon name="dimensions" />
-    </button>
+    </ToggleInput>
   )
 })
 
@@ -401,7 +409,6 @@ const ArrowModeAction = observer(() => {
 
 //   const value = [startValue ? 'start' : null, endValue ? 'end' : null].filter(isNonNullable)
 
-
 //   return (
 //     <ToggleInput className="tl-contextbar-button" pressed={noFill} onPressedChange={handleChange}>
 //       {noFill ? <TablerIcon name="eye-off" /> : <TablerIcon name="eye" />}
@@ -410,7 +417,7 @@ const ArrowModeAction = observer(() => {
 // })
 
 contextBarActionMapping.set('Edit', EditAction)
-contextBarActionMapping.set('ResetBounds', ResetBoundsAction)
+contextBarActionMapping.set('AutoResizing', AutoResizingAction)
 contextBarActionMapping.set('LogseqPortalViewMode', LogseqPortalViewModeAction)
 contextBarActionMapping.set('ScaleLevel', ScaleLevelAction)
 contextBarActionMapping.set('OpenPage', OpenPageAction)

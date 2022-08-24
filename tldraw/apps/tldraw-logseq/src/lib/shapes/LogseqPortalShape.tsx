@@ -144,6 +144,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     collapsed: false,
     compact: false,
     scaleLevel: 'md',
+    isAutoResizing: true,
   }
 
   hideRotateHandle = true
@@ -159,7 +160,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   constructor(props = {} as Partial<LogseqPortalShapeProps>) {
     super(props)
     makeObservable(this)
-    if (props.collapsed || props.compact) {
+    if (props.collapsed) {
       Object.assign(this.canResize, [true, false])
     }
     if (props.size?.[1] === 0) {
@@ -248,10 +249,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return size
   }
 
-  shouldAutoResizeHeight() {
-    return this.props.blockType === 'B' && this.props.compact
-  }
-
   getHeaderHeight() {
     const scale = levelToScale[this.props.scaleLevel ?? 'md']
     return this.props.compact ? 0 : HEADER_HEIGHT * scale
@@ -287,7 +284,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     let height = bounds.height
 
-    if (this.shouldAutoResizeHeight()) {
+    if (this.props.isAutoResizing) {
       height = this.getAutoResizeHeight() ?? height
     }
     return this.update({
@@ -608,7 +605,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const { Page, Block } = renderers
 
     React.useEffect(() => {
-      if (this.shouldAutoResizeHeight()) {
+      if (this.props.isAutoResizing) {
         const newHeight = innerHeight + this.getHeaderHeight()
         if (innerHeight && Math.abs(newHeight - this.props.size[1]) > AUTO_RESIZE_THRESHOLD) {
           this.update({
@@ -617,7 +614,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           app.persist(true)
         }
       }
-    }, [innerHeight, this.props.compact])
+    }, [innerHeight, this.props.isAutoResizing])
 
     React.useEffect(() => {
       if (!this.initialHeightCalculated) {
@@ -633,7 +630,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         ref={cpRefContainer}
         className="tl-logseq-cp-container"
         style={{
-          overflow: this.props.compact ? 'visible' : 'auto',
+          overflow: this.props.isAutoResizing ? 'visible' : 'auto',
         }}
       >
         {this.props.blockType === 'B' && this.props.compact ? (

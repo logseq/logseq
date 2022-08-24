@@ -40,6 +40,7 @@ export interface TLShapeProps {
   isLocked?: boolean
   isGenerated?: boolean
   isSizeLocked?: boolean
+  isAutoResizing?: boolean
   isAspectRatioLocked?: boolean
 }
 
