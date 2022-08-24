@@ -1128,6 +1128,7 @@ class LSPluginCore
     | 'registered'
     | 'error'
     | 'unregistered'
+    | 'ready'
     | 'themes-changed'
     | 'theme-selected'
     | 'reset-custom-theme'
@@ -1261,7 +1262,26 @@ class LSPluginCore
 
       await this.loadUserPreferences()
 
-      const externals = new Set(this._userPreferences.externals)
+      let externals = new Set(this._userPreferences.externals)
+
+      // valid externals
+      if (externals?.size) {
+        try {
+          const validatedExternals: Record<string, boolean> = await invokeHostExportedApi(
+            'validate_external_plugins', [...externals]
+          )
+
+          externals = new Set([...Object.entries(validatedExternals)].reduce(
+            (a, [k, v]) => {
+              if (v) {
+                a.push(k)
+              }
+              return a
+            }, []))
+        } catch (e) {
+          console.error('[validatedExternals Error]', e)
+        }
+      }
 
       if (initial) {
         plugins = plugins.concat(
@@ -1287,9 +1307,11 @@ class LSPluginCore
         )
 
         const perfInfo = { o: pluginLocal, s: performance.now(), e: 0 }
-        perfTable.set(pluginLocal.id, perfInfo)
+        perfTable.set(url, perfInfo)
 
         await pluginLocal.load({ indicator: readyIndicator })
+
+        perfInfo.e = performance.now()
 
         const { loadErr } = pluginLocal
 
@@ -1307,7 +1329,6 @@ class LSPluginCore
           }
         }
 
-        perfInfo.e = performance.now()
 
         pluginLocal.settings?.on('change', (a) => {
           this.emit('settings-changed', pluginLocal.id, a)
@@ -1331,6 +1352,7 @@ class LSPluginCore
       console.error(e)
     } finally {
       this._isRegistering = false
+      this.emit('ready', perfTable)
       debugPerfInfo()
     }
   }
