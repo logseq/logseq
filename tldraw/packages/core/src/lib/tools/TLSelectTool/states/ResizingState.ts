@@ -90,9 +90,6 @@ export class ResizingState<
       })
     )
     selectedShapesArray.forEach(shape => {
-      shape.update({
-        isAutoResizing: false
-      })
       shape.onResizeStart?.({ isSingle: this.isSingle })
     })
   }

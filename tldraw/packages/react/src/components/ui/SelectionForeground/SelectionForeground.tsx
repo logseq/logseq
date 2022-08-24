@@ -34,8 +34,8 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
         className="tl-bounds-fg"
         width={Math.max(width, 1)}
         height={Math.max(height, 1)}
-        rx={editing ? 4 : 0}
-        ry={editing ? 4 : 0}
+        rx={editing ? 8 : 0}
+        ry={editing ? 8 : 0}
         pointerEvents="none"
       />
       <EdgeHandle

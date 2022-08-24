@@ -287,6 +287,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     if (this.props.isAutoResizing) {
       height = this.getAutoResizeHeight() ?? height
     }
+
     return this.update({
       point: [bounds.minX, bounds.minY],
       size: [Math.max(1, bounds.width), Math.max(1, height)],
