@@ -5,11 +5,12 @@
             [frontend.util :as util]
             [frontend.handler.search :as search-handler :refer [debounced-search]]
             [goog.dom :as gdom]
-            [frontend.mixins :as mixins]))
+            [frontend.mixins :as mixins]
+            [clojure.string :as string]))
 
 (rum/defc search-input
-  [q]
-  [:div.flex.w-48
+  [q matches]
+  [:div.flex.w-48.relative
    [:input#search-in-page-input.form-input.block.sm:text-sm.sm:leading-5.my-2.border-none.mr-4.outline-none
     {:auto-focus true
      :placeholder "Find in page"
@@ -18,7 +19,13 @@
      :on-change (fn [e]
                   (let [value (util/evalue e)]
                     (state/set-state! [:ui/find-in-page :q] value)
-                    (debounced-search)))}]])
+                    (debounced-search)))}]
+   (when-not (string/blank? q)
+     (when-let [total (:matches matches)]
+      [:div.text-sm.absolute.top-2.right-0.py-2.px-4
+       (:activeMatchOrdinal matches 0)
+       "/"
+       total]))])
 
 (rum/defc search-inner < rum/static
   (mixins/event-mixin
@@ -31,12 +38,7 @@
   [{:keys [matches match-case? q]}]
   [:div#search-in-page.flex.flex-row.absolute.top-2.right-4.shadow-lg.px-2.py-1.faster-fade-in.items-center
 
-   (search-input q)
-
-   [:div.px-4.text-sm.opacity-80
-    (:activeMatchOrdinal matches 0)
-    "/"
-    (:matches matches 0)]
+   (search-input q matches)
 
    (ui/button
     (ui/icon "letter-case")
