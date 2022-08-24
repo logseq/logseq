@@ -47,6 +47,7 @@
                 (debounced-search))
     :intent "link"
     :small? true
+    :title "Match case"
     :class (str (when match-case? "active ") "text-lg"))
 
    (ui/button

@@ -13,5 +13,9 @@
 
   .ui__button {
       margin-top: 0;
+
+      &.active {
+        color: var(--ls-link-text-color);
+      }
   }
 }
