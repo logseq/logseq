@@ -6,6 +6,7 @@ import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import type { SizeLevel } from '~lib'
 import { CustomStyleProps, withClampedStyles } from './style-props'
+import { TextAreaUtils } from './text/TextAreaUtils'
 
 export interface TextShapeProps extends TLTextShapeProps, CustomStyleProps {
   borderRadius: number
@@ -87,39 +88,35 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     }, [])
 
     const handleKeyDown = React.useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.metaKey) e.stopPropagation()
-      switch (e.key) {
-        case 'Meta': {
-          e.stopPropagation()
-          break
+      if (e.key === 'Escape') return
+
+      if (e.key === 'Tab' && text.length === 0) {
+        e.preventDefault()
+        return
+      }
+
+      if (!(e.key === 'Meta' || e.metaKey)) {
+        e.stopPropagation()
+      } else if (e.key === 'z' && e.metaKey) {
+        if (e.shiftKey) {
+          document.execCommand('redo', false)
+        } else {
+          document.execCommand('undo', false)
         }
-        case 'z': {
-          if (e.metaKey) {
-            if (e.shiftKey) {
-              document.execCommand('redo', false)
-            } else {
-              document.execCommand('undo', false)
-            }
-            e.preventDefault()
-          }
-          break
+        e.stopPropagation()
+        e.preventDefault()
+        return
+      }
+
+      if (e.key === 'Tab') {
+        e.preventDefault()
+        if (e.shiftKey) {
+          TextAreaUtils.unindent(e.currentTarget)
+        } else {
+          TextAreaUtils.indent(e.currentTarget)
         }
-        case 'Enter': {
-          if (e.ctrlKey || e.metaKey) {
-            e.currentTarget.blur()
-          }
-          break
-        }
-        case 'Tab': {
-          e.preventDefault()
-          if (e.shiftKey) {
-            TextUtils.unindent(e.currentTarget)
-          } else {
-            TextUtils.indent(e.currentTarget)
-          }
-          this.update({ text: TextUtils.normalizeText(e.currentTarget.value) })
-          break
-        }
+
+        this.update({ text: TextUtils.normalizeText(e.currentTarget.value) })
       }
     }, [])
 

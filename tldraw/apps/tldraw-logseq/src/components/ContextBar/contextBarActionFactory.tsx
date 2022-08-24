@@ -424,6 +424,7 @@ const TextStyleAction = observer(() => {
             shape.update({
               fontWeight: v ? 700 : 400,
             })
+            shape.onResetBounds()
           })
           app.persist()
         }}
@@ -439,6 +440,7 @@ const TextStyleAction = observer(() => {
             shape.update({
               italic: v,
             })
+            shape.onResetBounds()
           })
           app.persist()
         }}
