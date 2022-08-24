@@ -602,7 +602,12 @@
       {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?
                                  :ls-right-sidebar-open sidebar-open?
                                  :ls-wide-mode wide-mode?}])}
-
+      [:button#skip-to-main
+       {:click #(.focus (gdom/getElement "#main-content-container"))
+        :on-key-press (fn [e]
+                        (when (= (.-key e) "Enter")
+                          (.focus (gdom/getElement "#main-content-container"))))}
+       "Skip to main content"]
       [:div.#app-container
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
