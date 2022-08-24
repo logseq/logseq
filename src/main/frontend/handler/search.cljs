@@ -10,7 +10,9 @@
             [logseq.graph-parser.text :as text]
             [frontend.util.drawer :as drawer]
             [frontend.util.property :as property]
-            [electron.ipc :as ipc]))
+            [electron.ipc :as ipc]
+            [goog.functions :refer [debounce]]
+            [dommy.core :as dom]))
 
 (defn add-search-to-recent!
   [repo q]
@@ -67,13 +69,23 @@
 
                    backward?
                    (assoc :forward false)
-                   
+
                    match-case?
                    (assoc :matchCase true))]
       (open-find-in-page!)
       (when-not (string/blank? q)
-          (state/set-state! [:ui/find-in-page :searching?] true)
-          (ipc/ipc "find-in-page" q option)))))
+        (dom/set-style! (dom/by-id "search-in-page-input")
+                        :visibility "hidden")
+        (ipc/ipc "find-in-page" q option)))))
+
+(defonce debounced-search (debounce electron-find-in-page! 500))
+
+(defn loop-find-in-page!
+  [backward?]
+  (when (and (get-in @state/state [:ui/find-in-page :active?])
+             (not (state/editing?)))
+    (state/set-state! [:ui/find-in-page :backward?] backward?)
+    (debounced-search)))
 
 (defn electron-exit-find-in-page!
   [& {:keys [clear-state?]
