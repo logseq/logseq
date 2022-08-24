@@ -194,7 +194,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       this.canResize[1] = !collapsed
       this.update({
         collapsed: collapsed,
-        size: [this.props.size[0], collapsed ? HEADER_HEIGHT : this.props.collapsedHeight],
+        size: [this.props.size[0], collapsed ? this.getHeaderHeight() : this.props.collapsedHeight],
         collapsedHeight: collapsed ? originalHeight : this.props.collapsedHeight,
       })
     }
@@ -253,7 +253,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   }
 
   getHeaderHeight() {
-    return this.props.compact ? 0 : HEADER_HEIGHT
+    const scale = levelToScale[this.props.scaleLevel ?? 'md']
+    return this.props.compact ? 0 : HEADER_HEIGHT * scale
   }
 
   getAutoResizeHeight() {
@@ -692,7 +693,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         })
         return () => {
           this.update({
-            size: [this.props.size[0], HEADER_HEIGHT],
+            size: [this.props.size[0], this.getHeaderHeight()],
           })
         }
       }

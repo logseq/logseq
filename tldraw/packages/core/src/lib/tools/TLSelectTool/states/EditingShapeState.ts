@@ -25,6 +25,10 @@ export class EditingShapeState<
     document.querySelectorAll<HTMLElement>('input,textarea').forEach(el => el.blur())
   }
 
+  onPinchStart: TLEvents<S>['pinch'] = (info, event) => {
+    this.tool.transition('pinching', { info, event })
+  }
+
   onPointerDown: TLEvents<S>['pointer'] = info => {
     switch (info.type) {
       case TLTargetType.Shape: {
