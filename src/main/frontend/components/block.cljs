@@ -421,6 +421,27 @@
 
 (declare page-reference)
 
+(defn open-page-ref
+  [e page-name redirect-page-name page-name-in-block contents-page?]
+  (util/stop e)
+  (cond
+    (gobj/get e "shiftKey")
+    (when-let [page-entity (db/entity [:block/name redirect-page-name])]
+      (state/sidebar-add-block!
+       (state/get-current-repo)
+       (:db/id page-entity)
+       :page))
+
+    (not= redirect-page-name page-name)
+    (route-handler/redirect-to-page! redirect-page-name)
+
+    :else
+    (state/pub-event! [:page/create page-name-in-block]))
+  (when (and contents-page?
+             (util/mobile?)
+             (state/get-left-sidebar-open?))
+    (ui-handler/close-left-sidebar!)))
+
 (rum/defc page-inner
   "The inner div of page reference component
 
@@ -430,30 +451,14 @@
   [config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label]
   (let [tag? (:tag? config)]
     [:a
-     {:class (cond-> (if tag? "tag" "page-ref")
+     {:tabindex "0"
+      :class (cond-> (if tag? "tag" "page-ref")
                (:property? config)
                (str " page-property-key block-property"))
       :data-ref page-name
-      :on-mouse-down
-      (fn [e]
-        (util/stop e)
-        (cond
-          (gobj/get e "shiftKey")
-          (when-let [page-entity (db/entity [:block/name redirect-page-name])]
-            (state/sidebar-add-block!
-             (state/get-current-repo)
-             (:db/id page-entity)
-             :page))
-
-          (not= redirect-page-name page-name)
-          (route-handler/redirect-to-page! redirect-page-name)
-
-          :else
-          (state/pub-event! [:page/create page-name-in-block]))
-        (when (and contents-page?
-                   (util/mobile?)
-                   (state/get-left-sidebar-open?))
-          (ui-handler/close-left-sidebar!)))}
+      :on-mouse-down (fn [e] (open-page-ref e page-name redirect-page-name page-name-in-block contents-page?))
+      :on-key-up (fn [e] ((when (= (.-key e) "Enter") 
+                           (open-page-ref e page-name redirect-page-name page-name-in-block contents-page?))))}
 
      (if (and (coll? children) (seq children))
        (for [child children]
