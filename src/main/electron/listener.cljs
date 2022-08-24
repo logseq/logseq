@@ -130,6 +130,7 @@
                        (let [data' (bean/->clj data)]
                          (state/set-state! [:ui/find-in-page :matches] data')
                          (dom/remove-style! (dom/by-id "search-in-page-input") :visibility)
+                         (dom/set-text! (dom/by-id "search-in-page-placeholder") "")
                          (ui/focus-element "search-in-page-input")
                          true)))
 

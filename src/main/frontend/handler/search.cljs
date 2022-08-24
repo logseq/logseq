@@ -76,6 +76,12 @@
       (when-not (string/blank? q)
         (dom/set-style! (dom/by-id "search-in-page-input")
                         :visibility "hidden")
+        (when (> (count q) 1)
+          (dom/set-html! (dom/by-id "search-in-page-placeholder")
+                         (util/format
+                          "<span><span>%s</span><span style=\"margin-left: -4px;\">%s</span></span>"
+                          (first q)
+                          (str " " (subs q 1)))))
         (ipc/ipc "find-in-page" q option)))))
 
 (defonce debounced-search (debounce electron-find-in-page! 500))
