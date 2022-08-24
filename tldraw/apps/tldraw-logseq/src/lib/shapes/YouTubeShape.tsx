@@ -43,7 +43,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
     this.update({ url, size: YouTubeShape.defaultProps.size })
   }
 
-  ReactComponent = observer(({ events, isErasing, isEditing }: TLComponentProps) => {
+  ReactComponent = observer(({ events, isErasing, isEditing, isSelected }: TLComponentProps) => {
     return (
       <HTMLContainer
         style={{
@@ -56,7 +56,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
         <div
           className="rounded-lg w-full h-full relative overflow-hidden shadow-xl"
           style={{
-            pointerEvents: isEditing ? 'all' : 'none',
+            pointerEvents: (isEditing || isSelected) ? 'all' : 'none',
             userSelect: 'none',
           }}
         >
@@ -120,7 +120,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
         size: [w, h],
       },
     } = this
-    return <rect width={w} height={h} fill="transparent" />
+    return <rect width={w} height={h} fill="transparent" stroke="none" />
   })
 
   validateProps = (props: Partial<YouTubeShapeProps>) => {
