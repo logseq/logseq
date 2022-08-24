@@ -18,31 +18,31 @@
 
 (defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
-       current-graph (let [graph (storage/get :git/current-repo)]
-                       (when graph (ipc/ipc "setCurrentGraph" graph))
-                       graph)]
+        current-graph  (let [graph (storage/get :git/current-repo)]
+                        (when graph (ipc/ipc "setCurrentGraph" graph))
+                        graph)]
    (atom
-    {:route-match                           nil
-     :today                                 nil
-     :system/events                         (async/chan 100)
-     :db/batch-txs                          (async/chan 100)
-     :file/writes                           (async/chan 100)
-     :file/unlinked-dirs                    #{}
-     :reactive/custom-queries               (async/chan 100)
-     :notification/show?                    false
-     :notification/content                  nil
-     :repo/loading-files?                   {}
-     :nfs/user-granted?                     {}
-     :nfs/refreshing?                       nil
-     :instrument/disabled?                  (storage/get "instrument-disabled")
+    {:route-match             nil
+     :today                   nil
+     :system/events           (async/chan 100)
+     :db/batch-txs            (async/chan 100)
+     :file/writes             (async/chan 100)
+     :file/unlinked-dirs      #{}
+     :reactive/custom-queries (async/chan 100)
+     :notification/show?      false
+     :notification/content    nil
+     :repo/loading-files?     {}
+     :nfs/user-granted?       {}
+     :nfs/refreshing?         nil
+     :instrument/disabled?    (storage/get "instrument-disabled")
      ;; TODO: how to detect the network reliably?
-     :network/online?                       true
-     :indexeddb/support?                    true
-     :me                                    nil
-     :git/current-repo                      current-graph
-     :format/loading                        {}
-     :draw?                                 false
-     :db/restoring?                         nil
+     :network/online?         true
+     :indexeddb/support?      true
+     :me                      nil
+     :git/current-repo        current-graph
+     :format/loading          {}
+     :draw?                   false
+     :db/restoring?           nil
 
      :journals-length                       3
 
@@ -136,6 +136,7 @@
      :selection/direction                   :down
      :custom-context-menu/show?             false
      :custom-context-menu/links             nil
+     :custom-context-menu/position          nil
 
      ;; pages or blocks in the right sidebar
      ;; It is a list of `[repo db-id block-type block-data]` 4-tuple
@@ -243,6 +244,9 @@
      :ui/loading?                           {}
      :file-sync/set-remote-graph-password-result {}
      :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
+
+     :ui/find-in-page                       nil
+
      })))
 
 ;; block uuid -> {content(String) -> ast}
@@ -381,9 +385,11 @@
                  (get (sub-config) (get-current-repo))))))
 
 (defn enable-journals?
-  [repo]
-  (not (false? (:feature/enable-journals?
-                (get (sub-config) repo)))))
+  ([]
+   (enable-journals? (get-current-repo)))
+  ([repo]
+   (not (false? (:feature/enable-journals?
+                 (get (sub-config) repo))))))
 
 (defn enable-flashcards?
   ([]
@@ -721,12 +727,24 @@
   []
   (:selection/blocks @state))
 
-(defn get-selection-block-ids
-  []
-  (->> (sub :selection/blocks)
+(defn- get-selected-block-ids
+  [blocks]
+  (->> blocks
        (keep #(when-let [id (dom/attr % "blockid")]
                 (uuid id)))
        (distinct)))
+
+(defn get-selection-block-ids
+  []
+  (get-selected-block-ids (get-selection-blocks)))
+
+(defn sub-block-selected?
+  [block-uuid]
+  (rum/react
+   (rum/derived-atom [state] [::select-block block-uuid]
+     (fn [state]
+       (contains? (set (get-selected-block-ids (:selection/blocks state)))
+                  block-uuid)))))
 
 (defn get-selection-start-block-or-first
   []
@@ -745,7 +763,6 @@
 
 (defn conj-selection-block!
   [block direction]
-  (dom/add-class! block "selected noselect")
   (swap! state assoc
          :selection/mode true
          :selection/blocks (-> (conj (vec (:selection/blocks @state)) block)
@@ -754,10 +771,18 @@
 
 (defn drop-last-selection-block!
   []
-  (let [last-block (peek (vec (:selection/blocks @state)))]
+  (let [direction (:selection/direction @state)
+        up? (= direction :up)
+        blocks (:selection/blocks @state)
+        last-block (if up?
+                     (first blocks)
+                     (peek (vec blocks)))
+        blocks' (if up?
+                  (rest blocks)
+                  (pop (vec blocks)))]
     (swap! state assoc
            :selection/mode true
-           :selection/blocks (pop (vec (:selection/blocks @state))))
+           :selection/blocks blocks')
     last-block))
 
 (defn get-selection-direction
@@ -765,16 +790,18 @@
   (:selection/direction @state))
 
 (defn show-custom-context-menu!
-  [links]
+  [links position]
   (swap! state assoc
          :custom-context-menu/show? true
-         :custom-context-menu/links links))
+         :custom-context-menu/links links
+         :custom-context-menu/position position))
 
 (defn hide-custom-context-menu!
   []
   (swap! state assoc
          :custom-context-menu/show? false
-         :custom-context-menu/links nil))
+         :custom-context-menu/links nil
+         :custom-context-menu/position nil))
 
 (defn toggle-navigation-item-collapsed!
   [item]
@@ -1359,12 +1386,13 @@
         (>= (- now last-time) 3000)))))
 
 (defn input-idle?
-  [repo]
+  [repo & {:keys [diff]
+           :or {diff 1000}}]
   (when repo
     (or
       (when-let [last-time (get-in @state [:editor/last-input-time repo])]
         (let [now (util/time-ms)]
-          (>= (- now last-time) 500)))
+          (>= (- now last-time) diff)))
       ;; not in editing mode
       (not (get-edit-input-id)))))
 
@@ -1667,7 +1695,8 @@
 (defn edit-in-query-or-refs-component
   []
   (let [config (last (get-editor-args))]
-    (or (:custom-query? config) (:ref? config))))
+    {:custom-query? (:custom-query? config)
+     :ref? (:ref? config)}))
 
 (defn set-auth-id-token
   [id-token]

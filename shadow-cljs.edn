@@ -66,7 +66,7 @@
          :devtools        {:enabled false}
          ;; disable :static-fns to allow for with-redefs and repl development
          :compiler-options {:static-fns false}
-         :main            frontend.test.node-test-runner/main}
+         :main            frontend.test.frontend-node-test-runner/main}
 
   :publishing {:target        :browser
                :module-loader true

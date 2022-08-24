@@ -27,6 +27,11 @@ a logseq page-ref e.g. [[page name]]"
   [page-name]
   (str left-brackets page-name right-brackets))
 
+(defn ->page-ref-re-str
+  "Create a page ref regex escaped string given a page name"
+  [page-name]
+  (string/replace (->page-ref page-name) #"([\[\]])" "\\$1"))
+
 (defn get-page-name
   "Extracts page-name from page-ref string"
   [s]

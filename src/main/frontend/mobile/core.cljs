@@ -2,6 +2,7 @@
   (:require ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
             [clojure.string :as string]
+            [promesa.core :as p]
             [frontend.fs.capacitor-fs :as mobile-fs]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.deeplink :as deeplink]
@@ -23,7 +24,7 @@
   "Initialize iOS-specified event listeners"
   []
   (p/let [path (mobile-fs/iOS-ensure-documents!)]
-    (println "iOS container path: " path))
+    (println "iOS container path: " (js->clj path)))
 
   (state/pub-event! [:validate-appId])
 

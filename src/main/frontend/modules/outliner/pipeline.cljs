@@ -21,7 +21,7 @@
 ;; 1. For each changed block, new-refs = its page + :block/refs + parents :block/refs
 ;; 2. Its children' block/path-refs might need to be updated too.
 (defn compute-block-path-refs
-  [tx-meta blocks]
+  [{:keys [tx-meta]} blocks]
   (let [repo (state/get-current-repo)
         blocks (remove :block/name blocks)]
     (when (:outliner-op tx-meta)
@@ -41,13 +41,15 @@
                             refs-changed? (not= old-refs new-refs)
                             children (db-model/get-block-children-ids repo (:block/uuid block))
                             children-refs (map (fn [id]
-                                                 {:db/id (:db/id (db/entity [:block/uuid id]))
-                                                  :block/path-refs (concat
-                                                                    (map :db/id (:block/path-refs (db/entity id)))
-                                                                    new-refs)}) children)]
+                                                 (let [entity (db/entity [:block/uuid id])]
+                                                   {:db/id (:db/id entity)
+                                                    :block/path-refs (concat
+                                                                      (map :db/id (:block/path-refs entity))
+                                                                      new-refs)})) children)]
                         (swap! *computed-ids set/union (set (cons (:block/uuid block) children)))
                         (util/concat-without-nil
-                         [(when (and refs-changed? (seq new-refs))
+                         [(when (and (seq new-refs)
+                                     refs-changed?)
                             {:db/id (:db/id block)
                              :block/path-refs new-refs})]
                          children-refs))))
@@ -61,7 +63,9 @@
                (not (:compute-new-refs? tx-meta)))
       (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
             repo (state/get-current-repo)
-            refs-tx (set (compute-block-path-refs (:tx-meta tx-report) blocks))
+            refs-tx (util/profile
+                     "Compute path refs: "
+                     (set (compute-block-path-refs tx-report blocks)))
             truncate-refs-tx (map (fn [m] [:db/retract (:db/id m) :block/path-refs]) refs-tx)
             tx (util/concat-without-nil truncate-refs-tx refs-tx)
             tx-report' (if (seq tx)

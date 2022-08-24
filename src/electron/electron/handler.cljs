@@ -22,7 +22,8 @@
             [electron.window :as win]
             [electron.file-sync-rsapi :as rsapi]
             [electron.backup-file :as backup-file]
-            [cljs.reader :as reader]))
+            [cljs.reader :as reader]
+            [electron.find-in-page :as find]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -581,6 +582,12 @@
   (when-let [f (:window/once-persist-done @state/state)]
     (f)
     (state/set-state! :window/once-persist-done nil)))
+
+(defmethod handle :find-in-page [^js win [_ search option]]
+  (find/find! win search (bean/->js option)))
+
+(defmethod handle :clear-find-in-page [^js win [_]]
+  (find/clear! win))
 
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]

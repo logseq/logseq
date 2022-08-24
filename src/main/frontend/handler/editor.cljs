@@ -204,8 +204,8 @@
 
 (defn clear-selection!
   []
-  (util/select-unhighlight! (dom/by-class "selected"))
-  (state/clear-selection!))
+  (state/clear-selection!)
+  (util/select-unhighlight! (dom/by-class "selected")))
 
 (defn- text-range-by-lst-fst-line [content [direction pos]]
   (case direction
@@ -258,40 +258,6 @@
   (when-let [id (and (string? block-id) (parse-uuid block-id))]
     (and (not= current-id id)
          (db/entity [:block/uuid id]))))
-
-(defn- attach-page-properties-if-exists!
-  [block]
-  (if (and (:block/pre-block? block)
-           (seq (:block/properties block)))
-    (let [page-properties (:block/properties block)
-          str->page (fn [n] (block/page-name->map n true))
-          refs (->> page-properties
-                    (filter (fn [[_ v]] (coll? v)))
-                    (vals)
-                    (apply concat)
-                    (set)
-                    (map str->page)
-                    (concat (:block/refs block))
-                    (util/distinct-by :block/name))
-          {:keys [tags alias]} page-properties
-          page-tx (let [id (:db/id (:block/page block))
-                        retract-attributes (when id
-                                             (mapv (fn [attribute]
-                                                     [:db/retract id attribute])
-                                                   [:block/properties :block/tags :block/alias]))
-                        tags (->> (map str->page tags) (remove nil?))
-                        alias (->> (map str->page alias) (remove nil?))
-                        tx (cond-> {:db/id id
-                                    :block/properties page-properties}
-                             (seq tags)
-                             (assoc :block/tags tags)
-                             (seq alias)
-                             (assoc :block/alias alias))]
-                    (conj retract-attributes tx))]
-      (assoc block
-             :block/refs refs
-             :db/other-tx page-tx))
-    block))
 
 (defn- remove-non-existed-refs!
   [refs]
@@ -385,7 +351,6 @@
                 block
                 (dissoc block :block/pre-block?))
         block (update block :block/refs remove-non-existed-refs!)
-        block (attach-page-properties-if-exists! block)
         new-properties (merge
                         (select-keys properties (property/hidden-properties))
                         (:block/properties block))]
@@ -756,7 +721,8 @@
                    (remove nil?))]
       (doseq [id ids]
         (let [block (db/pull [:block/uuid id])]
-          (set-marker block))))))
+          (when (not-empty (:block/content block))
+            (set-marker block)))))))
 
 (defn cycle-todo!
   []
@@ -1073,7 +1039,10 @@
     ;; remove embeds, references and queries
     (let [dom-blocks (remove (fn [block]
                               (or (= "true" (dom/attr block "data-transclude"))
-                                  (= "true" (dom/attr block "data-query")))) blocks)]
+                                  (= "true" (dom/attr block "data-query")))) blocks)
+          dom-blocks (if (seq dom-blocks) dom-blocks
+                         (remove (fn [block]
+                                   (= "true" (dom/attr block "data-transclude"))) blocks))]
       (when (seq dom-blocks)
         (let [repo (state/get-current-repo)
               block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
@@ -1219,8 +1188,7 @@
 
 (defn clear-last-selected-block!
   []
-  (let [block (state/drop-last-selection-block!)]
-    (util/select-unhighlight! [block])))
+  (state/drop-last-selection-block!))
 
 (defn highlight-selection-area!
   [end-block]
@@ -1235,18 +1203,18 @@
 (defn- select-block-up-down
   [direction]
   (cond
-      ;; when editing, quit editing and select current block
+    ;; when editing, quit editing and select current block
     (state/editing?)
     (state/exit-editing-and-set-selected-blocks! [(gdom/getElement (state/get-editing-block-dom-id))])
 
-      ;; when selection and one block selected, select next block
+    ;; when selection and one block selected, select next block
     (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
     (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
           element (f (first (state/get-selection-blocks)))]
       (when element
         (state/conj-selection-block! element direction)))
 
-      ;; if same direction, keep conj on same direction
+    ;; if same direction, keep conj on same direction
     (and (state/selection?) (= direction (state/get-selection-direction)))
     (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
           first-last (if (= :up direction) first last)
@@ -1254,7 +1222,7 @@
       (when element
         (state/conj-selection-block! element direction)))
 
-      ;; if different direction, keep clear until one left
+    ;; if different direction, keep clear until one left
     (state/selection?)
     (clear-last-selected-block!))
   nil)
@@ -1764,19 +1732,11 @@
 (defn close-autocomplete-if-outside
   [input]
   (when (and input
-             (state/get-editor-action)
-             (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets)))
-    (let [value (gobj/get input "value")
-          pos (state/get-editor-last-pos)
-          current-pos (cursor/pos input)
-          between (gp-util/safe-subs value (min pos current-pos) (max pos current-pos))]
-      (when (and between
-                 (or
-                  (string/includes? between "[")
-                  (string/includes? between "]")
-                  (string/includes? between "(")
-                  (string/includes? between ")")))
-        (state/clear-editor-action!)))))
+             (contains? #{:page-search :page-search-hashtag :block-search} (state/get-editor-action))
+             (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
+             (not (wrapped-by? input block-ref/left-parens block-ref/right-parens))
+             (not (wrapped-by? input "#" "")))
+    (state/clear-editor-action!)))
 
 (defn resize-image!
   [block-id metadata full_text size]
@@ -1806,7 +1766,7 @@
     (reset! *auto-save-timeout
             (js/setTimeout
              (fn []
-               (when (state/input-idle? repo)
+               (when (state/input-idle? repo :diff 500)
                  (state/set-editor-op! :auto-save)
                  ; don't auto-save for page's properties block
                  (save-current-block! {:skip-properties? true})
@@ -2702,7 +2662,7 @@
                        (surround-by? input "#" :end)
                        (= key "#"))]
       (cond
-        (and (contains? #{"ArrowLeft" "ArrowRight" "ArrowUp" "ArrowDown"} key)
+        (and (contains? #{"ArrowLeft" "ArrowRight"} key)
              (contains? #{:property-search :property-value-search} (state/get-editor-action)))
         (state/clear-editor-action!)
 
@@ -2914,9 +2874,9 @@
 
               :else
               nil)))
-        
+
         (close-autocomplete-if-outside input)
-        
+
         (when-not (or (= k "Shift") is-processed?)
           (state/set-last-key-code! {:key-code key-code
                                      :code code
@@ -2947,8 +2907,9 @@
 
 (defn- cut-blocks-and-clear-selections!
   [copy?]
-  (cut-selection-blocks copy?)
-  (clear-selection!))
+  (when-not (get-in @state/state [:ui/find-in-page :active?])
+    (cut-selection-blocks copy?)
+    (clear-selection!)))
 
 (defn shortcut-copy-selection
   [_e]

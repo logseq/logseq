@@ -12,6 +12,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
+            [frontend.components.find-in-page :as find-in-page]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -59,7 +60,7 @@
   [e]
   (when-let [target (.. e -target)]
     (let [rect (.. target getBoundingClientRect)]
-     (- (.. e -pageY) (.. rect -top)))))
+      (- (.. e -pageY) (.. rect -top)))))
 
 (defn- move-up?
   [e]
@@ -269,16 +270,16 @@
       (when (and left-sidebar-open? (not config/publishing?)) (recent-pages t))
 
       (when-not (mobile-util/native-platform?)
-       [:nav.px-2 {:aria-label "Sidebar"
-                   :class      "new-page"}
-        (when-not config/publishing?
-          [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
-           {:on-click (fn []
-                        (and (util/sm-breakpoint?)
-                             (state/toggle-left-sidebar!))
-                        (state/pub-event! [:go/search]))}
-           (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
-           [:span.flex-1 (t :right-side-bar/new-page)]])])]]))
+        [:nav.px-2 {:aria-label "Sidebar"
+                    :class      "new-page"}
+         (when-not config/publishing?
+           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
+            {:on-click (fn []
+                         (and (util/sm-breakpoint?)
+                              (state/toggle-left-sidebar!))
+                         (state/pub-event! [:go/search]))}
+            (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
+            [:span.flex-1 (t :right-side-bar/new-page)]])])]]))
 
 (rum/defc left-sidebar < rum/reactive
   [{:keys [left-sidebar-open? route-match]}]
@@ -332,6 +333,9 @@
                     :route-match route-match})
 
      [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
+
+      (when (util/electron?)
+        (find-in-page/search))
 
       (when show-action-bar?
         (action-bar/action-bar))
@@ -407,7 +411,7 @@
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
            (when (state/mobile?)
-                  (state/set-state! :mobile/show-tabbar? true))
+             (state/set-state! :mobile/show-tabbar? true))
            state)}
   []
   (let [default-home (get-default-home-if-valid)
@@ -448,15 +452,41 @@
          :else
          [:div])])))
 
+(defn- hide-context-menu-and-clear-selection
+  [e]
+  (state/hide-custom-context-menu!)
+  (when-not (or (gobj/get e "shiftKey")
+                (util/meta-key? e)
+                (state/get-edit-input-id))
+    (editor-handler/clear-selection!)))
+
+(rum/defc render-custom-context-menu
+  [links position]
+  (let [ref (rum/use-ref nil)]
+    (rum/use-effect!
+     #(let [el (rum/deref ref)
+            {:keys [x y]} (util/calc-delta-rect-offset el js/document.documentElement)]
+        (set! (.. el -style -transform)
+              (str "translate3d(" (if (neg? x) x 0) "px," (if (neg? y) (- y 10) 0) "px" ",0)"))))
+    [:<>
+     [:div.menu-backdrop {:on-mouse-down (fn [e] (hide-context-menu-and-clear-selection e))}]
+     [:div#custom-context-menu
+      {:ref ref
+       :style {:left (str (first position) "px")
+               :top (str (second position) "px")}} links]]))
+
 (rum/defc custom-context-menu < rum/reactive
   []
-  (when (state/sub :custom-context-menu/show?)
-    (when-let [links (state/sub :custom-context-menu/links)]
+  (let [show? (state/sub :custom-context-menu/show?)
+        links (state/sub :custom-context-menu/links)
+        position (state/sub :custom-context-menu/position)]
+    (when (and show? links position)
       (ui/css-transition
        {:class-names "fade"
         :timeout {:enter 500
                   :exit 300}}
-       links))))
+       (render-custom-context-menu links position)))))
+
 
 (rum/defc new-block-mode < rum/reactive
   []
@@ -484,14 +514,6 @@
        :on-click (fn []
                    (state/sidebar-add-block! (state/get-current-repo) "help" :help))}
       "?"]]))
-
-(defn- hide-context-menu-and-clear-selection
-  [e]
-  (state/hide-custom-context-menu!)
-  (when-not (or (gobj/get e "shiftKey")
-                (util/meta-key? e)
-                (state/get-edit-input-id))
-    (editor-handler/clear-selection!)))
 
 (rum/defcs ^:large-vars/cleanup-todo sidebar <
   (mixins/modal :modal/show?)
@@ -599,6 +621,6 @@
                                     :db-restoring? db-restoring?})
       [:a#download.hidden]
       (when
-          (and (not config/mobile?)
-               (not config/publishing?))
-          (help-button))])))
+       (and (not config/mobile?)
+            (not config/publishing?))
+        (help-button))])))

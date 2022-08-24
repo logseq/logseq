@@ -2,7 +2,6 @@
   (:require [cljs-bean.core :as bean]
             [cljs.reader :as reader]
             [clojure.string :as string]
-            [dommy.core :as d]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -116,19 +115,8 @@
 
 (defn show-custom-context-menu! [e context-menu-content]
   (util/stop e)
-  (let [client-x (gobj/get e "clientX")
-        client-y (gobj/get e "clientY")
-        scroll-y (util/cur-doc-top)]
-    (state/show-custom-context-menu! context-menu-content)
-
-    ;; FIXME: use setTimeout here because rum renders lazily.
-    (js/setTimeout
-     (fn []
-       (when-let [context-menu (d/by-id "custom-context-menu")]
-        (d/set-style! context-menu
-                      :left (str client-x "px")
-                      :top (str (+ scroll-y client-y) "px"))))
-     10)))
+  (let [position [(gobj/get e "clientX") (gobj/get e "clientY")]]
+    (state/show-custom-context-menu! context-menu-content position)))
 
 (defn parse-config
   "Parse configuration from file `content` such as from config.edn."

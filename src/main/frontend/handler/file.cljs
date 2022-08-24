@@ -8,11 +8,13 @@
             [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
+            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
+            [electron.ipc :as ipc]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile]
@@ -54,9 +56,9 @@
   (keep-formats files (gp-config/img-formats)))
 
 (defn restore-config!
-  ([repo-url project-changed-check?]
-   (restore-config! repo-url nil project-changed-check?))
-  ([repo-url config-content _project-changed-check?]
+  ([repo-url]
+   (restore-config! repo-url nil))
+  ([repo-url config-content]
    (let [config-content (if config-content config-content
                             (common-handler/get-config repo-url))]
      (when config-content
@@ -81,13 +83,26 @@
                    (log/error :nfs/load-files-error repo-url)
                    (log/error :exception error))))))
 
+(defn backup-file!
+  "Backup db content to bak directory"
+  [repo-url path db-content content]
+  (cond
+    (util/electron?)
+    (ipc/ipc "backupDbFile" repo-url path db-content content)
+
+    (mobile/native-platform?)
+    (capacitor-fs/backup-file-handle-changed! repo-url path db-content)
+
+    :else
+    nil))
+
 (defn- page-exists-in-another-file
   "Conflict of files towards same page"
   [repo-url page file]
   (when-let [page-name (:block/name page)]
     (let [current-file (:file/path (db/get-page-file repo-url page-name))]
       (when (not= file current-file)
-       current-file))))
+        current-file))))
 
 (defn- get-delete-blocks [repo-url first-page file]
   (let [delete-blocks (->
@@ -179,7 +194,7 @@
     (util/p-handle (write-file!)
                    (fn [_]
                      (when (= path (config/get-config-path repo))
-                       (restore-config! repo true))
+                       (restore-config! repo))
                      (when (= path (config/get-custom-css-path repo))
                        (ui-handler/add-style-if-exists!))
                      (when re-render-root? (ui-handler/re-render-root!)))
@@ -279,7 +294,7 @@
         path (str config/app-name "/" config/metadata-file)
         file-path (str "/" path)
         default-content (if encrypted? "{:db/encrypted? true}" "{}")]
-    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
+    (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
         (reset-file! repo-url path default-content)))))
@@ -290,7 +305,7 @@
         path (str config/app-name "/" config/pages-metadata-file)
         file-path (str "/" path)
         default-content "{}"]
-    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
+    (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
         (reset-file! repo-url path default-content)))))

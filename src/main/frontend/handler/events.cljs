@@ -96,6 +96,7 @@
   (db/set-key-value repo :ast/version db-schema/ast-version)
   (search-handler/rebuild-indices!)
   (db/persist! repo)
+  (plugin-handler/hook-plugin-app :graph-after-indexed {:repo repo :empty-graph? empty-graph?})
   (when (state/setups-picker?)
     (if empty-graph?
       (route-handler/redirect! {:to :import :query-params {:from "picker"}})
@@ -178,9 +179,11 @@
                             {:before     #(notification/show!
                                            (ui/loading (t :graph/save))
                                            :warning)
-                             :on-success #(notification/show!
-                                           (ui/loading (t :graph/save-success))
-                                           :warning)
+                             :on-success #(do
+                                            (notification/clear-all!)
+                                            (notification/show!
+                                             (t :graph/save-success)
+                                             :success))
                              :on-error   #(notification/show!
                                            (t :graph/save-error)
                                            :error)}))
@@ -445,7 +448,7 @@
               (state/set-current-repo! current-repo)
               (db/listen-and-persist! current-repo)
               (db/persist-if-idle! current-repo)
-              (file-handler/restore-config! current-repo false)
+              (file-handler/restore-config! current-repo)
               (.watch mobile-util/fs-watcher #js {:path current-repo-dir})
               (when graph-switch-f (graph-switch-f current-repo true))
               (file-sync-restart!))))
@@ -504,10 +507,11 @@
 (defmethod handle :file-watcher/changed [[_ ^js event]]
   (let [type (.-event event)
         payload (-> event
-                    (js->clj :keywordize-keys true)
-                    (update :path js/decodeURI))]
+                    (js->clj :keywordize-keys true))
+        ;; TODO: remove this
+        payload' (-> payload (update :path js/decodeURI))]
     (fs-watcher/handle-changed! type payload)
-    (sync/file-watch-handler type payload)))
+    (sync/file-watch-handler type payload')))
 
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))

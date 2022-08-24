@@ -228,6 +228,10 @@
  ;; E.g.:property-pages/excludelist #{:duration :author}
  ;; :property-pages/excludelist
 
+ ;; Enables property values to contain a mix of tags, page-refs, special
+ ;; punctuation and free-form text
+ ;; :rich-property-values? true
+
  ;; logbook setup
  ;; :logbook/settings
  ;; {:with-second-support? false ;limit logbook to minutes, seconds will be eliminated
