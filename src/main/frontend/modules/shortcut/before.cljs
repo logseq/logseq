@@ -33,7 +33,7 @@
 (defn enable-when-not-component-editing!
   [f]
   (fn [e]
-    (when (or (contains? #{:srs} (state/get-modal-id))
-              (not (state/block-component-editing?))
-              (not (whiteboard/tldraw-idle?)))
+    (when (and (or (contains? #{:srs} (state/get-modal-id))
+                   (not (state/block-component-editing?)))
+               (not (whiteboard/tldraw-idle?)))
       (f e))))
