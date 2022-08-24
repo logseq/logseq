@@ -2247,6 +2247,7 @@
         block-el-id (str "ls-block-" blocks-container-id "-" uuid)
         config {:id (str uuid)
                 :db/id (:db/id block-entity)
+                :block/uuid uuid
                 :block? true
                 :editor-box (state/get-component :editor/box)}
         edit-input-id (str "edit-block-" blocks-container-id "-" uuid)

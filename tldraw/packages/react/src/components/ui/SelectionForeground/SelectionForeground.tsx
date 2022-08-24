@@ -14,7 +14,7 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
   shapes,
 }: TLSelectionComponentProps<S>) {
   const app = useApp()
-  const { width, height } = bounds
+  let { width, height } = bounds
   const zoom = app.viewport.camera.zoom
 
   const size = 8 / zoom
@@ -22,12 +22,20 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
 
   const canResize = shapes.length === 1 ? shapes[0].canResize : [true, true]
 
+  const editing = !!app.editingShape
+
+  // when editing, make the selection a bit larger
+  width = editing ? width + 2 : width
+  height = editing ? height + 2 : height
+
   return (
-    <SVGContainer>
+    <SVGContainer style={{ transform: editing ? 'translate(-1px, -1px)' : 'none' }}>
       <rect
         className="tl-bounds-fg"
         width={Math.max(width, 1)}
         height={Math.max(height, 1)}
+        rx={editing ? 4 : 0}
+        ry={editing ? 4 : 0}
         pointerEvents="none"
       />
       <EdgeHandle
