@@ -593,11 +593,10 @@
      [:p (t :settings-page/git-confirm)])])
 
 (rum/defc settings-advanced < rum/reactive
-  [current-repo]
+  []
   (let [instrument-disabled? (state/sub :instrument/disabled?)
         developer-mode? (state/sub [:ui/developer-mode?])
-        https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])
-        enable-flashcards? (state/enable-flashcards? current-repo)]
+        https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])]
     [:div.panel-wrap.is-advanced
      (when (and util/mac? (util/electron?)) (app-auto-update-row t))
      (usage-diagnostics-row t instrument-disabled?)
@@ -629,7 +628,7 @@
         enable-journals? (state/enable-journals? current-repo)
         enable-encryption? (state/enable-encryption? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
-        enable-sync? (state/enable-sync? current-repo)]
+        enable-sync? (state/enable-sync?)]
     [:div.panel-wrap.is-features.mb-8
      (journal-row enable-journals?)
      (when (not enable-journals?)
@@ -724,7 +723,7 @@
          (settings-git)
 
          :advanced
-         (settings-advanced current-repo)
+         (settings-advanced)
 
          :features
          (settings-features)

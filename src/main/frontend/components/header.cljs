@@ -36,7 +36,7 @@
         loading? (state/sub [:ui/loading? :login])]
     (when-not (or config/publishing?
                   (user-handler/logged-in?)
-                  (not (state/enable-sync? (state/get-current-repo))))
+                  (not (state/enable-sync?)))
       [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
        [:span (t :login)]
        (when loading?

@@ -40,23 +40,6 @@
                    (js/console.error "writeFile Error: " path ": " error)
                    nil)))))
 
-(defn- fix-file-uri-schema
-  [uri]
-  (if (mobile-util/native-android?)
-    (try
-      (let [^js _u (js/URL. uri)]
-        (str (.-protocol _u) "//" (string/replace (.-pathname _u) #"^/+" "/")))
-      (catch js/Error _e
-        (str "file://" uri)))
-    uri))
-
-(defn- read-file-utf8
-  [path]
-  (when-not (string/blank? path)
-    (.readFile Filesystem
-               (clj->js
-                {:path     (fix-file-uri-schema path)
-                 :encoding (.-UTF8 Encoding)}))))
 (defn- <read-file-with-utf8
   [path]
   (when-not (string/blank? path)

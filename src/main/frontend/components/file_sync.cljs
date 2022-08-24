@@ -529,8 +529,7 @@
                  :on-click (fn []
                              (set-loading? true)
                              (let [result (:user/info @state/state)
-                                   ex-time (:ExpireTime result)
-                                   user-groups (set (:UserGroups result))]
+                                   ex-time (:ExpireTime result)]
                                (if (and (number? ex-time)
                                         (< (* ex-time 1000) (js/Date.now)))
                                  (do

@@ -153,7 +153,7 @@
      [:.menu-links-wrapper
       (when links-header links-header)
 
-      (for [{:keys [options title icon key hr hover-detail item as-link?]} (if (fn? links) (links) links)]
+      (for [{:keys [options title icon key hr hover-detail item _as-link?]} (if (fn? links) (links) links)]
         (let [new-options
               (merge options
                      (cond->

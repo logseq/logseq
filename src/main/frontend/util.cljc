@@ -1154,16 +1154,6 @@
              (async/close! ch))))
        ch)))
 
-(defn batch [in max-time handler buf-atom]
-  (async/go-loop [buf buf-atom t (async/timeout max-time)]
-    (let [[v p] (async/alts! [in t])]
-      (cond
-        (or (= p t) (nil? v))
-        (let [timeout (async/timeout max-time)]
-          (handler @buf)
-          (reset! buf [])
-          (recur buf timeout))))))
-
 
 #?(:cljs
    (defn trace!

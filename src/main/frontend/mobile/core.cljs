@@ -8,7 +8,6 @@
             [frontend.mobile.deeplink :as deeplink]
             [frontend.mobile.intent :as intent]
             [frontend.mobile.util :as mobile-util]
-            [promesa.core :as p]
             [frontend.state :as state]
             [frontend.util :as util]))
 

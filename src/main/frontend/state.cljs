@@ -403,7 +403,7 @@
   (set (get-in @state [:user/info :UserGroups])))
 
 (defn enable-sync?
-  [repo]
+  []
   (sub :feature/enable-sync?))
 
 (defn export-heading-to-list?
