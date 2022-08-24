@@ -25,7 +25,8 @@
       [:div.text-sm.absolute.top-2.right-0.py-2.px-4
        (:activeMatchOrdinal matches 0)
        "/"
-       total]))])
+       total]))
+   [:div#search-in-page-placeholder.absolute.top-2.left-0.p-2.sm:text-sm]])
 
 (rum/defc search-inner < rum/static
   (mixins/event-mixin
