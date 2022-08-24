@@ -35,5 +35,6 @@
   (fn [e]
     (when (and (or (contains? #{:srs} (state/get-modal-id))
                    (not (state/block-component-editing?)))
-               (not (whiteboard/tldraw-idle?)))
+               (not (and (whiteboard/tldraw-idle?)
+                         (not (state/editing?)))))
       (f e))))
