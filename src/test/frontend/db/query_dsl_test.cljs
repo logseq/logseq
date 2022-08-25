@@ -3,7 +3,7 @@
             [clojure.string :as str]
             [frontend.db :as db]
             [frontend.db.query-dsl :as query-dsl]
-            [frontend.test.helper :as test-helper :refer [load-test-files]]))
+            [frontend.test.helper :as test-helper :include-macros true :refer [load-test-files]]))
 
 ;; TODO: quickcheck
 ;; 1. generate query filters
@@ -45,7 +45,8 @@
 ;; Tests
 ;; =====
 
-(deftest block-property-queries
+(defn- block-property-queries-test
+  []
   (load-test-files [{:file/path "journals/2022_02_28.md"
                      :file/content "a:: b
 - b1
@@ -64,7 +65,7 @@ prop-d:: nada"}])
   (testing "Blocks have given property value"
     (is (= #{"b1" "b2"}
            (set (map (comp first str/split-lines :block/content)
-                 (dsl-query "(property prop-a val-a)")))))
+                     (dsl-query "(property prop-a val-a)")))))
 
     (is (= ["b2"]
            (map (comp first str/split-lines :block/content)
@@ -112,15 +113,27 @@ prop-d:: nada"}])
               (dsl-query "(property prop-d)")))
       "Blocks that have a property"))
 
-(deftest page-property-queries
+(deftest block-property-queries
+  (testing "block property tests with default config"
+    (test-helper/with-config {}
+      (block-property-queries-test)))
+
+  (test-helper/start-test-db!) ;; reset db
+
+  (testing "block property tests with rich-property-values? config"
+    (test-helper/with-config {:rich-property-values? true}
+      (block-property-queries-test))))
+
+(defn- page-property-queries-test
+  []
   (load-test-files [{:file/path "pages/page1.md"
-                     :file/content "parent:: [[child page 1]], [[child-no-space]]"}
+                     :file/content "parent:: [[child page 1]], [[child-no-space]]\ninteresting:: true"}
                     {:file/path "pages/page2.md"
-                     :file/content "foo:: bar"}
+                     :file/content "foo:: #bar\ninteresting:: false"}
                     {:file/path "pages/page3.md"
-                     :file/content "parent:: [[child page 1]], child page 2\nfoo:: bar"}
+                     :file/content "parent:: [[child page 1]], [[child page 2]]\nfoo:: bar\ninteresting:: false"}
                     {:file/path "pages/page4.md"
-                     :file/content "parent:: child page 2\nfoo:: baz"}])
+                     :file/content "parent:: [[child page 2]]\nfoo:: baz"}])
 
   (is (= ["page1" "page3" "page4"]
          (map :block/name (dsl-query "(page-property parent)")))
@@ -160,7 +173,27 @@ prop-d:: nada"}])
          (map
           :block/name
           (dsl-query "(and (not (page-property foo bar)) (page-property parent [[child page 2]]))")))
-      "Page property queries nested NOT in first clause"))
+      "Page property queries nested NOT in first clause")
+
+  (testing "boolean values"
+    (is (= ["page1"]
+           (map :block/name (dsl-query "(page-property interesting true)")))
+        "Boolean true")
+
+    (is (= ["page2" "page3"]
+           (map :block/name (dsl-query "(page-property interesting false)")))
+        "Boolean false")))
+
+(deftest page-property-queries
+  (testing "page property tests with default config"
+    (test-helper/with-config {}
+      (page-property-queries-test)))
+
+  (test-helper/start-test-db!) ;; reset db
+
+  (testing "page property tests with rich-property-values? config"
+    (test-helper/with-config {:rich-property-values? true}
+      (page-property-queries-test))))
 
 (deftest task-queries
   (load-test-files [{:file/path "pages/page1.md"

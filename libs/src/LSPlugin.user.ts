@@ -189,6 +189,10 @@ const app: Partial<IAppProxy> = {
 let registeredCmdUid = 0
 
 const editor: Partial<IEditorProxy> = {
+  newBlockUUID(this: LSPluginUser): Promise<string> {
+    return this._execCallableAPIAsync('new_block_uuid')
+  },
+
   registerSlashCommand(
     this: LSPluginUser,
     tag: string,
@@ -273,7 +277,7 @@ const editor: Partial<IEditorProxy> = {
     } else {
       this.App.pushState('page', { name: pageName }, { anchor })
     }
-  },
+  }
 }
 
 const db: Partial<IDBProxy> = {

@@ -10,7 +10,8 @@
             [frontend.util.property :as property]
             [frontend.format.block :as block]
             [medley.core :as medley]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.modules.outliner.tree :as tree]))
 
 ;; TODO: extract to table utils
 (defn- sort-result-by
@@ -82,7 +83,8 @@
   (rum/local false ::select?)
   [state config current-block result {:keys [page?]} map-inline page-cp ->elem inline-text]
   (when current-block
-    (let [p-sort-by (keyword (get-in current-block [:block/properties :query-sort-by]))
+    (let [result (tree/filter-top-level-blocks result)
+          p-sort-by (keyword (get-in current-block [:block/properties :query-sort-by]))
           p-desc? (get-in current-block [:block/properties :query-sort-desc])
           select? (get state ::select?)
           *sort-by-item (get state ::sort-by-item)

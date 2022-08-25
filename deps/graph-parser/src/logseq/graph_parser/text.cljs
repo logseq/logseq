@@ -5,6 +5,7 @@
             [clojure.set :as set]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.util.page-ref :as page-ref :refer [right-brackets]]))
 
 (defn get-file-basename
@@ -109,8 +110,8 @@
 
      (and (string? s)
             ;; Either a page ref, a tag or a comma separated collection
-            (or (gp-util/safe-re-find page-ref/page-ref-re s)
-                (gp-util/safe-re-find #"[\,|，|#|\"]+" s)))
+            (or (re-find page-ref/page-ref-re s)
+                (re-find #"[\,|，|#|\"]+" s)))
      (let [result (->> (sep-by-quotes s)
                        (mapcat
                         (fn [s]
@@ -199,7 +200,35 @@
 (defonce non-parsing-properties
   (atom #{"background-color" "background_color"}))
 
+(defn parse-non-string-property-value
+  "Return parsed non-string property value or nil if none is found"
+  [v]
+  (cond
+    (= v "true")
+    true
+
+    (= v "false")
+    false
+
+    (re-find #"^\d+$" v)
+    (parse-long v)))
+
+(def ^:private page-ref-or-tag-re
+  (re-pattern (str "#?" (page-ref/->page-ref-re-str "(.*?)") "|"
+                   ;; Don't capture punctuation at end of a tag
+                   "#([\\S]+[^\\s.!,])")))
+
+(defn extract-page-refs-and-tags
+  "Returns set of page-refs and tags in given string or returns string if none
+  are found"
+  [string]
+  (let [refs (map #(or (second %) (get % 2))
+                  (re-seq page-ref-or-tag-re string))]
+    (if (seq refs) (set refs) string)))
+
 (defn parse-property
+  "Property value parsing that takes into account built-in properties, format
+  and user config"
   ([k v config-state]
    (parse-property :markdown k v config-state))
   ([format k v config-state]
@@ -212,14 +241,6 @@
                    (get config-state :ignored-page-references-keywords)) k)
        v
 
-       (= v "true")
-       true
-       (= v "false")
-       false
-
-       (and (not= k "alias") (gp-util/safe-re-find #"^\d+$" v))
-       (parse-long v)
-
        (gp-util/wrapped-by-quotes? v) ; wrapped in ""
        v
 
@@ -229,5 +250,12 @@
        (gp-mldoc/link? format v)
        v
 
+       (contains? gp-property/editable-linkable-built-in-properties (keyword k))
+       (split-page-refs-without-brackets v)
+
        :else
-       (split-page-refs-without-brackets v)))))
+       (if-some [res (parse-non-string-property-value v)]
+         res
+         (if (:rich-property-values? config-state)
+           (extract-page-refs-and-tags v)
+           (split-page-refs-without-brackets v)))))))

@@ -18,11 +18,30 @@ export class EditingShapeState<
   }
 
   onExit = () => {
+    // cleanup text shapes
+    if ('text' in this.editingShape.props) {
+      // @ts-expect-error better typing
+      const newText = this.editingShape.props['text'].trim()
+
+      if (newText === '' && this.editingShape.props.type === 'text') {
+        this.app.deleteShapes([this.editingShape])
+      } else {
+        this.editingShape.onResetBounds()
+        this.editingShape.update({
+          text: newText,
+        })
+      }
+    }
+
     this.app.persist()
-    this.app.clearEditingShape()
+    this.app.setEditingShape()
 
     // Blur all inputs when exit idle
     document.querySelectorAll<HTMLElement>('input,textarea').forEach(el => el.blur())
+  }
+
+  onPinchStart: TLEvents<S>['pinch'] = (info, event) => {
+    this.tool.transition('pinching', { info, event })
   }
 
   onPointerDown: TLEvents<S>['pointer'] = info => {

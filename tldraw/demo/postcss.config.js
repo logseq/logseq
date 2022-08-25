@@ -3,7 +3,13 @@ module.exports = {
     'postcss-import': {},
     'postcss-nested': {},
     'postcss-import-ext-glob': {},
-    tailwindcss: {},
+    'tailwindcss/nesting': {},
+    tailwindcss: {
+      content: [
+        './**/*.jsx',
+        '../apps/**/*.{js,jsx,ts,tsx}',
+      ]
+    },
     autoprefixer: {},
   },
 }

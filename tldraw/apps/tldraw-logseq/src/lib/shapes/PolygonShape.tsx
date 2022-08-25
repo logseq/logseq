@@ -22,7 +22,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
     ratio: 1,
     isFlippedY: false,
     stroke: '#000000',
-    fill: '#ffffff',
+    fill: 'var(--ls-secondary-background-color)',
     noFill: false,
     strokeType: 'line',
     strokeWidth: 2,
@@ -72,7 +72,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
 
   validateProps = (props: Partial<PolygonShapeProps>) => {
     if (props.sides !== undefined) props.sides = Math.max(props.sides, 3)
-    return withClampedStyles(props)
+    return withClampedStyles(this, props)
   }
 
   /**

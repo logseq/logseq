@@ -63,7 +63,7 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
   })
 
   validateProps = (props: Partial<PencilShapeProps>) => {
-    props = withClampedStyles(props)
+    props = withClampedStyles(this, props)
     if (props.strokeWidth !== undefined) props.strokeWidth = Math.max(props.strokeWidth, 1)
     return props
   }

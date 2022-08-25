@@ -433,7 +433,7 @@
          (tagged-pages repo page-name))
 
        ;; referenced blocks
-       (when-not whiteboard?
+       (when-not (or block? whiteboard?)
          [:div {:key "page-references"}
           (rum/with-key
             (reference/references route-page-name)

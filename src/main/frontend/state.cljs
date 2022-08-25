@@ -133,6 +133,7 @@
      :selection/direction                   :down
      :custom-context-menu/show?             false
      :custom-context-menu/links             nil
+     :custom-context-menu/position          nil
 
      ;; pages or blocks in the right sidebar
      ;; It is a list of `[repo db-id block-type block-data]` 4-tuple
@@ -231,6 +232,7 @@
 
      :encryption/graph-parsing?             false
 
+     :ui/find-in-page                     nil
      })))
 
 ;; block uuid -> {content(String) -> ast}
@@ -369,9 +371,11 @@
                  (get (sub-config) (get-current-repo))))))
 
 (defn enable-journals?
-  [repo]
-  (not (false? (:feature/enable-journals?
-                (get (sub-config) repo)))))
+  ([]
+   (enable-journals? (get-current-repo)))
+  ([repo]
+   (not (false? (:feature/enable-journals?
+                 (get (sub-config) repo))))))
 
 (defn enable-flashcards?
   ([]
@@ -771,16 +775,18 @@
   (:selection/direction @state))
 
 (defn show-custom-context-menu!
-  [links]
+  [links position]
   (swap! state assoc
          :custom-context-menu/show? true
-         :custom-context-menu/links links))
+         :custom-context-menu/links links
+         :custom-context-menu/position position))
 
 (defn hide-custom-context-menu!
   []
   (swap! state assoc
          :custom-context-menu/show? false
-         :custom-context-menu/links nil))
+         :custom-context-menu/links nil
+         :custom-context-menu/position nil))
 
 (defn toggle-navigation-item-collapsed!
   [item]

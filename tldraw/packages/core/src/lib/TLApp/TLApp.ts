@@ -283,7 +283,9 @@ export class TLApp<
     ['page', new TLPage(this, { id: 'page', name: 'page', shapes: [], bindings: {} })],
   ])
 
-  @observable currentPageId = 'page'
+  @computed get currentPageId() {
+    return this.pages.keys().next().value
+  }
 
   @computed get currentPage(): TLPage<S, K> {
     return this.getPageById(this.currentPageId)
@@ -293,11 +295,6 @@ export class TLApp<
     const page = this.pages.get(pageId)
     if (!page) throw Error(`Could not find a page named ${pageId}.`)
     return page
-  }
-
-  @action setCurrentPage(page: string | TLPage<S, K>): this {
-    this.currentPageId = typeof page === 'string' ? page : page.id
-    return this
   }
 
   @action addPages(pages: TLPage<S, K>[]): this {
@@ -484,7 +481,8 @@ export class TLApp<
     return this
   }
 
-  readonly clearEditingShape = (): this => {
+  readonly clearEditingState = (): this => {
+    this.selectedTool.transition('idle')
     return this.setEditingShape()
   }
 
@@ -534,7 +532,7 @@ export class TLApp<
       this.selectionRotation = 0
     }
     if (shapes.length === 0) {
-      this.clearEditingShape()
+      this.setEditingShape()
     }
     return this
   }
@@ -642,11 +640,10 @@ export class TLApp<
     } = this
     return currentPage.shapes.filter(shape => {
       return (
-        shape.props.parentId === currentPage.id &&
-        (!shape.canUnmount ||
-          selectedShapes.has(shape) ||
-          BoundsUtils.boundsContain(currentView, shape.rotatedBounds) ||
-          BoundsUtils.boundsCollide(currentView, shape.rotatedBounds))
+        !shape.canUnmount ||
+        selectedShapes.has(shape) ||
+        BoundsUtils.boundsContain(currentView, shape.rotatedBounds) ||
+        BoundsUtils.boundsCollide(currentView, shape.rotatedBounds)
       )
     })
   }

@@ -1,9 +1,9 @@
-import '../../../tailwind.all.css'
 import React from 'react'
 import ReactDOM from 'react-dom'
 
 import App from './App'
 
+import './logseq-styles.css'
 import './index.css'
 
 // Not using strict mode because it may cause side effect problems

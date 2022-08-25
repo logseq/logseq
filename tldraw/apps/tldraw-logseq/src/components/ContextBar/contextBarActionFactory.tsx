@@ -1,4 +1,4 @@
-import { isNonNullable, debounce, Decoration, TLLineShapeProps } from '@tldraw/core'
+import { debounce, Decoration, isNonNullable } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import React from 'react'
@@ -12,7 +12,6 @@ import {
   ToggleGroupMultipleInput,
 } from '~components/inputs/ToggleGroupInput'
 import { ToggleInput } from '~components/inputs/ToggleInput'
-import { tint } from 'polished'
 import type {
   BoxShape,
   EllipseShape,
@@ -30,11 +29,12 @@ import { LogseqContext } from '~lib/logseq-context'
 export const contextBarActionTypes = [
   // Order matters
   'Edit',
+  'AutoResizing',
   'Swatch',
   'NoFill',
-  'ResetBounds',
   'StrokeType',
   'ScaleLevel',
+  'TextStyle',
   'YoutubeLink',
   'LogseqPortalViewMode',
   'ArrowMode',
@@ -48,8 +48,8 @@ const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 
 type ShapeType = Shape['props']['type']
 
-const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
-  'logseq-portal': ['Edit', 'LogseqPortalViewMode', 'ScaleLevel', 'OpenPage', 'ResetBounds'],
+export const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
+  'logseq-portal': ['Edit', 'LogseqPortalViewMode', 'ScaleLevel', 'OpenPage', 'AutoResizing'],
   youtube: ['YoutubeLink'],
   box: ['Swatch', 'NoFill', 'StrokeType'],
   ellipse: ['Swatch', 'NoFill', 'StrokeType'],
@@ -57,13 +57,13 @@ const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
   line: ['Edit', 'Swatch', 'ArrowMode'],
   pencil: ['Swatch'],
   highlighter: ['Swatch'],
-  text: ['Edit', 'Swatch', 'ScaleLevel', 'ResetBounds'],
-  html: ['ScaleLevel', 'ResetBounds'],
+  text: ['Edit', 'Swatch', 'ScaleLevel', 'AutoResizing', 'TextStyle'],
+  html: ['ScaleLevel', 'AutoResizing'],
 }
 
-const noStrokeShapes = Object.entries(shapeMapping)
+export const withFillShapes = Object.entries(shapeMapping)
   .filter(([key, types]) => {
-    return !types.includes('NoFill') && types.includes('Swatch')
+    return types.includes('NoFill') && types.includes('Swatch')
   })
   .map(([key]) => key) as ShapeType[]
 
@@ -79,9 +79,9 @@ const EditAction = observer(() => {
     <button
       className="tl-contextbar-button"
       type="button"
+      title="Edit"
       onClick={() => {
         app.api.editShape(shape)
-        app.api.zoomToSelection()
         if (shape.props.type === 'logseq-portal') {
           let uuid = shape.props.pageId
           if (shape.props.blockType === 'P') {
@@ -99,26 +99,36 @@ const EditAction = observer(() => {
   )
 })
 
-const ResetBoundsAction = observer(() => {
+const AutoResizingAction = observer(() => {
   const app = useApp<Shape>()
   const shapes = filterShapeByAction<LogseqPortalShape | TextShape | HTMLShape>(
     app.selectedShapesArray,
-    'ResetBounds'
+    'AutoResizing'
   )
 
+  const pressed = shapes.every(s => s.props.isAutoResizing)
+
   return (
-    <button
+    <ToggleInput
+      title="Auto Resize"
+      toggle={shapes.every(s => s.props.type === 'logseq-portal')}
       className="tl-contextbar-button"
-      type="button"
-      onClick={() => {
+      pressed={pressed}
+      onPressedChange={v => {
         shapes.forEach(s => {
-          s.onResetBounds({ zoom: app.viewport.camera.zoom })
+          if (s.props.type === 'logseq-portal') {
+            s.update({
+              isAutoResizing: v,
+            })
+          } else {
+            s.onResetBounds({ zoom: app.viewport.camera.zoom })
+          }
         })
         app.persist()
       }}
     >
       <TablerIcon name="dimensions" />
-    </button>
+    </ToggleInput>
   )
 })
 
@@ -142,6 +152,7 @@ const LogseqPortalViewModeAction = observer(() => {
   ]
   return (
     <ToggleGroupInput
+      title="View Mode"
       options={ViewModeOptions}
       value={collapsed ? '1' : '0'}
       onValueChange={v => {
@@ -186,6 +197,7 @@ const ScaleLevelAction = observer(() => {
   ]
   return (
     <SelectInput
+      title="Scale Level"
       options={sizeOptions}
       value={scaleLevel}
       onValueChange={v => {
@@ -208,6 +220,7 @@ const OpenPageAction = observer(() => {
   return (
     <span className="flex gap-1">
       <button
+        title="Open Page in Right Sidebar"
         className="tl-contextbar-button"
         type="button"
         onClick={() => handlers?.sidebarAddBlock(pageId, blockType === 'B' ? 'block' : 'page')}
@@ -215,6 +228,7 @@ const OpenPageAction = observer(() => {
         <TablerIcon name="layout-sidebar-right" />
       </button>
       <button
+        title="Open Page"
         className="tl-contextbar-button"
         type="button"
         onClick={() => handlers?.redirectToPage(pageId)}
@@ -235,8 +249,14 @@ const YoutubeLinkAction = observer(() => {
 
   return (
     <span className="flex gap-3">
-      <TextInput className="tl-youtube-link" value={`${shape.props.url}`} onChange={handleChange} />
+      <TextInput
+        title="YouTube Link"
+        className="tl-youtube-link"
+        value={`${shape.props.url}`}
+        onChange={handleChange}
+      />
       <button
+        title="Open YouTube Link"
         className="tl-contextbar-button"
         type="button"
         onClick={() => window.logseq?.api?.open_external_link?.(shape.props.url)}
@@ -261,7 +281,12 @@ const NoFillAction = observer(() => {
   const noFill = shapes.every(s => s.props.noFill)
 
   return (
-    <ToggleInput className="tl-contextbar-button" pressed={noFill} onPressedChange={handleChange}>
+    <ToggleInput
+      title="Fill Toggle"
+      className="tl-contextbar-button"
+      pressed={noFill}
+      onPressedChange={handleChange}
+    >
       {noFill ? <TablerIcon name="eye-off" /> : <TablerIcon name="eye" />}
     </ToggleInput>
   )
@@ -276,14 +301,8 @@ const SwatchAction = observer(() => {
   const handleChange = React.useMemo(() => {
     let latestValue = ''
     const handler: React.ChangeEventHandler<HTMLInputElement> = e => {
-      const strokeColor = tint(0.4, latestValue)
       shapes.forEach(s => {
-        const strokeOnly = noStrokeShapes.includes(s.props.type)
-        s.update(
-          strokeOnly
-            ? { stroke: latestValue, fill: latestValue }
-            : { fill: latestValue, stroke: strokeColor }
-        )
+        s.update({ fill: latestValue, stroke: latestValue })
       })
       app.persist(true)
     }
@@ -293,7 +312,7 @@ const SwatchAction = observer(() => {
   }, [])
 
   const value = shapes[0].props.noFill ? shapes[0].props.stroke : shapes[0].props.fill
-  return <ColorInput value={value} onChange={handleChange} />
+  return <ColorInput title="Color Picker" value={value} onChange={handleChange} />
 })
 
 const StrokeTypeAction = observer(() => {
@@ -321,6 +340,7 @@ const StrokeTypeAction = observer(() => {
 
   return (
     <ToggleGroupInput
+      title="Stroke Type"
       options={StrokeTypeOptions}
       value={value}
       onValueChange={v => {
@@ -364,6 +384,7 @@ const ArrowModeAction = observer(() => {
 
   return (
     <ToggleGroupMultipleInput
+      title="Arrow Head"
       options={StrokeTypeOptions}
       value={value}
       onValueChange={v => {
@@ -378,8 +399,53 @@ const ArrowModeAction = observer(() => {
   )
 })
 
+const TextStyleAction = observer(() => {
+  const app = useApp<Shape>()
+  const shapes = filterShapeByAction<TextShape>(app.selectedShapesArray, 'TextStyle')
+
+  const bold = shapes.every(s => s.props.fontWeight > 500)
+  const italic = shapes.every(s => s.props.italic)
+
+  return (
+    <span className="flex gap-1">
+      <ToggleInput
+        title="Bold"
+        className="tl-contextbar-button"
+        pressed={bold}
+        onPressedChange={v => {
+          shapes.forEach(shape => {
+            shape.update({
+              fontWeight: v ? 700 : 400,
+            })
+            shape.onResetBounds()
+          })
+          app.persist()
+        }}
+      >
+        <TablerIcon name="bold" />
+      </ToggleInput>
+      <ToggleInput
+        title="Italic"
+        className="tl-contextbar-button"
+        pressed={italic}
+        onPressedChange={v => {
+          shapes.forEach(shape => {
+            shape.update({
+              italic: v,
+            })
+            shape.onResetBounds()
+          })
+          app.persist()
+        }}
+      >
+        <TablerIcon name="italic" />
+      </ToggleInput>
+    </span>
+  )
+})
+
 contextBarActionMapping.set('Edit', EditAction)
-contextBarActionMapping.set('ResetBounds', ResetBoundsAction)
+contextBarActionMapping.set('AutoResizing', AutoResizingAction)
 contextBarActionMapping.set('LogseqPortalViewMode', LogseqPortalViewModeAction)
 contextBarActionMapping.set('ScaleLevel', ScaleLevelAction)
 contextBarActionMapping.set('OpenPage', OpenPageAction)
@@ -388,6 +454,7 @@ contextBarActionMapping.set('NoFill', NoFillAction)
 contextBarActionMapping.set('Swatch', SwatchAction)
 contextBarActionMapping.set('StrokeType', StrokeTypeAction)
 contextBarActionMapping.set('ArrowMode', ArrowModeAction)
+contextBarActionMapping.set('TextStyle', TextStyleAction)
 
 const getContextBarActionTypes = (type: ShapeType) => {
   return (shapeMapping[type] ?? []).filter(isNonNullable)

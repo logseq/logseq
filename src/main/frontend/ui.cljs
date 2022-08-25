@@ -84,7 +84,7 @@
 
 (rum/defc dropdown-content-wrapper [state content class]
   (let [class (or class
-                  (util/hiccup->class "origin-top-right.absolute.right-0.mt-2.rounded-md.shadow-lg"))]
+                  (util/hiccup->class "origin-top-right.absolute.right-0.mt-2"))]
     [:div.dropdown-wrapper
      {:class (str class " "
                   (case state
@@ -109,18 +109,38 @@
         (when @open?
           (dropdown-content-wrapper dropdown-state modal-content modal-class))))]))
 
+;; `sequence` can be a list of symbols, a list of strings, or a string
+(defn render-keyboard-shortcut [sequence]
+  (let [sequence (if (string? sequence)
+                   (-> sequence ;; turn string into sequence
+                       (string/trim)
+                       (string/lower-case)
+                       (string/split  #" |\+"))
+                   sequence)]
+    [:span.keyboard-shortcut
+     (map-indexed (fn [i key]
+                    [:code {:key i}
+                   ;; Display "cmd" rather than "meta" to the user to describe the Mac
+                   ;; mod key, because that's what the Mac keyboards actually say.
+                     (if (or (= :meta key) (= "meta" key))
+                       (util/meta-key-name)
+                       (name key))])
+                  sequence)]))
+
 (rum/defc menu-link
-  [options child]
-  [:a.block.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
+  [options child shortcut]
+  [:a.flex.justify-between.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
    options
-   child])
+   [:span child]
+   (when shortcut
+     [:span.ml-1 (render-keyboard-shortcut shortcut)])])
 
 (rum/defc dropdown-with-links
   [content-fn links {:keys [links-header links-footer] :as opts}]
   (dropdown
    content-fn
    (fn [{:keys [close-fn]}]
-     [:div.py-1.rounded-md.shadow-xs
+     [:.menu-links-wrapper
       (when links-header links-header)
       (for [{:keys [options title icon hr hover-detail item]} (if (fn? links) (links) links)]
         (let [new-options
@@ -138,16 +158,16 @@
                            [:div {:style {:margin-right "8px"
                                           :margin-left  "4px"}} title]]))]
           (if hr
-            [:hr.my-1 {:key "dropdown-hr"}]
+            [:hr.menu-separator {:key "dropdown-hr"}]
             (rum/with-key
-              (menu-link new-options child)
+              (menu-link new-options child nil)
               title))))
       (when links-footer links-footer)])
    opts))
 
 (defn button
-  [text & {:keys [background href class intent on-click small? large?]
-           :or {small? false large? false}
+  [text & {:keys [background href class intent on-click small? large? title]
+           :or   {small? false large? false}
            :as   option}]
   (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center")
         klass (if background (string/replace klass "indigo" background) klass)
@@ -156,6 +176,7 @@
     [:button.ui__button
      (merge
       {:type  "button"
+       :title title
        :class (str (util/hiccup->class klass) " " class)}
       (dissoc option :background :class :small? :large?)
       (when href
@@ -253,6 +274,11 @@
 (defn main-node
   []
   (gdom/getElement "main-content-container"))
+
+(defn focus-element
+  [element]
+  (when-let [element ^js (gdom/getElement element)]
+    (.focus element)))
 
 (defn get-scroll-top []
   (.-scrollTop (main-node)))
@@ -418,7 +444,7 @@
                                        (if (and (gobj/get e "shiftKey") on-shift-chosen)
                                          (on-shift-chosen item)
                                          (on-chosen item)))}
-                     (if item-render (item-render item chosen?) item)))]]
+                     (if item-render (item-render item chosen?) item) nil))]]
 
              (if get-group-name
                (if-let [group-name (get-group-name item)]
@@ -444,24 +470,6 @@
      [:span.switcher.transform.transition.ease-in-out.duration-200
       {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
        :aria-hidden "true"}]]]))
-
-;; `sequence` can be a list of symbols, a list of strings, or a string
-(defn render-keyboard-shortcut [sequence]
-  (let [sequence (if (string? sequence)
-                   (-> sequence ;; turn string into sequence
-                       (string/trim)
-                       (string/lower-case)
-                       (string/split  #" |\+"))
-                   sequence)]
-    [:span.keyboard-shortcut
-     (map-indexed (fn [i key]
-                    [:code {:key i}
-                   ;; Display "cmd" rather than "meta" to the user to describe the Mac
-                   ;; mod key, because that's what the Mac keyboards actually say.
-                     (if (or (= :meta key) (= "meta" key))
-                       (util/meta-key-name)
-                       (name key))])
-                  sequence)]))
 
 (defn keyboard-shortcut-from-config [shortcut-name]
   (let [default-binding (:binding (get shortcut-config/all-default-keyboard-shortcuts shortcut-name))
@@ -947,24 +955,17 @@
   ([content-fn]
    (lazy-visible content-fn nil))
   ([content-fn {:keys [trigger-once? _debug-id]
-                :or {trigger-once? false}}]
+                :or {trigger-once? true}}]
    (if (or (util/mobile?) (mobile-util/native-platform?))
      (content-fn)
      (let [[visible? set-visible!] (rum/use-state false)
-           [last-changed-time set-last-changed-time!] (rum/use-state nil)
            inViewState (useInView #js {:rootMargin "100px"
                                        :triggerOnce trigger-once?
                                        :onChange (fn [in-view? entry]
-                                                   (let [self-top (.-top (.-boundingClientRect entry))
-                                                         time' (util/time-ms)]
-                                                     (when (and
-                                                            (or (and (not visible?) in-view?)
-                                                                ;; hide only the components below the current top for better ux
-                                                                (and visible? (not in-view?) (> self-top 0)))
-                                                            (or (nil? last-changed-time)
-                                                                (and (some? last-changed-time)
-                                                                     (> (- time' last-changed-time) 50))))
-                                                       (set-last-changed-time! time')
+                                                   (let [self-top (.-top (.-boundingClientRect entry))]
+                                                     (when (or (and (not visible?) in-view?)
+                                                               ;; hide only the components below the current top for better ux
+                                                               (and visible? (not in-view?) (> self-top 0)))
                                                        (set-visible! in-view?))))})
            ref (.-ref inViewState)]
        (lazy-visible-inner visible? content-fn ref)))))

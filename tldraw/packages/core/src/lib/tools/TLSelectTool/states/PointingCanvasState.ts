@@ -14,7 +14,7 @@ export class PointingCanvasState<
     const { shiftKey } = this.app.inputs
     if (!shiftKey) {
       this.app.setSelectedShapes([])
-      this.app.clearEditingShape()
+      this.app.setEditingShape()
       window.getSelection()?.removeAllRanges()
     }
   }

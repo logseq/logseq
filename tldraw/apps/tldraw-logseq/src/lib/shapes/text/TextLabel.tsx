@@ -114,8 +114,6 @@ export const TextLabel = React.memo(function TextLabel({
           elm.select()
         }
       })
-    } else {
-      onBlur?.()
     }
   }, [isEditing, onBlur])
 

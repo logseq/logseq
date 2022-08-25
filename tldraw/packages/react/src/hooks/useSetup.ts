@@ -2,7 +2,7 @@ import * as React from 'react'
 import type { TLAppPropsWithoutApp, TLAppPropsWithApp } from '~components'
 import type { TLReactShape, TLReactApp } from '~lib'
 
-declare const window: Window & { tln: TLReactApp<any> }
+declare const window: Window & { tln?: TLReactApp<any> }
 
 export function useSetup<
   S extends TLReactShape = TLReactShape,
@@ -31,6 +31,7 @@ export function useSetup<
     if (onMount) onMount(app, null)
     return () => {
       unsubs.forEach(unsub => unsub())
+      window['tln'] = undefined
     }
   }, [app])
 

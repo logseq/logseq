@@ -34,4 +34,8 @@ export class PinchingState<
   onPinchEnd: TLEvents<S>['pinch'] = () => {
     this.tool.transition('idle')
   }
+
+  onPointerDown: TLEvents<S>['pointer'] = () => {
+    this.tool.transition('idle')
+  }
 }

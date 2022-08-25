@@ -21,7 +21,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
     size: [100, 100],
     borderRadius: 2,
     stroke: '#000000',
-    fill: '#ffffff',
+    fill: 'var(--ls-secondary-background-color)',
     noFill: false,
     strokeType: 'line',
     strokeWidth: 2,
@@ -87,6 +87,6 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
       props.size[1] = Math.max(props.size[1], 1)
     }
     if (props.borderRadius !== undefined) props.borderRadius = Math.max(0, props.borderRadius)
-    return withClampedStyles(props)
+    return withClampedStyles(this, props)
   }
 }

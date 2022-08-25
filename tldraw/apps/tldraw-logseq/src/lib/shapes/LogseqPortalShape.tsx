@@ -144,6 +144,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     collapsed: false,
     compact: false,
     scaleLevel: 'md',
+    isAutoResizing: true,
   }
 
   hideRotateHandle = true
@@ -159,7 +160,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   constructor(props = {} as Partial<LogseqPortalShapeProps>) {
     super(props)
     makeObservable(this)
-    if (props.collapsed || props.compact) {
+    if (props.collapsed) {
       Object.assign(this.canResize, [true, false])
     }
     if (props.size?.[1] === 0) {
@@ -194,7 +195,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       this.canResize[1] = !collapsed
       this.update({
         collapsed: collapsed,
-        size: [this.props.size[0], collapsed ? HEADER_HEIGHT : this.props.collapsedHeight],
+        size: [this.props.size[0], collapsed ? this.getHeaderHeight() : this.props.collapsedHeight],
         collapsedHeight: collapsed ? originalHeight : this.props.collapsedHeight,
       })
     }
@@ -248,12 +249,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return size
   }
 
-  shouldAutoResizeHeight() {
-    return this.props.blockType === 'B' && this.props.compact
-  }
-
   getHeaderHeight() {
-    return this.props.compact ? 0 : HEADER_HEIGHT
+    const scale = levelToScale[this.props.scaleLevel ?? 'md']
+    return this.props.compact ? 0 : HEADER_HEIGHT * scale
   }
 
   getAutoResizeHeight() {
@@ -286,9 +284,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     let height = bounds.height
 
-    if (this.shouldAutoResizeHeight()) {
+    if (this.props.isAutoResizing) {
       height = this.getAutoResizeHeight() ?? height
     }
+
     return this.update({
       point: [bounds.minX, bounds.minY],
       size: [Math.max(1, bounds.width), Math.max(1, height)],
@@ -373,8 +372,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         ),
       })
 
-      // New page option
-      if (searchResult?.pages?.length === 0 && q) {
+      // New page option when no exact match
+      if (!searchResult?.pages.some(p => p.toLowerCase() === q.toLowerCase()) && q) {
         options.push({
           actionIcon: 'circle-plus',
           onChosen: () => {
@@ -607,8 +606,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const { Page, Block } = renderers
 
     React.useEffect(() => {
-      if (this.shouldAutoResizeHeight()) {
-        const newHeight = innerHeight + this.getHeaderHeight()
+      if (this.props.isAutoResizing) {
+        const latestInnerHeight = this.getInnerHeight?.() ?? innerHeight
+        const newHeight = latestInnerHeight + this.getHeaderHeight()
         if (innerHeight && Math.abs(newHeight - this.props.size[1]) > AUTO_RESIZE_THRESHOLD) {
           this.update({
             size: [this.props.size[0], newHeight],
@@ -616,7 +616,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           app.persist(true)
         }
       }
-    }, [innerHeight, this.props.compact])
+    }, [innerHeight, this.props.isAutoResizing])
 
     React.useEffect(() => {
       if (!this.initialHeightCalculated) {
@@ -632,7 +632,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         ref={cpRefContainer}
         className="tl-logseq-cp-container"
         style={{
-          overflow: this.props.compact ? 'visible' : 'auto',
+          overflow: this.props.isAutoResizing ? 'visible' : 'auto',
         }}
       >
         {this.props.blockType === 'B' && this.props.compact ? (
@@ -692,7 +692,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         })
         return () => {
           this.update({
-            size: [this.props.size[0], HEADER_HEIGHT],
+            size: [this.props.size[0], this.getHeaderHeight()],
           })
         }
       }
@@ -794,7 +794,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
   ReactIndicator = observer(() => {
     const bounds = this.getBounds()
-    return <rect width={bounds.width} height={bounds.height} fill="transparent" />
+    return <rect width={bounds.width} height={bounds.height} fill="transparent" stroke="none" />
   })
 
   validateProps = (props: Partial<LogseqPortalShapeProps>) => {
@@ -803,7 +803,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       props.size[0] = Math.max(props.size[0], 240 * scale)
       props.size[1] = Math.max(props.size[1], HEADER_HEIGHT * scale)
     }
-    return withClampedStyles(props)
+    return withClampedStyles(this, props)
   }
 
   getShapeSVGJsx({ preview }: any) {

@@ -18,7 +18,7 @@ export class DotShape extends TLDotShape<DotShapeProps> {
     point: [0, 0],
     radius: 4,
     stroke: '#000000',
-    fill: '#ffffff',
+    fill: 'var(--ls-secondary-background-color)',
     noFill: false,
     strokeType: 'line',
     strokeWidth: 2,
@@ -50,6 +50,6 @@ export class DotShape extends TLDotShape<DotShapeProps> {
 
   validateProps = (props: Partial<DotShapeProps>) => {
     if (props.radius !== undefined) props.radius = Math.max(props.radius, 1)
-    return withClampedStyles(props)
+    return withClampedStyles(this, props)
   }
 }

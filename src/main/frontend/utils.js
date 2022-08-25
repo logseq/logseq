@@ -315,12 +315,14 @@ export const nodePath = Object.assign({}, path, {
   join (input, ...paths) {
     let orURI = null
 
-    try {
-      orURI = new URL(input)
-      input = input.replace(orURI.protocol + '//', '')
-        .replace(orURI.protocol, '')
-        .replace(/^\/+/, '/')
-    } catch (_e) {}
+    if (input.startsWith("file://")) {
+      try {
+        orURI = new URL(input)
+        input = input.replace(orURI.protocol + '//', '')
+          .replace(orURI.protocol, '')
+          .replace(/^\/+/, '/')
+      } catch (_e) {}
+    }
 
     input = path.join(input, ...paths)
 

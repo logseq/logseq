@@ -243,7 +243,7 @@
 button.tl-select-input-trigger {
   @apply flex items-center py-1 px-3;
   box-shadow: 0 0 0 1px var(--ls-secondary-border-color);
-  background-color: var(--ls-quaternary-background-color);
+  background-color: var(--ls-secondary-background-color);
   min-width: 160px;
   border-radius: 8px;
   font-size: 16px;
@@ -264,6 +264,7 @@ button.tl-select-input-trigger {
 .tl-select-input-select-item {
   cursor: default;
   padding: 4px 12px;
+  outline-offset: -1px;
 
   color: var(--ls-secondary-text-color);
 
@@ -340,6 +341,7 @@ button.tl-select-input-trigger {
   font-family: inherit;
   font-size: inherit;
   font-variant: inherit;
+  font-style: inherit;
   text-align: inherit;
   min-height: inherit;
   min-width: inherit;
@@ -630,7 +632,7 @@ button.tl-select-input-trigger {
 }
 
 .tl-html-container {
-  @apply h-full w-full m-0 relative;
+  @apply h-full w-full m-0 relative flex flex-col;
   user-select: text;
   transform-origin: top left;
 }
@@ -740,6 +742,9 @@ html[data-theme='dark'] {
   &:hover {
     background-color: var(--ls-tertiary-background-color);
   }
+  &[data-toggle='false'] {
+    opacity: 1;
+  }
   &[data-state='on'] {
     background-color: var(--ls-tertiary-background-color);
     color: var(--ls-primary-text-color);
@@ -751,6 +756,7 @@ html[data-theme='dark'] {
   @apply rounded inline-flex items-center justify-center;
   height: 32px;
   width: 32px;
+  color: var(--ls-primary-text-color);
 
   &:hover {
     background-color: var(--ls-tertiary-background-color);

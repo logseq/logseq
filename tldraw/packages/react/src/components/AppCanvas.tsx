@@ -24,7 +24,7 @@ export const AppCanvas = observer(function InnerApp<S extends TLReactShape>(
       selectionBounds={app.selectionBounds}
       selectedShapes={app.selectedShapesArray}
       erasingShapes={app.erasingShapesArray}
-      shapes={app.shapes}
+      shapes={app.shapesInViewport}
       assets={app.assets}
       showGrid={app.settings.showGrid}
       showSelection={app.showSelection}
@@ -36,7 +36,7 @@ export const AppCanvas = observer(function InnerApp<S extends TLReactShape>(
       cursor={app.cursors.cursor}
       cursorRotation={app.cursors.rotation}
       selectionRotation={app.selectionRotation}
-      onEditingEnd={app.clearEditingShape}
+      onEditingEnd={app.clearEditingState}
       {...props}
     />
   )

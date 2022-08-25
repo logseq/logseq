@@ -65,7 +65,7 @@ export class CreatingState extends TLToolState<
       this.app.setSelectedShapes([this.creatingShape.id])
     } else {
       this.app.deleteShapes([this.creatingShape.id])
-      this.app.clearEditingShape()
+      this.app.setEditingShape()
     }
   }
 }

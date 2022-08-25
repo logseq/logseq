@@ -31,7 +31,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       end: { id: 'end', canBind: true, point: [1, 1] },
     },
     stroke: 'var(--ls-primary-text-color, #000)',
-    fill: '#ffffff',
+    fill: 'var(--ls-secondary-background-color)',
     noFill: true,
     strokeType: 'line',
     strokeWidth: 1,
@@ -145,7 +145,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
   })
 
   validateProps = (props: Partial<LineShapeProps>) => {
-    return withClampedStyles(props)
+    return withClampedStyles(this, props)
   }
 
   getShapeSVGJsx({ preview }: any) {

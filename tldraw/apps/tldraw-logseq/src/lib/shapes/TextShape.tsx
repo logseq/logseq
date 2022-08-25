@@ -6,12 +6,14 @@ import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import type { SizeLevel } from '~lib'
 import { CustomStyleProps, withClampedStyles } from './style-props'
+import { TextAreaUtils } from './text/TextAreaUtils'
 
 export interface TextShapeProps extends TLTextShapeProps, CustomStyleProps {
   borderRadius: number
   fontFamily: string
   fontSize: number
   fontWeight: number
+  italic: boolean
   lineHeight: number
   padding: number
   type: 'text'
@@ -41,6 +43,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     lineHeight: 1.2,
     fontSize: 20,
     fontWeight: 400,
+    italic: false,
     padding: 4,
     fontFamily: "var(--ls-font-family), 'Helvetica Neue', Helvetica, Arial, sans-serif",
     borderRadius: 0,
@@ -54,7 +57,17 @@ export class TextShape extends TLTextShape<TextShapeProps> {
 
   ReactComponent = observer(({ events, isErasing, isEditing, onEditingEnd }: TLComponentProps) => {
     const {
-      props: { opacity, fontFamily, fontSize, fontWeight, lineHeight, text, stroke, padding },
+      props: {
+        opacity,
+        fontFamily,
+        fontSize,
+        fontWeight,
+        italic,
+        lineHeight,
+        text,
+        stroke,
+        padding,
+      },
     } = this
     const rInput = React.useRef<HTMLTextAreaElement>(null)
 
@@ -75,39 +88,35 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     }, [])
 
     const handleKeyDown = React.useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.metaKey) e.stopPropagation()
-      switch (e.key) {
-        case 'Meta': {
-          e.stopPropagation()
-          break
+      if (e.key === 'Escape') return
+
+      if (e.key === 'Tab' && text.length === 0) {
+        e.preventDefault()
+        return
+      }
+
+      if (!(e.key === 'Meta' || e.metaKey)) {
+        e.stopPropagation()
+      } else if (e.key === 'z' && e.metaKey) {
+        if (e.shiftKey) {
+          document.execCommand('redo', false)
+        } else {
+          document.execCommand('undo', false)
         }
-        case 'z': {
-          if (e.metaKey) {
-            if (e.shiftKey) {
-              document.execCommand('redo', false)
-            } else {
-              document.execCommand('undo', false)
-            }
-            e.preventDefault()
-          }
-          break
+        e.stopPropagation()
+        e.preventDefault()
+        return
+      }
+
+      if (e.key === 'Tab') {
+        e.preventDefault()
+        if (e.shiftKey) {
+          TextAreaUtils.unindent(e.currentTarget)
+        } else {
+          TextAreaUtils.indent(e.currentTarget)
         }
-        case 'Enter': {
-          if (e.ctrlKey || e.metaKey) {
-            e.currentTarget.blur()
-          }
-          break
-        }
-        case 'Tab': {
-          e.preventDefault()
-          if (e.shiftKey) {
-            TextUtils.unindent(e.currentTarget)
-          } else {
-            TextUtils.indent(e.currentTarget)
-          }
-          this.update({ text: TextUtils.normalizeText(e.currentTarget.value) })
-          break
-        }
+
+        this.update({ text: TextUtils.normalizeText(e.currentTarget.value) })
       }
     }, [])
 
@@ -171,6 +180,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
           data-isediting={isEditing}
           style={{
             fontFamily,
+            fontStyle: italic ? 'italic' : 'normal',
             fontSize,
             fontWeight,
             padding,
@@ -217,7 +227,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
   @action setScaleLevel = async (v?: SizeLevel) => {
     this.update({
       scaleLevel: v,
-      fontSize: levelToScale[v ?? 'md']
+      fontSize: levelToScale[v ?? 'md'],
     })
     this.onResetBounds()
   }
@@ -234,6 +244,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
         rx={borderRadius}
         ry={borderRadius}
         fill="transparent"
+        stroke="none"
       />
     )
   })
@@ -242,7 +253,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     if (props.isSizeLocked || this.props.isSizeLocked) {
       // props.size = this.getAutoSizedBoundingBox(props)
     }
-    return withClampedStyles(props)
+    return withClampedStyles(this, props)
   }
 
   // Custom

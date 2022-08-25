@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as React from 'react'
 import { getStroke } from 'perfect-freehand'
 import { SvgPathUtils, TLDrawShape, TLDrawShapeProps } from '@tldraw/core'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
@@ -71,7 +70,7 @@ export class PenShape extends TLDrawShape<PenShapeProps> {
   })
 
   validateProps = (props: Partial<PenShapeProps>) => {
-    props = withClampedStyles(props)
+    props = withClampedStyles(this, props)
     if (props.strokeWidth !== undefined) props.strokeWidth = Math.max(props.strokeWidth, 1)
     return props
   }

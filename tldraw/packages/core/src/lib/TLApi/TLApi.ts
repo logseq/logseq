@@ -10,16 +10,6 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     this.app = app
   }
 
-  /**
-   * Set the current page.
-   *
-   * @param page The new current page or page id.
-   */
-  changePage = (page: string | TLPage<S, K>): this => {
-    this.app.setCurrentPage(page)
-    return this
-  }
-
   editShape = (shape: string | S | undefined): this => {
     this.app.transition('select').selectedTool.transition('editingShape', { shape })
     return this

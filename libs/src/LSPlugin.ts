@@ -140,6 +140,8 @@ export interface AppUserConfigs {
 
   currentGraph: string
   showBracket: boolean
+  enabledFlashcards: boolean
+  enabledJournals: boolean
 
   [key: string]: any
 }
@@ -410,6 +412,7 @@ export interface IAppProxy {
 
   // hook events
   onCurrentGraphChanged: IUserHook
+  onGraphAfterIndexed: IUserHook<{repo: string}>
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
   onThemeChanged: IUserHook<Partial<{name: string, mode: string, pid: string, url: string}>>
   onBlockRendererSlotted: IUserSlotHook<{ uuid: BlockUUID }>
@@ -552,6 +555,12 @@ export interface IEditorProxy extends Record<string, any> {
   ) => Promise<Array<PageEntity> | null>
 
   /**
+   * Create a unique UUID string which can then be assigned to a block.
+   * @added 0.0.8
+   */
+  newBlockUUID: () => Promise<string>
+
+  /**
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-reddit-hot-news
    *
    * @param srcBlock
@@ -565,6 +574,7 @@ export interface IEditorProxy extends Record<string, any> {
       before: boolean
       sibling: boolean
       isPageBlock: boolean
+      customUUID: string
       properties: {}
     }>
   ) => Promise<BlockEntity | null>
