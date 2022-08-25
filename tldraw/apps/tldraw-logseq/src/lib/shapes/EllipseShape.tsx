@@ -20,7 +20,7 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
     point: [0, 0],
     size: [100, 100],
     stroke: '#000000',
-    fill: '#ffffff',
+    fill: 'var(--ls-secondary-background-color)',
     noFill: false,
     strokeType: 'line',
     strokeWidth: 2,

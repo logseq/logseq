@@ -21,7 +21,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
     size: [100, 100],
     borderRadius: 2,
     stroke: '#000000',
-    fill: '#ffffff',
+    fill: 'var(--ls-secondary-background-color)',
     noFill: false,
     strokeType: 'line',
     strokeWidth: 2,

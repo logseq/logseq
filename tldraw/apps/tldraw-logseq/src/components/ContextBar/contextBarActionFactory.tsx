@@ -48,7 +48,7 @@ const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 
 type ShapeType = Shape['props']['type']
 
-const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
+export const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
   'logseq-portal': ['Edit', 'LogseqPortalViewMode', 'ScaleLevel', 'OpenPage', 'AutoResizing'],
   youtube: ['YoutubeLink'],
   box: ['Swatch', 'NoFill', 'StrokeType'],
@@ -61,9 +61,9 @@ const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
   html: ['ScaleLevel', 'AutoResizing'],
 }
 
-export const noStrokeShapes = Object.entries(shapeMapping)
+export const withFillShapes = Object.entries(shapeMapping)
   .filter(([key, types]) => {
-    return !types.includes('NoFill') && types.includes('Swatch')
+    return types.includes('NoFill') && types.includes('Swatch')
   })
   .map(([key]) => key) as ShapeType[]
 
@@ -302,7 +302,7 @@ const SwatchAction = observer(() => {
     let latestValue = ''
     const handler: React.ChangeEventHandler<HTMLInputElement> = e => {
       shapes.forEach(s => {
-        s.update({ fill: latestValue })
+        s.update({ fill: latestValue, stroke: latestValue })
       })
       app.persist(true)
     }

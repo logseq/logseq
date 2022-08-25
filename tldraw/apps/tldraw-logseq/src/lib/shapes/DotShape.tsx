@@ -18,7 +18,7 @@ export class DotShape extends TLDotShape<DotShapeProps> {
     point: [0, 0],
     radius: 4,
     stroke: '#000000',
-    fill: '#ffffff',
+    fill: 'var(--ls-secondary-background-color)',
     noFill: false,
     strokeType: 'line',
     strokeWidth: 2,

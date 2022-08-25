@@ -1,6 +1,7 @@
 import { darken } from 'polished'
-import { noStrokeShapes } from '~components/ContextBar/contextBarActionFactory'
+import { withFillShapes } from '~components/ContextBar/contextBarActionFactory'
 import type { Shape } from '~lib'
+import { getComputedColor } from '~lib/color'
 
 export interface CustomStyleProps {
   stroke: string
@@ -15,11 +16,11 @@ export function withClampedStyles<P>(self: Shape, props: P & Partial<CustomStyle
   if (props.strokeWidth !== undefined) props.strokeWidth = Math.max(props.strokeWidth, 1)
   if (props.opacity !== undefined) props.opacity = Math.min(1, Math.max(props.opacity, 0))
 
-  const fill = props.fill ?? (self.props as any).fill
-  if (fill !== undefined) {
-    const strokeOnly = noStrokeShapes.includes(self.props.type)
+  let fill = props.fill ?? (self.props as any).fill
+  if (fill !== undefined && !props.noFill && withFillShapes.includes(self.props.type)) {
+    fill = getComputedColor(fill)
     const strokeColor = darken(0.3, fill)
-    props.stroke = strokeOnly ? fill : strokeColor
+    props.stroke = strokeColor
   }
 
   return props

@@ -22,7 +22,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
     ratio: 1,
     isFlippedY: false,
     stroke: '#000000',
-    fill: '#ffffff',
+    fill: 'var(--ls-secondary-background-color)',
     noFill: false,
     strokeType: 'line',
     strokeWidth: 2,
