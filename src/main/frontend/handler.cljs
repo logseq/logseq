@@ -211,9 +211,9 @@
 
     (p/let [repos (get-repos)]
       (state/set-repos! repos)
-      (restore-and-setup! repos db-schema)
-      (when (mobile-util/native-platform?)
-        (p/do! (mobile-util/hide-splash))))
+      (restore-and-setup! repos db-schema))
+    (when (mobile-util/native-platform?)
+      (p/do! (mobile-util/hide-splash)))
 
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)
