@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.util :as util]
             [clojure.set :as set]
+            [goog.string :as gstring]
             [frontend.config :as config]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -357,10 +358,13 @@
 (defn remove-built-in-properties
   [format content]
   (let [built-in-properties* (built-in-properties)
-        content (reduce (fn [content key]
-                          (remove-property format key content)) content built-in-properties*)]
+        prop-pat (string/join "|" (map #(gstring/regExpEscape (subs (str %) 1)) built-in-properties*))
+        prop-line-pat (if (= format :org)
+                        (str "(\\n|^)(#\\+|:)" "(" prop-pat "): .+?(\\n|$)")
+                        (str "(\\n|^)(" prop-pat "):: .+?(\\n|$)"))
+        content (string/replace content (js/RegExp. prop-line-pat "im") "\n")]
     (if (= format :org)
-      (string/replace-first content (re-pattern ":PROPERTIES:\n:END:\n*") "")
+      (string/replace-first content (re-pattern ":PROPERTIES:\n+?:END:\n*") "")
       content)))
 
 (defn add-page-properties
