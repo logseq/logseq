@@ -147,31 +147,30 @@
   "Not rely on file system - backend compatible.
    tree-translator-fn: translate exported tree structure to the desired tree for import"
   [data tree-translator-fn]
-  (let [imported-chan (async/promise-chan)
-        blocks (->> (:blocks data)
-                    (mapv tree-translator-fn )
-                    (sort-by :title)
-                    (medley/indexed))
-        job-chan (async/to-chan! blocks)]
+  (let [imported-chan (async/promise-chan)]
     (try
-      (state/set-state! [:graph/importing-state :total] (count blocks))
-      (pre-transact-uuids! blocks)
-      (async/go-loop []
-        (if-let [[i block] (async/<! job-chan)]
-          (do
-            (state/set-state! [:graph/importing-state :current-idx] (inc i))
-            (state/set-state! [:graph/importing-state :current-page] (:title block))
-            (async/<! (async/timeout 10))
-            (create-page-with-exported-tree! block)
-            (recur))
-          (do
-            (editor/set-blocks-id! (db/get-all-referenced-blocks-uuid))
-            (async/offer! imported-chan true))))
+      (let [blocks (->> (:blocks data)
+                        (mapv tree-translator-fn )
+                        (sort-by :title)
+                        (medley/indexed))
+            job-chan (async/to-chan! blocks)]
+        (state/set-state! [:graph/importing-state :total] (count blocks))
+        (pre-transact-uuids! blocks)
+        (async/go-loop []
+          (if-let [[i block] (async/<! job-chan)]
+            (do
+              (state/set-state! [:graph/importing-state :current-idx] (inc i))
+              (state/set-state! [:graph/importing-state :current-page] (:title block))
+              (async/<! (async/timeout 10))
+              (create-page-with-exported-tree! block)
+              (recur))
+            (do
+              (editor/set-blocks-id! (db/get-all-referenced-blocks-uuid))
+              (async/offer! imported-chan true)))))
+
       (catch :default e
         (notification/show! (str "Error happens when importing:\n" e) :error)
-        (async/offer! imported-chan true)))
-
-    imported-chan))
+        (async/offer! imported-chan true)))))
 
 (defn tree-vec-translate-edn
   "Actions to do for loading edn tree structure.
@@ -196,9 +195,16 @@
 
 (defn import-from-edn!
   [raw finished-ok-handler]
-  (async/go
-    (async/<! (import-from-tree! (edn/read-string raw) tree-vec-translate-edn))
-    (finished-ok-handler nil))) ;; it was designed to accept a list of imported page names but now deprecated
+  (try
+    (let [data (edn/read-string raw)]
+     (async/go
+       (async/<! (import-from-tree! data tree-vec-translate-edn))
+       (finished-ok-handler nil)))
+    (catch :default e
+      (js/console.error e)
+      (notification/show!
+       (str (:message e))
+       :error)))) ;; it was designed to accept a list of imported page names but now deprecated
 
 (defn tree-vec-translate-json
   "Actions to do for loading json tree structure.
