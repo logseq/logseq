@@ -234,6 +234,11 @@ input::-webkit-inner-spin-button {
         margin-top: 13px;
         opacity: 0.8;
         border-top: 1px solid #ccc;
+
+        &.is-between {
+          padding-top: 0;
+          border-top: none;
+        }
       }
     }
   }
@@ -687,7 +692,9 @@ input::-webkit-inner-spin-button {
       }
     }
   }
+}
 
+.ls-hl-colored .block-content {
   &[data-hl-color=green] {
     a.prefix-link {
       &:before {
@@ -727,7 +734,6 @@ input::-webkit-inner-spin-button {
       }
     }
   }
-
 }
 
 body[data-page] {

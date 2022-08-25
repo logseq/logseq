@@ -24,7 +24,8 @@
   [^js _viewer theme {:keys [hide-settings! select-theme! t]}]
 
   (let [*el-popup (rum/use-ref nil)
-        [area-dashed? set-area-dashed?] (use-atom *area-dashed?)]
+        [area-dashed? set-area-dashed?] (use-atom *area-dashed?)
+        [hl-block-colored? set-hl-block-colored?] (rum/use-state (state/sub :pdf/block-highlight-colored?))]
 
     (rum/use-effect!
      (fn []
@@ -41,6 +42,13 @@
      (fn []
        (storage/set "ls-pdf-area-is-dashed" (boolean area-dashed?)))
      [area-dashed?])
+
+    (rum/use-effect!
+     (fn []
+       (let [b (boolean hl-block-colored?)]
+         (state/set-state! :pdf/block-highlight-colored? b)
+         (storage/set "ls-pdf-hl-block-is-colored" b)))
+     [hl-block-colored?])
 
     [:div.extensions__pdf-settings.hls-popup-wrap.visible
      {:on-click (fn [^js/MouseEvent e]
@@ -63,14 +71,18 @@
        [:label (t :pdf/toggle-dashed)]
        (ui/toggle area-dashed? #(set-area-dashed? (not area-dashed?)) true)]
 
+      [:div.extensions__pdf-settings-item.toggle-input.is-between
+       [:label (t :pdf/hl-block-colored)]
+       (ui/toggle hl-block-colored? #(set-hl-block-colored? (not hl-block-colored?)) true)]
+
       [:div.extensions__pdf-settings-item.toggle-input
        [:a.is-info.w-full.text-gray-500
-        {:title    "Document metadata"
+        {:title    (t :pdf/doc-metadata)
          :on-click #(p/let [ret (pdf-utils/get-meta-data$ _viewer)]
                       (state/set-modal! (make-docinfo-in-modal ret)))}
 
         [:span.flex.items-center.justify-between.w-full
-         "Document metadata"
+         (t :pdf/doc-metadata)
          (svg/icon-info)]]]
       ]]))
 

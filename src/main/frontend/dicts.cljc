@@ -315,6 +315,8 @@
         :pdf/copy-text "Copy text"
         :pdf/linked-ref "Linked references"
         :pdf/toggle-dashed "Dashed style for area highlight"
+        :pdf/hl-block-colored "Colored label for highlight block"
+        :pdf/doc-metadata "Document metadata"
 
         :updater/new-version-install "A new version has been downloaded."
         :updater/quit-and-install "Restart to install"
@@ -1413,6 +1415,8 @@
            :pdf/copy-text "复制文本"
            :pdf/linked-ref "转到注解"
            :pdf/toggle-dashed "区域选取为虚线"
+           :pdf/hl-block-colored "颜色标识高亮块"
+           :pdf/doc-metadata "查看文档元数据"
 
            :updater/new-version-install "新版本已经准备就绪，重启应用即可更新。"
            :updater/quit-and-install "现在安装"

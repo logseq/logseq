@@ -274,8 +274,10 @@
             (string/trimr))
         filename))))
 
-(rum/defc human-hls-filename-display
-  [title]
-  (when (string/starts-with? title "hls__")
-    [:a.asset-ref
-     (fix-local-asset-filename title)]))
+(rum/defc human-page-name-display
+  [page-name]
+  (cond
+    (string/starts-with? page-name "hls__")
+    (fix-local-asset-filename page-name)
+
+    :else (util/trim-safe page-name)))

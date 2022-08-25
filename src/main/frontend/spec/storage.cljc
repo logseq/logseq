@@ -12,6 +12,7 @@
 (s/def ::lsp-core-enabled boolean?)
 (s/def ::instrument-disabled boolean?)
 (s/def ::ls-pdf-area-is-dashed boolean?)
+(s/def ::ls-pdf-hl-block-is-colored boolean?)
 (s/def ::ls-pdf-viewer-theme string?)
 (s/def :zotero/api-key-v2 map?)
 (s/def :zotero/setting-profile string?)
@@ -45,6 +46,7 @@
             ::lsp-core-enabled
             ::instrument-disabled
             ::ls-pdf-area-is-dashed
+            ::ls-pdf-hl-block-is-colored
             ::ls-pdf-viewer-theme
             :zotero/api-key-v2
             :zotero/setting-profile
