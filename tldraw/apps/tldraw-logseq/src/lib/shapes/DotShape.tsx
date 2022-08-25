@@ -50,6 +50,6 @@ export class DotShape extends TLDotShape<DotShapeProps> {
 
   validateProps = (props: Partial<DotShapeProps>) => {
     if (props.radius !== undefined) props.radius = Math.max(props.radius, 1)
-    return withClampedStyles(props)
+    return withClampedStyles(this, props)
   }
 }

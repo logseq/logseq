@@ -253,7 +253,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     if (props.isSizeLocked || this.props.isSizeLocked) {
       // props.size = this.getAutoSizedBoundingBox(props)
     }
-    return withClampedStyles(props)
+    return withClampedStyles(this, props)
   }
 
   // Custom

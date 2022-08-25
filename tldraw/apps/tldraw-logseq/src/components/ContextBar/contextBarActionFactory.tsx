@@ -1,7 +1,6 @@
 import { debounce, Decoration, isNonNullable } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
-import { darken } from 'polished'
 import React from 'react'
 import { TablerIcon } from '~components/icons'
 import { ColorInput } from '~components/inputs/ColorInput'
@@ -62,7 +61,7 @@ const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
   html: ['ScaleLevel', 'AutoResizing'],
 }
 
-const noStrokeShapes = Object.entries(shapeMapping)
+export const noStrokeShapes = Object.entries(shapeMapping)
   .filter(([key, types]) => {
     return !types.includes('NoFill') && types.includes('Swatch')
   })
@@ -302,14 +301,8 @@ const SwatchAction = observer(() => {
   const handleChange = React.useMemo(() => {
     let latestValue = ''
     const handler: React.ChangeEventHandler<HTMLInputElement> = e => {
-      const strokeColor = darken(0.3, latestValue)
       shapes.forEach(s => {
-        const strokeOnly = noStrokeShapes.includes(s.props.type)
-        s.update(
-          strokeOnly
-            ? { stroke: latestValue, fill: latestValue }
-            : { fill: latestValue, stroke: strokeColor }
-        )
+        s.update({ fill: latestValue })
       })
       app.persist(true)
     }
@@ -416,7 +409,7 @@ const TextStyleAction = observer(() => {
   return (
     <span className="flex gap-1">
       <ToggleInput
-        title='Bold'
+        title="Bold"
         className="tl-contextbar-button"
         pressed={bold}
         onPressedChange={v => {
@@ -432,7 +425,7 @@ const TextStyleAction = observer(() => {
         <TablerIcon name="bold" />
       </ToggleInput>
       <ToggleInput
-        title='Italic'
+        title="Italic"
         className="tl-contextbar-button"
         pressed={italic}
         onPressedChange={v => {

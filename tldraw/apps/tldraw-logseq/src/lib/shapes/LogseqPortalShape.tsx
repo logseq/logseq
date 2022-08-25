@@ -607,7 +607,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     React.useEffect(() => {
       if (this.props.isAutoResizing) {
-        const newHeight = innerHeight + this.getHeaderHeight()
+        const latestInnerHeight = this.getInnerHeight?.() ?? innerHeight
+        const newHeight = latestInnerHeight + this.getHeaderHeight()
         if (innerHeight && Math.abs(newHeight - this.props.size[1]) > AUTO_RESIZE_THRESHOLD) {
           this.update({
             size: [this.props.size[0], newHeight],
@@ -802,7 +803,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       props.size[0] = Math.max(props.size[0], 240 * scale)
       props.size[1] = Math.max(props.size[1], HEADER_HEIGHT * scale)
     }
-    return withClampedStyles(props)
+    return withClampedStyles(this, props)
   }
 
   getShapeSVGJsx({ preview }: any) {

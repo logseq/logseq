@@ -66,7 +66,7 @@ export class HighlighterShape extends TLDrawShape<HighlighterShapeProps> {
   })
 
   validateProps = (props: Partial<HighlighterShapeProps>) => {
-    props = withClampedStyles(props)
+    props = withClampedStyles(this, props)
     if (props.strokeWidth !== undefined) props.strokeWidth = Math.max(props.strokeWidth, 1)
     return props
   }

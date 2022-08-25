@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite'
 import { TLBounds, BoundsUtils, TLOffset } from '@tldraw/core'
 import { useCounterScaledPosition, useRendererContext } from '~hooks'
 import type { TLReactShape } from '~lib'
+import { useDebouncedValue } from '~hooks/useDebounced'
 
 const stopEventPropagation = (e: React.PointerEvent) => e.stopPropagation()
 
@@ -15,7 +16,7 @@ export interface TLContextBarContainerProps<S extends TLReactShape> {
 
 export const ContextBarContainer = observer(function ContextBarContainer<S extends TLReactShape>({
   shapes,
-  hidden,
+  hidden: _hidden,
   bounds,
   rotation = 0,
 }: TLContextBarContainerProps<S>) {
@@ -33,6 +34,8 @@ export const ContextBarContainer = observer(function ContextBarContainer<S exten
 
   const rotatedBounds = BoundsUtils.getRotatedBounds(bounds, rotation)
   const scaledBounds = BoundsUtils.multiplyBounds(rotatedBounds, zoom)
+
+  const hidden = useDebouncedValue(_hidden, 200)
 
   useCounterScaledPosition(rBounds, bounds, rotation, 10003)
 

@@ -271,6 +271,7 @@ button.tl-select-input-trigger {
 .tl-select-input-select-item {
   cursor: default;
   padding: 4px 12px;
+  outline-offset: -1px;
 
   color: var(--ls-secondary-text-color);
 

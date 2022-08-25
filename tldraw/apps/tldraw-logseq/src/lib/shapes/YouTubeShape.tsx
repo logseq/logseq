@@ -128,6 +128,6 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
       props.size[0] = Math.max(props.size[0], 1)
       props.size[1] = Math.max(props.size[0] * this.aspectRatio, 1)
     }
-    return withClampedStyles(props)
+    return withClampedStyles(this, props)
   }
 }

@@ -145,7 +145,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
   })
 
   validateProps = (props: Partial<LineShapeProps>) => {
-    return withClampedStyles(props)
+    return withClampedStyles(this, props)
   }
 
   getShapeSVGJsx({ preview }: any) {

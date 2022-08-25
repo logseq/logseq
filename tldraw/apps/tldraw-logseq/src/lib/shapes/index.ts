@@ -12,6 +12,7 @@ import { PencilShape } from './PencilShape'
 import { PolygonShape } from './PolygonShape'
 import { TextShape } from './TextShape'
 import { YouTubeShape } from './YouTubeShape'
+import type { PenShape } from './PenShape'
 
 export type Shape =
   | BoxShape
@@ -21,6 +22,7 @@ export type Shape =
   | ImageShape
   | VideoShape
   | LineShape
+  | PenShape
   | PencilShape
   | PolygonShape
   | TextShape

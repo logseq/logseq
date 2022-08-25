@@ -72,7 +72,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
 
   validateProps = (props: Partial<PolygonShapeProps>) => {
     if (props.sides !== undefined) props.sides = Math.max(props.sides, 3)
-    return withClampedStyles(props)
+    return withClampedStyles(this, props)
   }
 
   /**

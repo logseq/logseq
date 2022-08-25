@@ -87,6 +87,6 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
       props.size[1] = Math.max(props.size[1], 1)
     }
     if (props.borderRadius !== undefined) props.borderRadius = Math.max(0, props.borderRadius)
-    return withClampedStyles(props)
+    return withClampedStyles(this, props)
   }
 }
