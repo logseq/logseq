@@ -178,6 +178,50 @@ input::-webkit-inner-spin-button {
         padding-left: 12px;
       }
     }
+
+    &-tabs {
+      @apply flex justify-center py-2.5 space-x-1;
+
+      border-bottom: 1px solid #d9d9d9;
+      
+      > .inner {
+        display: flex;
+        border: 1px solid #d5d5d5;
+        border-radius: 4px;
+      }
+
+      button {
+        font-size: 12px;
+        padding: 5px 6px;
+        line-height: 1;
+        border: none;
+        min-width: 90px;
+        border-radius: 3px;
+        color: black;
+
+        &:hover {
+          border: none;
+          opacity: .8;
+          color: black;
+          border-radius: 3px;
+        }
+
+        &:active {
+          opacity: 1;
+          background-color: #c5c5c5;
+        }
+
+        &.active {
+          background-color: #c5c5c5;
+        }
+      }
+    }
+
+    &-panels {
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 5px 0 5px 10px;
+    }
   }
 
   &-settings {

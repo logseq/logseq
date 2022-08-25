@@ -219,7 +219,7 @@
                            :dune))}]
 
         (when entered-active?
-         (ui/button (ui/icon "arrow-back") :title "Enter to search" :class "icon-enter" :intent "true" :small? true))]
+          (ui/button (ui/icon "arrow-back") :title "Enter to search" :class "icon-enter" :intent "true" :small? true))]
 
        (ui/button (ui/icon "letter-case")
                   :class (string/join " " (util/classnames [{:active case-sensitive?}]))
@@ -315,31 +315,55 @@
            #(.removeEventListener el-outline "keyup" cb)))
        [])
 
-      [:div.extensions__pdf-outline-wrap.hls-popup-wrap
-       {:class    (util/classnames [{:visible visible?}])
-        :on-click (fn [^js/MouseEvent e]
-                    (let [target (.-target e)]
-                      (when-not (.contains (rum/deref *el-outline) target)
-                        (set-visible! false))))}
+      [:div.extensions__pdf-outline-list-content
+       {:ref       *el-outline
+        :tab-index -1}
+       (if (seq outline-data)
+         [:section
+          (map-indexed (fn [idx itm]
+                         (rum/with-key
+                          (pdf-outline-item
+                           viewer
+                           (merge itm {:parent idx})
+                           {:upt-outline-node! upt-outline-node!})
+                          idx))
+                       outline-data)]
+         [:section.is-empty "No outlines"])])))
 
-       [:div.extensions__pdf-outline.hls-popup-box
-        {:ref       *el-outline
-         :tab-index -1}
-        (if (seq outline-data)
-          [:section
-           (map-indexed (fn [idx itm]
-                          (rum/with-key
-                           (pdf-outline-item
-                            viewer
-                            (merge itm {:parent idx})
-                            {:upt-outline-node! upt-outline-node!})
-                           idx))
-                        outline-data)]
-          [:section.is-empty "No outlines"])]])))
+(rum/defc pdf-outline-&-highlights
+  [^js viewer visible? set-visible!]
+  (let [*el-container (rum/create-ref)
+        [active-tab, set-active-tab!] (rum/use-state "contents")
+        set-outline-visible! #(set-active-tab! "contents")
+        contents? (= active-tab "contents")]
+
+    [:div.extensions__pdf-outline-wrap.hls-popup-wrap
+     {:class    (util/classnames [{:visible visible?}])
+      :on-click (fn [^js/MouseEvent e]
+                  (let [target (.-target e)]
+                    (when-not (.contains (rum/deref *el-container) target)
+                      (set-visible! false))))}
+
+     [:div.extensions__pdf-outline.hls-popup-box
+      {:ref       *el-container
+       :tab-index -1}
+
+      [:div.extensions__pdf-outline-tabs
+       [:div.inner
+        [:button {:class (when contents? "active")
+                  :on-click #(set-active-tab! "contents")} "Contents"]
+        [:button {:class (when-not contents? "active")
+                  :on-click #(set-active-tab! "highlights")} "Highlights"]]]
+
+      [:div.extensions__pdf-outline-panels
+       (if contents?
+         (pdf-outline viewer contents? set-outline-visible!)
+
+         [:strong "Highlights list"])]]]))
 
 (rum/defc ^:large-vars/cleanup-todo pdf-toolbar
   [^js viewer]
-  (let [[area-mode? set-area-mode!] (use-atom *area-mode?)
+  (let [[area-mode?, set-area-mode!] (use-atom *area-mode?)
         [outline-visible?, set-outline-visible!] (rum/use-state false)
         [finder-visible?, set-finder-visible!] (rum/use-state false)
         [highlight-mode?, set-highlight-mode!] (use-atom *highlight-mode?)
@@ -455,7 +479,7 @@
         (t :close)]]]
 
      ;; contents outline
-     (pdf-outline viewer outline-visible? set-outline-visible!)
+     (pdf-outline-&-highlights viewer outline-visible? set-outline-visible!)
 
      ;; finder
      (when finder-visible?
