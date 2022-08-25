@@ -287,7 +287,8 @@
           get-parents (fn [block]
                         (loop [block block
                                result [block]]
-                          (if-let [parent (id->block (:db/id (:block/parent block)))]
-                            (recur parent (conj result parent))
-                            result)))]
+                          (let [parent (id->block (:db/id (:block/parent block)))]
+                            (if (and parent (not= (:db/id parent) (:db/id block)))
+                              (recur parent (conj result parent))
+                              result))))]
       (distinct (mapcat get-parents filtered-ref-blocks)))))
