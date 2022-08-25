@@ -640,11 +640,10 @@ export class TLApp<
     } = this
     return currentPage.shapes.filter(shape => {
       return (
-        shape.props.parentId === currentPage.id &&
-        (!shape.canUnmount ||
-          selectedShapes.has(shape) ||
-          BoundsUtils.boundsContain(currentView, shape.rotatedBounds) ||
-          BoundsUtils.boundsCollide(currentView, shape.rotatedBounds))
+        !shape.canUnmount ||
+        selectedShapes.has(shape) ||
+        BoundsUtils.boundsContain(currentView, shape.rotatedBounds) ||
+        BoundsUtils.boundsCollide(currentView, shape.rotatedBounds)
       )
     })
   }
