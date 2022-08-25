@@ -217,7 +217,7 @@
       (p/do! (mobile-util/hide-splash)))
 
     (db/run-batch-txs!)
-    (file-handler/run-writes-chan!)
+
     (when config/dev?
       (enable-datalog-console))
     (when (util/electron?)

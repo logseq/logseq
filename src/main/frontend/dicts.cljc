@@ -252,6 +252,7 @@
         :developer-mode-alert "You need to restart the app to enable the plugin system. Do you want to restart it now?"
         :relaunch-confirm-to-work "Should relaunch app to make it work. Do you want to restart it now?"
         :import "Import"
+        :importing "Importing"
         :join-community "Join the community"
         :sponsor-us "Sponsor Us"
         :discourse-title "Our forum!"
