@@ -281,12 +281,10 @@
       (readdir dir)))
   (unlink! [this repo path _opts]
     (p/let [path (get-file-path nil path)
-            path (if (string/starts-with? path "file://")
-                   (string/replace-first path "file://" "")
-                   path)
-            repo-dir (config/get-local-dir repo)
-            recycle-dir (str repo-dir config/app-name "/.recycle") ;; logseq/.recycle
-            file-name (-> (string/replace path repo-dir "")
+            repo-url (config/get-local-dir repo)
+            recycle-dir (str repo-url config/app-name "/.recycle") ;; logseq/.recycle
+            ;; convert url to pure path
+            file-name (-> (string/replace path repo-url "")
                           (string/replace "/" "_")
                           (string/replace "\\" "_"))
             new-path (str recycle-dir "/" file-name)]
