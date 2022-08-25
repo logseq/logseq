@@ -450,7 +450,7 @@
   (try
     (edn/read-string (str k))
     true
-    (catch :default e
+    (catch :default _
       false)))
 
 (defn- non-safe-keyword->str
