@@ -141,12 +141,12 @@
  :default-queries
  {:journals
   [{:title "🔨 NOW"
-    :query [:find (pull ?h [*])
+    :query [:find (pull ?b [*])
             :in $ ?start ?today
             :where
-            [?h :block/marker ?marker]
+            [?b :block/marker ?marker]
             [(contains? #{"NOW" "DOING"} ?marker)]
-            [?h :block/page ?p]
+            [?b :block/page ?p]
             [?p :block/journal? true]
             [?p :block/journal-day ?d]
             [(>= ?d ?start)]
@@ -157,12 +157,12 @@
                                    (get h :block/priority "Z")) result))
     :collapsed? false}
    {:title "📅 NEXT"
-    :query [:find (pull ?h [*])
+    :query [:find (pull ?b [*])
             :in $ ?start ?next
             :where
-            [?h :block/marker ?marker]
+            [?b :block/marker ?marker]
             [(contains? #{"NOW" "LATER" "TODO"} ?marker)]
-            [?h :block/ref-pages ?p]
+            [?b :block/page ?p]
             [?p :block/journal? true]
             [?p :block/journal-day ?d]
             [(> ?d ?start)]
@@ -227,6 +227,10 @@
  ;; Properties to exclude from having property pages
  ;; E.g.:property-pages/excludelist #{:duration :author}
  ;; :property-pages/excludelist
+
+ ;; Enables property values to contain a mix of tags, page-refs, special
+ ;; punctuation and free-form text
+ ;; :rich-property-values? true
 
  ;; logbook setup
  ;; :logbook/settings

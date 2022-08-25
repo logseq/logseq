@@ -1,15 +1,18 @@
 (ns frontend.handler
-  (:require [electron.ipc :as ipc]
+  (:require [cljs.reader :refer [read-string]]
+            [clojure.string :as string]
+            [electron.ipc :as ipc]
             [electron.listener :as el]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
             [frontend.config :as config]
-            [frontend.context.i18n :as i18n]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
-            [logseq.db.schema :as db-schema]
             [frontend.db.conn :as conn]
+            [frontend.db.persist :as db-persist]
             [frontend.db.react :as react]
             [frontend.error :as error]
+            [frontend.extensions.srs :as srs]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.events :as events]
             [frontend.handler.file :as file-handler]
@@ -18,21 +21,20 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.extensions.srs :as srs]
-            [frontend.mobile.util :as mobile-util]
             [frontend.idb :as idb]
+            [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
+            [frontend.modules.outliner.datascript :as outliner-db]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.storage :as storage]
+            [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
-            [cljs.reader :refer [read-string]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]
-            [frontend.db.persist :as db-persist]
-            [frontend.modules.outliner.datascript :as outliner-db]))
+            [logseq.db.schema :as db-schema]
+            [promesa.core :as p]))
 
 (defn set-global-error-notification!
   []
@@ -82,7 +84,7 @@
        {:repos repos}
        old-db-schema
        (fn [repo]
-         (file-handler/restore-config! repo false)))
+         (file-handler/restore-config! repo)))
       (p/then
        (fn []
          ;; try to load custom css only for current repo
@@ -104,7 +106,7 @@
            (state/set-db-restoring! false))))
       (p/then
        (fn []
-         (prn "db restored, setting up repo hooks")
+         (js/console.log "db restored, setting up repo hooks")
          (store-schema!)
 
          (state/pub-event! [:modal/nfs-ask-permission])
@@ -143,18 +145,6 @@
                                (.postMessage js/window #js {":datalog-console.remote/remote-message" (pr-str db)} "*")
 
                                nil)))))))
-(defn- get-repos
-  []
-  (p/let [nfs-dbs (db-persist/get-all-graphs)
-          nfs-dbs (map (fn [db]
-                         {:url db :nfs? true}) nfs-dbs)]
-    (cond
-      (seq nfs-dbs)
-      nfs-dbs
-
-      :else
-      [{:url config/local-repo
-        :example? true}])))
 
 (defn clear-cache!
   []
@@ -167,6 +157,29 @@
               (ipc/ipc :reloadWindowPage)
               (js/window.location.reload)))
      2000)))
+
+(defn- get-repos
+  []
+  (p/let [nfs-dbs (db-persist/get-all-graphs)]
+    ;; TODO: Better IndexDB migration handling
+    (cond
+      (and (mobile-util/native-platform?)
+           (some #(or (string/includes? % " ")
+                      (string/includes? % "logseq_local_/")) nfs-dbs))
+      (do (notification/show! ["DB version is not compatible, please clear cache then re-add your graph back."
+                               (ui/button
+                                (t :settings-page/clear-cache)
+                                :class    "text-sm p-1"
+                                :on-click clear-cache!)] :error false)
+          {:url config/local-repo
+           :example? true})
+
+      (seq nfs-dbs)
+      (map (fn [db] {:url db :nfs? true}) nfs-dbs)
+
+      :else
+      [{:url config/local-repo
+        :example? true}])))
 
 (defn- register-components-fns!
   []

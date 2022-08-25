@@ -13,19 +13,49 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.modules.outliner.tree :as tree]))
 
 (defn- frequencies-sort
   [references]
   (sort-by second #(> %1 %2) references))
 
+(defn filtered-refs
+  [page-name filters filters-atom filtered-references]
+  [:div.flex.gap-1.flex-wrap
+   (for [[ref-name ref-count] filtered-references]
+     (when ref-name
+       (let [lc-reference (string/lower-case ref-name)]
+         (ui/button
+           [:span
+            ref-name
+            (when ref-count [:sup " " ref-count])]
+           :on-click (fn [e]
+                       (swap! filters-atom #(if (nil? (get filters lc-reference))
+                                              (assoc % lc-reference (not (.-shiftKey e)))
+                                              (dissoc % lc-reference)))
+                       (page-handler/save-filter! page-name @filters-atom))
+           :small? true
+           :intent "link"
+           :key ref-name))))])
+
 (rum/defcs filter-dialog-inner < rum/reactive (rum/local "" ::filterSearch)
-  [state filters-atom _close-fn references page-name]
+  [state filters-atom *references page-name]
   (let [filter-search (get state ::filterSearch)
+        references (rum/react *references)
         filtered-references  (frequencies-sort
                               (if (= @filter-search "")
                                 references
-                                (search/fuzzy-search references @filter-search :limit 500 :extract-fn first)))]
+                                (search/fuzzy-search references @filter-search :limit 500 :extract-fn first)))
+        filters (rum/react filters-atom)
+        includes (keep (fn [[page include?]]
+                         (let [page' (model-db/get-page-original-name page)]
+                           (when include? [page'])))
+                       filters)
+        excludes (keep (fn [[page include?]]
+                         (let [page' (model-db/get-page-original-name page)]
+                           (when-not include? [page'])))
+                       filters)]
     [:div.ls-filters.filters
      [:div.sm:flex.sm:items-start
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
@@ -34,6 +64,16 @@
        [:h3#modal-headline.text-lg.leading-6.font-medium "Filter"]
        [:span.text-xs
         "Click to include and shift-click to exclude. Click again to remove."]]]
+     (when (seq filters)
+       [:div.cp__filters.mb-4.ml-2
+        (when (seq includes)
+          [:div.flex.flex-row.flex-wrap.center-items
+           [:div.mr-1.font-medium.py-1 "Includes: "]
+           (filtered-refs page-name filters filters-atom includes)])
+        (when (seq excludes)
+          [:div.flex.flex-row.flex-wrap
+           [:div.mr-1.font-medium.py-1 "Excludes: " ]
+           (filtered-refs page-name filters filters-atom excludes)])])
      [:div.cp__filters-input-panel.flex
       (ui/icon "search")
       [:input.cp__filters-input.w-full
@@ -41,30 +81,17 @@
         :auto-focus true
         :on-change (fn [e]
                      (reset! filter-search (util/evalue e)))}]]
-     (when (seq filtered-references)
-       (let [filters (rum/react filters-atom)]
-         [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1.flex-wrap
-          (for [[ref-name ref-count] filtered-references]
-            (when ref-name
-              (let [lc-reference (string/lower-case ref-name)
-                    filtered (get filters lc-reference)
-                    color (condp = filtered
-                            true "text-green-400"
-                            false "text-red-400"
-                            nil)]
-                [:button.border.rounded.px-1.mb-1.mr-1.select-none
-                 {:key ref-name :class color :style {:border-color "currentColor"}
-                  :on-click (fn [e]
-                              (swap! filters-atom #(if (nil? (get filters lc-reference))
-                                                     (assoc % lc-reference (not (.-shiftKey e)))
-                                                     (dissoc % lc-reference)))
-                              (page-handler/save-filter! page-name @filters-atom))}
-                 ref-name [:sub " " ref-count]])))]))]))
+     (let [all-filters (set (keys filters))
+           refs (remove (fn [[page _]] (all-filters (util/page-name-sanity-lc page)))
+                        filtered-references)]
+       (when (seq refs)
+         [:div.mt-4
+          (filtered-refs page-name filters filters-atom refs)]))]))
 
 (defn filter-dialog
-  [filters-atom references page-name]
-  (fn [close-fn]
-    (filter-dialog-inner filters-atom close-fn references page-name)))
+  [filters-atom *references page-name]
+  (fn []
+    (filter-dialog-inner filters-atom *references page-name)))
 
 (rum/defc block-linked-references < rum/reactive db-mixins/query
   [block-id]
@@ -80,16 +107,10 @@
      (content/content block-id
                       {:hiccup ref-hiccup})]))
 
-(rum/defc references-inner < rum/reactive db-mixins/query
-  [page-name block-id filters *filtered-ref-blocks ref-pages]
+(rum/defc references-inner
+  [page-name filters filtered-ref-blocks]
   [:div.references-blocks
-   (let [ref-blocks (if block-id
-                      (db/get-block-referenced-blocks block-id)
-                      (db/get-page-referenced-blocks page-name))
-         filtered-ref-blocks (if block-id
-                               ref-blocks
-                               (block-handler/get-filtered-ref-blocks ref-blocks filters ref-pages))
-         ref-hiccup (block/->hiccup filtered-ref-blocks
+   (let [ref-hiccup (block/->hiccup filtered-ref-blocks
                                     {:id page-name
                                      :ref? true
                                      :breadcrumb-show? true
@@ -97,24 +118,21 @@
                                      :editor-box editor/box
                                      :filters filters}
                                     {})]
-     (reset! *filtered-ref-blocks filtered-ref-blocks)
      (content/content page-name {:hiccup ref-hiccup}))])
 
 (rum/defc references-cp
-  [repo page-entity page-name block-id filters-atom filter-state n-ref]
+  [page-name filters filters-atom filter-state total filter-n filtered-ref-blocks *ref-pages]
   (let [threshold (state/get-linked-references-collapsed-threshold)
-        default-collapsed? (>= n-ref threshold)
-        filters (when (seq filter-state)
-                  (-> (group-by second filter-state)
-                      (update-vals #(map first %))))
-        *filtered-ref-blocks (atom nil)
-        *collapsed? (atom nil)
-        ref-pages (when-not block-id
-                    (block-handler/get-blocks-refed-pages repo page-entity))]
+        default-collapsed? (>= total threshold)
+        *collapsed? (atom nil)]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
-      [:h2.font-bold.opacity-50 (str n-ref " Linked Reference"
-                                     (when (> n-ref 1) "s"))]
+      [:h2.font-bold.opacity-50 (str
+                                 (when (seq filters)
+                                   (str filter-n " of "))
+                                 total
+                                 " Linked Reference"
+                                 (when (> total 1) "s"))]
       [:a.filter.fade-link
        {:title "Filter"
         :on-mouse-over (fn [_e]
@@ -124,10 +142,8 @@
         :on-mouse-down (fn [e]
                          (util/stop-propagation e))
         :on-click (fn []
-                    (let [ref-pages (map :block/original-name ref-pages)
-                          references (frequencies ref-pages)]
-                      (state/set-modal! (filter-dialog filters-atom references page-name)
-                                        {:center? true})))}
+                    (state/set-modal! (filter-dialog filters-atom *ref-pages page-name)
+                                      {:center? true}))}
        (ui/icon "filter" {:class (cond
                                    (empty? filter-state)
                                    ""
@@ -140,46 +156,91 @@
                           :style {:fontSize 24}})]]
 
      (fn []
-       (references-inner page-name block-id filters *filtered-ref-blocks ref-pages))
+       (references-inner page-name filters filtered-ref-blocks))
 
      {:default-collapsed? default-collapsed?
       :title-trigger? true
       :init-collapsed (fn [collapsed-atom]
                         (reset! *collapsed? collapsed-atom))})))
 
-(rum/defcs references* < rum/reactive
+(defn- get-filtered-children
+  [block parent->blocks]
+  (let [children (get parent->blocks (:db/id block))]
+    (set
+     (loop [blocks children
+            result (vec children)]
+       (if (empty? blocks)
+         result
+         (let [fb (first blocks)
+               children (get parent->blocks (:db/id fb))]
+           (recur
+            (concat children (rest blocks))
+            (conj result fb))))))))
+
+(rum/defcs references* < rum/reactive db-mixins/query
+  (rum/local nil ::ref-pages)
   {:init (fn [state]
            (let [page-name (first (:rum/args state))
                  filters (when page-name
-                           (atom (page-handler/get-filters (string/lower-case page-name))))]
+                           (atom (page-handler/get-filters (util/page-name-sanity-lc page-name))))]
              (assoc state ::filters filters)))}
   [state page-name]
   (when page-name
-    (let [page-name (string/lower-case page-name)
-          page-entity (db/entity [:block/name page-name])
+    (let [page-name (util/page-name-sanity-lc page-name)
+          *ref-pages (::ref-pages state)
           repo (state/get-current-repo)
           filters-atom (get state ::filters)
           filter-state (rum/react filters-atom)
-          block-id (parse-uuid page-name)
-          id (if block-id
-               (:db/id (db/pull [:block/uuid block-id]))
-               (:db/id page-entity))
-          n-ref (model-db/get-linked-references-count id)]
-      (when (or (seq filter-state) (> n-ref 0))
+          ref-blocks (db/get-page-referenced-blocks page-name)
+          page-id (:db/id (db/entity repo [:block/name page-name]))
+          aliases (db/page-alias-set repo page-name)
+          aliases-exclude-self (set (remove #{page-id} aliases))
+          top-level-blocks (filter (fn [b] (some aliases (set (map :db/id (:block/refs b))))) ref-blocks)
+          top-level-blocks-ids (set (map :db/id top-level-blocks))
+          filters (when (seq filter-state)
+                    (-> (group-by second filter-state)
+                        (update-vals #(map first %))))
+          filtered-ref-blocks (->> (block-handler/filter-blocks ref-blocks filters)
+                                   (block-handler/get-filtered-ref-blocks-with-parents ref-blocks))
+          total (count top-level-blocks)
+          filtered-top-blocks (filter (fn [b] (top-level-blocks-ids (:db/id b))) filtered-ref-blocks)
+          filter-n (count filtered-top-blocks)
+          parent->blocks (group-by (fn [x] (:db/id (x :block/parent))) filtered-ref-blocks)
+          result (->> (group-by :block/page filtered-top-blocks)
+                      (map (fn [[page blocks]]
+                             (let [blocks (sort-by (fn [b] (not= (:db/id page) (:db/id (:block/parent b)))) blocks)
+                                   result (map (fn [block]
+                                                 (let [filtered-children (get-filtered-children block parent->blocks)
+                                                       refs (when-not (contains? top-level-blocks-ids (:db/id (:block/parent block)))
+                                                              (block-handler/get-blocks-refed-pages aliases (cons block filtered-children)))
+                                                       block' (assoc (tree/block-entity->map block) :block/children filtered-children)]
+                                                   [block' refs])) blocks)
+                                   blocks' (map first result)
+                                   page' (if (contains? aliases-exclude-self (:db/id page))
+                                           {:db/id (:db/id page)
+                                            :block/alias? true
+                                            :block/journal-day (:block/journal-day page)}
+                                           page)]
+                               [[page' blocks'] (mapcat second result)]))))
+          filtered-ref-blocks' (map first result)
+          ref-pages (->>
+                     (mapcat second result)
+                     (map :block/original-name)
+                     frequencies)]
+      (reset! *ref-pages ref-pages)
+      (when (or (seq filter-state) (> filter-n 0))
         [:div.references.flex-1.flex-row
          [:div.content.pt-6
-          (references-cp repo page-entity page-name block-id
-                         filters-atom filter-state n-ref)]]))))
+          (references-cp page-name filters filters-atom filter-state total filter-n filtered-ref-blocks' *ref-pages)]]))))
 
 (rum/defc references
   [page-name]
   (ui/catch-error
-   (ui/component-error "Linked References: Unexpected error")
+   (ui/component-error "Linked References: Unexpected error. Please re-index your graph first.")
    (ui/lazy-visible
     (fn []
       (references* page-name))
-    {:trigger-once? true
-     :debug-id (str page-name " references")})))
+    {:debug-id (str page-name " references")})))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query

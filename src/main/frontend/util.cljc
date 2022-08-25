@@ -10,6 +10,7 @@
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
+            [clojure.pprint]
             [dommy.core :as d]
             [frontend.mobile.util :refer [native-platform?]]
             [logseq.graph-parser.util :as gp-util]
@@ -78,8 +79,7 @@
    (defn electron?
      []
      (when (and js/window (gobj/get js/window "navigator"))
-       (let [ua (string/lower-case js/navigator.userAgent)]
-         (string/includes? ua " electron")))))
+       (gstring/caseInsensitiveContains js/navigator.userAgent " electron"))))
 
 #?(:cljs
    (defn mocked-open-dir-path
@@ -338,10 +338,6 @@
      (when e (.stopPropagation e))))
 
 #?(:cljs
-   (defn cur-doc-top []
-     (.. js/document -documentElement -scrollTop)))
-
-#?(:cljs
    (defn element-top [elem top]
      (when elem
        (if (.-offsetParent elem)
@@ -486,6 +482,13 @@
   [s]
   (if (string? s)
     (string/lower-case s) s))
+
+#?(:cljs
+   (defn safe-path-join [prefix & paths]
+     (let [path (apply node-path.join (cons prefix paths))]
+       (if (and (electron?) (gstring/caseInsensitiveStartsWith path "file://"))
+         (js/decodeURIComponent (subs path 7))
+         path))))
 
 (defn trim-safe
   [s]
@@ -891,11 +894,6 @@
      [string]
      (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
 
-#?(:cljs
-   (defn url-decode
-     [string]
-     (some-> string str (js/decodeURIComponent))))
-
 (def windows-reserved-chars #"[:\\*\\?\"<>|]+")
 
 #?(:cljs
@@ -1075,6 +1073,8 @@
   (= (get-relative-path "a/b/c/d/g.org" "a/b/c/e/f.org")
      "../e/f.org"))
 
+(defn keyname [key] (str (namespace key) "/" (name key)))
+
 #?(:cljs
    (defn select-highlight!
      [blocks]
@@ -1086,8 +1086,6 @@
      [blocks]
      (doseq [block blocks]
        (d/remove-class! block "selected" "noselect"))))
-
-(defn keyname [key] (str (namespace key) "/" (name key)))
 
 (defn batch [in max-time handler buf-atom]
   (async/go-loop [buf buf-atom t (async/timeout max-time)]

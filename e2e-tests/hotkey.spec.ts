@@ -5,10 +5,8 @@ import { createRandomPage, newBlock, lastBlock, IsMac, IsLinux } from './utils'
 test('open search dialog', async ({ page }) => {
   if (IsMac) {
     await page.keyboard.press('Meta+k')
-  } else if (IsLinux) {
-    await page.keyboard.press('Control+k')
   } else {
-    expect(false, "TODO: test on Windows and other platforms").toBeTruthy()
+    await page.keyboard.press('Control+k')
   }
 
   await page.waitForSelector('[placeholder="Search or create page"]')

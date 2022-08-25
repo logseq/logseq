@@ -79,7 +79,7 @@
     [:div.pl-1 (edit-settings-file pid nil)]]])
 
 (rum/defc render-item-heading
-  [{:keys [title]}]
+  [{:keys [key title]}]
 
   [:div.heading-item
    {:data-key key}

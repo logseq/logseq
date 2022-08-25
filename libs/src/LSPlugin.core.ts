@@ -907,7 +907,7 @@ class PluginLocal extends EventEmitter<'loaded'
 
       this._dispose(cleanInjectedScripts.bind(this))
     } catch (e) {
-      debug('[Load Plugin Error] ', e)
+      console.error('[Load Plugin Error] ', e)
       this.logger?.error(e)
 
       this._status = PluginLocalLoadStatus.ERROR

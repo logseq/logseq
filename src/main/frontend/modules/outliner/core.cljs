@@ -158,12 +158,24 @@
                                       db-schema/retract-attributes)))))
 
         (when-let [e (:block/page block-entity)]
-          (let [m {:db/id (:db/id e)
+          (let [m' {:db/id (:db/id e)
                    :block/updated-at (util/time-ms)}
-                m (if (:block/created-at e)
-                    m
-                    (assoc m :block/created-at (util/time-ms)))]
-            (swap! txs-state conj m))
+                m' (if (:block/created-at e)
+                    m'
+                    (assoc m' :block/created-at (util/time-ms)))
+                m' (if (or (:block/pre-block? block-entity)
+                           (:block/pre-block? m))
+                     (let [properties (:block/properties m)
+                           alias (set (:alias properties))
+                           tags (set (:tags properties))
+                           alias (map (fn [p] {:block/name (util/page-name-sanity-lc p)}) alias)
+                           tags (map (fn [p] {:block/name (util/page-name-sanity-lc p)}) tags)]
+                       (assoc m'
+                              :block/alias alias
+                              :block/tags tags
+                              :block/properties properties))
+                     m')]
+            (swap! txs-state conj m'))
           (remove-orphaned-page-refs! (:db/id block-entity) txs-state old-refs new-refs)))
 
       (swap! txs-state conj (dissoc m :db/other-tx))
@@ -194,8 +206,15 @@
                                                  (assoc :block/left parent))))
                                            immediate-children)))
                     txs))
-                txs)]
-      (swap! txs-state concat txs)
+                txs)
+          page-tx (let [block (db/entity [:block/uuid block-id])]
+                    (when (:block/pre-block? block)
+                      (let [id (:db/id (:block/page block))]
+                        [[:db/retract id :block/properties]
+                         [:db/retract id :block/properties-order]
+                         [:db/retract id :block/alias]
+                         [:db/retract id :block/tags]])))]
+      (swap! txs-state concat txs page-tx)
       block-id))
 
   (-get-children [this]

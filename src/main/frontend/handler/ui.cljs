@@ -125,7 +125,8 @@
   []
   (when-let [style (or
                     (state/get-custom-css-link)
-                    (db-model/get-custom-css)
+                    (some-> (db-model/get-custom-css)
+                            (config/expand-relative-assets-path))
                     ;; (state/get-custom-css-link)
 )]
     (util/add-style! style)))
