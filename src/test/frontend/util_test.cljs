@@ -27,6 +27,7 @@
     (is (= (util/node-path.join "file:///a/b" "c/d.md") "file:///a/b/c/d.md"))
     (is (= (util/node-path.join "file:///a/b" "../d.md") "file:///a/d.md"))
     (is (= (util/node-path.join "file:///a   a2/b" "c/d.md") "file:///a   a2/b/c/d.md"))
+    (is (= (util/node-path.join "C:/a2/b" "c/d.md") "C:/a2/b/c/d.md"))
     (is (= (util/node-path.join "content://a/b" "../d.md") "content://a/d.md"))
     (is (= (util/node-path.join "https://logseq.com/a/b" "c/d.md") "https://logseq.com/a/b/c/d.md"))))
 
