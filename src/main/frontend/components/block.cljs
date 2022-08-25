@@ -71,6 +71,7 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
+            [clojure.set :as set]
             [shadow.loader :as loader]))
 
 (defn safe-read-string
@@ -1843,41 +1844,53 @@
        :else
        (inline-text config (:block/format block) (str v)))]))
 
+(def hidden-editable-page-properties
+  "Properties that are hidden in the pre-block (page property)"
+  #{:title :filters :icon})
+
+(assert (set/subset? hidden-editable-page-properties (gp-property/editable-built-in-properties))
+        "Hidden editable page properties must be valid editable properties")
+
+(defn- add-aliases-to-properties
+  [properties block]
+  (let [repo (state/get-current-repo)
+        aliases (db/get-page-alias-names repo
+                                         (:block/name (db/pull (:db/id (:block/page block)))))]
+    (if (seq aliases)
+      (if (:alias properties)
+        (update properties :alias (fn [c]
+                                    (util/distinct-by string/lower-case (concat c aliases))))
+        (assoc properties :alias aliases))
+      properties)))
+
 (rum/defc properties-cp
-  [config block]
-  (let [properties (walk/keywordize-keys (:block/properties block))
-        properties-order (:block/properties-order block)
-        properties (apply dissoc properties (property/hidden-properties))
-        properties-order (remove (property/hidden-properties) properties-order)
-        pre-block? (:block/pre-block? block)
-        properties (if pre-block?
-                     (let [repo (state/get-current-repo)
-                           properties (dissoc properties :title :filters)
-                           aliases (db/get-page-alias-names repo
-                                                            (:block/name (db/pull (:db/id (:block/page block)))))]
-                       (if (seq aliases)
-                         (if (:alias properties)
-                           (update properties :alias (fn [c]
-                                                       (util/distinct-by string/lower-case (concat c aliases))))
-                           (assoc properties :alias aliases))
-                         properties))
-                     properties)
-        properties-order (if pre-block?
-                           (remove #{:title :filters} properties-order)
-                           properties-order)
-        properties (if (seq properties-order)
-                     (map (fn [k] [k (get properties k)]) properties-order)
-                     properties)]
+  [config {:block/keys [pre-block?] :as block}]
+  (let [dissoc-keys (fn [m keys] (apply dissoc m keys))
+        properties (cond-> (update-keys (:block/properties block) keyword)
+                           true
+                           (dissoc-keys (property/hidden-properties))
+                           pre-block?
+                           (dissoc-keys hidden-editable-page-properties)
+                           pre-block?
+                           (add-aliases-to-properties block))]
     (cond
       (seq properties)
-      [:div.block-properties
-       {:class (when pre-block? "page-properties")
-        :title (if pre-block?
-                 "Click to edit this page's properties"
-                 "Click to edit this block's properties")}
-       (for [[k v] properties]
-         (rum/with-key (property-cp config block k v)
-           (str (:block/uuid block) "-" k)))]
+      (let [properties-order (cond->> (:block/properties-order block)
+                                      true
+                                      (remove (property/hidden-properties))
+                                      pre-block?
+                                      (remove hidden-editable-page-properties))
+            ordered-properties (if (seq properties-order)
+                                 (map (fn [k] [k (get properties k)]) properties-order)
+                                 properties)]
+        [:div.block-properties
+         {:class (when pre-block? "page-properties")
+          :title (if pre-block?
+                   "Click to edit this page's properties"
+                   "Click to edit this block's properties")}
+         (for [[k v] ordered-properties]
+           (rum/with-key (property-cp config block k v)
+             (str (:block/uuid block) "-" k)))])
 
       (and pre-block? properties)
       [:span.opacity-50 "Properties"]
