@@ -215,7 +215,6 @@
                          [:db/retract id :block/alias]
                          [:db/retract id :block/tags]])))]
       (swap! txs-state concat txs page-tx)
-      (util/pprint @txs-state)
       block-id))
 
   (-get-children [this]
