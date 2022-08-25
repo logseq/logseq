@@ -644,12 +644,11 @@
 (rum/defc pdf-viewer
   [url initial-hls ^js pdf-document ops]
 
-  ;;(dd "==== render pdf-viewer ====")
-
   (let [*el-ref (rum/create-ref)
         [state, set-state!] (rum/use-state {:viewer nil :bus nil :link nil :el nil})
         [ano-state, set-ano-state!] (rum/use-state {:loaded-pages []})
-        [page-ready?, set-page-ready!] (rum/use-state false)]
+        [page-ready?, set-page-ready!] (rum/use-state false)
+        [area-dashed?, _set-area-dashed?] (use-atom *area-dashed?)]
 
     ;; instant pdfjs viewer
     (rum/use-effect!
@@ -709,7 +708,7 @@
     (let [^js viewer (:viewer state)]
       [:div.extensions__pdf-viewer-cnt
        [:div.extensions__pdf-viewer
-        {:ref *el-ref :class (util/classnames [{:is-area-dashed @*area-dashed?}])}
+        {:ref *el-ref :class (util/classnames [{:is-area-dashed area-dashed?}])}
         [:div.pdfViewer "viewer pdf"]
         [:div.pp-holder]
 
