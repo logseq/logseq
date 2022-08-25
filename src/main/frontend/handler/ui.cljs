@@ -99,12 +99,6 @@
      (doseq [component (state/get-custom-query-components)]
        (rum/request-render component)))))
 
-(defn re-render-file!
-  []
-  (when-let [component (state/get-file-component)]
-    (when (= :file (state/get-current-route))
-      (rum/request-render component))))
-
 (defn highlight-element!
   [fragment]
   (let [id (and

@@ -70,15 +70,19 @@
             tx (util/concat-without-nil truncate-refs-tx refs-tx)
             tx-report' (if (seq tx)
                          (let [refs-tx-data' (:tx-data (db/transact! repo tx {:outliner/transact? true
-                                                                         :compute-new-refs? true}))]
+                                                                              :compute-new-refs? true}))]
                            ;; merge
                            (assoc tx-report :tx-data (concat (:tx-data tx-report) refs-tx-data')))
-                         tx-report)]
-        (react/refresh! repo tx-report')
+                         tx-report)
+            importing? (:graph/importing @state/state)]
+
+        (when-not importing?
+          (react/refresh! repo tx-report'))
 
         (doseq [p (seq pages)]
           (updated-page-hook tx-report p))
-        (when (and state/lsp-enabled? (seq blocks))
+
+        (when (and state/lsp-enabled? (seq blocks) (not importing?))
           (state/pub-event! [:plugin/hook-db-tx
                              {:blocks  blocks
                               :tx-data (:tx-data tx-report)

@@ -53,15 +53,13 @@
             disk-content (or disk-content "")
             ext (string/lower-case (util/get-file-ext path))
             db-content (or old-content (db/get-file repo path) "")
-            contents-matched? (contents-matched? disk-content db-content)
-            pending-writes (state/get-write-chan-length)]
+            contents-matched? (contents-matched? disk-content db-content)]
       (cond
         (and
          (not= stat :not-found)         ; file on the disk was deleted
          (not contents-matched?)
          (not (contains? #{"excalidraw" "edn" "css"} ext))
-         (not (string/includes? path "/.recycle/"))
-         (zero? pending-writes))
+         (not (string/includes? path "/.recycle/")))
         (p/let [disk-content (encrypt/decrypt disk-content)]
           (state/pub-event! [:file/not-matched-from-disk path disk-content content]))
 

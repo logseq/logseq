@@ -12,7 +12,6 @@
             [lambdaisland.glogi :as log]
             [frontend.state :as state]))
 
-(defonce write-chan (async/chan 100))
 (defonce write-chan-batch-buf (atom []))
 
 (def batch-write-interval 1000)
@@ -27,8 +26,8 @@
         page-db-id (:db/id page-block)
         blocks-count (model/get-page-blocks-count repo page-db-id)]
     (if (and (> blocks-count 500)
-             (not (state/input-idle? repo :diff 3000)))           ; long page
-      (async/put! write-chan [repo page-db-id])
+             (not (state/input-idle? repo :diff 3000))) ; long page
+      (async/put! (state/get-file-write-chan) [repo page-db-id])
       (let [blocks (model/get-page-blocks-no-cache repo (:block/name page-block))]
         (when-not (and (= 1 (count blocks))
                        (string/blank? (:block/content (first blocks)))
@@ -59,9 +58,11 @@
      "Write file failed, can't find the current page!"
      :error)
     (when-let [repo (state/get-current-repo)]
-      (async/put! write-chan [repo page-db-id]))))
+      (if (:graph/importing @state/state) ; write immediately
+        (write-files! [[repo page-db-id]])
+        (async/put! (state/get-file-write-chan) [repo page-db-id])))))
 
-(util/batch write-chan
+(util/batch (state/get-file-write-chan)
             batch-write-interval
             write-files!
             write-chan-batch-buf)
