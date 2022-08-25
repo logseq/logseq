@@ -234,7 +234,7 @@
                                                   (editor-handler/delete-asset-of-block!
                                                    {:block-id    block-id
                                                     :local?      local?
-                                                    :delete-local? (first sub-selected)
+                                                    :delete-local? (and sub-selected (first sub-selected))
                                                     :repo        (state/get-current-repo)
                                                     :href        src
                                                     :title       title
