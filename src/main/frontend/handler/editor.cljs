@@ -1948,7 +1948,12 @@
   [tree-vec format {:keys [target-block keep-uuid?] :as opts}]
   (let [blocks (block-tree->blocks tree-vec format keep-uuid?)
         page-id (:db/id (:block/page target-block))
-        blocks (gp-block/with-parent-and-left page-id blocks)]
+        blocks (gp-block/with-parent-and-left page-id blocks)
+        block-refs (->> (mapcat :block/refs blocks)
+                        (set)
+                        (filter (fn [ref] (and (vector? ref) (= :block/uuid (first ref))))))]
+    (when (seq block-refs)
+      (db/transact! (map (fn [[_ id]] {:block/uuid id}) block-refs)))
     (paste-blocks
      blocks
      opts)))
