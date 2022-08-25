@@ -444,6 +444,16 @@
        x))
    vec-tree))
 
+(defn- keyword-with-commas->str
+  [block]
+  (update block :block/properties
+          (fn [properties]
+            (when (seq properties)
+              (update-keys properties (fn [k]
+                                        (if (string/includes? (str k) ",")
+                                          (subs (str k) 1)
+                                          k)))))))
+
 (defn- blocks [db]
   {:version 1
    :blocks
@@ -460,12 +470,14 @@
                              name
                              {:transform? false})
                      blocks' (map (fn [b]
-                                    (if (seq (:block/properties b))
-                                      (update b :block/content
-                                              (fn [content] (property/remove-properties (:block/format b) content)))
-                                      b)) blocks)
-                     children (outliner-tree/blocks->vec-tree blocks' name)]
-                 (assoc page :block/children children))))
+                                    (let [b' (if (seq (:block/properties b))
+                                               (update b :block/content
+                                                       (fn [content] (property/remove-properties (:block/format b) content)))
+                                               b)]
+                                      (keyword-with-commas->str b'))) blocks)
+                     children (outliner-tree/blocks->vec-tree blocks' name)
+                     page' (keyword-with-commas->str page)]
+                 (assoc page' :block/children children))))
         (nested-select-keys
          [:block/id
           :block/page-name

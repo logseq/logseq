@@ -203,7 +203,7 @@
     (catch :default e
       (js/console.error e)
       (notification/show!
-       (str (:message e))
+       (str (.-message e))
        :error)))) ;; it was designed to accept a list of imported page names but now deprecated
 
 (defn tree-vec-translate-json
