@@ -16,7 +16,7 @@
 	- Focus management is extremely important for [keyboard navigation](https://developer.mozilla.org/en-US/docs/Web/Accessibility/Understanding_WCAG/Keyboard). Focusable elements can help people with motor disabilities navigate. [Focus Order](https://www.w3.org/TR/UNDERSTANDING-WCAG20/navigation-mechanisms-focus-order.html) plays an important role in this.
 - ## Automated testing
 	- There is a [huge list of tools](https://www.w3.org/WAI/ER/tools/) that can help us test our application. Most of them use [axe-core](https://github.com/dequelabs/axe-core) internally. There are [browser extensions](https://www.deque.com/axe/browser-extensions/) based on axe, a [VSCode Linter Plugin](https://marketplace.visualstudio.com/items?itemName=deque-systems.vscode-axe-linter) and also [multiple community projects](https://github.com/dequelabs/axe-core/blob/develop/doc/projects.md#community-projects).
-	- Basic accessibility testing could be integrated into our [[CI]], by using the appropriate axe package (e.g. [@axe-core/playwright](https://github.com/dequelabs/axe-core-npm/blob/develop/packages/playwright/README.md))
+	- Basic accessibility testing could be integrated into our CI, by using the appropriate axe package (e.g. [@axe-core/playwright](https://github.com/dequelabs/axe-core-npm/blob/develop/packages/playwright/README.md))
 - ## Manual testing
 	- In theory, all of the cases described by WCAG should be testable. In practice, there are issues that can't be replicated by code. Also, manual accessibility testing would help us have a better understanding of the difficulties that certain people might encounter. Even if the all the individual cases pass the tests, the overall navigation might be nonsensical.
 	- ### Manual accessibility testing musts
