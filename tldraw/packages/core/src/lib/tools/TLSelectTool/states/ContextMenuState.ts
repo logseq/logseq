@@ -19,16 +19,4 @@ export class ContextMenuState<
   onPointerDown: TLEvents<S>['pointer'] = () => {
     this.tool.transition('idle')
   }
-
-  onPinch: TLEvents<S>['pinch'] = info => {
-    this.tool.transition('idle')
-  }
-
-  onPinchEnd: TLEvents<S>['pinch'] = () => {
-    this.tool.transition('idle')
-  }
-
-  onWheel: TLEvents<S>['wheel'] = (info, e) => {
-    this.tool.transition('idle')
-  }
 }
