@@ -33,6 +33,7 @@ export const ContextMenu = observer(function ContextMenu({ children }: ContextMe
             Paste
             <div className="tl-context-menu-right-slot">⌘+V</div>
           </ReactContextMenu.Item>
+          <ReactContextMenu.Separator className="menu-separator"/>
           <ReactContextMenu.Item className="tl-context-menu-button" onClick={app.api.selectAll}>
             Select All
             <div className="tl-context-menu-right-slot">⌘+A</div>
@@ -49,9 +50,10 @@ export const ContextMenu = observer(function ContextMenu({ children }: ContextMe
                 <div className="tl-context-menu-right-slot">Delete</div>
               </ReactContextMenu.Item>
               <ReactContextMenu.Item className="tl-context-menu-button">
-                  Duplicate
-                  <div className="tl-context-menu-right-slot">⌘+D</div>
-                </ReactContextMenu.Item>
+                Duplicate
+                <div className="tl-context-menu-right-slot">⌘+D</div>
+              </ReactContextMenu.Item>
+              <ReactContextMenu.Separator className="menu-separator"/>
               <ReactContextMenu.Item
                 className="tl-context-menu-button"
                 onClick={() => {
@@ -60,12 +62,13 @@ export const ContextMenu = observer(function ContextMenu({ children }: ContextMe
                   Flip Horizontally
               </ReactContextMenu.Item>
               <ReactContextMenu.Item
-                  className="tl-context-menu-button"
-                  onClick={() => {
-                    app.flipVertical(app.selectedShapesArray)
-                  }}>
+                className="tl-context-menu-button"
+                onClick={() => {
+                  app.flipVertical(app.selectedShapesArray)
+                }}>
                   Flip Vertically
               </ReactContextMenu.Item>
+              <ReactContextMenu.Separator className="menu-separator"/>
               <ReactContextMenu.Item
                 className="tl-context-menu-button"
                 onClick={() => {
