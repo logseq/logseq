@@ -25,6 +25,8 @@ export class PointingRotateHandleState<
   private handle = '' as TLSelectionHandle
 
   onEnter = (info: TLEventSelectionInfo) => {
+    // Pause the history when we enter
+    this.app.history.pause()
     this.handle = info.handle
     this.updateCursor()
   }
@@ -41,6 +43,8 @@ export class PointingRotateHandleState<
   }
 
   onPointerUp: TLEvents<S>['pointer'] = () => {
+    this.app.history.resume()
+    this.app.persist()
     this.tool.transition('idle')
   }
 
