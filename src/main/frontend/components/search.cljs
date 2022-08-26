@@ -347,10 +347,11 @@
                             (let [page data]
                               (when (string? page)
                                 (when-let [page (db/pull [:block/name (util/page-name-sanity-lc page)])]
-                                  (state/sidebar-add-block!
-                                   (state/get-current-repo)
-                                   (:db/id page)
-                                   :page))))
+                                 (state/sidebar-add-block!
+                                  (state/get-current-repo)
+                                  (:db/id page)
+                                  :page))
+                                (state/close-modal!)))
 
                             nil))
        :item-render (fn [{:keys [type data]}]

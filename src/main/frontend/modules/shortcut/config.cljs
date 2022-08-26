@@ -250,18 +250,16 @@
                                                 (route-handler/go-to-search! :global))}
 
    :go/electron-find-in-page       {:binding "mod+f"
-                                    :fn      #(when (util/electron?)
-                                                (search-handler/open-find-in-page!))}
-
+                                    :inactive (not (util/electron?))
+                                    :fn      #(search-handler/open-find-in-page!)}
+   
    :go/electron-jump-to-the-next {:binding ["enter" "mod+g"]
-                                    :fn      (fn [_state _e]
-                                               (when (util/electron?)
-                                                 (search-handler/loop-find-in-page! false)))}
+                                  :inactive (not (util/electron?))
+                                  :fn      #(search-handler/loop-find-in-page! false)}
 
    :go/electron-jump-to-the-previous {:binding ["shift+enter" "mod+shift+g"]
-                                             :fn      (fn [_state _e]
-                                                        (when (util/electron?)
-                                                          (search-handler/loop-find-in-page! true)))}
+                                      :inactive (not (util/electron?))
+                                      :fn      #(search-handler/loop-find-in-page! true)}
 
    :go/journals                    {:binding "g j"
                                     :fn      route-handler/go-to-journals!}

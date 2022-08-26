@@ -130,6 +130,10 @@ To write a test that uses a datascript db:
 
 For examples of these tests, see `frontend.db.query-dsl-test` and `frontend.db.model-test`.
 
+## Accessibility
+
+Please refer to our [accessibility guidelines](accessibility.md).
+
 ## Logging
 
 For logging, we use https://github.com/lambdaisland/glogi. When in development,

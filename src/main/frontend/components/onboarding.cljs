@@ -13,8 +13,8 @@
   []
   [:div.help.cp__sidebar-help-docs
    (let [discourse-with-icon [:div.flex-row.inline-flex.items-center
-                            [:span.mr-1 (t :help/forum-community)]
-                            (ui/icon "message-circle" {:style {:font-size 20}})]
+                              [:span.mr-1 (t :help/forum-community)]
+                              (ui/icon "message-circle" {:style {:font-size 20}})]
          list
          [{:title "Usage"
            :children [[[:a
@@ -25,7 +25,7 @@
                       [(t :help/docs) "https://docs.logseq.com/"]
                       [(t :help/start) "https://docs.logseq.com/#/page/tutorial"]
                       ["FAQ" "https://docs.logseq.com/#/page/faq"]]}
-          
+
           {:title "Community"
            :children [[(t :help/awesome-logseq) "https://github.com/logseq/awesome-logseq"]
                       [(t :help/blog) "https://blog.logseq.com"]
@@ -36,7 +36,7 @@
                       [(t :help/bug) "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"]
                       [(t :help/feature) "https://discuss.logseq.com/c/feature-requests/"]
                       [(t :help/changelog) "https://docs.logseq.com/#/page/changelog"]]}
-          
+
           {:title "About"
            :children [[(t :help/about) "https://logseq.com/blog/about"]]}
 
@@ -44,7 +44,7 @@
            :children [[(t :help/privacy) "https://logseq.com/blog/privacy-policy"]
                       [(t :help/terms) "https://logseq.com/blog/terms"]]}]]
 
-          
+
 
      (map (fn [sublist]
             [[:p.mt-4.mb-1 [:b (:title sublist)]]

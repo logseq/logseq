@@ -1,10 +1,11 @@
 (ns logseq.graph-parser.util
   "Util fns shared between graph-parser and rest of app. Util fns only rely on
   clojure standard libraries."
-  (:require [clojure.walk :as walk]
+  (:require [cljs.reader :as reader]
+            [clojure.edn :as edn]
             [clojure.string :as string]
-            [logseq.graph-parser.log :as log]
-            [cljs.reader :as reader]))
+            [clojure.walk :as walk]
+            [logseq.graph-parser.log :as log]))
 
 (defn path-normalize
   "Normalize file path (for reading paths from FS, not required by writting)"
@@ -149,6 +150,16 @@
   [file]
   (when file
     (normalize-format (keyword (string/lower-case (last (string/split file #"\.")))))))
+
+(defn valid-edn-keyword?
+  [k]
+  (try
+    (let [s (str k)]
+      (and (= \: (first s))
+           (edn/read-string (str "{" s " nil}"))))
+    true
+    (catch :default _
+      false)))
 
 (defn safe-read-string
   [content]
