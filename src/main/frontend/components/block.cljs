@@ -457,7 +457,7 @@
                (str " page-property-key block-property"))
       :data-ref page-name
       :on-mouse-down (fn [e] (open-page-ref e page-name redirect-page-name page-name-in-block contents-page?))
-      :on-key-up (fn [e] ((when (= (.-key e) "Enter") 
+      :on-key-up (fn [e] ((when (= (.-key e) "Enter")
                            (open-page-ref e page-name redirect-page-name page-name-in-block contents-page?))))}
 
      (if (and (coll? children) (seq children))
@@ -1908,10 +1908,10 @@
   (when (seq invalid-properties)
     [:div.invalid-properties.mb-2
      [:div.warning {:title "Invalid properties"}
-      "Invalid property keys: "
+      "Invalid property names: "
       (for [p invalid-properties]
         [:button.p-1.mr-2 p])]
-     [:code "Property key begins with a non-numeric character and can contain alphanumeric characters and . * + ! - _ ? $ % & = < >. If -, + or . are the first character, the second character (if any) must be non-numeric."]]))
+     [:code "Property name begins with a non-numeric character and can contain alphanumeric characters and . * + ! - _ ? $ % & = < >. If -, + or . are the first character, the second character (if any) must be non-numeric."]]))
 
 (rum/defcs timestamp-cp < rum/reactive
   (rum/local false ::show?)

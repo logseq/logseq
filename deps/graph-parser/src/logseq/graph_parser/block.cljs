@@ -211,7 +211,7 @@
                                              (string/replace " " "-")
                                              (string/replace "_" "-")
                                              (string/replace #"[\"|^|(|)|{|}]+" ""))]
-                                   (if (gp-util/valid-edn-keyword? (str ":" k))
+                                   (if (gp-property/valid-property-name? (str ":" k))
                                      (let [k (if (contains? #{"custom_id" "custom-id"} k)
                                                "id"
                                                k)
