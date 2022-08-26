@@ -2,7 +2,8 @@
   "Util fns shared between graph-parser and rest of app. Util fns only rely on
   clojure standard libraries."
   (:require [clojure.walk :as walk]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [clojure.edn :as edn]))
 
 (defn path-normalize
   "Normalize file path (for reading paths from FS, not required by writting)"
@@ -147,3 +148,13 @@
   [file]
   (when file
     (normalize-format (keyword (string/lower-case (last (string/split file #"\.")))))))
+
+(defn valid-edn-keyword?
+  [k]
+  (try
+    (let [s (str k)]
+      (and (= \: (first s))
+           (edn/read-string (str "{" s " nil}"))))
+    true
+    (catch :default _
+      false)))
