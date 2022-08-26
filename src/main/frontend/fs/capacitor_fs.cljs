@@ -14,7 +14,7 @@
             [rum.core :as rum]))
 
 (when (mobile-util/native-ios?)
-  (defn iOS-ensure-documents!
+  (defn ios-ensure-documents!
     []
     (.ensureDocuments mobile-util/ios-file-container)))
 

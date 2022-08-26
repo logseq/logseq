@@ -288,12 +288,8 @@
           (swap! *on-flying-request disj name)
           r))))
 
-;; FIXME: For Android, dir is plain path
-;; For iOS, dir is URL
 (defn- remove-dir-prefix [dir path]
-  (let [is-mobile-url? (string/starts-with? dir "file://")
-        dir (if is-mobile-url? (gstring/urlDecode dir) dir)
-        r (string/replace path (js/RegExp. (str "^" "(file://)?" (gstring/regExpEscape dir))) "")]
+  (let [r (string/replace path (js/RegExp. (str "^" (gstring/regExpEscape dir))) "")]
     (if (string/starts-with? r "/")
       (string/replace-first r "/" "")
       r)))

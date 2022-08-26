@@ -22,7 +22,7 @@
 (defn- ios-init
   "Initialize iOS-specified event listeners"
   []
-  (p/let [path (mobile-fs/iOS-ensure-documents!)]
+  (p/let [path (mobile-fs/ios-ensure-documents!)]
     (println "iOS container path: " (js->clj path)))
 
   (state/pub-event! [:validate-appId])
