@@ -205,3 +205,20 @@
         :desc #{"link"}
         :comma-prop "one, two,three"}
        {:rich-property-values? true}))))
+
+(deftest invalid-properties
+  (let [conn (ldb/start-conn)
+        properties {"foo" "valid"
+                    "[[foo]]" "invalid"
+                    "some,prop" "invalid"}]
+    (graph-parser/parse-file conn "foo.md" (gp-property/->block-content properties) {})
+
+    (is (= [{:block/properties {:foo "valid"}
+             :block/invalid-properties #{"[[foo]]" "some,prop"}}]
+           (->> (d/q '[:find (pull ?b [*])
+                       :in $
+                       :where [?b :block/properties] [(missing? $ ?b :block/name)]]
+                     @conn)
+                (map first)
+                (map #(select-keys % [:block/properties :block/invalid-properties]))))
+        "Has correct (in)valid block properties")))

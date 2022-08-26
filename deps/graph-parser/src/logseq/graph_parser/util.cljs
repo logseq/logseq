@@ -150,11 +150,10 @@
     (normalize-format (keyword (string/lower-case (last (string/split file #"\.")))))))
 
 (defn valid-edn-keyword?
-  [k]
+  "Determine if string is a valid edn keyword"
+  [s]
   (try
-    (let [s (str k)]
-      (and (= \: (first s))
-           (edn/read-string (str "{" s " nil}"))))
-    true
+    (boolean (and (= \: (first s))
+                  (edn/read-string (str "{" s " nil}"))))
     (catch :default _
       false)))
