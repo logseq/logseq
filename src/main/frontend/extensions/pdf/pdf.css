@@ -7,6 +7,8 @@
   --ph-highlight-color-purple: #ac8cf1;
   --ph-highlight-color-yellow: #fcd713;
 
+  --ph-link-color: #106ba3;
+
   --ph-highlight-scroll-into-color: rgba(255, 75, 93, 0.67);
 
   --ph-view-container-width: 42vw;
@@ -23,6 +25,31 @@ input::-webkit-inner-spin-button {
 
   &-container {
     display: flex;
+
+    *[data-color=yellow] {
+      background-color: var(--ph-highlight-color-yellow);
+      border-color: var(--ph-highlight-color-yellow);
+    }
+
+    *[data-color=blue] {
+      background-color: var(--ph-highlight-color-blue);
+      border-color: var(--ph-highlight-color-blue);
+    }
+
+    *[data-color=green] {
+      background-color: var(--ph-highlight-color-green);
+      border-color: var(--ph-highlight-color-green);
+    }
+
+    *[data-color=red] {
+      background-color: var(--ph-highlight-color-red);
+      border-color: var(--ph-highlight-color-red);
+    }
+
+    *[data-color=purple] {
+      background-color: var(--ph-highlight-color-purple);
+      border-color: var(--ph-highlight-color-purple);
+    }
   }
 
   &-loader {
@@ -158,11 +185,11 @@ input::-webkit-inner-spin-button {
           }
 
           &:hover {
-            color: #106ba3;
+            color: var(--ph-link-color);
           }
 
           &:active, &:focus {
-            background-color: #106ba3;
+            background-color: var(--ph-link-color);
             color: white;
 
             > i {
@@ -183,7 +210,7 @@ input::-webkit-inner-spin-button {
       @apply flex justify-center py-2.5 space-x-1;
 
       border-bottom: 1px solid #d9d9d9;
-      
+
       > .inner {
         display: flex;
         border: 1px solid #d5d5d5;
@@ -399,31 +426,6 @@ input::-webkit-inner-spin-button {
     mix-blend-mode: multiply;
     touch-action: none;
     border-style: dashed;
-
-    &[data-color=yellow] {
-      background-color: var(--ph-highlight-color-yellow);
-      border-color: var(--ph-highlight-color-yellow);
-    }
-
-    &[data-color=blue] {
-      background-color: var(--ph-highlight-color-blue);
-      border-color: var(--ph-highlight-color-blue);
-    }
-
-    &[data-color=green] {
-      background-color: var(--ph-highlight-color-green);
-      border-color: var(--ph-highlight-color-green);
-    }
-
-    &[data-color=red] {
-      background-color: var(--ph-highlight-color-red);
-      border-color: var(--ph-highlight-color-red);
-    }
-
-    &[data-color=purple] {
-      background-color: var(--ph-highlight-color-purple);
-      border-color: var(--ph-highlight-color-purple);
-    }
   }
 
   &-viewer.is-area-dashed {
@@ -531,6 +533,62 @@ input::-webkit-inner-spin-button {
       position: absolute;
       background: rgba(252, 232, 151, 1);
       mix-blend-mode: multiply;
+    }
+  }
+
+  &-highlights-list-item {
+    @apply hover:opacity-90 active:opacity-100 mr-2;
+    
+    user-select: none;
+    font-size: 12px;
+    padding-top: 8px;
+    padding-bottom: 2px;
+    padding-left: 6px;
+    border-radius: 4px;
+    margin-bottom: 3px;
+
+    &:first-child {
+      margin-top: 5px;
+    }
+
+    > h6 {
+      @apply flex items-center;
+      
+      font-size: 10px;
+      line-height: 1em;
+      color: #696969;
+      -webkit-font-smoothing: antialiased;
+
+      > small {
+        width: 8px;
+        height: 8px;
+        border-radius: 100%;
+        margin-right: 4px;
+      }
+    }
+
+    > p {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      line-height: 1.24em;
+      color: #646464;
+      padding-top: 6px;
+      padding-bottom: 2px;
+      margin: 0;
+
+      &:hover {
+        color: var(--ph-link-color);
+      }
+    }
+
+    &.active {
+      background-color: var(--ph-link-color);
+
+      > h6, > p {
+        color: white;
+      }
     }
   }
 }

@@ -19,6 +19,7 @@
 (def *area-dashed? (atom ((fnil identity false) (storage/get (str "ls-pdf-area-is-dashed")))))
 (def *area-mode? (atom false))
 (def *highlight-mode? (atom false))
+(rum/defcontext *highlights-ctx* )
 
 (rum/defc pdf-settings
   [^js _viewer theme {:keys [hide-settings! select-theme! t]}]
@@ -337,7 +338,25 @@
 (rum/defc pdf-highlights-list
   [^js _viewer]
 
-  [:strong "Highlights list ..."])
+  (let [[active, set-active!] (rum/use-state false)]
+    (rum/with-context
+     [hls-state *highlights-ctx*]
+     (let [hls (sort-by :page (or (seq (:initial-hls hls-state))
+                                  (:latest-hls hls-state)))]
+
+       (for [{:keys [id content properties page] :as hl} hls]
+         [:div.extensions__pdf-highlights-list-item
+          {:key      id
+           :class (when (= active id) "active")
+           :on-click (fn []
+                       (pdf-utils/scroll-to-highlight _viewer hl)
+                       (set-active! id))}
+          [:h6.flex
+           [:small {:data-color (:color properties)}]
+           [:strong "Page " page]]
+
+          [:p
+           (:text content)]])))))
 
 (rum/defc pdf-outline-&-highlights
   [^js viewer visible? set-visible!]

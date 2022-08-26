@@ -5,7 +5,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.pdf.utils :as pdf-utils]
-            [frontend.extensions.pdf.toolbar :refer [pdf-toolbar *area-dashed? *area-mode? *highlight-mode?]]
+            [frontend.extensions.pdf.toolbar :refer [pdf-toolbar *area-dashed? *area-mode? *highlight-mode? *highlights-ctx*]]
             [frontend.handler.notification :as notification]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.rum :refer [use-atom]]
@@ -807,20 +807,22 @@
              (state/set-state! :pdf/current nil)))))
      [(:error state)])
 
-    [:div.extensions__pdf-loader {:ref *doc-ref}
-     (let [status-doc  (:status state)
-           initial-hls (:initial-hls hls-state)]
+    (rum/bind-context
+     [*highlights-ctx* hls-state]
+     [:div.extensions__pdf-loader {:ref *doc-ref}
+      (let [status-doc  (:status state)
+            initial-hls (:initial-hls hls-state)]
 
-       (if (or (= status-doc :loading)
-               (nil? initial-hls))
+        (if (or (= status-doc :loading)
+                (nil? initial-hls))
 
-         [:div.flex.justify-center.items-center.h-screen.text-gray-500.text-lg
-          svg/loading]
+          [:div.flex.justify-center.items-center.h-screen.text-gray-500.text-lg
+           svg/loading]
 
-         [(rum/with-key (pdf-viewer
-                         url initial-hls
-                         (:pdf-document state)
-                         {:set-dirty-hls! set-dirty-hls!}) "pdf-viewer")]))]))
+          [(rum/with-key (pdf-viewer
+                          url initial-hls
+                          (:pdf-document state)
+                          {:set-dirty-hls! set-dirty-hls!}) "pdf-viewer")]))])))
 
 (rum/defc pdf-container
   [{:keys [identity] :as pdf-current}]
@@ -863,7 +865,7 @@
 (rum/defcs playground
   < rum/static rum/reactive
     (shortcut/mixin :shortcut.handler/pdf)
-  [state]
+  [_state]
   (let [pdf-current (state/sub :pdf/current)]
     [:div.extensions__pdf-playground
 

@@ -57,6 +57,12 @@
        :url      url
        :hls-file (str "assets/" key ".edn")})))
 
+(defn resolve-area-image-file
+  [current area-hl]
+
+  ;;;;;
+  )
+
 (defn load-hls-data$
   [{:keys [hls-file]}]
   (when hls-file
