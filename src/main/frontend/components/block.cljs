@@ -1898,6 +1898,16 @@
       :else
       nil)))
 
+(rum/defc invalid-properties-cp
+  [invalid-properties]
+  (when (seq invalid-properties)
+    [:div.invalid-properties.mb-2
+     [:div.warning {:title "Invalid properties"}
+      "Invalid property keys: "
+      (for [p invalid-properties]
+        [:button.p-1.mr-2 p])]
+     [:code "Property key begins with a non-numeric character and can contain alphanumeric characters and . * + ! - _ ? $ % & = < >. If -, + or . are the first character, the second character (if any) must be non-numeric."]]))
+
 (rum/defcs timestamp-cp < rum/reactive
   (rum/local false ::show?)
   (rum/local {} ::pos)
@@ -2103,6 +2113,9 @@
       (when scheduled
         (when-let [scheduled-ast (block-handler/get-scheduled-ast block)]
           (timestamp-cp block "SCHEDULED" scheduled-ast)))
+
+      (when-let [invalid-properties (:block/invalid-properties block)]
+        (invalid-properties-cp invalid-properties))
 
       (when (and (seq properties)
                  (let [hidden? (property/properties-hidden? properties)]

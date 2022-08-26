@@ -26,8 +26,7 @@
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
-            [frontend.handler.notification :as notification]
-            [clojure.edn :as edn])
+            [frontend.handler.notification :as notification])
   (:import
    [goog.string StringBuffer]))
 
@@ -445,23 +444,14 @@
        x))
    vec-tree))
 
-(defn- valid-edn-keyword?
-  [k]
-  (try
-    (edn/read-string (str k))
-    true
-    (catch :default _
-      false)))
-
-(defn- non-safe-keyword->str
+(defn- safe-keywordize
   [block]
   (update block :block/properties
           (fn [properties]
             (when (seq properties)
-              (update-keys properties (fn [k]
-                                        (if (valid-edn-keyword? k)
-                                          (subs (str k) 1)
-                                          k)))))))
+              (->> (filter (fn [[k v]]
+                             (gp-util/valid-edn-keyword? k)) properties)
+                   (into {}))))))
 
 (defn- blocks [db]
   {:version 1
@@ -483,9 +473,9 @@
                                                (update b :block/content
                                                        (fn [content] (property/remove-properties (:block/format b) content)))
                                                b)]
-                                      (non-safe-keyword->str b'))) blocks)
+                                      (safe-keywordize b'))) blocks)
                      children (outliner-tree/blocks->vec-tree blocks' name)
-                     page' (non-safe-keyword->str page)]
+                     page' (safe-keywordize page)]
                  (assoc page' :block/children children))))
         (nested-select-keys
          [:block/id
