@@ -1,11 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { TLApp, TLSelectTool, TLShape, TLToolState } from '~lib'
-import {
-  TLEvents,
-  TLSelectionHandle,
-  TLEventMap,
-  TLEventSelectionInfo,
-} from '~types'
+import type { TLEvents, TLSelectionHandle, TLEventMap, TLEventSelectionInfo } from '~types'
 
 export class ContextMenuState<
   S extends TLShape,
