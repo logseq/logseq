@@ -18,7 +18,6 @@
   ],
   "scripts": {
     "build": "cd apps/tldraw-logseq && yarn build",
-    "build:watch": "cd apps/tldraw-logseq && yarn dev",
     "postinstall": "yarn build",
     "dev": "cd demo && yarn dev",
     "fix:style": "yarn run pretty-quick",

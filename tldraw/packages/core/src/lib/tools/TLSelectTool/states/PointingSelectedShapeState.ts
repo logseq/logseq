@@ -1,5 +1,10 @@
 import { Vec } from '@tldraw/vec'
-import { type TLEventMap, type TLEventShapeInfo, type TLEvents, TLTargetType } from '../../../../types'
+import {
+  type TLEventMap,
+  type TLEventShapeInfo,
+  type TLEvents,
+  TLTargetType,
+} from '../../../../types'
 import { type TLShape, TLBoxShape } from '../../../shapes'
 import type { TLApp } from '../../../TLApp'
 import { TLToolState } from '../../../TLToolState'

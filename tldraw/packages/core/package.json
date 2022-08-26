@@ -40,13 +40,13 @@
     "@use-gesture/react": "^10.2.15",
     "fast-copy": "^2.1.3",
     "fast-deep-equal": "^3.1.3",
-    "hotkeys-js": "^3.9.4",
+    "hotkeys-js": "^3.9.5",
     "is-plain-object": "^5.0.0",
     "mobx": "^6.6.0",
     "mobx-react-lite": "^3.4.0",
     "mousetrap": "^1.6.5",
-    "uuid": "^8.0.0",
-    "rbush": "^3.0.1"
+    "rbush": "^3.0.1",
+    "uuid": "^8.0.0"
   },
   "devDependencies": {
     "@types/is-plain-object": "^2.0.4",

@@ -11,7 +11,7 @@ const extendedIcons = [
   'whiteboard-element',
   'select-cursor',
   'text',
-  'connector'
+  'connector',
 ]
 
 const cx = (...args: (string | undefined)[]) => args.join(' ')

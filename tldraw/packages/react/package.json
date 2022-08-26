@@ -36,13 +36,13 @@
     "@tldraw/intersect": "2.0.0-alpha.1",
     "@tldraw/vec": "2.0.0-alpha.1",
     "@use-gesture/react": "^10.2.15",
-    "hotkeys-js": "^3.9.4",
+    "hotkeys-js": "^3.9.5",
     "is-plain-object": "^5.0.0",
     "mobx": "^6.6.0",
     "mobx-react-lite": "^3.4.0",
     "mousetrap": "^1.6.5",
-    "uuid": "^8.0.0",
-    "rbush": "^3.0.1"
+    "rbush": "^3.0.1",
+    "uuid": "^8.0.0"
   },
   "peerDependencies": {
     "react": ">=16.8",

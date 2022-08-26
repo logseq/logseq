@@ -7,5 +7,4 @@ export class HTMLTool extends TLBoxTool<HTMLShape, Shape, TLReactEventMap> {
   Shape = HTMLShape
 }
 
-export { }
-
+export {}

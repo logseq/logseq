@@ -3,10 +3,6 @@ const iconBase64 =
 
 export function LogseqIcon() {
   return (
-    <img
-      className='logseq-img-icon'
-      src={'data:image/png;base64,' + iconBase64}
-      alt="logseq"
-    />
+    <img className="logseq-img-icon" src={'data:image/png;base64,' + iconBase64} alt="logseq" />
   )
 }

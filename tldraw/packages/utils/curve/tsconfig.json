@@ -3,7 +3,7 @@
   "include": ["src"],
   "exclude": ["node_modules", "dist", "docs"],
   "compilerOptions": {
-    "outDir": "./dist/types",
+    "outDir": "./dist/types"
   },
   "typedocOptions": {
     "entryPoints": ["src/index.ts"],

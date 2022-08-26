@@ -6,7 +6,7 @@
     "paths": {
       "@tldraw/core": ["../../../core/src/*"],
       "@tldraw/react": ["../../../react/src/*"],
-      "@tldraw/vec": ["../../../utils/vec/src/*"], 
+      "@tldraw/vec": ["../../../utils/vec/src/*"],
       "@tldraw/intersect": ["../../../utils/intersect/src/*"]
     }
   },
