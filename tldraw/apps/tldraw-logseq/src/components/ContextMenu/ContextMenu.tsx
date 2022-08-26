@@ -25,10 +25,14 @@ export const ContextMenu = observer(function ContextMenu({ children }: ContextMe
       asChild
       tabIndex={-1}>
         <div>
-          <ReactContextMenu.Item className="tl-context-menu-button" onClick={app.copy}>
-            Copy
-            <div className="tl-context-menu-right-slot">⌘+C</div>
-          </ReactContextMenu.Item>
+          {app.selectedShapes && app.selectedShapes.size > 0 && (
+            <>
+              <ReactContextMenu.Item className="tl-context-menu-button" onClick={app.copy}>
+                Copy
+                <div className="tl-context-menu-right-slot">⌘+C</div>
+              </ReactContextMenu.Item>
+            </>
+          )}
           <ReactContextMenu.Item className="tl-context-menu-button" onClick={app.paste}>
             Paste
             <div className="tl-context-menu-right-slot">⌘+V</div>
