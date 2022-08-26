@@ -33,13 +33,11 @@
 }
 
 .tl-context-menu-button {
+  @apply flex items-center px-4 py-1 text-sm !important;
+
   min-width: 220px;
   all: unset;
-  font-size: 13px;
   line-height: 1;
-  border-radius: 3px;
-  display: flex;
-  align-items: center;
   height: 25px;
   padding: 0 5px;
   position: relative;
@@ -48,24 +46,20 @@
 
   &:hover,
   &:focus {
-    background-color: var(--ls-menu-hover-color);
+    background-color: var(--ls-secondary-background-color) !important;
   }
 }
 
 .tl-context-menu {
-  @apply relative flex bottom-0 flex border-0;
+  @apply relative py-2 flex bottom-0 flex border-0 rounded shadow-lg;
 
   opacity: 100%;
-  border-radius: 6px;
-  padding: 5px;
-  overflow: hidden;
   user-select: none;
   flex-direction: column;
   z-index: 180;
   min-width: 180;
   pointer-events: 'all';
   background: var(--ls-primary-background-color);
-  box-shadow: var(--shadow-medium);
 }
 
 .tl-context-menu-right-slot {
@@ -112,7 +106,7 @@
 .tl-zoom-menu-dropdown-menu-button {
   @apply py-2 rounded shadow-lg;
   opacity: 100%;
-  background-color:  var(--ls-primary-background-color);
+  background-color: var(--ls-primary-background-color);
 
 
   > span svg {
@@ -130,7 +124,7 @@
 
   &:hover {
     cursor: pointer;
-    background-color: var(--ls-menu-hover-color);
+    background-color: var(--color-hover);
   }
 }
 
