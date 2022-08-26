@@ -1,5 +1,7 @@
-import { TLDotShape, TLApp, TLShape, TLToolState } from '~lib'
-import type { TLEventMap, TLStateEvents } from '~types'
+import type { TLEventMap, TLStateEvents } from '../../../../types'
+import type { TLShape, TLDotShape } from '../../../shapes'
+import type { TLApp } from '../../../TLApp'
+import { TLToolState } from '../../../TLToolState'
 import type { TLDotTool } from '../TLDotTool'
 
 export class IdleState<

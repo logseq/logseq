@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import type { TLApp, TLShape } from '~lib'
-import type { TLEventMap, TLStateEvents } from '~types'
+import type { TLEventMap, TLStateEvents } from '../types'
+import type { TLShape } from './shapes'
+import type { TLApp } from './TLApp'
 import { TLState } from './TLState'
 
 export interface TLToolConstructor<

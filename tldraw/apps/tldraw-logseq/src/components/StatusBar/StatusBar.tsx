@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { observer } from 'mobx-react-lite'
 import { useApp } from '@tldraw/react'
-import type { Shape } from '~lib'
+import type { Shape } from '../../lib'
 
 export const StatusBar = observer(function StatusBar() {
   const app = useApp<Shape>()

@@ -1,9 +1,9 @@
 import * as React from 'react'
 import { TLTargetType } from '@tldraw/core'
-import { useRendererContext } from '~hooks'
-import type { TLReactShape } from '~lib'
-import type { TLReactCustomEvents } from '~types'
-import { DOUBLE_CLICK_DURATION } from '~constants'
+import { useRendererContext } from '.'
+import { DOUBLE_CLICK_DURATION } from '../constants'
+import type { TLReactShape } from '../lib'
+import type { TLReactCustomEvents } from '../types'
 
 export function useShapeEvents<S extends TLReactShape>(shape: S) {
   const { inputs, callbacks } = useRendererContext()

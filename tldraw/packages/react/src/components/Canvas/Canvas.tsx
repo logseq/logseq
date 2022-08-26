@@ -1,32 +1,30 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { TLAsset, TLBinding, TLBounds, TLCursor, TLTheme } from '@tldraw/core'
+import { EMPTY_OBJECT, TLAsset, TLBinding, TLBounds, TLCursor, TLTheme } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
+import { NOOP } from '../../constants'
 import {
-  Container,
-  ContextBarContainer,
-  HTMLLayer,
-  Indicator,
-  SelectionDetailContainer,
-  Shape,
-  SVGContainer,
-} from '~components'
-import { DirectionIndicator } from '~components/ui/DirectionIndicator'
-import { EMPTY_OBJECT, NOOP } from '~constants'
-import {
-  useApp,
-  useCanvasEvents,
-  useCursor,
-  useGestureEvents,
-  usePreventNavigation,
   useRendererContext,
-  useResizeObserver,
+  useApp,
   useStylesheet,
+  usePreventNavigation,
+  useResizeObserver,
+  useGestureEvents,
+  useCursor,
   useZoom,
-} from '~hooks'
-import { useKeyboardEvents } from '~hooks/useKeyboardEvents'
-import type { TLReactShape } from '~lib'
+  useCanvasEvents,
+} from '../../hooks'
+import { useKeyboardEvents } from '../../hooks/useKeyboardEvents'
+import type { TLReactShape } from '../../lib'
+import { Container } from '../Container'
+import { ContextBarContainer } from '../ContextBarContainer'
+import { HTMLLayer } from '../HTMLLayer'
+import { Indicator } from '../Indicator'
+import { SelectionDetailContainer } from '../SelectionDetailContainer'
+import { Shape } from '../Shape'
+import { SVGContainer } from '../SVGContainer'
+import { DirectionIndicator } from '../ui'
 
 export interface TLCanvasProps<S extends TLReactShape> {
   id: string

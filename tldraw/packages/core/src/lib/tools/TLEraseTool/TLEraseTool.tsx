@@ -1,6 +1,8 @@
+import { type TLEventMap, TLCursor } from '../../../types'
+import type { TLShape } from '../../shapes'
+import type { TLApp } from '../../TLApp'
+import { TLTool } from '../../TLTool'
 import { IdleState, PointingState, ErasingState } from './states'
-import { TLTool, TLApp, TLShape } from '~lib'
-import { TLEventMap, TLCursor } from '~types'
 
 export abstract class TLEraseTool<
   S extends TLShape = TLShape,

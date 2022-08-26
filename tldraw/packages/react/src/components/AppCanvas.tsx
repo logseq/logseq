@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as React from 'react'
 import { observer } from 'mobx-react-lite'
-import type { TLReactShape } from '~lib'
-import { useApp } from '~hooks'
+import { useApp } from '../hooks'
+import type { TLReactShape } from '../lib'
 import type { AppProps } from './App'
 import { Renderer } from './Renderer'
 

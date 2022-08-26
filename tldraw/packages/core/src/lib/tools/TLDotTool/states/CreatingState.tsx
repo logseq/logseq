@@ -1,9 +1,11 @@
 import Vec from '@tldraw/vec'
-import { TLApp, TLShape, TLToolState, TLDotShape } from '~lib'
-import { uniqueId } from '~utils'
-import type { TLEventMap, TLStateEvents } from '~types'
 import type { TLDotTool } from '../TLDotTool'
 import { transaction } from 'mobx'
+import type { TLEventMap, TLStateEvents } from '../../../../types'
+import { uniqueId } from '../../../../utils'
+import type { TLDotShape, TLShape } from '../../../shapes'
+import type { TLApp } from '../../../TLApp'
+import { TLToolState } from '../../../TLToolState'
 
 export class CreatingState<
   S extends TLDotShape,

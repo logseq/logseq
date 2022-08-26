@@ -1,6 +1,8 @@
+import { type TLEventMap, TLCursor } from '../../../types'
+import type { TLDrawShape, TLShape, TLDrawShapeProps } from '../../shapes'
+import type { TLApp } from '../../TLApp'
+import { TLTool } from '../../TLTool'
 import { IdleState, CreatingState } from './states'
-import { TLTool, TLApp, TLShape, TLDrawShape, TLDrawShapeProps } from '~lib'
-import { TLCursor, TLEventMap } from '~types'
 
 export abstract class TLDrawTool<
   T extends TLDrawShape = TLDrawShape,

@@ -1,40 +1,34 @@
 /* eslint-disable @typescript-eslint/no-extra-semi */
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import type { TLBounds } from '@tldraw/intersect'
 import { Vec } from '@tldraw/vec'
 import { action, computed, makeObservable, observable, transaction } from 'mobx'
-import { GRID_SIZE } from '~constants'
-
-import {
-  TLInputs,
-  TLMoveTool,
-  TLPage,
-  TLPageModel,
-  TLSelectTool,
-  TLShape,
-  TLShapeConstructor,
-  TLShapeModel,
-  TLToolConstructor,
-  TLViewport,
-} from '~lib'
-import { TLApi } from '~lib/TLApi'
-import { TLCursors } from '~lib/TLCursors'
+import { GRID_SIZE } from '../../constants'
 import type {
   TLAsset,
-  TLBounds,
-  TLCallback,
   TLEventMap,
-  TLEvents,
   TLShortcut,
-  TLStateEvents,
   TLSubscription,
-  TLSubscriptionEventInfo,
   TLSubscriptionEventName,
-} from '~types'
-import { BoundsUtils, KeyUtils } from '~utils'
+  TLCallback,
+  TLSubscriptionEventInfo,
+  TLStateEvents,
+  TLEvents,
+} from '../../types'
+import { KeyUtils, BoundsUtils } from '../../utils'
+import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
+import { TLApi } from '../TLApi'
+import { TLCursors } from '../TLCursors'
+
 import { TLHistory } from '../TLHistory'
+import { TLInputs } from '../TLInputs'
+import { type TLPageModel, TLPage } from '../TLPage'
 import { TLSettings } from '../TLSettings'
 import { TLRootState } from '../TLState'
+import type { TLToolConstructor } from '../TLTool'
+import { TLViewport } from '../TLViewport'
+import { TLSelectTool, TLMoveTool } from '../tools'
 
 export interface TLDocumentModel<S extends TLShape = TLShape, A extends TLAsset = TLAsset> {
   currentPageId: string

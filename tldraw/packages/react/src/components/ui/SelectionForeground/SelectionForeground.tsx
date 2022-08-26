@@ -1,9 +1,9 @@
 import { TLResizeCorner, TLResizeEdge, TLRotateCorner } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
-import { SVGContainer } from '~components'
-import { useApp } from '~hooks'
-import type { TLReactShape } from '~lib'
-import type { TLSelectionComponentProps } from '~types'
+import { useApp } from '../../../hooks'
+import type { TLReactShape } from '../../../lib'
+import type { TLSelectionComponentProps } from '../../../types'
+import { SVGContainer } from '../../SVGContainer'
 import { CornerHandle, EdgeHandle } from './handles'
 import { RotateCornerHandle } from './handles/RotateCornerHandle'
 

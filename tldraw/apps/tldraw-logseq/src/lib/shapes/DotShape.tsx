@@ -1,4 +1,3 @@
-import * as React from 'react'
 import { TLDotShape, TLDotShapeProps } from '@tldraw/core'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'

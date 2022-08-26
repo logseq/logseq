@@ -3,8 +3,6 @@
   "exclude": ["node_modules", "dist", "docs"],
   "compilerOptions": {
     "outDir": "./dist/types",
-    "rootDir": "src",
-    "baseUrl": "."
   },
   "references": [{ "path": "../vec" }],
   "typedocOptions": {

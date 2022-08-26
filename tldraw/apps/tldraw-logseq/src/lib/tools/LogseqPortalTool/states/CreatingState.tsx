@@ -2,7 +2,7 @@ import { TLApp, TLTargetType, TLToolState, uniqueId } from '@tldraw/core'
 import type { TLReactEventMap, TLReactEvents } from '@tldraw/react'
 import Vec from '@tldraw/vec'
 import { transaction } from 'mobx'
-import { LogseqPortalShape, Shape } from '~lib/shapes'
+import { type Shape, LogseqPortalShape } from '../../../shapes'
 import type { LogseqPortalTool } from '../LogseqPortalTool'
 
 export class CreatingState extends TLToolState<

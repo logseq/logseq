@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import * as React from 'react'
 import { TLTargetType } from '@tldraw/core'
-import { useRendererContext } from '~hooks'
-import type { TLReactShape } from '~lib'
-import type { TLReactCustomEvents } from '~types'
+import type { TLReactShape } from '../lib'
+import type { TLReactCustomEvents } from '../types'
+import { useRendererContext } from './useRendererContext'
 
 export function useHandleEvents<S extends TLReactShape = TLReactShape>(shape: S, id: string) {
   const { inputs, callbacks } = useRendererContext()

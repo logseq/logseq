@@ -1,6 +1,10 @@
-import { TLApp, TLBush, TLSelectTool, TLToolState, TLShape } from '~lib'
-import { BoundsUtils } from '~utils'
-import type { TLEventMap, TLEvents } from '~types'
+import type { TLEventMap, TLEvents } from "../../../../types"
+import { BoundsUtils } from "../../../../utils"
+import type { TLShape } from "../../../shapes"
+import type { TLApp } from "../../../TLApp"
+import { TLBush } from "../../../TLBush"
+import { TLToolState } from "../../../TLToolState"
+import type { TLSelectTool } from "../TLSelectTool"
 
 export class BrushingState<
   S extends TLShape,

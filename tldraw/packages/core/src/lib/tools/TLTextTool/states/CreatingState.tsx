@@ -1,10 +1,12 @@
 import type { TLTextTool } from '../TLTextTool'
-import { TLShape, TLApp, TLToolState, TLTextShape } from '~lib'
 import Vec from '@tldraw/vec'
-import { TLCursor, TLEventMap, TLTargetType } from '~types'
 import type { TLBounds } from '@tldraw/intersect'
-import { uniqueId } from '~utils'
 import { transaction } from 'mobx'
+import { type TLEventMap, TLCursor, TLTargetType } from '../../../../types'
+import { uniqueId } from '../../../../utils'
+import type { TLTextShape, TLShape } from '../../../shapes'
+import type { TLApp } from '../../../TLApp'
+import { TLToolState } from '../../../TLToolState'
 
 export class CreatingState<
   T extends TLTextShape,

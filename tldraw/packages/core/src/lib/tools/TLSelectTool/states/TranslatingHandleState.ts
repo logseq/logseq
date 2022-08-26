@@ -1,9 +1,11 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { toJS } from 'mobx'
-import type { TLApp, TLLineShape, TLSelectTool, TLShape } from '~lib'
-import { TLBaseLineBindingState } from '~lib/TLBaseLineBindingState'
-import { TLCursor, TLEventHandleInfo, TLEventMap } from '~types'
-import { uniqueId } from '~utils'
+import { type TLEventMap, TLCursor, type TLEventHandleInfo } from '../../../../types'
+import { uniqueId } from '../../../../utils'
+import type { TLShape, TLLineShape } from '../../../shapes'
+import type { TLApp } from '../../../TLApp'
+import { TLBaseLineBindingState } from '../../../TLBaseLineBindingState'
+import type { TLSelectTool } from '../TLSelectTool'
 
 export class TranslatingHandleState<
   S extends TLShape,

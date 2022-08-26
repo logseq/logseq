@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { TLEventInfo } from './types'
-import type { TLShape } from '~lib'
 import type { TLEventMap } from './TLEventMap'
+import type { TLShape } from '../lib';
 
 export interface TLEvents<
   S extends TLShape = TLShape,

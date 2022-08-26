@@ -1,6 +1,9 @@
-import { TLShape, TLApp, TLSelectTool, TLToolState, TLBoxShape } from '~lib'
-import { TLEventMap, TLEvents, TLShortcut, TLTargetType } from '~types'
-import { PointUtils } from '~utils'
+import { type TLEventMap, type TLEvents, TLTargetType } from '../../../../types'
+import { PointUtils } from '../../../../utils'
+import type { TLShape } from '../../../shapes'
+import type { TLApp } from '../../../TLApp'
+import { TLToolState } from '../../../TLToolState'
+import type { TLSelectTool } from '../TLSelectTool'
 
 export class IdleState<
   S extends TLShape,

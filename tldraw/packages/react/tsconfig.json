@@ -3,11 +3,6 @@
   "exclude": ["node_modules", "dist", "docs"],
   "compilerOptions": {
     "outDir": "./dist/types",
-    "rootDir": "src",
-    "baseUrl": ".",
-    "paths": {
-      "~*": ["./src/*"]
-    },
     "experimentalDecorators": true,
     "useDefineForClassFields": true
   },

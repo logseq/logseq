@@ -1,7 +1,6 @@
-import * as React from 'react'
-import type { TLReactShape } from '~lib'
-import { Canvas, RendererContext, TLCanvasProps } from '~components'
-import type { TLRendererContextProps } from './RendererContext'
+import type { TLReactShape } from '../../lib'
+import { type TLCanvasProps, Canvas } from '../Canvas'
+import { RendererContext, TLRendererContextProps } from './RendererContext'
 
 export interface TLRendererProps<S extends TLReactShape>
   extends TLRendererContextProps<S>,

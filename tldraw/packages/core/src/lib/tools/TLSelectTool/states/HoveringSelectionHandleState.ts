@@ -1,15 +1,19 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { CURSORS } from '~constants'
-import { TLApp, TLSelectTool, TLShape, TLToolState } from '~lib'
+
+import { CURSORS } from '../../../../constants'
 import {
-  TLEvents,
-  TLSelectionHandle,
-  TLEventMap,
+  type TLEventMap,
+  type TLSelectionHandle,
+  type TLEventSelectionInfo,
+  type TLEvents,
   TLTargetType,
-  TLEventSelectionInfo,
   TLRotateCorner,
-} from '~types'
-import { getFirstFromSet } from '~utils'
+} from '../../../../types'
+import { getFirstFromSet } from '../../../../utils'
+import type { TLShape } from '../../../shapes'
+import type { TLApp } from '../../../TLApp'
+import { TLToolState } from '../../../TLToolState'
+import type { TLSelectTool } from '../TLSelectTool'
 
 export class HoveringSelectionHandleState<
   S extends TLShape,

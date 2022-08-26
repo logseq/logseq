@@ -1,10 +1,9 @@
 import * as React from 'react'
 import { observer } from 'mobx-react-lite'
-import { useRendererContext } from '~hooks'
 import { BoundsUtils } from '@tldraw/core'
 import type { TLBounds } from '@tldraw/core'
-import { useCounterScaledPosition } from '~hooks'
-import type { TLReactShape } from '~lib'
+import { useRendererContext, useCounterScaledPosition } from '../../hooks'
+import type { TLReactShape } from '../../lib'
 
 export interface TLSelectionDetailContainerProps<S extends TLReactShape> {
   hidden: boolean

@@ -2,8 +2,8 @@ import { TLMoveTool, TLSelectTool } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
-import { Button } from '~components/Button'
-import { LogseqIcon, TablerIcon } from '~components/icons'
+import { Button } from '../Button'
+import { TablerIcon, LogseqIcon } from '../icons'
 
 interface ToolButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   id: string
@@ -97,7 +97,11 @@ export const PrimaryTools = observer(function PrimaryTools() {
     <div className="tl-primary-tools">
       <div className="tl-tools-floating-panel" data-tool-locked={app.settings.isToolLocked}>
         <ToolButton title="Select" id="select" icon="select-cursor" />
-        <ToolButton title="Move" id="move" icon={app.isIn('move.panning') ? "hand-grab" : "hand-stop" } />
+        <ToolButton
+          title="Move"
+          id="move"
+          icon={app.isIn('move.panning') ? 'hand-grab' : 'hand-stop'}
+        />
         <ToolButton title="Draw" id="pencil" icon="ballpen" />
         <ToolButton title="Highlight" id="highlighter" icon="highlight" />
         <ToolButton title="Eraser" id="erase" icon="eraser" />

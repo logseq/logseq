@@ -1,6 +1,8 @@
 import Vec from '@tldraw/vec'
-import { TLApp, TLShape, TLToolState } from '~lib'
-import { TLCursor, TLEventMap, TLStateEvents } from '~types'
+import { type TLEventMap, TLCursor, type TLStateEvents } from '../../../../types'
+import type { TLShape } from '../../../shapes'
+import type { TLApp } from '../../../TLApp'
+import { TLToolState } from '../../../TLToolState'
 import type { TLMoveTool } from '../TLMoveTool'
 
 export class PanningState<

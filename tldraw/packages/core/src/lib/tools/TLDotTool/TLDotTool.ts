@@ -1,5 +1,7 @@
-import { TLApp, TLDotShape, TLShape, TLTool } from '~lib'
-import { TLCursor, TLEventMap } from '~types'
+import { type TLEventMap, TLCursor } from '../../../types'
+import type { TLDotShape, TLShape } from '../../shapes'
+import type { TLApp } from '../../TLApp'
+import { TLTool } from '../../TLTool'
 import { CreatingState, IdleState } from './states'
 
 export abstract class TLDotTool<

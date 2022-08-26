@@ -1,6 +1,9 @@
 import { transaction } from 'mobx'
-import { TLApp, TLSelectTool, TLShape, TLToolState } from '~lib'
-import { TLEvents, TLEventMap, TLTargetType } from '~types'
+import type { TLEventMap, TLEvents, TLTargetType } from '../../../../types'
+import type { TLShape } from '../../../shapes'
+import type { TLApp } from '../../../TLApp'
+import { TLToolState } from '../../../TLToolState'
+import type { TLSelectTool } from '../TLSelectTool'
 
 export class EditingShapeState<
   S extends TLShape,

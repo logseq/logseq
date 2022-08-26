@@ -1,5 +1,3 @@
-import * as React from 'react'
-
 interface BindingIndicatorProps {
   strokeWidth: number
   size: number[]

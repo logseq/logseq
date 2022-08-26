@@ -1,7 +1,7 @@
 import { Vec } from '@tldraw/vec'
 import { action, computed, makeObservable, observable } from 'mobx'
-import type { TLBounds } from '~types'
-import { FIT_TO_SCREEN_PADDING } from '~constants'
+import { FIT_TO_SCREEN_PADDING } from '../constants'
+import type { TLBounds } from '../types'
 
 export class TLViewport {
   constructor() {

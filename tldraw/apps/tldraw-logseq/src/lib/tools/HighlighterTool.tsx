@@ -1,6 +1,6 @@
 import { TLDrawTool } from '@tldraw/core'
 import type { TLReactEventMap } from '@tldraw/react'
-import { HighlighterShape, Shape } from '~lib'
+import { HighlighterShape, type Shape } from '../shapes'
 
 export class HighlighterTool extends TLDrawTool<HighlighterShape, Shape, TLReactEventMap> {
   static id = 'highlighter'

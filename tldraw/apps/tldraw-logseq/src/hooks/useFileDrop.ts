@@ -1,8 +1,7 @@
-import { fileToBase64, getSizeFromSrc, TLAsset, uniqueId } from '@tldraw/core'
 import type { TLReactCallbacks } from '@tldraw/react'
 import * as React from 'react'
-import type { Shape } from '~lib'
-import type { LogseqContextValue } from '~lib/logseq-context'
+import type { Shape } from '../lib'
+import type { LogseqContextValue } from '../lib/logseq-context'
 import { usePaste } from './usePaste'
 
 export function useFileDrop(context: LogseqContextValue) {

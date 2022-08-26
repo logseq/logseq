@@ -1,5 +1,5 @@
 import { action, makeObservable, observable } from 'mobx'
-import { TLCursor } from '~types/TLCursor'
+import { TLCursor } from '../types'
 
 export class TLCursors {
   constructor() {

@@ -1,7 +1,7 @@
-import * as React from 'react'
 import { observer } from 'mobx-react-lite'
-import { Container, SVGContainer } from '~components'
-import type { TLBrushProps } from '~types/component-props'
+import type { TLBrushProps } from '../../../types'
+import { Container } from '../../Container'
+import { SVGContainer } from '../../SVGContainer'
 
 export const Brush = observer(function Brush({ bounds }: TLBrushProps) {
   return (

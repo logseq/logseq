@@ -1,6 +1,6 @@
 import type { TLBounds } from '@tldraw/intersect'
 import { makeObservable } from 'mobx'
-import { BoundsUtils } from '~utils'
+import { BoundsUtils } from '../../../utils'
 import { TLResizeInfo, TLShape, TLShapeProps } from '../TLShape'
 
 export interface TLBoxShapeProps extends TLShapeProps {

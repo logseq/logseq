@@ -1,4 +1,3 @@
-import React from 'react'
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'

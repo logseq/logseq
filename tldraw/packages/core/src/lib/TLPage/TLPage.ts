@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { intersectRayBounds } from '@tldraw/intersect'
+import { intersectRayBounds, TLBounds } from '@tldraw/intersect'
 import Vec from '@tldraw/vec'
 import { action, computed, makeObservable, observable, reaction, toJS } from 'mobx'
-import { BINDING_DISTANCE } from '~constants'
-import type { TLApp, TLShape, TLShapeModel } from '~lib'
-import type { TLLineShape } from '~lib/shapes'
-import { TLBinding, TLBounds, TLEventMap, TLHandle, TLResizeCorner } from '~types'
-import { BoundsUtils, deepCopy, deepEqual, PointUtils } from '~utils'
+import { BINDING_DISTANCE } from '../../constants'
+import { type TLBinding, type TLEventMap, TLResizeCorner, type TLHandle } from '../../types'
+import { deepCopy, BoundsUtils, deepEqual, PointUtils } from '../../utils'
+import type { TLShape, TLShapeModel, TLLineShape } from '../shapes'
+import type { TLApp } from '../TLApp'
 
 export interface TLPageModel<S extends TLShape = TLShape> {
   id: string

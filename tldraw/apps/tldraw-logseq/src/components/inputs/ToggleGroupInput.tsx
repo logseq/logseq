@@ -1,5 +1,5 @@
 import * as ToggleGroup from '@radix-ui/react-toggle-group'
-import { TablerIcon } from '~components/icons'
+import { TablerIcon } from '../icons'
 
 export interface ToggleGroupInputOption {
   value: string

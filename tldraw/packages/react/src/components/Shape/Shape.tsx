@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { TLAsset } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
-import { Container } from '~components'
-import { useShapeEvents } from '~hooks/useShapeEvents'
-import type { TLReactShape } from '~lib'
+import { useShapeEvents } from '../../hooks/useShapeEvents'
+import type { TLReactShape } from '../../lib'
+import { Container } from '../Container'
 
 interface ShapeProps {
   shape: TLReactShape

@@ -1,14 +1,13 @@
 /* eslint-disable @typescript-eslint/no-extra-semi */
 import { Vec } from '@tldraw/vec'
-
 import {
-  TLBounds,
+  type TLBounds,
   TLResizeCorner,
   TLResizeEdge,
-  TLBoundsWithCenter,
-  TLSnap,
+  type TLBoundsWithCenter,
   TLSnapPoints,
-} from '~types'
+  type TLSnap,
+} from '../types'
 
 export class BoundsUtils {
   static getRectangleSides(point: number[], size: number[], rotation = 0): [string, number[][]][] {

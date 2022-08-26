@@ -1,9 +1,11 @@
 import type { TLBoxTool } from '../TLBoxTool'
-import { TLShape, TLApp, TLToolState, TLBoxShape } from '~lib'
 import Vec from '@tldraw/vec'
-import { TLCursor, TLEventMap, TLResizeCorner, TLStateEvents } from '~types'
 import type { TLBounds } from '@tldraw/intersect'
-import { BoundsUtils, uniqueId } from '~utils'
+import { type TLEventMap, TLCursor, type TLStateEvents, TLResizeCorner } from '../../../../types'
+import { uniqueId, BoundsUtils } from '../../../../utils'
+import type { TLBoxShape, TLShape } from '../../../shapes'
+import type { TLApp } from '../../../TLApp'
+import { TLToolState } from '../../../TLToolState'
 
 export class CreatingState<
   T extends TLBoxShape,

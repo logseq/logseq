@@ -1,8 +1,9 @@
 import { toJS } from 'mobx'
-import type { TLApp, TLLineShape, TLShape } from '~lib'
-import { TLBaseLineBindingState } from '~lib/TLBaseLineBindingState'
-import type { TLEventMap } from '~types'
-import { PointUtils, uniqueId } from '~utils'
+import type { TLEventMap } from '../../../../types'
+import { uniqueId, PointUtils } from '../../../../utils'
+import type { TLShape, TLLineShape } from '../../../shapes'
+import type { TLApp } from '../../../TLApp'
+import { TLBaseLineBindingState } from '../../../TLBaseLineBindingState'
 import type { TLLineTool } from '../TLLineTool'
 
 export class CreatingState<

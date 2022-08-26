@@ -1,7 +1,7 @@
-import type { TLShape } from '~lib'
 import type { TLEventHandlers } from './TLEventHandlers'
 import type { TLEvents } from './TLEvents'
 import type { TLEventMap } from './TLEventMap'
+import type { TLShape } from '../lib'
 
 export interface TLStateEvents<S extends TLShape = TLShape, K extends TLEventMap = TLEventMap>
   extends TLEventHandlers<S, K> {

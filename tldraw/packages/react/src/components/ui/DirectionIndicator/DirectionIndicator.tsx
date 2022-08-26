@@ -4,9 +4,9 @@ import { BoundsUtils } from '@tldraw/core'
 import { intersectRayLineSegment } from '@tldraw/intersect'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
-import { useRendererContext } from '~hooks'
-import type { TLReactShape } from '~lib'
-import type { TLDirectionIndicatorProps } from '~types'
+import { useRendererContext } from '../../../hooks'
+import type { TLReactShape } from '../../../lib'
+import type { TLDirectionIndicatorProps } from '../../../types'
 
 export const DirectionIndicator = observer(function DirectionIndicator<
   S extends TLReactShape = TLReactShape

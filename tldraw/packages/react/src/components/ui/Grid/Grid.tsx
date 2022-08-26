@@ -1,7 +1,7 @@
 import { modulate } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
-import { useRendererContext } from '~hooks'
-import type { TLGridProps } from '~types/component-props'
+import { useRendererContext } from '../../../hooks'
+import type { TLGridProps } from '../../../types'
 
 const STEPS = [
   [-1, 0.15, 64],

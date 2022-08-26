@@ -1,8 +1,7 @@
 import { makeObservable } from 'mobx'
-import type { TLResizeInfo } from '~lib'
-import type { TLAsset, TLBounds } from '~types'
-import type { TLResetBoundsInfo } from '..'
+import type { TLAsset } from '../../../types'
 import { TLBoxShape, TLBoxShapeProps } from '../TLBoxShape'
+import type { TLResetBoundsInfo, TLResizeInfo } from '../TLShape'
 
 export interface TLImageAsset extends TLAsset {
   type: 'image'

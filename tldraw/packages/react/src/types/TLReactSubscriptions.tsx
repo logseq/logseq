@@ -1,5 +1,5 @@
 import type { TLSubscriptionEventInfo, TLSubscriptionEventName } from '@tldraw/core'
-import type { TLReactShape } from '~lib'
+import type { TLReactShape } from '../lib'
 import type { TLReactApp } from '../lib/TLReactApp'
 
 export type TLReactSubscription<

@@ -1,7 +1,7 @@
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
-import { useBoundsEvents } from '~hooks/useBoundsEvents'
 import type { TLRotateCorner } from '@tldraw/core'
+import { useBoundsEvents } from '../../../../hooks'
 
 interface RotateCornerHandleProps {
   cx: number

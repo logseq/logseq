@@ -1,9 +1,9 @@
 import * as React from 'react'
-import { useRendererContext } from '~hooks'
 import { TLTargetType } from '@tldraw/core'
-import type { TLReactCustomEvents } from '~types'
 import { useApp } from './useApp'
-import { DOUBLE_CLICK_DURATION } from '~constants'
+import { DOUBLE_CLICK_DURATION } from '../constants'
+import type { TLReactCustomEvents } from '../types'
+import { useRendererContext } from './useRendererContext'
 
 export function useCanvasEvents() {
   const app = useApp()

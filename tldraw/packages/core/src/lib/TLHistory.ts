@@ -1,7 +1,9 @@
 import { computed, makeObservable, transaction } from 'mobx'
-import { TLApp, TLDocumentModel, TLPage, TLShape } from '~lib'
-import type { TLEventMap } from '~types'
-import { deepEqual } from '~utils'
+import type { TLEventMap } from '../types'
+import { deepEqual } from '../utils'
+import type { TLShape } from './shapes'
+import type { TLApp, TLDocumentModel } from './TLApp'
+import { TLPage } from './TLPage'
 
 export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEventMap> {
   constructor(app: TLApp<S, K>) {

@@ -1,6 +1,9 @@
 import { Vec } from '@tldraw/vec'
-import { TLApp, TLSelectTool, TLShape, TLToolState } from '~lib'
-import type { TLEventInfo, TLEventMap, TLEvents } from '~types'
+import type { TLEventMap, TLEventInfo, TLEvents } from '../../../../types';
+import type { TLShape } from '../../../shapes';
+import type { TLApp } from '../../../TLApp';
+import { TLToolState } from '../../../TLToolState';
+import type { TLSelectTool } from '../TLSelectTool';
 
 type GestureInfo<
   S extends TLShape,

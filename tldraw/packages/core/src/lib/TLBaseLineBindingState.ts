@@ -1,8 +1,11 @@
 import Vec from '@tldraw/vec'
-import { toJS, transaction } from 'mobx'
-import { TLApp, TLLineShape, TLLineShapeProps, TLShape, TLTool, TLToolState } from '~lib'
-import type { TLBinding, TLEventMap, TLHandle, TLStateEvents } from '~types'
-import { deepMerge, GeomUtils } from '~utils'
+import { transaction } from 'mobx'
+import type { TLBinding, TLEventMap, TLHandle, TLStateEvents } from '../types'
+import { deepMerge, GeomUtils } from '../utils'
+import type { TLLineShape, TLLineShapeProps, TLShape } from './shapes'
+import type { TLApp } from './TLApp'
+import type { TLTool } from './TLTool'
+import { TLToolState } from './TLToolState'
 
 export class TLBaseLineBindingState<
   S extends TLShape,
@@ -48,7 +51,6 @@ export class TLBaseLineBindingState<
     }
 
     const nextPoint = Vec.add(handles[handleId].point, delta)
-
 
     const handleChanges = {
       [handleId]: {

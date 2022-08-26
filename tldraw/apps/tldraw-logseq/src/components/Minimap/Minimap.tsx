@@ -3,8 +3,8 @@ import { useApp, useMinimapEvents } from '@tldraw/react'
 import { reaction } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import React from 'react'
-import { TablerIcon } from '~components/icons'
-import { PreviewManager } from '~lib'
+import { PreviewManager } from '../../lib'
+import { TablerIcon } from '../icons'
 
 export const Minimap = observer(function Minimap() {
   const app = useApp()

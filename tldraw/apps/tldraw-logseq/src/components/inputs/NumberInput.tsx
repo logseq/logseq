@@ -1,5 +1,3 @@
-import * as React from 'react'
-
 interface NumberInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string
 }

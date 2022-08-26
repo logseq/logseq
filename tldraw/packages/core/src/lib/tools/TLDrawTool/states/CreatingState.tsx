@@ -1,7 +1,9 @@
 import { Vec } from '@tldraw/vec'
-import { TLDrawShape, TLToolState, TLShape, TLApp } from '~lib'
-import type { TLStateEvents, TLEventMap } from '~types'
-import { lerp, PointUtils, uniqueId } from '~utils'
+import type { TLEventMap, TLStateEvents } from '../../../../types'
+import { lerp, uniqueId, PointUtils } from '../../../../utils'
+import type { TLShape, TLDrawShape } from '../../../shapes'
+import type { TLApp } from '../../../TLApp'
+import { TLToolState } from '../../../TLToolState'
 import type { TLDrawTool } from '../TLDrawTool'
 
 export class CreatingState<

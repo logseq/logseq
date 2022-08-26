@@ -1,6 +1,6 @@
 import * as React from 'react'
 import * as Select from '@radix-ui/react-select'
-import { TablerIcon } from '~components/icons'
+import { TablerIcon } from '../icons'
 
 export interface SelectOption {
   value: string

@@ -5,8 +5,8 @@ import Vec from '@tldraw/vec'
 import { action, computed } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
-import { useCameraMovingRef } from '~hooks/useCameraMoving'
-import type { Shape, SizeLevel } from '~lib'
+import type { SizeLevel, Shape } from '.'
+import { useCameraMovingRef } from '../../hooks/useCameraMoving'
 import { withClampedStyles } from './style-props'
 
 export interface HTMLShapeProps extends TLBoxShapeProps {

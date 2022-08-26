@@ -1,6 +1,6 @@
 import * as React from 'react'
-import type { TLAppPropsWithApp, TLAppPropsWithoutApp } from '~components'
-import { TLReactApp, TLReactShape } from '~lib'
+import type { TLAppPropsWithoutApp, TLAppPropsWithApp } from '../components'
+import { type TLReactShape, TLReactApp } from '../lib'
 
 export function useAppSetup<S extends TLReactShape, R extends TLReactApp<S> = TLReactApp<S>>(
   props: TLAppPropsWithoutApp<S, R> | TLAppPropsWithApp<S, R>
