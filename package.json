@@ -8,6 +8,7 @@
         "@playwright/test": "^1.24.2",
         "@tailwindcss/ui": "0.7.2",
         "@types/gulp": "^4.0.7",
+        "axe-playwright": "^1.1.11",
         "cross-env": "^7.0.3",
         "cssnano": "^4.1.10",
         "del": "^6.0.0",

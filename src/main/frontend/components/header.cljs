@@ -26,7 +26,8 @@
 (rum/defc home-button []
   (ui/with-shortcut :go/home "left"
     [:button.button.icon.inline
-     {:on-click #(do
+     {:title "Home"
+      :on-click #(do
                    (when (mobile-util/native-iphone?)
                      (state/set-left-sidebar-open! false))
                    (route-handler/redirect-to-home!))}
@@ -131,7 +132,8 @@
   [{:keys [on-click]}]
   (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
     [:button.#left-menu.cp__header-left-menu.button.icon
-     {:on-click on-click}
+     {:title "Toggle left menu"
+      :on-click on-click}
       (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]))
 
 (rum/defc dropdown-menu < rum/reactive
@@ -142,7 +144,8 @@
     (ui/dropdown-with-links
      (fn [{:keys [toggle-fn]}]
        [:button.button.icon
-        {:on-click toggle-fn}
+        {:title "More"
+         :on-click toggle-fn}
         (ui/icon "dots" {:style {:fontSize ui/icon-size}})])
      (->>
       [(when (state/enable-editing?)
@@ -249,7 +252,8 @@
          (when current-repo ;; this is for the Search button
            (ui/with-shortcut :go/search "right"
              [:button.button.icon#search-button
-              {:on-click #(do (when (or (mobile-util/native-android?)
+              {:title "Search"
+               :on-click #(do (when (or (mobile-util/native-android?)
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))
                               (state/pub-event! [:go/search]))}

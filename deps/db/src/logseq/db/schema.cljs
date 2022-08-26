@@ -119,6 +119,8 @@
     :block/heading-level
     :block/type
     :block/properties
+    :block/properties-order
+    :block/invalid-properties
     :block/created-at
     :block/updated-at
     :block/warning
@@ -135,5 +137,7 @@
     :block/format
     :block/content
     :block/properties
+    :block/properties-order
+    :block/invalid-properties
     :block/alias
     :block/tags})

@@ -141,12 +141,12 @@
  :default-queries
  {:journals
   [{:title "🔨 NOW"
-    :query [:find (pull ?b [*])
+    :query [:find (pull ?h [*])
             :in $ ?start ?today
             :where
-            [?b :block/marker ?marker]
+            [?h :block/marker ?marker]
             [(contains? #{"NOW" "DOING"} ?marker)]
-            [?b :block/page ?p]
+            [?h :block/page ?p]
             [?p :block/journal? true]
             [?p :block/journal-day ?d]
             [(>= ?d ?start)]
@@ -157,12 +157,12 @@
                                    (get h :block/priority "Z")) result))
     :collapsed? false}
    {:title "📅 NEXT"
-    :query [:find (pull ?b [*])
+    :query [:find (pull ?h [*])
             :in $ ?start ?next
             :where
-            [?b :block/marker ?marker]
+            [?h :block/marker ?marker]
             [(contains? #{"NOW" "LATER" "TODO"} ?marker)]
-            [?b :block/page ?p]
+            [?h :block/page ?p]
             [?p :block/journal? true]
             [?p :block/journal-day ?d]
             [(> ?d ?start)]
@@ -265,4 +265,16 @@
  ;; :quick-capture-templates
  ;; {:text "[[quick capture]] **{time}**: {text} from {url}"
  ;;  :media "[[quick capture]] **{time}**: {url}"}
+
+ ;; dwim (do what I mean) for Enter key when editing.
+ ;; Context-awareness of Enter key makes editing more easily
+ ; :dwim/settings {
+ ;   :admonition&src?  true
+ ;   :markup?          false
+ ;   :block-ref?       true
+ ;   :page-ref?        true
+ ;   :properties?      true
+ ;   :list?            true
+ ; }
+
  }

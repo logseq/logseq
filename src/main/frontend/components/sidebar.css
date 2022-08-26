@@ -25,6 +25,21 @@
   flex: 0 0 100%;
 }
 
+#skip-to-main {
+  @apply fixed p-2 rounded;
+
+  left: 50%;
+  transform: translate(-50%, 0);
+  background-color: var(--ls-secondary-background-color);
+  top: -100px;
+  z-index: 10000;
+  transition: top 0.3s;
+
+  &:focus {
+    top: 20px;
+  }
+}
+
 #left-container {
   @apply flex flex-1 flex-col relative h-screen;
 }
