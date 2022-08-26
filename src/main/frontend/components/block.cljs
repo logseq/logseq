@@ -426,7 +426,7 @@
 (declare page-reference)
 
 (defn open-page-ref
-  [e page-name redirect-page-name page-name-in-block contents-page?]
+  [e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?]
   (util/stop e)
   (cond
     (gobj/get e "shiftKey")
@@ -435,6 +435,9 @@
        (state/get-current-repo)
        (:db/id page-entity)
        :page))
+
+    whiteboard-page?
+    (route-handler/redirect-to-whiteboard! page-name)
 
     (not= redirect-page-name page-name)
     (route-handler/redirect-to-page! redirect-page-name)
@@ -460,29 +463,9 @@
                (:property? config)
                (str " page-property-key"))
       :data-ref page-name
-      :on-mouse-down
-      (fn [e]
-        (util/stop e)
-        (cond
-          (gobj/get e "shiftKey")
-          (when-let [page-entity (db/entity [:block/name redirect-page-name])]
-            (state/sidebar-add-block!
-             (state/get-current-repo)
-             (:db/id page-entity)
-             :page))
-
-          whiteboard-page?
-          (route-handler/redirect-to-whiteboard! page-name)
-
-          (not= redirect-page-name page-name)
-          (route-handler/redirect-to-page! redirect-page-name)
-
-          :else
-          (state/pub-event! [:page/create page-name-in-block]))
-        (when (and contents-page?
-                   (util/mobile?)
-                   (state/get-left-sidebar-open?))
-          (ui-handler/close-left-sidebar!)))}
+      :on-mouse-down (fn [e] (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?))
+      :on-key-up (fn [e] ((when (= (.-key e) "Enter")
+                            (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?))))}
 
      (if (and (coll? children) (seq children))
        (for [child children]
