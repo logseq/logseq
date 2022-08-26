@@ -1508,20 +1508,23 @@
          ":" ":"))
 
 (defn autopair
-  [input-id prefix _format _option]
-  (let [value (get autopair-map prefix)
+  [input-id original-prefix _format {:keys [preserve-prefix?]}]
+  (let [value (get autopair-map original-prefix)
         selected (util/get-selected-text)
         postfix (str selected value)
-        value (str prefix postfix)
+        replacement (if preserve-prefix? postfix (str original-prefix postfix))
         input (gdom/getElement input-id)]
-    (when value
+    (when replacement
       (when-not (string/blank? selected) (reset! *selected-text selected))
-      (let [[prefix _pos] (commands/simple-replace! input-id value selected
-                                                    {:backward-pos (count postfix)
-                                                     :check-fn (fn [new-value prefix-pos]
-                                                                 (when (>= prefix-pos 0)
-                                                                   [(subs new-value prefix-pos (+ prefix-pos 2))
-                                                                    (+ prefix-pos 2)]))})]
+      (let [[prefix _pos]
+            (commands/simple-replace!
+             input-id replacement selected
+             {:backward-pos (count postfix)
+              :check-fn (fn [new-value replacement-start]
+                          (let [prefix-start (if preserve-prefix? (- replacement-start (count original-prefix)) replacement-start)]
+                            (when (>= replacement-start 0)
+                              [(subs new-value prefix-start (+ prefix-start 2))
+                               (+ prefix-start 2)])))})]
         (cond
           (= prefix page-ref/left-brackets)
           (do
@@ -2700,6 +2703,8 @@
                   (= "#" (util/nth-safe value (dec pos)))))
         (state/clear-editor-action!)
 
+        ;; If typing a closing-autocomplete character (other than `), move the cursor right instead of inserting another
+        ;; FIXME: ` should do this too, but without making ``` annoying to type
         (and (contains? (set/difference (set (keys reversed-autopair-map))
                                         #{"`"})
                         key)
@@ -2707,9 +2712,11 @@
         (do (util/stop e)
             (cursor/move-cursor-forward input))
 
-        (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
-        nil
-
+        ;; Note: When text is not selected, autopair handled in `input-handler` instead
+        (and (autopair-when-selected key) (not (string/blank? (util/get-selected-text))))
+        (do (util/stop e)
+            (autopair input-id key format {}))
+        
         (and (not (string/blank? (util/get-selected-text)))
              (contains? keycode/left-square-brackets-keys key))
         (do (autopair input-id "[" format nil)
@@ -2719,10 +2726,6 @@
              (contains? keycode/left-paren-keys key))
         (do (util/stop e)
             (autopair input-id "(" format nil))
-
-        (contains? (set (keys autopair-map)) key)
-        (do (util/stop e)
-            (autopair input-id key format nil))
 
         (and hashtag? (or (zero? pos) (re-matches #"\s" (get value (dec pos)))))
         (do
@@ -2887,6 +2890,21 @@
                                      :code code
                                      :key k
                                      :shift? (.-shiftKey e)}))))))
+
+(defn input-handler
+  [_state format _input input-id]
+  (fn [_e new-text]
+    (let [selection (util/get-selected-text)
+          selection? (not (string/blank? selection))]
+      (cond
+        (autopair-when-selected new-text)
+        nil
+
+        ;; No-selection autopair must be handled after the input event has fired (instead of on keydown),
+        ;; to prevent a bug in iOS keyboard's word autocomplete
+        ;; https://github.com/logseq/logseq/issues/5987
+        (contains? (set (keys autopair-map)) new-text)
+        (autopair input-id new-text format {:preserve-prefix? (not selection?)})))))
 
 (defn editor-on-click!
   [id]

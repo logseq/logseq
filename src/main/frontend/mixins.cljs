@@ -87,6 +87,13 @@
                (when (and all-handler (fn? all-handler))
                  (all-handler e key-code)))))))
 
+(defn on-input
+  ([state all-handler target]
+   (listen state (or target js/window) "input"
+           (fn [e]
+             (let [new-text e.event_.data]
+               (all-handler e new-text))))))
+
 (defn event-mixin
   ([attach-listeners]
    (event-mixin attach-listeners identity))

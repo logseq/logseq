@@ -248,7 +248,7 @@ test('undo and redo after starting an action should not destroy text #6267', asy
 })
 
 test('undo after starting an action should close the action menu #6269', async ({ page, block }) => {
-  for (const [commandTrigger, modalName] of [['/', 'commands'], ['[[', 'page-search']]) {
+  for (const [commandTrigger, expectedText, modalName] of [['/', '/', 'commands'], ['[[', '[[]]', 'page-search']]) {
     await createRandomPage(page)
 
     // Open the action modal
@@ -257,6 +257,7 @@ test('undo after starting an action should close the action menu #6269', async (
     for (const char of commandTrigger) {
       await page.keyboard.type(char)
     }
+    await expect(page.locator('textarea >> nth=0')).toHaveText('text1 ' + expectedText)
     await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
 
     // Undo, removing "/today", and closing the action modal
@@ -272,7 +273,7 @@ test('undo after starting an action should close the action menu #6269', async (
 })
 
 test('#6266 moving cursor outside of brackets should close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
-  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+  for (const [commandTrigger, expectedText, modalName] of [['[[', '[[]]', 'page-search'], ['((', '(())', 'block-search']]) {
     // First, left arrow
     await createRandomPage(page)
 
@@ -281,6 +282,7 @@ test('#6266 moving cursor outside of brackets should close autocomplete menu', a
       await page.keyboard.type(char)
       await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
     }
+    await expect(page.locator('textarea >> nth=0')).toHaveText(expectedText)
     await autocompleteMenu.expectVisible(modalName)
 
     await page.keyboard.press('ArrowLeft')
@@ -308,7 +310,7 @@ test('#6266 moving cursor outside of brackets should close autocomplete menu', a
 
 // Old logic would fail this because it didn't do the check if @search-timeout was set
 test('#6266 moving cursor outside of parens immediately after searching should still close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
-  for (const [commandTrigger, modalName] of [['((', 'block-search']]) {
+  for (const [commandTrigger, expectedText, modalName] of [['((', '(())', 'block-search']]) {
     await createRandomPage(page)
 
     // Open the autocomplete menu
@@ -331,7 +333,7 @@ test('#6266 moving cursor outside of parens immediately after searching should s
 })
 
 test('pressing up and down should NOT close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
-  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+  for (const [commandTrigger, expectedText, modalName] of [['[[', '[[]]', 'page-search'], ['((', '(())', 'block-search']]) {
     await createRandomPage(page)
 
     // Open the autocomplete menu
@@ -356,7 +358,7 @@ test('pressing up and down should NOT close autocomplete menu', async ({ page, b
 })
 
 test('moving cursor inside of brackets should NOT close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
-  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+  for (const [commandTrigger, expectedText, modalName] of [['[[', '[[]]', 'page-search'], ['((', '(())', 'block-search']]) {
     await createRandomPage(page)
 
     // Open the autocomplete menu
@@ -365,6 +367,7 @@ test('moving cursor inside of brackets should NOT close autocomplete menu', asyn
       await page.keyboard.type(char)
       await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
     }
+    await expect(page.locator('textarea >> nth=0')).toHaveText(expectedText)
     await page.waitForTimeout(100)
     if (commandTrigger === '[[') {
       await autocompleteMenu.expectVisible(modalName)
@@ -383,7 +386,7 @@ test('moving cursor inside of brackets should NOT close autocomplete menu', asyn
 
 test('moving cursor inside of brackets when autocomplete menu is closed should NOT open autocomplete menu', async ({ page, block, autocompleteMenu }) => {
   // Note: (( behaves differently and doesn't auto-trigger when typing in it after exiting the search prompt once
-  for (const [commandTrigger, modalName] of [['[[', 'page-search']]) {
+  for (const [commandTrigger, expectedText, modalName] of [['[[', '[[]]', 'page-search']]) {
     await createRandomPage(page)
 
     // Open the autocomplete menu
@@ -392,6 +395,7 @@ test('moving cursor inside of brackets when autocomplete menu is closed should N
       await page.keyboard.type(char)
       await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
     }
+    await expect(page.locator('textarea >> nth=0')).toHaveText(expectedText)
     await autocompleteMenu.expectVisible(modalName)
 
     await block.escapeEditing()
@@ -418,7 +422,7 @@ test('moving cursor inside of brackets when autocomplete menu is closed should N
 })
 
 test('selecting text inside of brackets should NOT close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
-  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+  for (const [commandTrigger, expectedText, modalName] of [['[[', '[[]]', 'page-search'], ['((', '(())', 'block-search']]) {
     await createRandomPage(page)
 
     // Open the autocomplete menu
@@ -428,6 +432,7 @@ test('selecting text inside of brackets should NOT close autocomplete menu', asy
       await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
     }
     await page.waitForTimeout(100)
+    await expect(page.locator('textarea >> nth=0')).toHaveText(expectedText)
     await autocompleteMenu.expectVisible(modalName)
 
     await page.keyboard.type("some page search text")
@@ -442,7 +447,7 @@ test('selecting text inside of brackets should NOT close autocomplete menu', asy
 })
 
 test('pressing backspace and remaining inside of brackets should NOT close autocomplete menu', async ({ page, block, autocompleteMenu }) => {
-  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['((', 'block-search']]) {
+  for (const [commandTrigger, expectedText, modalName] of [['[[', '[[]]', 'page-search'], ['((', '(())', 'block-search']]) {
     await createRandomPage(page)
 
     // Open the autocomplete menu
@@ -452,6 +457,7 @@ test('pressing backspace and remaining inside of brackets should NOT close autoc
       await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
     }
     await page.waitForTimeout(100)
+    await expect(page.locator('textarea >> nth=0')).toHaveText(expectedText)
     await autocompleteMenu.expectVisible(modalName)
 
     await page.keyboard.type("some page search text")
@@ -465,7 +471,7 @@ test('pressing backspace and remaining inside of brackets should NOT close autoc
   }
 })
 test('press escape when autocomplete menu is open, should close autocomplete menu only #6270', async ({ page, block }) => {
-  for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['/', 'commands']]) {
+  for (const [commandTrigger, expectedText, modalName] of [['[[', '[[]]', 'page-search'], ['/', '/', 'commands']]) {
     await createRandomPage(page)
 
     // Open the action modal
@@ -475,6 +481,7 @@ test('press escape when autocomplete menu is open, should close autocomplete men
       await page.keyboard.type(char) // Type it one character at a time, because too quickly can fail to trigger it sometimes
     }
     await page.waitForTimeout(100)
+    await expect(page.locator('textarea >> nth=0')).toHaveText('text ' + expectedText)
     await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
     await page.waitForTimeout(100)
 
@@ -488,7 +495,7 @@ test('press escape when autocomplete menu is open, should close autocomplete men
 })
 
 test('press escape when link/image dialog is open, should restore focus to input', async ({ page, block }) => {
-  for (const [commandTrigger, modalName] of [['/link', 'commands']]) {
+  for (const [commandTrigger, expectedText, modalName] of [['/link', '/link', 'commands']]) {
     await createRandomPage(page)
 
     // Open the action modal
@@ -498,6 +505,7 @@ test('press escape when link/image dialog is open, should restore focus to input
       await page.keyboard.type(char) // Type it one character at a time, because too quickly can fail to trigger it sometimes
     }
     await page.waitForTimeout(100)
+    await expect(page.locator('textarea >> nth=0')).toHaveText(expectedText)
     await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
     await page.waitForTimeout(100)
 
@@ -511,5 +519,44 @@ test('press escape when link/image dialog is open, should restore focus to input
     await expect(page.locator(`[data-modal-name="input"]`)).not.toBeVisible()
     await page.waitForTimeout(1000)
     expect(await block.isEditing()).toBe(true)
+  }
+})
+
+test('typing ^^/$$ should autopair to ^^^^/$$$$', async ({ page, block }) => {
+  for (const [commandTrigger, expectedText, modalName] of [['^^', '^^^^'], ['$$', '$$$$']]) {
+    await createRandomPage(page)
+
+    await block.mustFill('')
+    await page.waitForTimeout(550)
+    
+    // Type out all but the last character; should not autopair anything yet
+    let typed = ''
+    for (const char of commandTrigger.slice(0,-1)) {
+      await page.keyboard.type(char) // Type it one character at a time, because too quickly can fail to trigger it sometimes
+      typed += char
+      await expect(page.locator('textarea >> nth=0')).toHaveText(typed)
+    }
+    // Thhen type the last character and it should autoapair
+    await page.keyboard.type(commandTrigger.at(-1)!)
+    await expect(page.locator('textarea >> nth=0')).toHaveText(expectedText)
+  }
+})
+
+test('typing ^ while a word is selected should wrap that word in ^s', async ({ page, block }) => {
+  for (const wrapChar of ['*', '^', '_', '=', '+', '/']) {
+    await createRandomPage(page)
+
+    const baseText = 'wrap me'
+    await block.mustFill(baseText)
+    await page.waitForTimeout(550)
+    
+    await page.keyboard.down('Shift')
+    for (let i=0;i<baseText.length;i++) {
+      await page.keyboard.press('ArrowLeft')
+    }
+    await page.keyboard.up('Shift')
+    await page.keyboard.press(wrapChar)
+
+    await expect(page.locator('textarea >> nth=0')).toHaveText(`${wrapChar}${baseText}${wrapChar}`)
   }
 })
