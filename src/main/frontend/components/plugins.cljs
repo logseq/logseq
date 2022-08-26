@@ -1000,11 +1000,10 @@
   [pid name url]
   [:div
    [:span.block.whitespace-normal
-    "The plugin "
+    "This plugin "
     [:strong.text-red-500 "#" name]
-    " takes too long to load, which affects the
-     application startup time, as well as potentially
-     causing other plugins to fail to load."]
+    " takes too long to load, affecting the application startup time and
+     potentially causing other plugins to fail to load."]
 
    [:path.opacity-50
     [:small [:span.pr-1 (ui/icon "folder")] url]]
