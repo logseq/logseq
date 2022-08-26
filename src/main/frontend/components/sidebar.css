@@ -61,7 +61,8 @@
   height: 100%;
   padding-top: 12px;
   width: var(--ls-left-sidebar-sm-width);
-  overflow: visible;
+  overflow-y: auto;
+  overflow-x: hidden;
   background-color: var(--ls-primary-background-color);
   transition: transform .3s;
   transform: translateX(-100%);
@@ -290,6 +291,7 @@
 
     .left-sidebar-inner {
       transform: translateX(0);
+      overflow: visible;
     }
 
     > .shade-mask {
