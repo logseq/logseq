@@ -25,6 +25,7 @@ describe('HTMLLayer', () => {
           showRotateHandles={app.showRotateHandles}
           showSelectionDetail={app.showSelectionDetail}
           showContextBar={app.showContextBar}
+          showContextMenu={app.showContextBar}
         />
       )
     }

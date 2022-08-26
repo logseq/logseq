@@ -43,6 +43,11 @@ export class IdleState<
       inputs: { ctrlKey },
     } = this.app
 
+    if (event.button === 2) {
+      this.tool.transition('contextMenu')
+      return
+    }
+
     // Holding ctrlKey should ignore shapes
     if (ctrlKey) {
       this.tool.transition('pointingCanvas')

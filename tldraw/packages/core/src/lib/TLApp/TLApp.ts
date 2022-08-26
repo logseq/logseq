@@ -719,6 +719,12 @@ export class TLApp<
     )
   }
 
+  @computed get showContextMenu() {
+    return (
+      this.isIn('select.contextMenu')
+    )
+  }
+
   @computed get showRotateHandles() {
     const { selectedShapesArray } = this
     return (
@@ -812,6 +818,14 @@ export class TLApp<
 
   /* ----------------- Event Handlers ----------------- */
 
+  temporaryTransitionToMove(event: any) {
+    event.stopPropagation()
+    event.preventDefault()
+    const prevTool = this.selectedTool
+    this.transition('move', { prevTool })
+    this.selectedTool.transition('idleHold')
+  }
+
   readonly onTransition: TLStateEvents<S, K>['onTransition'] = () => {
     this.settings.update({ isToolLocked: false })
   }
@@ -822,6 +836,18 @@ export class TLApp<
   }
 
   readonly onPointerDown: TLEvents<S, K>['pointer'] = (info, e) => {
+    // Switch to select on right click to enable contextMenu state
+    if (e.button === 2) {
+      this.transition('select', info)
+      return false
+    }
+
+    // Pan canvas when holding middle click
+    if (!this.editingShape && e.button === 1 && !this.isIn('move')) {
+      this.temporaryTransitionToMove(e)
+      return
+    }
+
     if ('clientX' in e) {
       this.inputs.onPointerDown(
         [...this.viewport.getPagePoint([e.clientX, e.clientY]), 0.5],
@@ -831,6 +857,13 @@ export class TLApp<
   }
 
   readonly onPointerUp: TLEvents<S, K>['pointer'] = (info, e) => {
+    if (!this.editingShape && e.button === 1 && this.isIn('move')) {
+      this.selectedTool.transition('idle', { exit: true })
+      e.stopPropagation()
+      e.preventDefault()
+      return
+    }
+
     if ('clientX' in e) {
       this.inputs.onPointerUp(
         [...this.viewport.getPagePoint([e.clientX, e.clientY]), 0.5],
@@ -847,11 +880,7 @@ export class TLApp<
 
   readonly onKeyDown: TLEvents<S, K>['keyboard'] = (info, e) => {
     if (!this.editingShape && e['key'] === ' ' && !this.isIn('move')) {
-      e.stopPropagation()
-      e.preventDefault()
-      const prevTool = this.selectedTool
-      this.transition('move', { prevTool })
-      this.selectedTool.transition('idleHold')
+      this.temporaryTransitionToMove(e)
       return
     }
     this.inputs.onKeyDown(e)

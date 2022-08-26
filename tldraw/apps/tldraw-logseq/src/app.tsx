@@ -11,6 +11,7 @@ import {
 import * as React from 'react'
 import { AppUI } from '~components/AppUI'
 import { ContextBar } from '~components/ContextBar/ContextBar'
+import { ContextMenu } from '~components/ContextMenu/ContextMenu'
 import { useFileDrop } from '~hooks/useFileDrop'
 import { usePaste } from '~hooks/usePaste'
 import { useQuickAdd } from '~hooks/useQuickAdd'
@@ -102,11 +103,14 @@ export const App = function App({
         model={model}
         {...rest}
       >
+      <ContextMenu>
         <div className="logseq-tldraw logseq-tldraw-wrapper">
           <AppCanvas components={components}>
             <AppUI />
           </AppCanvas>
         </div>
+      </ContextMenu>
+
       </AppProvider>
     </LogseqContext.Provider>
   )
