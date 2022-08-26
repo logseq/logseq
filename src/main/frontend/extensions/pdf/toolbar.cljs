@@ -125,13 +125,15 @@
         [input, set-input!] (rum/use-state "")
         [matches, set-matches!] (rum/use-state {:current 0 :total 0})
         [find-state, set-find-state!] (rum/use-state {:status nil :current 0 :total 0 :query ""})
+        [entered-active0?, set-entered-active0?] (rum/use-state false)
         [entered-active?, set-entered-active?] (rum/use-state false)
 
         reset-finder! (fn []
                         (.dispatch bus "findbarclose" nil)
                         (set-matches! nil)
                         (set-find-state! nil)
-                        (set-entered-active? false))
+                        (set-entered-active? false)
+                        (set-entered-active0? false))
 
         close-finder! (fn []
                         (reset-finder!)
@@ -199,8 +201,10 @@
           :auto-focus  true
           :value       input
           :on-change   (fn [^js e]
-                         (set-input! (.-value (.-target e)))
-                         (set-entered-active? false))
+                         (let [val (.-value (.-target e))]
+                           (set-input! val)
+                           (set-entered-active0? (not (string/blank? (util/trim-safe val))))
+                           (set-entered-active? false)))
 
           :on-key-up   (fn [^js e]
                          (case (.-which e)
@@ -218,7 +222,7 @@
 
                            :dune))}]
 
-        (when entered-active?
+        (when entered-active0?
           (ui/button (ui/icon "arrow-back") :title "Enter to search" :class "icon-enter" :intent "true" :small? true))]
 
        (ui/button (ui/icon "letter-case")
@@ -330,10 +334,15 @@
                        outline-data)]
          [:section.is-empty "No outlines"])])))
 
+(rum/defc pdf-highlights-list
+  [^js _viewer]
+
+  [:strong "Highlights list ..."])
+
 (rum/defc pdf-outline-&-highlights
   [^js viewer visible? set-visible!]
   (let [*el-container (rum/create-ref)
-        [active-tab, set-active-tab!] (rum/use-state "contents")
+        [active-tab, set-active-tab!] (rum/use-state "highlights")
         set-outline-visible! #(set-active-tab! "contents")
         contents? (= active-tab "contents")]
 
@@ -358,8 +367,7 @@
       [:div.extensions__pdf-outline-panels
        (if contents?
          (pdf-outline viewer contents? set-outline-visible!)
-
-         [:strong "Highlights list"])]]]))
+         (pdf-highlights-list viewer))]]]))
 
 (rum/defc ^:large-vars/cleanup-todo pdf-toolbar
   [^js viewer]
