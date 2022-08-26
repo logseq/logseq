@@ -42,7 +42,6 @@ export const ContextMenu = observer(function ContextMenu({ children }: ContextMe
             Select All
             <div className="tl-context-menu-right-slot">⌘+A</div>
           </ReactContextMenu.Item>
-          {/*TODO: Add paste to this menu*/}
           {app.selectedShapes && app.selectedShapes.size > 0 && (
             <>
               <ReactContextMenu.Item
