@@ -21,7 +21,7 @@
             [frontend.ui :as ui]
             [electron.ipc :as ipc]
             [promesa.core :as p]
-            [frontend.util :refer [classnames] :as util]
+            [frontend.util :refer [classnames web-platform?] :as util]
             [frontend.version :refer [version]]
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
@@ -648,10 +648,12 @@
      (flashcards-switcher-row enable-flashcards?)
      (zotero-settings-row)
      (encryption-row enable-encryption?)
-     [:div
-      [:hr]
-      [:h2.mb-4 "Alpha test (sponsors only)"]
-      (when (util/electron?) (sync-switcher-row enable-sync?))]]))
+
+     (when-not web-platform?
+       [:div
+        [:hr]
+        [:h2.mb-4 "Alpha test (sponsors only)"]
+        (sync-switcher-row enable-sync?)])]))
 
 (rum/defcs settings
   < (rum/local [:general :general] ::active)

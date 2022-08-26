@@ -95,8 +95,10 @@
      (when (electron?) (. js/window -__MOCKED_OPEN_DIR_PATH__))))
 
 #?(:cljs
-   (def nfs? (and (not (electron?))
-                  (not (native-platform?)))))
+   (do
+     (def nfs? (and (not (electron?))
+                    (not (native-platform?))))
+     (def web-platform? nfs?)))
 
 #?(:cljs
    (defn file-protocol?
