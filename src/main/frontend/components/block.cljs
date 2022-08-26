@@ -755,10 +755,11 @@
           block (when db-id (db/pull-block db-id))
           block-type (keyword (get-in block [:block/properties :ls-type]))
           hl-type (get-in block [:block/properties :hl-type])
-          repo (state/get-current-repo)]
+          repo (state/get-current-repo)
+          stop-inner-events? (= block-type :whiteboard-shape)]
       (if (and block (:block/content block))
-        (let [title [:span {:class "block-ref"}
-                     (block-content (assoc config :block-ref? true)
+        (let [title [:span.block-ref
+                     (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
                                     block nil (:block/uuid block)
                                     (:slide? config))]
               inner (if label
@@ -2086,6 +2087,7 @@
                                                  (merge block (block/parse-title-and-body uuid format pre-block? content)))
         collapsed? (util/collapsed? block)
         block-ref? (:block-ref? config)
+        stop-events? (:stop-events? config)
         block-ref-with-title? (and block-ref? (seq title))
         block-type (or (:ls-type properties) :default)
         content (if (string? content) (string/trim content) "")
@@ -2096,7 +2098,7 @@
         attrs (cond->
                {:blockid       (str uuid)
                 :data-type (name block-type)
-                :style {:width "100%"}}
+                :style {:width "100%" :pointer-events (when stop-events? "none")}}
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
                                         (block-content-on-mouse-down e block block-id content edit-input-id))))]
