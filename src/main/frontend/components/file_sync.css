@@ -66,13 +66,9 @@
 
     .dropdown-wrapper {
       width: 90vw;
-      max-height: 75vh;
-      overflow: hidden;
-      overflow-y: auto;
       position: fixed;
       right: 5vw;
-      padding-bottom: 8px;
-      padding-top: 5px;
+      border-radius: 4px;
 
       .head-ctls {
         position: absolute;
@@ -144,6 +140,12 @@
           content: "Upcoming Sync";
         }
       }
+    }
+
+    .menu-links-wrapper {
+      padding: 4px 0;
+      max-height: 60vh !important;
+      overflow-y: auto;
     }
   }
 
