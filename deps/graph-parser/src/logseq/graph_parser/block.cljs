@@ -233,11 +233,12 @@
                                                v)
                                            v (if (coll? v) (set v) v)]
                                        [k v])
-                                     (swap! *invalid-properties conj k)))))
+                                     (do (swap! *invalid-properties conj k)
+                                         nil)))))
                           (remove #(nil? (second %))))
           properties' (into {} properties)]
       {:properties properties'
-       :properties-order (map first properties')
+       :properties-order (map first properties)
        :invalid-properties @*invalid-properties
        :page-refs page-refs})))
 

@@ -449,7 +449,7 @@
   (update block :block/properties
           (fn [properties]
             (when (seq properties)
-              (->> (filter (fn [[k v]]
+              (->> (filter (fn [[k _v]]
                              (gp-util/valid-edn-keyword? k)) properties)
                    (into {}))))))
 
