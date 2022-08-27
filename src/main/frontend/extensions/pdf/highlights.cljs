@@ -662,6 +662,7 @@
                                          :findController    (js/pdfjsViewer.PDFFindController.
                                                              #js {:linkService link-service :eventBus event-bus})
                                          :textLayerMode     2
+                                         :annotationMode    0 ;; disabled
                                          :removePageBorders true})]
               (. link-service setDocument pdf-document)
               (. link-service setViewer viewer)

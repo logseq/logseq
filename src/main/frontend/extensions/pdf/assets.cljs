@@ -191,27 +191,28 @@
       (page-property/add-property! page-name :file-path url))
     page))
 
-(defn create-ref-block!
-  [{:keys [id content page properties]}]
-  (when-let [pdf-current (:pdf/current @state/state)]
-    (when-let [ref-page (resolve-ref-page pdf-current)]
-      (if-let [ref-block (db-model/query-block-by-uuid id)]
-        (do
-          (println "[existed ref block]" ref-block)
-          ref-block)
-        (let [text (:text content)
-              wrap-props #(if-let [stamp (:image content)]
-                            (assoc % :hl-type "area" :hl-stamp stamp) %)]
+(defn ensure-ref-block!
+  ([pdf hl] (ensure-ref-block! pdf hl nil))
+  ([pdf-current {:keys [id content page properties]} insert-opts]
+   (when-let [ref-page (and pdf-current (resolve-ref-page pdf-current))]
+     (if-let [ref-block (db-model/query-block-by-uuid id)]
+       (do
+         (println "[existed ref block]" ref-block)
+         ref-block)
+       (let [text       (:text content)
+             wrap-props #(if-let [stamp (:image content)]
+                           (assoc % :hl-type "area" :hl-stamp stamp) %)]
 
-          (editor-handler/api-insert-new-block!
-            text {:page        (:block/name ref-page)
-                  :custom-uuid id
-                  :properties  (wrap-props
-                                 {:ls-type "annotation"
-                                  :hl-page page
-                                  :hl-color (:color properties)
-                                  ;; force custom uuid
-                                  :id      (str id)})}))))))
+         (editor-handler/api-insert-new-block!
+          text (merge {:page        (:block/name ref-page)
+                       :custom-uuid id
+                       :properties  (wrap-props
+                                     {:ls-type  "annotation"
+                                      :hl-page  page
+                                      :hl-color (:color properties)
+                                      ;; force custom uuid
+                                      :id       (str id)})}
+                      insert-opts)))))))
 
 (defn del-ref-block!
   [{:keys [id]}]
@@ -222,7 +223,7 @@
 
 (defn copy-hl-ref!
   [highlight]
-  (when-let [ref-block (create-ref-block! highlight)]
+  (when-let [ref-block (ensure-ref-block! (state/get-current-pdf) highlight)]
     (util/copy-to-clipboard! (block-ref/->block-ref (:block/uuid ref-block)))))
 
 (defn open-block-ref!
@@ -243,8 +244,10 @@
             (js/console.debug "[Unmatched highlight ref]" block)))))))
 
 (defn goto-block-ref!
-  [{:keys [id]}]
+  [{:keys [id] :as hl}]
   (when id
+    (ensure-ref-block!
+     (state/get-current-pdf) hl {:edit-block? false})
     (rfe/push-state :page {:name (str id)})))
 
 (defn goto-annotations-page!

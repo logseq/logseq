@@ -345,19 +345,24 @@
      (let [hls (sort-by :page (or (seq (:initial-hls hls-state))
                                   (:latest-hls hls-state)))]
 
-       (for [{:keys [id content properties page] :as hl} hls]
+       (for [{:keys [id content properties page] :as hl} hls
+             :let [goto-ref! #(pdf-assets/goto-block-ref! hl)]]
          [:div.extensions__pdf-highlights-list-item
           {:key      id
            :class (when (= active id) "active")
            :on-click (fn []
                        (pdf-utils/scroll-to-highlight _viewer hl)
-                       (set-active! id))}
+                       (set-active! id))
+           :on-double-click goto-ref!}
           [:h6.flex
            [:span.flex.items-center
             [:small {:data-color (:color properties)}]
             [:strong "Page " page]]
 
-           [:button {:title (t :pdf/linked-ref)} (ui/icon "external-link")]]
+           [:button
+            {:title (t :pdf/linked-ref)
+             :on-click goto-ref!}
+            (ui/icon "external-link")]]
 
 
           (if-let [img-stamp (:image content)]
