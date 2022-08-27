@@ -249,6 +249,14 @@ input::-webkit-inner-spin-button {
       overflow-y: auto;
       padding: 5px 0 5px 10px;
     }
+
+    &-wrap.hls-popup-overlay {
+      right: -6px;
+      left: unset;
+      bottom: unset;
+      height: auto;
+      width: auto;
+    }
   }
 
   &-settings {
@@ -315,7 +323,7 @@ input::-webkit-inner-spin-button {
   }
 
   &-finder {
-    &-wrap.hls-popup-wrap {
+    &-wrap.hls-popup-overlay {
       right: -6px;
       left: unset;
       bottom: unset;
@@ -652,7 +660,7 @@ input::-webkit-inner-spin-button {
 }
 
 .hls-popup {
-  &-wrap {
+  &-overlay {
     position: absolute;
     top: 40px;
     right: 0;

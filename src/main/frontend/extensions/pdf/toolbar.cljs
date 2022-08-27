@@ -52,7 +52,7 @@
          (storage/set "ls-pdf-hl-block-is-colored" b)))
      [hl-block-colored?])
 
-    [:div.extensions__pdf-settings.hls-popup-wrap.visible
+    [:div.extensions__pdf-settings.hls-popup-overlay.visible
      {:on-click (fn [^js/MouseEvent e]
                   (let [target (.-target e)]
                     (when-not (.contains (rum/deref *el-popup) target)
@@ -187,7 +187,7 @@
          (do-find! :casesensitivitychange)))
      [case-sensitive?])
 
-    [:div.extensions__pdf-finder-wrap.hls-popup-wrap.visible
+    [:div.extensions__pdf-finder-wrap.hls-popup-overlay.visible
      {:on-click #()}
 
      [:div.extensions__pdf-finder.hls-popup-box
@@ -376,16 +376,25 @@
 (rum/defc pdf-outline-&-highlights
   [^js viewer visible? set-visible!]
   (let [*el-container (rum/create-ref)
-        [active-tab, set-active-tab!] (rum/use-state "highlights")
+        [active-tab, set-active-tab!] (rum/use-state "contents")
         set-outline-visible! #(set-active-tab! "contents")
         contents? (= active-tab "contents")]
 
-    [:div.extensions__pdf-outline-wrap.hls-popup-wrap
-     {:class    (util/classnames [{:visible visible?}])
-      :on-click (fn [^js/MouseEvent e]
-                  (let [target (.-target e)]
-                    (when-not (.contains (rum/deref *el-container) target)
-                      (set-visible! false))))}
+    (rum/use-effect!
+     (fn []
+       (when-let [^js el-viewer (and viewer (js/document.querySelector "#pdf-layout-container"))]
+         (let [handler (fn [^js e]
+                         (when-let [^js target (.-target e)]
+                           (when (and
+                                  (not= "Outline" (.-title target))
+                                  (not (.contains (rum/deref *el-container) target)))
+                             (set-visible! false))))]
+           (.addEventListener el-viewer "click" handler)
+           #(.removeEventListener el-viewer "click" handler))))
+     [viewer *el-container])
+
+    [:div.extensions__pdf-outline-wrap.hls-popup-overlay
+     {:class    (util/classnames [{:visible visible?}])}
 
      [:div.extensions__pdf-outline.hls-popup-box
       {:ref       *el-container
