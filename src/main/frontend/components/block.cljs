@@ -2454,7 +2454,10 @@
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
-        block (if (or (and custom-query? (empty? (:block/children block)))
+        block (if (or (and custom-query?
+                           (empty? (:block/children block))
+                           (not (and (:dsl-query? config)
+                                     (string/includes? (:query config) "not"))))
                       navigated?)
                 (let [block (db/pull [:block/uuid navigating-block])
                       blocks (db/get-paginated-blocks repo (:db/id block)
@@ -2949,6 +2952,8 @@
                (and (seq result) (or only-blocks? blocks-grouped-by-page?))
                (->hiccup result (cond-> (assoc config
                                                :custom-query? true
+                                               :dsl-query? dsl-query?
+                                               :query query
                                                :breadcrumb-show? (if (some? breadcrumb-show?)
                                                                    breadcrumb-show?
                                                                    true)
