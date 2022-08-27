@@ -58,10 +58,10 @@
        :hls-file (str "assets/" key ".edn")})))
 
 (defn resolve-area-image-file
-  [current area-hl]
-
-  ;;;;;
-  )
+  [img-stamp current {:keys [page id] :as _hl}]
+  (when-let [key (:key current)]
+    (-> (str gp-config/local-assets-dir "/" key "/")
+        (str (util/format "%s_%s_%s.png" page id img-stamp)))))
 
 (defn load-hls-data$
   [{:keys [hls-file]}]

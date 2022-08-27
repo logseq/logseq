@@ -302,6 +302,10 @@
       (when-not (mobile-util/native-platform?)
         "local")))
 
+(defn get-current-pdf
+  []
+  (:pdf/current @state))
+
 (def default-config
   "Default config for a repo-specific, user config"
   {:feature/enable-search-remove-accents? true

@@ -1384,16 +1384,17 @@
 (defn make-asset-url
   [path] ;; path start with "/assets" or compatible for "../assets"
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))
-        path (string/replace path "../" "/")]
+        path (string/replace path "../" "/")
+        full-path (util/node-path.join repo-dir path)]
     (cond
       (util/electron?)
-      (str "assets://" repo-dir path)
+      (str "assets://" full-path)
 
       (mobile-util/native-platform?)
-      (mobile-util/convert-file-src (str repo-dir path))
+      (mobile-util/convert-file-src full-path)
 
       :else
-      (let [handle-path (str "handle" repo-dir path)
+      (let [handle-path (str "handle" full-path)
             cached-url (get @*assets-url-cache (keyword handle-path))]
         (if cached-url
           (p/resolved cached-url)

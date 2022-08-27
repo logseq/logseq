@@ -537,8 +537,8 @@ input::-webkit-inner-spin-button {
   }
 
   &-highlights-list-item {
-    @apply hover:opacity-90 active:opacity-100 mr-2;
-    
+    @apply active:opacity-100 mr-2;
+
     user-select: none;
     font-size: 12px;
     padding-top: 8px;
@@ -552,31 +552,52 @@ input::-webkit-inner-spin-button {
     }
 
     > h6 {
-      @apply flex items-center;
-      
+      @apply flex items-center justify-between pr-2 relative;
+
       font-size: 10px;
       line-height: 1em;
       color: #696969;
       -webkit-font-smoothing: antialiased;
 
-      > small {
+      small {
         width: 8px;
         height: 8px;
         border-radius: 100%;
-        margin-right: 4px;
+        margin-right: 6px;
+        border-color: #cccccc !important;
+      }
+
+      button {
+        @apply absolute right-0 top-[-6px] hover:opacity-80 active:opacity-100 hidden;
+
+        padding-right: 8px;
+        padding-top: 4px;
+
+        .ti {
+          font-size: 14px;
+        }
       }
     }
 
     > p {
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      line-height: 1.24em;
       color: #646464;
       padding-top: 6px;
       padding-bottom: 2px;
       margin: 0;
+
+      &.text-wrap {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        line-height: 1.24em;
+      }
+
+      &.area-wrap {
+        display: flex;
+        align-items: center;
+        padding-right: 6px;
+      }
 
       &:hover {
         color: var(--ph-link-color);
@@ -588,7 +609,15 @@ input::-webkit-inner-spin-button {
 
       > h6, > p {
         color: white;
+
+        button {
+          @apply inline;
+        }
       }
+    }
+
+    &:hover:not(.active) {
+      opacity: .9;
     }
   }
 }

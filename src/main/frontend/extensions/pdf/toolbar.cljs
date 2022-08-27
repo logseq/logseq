@@ -11,6 +11,7 @@
             [frontend.ui :as ui]
             [frontend.components.svg :as svg]
             [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.handler.editor :as editor-handler]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.notification :as notification]))
 
@@ -285,7 +286,7 @@
                ops) parent))) items)])]))
 
 (rum/defc pdf-outline
-  [^js viewer visible? set-visible!]
+  [^js viewer _visible? set-visible!]
   (when-let [^js pdf-doc (and viewer (.-pdfDocument viewer))]
     (let [*el-outline       (rum/use-ref nil)
           [outline-data, set-outline-data!] (rum/use-state [])
@@ -352,11 +353,20 @@
                        (pdf-utils/scroll-to-highlight _viewer hl)
                        (set-active! id))}
           [:h6.flex
-           [:small {:data-color (:color properties)}]
-           [:strong "Page " page]]
+           [:span.flex.items-center
+            [:small {:data-color (:color properties)}]
+            [:strong "Page " page]]
 
-          [:p
-           (:text content)]])))))
+           [:button {:title (t :pdf/linked-ref)} (ui/icon "external-link")]]
+
+
+          (if-let [img-stamp (:image content)]
+            (let [fpath (pdf-assets/resolve-area-image-file
+                         img-stamp (state/get-current-pdf) hl)
+                  fpath (editor-handler/make-asset-url fpath)]
+              [:p.area-wrap
+               [:img {:src fpath}]])
+            [:p.text-wrap (:text content)])])))))
 
 (rum/defc pdf-outline-&-highlights
   [^js viewer visible? set-visible!]
