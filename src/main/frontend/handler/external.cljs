@@ -16,7 +16,9 @@
             [frontend.handler.page :as page]
             [frontend.handler.editor :as editor]
             [frontend.handler.notification :as notification]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [clojure.core.async :as async]
+            [medley.core :as medley]))
 
 (defn index-files!
   "Create file structure, then parse into DB (client only)"
@@ -42,7 +44,7 @@
                                          ".md")]
                            {:file/path path
                             :file/content text}))))
-                   files)
+                files)
         files (remove nil? files)]
     (repo-handler/parse-files-and-load-to-db! repo files nil)
     (let [files (->> (map (fn [{:file/keys [path content]}] (when path [path content])) files)
@@ -53,13 +55,13 @@
                                             :finish-handler finish-handler}))
     (let [journal-pages-tx (let [titles (filter date/valid-journal-title? titles)]
                              (map
-                              (fn [title]
-                                (let [day (date/journal-title->int title)
-                                      page-name (util/page-name-sanity-lc (date-time-util/int->journal-title day (state/get-date-formatter)))]
-                                  {:block/name page-name
-                                   :block/journal? true
-                                   :block/journal-day day}))
-                              titles))]
+                               (fn [title]
+                                 (let [day (date/journal-title->int title)
+                                       page-name (util/page-name-sanity-lc (date-time-util/int->journal-title day (state/get-date-formatter)))]
+                                   {:block/name page-name
+                                    :block/journal? true
+                                    :block/journal-day day}))
+                               titles))]
       (when (seq journal-pages-tx)
         (db/transact! repo journal-pages-tx)))))
 
@@ -132,27 +134,43 @@
                                         "\nSkipped and continue the remaining import.") :error))))))
   title)
 
-(defn- pre-transact-uuids
+(defn- pre-transact-uuids!
   "Collect all uuids from page trees and write them to the db before hand."
   [pages]
-  (let [uuids (map (fn [block]
-                     {:block/uuid (:uuid block)})
-                   (mapcat #(tree-seq map? :children %)
-                           pages))]
-    (db/transact! uuids)
-    pages))
+  (let [uuids (mapv (fn [block]
+                      {:block/uuid (:uuid block)})
+                    (mapcat #(tree-seq map? :children %)
+                            pages))]
+    (db/transact! uuids)))
 
 (defn- import-from-tree!
   "Not rely on file system - backend compatible.
    tree-translator-fn: translate exported tree structure to the desired tree for import"
   [data tree-translator-fn]
-  (try (->> (:blocks data)
-            (map tree-translator-fn)
-            (pre-transact-uuids)
-            (mapv create-page-with-exported-tree!))
-       (editor/set-blocks-id! (db/get-all-referenced-blocks-uuid))
-       (catch js/Error e
-         (notification/show! (str "Error happens when importing:\n" e) :error))))
+  (let [imported-chan (async/promise-chan)]
+    (try
+      (let [blocks (->> (:blocks data)
+                        (mapv tree-translator-fn )
+                        (sort-by :title)
+                        (medley/indexed))
+            job-chan (async/to-chan! blocks)]
+        (state/set-state! [:graph/importing-state :total] (count blocks))
+        (pre-transact-uuids! blocks)
+        (async/go-loop []
+          (if-let [[i block] (async/<! job-chan)]
+            (do
+              (state/set-state! [:graph/importing-state :current-idx] (inc i))
+              (state/set-state! [:graph/importing-state :current-page] (:title block))
+              (async/<! (async/timeout 10))
+              (create-page-with-exported-tree! block)
+              (recur))
+            (do
+              (editor/set-blocks-id! (db/get-all-referenced-blocks-uuid))
+              (async/offer! imported-chan true)))))
+
+      (catch :default e
+        (notification/show! (str "Error happens when importing:\n" e) :error)
+        (async/offer! imported-chan true)))))
 
 (defn tree-vec-translate-edn
   "Actions to do for loading edn tree structure.
@@ -177,8 +195,16 @@
 
 (defn import-from-edn!
   [raw finished-ok-handler]
-  (import-from-tree! (edn/read-string raw) tree-vec-translate-edn)
-  (finished-ok-handler nil)) ;; it was designed to accept a list of imported page names but now deprecated
+  (try
+    (let [data (edn/read-string raw)]
+     (async/go
+       (async/<! (import-from-tree! data tree-vec-translate-edn))
+       (finished-ok-handler nil)))
+    (catch :default e
+      (js/console.error e)
+      (notification/show!
+       (str (.-message e))
+       :error)))) ;; it was designed to accept a list of imported page names but now deprecated
 
 (defn tree-vec-translate-json
   "Actions to do for loading json tree structure.
@@ -210,5 +236,6 @@
   [raw finished-ok-handler]
   (let [json     (js/JSON.parse raw)
         clj-data (js->clj json :keywordize-keys true)]
-    (import-from-tree! clj-data tree-vec-translate-json))
-  (finished-ok-handler nil)) ;; it was designed to accept a list of imported page names but now deprecated
+    (async/go
+      (async/<! (import-from-tree! clj-data tree-vec-translate-json))
+      (finished-ok-handler nil)))) ;; it was designed to accept a list of imported page names but now deprecated

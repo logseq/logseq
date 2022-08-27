@@ -585,7 +585,7 @@
         [:small.scale-250.opacity-70.mb-10.animate-pulse (svg/logo false)]
         [:small.block.text-sm.relative.opacity-50 {:style {:right "-8px"}} text]]])))
 
-(defn init-plugins!
+(defn ^:large-vars/cleanup-todo init-plugins!
   [callback]
 
   (let [el (js/document.createElement "div")]
@@ -665,7 +665,24 @@
                                                           (let [id (keyword id)]
                                                             (when (and settings
                                                                        (contains? (:plugin/installed-plugins @state/state) id))
-                                                              (update-plugin-settings-state id (bean/->clj settings)))))))
+                                                              (update-plugin-settings-state id (bean/->clj settings))))))
+
+                                (.on "ready" (fn [^js perf-table]
+                                               (when-let [plugins (and perf-table (.entries perf-table))]
+                                                 (->> plugins
+                                                      (keep
+                                                       (fn [[_k ^js v]]
+                                                         (when-let [end (and (some-> v (.-o) (.-disabled) (not))
+                                                                             (.-e v))]
+                                                           (when (and (number? end)
+                                                                      ;; valid end time
+                                                                      (> end 0)
+                                                                      ;; greater than 3s
+                                                                      (> (- end (.-s v)) 3000))
+                                                             v))))
+                                                      ((fn [perfs]
+                                                         (doseq [perf perfs]
+                                                           (state/pub-event! [:plugin/loader-perf-tip (bean/->clj perf)])))))))))
 
               default-plugins (get-user-default-plugins)
 

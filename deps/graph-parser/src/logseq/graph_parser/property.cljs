@@ -21,6 +21,8 @@
   (second (re-find (re-pattern (str property colons "\\s+(.*)"))
                    content)))
 
+(def valid-property-name? gp-util/valid-edn-keyword?)
+
 (defn properties-ast?
   [block]
   (and

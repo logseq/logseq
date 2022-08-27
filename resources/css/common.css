@@ -1039,7 +1039,7 @@ hr {
 
 .cp__header-logo,
 .fade-link {
-  opacity: 0.6;
+  opacity: 0.8;
   transition: 0.3s;
   color: var(--ls-primary-text-color);
 }

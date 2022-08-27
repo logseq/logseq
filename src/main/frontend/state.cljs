@@ -24,11 +24,11 @@
    (atom
     {:route-match                           nil
      :today                                 nil
-     :system/events                         (async/chan 100)
-     :db/batch-txs                          (async/chan 100)
-     :file/writes                           (async/chan 100)
+     :system/events                         (async/chan 1000)
+     :db/batch-txs                          (async/chan 1000)
+     :file/writes                           (async/chan 10000)
      :file/unlinked-dirs                    #{}
-     :reactive/custom-queries               (async/chan 100)
+     :reactive/custom-queries               (async/chan 1000)
      :notification/show?                    false
      :notification/content                  nil
      :repo/loading-files?                   {}
@@ -233,7 +233,9 @@
 
      :encryption/graph-parsing?             false
 
-     :ui/find-in-page                     nil
+     :ui/find-in-page                       nil
+     :graph/importing                       nil
+     :graph/importing-state                 {}
      })))
 
 ;; block uuid -> {content(String) -> ast}
@@ -1010,10 +1012,6 @@
   []
   (set-state! :ui/file-component nil))
 
-(defn get-file-component
-  []
-  (get @state :ui/file-component))
-
 (defn set-journals-length!
   [value]
   (when value
@@ -1162,11 +1160,6 @@
 (defn get-reactive-custom-queries-chan
   []
   (:reactive/custom-queries @state))
-
-(defn get-write-chan-length
-  []
-  (let [c (get-file-write-chan)]
-    (count (gobj/get c "buf"))))
 
 (defn get-left-sidebar-open?
   []

@@ -163,7 +163,6 @@
           (if file-handle
             (-> (p/let [local-file (.getFile file-handle)
                         local-content (.text local-file)
-                        pending-writes (state/get-write-chan-length)
                         ext (string/lower-case (util/get-file-ext path))
                         db-content (db/get-file repo path)
                         contents-matched? (contents-matched? local-content (or db-content ""))]
@@ -173,8 +172,7 @@
                          (not (:skip-compare? opts))
                          (not contents-matched?)
                          (not (contains? #{"excalidraw" "edn" "css"} ext))
-                         (not (string/includes? path "/.recycle/"))
-                         (zero? pending-writes))
+                         (not (string/includes? path "/.recycle/")))
                       (p/let [local-content (encrypt/decrypt local-content)]
                         (state/pub-event! [:file/not-matched-from-disk path local-content content]))
                       (p/let [_ (verify-permission repo file-handle true)

@@ -439,6 +439,12 @@
     (plugin-handler/hook-plugin-db :changed payload)
     (plugin-handler/hook-plugin-block-changes payload)))
 
+(defmethod handle :plugin/loader-perf-tip [[_ {:keys [^js o _s _e]}]]
+  (when-let [opts (.-options o)]
+    (notification/show!
+     (plugin/perf-tip-content (.-id o) (.-name opts) (.-url opts))
+     :warning false (.-id o))))
+
 (defmethod handle :backup/broken-config [[_ repo content]]
   (when (and repo content)
     (let [path (config/get-config-path)
@@ -476,6 +482,7 @@
        (ui/button
          (t :yes)
          :autoFocus "on"
+         :class "ui__modal-enter"
          :large? true
          :on-click (fn []
                      (state/close-modal!)

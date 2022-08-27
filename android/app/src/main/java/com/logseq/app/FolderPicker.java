@@ -20,6 +20,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 
+import java.io.File;
+
 
 @CapacitorPlugin(name = "FolderPicker")
 public class FolderPicker extends Plugin {
@@ -63,7 +65,8 @@ public class FolderPicker extends Plugin {
         if (path == null || path.isEmpty()) {
             call.reject("Cannot support this directory type: " + docUri);
         } else {
-            ret.put("path", "file://" + path);
+            Uri folderUri = Uri.fromFile(new File(path));
+            ret.put("path", folderUri.toString());
             call.resolve(ret);
         }
     }
