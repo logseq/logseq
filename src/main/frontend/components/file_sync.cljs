@@ -256,11 +256,16 @@
                                  (js/decodeURIComponent f)]
                          :key   (str "downloading-" f)
                          :icon  (ui/icon "arrow-narrow-down")}) downloading-files)
-           (map (fn [f] {:title [:div.file-item
-                                 {:key (str "queue-" f)}
-                                 (js/decodeURIComponent f)]
-                         :key   (str "queue-" f)
-                         :icon  (ui/icon "circle-dotted")}) (take 10 queuing-files))
+           (map (fn [e] (let [icon (case (.-type e)
+                                           "add"    "plus"
+                                           "unlink" "minus"
+                                           "edit")
+                              path (fs-sync/relative-path e)]
+                          {:title [:div.file-item
+                                   {:key (str "queue-" path)}
+                                   (js/decodeURIComponent path)]
+                           :key   (str "queue-" path)
+                           :icon  (ui/icon icon)})) (take 10 queuing-files))
            (map (fn [f] {:title [:div.file-item
                                  {:key (str "uploading-" f)}
                                  (js/decodeURIComponent f)]

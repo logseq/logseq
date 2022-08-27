@@ -1802,14 +1802,19 @@
   (update sync-state :current-local->remote-files into paths))
 
 (defn sync-state--add-queued-local->remote-files
-  [sync-state paths]
+  [sync-state event]
   {:post [(s/valid? ::sync-state %)]}
-  (update sync-state :queued-local->remote-files (fn [o n] (set/union o (set n))) paths))
+  (update sync-state :queued-local->remote-files
+          (fn [o event]
+            (->> (concat o [event])
+                 (util/distinct-by-last-wins (fn [e] (.-path e))))) event))
 
 (defn sync-state--remove-queued-local->remote-files
-  [sync-state paths]
+  [sync-state event]
   {:post [(s/valid? ::sync-state %)]}
-  (update sync-state :queued-local->remote-files (fn [o n] (set/difference o (set n))) paths))
+  (update sync-state :queued-local->remote-files
+          (fn [o event]
+            (remove #{event} o)) event))
 
 (defn sync-state-reset-queued-local->remote-files
   [sync-state]
@@ -1835,7 +1840,8 @@
     (dedupe-by :path)
     ;; reserve the latest 20 history items
     (take 20))
-   (into (filter (fn [o] (not (contains? (set paths) (:path o)))) history)
+   (into (filter (fn [o]
+                   (not (contains? (set paths) (:path o)))) history)
          (map (fn [path] {:path path :time now}) paths))))
 
 (defn sync-state--remove-current-remote->local-files
@@ -2067,11 +2073,11 @@
            (go
              (and (rsapi-ready? rsapi graph-uuid)
                   (<! (<fast-filter-e-fn e))
-                  (let [e-path [(relative-path e)]]
-                    (swap! *sync-state sync-state--add-queued-local->remote-files e-path)
+                  (do
+                    (swap! *sync-state sync-state--add-queued-local->remote-files e)
                     (let [v (<! (<filter-local-changes-pred e base-path graph-uuid))]
                       (when-not v
-                        (swap! *sync-state sync-state--remove-queued-local->remote-files e-path))
+                        (swap! *sync-state sync-state--remove-queued-local->remote-files e))
                       v)))))
          :flush-fn #(swap! *sync-state sync-state-reset-queued-local->remote-files)
          :stop-ch stop-chan
