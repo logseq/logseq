@@ -470,6 +470,7 @@ test('pressing backspace and remaining inside of brackets should NOT close autoc
     await autocompleteMenu.expectVisible(modalName)
   }
 })
+
 test('press escape when autocomplete menu is open, should close autocomplete menu only #6270', async ({ page, block }) => {
   for (const [commandTrigger, modalName] of [['[[', 'page-search'], ['/', 'commands']]) {
     await createRandomPage(page)
@@ -518,4 +519,49 @@ test('press escape when link/image dialog is open, should restore focus to input
     await page.waitForTimeout(1000)
     expect(await block.isEditing()).toBe(true)
   }
+})
+
+test('should show text after soft return when node is collapsed #5074', async ({ page, block }) => {
+  const delay = 100
+  await createRandomPage(page)
+
+  await page.type('textarea >> nth=0', 'Before soft return')
+  await page.waitForTimeout(delay)
+  await page.keyboard.press('Shift+Enter')
+  await page.waitForTimeout(delay)
+  await page.type('textarea >> nth=0', 'After soft return')
+  await page.waitForTimeout(delay)
+
+  await block.enterNext()
+  expect(await block.indent()).toBe(true)
+  await block.mustType('Child text')
+  await page.waitForTimeout(delay)
+
+  // collapse
+  await page.click('.block-control >> nth=0')
+  await page.waitForTimeout(delay)
+
+  // select the block that has the soft return
+  await page.keyboard.press('ArrowDown')
+  await page.waitForTimeout(delay)
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(delay)
+
+  expect(await page.inputValue('textarea >> nth=0')).toBe(
+    'Before soft return\nAfter soft return'
+  )
+
+  // zoom into the block
+  await page.click('a.block-control + a')
+  await page.waitForTimeout(delay)
+
+  // select the block that has the soft return
+  await page.keyboard.press('ArrowDown')
+  await page.waitForTimeout(delay)
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(delay)
+
+  expect(await page.inputValue('textarea >> nth=0')).toBe(
+    'Before soft return\nAfter soft return'
+  )
 })
