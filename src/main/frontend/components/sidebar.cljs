@@ -230,7 +230,8 @@
        (repo/repos-dropdown)
 
        [:div.nav-header.flex.gap-1.flex-col
-        (if-let [page (:page default-home)]
+        (let [page (:page default-home)]
+          (if (and page (not (state/enable-journals? (state/get-current-repo))))
           (sidebar-item
            {:class            "home-nav"
             :title            page
@@ -245,7 +246,7 @@
                                    (or (= route-name :all-journals) (= route-name :home)))
             :title            (t :left-side-bar/journals)
             :on-click-handler route-handler/go-to-journals!
-            :icon             "calendar"}))
+            :icon             "calendar"})))
 
         (when (state/enable-flashcards? (state/get-current-repo))
           [:div.flashcards-nav
