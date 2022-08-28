@@ -542,8 +542,8 @@ test('typing ^^/$$ should autopair to ^^^^/$$$$', async ({ page, block }) => {
   }
 })
 
-test('typing ^ while a word is selected should wrap that word in ^s', async ({ page, block }) => {
-  for (const wrapChar of ['*', '^', '_', '=', '+', '/']) {
+test('typing markup chars while a word is selected should wrap that word in that character', async ({ page, block }) => {
+  for (const wrapChar of ['*', '^', '_', '=', '+', '/', '`']) {
     await createRandomPage(page)
 
     const baseText = 'wrap me'
@@ -558,5 +558,21 @@ test('typing ^ while a word is selected should wrap that word in ^s', async ({ p
     await page.keyboard.press(wrapChar)
 
     await expect(page.locator('textarea >> nth=0')).toHaveText(`${wrapChar}${baseText}${wrapChar}`)
+  }
+})
+
+test('typing multiple ` should autopair multiple times in a row', async ({ page, block }) => {
+  for (const pairedChar of ['`']) {
+    await createRandomPage(page)
+
+    await block.mustFill('')
+    await page.waitForTimeout(550)
+    
+    let typed = ''
+    for (let i=0; i<3; i++) {
+      await page.keyboard.press(pairedChar)
+      typed += pairedChar
+      await expect(page.locator('textarea >> nth=0')).toHaveText(`${typed}${typed}`)
+    }
   }
 })

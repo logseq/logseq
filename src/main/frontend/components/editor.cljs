@@ -430,7 +430,7 @@
    {}
    (editor-handler/keyup-handler state input input-id)))
 
-(defn- set-up-input-event!
+(defn- set-up-input-handler!
   [state format input input-id]
   (mixins/on-input
    state
@@ -446,8 +446,7 @@
         input (gdom/getElement input-id)]
     (set-up-key-down! state format)
     (set-up-key-up! state input input-id)
-    (set-up-input-event! state format input input-id)
-    ))
+    (set-up-input-handler! state format input input-id)))
 
 (def starts-with? clojure.string/starts-with?)
 

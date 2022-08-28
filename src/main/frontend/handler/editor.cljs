@@ -1499,8 +1499,11 @@
   (zipmap (vals autopair-map)
           (keys autopair-map)))
 
+(def autopair-when-not-selected
+  #{"[" "{" "(" "`"})
+
 (def autopair-when-selected
-  #{"*" "^" "_" "=" "+" "/"})
+  #{"*" "^" "_" "=" "+" "/" "`"})
 
 (def delete-map
   (assoc autopair-map
@@ -2694,42 +2697,22 @@
                 top-block? (= (:block/left block) (:block/page block))
                 root-block? (= (:block/container block) (str (:block/uuid block)))
                 repo (state/get-current-repo)]
-           (when (and (if top-block? (string/blank? value) true)
-                      (not root-block?))
-             (delete-block! repo false))))
+            (when (and (if top-block? (string/blank? value) true)
+                       (not root-block?))
+              (delete-block! repo false))))
 
         (and (= key "#")
              (and (> pos 0)
                   (= "#" (util/nth-safe value (dec pos)))))
         (state/clear-editor-action!)
 
-        ;; If typing a closing-autocomplete character (other than `), move the cursor right instead of inserting another
+        ;; If typing a closing-autocomplete character, move the cursor right instead of inserting another. (` is handled separately below)
         (and (contains? (set/difference (set (keys reversed-autopair-map))
                                         #{"`"})
                         key)
-         (= (get-current-input-char input) key))
+             (= (get-current-input-char input) key))
         (do (util/stop e)
             (cursor/move-cursor-forward input))
-
-        ;; Note: When text is not selected, autopair handled in `input-handler` instead (except for `)
-        (and (autopair-when-selected key) (not (string/blank? (util/get-selected-text))))
-        (do (util/stop e)
-            (autopair input-id key format {}))
-        
-        (and (not (string/blank? (util/get-selected-text)))
-             (contains? keycode/left-square-brackets-keys key))
-        (do (autopair input-id "[" format nil)
-            (util/stop e))
-
-        (and (not (string/blank? (util/get-selected-text)))
-             (contains? keycode/left-paren-keys key))
-        (do (util/stop e)
-            (autopair input-id "(" format nil))
-
-        (and (not (string/blank? (util/get-selected-text)))
-             (= "`" key))
-        (do (util/stop e)
-            (autopair input-id "`" format nil))
 
         ;; If you type `xyz`, the last backtick should close the first and not add another autopair
         ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)        
@@ -2739,6 +2722,22 @@
           (and (string/blank? (util/get-selected-text))
                (= key "`") (= "`" curr) (not= "`" prev)))
         (do (util/stop e) (cursor/move-cursor-forward input))
+
+        ;; Note: When text is not selected, other autopair handled in `input-handler` instead
+        (and (not (string/blank? (util/get-selected-text)))
+             (autopair-when-selected key))
+        (do (util/stop e)
+            (autopair input-id key format {}))
+
+        (and (not (string/blank? (util/get-selected-text)))
+             (contains? keycode/left-square-brackets-keys key))
+        (do (autopair input-id "[" format nil)
+            (util/stop e))
+
+        (and (not (string/blank? (util/get-selected-text)))
+             (contains? keycode/left-paren-keys key))
+        (do (util/stop e)
+            (autopair input-id "(" format nil))
 
         (and hashtag? (or (zero? pos) (re-matches #"\s" (get value (dec pos)))))
         (do
@@ -2907,17 +2906,12 @@
 (defn input-handler
   [_state format _input input-id]
   (fn [_e new-text]
-    (let [selection (util/get-selected-text)
-          selection? (not (string/blank? selection))]
-      (cond
-        (autopair-when-selected new-text)
-        nil
-
-        ;; No-selection autopair must be handled after the input event has fired (instead of on keydown),
-        ;; to prevent a bug in iOS keyboard's word autocomplete
-        ;; https://github.com/logseq/logseq/issues/5987
-        (contains? (set (keys autopair-map)) new-text)
-        (autopair input-id new-text format {:preserve-prefix? (not selection?)})))))
+    (cond
+      ;; No-selection autopair must be handled after the input event has fired (instead of on keydown),
+      ;; to prevent a bug in iOS keyboard's word autocomplete
+      ;; https://github.com/logseq/logseq/issues/5987
+      (autopair-when-not-selected new-text)
+      (autopair input-id new-text format {:preserve-prefix? true}))))
 
 (defn editor-on-click!
   [id]
