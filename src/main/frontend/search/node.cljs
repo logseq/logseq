@@ -4,7 +4,7 @@
             [frontend.search.db :as search-db]
             [frontend.search.protocol :as protocol]
             [promesa.core :as p]
-            [frontend.util :as util]))
+            [frontend.state :as state]))
 
 (defrecord Node [repo]
   protocol/Engine
@@ -12,7 +12,7 @@
     (p/let [result (ipc/ipc "search-blocks" repo q opts)
             result (bean/->clj result)]
       (keep (fn [{:keys [content uuid page]}]
-              (when-not (util/base64-image-included? content)
+              (when-not (> (count content) (state/block-content-max-length repo))
                 {:block/uuid uuid
                  :block/content content
                  :block/page page})) result)))
