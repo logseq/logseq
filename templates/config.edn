@@ -119,6 +119,10 @@
  ;; Set this to `true` so that it's the same behaviour as the usual outliner mode.
  :shortcut/doc-mode-enter-for-new-block? false
 
+ ;; Block content larger than `search/text-max-length` will not be searchable
+ ;; or editable for performance.
+ :block/content-max-length 5000
+
  ;; Whether to show command doc on hover
  :ui/show-command-doc? true
 

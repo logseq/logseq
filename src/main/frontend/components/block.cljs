@@ -1968,7 +1968,7 @@
 
 (defn- block-content-on-mouse-down
   [e block block-id content edit-input-id]
-  (when-not (util/base64-image-included? content)
+  (when-not (> (count content) (state/block-content-max-length (state/get-current-repo)))
     (.stopPropagation e)
     (let [target (gobj/get e "target")
           button (gobj/get e "buttons")
@@ -2098,6 +2098,9 @@
        (merge attrs))
 
      [:<>
+      (when (> (count content) (state/block-content-max-length (state/get-current-repo)))
+        [:div.warning.text-sm
+         "Large block will not be editable or searchable to not slow down the app, please use another editor to edit this block."])
       [:div.flex.flex-row.justify-between.block-content-inner
        [:div.flex-1.w-full
         (cond

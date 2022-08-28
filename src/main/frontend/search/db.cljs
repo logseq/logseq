@@ -14,7 +14,7 @@
   "Convert a block to the index for searching"
   [{:block/keys [uuid page content] :as block}]
   (when-let [content (util/search-normalize content (state/enable-search-remove-accents?))]
-    (when-not (util/base64-image-included? content)
+    (when-not (> (count content) (state/block-content-max-length (state/get-current-repo)))
       {:id (:db/id block)
        :uuid (str uuid)
        :page page

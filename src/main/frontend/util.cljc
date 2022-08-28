@@ -1343,8 +1343,3 @@
                Math/floor
                int
                (#(str % " " (:name unit) (when (> % 1) "s") " ago"))))))))
-
-#?(:cljs
-   (defn base64-image-included?
-     [content]
-     (safe-re-find #"data:image/[^;]+;base64" content)))
