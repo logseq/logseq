@@ -1274,11 +1274,14 @@
       (.-deleted? (first filetxns))
       (let [filetxn (first filetxns)]
         (assert (= 1 (count filetxns)))
-        (let [r (<! (<delete-local-files rsapi graph-uuid base-path [(relative-path filetxn)]))]
-          (if (and (instance? ExceptionInfo r)
-                   (string/index-of (str (ex-cause r)) "No such file or directory"))
-            true
-            r))))))
+        (if (empty? (<get-local-files-meta rsapi "" base-path [(relative-path filetxn)]))
+          ;; not exist, ignore
+          true
+          (let [r (<! (<delete-local-files rsapi graph-uuid base-path [(relative-path filetxn)]))]
+            (if (and (instance? ExceptionInfo r)
+                     (string/index-of (str (ex-cause r)) "No such file or directory"))
+              true
+              r)))))))
 
 (defn- assert-local-txid<=remote-txid
   []
@@ -1486,6 +1489,19 @@
    (map #(partition-all n %))
    cat))
 
+(defn <file-change-event-revise
+  "filename is case-insensitive on macos.
+  when renamed a page(foo->Foo), generate following events:
+  1. change foo.md
+  2. add Foo.md
+  the 1st event should be converted to <unlink foo.md>"
+  [^FileChangeEvent e]
+  (go
+    (if (and (= "change" (.-type e))
+             ;; if not found in local fs
+             (empty? (<! (<get-local-files-meta rsapi "" (.-dir e) [(.-path e)]))))
+      (->FileChangeEvent "unlink" (.-dir e) (.-path e) nil false)
+      e)))
 
 (def local-changes-chan (chan (async/dropping-buffer 1000)))
 (defn file-watch-handler
@@ -1500,8 +1516,9 @@
             (let [path (remove-dir-prefix dir path)
                   files-meta (and (not= "unlink" type)
                                   (<! (<get-local-files-meta rsapi "" dir [path])))
-                  checksum (and (coll? files-meta) (some-> files-meta first :etag))]
-              (>! local-changes-chan (->FileChangeEvent type dir path stat checksum)))))))))
+                  checksum (and (coll? files-meta) (some-> files-meta first :etag))
+                  e (<! (<file-change-event-revise (->FileChangeEvent type dir path stat checksum)))]
+              (>! local-changes-chan e))))))))
 
 ;;; ### encryption
 (def pwd-map
@@ -2108,7 +2125,8 @@
                             "unlink"
                             (do
                               ;; ensure local-file deleted, may return no such file exception, but ignore it.
-                              (<delete-local-files rsapi graph-uuid base-path paths)
+                              (let [paths* (mapv :path (<! (<get-local-files-meta rsapi "" base-path paths)))]
+                                (<delete-local-files rsapi graph-uuid base-path paths*))
                               (<with-pause (<delete-remote-files rsapi graph-uuid base-path paths @*txid) *paused))))
                   _     (swap! *sync-state sync-state--add-current-local->remote-files paths)
                   r*    (<! r)
