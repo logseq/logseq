@@ -2704,7 +2704,6 @@
         (state/clear-editor-action!)
 
         ;; If typing a closing-autocomplete character (other than `), move the cursor right instead of inserting another
-        ;; FIXME: ` should do this too, but without making ``` annoying to type
         (and (contains? (set/difference (set (keys reversed-autopair-map))
                                         #{"`"})
                         key)
@@ -2712,7 +2711,7 @@
         (do (util/stop e)
             (cursor/move-cursor-forward input))
 
-        ;; Note: When text is not selected, autopair handled in `input-handler` instead
+        ;; Note: When text is not selected, autopair handled in `input-handler` instead (except for `)
         (and (autopair-when-selected key) (not (string/blank? (util/get-selected-text))))
         (do (util/stop e)
             (autopair input-id key format {}))
@@ -2727,15 +2726,19 @@
         (do (util/stop e)
             (autopair input-id "(" format nil))
 
+        (and (not (string/blank? (util/get-selected-text)))
+             (= "`" key))
+        (do (util/stop e)
+            (autopair input-id "`" format nil))
+
         ;; If you type `xyz`, the last backtick should close the first and not add another autopair
         ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)        
-        (contains? (set (keys autopair-map)) key)
+        ;; https://github.com/logseq/logseq/pull/6496
         (let [curr (get-current-input-char input)
-                  prev (util/nth-safe value (dec pos))]
-            (util/stop e) 
-            (if (and (= key "`") (= "`" curr) (not= "`" prev))
-              (cursor/move-cursor-forward input)
-              (autopair input-id key format nil)))
+              prev (util/nth-safe value (dec pos))]
+          (and (string/blank? (util/get-selected-text))
+               (= key "`") (= "`" curr) (not= "`" prev)))
+        (do (util/stop e) (cursor/move-cursor-forward input))
 
         (and hashtag? (or (zero? pos) (re-matches #"\s" (get value (dec pos)))))
         (do
