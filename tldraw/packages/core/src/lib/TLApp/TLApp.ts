@@ -857,13 +857,6 @@ export class TLApp<
   }
 
   readonly onPointerUp: TLEvents<S, K>['pointer'] = (info, e) => {
-    if (!this.editingShape && e.button === 1 && this.isIn('move')) {
-      this.selectedTool.transition('idle', { exit: true })
-      e.stopPropagation()
-      e.preventDefault()
-      return
-    }
-
     if ('clientX' in e) {
       this.inputs.onPointerUp(
         [...this.viewport.getPagePoint([e.clientX, e.clientY]), 0.5],
