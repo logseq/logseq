@@ -1,4 +1,4 @@
-import { expect } from '@playwright/test'
+import { expect, Page } from '@playwright/test'
 import { test } from './fixtures'
 import { IsMac, createPage, randomLowerString, newBlock, newInnerBlock, randomString, lastBlock } from './utils'
 
@@ -6,7 +6,7 @@ import { IsMac, createPage, randomLowerString, newBlock, newInnerBlock, randomSt
  * Test rename feature
  ***/
 
-async function page_rename_test(page, original_page_name: string, new_page_name: string) {
+async function page_rename_test(page: Page, original_page_name: string, new_page_name: string) {
   let selectAll = 'Control+a'
   if (IsMac) {
     selectAll = 'Meta+a'
@@ -17,7 +17,7 @@ async function page_rename_test(page, original_page_name: string, new_page_name:
   let new_name = new_page_name + rand
 
   await createPage(page, original_name)
-  await page.click('.page-title .title')
+  await page.click('.ls-page-title .page-title')
   await page.waitForSelector('input[type="text"]')
   await page.keyboard.press(selectAll)
   await page.keyboard.press('Backspace')
