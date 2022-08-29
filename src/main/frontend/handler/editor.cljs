@@ -2735,9 +2735,15 @@
         (do (util/stop e)
             (autopair input-id "(" format nil))
 
+        ;; If you type `xyz`, the last backtick should close the first and not add another autopair
+        ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)        
         (contains? (set (keys autopair-map)) key)
-        (do (util/stop e)
-            (autopair input-id key format nil))
+        (let [curr (get-current-input-char input)
+                  prev (util/nth-safe value (dec pos))]
+            (util/stop e) 
+            (if (and (= key "`") (= "`" curr) (not= "`" prev))
+              (cursor/move-cursor-forward input)
+              (autopair input-id key format nil)))
 
         (and hashtag? (or (zero? pos) (re-matches #"\s" (get value (dec pos)))))
         (do

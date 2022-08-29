@@ -229,7 +229,8 @@
  ;; :property-pages/excludelist
 
  ;; Enables property values to contain a mix of tags, page-refs, special
- ;; punctuation and free-form text
+ ;; punctuation and free-form text.
+ ;; Re-index current graph for config to take effect
  ;; :rich-property-values? true
 
  ;; logbook setup
