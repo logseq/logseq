@@ -135,6 +135,7 @@
   (s/or :succ ::succ-map
         :stop ::stop-map
         :need-sync-remote ::need-sync-remote
+        :graph-has-been-deleted ::graph-has-been-deleted
         :unknown ::unknown-map))
 
 ;; sync-event type
@@ -1171,18 +1172,23 @@
 
 (def remoteapi (->RemoteAPI nil))
 
-(def <get-graph-salt-memoize
-  (let [*cache (atom {})]
-    (fn [remoteapi graph-uuid]
-      (go
-        (let [r          (get @*cache graph-uuid)
-              expired-at (:expired-at r)
-              now        (tc/to-long (t/now))]
-          (if (< now expired-at)
-            r
-            (let [r (<! (<get-graph-salt remoteapi graph-uuid))]
-              (swap! *cache conj [graph-uuid r])
-              r)))))))
+
+(def ^:private *get-graph-salt-memoize-cache (atom {}))
+(defn update-graph-salt-cache [graph-uuid v]
+  {:pre [(map? v)
+         (= #{:value :expired-at} (set (keys v)))]}
+  (swap! *get-graph-salt-memoize-cache conj [graph-uuid v]))
+
+(defn <get-graph-salt-memoize [remoteapi graph-uuid]
+  (go
+    (let [r          (get @*get-graph-salt-memoize-cache graph-uuid)
+          expired-at (:expired-at r)
+          now        (tc/to-long (t/now))]
+      (if (< now expired-at)
+        r
+        (let [r (<! (<get-graph-salt remoteapi graph-uuid))]
+          (swap! *get-graph-salt-memoize-cache conj [graph-uuid r])
+          r)))))
 
 (def <get-graph-encrypt-keys-memoize
   (let [*cache (atom {})]
@@ -1552,6 +1558,7 @@
 
 (defn- persist-pwd!
   [pwd graph-uuid]
+  {:pre [(string? pwd)]}
   (js/localStorage.setItem (local-storage-pwd-path graph-uuid) pwd))
 
 (defn- remove-pwd!
@@ -1574,7 +1581,9 @@
            (<! (<get-graph-salt-memoize remoteapi graph-uuid)))
           [salt-value _expired-at]
           (if gone?
-            ((juxt :value :expired-at) (<! (<create-graph-salt remoteapi graph-uuid)))
+            (let [r (<! (<create-graph-salt remoteapi graph-uuid))]
+              ;; (update-graph-salt-cache graph-uuid r)
+              ((juxt :value :expired-at) r))
             [value expired-at])
           encrypted-pwd (<! (<encrypt-content pwd salt-value))]
       (persist-pwd! encrypted-pwd graph-uuid))))
@@ -1612,6 +1621,8 @@
 
 
 (def <restored-pwd (chan (async/sliding-buffer 1)))
+(def <restored-pwd-pub (async/pub <restored-pwd :graph-uuid))
+
 (defn- <ensure-pwd-exists!
   "return password or nil when restore pwd from localstorage failed"
   [repo graph-uuid init-graph-keys]
@@ -1619,14 +1630,13 @@
     (let [{:keys [restore-pwd-failed]} (<! (restore-pwd! graph-uuid))
           pwd (get-in @pwd-map [graph-uuid :pwd])]
       (if restore-pwd-failed
-        (do (util/drain-chan <restored-pwd)
-            (state/pub-event! [:modal/remote-encryption-input-pw-dialog repo
+        (do (state/pub-event! [:modal/remote-encryption-input-pw-dialog repo
                                (state/get-remote-graph-info-by-uuid graph-uuid)
                                :input-pwd-remote
                                {:GraphUUID graph-uuid
                                 :init-graph-keys init-graph-keys
                                 :after-input-password #(go (<! (restore-pwd! graph-uuid))
-                                                           (offer! <restored-pwd true))}])
+                                                           (offer! <restored-pwd {:graph-uuid graph-uuid :value true}))}])
             nil)
         pwd))))
 
@@ -1640,58 +1650,62 @@
 
 (defn- <loop-ensure-pwd&keys
   [graph-uuid repo *stopped?]
-  (go-loop []
-    (if @*stopped?
-      ::stop
-      (let [{:keys [public-key encrypted-private-key] :as r}
-            (<! (<get-graph-encrypt-keys-memoize remoteapi graph-uuid))
-            init-graph-keys (some-> (ex-data r) :err :status (= 404))
-            pwd (<! (<ensure-pwd-exists! repo graph-uuid init-graph-keys))]
+  (let [<restored-pwd-sub-chan (chan 1)]
+    (async/sub <restored-pwd-pub graph-uuid <restored-pwd-sub-chan)
+    (go-loop []
+      (if @*stopped?
+        ::stop
+        (let [{:keys [public-key encrypted-private-key] :as r}
+              (<! (<get-graph-encrypt-keys-memoize remoteapi graph-uuid))
+              init-graph-keys (some-> (ex-data r) :err :status (= 404))
+              pwd (<! (<ensure-pwd-exists! repo graph-uuid init-graph-keys))]
 
-        (cond
-          (not pwd)
-          (do (<! <restored-pwd)        ;loop to wait password
-              (recur))
+          (cond
+            (not pwd)
+            (do (println :debug "waiting password...")
+                (<! <restored-pwd-sub-chan)      ;loop to wait password
+                (println :debug "waiting password...DONE" graph-uuid)
+                (recur))
 
-          init-graph-keys
-          ;; when public+private keys not stored at server
-          ;; generate a new key pair and upload them
-          (let [next-state
-                (let [{public-key :publicKey private-key :secretKey}
-                      (<! (<key-gen rsapi))
-                      encrypted-private-key (<! (<encrypt-content private-key pwd))
-                      _ (assert (string? encrypted-private-key)
-                                {:encrypted-private-key encrypted-private-key
-                                 :private-key private-key
-                                 :pwd pwd})
-                      upload-r (<! (<upload-graph-encrypt-keys remoteapi graph-uuid public-key encrypted-private-key))]
-                  (if (instance? ExceptionInfo upload-r)
-                    (do (js/console.log "upload-graph-encrypt-keys err" upload-r)
-                        ::stop)
-                    :recur))]
-            (if (= :recur next-state)
-              (recur)
-              next-state))
-          :else
-          ;; pwd, public-key, encrypted-private-key all exist
-          (do (assert (and pwd public-key encrypted-private-key) {:encrypted-private-key encrypted-private-key
-                                                                  :public-key public-key
-                                                                  :pwd pwd})
-              (<! (<set-graph-encryption-keys! graph-uuid pwd public-key encrypted-private-key))
-              (if (get-in @pwd-map [graph-uuid :private-key])
-                (do (when (state/modal-opened?)
-                      (state/set-state! [:ui/loading? :set-graph-password] false)
-                      (notification/show! "Password successfully matched" :success)
-                      (state/close-modal!))
-                    ::idle)
-                ;; bad pwd
-                (do (when (state/modal-opened?)
-                      (when (state/sub [:ui/loading? :set-graph-password])
-                        (state/set-state! [:file-sync/set-remote-graph-password-result]
-                                          {:fail "Incorrect password. Please try again"}))
-                      (state/set-state! [:ui/loading? :set-graph-password] false))
-                    (clear-pwd! graph-uuid)
-                    (recur)))))))))
+            init-graph-keys
+            ;; when public+private keys not stored at server
+            ;; generate a new key pair and upload them
+            (let [next-state
+                  (let [{public-key :publicKey private-key :secretKey}
+                        (<! (<key-gen rsapi))
+                        encrypted-private-key (<! (<encrypt-content private-key pwd))
+                        _ (assert (string? encrypted-private-key)
+                                  {:encrypted-private-key encrypted-private-key
+                                   :private-key private-key
+                                   :pwd pwd})
+                        upload-r (<! (<upload-graph-encrypt-keys remoteapi graph-uuid public-key encrypted-private-key))]
+                    (if (instance? ExceptionInfo upload-r)
+                      (do (js/console.log "upload-graph-encrypt-keys err" upload-r)
+                          ::stop)
+                      :recur))]
+              (if (= :recur next-state)
+                (recur)
+                next-state))
+            :else
+            ;; pwd, public-key, encrypted-private-key all exist
+            (do (assert (and pwd public-key encrypted-private-key) {:encrypted-private-key encrypted-private-key
+                                                                    :public-key public-key
+                                                                    :pwd pwd})
+                (<! (<set-graph-encryption-keys! graph-uuid pwd public-key encrypted-private-key))
+                (if (get-in @pwd-map [graph-uuid :private-key])
+                  (do (when (state/modal-opened?)
+                        (state/set-state! [:ui/loading? :set-graph-password] false)
+                        (notification/show! "Password successfully matched" :success)
+                        (state/close-modal!))
+                      ::idle)
+                  ;; bad pwd
+                  (do (when (state/modal-opened?)
+                        (when (state/sub [:ui/loading? :set-graph-password])
+                          (state/set-state! [:file-sync/set-remote-graph-password-result]
+                                            {:fail "Incorrect password. Please try again"}))
+                        (state/set-state! [:ui/loading? :set-graph-password] false))
+                      (clear-pwd! graph-uuid)
+                      (recur))))))))))
 
 
 (defn- <set-env&keys
@@ -2112,8 +2126,9 @@
                              (filter #(not (contains-path? ignored-files %))))]
           (go
             (let [es*   (<! (<filter-checksum-not-consistent es))
-                  _ (when (not= (count es*) (count es))
-                      (println :debug :filter-checksum-changed (mapv relative-path (set/difference (set es) (set es*)))))
+                  _     (when (not= (count es*) (count es))
+                          (println :debug :filter-checksum-changed
+                                   (mapv relative-path (set/difference (set es) (set es*)))))
                   paths (sequence es->paths-xf es*)
                   _     (println :sync-local->remote type paths)
                   r     (if (empty? paths)
@@ -2128,10 +2143,10 @@
                               (let [paths* (mapv :path (<! (<get-local-files-meta rsapi "" base-path paths)))]
                                 (<delete-local-files rsapi graph-uuid base-path paths*))
                               (<with-pause (<delete-remote-files rsapi graph-uuid base-path paths @*txid) *paused))))
-                  _     (swap! *sync-state sync-state--add-current-local->remote-files paths)
-                  r*    (<! r)
+                  _               (swap! *sync-state sync-state--add-current-local->remote-files paths)
+                  r*              (<! r)
                   [succ? paused?] ((juxt number? :pause) r*)
-                  _     (swap! *sync-state sync-state--remove-current-local->remote-files paths succ?)]
+                  _               (swap! *sync-state sync-state--remove-current-local->remote-files paths succ?)]
               (cond
                 (need-sync-remote? r*)
                 (do (println :need-sync-remote r*)
@@ -2173,9 +2188,9 @@
                   (sync-stop-when-api-flying? remote-all-files-meta-or-exp)
                   (decrypt-exp? remote-all-files-meta-or-exp))
             (do (put-sync-event! {:event :exception-decrypt-failed
-                                  :data {:graph-uuid graph-uuid
-                                         :exp remote-all-files-meta-or-exp
-                                         :epoch (tc/to-epoch (t/now))}})
+                                  :data  {:graph-uuid graph-uuid
+                                          :exp        remote-all-files-meta-or-exp
+                                          :epoch      (tc/to-epoch (t/now))}})
                 {:stop true})
             (let [remote-all-files-meta remote-all-files-meta-or-exp
                   local-all-files-meta  (<! local-all-files-meta-c)
