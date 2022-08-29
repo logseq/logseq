@@ -9,9 +9,10 @@ const preventDefault = (e: Event) => e.stopPropagation()
 
 interface ContextMenuProps {
   children: React.ReactNode
+  collisionRef: React.RefObject<HTMLDivElement>
 }
 
-export const ContextMenu = observer(function ContextMenu({ children }: ContextMenuProps) {
+export const ContextMenu = observer(function ContextMenu({ children, collisionRef }: ContextMenuProps) {
   const app = useApp()
   const rContent = React.useRef<HTMLDivElement>(null)
 
@@ -21,7 +22,7 @@ export const ContextMenu = observer(function ContextMenu({ children }: ContextMe
       <ReactContextMenu.Content className="tl-context-menu"
       ref={rContent}
       onEscapeKeyDown={preventDefault}
-      collisionBoundary={document.querySelector<HTMLElement>('.logseq-tldraw-wrapper')}
+      collisionBoundary={collisionRef.current}
       asChild
       tabIndex={-1}
       >

@@ -81,6 +81,7 @@ export const App = function App({
   const onFileDrop = useFileDrop(contextValue)
   const onPaste = usePaste(contextValue)
   const onQuickAdd = useQuickAdd()
+  const ref = React.useRef<HTMLDivElement>(null);
 
   const onPersistOnDiff: TLReactCallbacks<Shape>['onPersist'] = React.useCallback(
     (app, info) => {
@@ -103,8 +104,8 @@ export const App = function App({
         model={model}
         {...rest}
       >
-        <ContextMenu>
-          <div className="logseq-tldraw logseq-tldraw-wrapper">
+        <ContextMenu collisionRef={ref}>
+          <div ref={ref} className="logseq-tldraw logseq-tldraw-wrapper">
             <AppCanvas components={components}>
               <AppUI />
             </AppCanvas>
