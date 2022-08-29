@@ -83,7 +83,7 @@ extension URL {
         if self.lastPathComponent.starts(with: ".") {
             return true
         }
-        if self.absoluteString.contains("logseq/bak/") {
+        if self.absoluteString.contains("/logseq/bak/") || self.absoluteString.contains("/logseq/version-files/"){
             return true
         }
         if self.lastPathComponent == "graphs-txid.edn" || self.lastPathComponent == "broken-config.edn" {

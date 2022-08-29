@@ -117,7 +117,7 @@ public struct SyncMetadata: CustomStringConvertible, Equatable {
 public class FileSync: CAPPlugin, SyncDebugDelegate {
     override public func load() {
         print("debug File sync iOS plugin loaded!")
-        
+
         AWSMobileClient.default().initialize { (userState, error) in
             guard error == nil else {
                 print("error initializing AWSMobileClient. Error: \(error!.localizedDescription)")
@@ -153,7 +153,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
         ENCRYPTION_SECRET_KEY = secretKey
         ENCRYPTION_PUBLIC_KEY = publicKey
         FNAME_ENCRYPTION_KEY = AgeEncryption.toRawX25519Key(secretKey)
-        
+
     }
 
     @objc func setEnv(_ call: CAPPluginCall) {
@@ -180,7 +180,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
         self.debugNotification(["event": "setenv:\(env)"])
         call.resolve(["ok": true])
     }
-    
+
     @objc func encryptFnames(_ call: CAPPluginCall) {
         guard fnameEncryptionEnabled() else {
             call.reject("fname encryption key not set")
@@ -190,7 +190,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             call.reject("required parameters: filePaths")
             return
         }
-        
+
         let nFiles = fnames.count
         fnames = fnames.compactMap { $0.removingPercentEncoding!.fnameEncrypt(rawKey: FNAME_ENCRYPTION_KEY!) }
         if fnames.count != nFiles {
@@ -198,7 +198,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
         }
         call.resolve(["value": fnames])
     }
-    
+
     @objc func decryptFnames(_ call: CAPPluginCall) {
         guard fnameEncryptionEnabled() else {
             call.reject("fname encryption key not set")
@@ -329,7 +329,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
                   call.reject("required paremeters: basePath, filePaths, graphUUID, token")
                   return
               }
-    
+
         // [encrypted-fname: original-fname]
         var encryptedFilePathDict: [String: String] = [:]
         if fnameEncryptionEnabled() {
@@ -345,7 +345,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
         }
 
         let encryptedFilePaths = Array(encryptedFilePathDict.keys)
-        
+
         let client = SyncClient(token: token, graphUUID: graphUUID)
         client.delegate = self // receives notification
 
@@ -385,7 +385,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             }
         }
     }
-    
+
     @objc func updateLocalVersionFiles(_ call: CAPPluginCall) {
         guard let baseURL = call.getString("basePath").flatMap({path in URL(string: path)}),
               let filePaths = call.getArray("filePaths") as? [String],
@@ -394,9 +394,6 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
                   call.reject("required paremeters: basePath, filePaths, graphUUID, token")
                   return
               }
-        
-        print("update local version files \(baseURL) \(filePaths)")
-    
         let client = SyncClient(token: token, graphUUID: graphUUID)
         client.delegate = self // receives notification
 
@@ -452,7 +449,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
 
         let nFiles = filePaths.count
         if fnameEncryptionEnabled() {
-            filePaths = filePaths.compactMap { $0.fnameEncrypt(rawKey: FNAME_ENCRYPTION_KEY!) }
+            filePaths = filePaths.compactMap { $0.removingPercentEncoding!.fnameEncrypt(rawKey: FNAME_ENCRYPTION_KEY!) }
         }
         if filePaths.count != nFiles {
             call.reject("cannot encrypt all file names")
@@ -483,7 +480,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
                   return
               }
         let fnameEncryption = call.getBool("fnameEncryption") ?? false // default to false
-        
+
         guard !filePaths.isEmpty else {
             return call.reject("empty filePaths")
         }
