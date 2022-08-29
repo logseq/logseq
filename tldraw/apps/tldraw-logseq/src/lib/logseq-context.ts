@@ -1,9 +1,8 @@
 import React from 'react'
 
 export interface SearchResult {
-  pages: string[]
-  blocks: { content: string; page: number; uuid: string }[]
-  'has-more?': boolean
+  pages?: string[]
+  blocks?: { content: string; page: number; uuid: string }[]
   files?: string[]
 }
 
@@ -23,7 +22,10 @@ export interface LogseqContextValue {
     }>
   }
   handlers: {
-    search: (query: string) => Promise<SearchResult>
+    search: (
+      query: string,
+      filters: { 'pages?': boolean; 'blocks?': boolean; 'files?': boolean }
+    ) => Promise<SearchResult>
     addNewBlock: (content: string) => string // returns the new block uuid
     queryBlockByUUID: (uuid: string) => any
     isWhiteboardPage: (pageName: string) => boolean

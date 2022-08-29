@@ -5,9 +5,9 @@
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.search :as search]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.rum :as r]
+            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
@@ -43,9 +43,14 @@
       (whiteboard-handler/add-new-block-portal-shape! uuid client-x client-y))))
 
 (defn search-handler
-  [q]
-  (p/let [results (search/search q)]
-    (clj->js results)))
+  [q filters]
+  (let [{:keys [pages? blocks? files?]} (js->clj filters {:keywordize-keys true})
+        repo (state/get-current-repo)
+        limit 100]
+    (p/let [blocks (when blocks? (search/block-search repo q {:limit limit}))
+            pages (when pages? (search/page-search q))
+            files (when files? (search/file-search q limit))]
+      (clj->js {:pages pages :blocks blocks :files files}))))
 
 (defn save-asset-handler
   [file]
