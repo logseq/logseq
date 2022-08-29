@@ -831,20 +831,26 @@ export class TLApp<
   }
 
   readonly onWheel: TLEvents<S, K>['wheel'] = (info, e) => {
+    if (e.ctrlKey) {
+      return
+    }
+
     this.viewport.panCamera(info.delta)
     this.inputs.onWheel([...this.viewport.getPagePoint([e.clientX, e.clientY]), 0.5], e)
   }
 
   readonly onPointerDown: TLEvents<S, K>['pointer'] = (info, e) => {
-    // Switch to select on right click to enable contextMenu state
-    if (e.button === 2) {
-      this.transition('select', info)
-      return
-    }
+
 
     // Pan canvas when holding middle click
     if (!this.editingShape && e.button === 1 && !this.isIn('move')) {
       this.temporaryTransitionToMove(e)
+      return
+    }
+
+    // Switch to select on right click to enable contextMenu state
+    if (e.button === 2) {
+      this.transition('select')
       return
     }
 
