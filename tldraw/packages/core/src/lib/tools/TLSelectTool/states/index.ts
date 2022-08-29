@@ -1,4 +1,5 @@
 export * from './BrushingState'
+export * from './ContextMenuState'
 export * from './IdleState'
 export * from './PointingShapeState'
 export * from './PointingBoundsBackgroundState'

@@ -5,6 +5,7 @@ import { TLTool } from '../../TLTool'
 import {
   IdleState,
   BrushingState,
+  ContextMenuState,
   PointingCanvasState,
   PointingShapeState,
   PointingShapeBehindBoundsState,
@@ -37,6 +38,7 @@ export class TLSelectTool<
   static states = [
     IdleState,
     BrushingState,
+    ContextMenuState,
     PointingCanvasState,
     PointingShapeState,
     PointingShapeBehindBoundsState,

@@ -1512,6 +1512,19 @@
   dependencies:
     "@babel/runtime" "^7.13.10"
 
+"@radix-ui/react-context-menu@^1.0.0":
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/@radix-ui/react-context-menu/-/react-context-menu-1.0.0.tgz#49f2ac5faafc8124add8069a39eab603b2437ba8"
+  integrity sha512-JkwOgdXwErwEEpsmgu0Ob8zD3gzWS1brPXnNGPyZEtR6/EYyDgruQYKiihXVsCrPCdrNUHawop9I1+6JTdXPTA==
+  dependencies:
+    "@babel/runtime" "^7.13.10"
+    "@radix-ui/primitive" "1.0.0"
+    "@radix-ui/react-context" "1.0.0"
+    "@radix-ui/react-menu" "1.0.0"
+    "@radix-ui/react-primitive" "1.0.0"
+    "@radix-ui/react-use-callback-ref" "1.0.0"
+    "@radix-ui/react-use-controllable-state" "1.0.0"
+
 "@radix-ui/react-context@1.0.0":
   version "1.0.0"
   resolved "https://registry.yarnpkg.com/@radix-ui/react-context/-/react-context-1.0.0.tgz#f38e30c5859a9fb5e9aa9a9da452ee3ed9e0aee0"

@@ -11,6 +11,7 @@ import {
 import * as React from 'react'
 import { AppUI } from './components/AppUI'
 import { ContextBar } from './components/ContextBar'
+import { ContextMenu } from './components/ContextMenu'
 import { useFileDrop } from './hooks/useFileDrop'
 import { usePaste } from './hooks/usePaste'
 import { useQuickAdd } from './hooks/useQuickAdd'
@@ -80,6 +81,7 @@ export const App = function App({
   const onFileDrop = useFileDrop(contextValue)
   const onPaste = usePaste(contextValue)
   const onQuickAdd = useQuickAdd()
+  const ref = React.useRef<HTMLDivElement>(null);
 
   const onPersistOnDiff: TLReactCallbacks<Shape>['onPersist'] = React.useCallback(
     (app, info) => {
@@ -102,11 +104,13 @@ export const App = function App({
         model={model}
         {...rest}
       >
-        <div className="logseq-tldraw logseq-tldraw-wrapper">
-          <AppCanvas components={components}>
-            <AppUI />
-          </AppCanvas>
-        </div>
+        <ContextMenu collisionRef={ref}>
+          <div ref={ref} className="logseq-tldraw logseq-tldraw-wrapper">
+            <AppCanvas components={components}>
+              <AppUI />
+            </AppCanvas>
+          </div>
+        </ContextMenu>
       </AppProvider>
     </LogseqContext.Provider>
   )

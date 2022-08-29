@@ -22,6 +22,8 @@ export const FIT_TO_SCREEN_PADDING = 100
 
 export const BINDING_DISTANCE = 4
 
+export const ZOOM_UPDATE_FACTOR = 0.8
+
 export const GRID_SIZE = 8
 
 export const EMPTY_OBJECT: any = {}

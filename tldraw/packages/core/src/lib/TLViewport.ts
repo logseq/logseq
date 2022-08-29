@@ -1,6 +1,6 @@
 import { Vec } from '@tldraw/vec'
 import { action, computed, makeObservable, observable } from 'mobx'
-import { FIT_TO_SCREEN_PADDING } from '../constants'
+import { FIT_TO_SCREEN_PADDING, ZOOM_UPDATE_FACTOR } from '../constants'
 import type { TLBounds } from '../types'
 
 export class TLViewport {
@@ -84,7 +84,7 @@ export class TLViewport {
 
   zoomIn = (): this => {
     const { camera, bounds } = this
-    const zoom: number = Math.min(TLViewport.maxZoom, Math.ceil((camera.zoom * 100 + 1) / 25) / 4)
+    const zoom: number = Math.min(TLViewport.maxZoom, camera.zoom / ZOOM_UPDATE_FACTOR)
     const center = [bounds.width / 2, bounds.height / 2]
     const p0 = Vec.sub(Vec.div(center, camera.zoom), center)
     const p1 = Vec.sub(Vec.div(center, zoom), center)
@@ -93,7 +93,7 @@ export class TLViewport {
 
   zoomOut = (): this => {
     const { camera, bounds } = this
-    const zoom: number = Math.max(TLViewport.minZoom, Math.floor((camera.zoom * 100 - 1) / 25) / 4)
+    const zoom: number = Math.max(TLViewport.minZoom, camera.zoom * ZOOM_UPDATE_FACTOR)
     const center = [bounds.width / 2, bounds.height / 2]
     const p0 = Vec.sub(Vec.div(center, camera.zoom), center)
     const p1 = Vec.sub(Vec.div(center, zoom), center)

@@ -10,6 +10,7 @@
     "dev:vite": "tsup --watch --sourcemap inline"
   },
   "devDependencies": {
+    "@radix-ui/react-context-menu": "^1.0.0",
     "@radix-ui/react-dropdown-menu": "^1.0.0",
     "@radix-ui/react-select": "^1.0.0",
     "@radix-ui/react-separator": "^1.0.0",
