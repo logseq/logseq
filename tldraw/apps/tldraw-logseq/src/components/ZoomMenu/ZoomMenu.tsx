@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import { useApp } from '@tldraw/react'
 import { MOD_KEY} from '@tldraw/core'
