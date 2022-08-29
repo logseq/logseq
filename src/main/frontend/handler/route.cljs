@@ -9,6 +9,7 @@
             [frontend.state :as state]
             [logseq.graph-parser.text :as text]
             [frontend.util :as util]
+            [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]))
 
 (defn redirect!
@@ -137,13 +138,20 @@
   (state/pub-event! [:go/search]))
 
 (defn go-to-journals!
-  []
-  (state/set-journals-length! 3)
-  (let [route (if (state/custom-home-page?)
-                :all-journals
-                :home)]
-    (redirect! {:to route}))
-  (util/scroll-to-top))
+  [e]
+  (if (gobj/get e "shiftKey")           ;TODO pretty sure this test should be sidebar.cljs
+    (do
+      (state/sidebar-add-block!
+       (state/get-current-repo)
+       (:db/id (db/get-page (date/today)))
+       :page))
+    (do
+      (state/set-journals-length! 3)
+      (let [route (if (state/custom-home-page?)
+                    :all-journals
+                    :home)]
+        (redirect! {:to route}))
+      (util/scroll-to-top))))
 
 (defn- redirect-to-file!
   [page]
