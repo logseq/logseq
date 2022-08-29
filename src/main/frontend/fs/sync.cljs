@@ -1283,7 +1283,7 @@
       (.-deleted? (first filetxns))
       (let [filetxn (first filetxns)]
         (assert (= 1 (count filetxns)))
-        (if (empty? (<get-local-files-meta rsapi "" base-path [(relative-path filetxn)]))
+        (if (empty? (<! (<get-local-files-meta rsapi "" base-path [(relative-path filetxn)])))
           ;; not exist, ignore
           true
           (let [r (<! (<delete-local-files rsapi graph-uuid base-path [(relative-path filetxn)]))]
@@ -1291,6 +1291,7 @@
                      (string/index-of (str (ex-cause r)) "No such file or directory"))
               true
               r)))))))
+
 
 (defn- assert-local-txid<=remote-txid
   []
