@@ -1,0 +1,111 @@
+name: E2E Test Repeat
+
+# Running E2E test multiple times to confirm test stability.
+# E2E test could be randomly failed due to the batch update mechanism of React.
+# Robust E2E test could help improving dev experience.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'e2e-tests/**'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'e2e-tests/**'
+
+env:
+  CLOJURE_VERSION: '1.10.1.727'
+  # setup-java@v2 dropped support for legacy Java version syntax.
+  # This is the same as 1.8.
+  JAVA_VERSION: '8'
+  # This is the latest node version we can run.
+  NODE_VERSION: '16'
+  BABASHKA_VERSION: '0.8.1'
+
+jobs:
+
+  e2e-test-repeat:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        repeat: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] # Test 10 times for E2E robustness
+
+    steps:
+      - name: Repeat message
+        run: echo running E2E test with repeat id ${{ matrix.repeat }}
+
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+          cache-dependency-path: |
+            yarn.lock
+            static/yarn.lock
+
+      - name: Set up Java
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@master
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+
+      - name: Clojure cache
+        uses: actions/cache@v2
+        id: clojure-deps
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn') }}
+          restore-keys: ${{ runner.os }}-clojure-deps-
+
+      - name: Fetch Clojure deps
+        if: steps.clojure-deps.outputs.cache-hit != 'true'
+        run: clojure -A:cljs -P
+
+      - name: Shadow-cljs cache
+        uses: actions/cache@v2
+        with:
+          path: .shadow-cljs
+          # ensure update cache every time
+          key: ${{ runner.os }}-shadow-cljs-${{ github.sha }}
+          # will match most recent upload
+          restore-keys: |
+            ${{ runner.os }}-shadow-cljs-
+
+      - name: Fetch yarn deps
+        run: yarn install
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
+
+      # NOTE: require the app to be build in debug mode(compile instead of build).
+      - name: Prepare E2E test build
+        run: |
+          yarn gulp:build && clojure -M:cljs compile app publishing electron
+          (cd static && yarn install && yarn rebuild:better-sqlite3)
+
+      # Exits with 0 if yarn.lock is up to date or 1 if we forgot to update it
+      - name: Ensure static yarn.lock is up to date
+        run: git diff --exit-code static/yarn.lock
+
+      - name: Run Playwright test
+        run: xvfb-run -- yarn e2e-test
+        env:
+          CI: true
+          DEBUG: "pw:api"
+
+      # - name: Save test artifacts
+      #   if: ${{ failure() }}
+      #   uses: actions/upload-artifact@v2
+      #   with:
+      #     name: e2e-test-report
+      #     path: artifacts.zip
