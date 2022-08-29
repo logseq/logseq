@@ -196,25 +196,25 @@
      (ui/resize-consumer
       (if-not (mobile-util/native-ios?)
         (cond->
-         {:className "resize image-resize"
-          :onSizeChanged (fn [value]
-                           (when (and (not @*resizing-image?)
-                                      (some? @size)
-                                      (not= value @size))
-                             (reset! *resizing-image? true))
-                           (reset! size value))
-          :onMouseUp (fn []
-                       (when (and @size @*resizing-image?)
-                         (when-let [block-id (:block/uuid config)]
-                           (let [size (bean/->clj @size)]
-                             (editor-handler/resize-image! block-id metadata full_text size))))
-                       (when @*resizing-image?
+            {:className "resize image-resize"
+             :onSizeChanged (fn [value]
+                              (when (and (not @*resizing-image?)
+                                         (some? @size)
+                                         (not= value @size))
+                                (reset! *resizing-image? true))
+                              (reset! size value))
+             :onMouseUp (fn []
+                          (when (and @size @*resizing-image?)
+                            (when-let [block-id (:block/uuid config)]
+                              (let [size (bean/->clj @size)]
+                                (editor-handler/resize-image! block-id metadata full_text size))))
+                          (when @*resizing-image?
                             ;; TODO: need a better way to prevent the clicking to edit current block
-                         (js/setTimeout #(reset! *resizing-image? false) 200)))
-          :onClick (fn [e]
-                     (when @*resizing-image? (util/stop e)))}
-          (and (:width metadata) (not (util/mobile?)))
-          (assoc :style {:width (:width metadata)}))
+                            (js/setTimeout #(reset! *resizing-image? false) 200)))
+             :onClick (fn [e]
+                        (when @*resizing-image? (util/stop e)))}
+            (and (:width metadata) (not (util/mobile?)))
+            (assoc :style {:width (:width metadata)}))
         {})
       [:div.asset-container {:key "resize-asset-container"}
        [:img.rounded-sm.shadow-xl.relative
@@ -305,7 +305,7 @@
           [:a.asset-ref.is-plaintext {:href (rfe/href :file {:path path})
                                       :on-click (fn [_event]
                                                   (p/let [result (fs/read-file repo-dir path)]
-                                                    (db/set-file-content! repo path result)))}
+                                                    (db/set-file-content! repo path result )))}
            title]
 
           (= ext :pdf)
@@ -459,9 +459,10 @@
   (let [tag? (:tag? config)
         config (assoc config :whiteboard-page? whiteboard-page?)]
     [:a
-     {:class (cond-> (if tag? "tag" "page-ref")
+     {:tabindex "0"
+      :class (cond-> (if tag? "tag" "page-ref")
                (:property? config)
-               (str " page-property-key"))
+               (str " page-property-key block-property"))
       :data-ref page-name
       :on-mouse-down (fn [e] (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?))
       :on-key-up (fn [e] ((when (= (.-key e) "Enter")
@@ -1196,25 +1197,25 @@
   (when-let [url (first arguments)]
     (let [results (text-util/get-matched-video url)
           src (match results
-                [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
-                (if (= (count id) 11) ["youtube-player" id] url)
+                     [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
+                     (if (= (count id) 11) ["youtube-player" id] url)
 
-                [_ _ _ "youtube-nocookie.com" _ id _]
-                (str "https://www.youtube-nocookie.com/embed/" id)
+                     [_ _ _ "youtube-nocookie.com" _ id _]
+                     (str "https://www.youtube-nocookie.com/embed/" id)
 
-                [_ _ _ "loom.com" _ id _]
-                (str "https://www.loom.com/embed/" id)
+                     [_ _ _ "loom.com" _ id _]
+                     (str "https://www.loom.com/embed/" id)
 
-                [_ _ _ (_ :guard #(string/ends-with? % "vimeo.com")) _ id _]
-                (str "https://player.vimeo.com/video/" id)
+                     [_ _ _ (_ :guard #(string/ends-with? % "vimeo.com")) _ id _]
+                     (str "https://player.vimeo.com/video/" id)
 
-                [_ _ _ "bilibili.com" _ id & query]
-                (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1"
-                     (when-let [page (second query)]
-                       (str "&page=" page)))
+                     [_ _ _ "bilibili.com" _ id & query]
+                     (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1"
+                          (when-let [page (second query)]
+                            (str "&page=" page)))
 
-                :else
-                url)]
+                     :else
+                     url)]
       (if (and (coll? src)
                (= (first src) "youtube-player"))
         (youtube/youtube-video (last src))
@@ -1411,103 +1412,103 @@
 (defn inline
   [{:keys [html-export?] :as config} item]
   (match item
-    [(:or "Plain" "Spaces") s]
-    s
+         [(:or "Plain" "Spaces") s]
+         s
 
-    ["Superscript" l]
-    (->elem :sup (map-inline config l))
-    ["Subscript" l]
-    (->elem :sub (map-inline config l))
+         ["Superscript" l]
+         (->elem :sup (map-inline config l))
+         ["Subscript" l]
+         (->elem :sub (map-inline config l))
 
-    ["Tag" _]
-    (when-let [s (gp-block/get-tag item)]
-      (let [s (text/page-ref-un-brackets! s)]
-        (page-cp (assoc config :tag? true) {:block/name s})))
+         ["Tag" _]
+         (when-let [s (gp-block/get-tag item)]
+           (let [s (text/page-ref-un-brackets! s)]
+             (page-cp (assoc config :tag? true) {:block/name s})))
 
-    ["Emphasis" [[kind] data]]
-    (emphasis-cp config kind data)
+         ["Emphasis" [[kind] data]]
+         (emphasis-cp config kind data)
 
-    ["Entity" e]
-    [:span {:dangerouslySetInnerHTML
-            {:__html (:html e)}}]
+         ["Entity" e]
+         [:span {:dangerouslySetInnerHTML
+                 {:__html (:html e)}}]
 
-    ["Latex_Fragment" [display s]] ;display can be "Displayed" or "Inline"
-    (if html-export?
-      (latex/html-export s false true)
-      (latex/latex (str (d/squuid)) s false (not= display "Inline")))
+         ["Latex_Fragment" [display s]] ;display can be "Displayed" or "Inline"
+         (if html-export?
+           (latex/html-export s false true)
+           (latex/latex (str (d/squuid)) s false (not= display "Inline")))
 
-    [(:or "Target" "Radio_Target") s]
-    [:a {:id s} s]
+         [(:or "Target" "Radio_Target") s]
+         [:a {:id s} s]
 
-    ["Email" address]
-    (let [{:keys [local_part domain]} address
-          address (str local_part "@" domain)]
-      [:a {:href (str "mailto:" address)} address])
+         ["Email" address]
+         (let [{:keys [local_part domain]} address
+               address (str local_part "@" domain)]
+           [:a {:href (str "mailto:" address)} address])
 
-    ["Nested_link" link]
-    (nested-link config html-export? link)
+         ["Nested_link" link]
+         (nested-link config html-export? link)
 
-    ["Link" link]
-    (link-cp config html-export? link)
+         ["Link" link]
+         (link-cp config html-export? link)
 
-    [(:or "Verbatim" "Code") s]
-    [:code s]
+         [(:or "Verbatim" "Code") s]
+         [:code s]
 
-    ["Inline_Source_Block" x]
-    [:code (:code x)]
+         ["Inline_Source_Block" x]
+         [:code (:code x)]
 
-    ["Export_Snippet" "html" s]
-    (when (not html-export?)
-      [:span {:dangerouslySetInnerHTML
-              {:__html s}}])
+         ["Export_Snippet" "html" s]
+         (when (not html-export?)
+           [:span {:dangerouslySetInnerHTML
+                   {:__html s}}])
 
-    ["Inline_Hiccup" s] ;; String to hiccup
-    (ui/catch-error
-     [:div.warning {:title "Invalid hiccup"} s]
-     (-> (safe-read-string s)
-         (security/remove-javascript-links-in-href)))
+         ["Inline_Hiccup" s] ;; String to hiccup
+         (ui/catch-error
+          [:div.warning {:title "Invalid hiccup"} s]
+          (-> (safe-read-string s)
+              (security/remove-javascript-links-in-href)))
 
-    ["Inline_Html" s]
-    (when (not html-export?)
+         ["Inline_Html" s]
+         (when (not html-export?)
            ;; TODO: how to remove span and only export the content of `s`?
-      [:span {:dangerouslySetInnerHTML {:__html s}}])
+           [:span {:dangerouslySetInnerHTML {:__html s}}])
 
-    [(:or "Break_Line" "Hard_Break_Line")]
-    [:br]
+         [(:or "Break_Line" "Hard_Break_Line")]
+         [:br]
 
-    ["Timestamp" [(:or "Scheduled" "Deadline") _timestamp]]
-    nil
-    ["Timestamp" ["Date" t]]
-    (timestamp t "Date")
-    ["Timestamp" ["Closed" t]]
-    (timestamp t "Closed")
-    ["Timestamp" ["Range" t]]
-    (range t false)
-    ["Timestamp" ["Clock" ["Stopped" t]]]
-    (range t true)
-    ["Timestamp" ["Clock" ["Started" t]]]
-    (timestamp t "Started")
+         ["Timestamp" [(:or "Scheduled" "Deadline") _timestamp]]
+         nil
+         ["Timestamp" ["Date" t]]
+         (timestamp t "Date")
+         ["Timestamp" ["Closed" t]]
+         (timestamp t "Closed")
+         ["Timestamp" ["Range" t]]
+         (range t false)
+         ["Timestamp" ["Clock" ["Stopped" t]]]
+         (range t true)
+         ["Timestamp" ["Clock" ["Started" t]]]
+         (timestamp t "Started")
 
-    ["Cookie" ["Percent" n]]
-    [:span {:class "cookie-percent"}
-     (util/format "[d%%]" n)]
-    ["Cookie" ["Absolute" current total]]
-    [:span {:class "cookie-absolute"}
-     (util/format "[%d/%d]" current total)]
+         ["Cookie" ["Percent" n]]
+         [:span {:class "cookie-percent"}
+          (util/format "[d%%]" n)]
+         ["Cookie" ["Absolute" current total]]
+         [:span {:class "cookie-absolute"}
+          (util/format "[%d/%d]" current total)]
 
-    ["Footnote_Reference" options]
-    (let [{:keys [name]} options
-          encode-name (util/url-encode name)]
-      [:sup.fn
-       [:a {:id (str "fnr." encode-name)
-            :class "footref"
-            :on-click #(route-handler/jump-to-anchor! (str "fn." encode-name))}
-        name]])
+         ["Footnote_Reference" options]
+         (let [{:keys [name]} options
+               encode-name (util/url-encode name)]
+           [:sup.fn
+            [:a {:id (str "fnr." encode-name)
+                 :class "footref"
+                 :on-click #(route-handler/jump-to-anchor! (str "fn." encode-name))}
+             name]])
 
-    ["Macro" options]
-    (macro-cp config options)
+         ["Macro" options]
+         (macro-cp config options)
 
-    :else ""))
+         :else ""))
 
 (rum/defc block-child
   [block]
@@ -2114,7 +2115,7 @@
                                (util/clear-selection!)))}
        (not slide?)
        (merge attrs))
-     
+
      [:<>
       [:div.flex.flex-row.justify-between.block-content-inner
        [:div.flex-1.w-full

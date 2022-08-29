@@ -1,8 +1,7 @@
 (ns frontend.components.editor
   (:require [clojure.string :as string]
             [frontend.commands :as commands
-             :refer [*first-command-group *matched-block-commands
-                     *matched-commands]]
+             :refer [*first-command-group *matched-block-commands *matched-commands]]
             [frontend.components.block :as block]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.search :as search]
