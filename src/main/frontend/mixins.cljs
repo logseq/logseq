@@ -77,7 +77,7 @@
   ([state keycode-map]
    (on-key-down state keycode-map {}))
   ([state keycode-map {:keys [not-matched-handler all-handler target]}]
-   (listen state (or target (.. js/window -document -documentElement)) "keydown"
+   (listen state (or target js/window) "keydown"
            (fn [e]
              (let [key-code (.-keyCode e)]
                (if-let [f (get keycode-map key-code)]

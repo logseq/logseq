@@ -171,7 +171,8 @@
      [:div
       {:ref ref}
       [:div.gap-8.grid.grid-rows-auto
-       {:style {:grid-template-columns (str "repeat(" cols ", minmax(0, 1fr))")}}
+       {:style {:visibility (when (nil? container-width) "hidden")
+                :grid-template-columns (str "repeat(" cols ", minmax(0, 1fr))")}}
        (dashboard-create-card)
        (for [whiteboard-name whiteboard-names]
          [:<> {:key whiteboard-name} (dashboard-preview-card whiteboard-name)])

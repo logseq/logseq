@@ -636,7 +636,7 @@ button.tl-select-input-trigger {
   }
 
   &[data-portal-selected='true'] {
-    filter: brightness(0.9);
+    filter: brightness(0.9) contrast(0.5);
   }
 }
 
