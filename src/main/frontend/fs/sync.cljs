@@ -684,13 +684,12 @@
   (<get-local-files-meta [_ graph-uuid base-path filepaths]
     (go
       (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "get-local-files-meta" graph-uuid base-path filepaths))))]
-        (if (instance? ExceptionInfo r)
-          r
-          (->> r
-               js->clj
-               (map (fn [[path metadata]]
-                      (->FileMetadata (get metadata "size") (get metadata "md5") path
-                                      (get metadata "encryptedFname") (get metadata "mtime") false nil))))))))
+        (assert (not (instance? ExceptionInfo r)) "get-local-files-meta shouldn't return exception")
+        (->> r
+             js->clj
+             (map (fn [[path metadata]]
+                    (->FileMetadata (get metadata "size") (get metadata "md5") path
+                                    (get metadata "encryptedFname") (get metadata "mtime") false nil)))))))
   (<rename-local-file [_ graph-uuid base-path from to]
     (<retry-rsapi #(p->c (ipc/ipc "rename-local-file" graph-uuid base-path from to))))
   (<update-local-files [this graph-uuid base-path filepaths]
@@ -774,14 +773,13 @@
       (let [r (<! (p->c (.getLocalFilesMeta mobile-util/file-sync
                                             (clj->js {:basePath base-path
                                                       :filePaths filepaths}))))]
-        (if (instance? ExceptionInfo r)
-          r
-          (->> (.-result r)
-               js->clj
-               (map (fn [[path metadata]]
-                      (->FileMetadata (get metadata "size") (get metadata "md5") path
-                                      (get metadata "encryptedFname") nil false nil)))
-               set)))))
+        (assert (not (instance? ExceptionInfo r)) "get-local-files-meta shouldn't return exception")
+        (->> (.-result r)
+             js->clj
+             (map (fn [[path metadata]]
+                    (->FileMetadata (get metadata "size") (get metadata "md5") path
+                                    (get metadata "encryptedFname") nil false nil)))
+             set))))
 
   (<rename-local-file [_ _graph-uuid base-path from to]
     (p->c (.renameLocalFile mobile-util/file-sync
@@ -2014,7 +2012,7 @@
 
 (defn- <local-file-exists?
   [relative-path base-path]
-  (go (nil? (ex-cause (<! (<get-local-files-meta rsapi "" base-path [relative-path]))))))
+  (go (= 1 (count (<! (<get-local-files-meta rsapi "" base-path [relative-path]))))))
 
 (defn- <filter-local-changes-pred
   "filter local-change events:
@@ -2029,8 +2027,7 @@
         "unlink"
         (let [r (<! (<get-local-files-meta rsapi "" basepath [r-path]))]
           ;; keep this e when it's not found
-          (or (some-> r ex-cause)
-              (zero? (count r))))
+          (empty? r))
 
         ("add" "change")
         ;; 1. local file exists
