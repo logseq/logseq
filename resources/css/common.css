@@ -931,6 +931,8 @@ button.menu:focus {
   @apply my-1;
 
   opacity: .5;
+  border-top-width: 1px;
+  border-color: var(--ls-border-color, #ccc);
 }
 
 a.login {

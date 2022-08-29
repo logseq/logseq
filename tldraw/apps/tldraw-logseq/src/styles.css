@@ -42,7 +42,7 @@
   padding: 0 5px;
   position: relative;
   user-select: none;
-  color: var(--color-text);
+  color: var(--ls-primary-text-color);
 
   &:hover,
   &:focus {
@@ -57,7 +57,7 @@
   user-select: none;
   flex-direction: column;
   z-index: 180;
-  min-width: 180;
+  min-width: 220px;
   pointer-events: 'all';
   background: var(--ls-primary-background-color);
 }
