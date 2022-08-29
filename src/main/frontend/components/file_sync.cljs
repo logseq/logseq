@@ -184,7 +184,7 @@
         full-syncing?          (contains? #{:local->remote-full-sync :remote->local-full-sync} status)
         syncing?               (or full-syncing? (contains? #{:local->remote :remote->local} status))
         idle?                  (contains? #{:idle} status)
-        _need-password?         (contains? #{:need-password} status)
+        need-password?         (contains? #{:need-password} status)
         queuing?               (and idle? (boolean (seq queuing-files)))
         no-active-files?       (empty? (concat downloading-files queuing-files uploading-files))
         create-remote-graph-fn #(when (and current-repo (not (config/demo-graph? current-repo)))
@@ -255,7 +255,12 @@
                [{:item [:div.flex.justify-center.w-full.py-2
                         [:span.opacity-60 "Everything is synced!"]]
                  :as-link? false}]
-               [{:title [:div.file-item.is-first ""] :options {:class "is-first-placeholder"}}])
+               (if need-password?
+                 [{:title   [:div.file-item
+                             (ui/icon "lock") "Password is required"]
+                   :options {:on-click #(state/pub-event! [:file-sync/restart])}}]
+                 [{:title   [:div.file-item.is-first ""]
+                   :options {:class "is-first-placeholder"}}]))
 
              (map (fn [f] {:title [:div.file-item
                                    {:key (str "downloading-" f)}

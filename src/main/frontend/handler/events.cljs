@@ -620,6 +620,9 @@
   (notification/show! "file sync graph count exceed limit" :warning false)
   (file-sync-stop!))
 
+(defmethod handle :file-sync/restart [[_]]
+  (file-sync-restart!))
+
 (defmethod handle :graph/restored [[_ _graph]]
   (mobile/init!)
   (when-not (mobile-util/native-ios?)
