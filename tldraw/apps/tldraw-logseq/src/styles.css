@@ -627,6 +627,15 @@ button.tl-select-input-trigger {
   .page-ref {
     color: var(--ls-title-text-color);
   }
+
+  .breadcrumb {
+    text-overflow: ellipsis;
+    overflow: hidden;
+  }
+
+  .block-content {
+    white-space: nowrap;
+  }
 }
 
 .tl-type-tag {
