@@ -1,5 +1,6 @@
 package com.logseq.app;
 
+import android.net.Uri;
 import android.util.Log;
 
 import com.getcapacitor.JSArray;
@@ -13,8 +14,6 @@ import com.logseq.sync.RSFileSync;
 
 import org.json.JSONException;
 
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 @CapacitorPlugin(name = "FileSync")
@@ -47,7 +46,7 @@ public class FileSync extends Plugin {
     public void setKey(PluginCall call) {
         String secretKey = call.getString("secretKey");
         String publicKey = call.getString("publicKey");
-        long code =  RSFileSync.setKeys(secretKey, publicKey);
+        long code = RSFileSync.setKeys(secretKey, publicKey);
         if (code != -1) {
             JSObject ret = new JSObject();
             ret.put("ok", true);
@@ -82,19 +81,27 @@ public class FileSync extends Plugin {
         Thread runner = new Thread() {
             @Override
             public void run() {
-                JSArray filePaths = call.getArray("filePaths");
-                String[] raw;
+                List<String> filePaths = null;
                 try {
-                    raw = RSFileSync.encryptFilenames(filePaths.toList());
-                    if (raw != null) {
-                        JSObject ret = new JSObject();
-                        ret.put("value", JSArray.from(raw));
-                        call.resolve(ret);
-                    }
+                    filePaths = call.getArray("filePaths").toList();
                 } catch (JSONException e) {
                     e.printStackTrace();
-                    call.reject("cannot encrypt fnames: " + e.toString());
+                    return;
                 }
+
+                for (int i = 0; i < filePaths.size(); i++) {
+                    String filePath = filePaths.get(i);
+                    filePaths.set(i, Uri.decode(filePath));
+                }
+
+                String[] raw;
+                raw = RSFileSync.encryptFilenames(filePaths);
+                if (raw != null) {
+                    JSObject ret = new JSObject();
+                    ret.put("value", JSArray.from(raw));
+                    call.resolve(ret);
+                }
+
             }
         };
         runner.start();
@@ -111,6 +118,9 @@ public class FileSync extends Plugin {
                 String[] raw;
                 try {
                     raw = RSFileSync.decryptFilenames(filePaths.toList());
+                    for (int i = 0; i < raw.length; i++) {
+                        raw[i] = Uri.encode(raw[i], "/");
+                    }
                     if (raw != null) {
                         JSObject ret = new JSObject();
                         ret.put("value", JSArray.from(raw));
@@ -131,12 +141,14 @@ public class FileSync extends Plugin {
         String basePath = call.getString("basePath");
         List<String> filePaths = call.getArray("filePaths").toList();
 
+
         call.setKeepAlive(true);
         Thread runner = new Thread() {
             @Override
             public void run() {
-                for (String filePath : filePaths) {
-                    Log.i("FileSync", "Got file Meta " + filePath);
+                for (int i = 0; i < filePaths.size(); i++) {
+                    String filePath = filePaths.get(i);
+                    filePaths.set(i, Uri.decode(filePath));
                 }
 
                 FileMeta[] metas = RSFileSync.getLocalFilesMeta(basePath, filePaths);
@@ -146,6 +158,9 @@ public class FileSync extends Plugin {
                 }
                 JSObject dict = new JSObject();
                 for (FileMeta meta : metas) {
+                    if (meta == null) {
+                        continue;
+                    }
                     Log.i("FileSync", "got meta " + meta.toString());
                     JSObject item = new JSObject();
                     item.put("md5", meta.md5);
@@ -153,7 +168,7 @@ public class FileSync extends Plugin {
                     item.put("encryptedFname", meta.encryptedFilename);
 
                     item.put("mtime", meta.mtime); // not used for now
-                    dict.put(meta.filePath, item);
+                    dict.put(Uri.encode(meta.filePath, "/"), item);
                 }
                 JSObject ret = new JSObject();
                 ret.put("result", dict);
@@ -184,7 +199,7 @@ public class FileSync extends Plugin {
                     item.put("encryptedFname", meta.encryptedFilename);
 
                     item.put("mtime", meta.mtime); // not used for now
-                    dict.put(meta.filePath, item);
+                    dict.put(Uri.encode(meta.filePath, "/"), item);
                 }
                 JSObject ret = new JSObject();
                 ret.put("result", dict);
@@ -198,6 +213,9 @@ public class FileSync extends Plugin {
     public void deleteLocalFiles(PluginCall call) throws JSONException {
         String basePath = call.getString("basePath");
         List<String> filePaths = call.getArray("filePaths").toList();
+        for (int i = 0; i < filePaths.size(); i++) {
+            filePaths.set(i, Uri.decode(filePaths.get(i)));
+        }
 
         RSFileSync.deleteLocalFiles(basePath, filePaths);
 
@@ -212,6 +230,10 @@ public class FileSync extends Plugin {
         List<String> filePaths = call.getArray("filePaths").toList();
         String graphUUID = call.getString("graphUUID");
         String token = call.getString("token");
+
+        for (int i = 0; i < filePaths.size(); i++) {
+            filePaths.set(i, Uri.decode(filePaths.get(i)));
+        }
 
         call.setKeepAlive(true);
         Thread runner = new Thread() {
@@ -237,6 +259,10 @@ public class FileSync extends Plugin {
         String graphUUID = call.getString("graphUUID");
         String token = call.getString("token");
 
+        for (int i = 0; i < filePaths.size(); i++) {
+            filePaths.set(i, Uri.decode(filePaths.get(i)));
+        }
+
         call.setKeepAlive(true);
         Thread runner = new Thread() {
             @Override
@@ -260,6 +286,10 @@ public class FileSync extends Plugin {
         String graphUUID = call.getString("graphUUID");
         String token = call.getString("token");
         long txid = call.getInt("txid").longValue();
+
+        for (int i = 0; i < filePaths.size(); i++) {
+            filePaths.set(i, Uri.decode(filePaths.get(i)));
+        }
 
         call.setKeepAlive(true);
         Thread runner = new Thread() {
@@ -287,6 +317,10 @@ public class FileSync extends Plugin {
         String token = call.getString("token");
         long txid = call.getInt("txid").longValue();
         // NOTE: fnameEncryption is ignored. since it's always on.
+
+        for (int i = 0; i < filePaths.size(); i++) {
+            filePaths.set(i, Uri.decode(filePaths.get(i)));
+        }
 
         Thread runner = new Thread() {
             @Override
