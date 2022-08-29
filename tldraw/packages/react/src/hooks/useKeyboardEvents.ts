@@ -1,7 +1,8 @@
 import * as React from 'react'
-import { useApp, useRendererContext } from '~hooks'
 import { TLTargetType } from '@tldraw/core'
-import type { TLReactCustomEvents } from '~types'
+import type { TLReactCustomEvents } from '../types'
+import { useApp } from './useApp'
+import { useRendererContext } from './useRendererContext'
 
 export function useKeyboardEvents(ref: React.RefObject<HTMLDivElement>) {
   const app = useApp()

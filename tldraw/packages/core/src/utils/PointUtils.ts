@@ -1,5 +1,5 @@
 import { Vec } from '@tldraw/vec'
-import type { TLBounds } from '~types'
+import type { TLBounds } from '../types'
 
 export class PointUtils {
   /**

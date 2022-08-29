@@ -1,7 +1,7 @@
 /* -------------------- App Props ------------------- */
 
 import type { TLBounds, TLHandle, TLOffset } from '@tldraw/core'
-import type { TLReactShape } from '~lib'
+import type { TLReactShape } from '../lib'
 
 /* ------------------- Components ------------------- */
 

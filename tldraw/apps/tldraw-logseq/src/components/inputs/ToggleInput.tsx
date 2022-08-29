@@ -6,7 +6,13 @@ interface ToggleInputProps extends React.HTMLAttributes<HTMLElement> {
   onPressedChange: (value: boolean) => void
 }
 
-export function ToggleInput({ toggle = true, pressed, onPressedChange, className, ...rest }: ToggleInputProps) {
+export function ToggleInput({
+  toggle = true,
+  pressed,
+  onPressedChange,
+  className,
+  ...rest
+}: ToggleInputProps) {
   return (
     <Toggle.Root
       {...rest}

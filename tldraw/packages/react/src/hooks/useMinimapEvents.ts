@@ -1,8 +1,8 @@
 import * as React from 'react'
-import { useRendererContext } from '~hooks'
 import { TLTargetType } from '@tldraw/core'
-import type { TLReactCustomEvents } from '~types'
 import { useApp } from './useApp'
+import type { TLReactCustomEvents } from '../types'
+import { useRendererContext } from './useRendererContext'
 
 export function useMinimapEvents() {
   const app = useApp()

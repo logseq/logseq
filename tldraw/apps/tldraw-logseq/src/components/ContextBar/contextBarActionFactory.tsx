@@ -2,29 +2,29 @@ import { debounce, Decoration, isNonNullable } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import React from 'react'
-import { TablerIcon } from '~components/icons'
-import { ColorInput } from '~components/inputs/ColorInput'
-import { SelectInput, SelectOption } from '~components/inputs/SelectInput'
-import { TextInput } from '~components/inputs/TextInput'
-import {
-  ToggleGroupInput,
-  ToggleGroupInputOption,
-  ToggleGroupMultipleInput,
-} from '~components/inputs/ToggleGroupInput'
-import { ToggleInput } from '~components/inputs/ToggleInput'
 import type {
-  BoxShape,
-  EllipseShape,
-  HTMLShape,
-  LineShape,
-  LogseqPortalShape,
-  PencilShape,
-  PolygonShape,
   Shape,
+  LogseqPortalShape,
   TextShape,
+  HTMLShape,
   YouTubeShape,
-} from '~lib'
-import { LogseqContext } from '~lib/logseq-context'
+  BoxShape,
+  PolygonShape,
+  EllipseShape,
+  LineShape,
+  PencilShape,
+} from '../../lib'
+import { LogseqContext } from '../../lib/logseq-context'
+import { TablerIcon } from '../icons'
+import { ColorInput } from '../inputs/ColorInput'
+import { type SelectOption, SelectInput } from '../inputs/SelectInput'
+import { TextInput } from '../inputs/TextInput'
+import {
+  type ToggleGroupInputOption,
+  ToggleGroupInput,
+  ToggleGroupMultipleInput,
+} from '../inputs/ToggleGroupInput'
+import { ToggleInput } from '../inputs/ToggleInput'
 
 export const contextBarActionTypes = [
   // Order matters

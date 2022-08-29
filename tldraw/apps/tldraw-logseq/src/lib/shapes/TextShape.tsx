@@ -4,7 +4,7 @@ import { HTMLContainer, TLComponentProps, TLTextMeasure } from '@tldraw/react'
 import { action, computed } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
-import type { SizeLevel } from '~lib'
+import type { SizeLevel } from '.'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 import { TextAreaUtils } from './text/TextAreaUtils'
 

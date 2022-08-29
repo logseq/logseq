@@ -1,7 +1,7 @@
 import type { TLBounds } from '@tldraw/intersect'
 import { makeObservable } from 'mobx'
+import { BoundsUtils } from '../../../utils'
 import { TLShape, TLResizeInfo, TLShapeProps } from '../TLShape'
-import { BoundsUtils } from '~utils'
 
 export interface TLDotShapeProps extends TLShapeProps {
   radius?: number

@@ -1,5 +1,7 @@
-import { TLApp, TLBoxShape, TLShape, TLTool } from '~lib'
-import { TLCursor, TLEventMap } from '~types'
+import { type TLEventMap, TLCursor } from '../../../types'
+import type { TLBoxShape, TLShape } from '../../shapes'
+import type { TLApp } from '../../TLApp'
+import { TLTool } from '../../TLTool'
 import { IdleState, PointingState, CreatingState } from './states'
 
 export abstract class TLBoxTool<

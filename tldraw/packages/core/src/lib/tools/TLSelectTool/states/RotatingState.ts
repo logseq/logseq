@@ -1,17 +1,20 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
+import type { TLBounds } from '@tldraw/intersect'
 import { Vec } from '@tldraw/vec'
-import { CURSORS } from '~constants'
-import { TLApp, TLSelectTool, TLShape, TLToolState } from '~lib'
+import { CURSORS } from '../../../../constants'
 import {
-  TLBounds,
+  type TLEventMap,
   TLCursor,
-  TLEventMap,
-  TLEvents,
-  TLEventSelectionInfo,
-  TLHandle,
-  TLSelectionHandle,
-} from '~types'
-import { BoundsUtils, deepCopy, GeomUtils } from '~utils'
+  type TLHandle,
+  type TLSelectionHandle,
+  type TLEventSelectionInfo,
+  type TLEvents,
+} from '../../../../types'
+import { BoundsUtils, deepCopy, GeomUtils } from '../../../../utils'
+import type { TLShape } from '../../../shapes'
+import type { TLApp } from '../../../TLApp'
+import { TLToolState } from '../../../TLToolState'
+import type { TLSelectTool } from '../TLSelectTool'
 
 export class RotatingState<
   S extends TLShape,

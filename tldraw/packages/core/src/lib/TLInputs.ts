@@ -1,7 +1,7 @@
 import Vec from '@tldraw/vec'
 import { action, makeObservable, observable } from 'mobx'
-import type { TLEventMap } from '~types'
-import { modKey } from '~utils'
+import type { TLEventMap } from '../types'
+import { modKey } from '../utils'
 
 export class TLInputs<K extends TLEventMap> {
   constructor() {

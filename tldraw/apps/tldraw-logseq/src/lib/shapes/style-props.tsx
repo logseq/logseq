@@ -1,7 +1,7 @@
 import { darken } from 'polished'
-import { withFillShapes } from '~components/ContextBar/contextBarActionFactory'
-import type { Shape } from '~lib'
-import { getComputedColor } from '~lib/color'
+import type { Shape } from '.'
+import { withFillShapes } from '../../components/ContextBar/contextBarActionFactory'
+import { getComputedColor } from '../color'
 
 export interface CustomStyleProps {
   stroke: string

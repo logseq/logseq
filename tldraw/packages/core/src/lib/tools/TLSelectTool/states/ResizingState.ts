@@ -1,7 +1,17 @@
+import type { TLBounds } from '@tldraw/intersect'
 import { Vec } from '@tldraw/vec'
-import { TLApp, TLShape, TLSelectTool, TLToolState, TLShapeModel } from '~lib'
-import { TLBounds, TLResizeCorner, TLResizeEdge, TLCursor, TLEventMap, TLEvents } from '~types'
-import { BoundsUtils, getFirstFromSet } from '~utils'
+import {
+  type TLEventMap,
+  TLResizeCorner,
+  TLResizeEdge,
+  TLCursor,
+  type TLEvents,
+} from '../../../../types'
+import { BoundsUtils, getFirstFromSet } from '../../../../utils'
+import type { TLShape, TLShapeModel } from '../../../shapes'
+import type { TLApp } from '../../../TLApp'
+import { TLToolState } from '../../../TLToolState'
+import type { TLSelectTool } from '../TLSelectTool'
 
 export class ResizingState<
   S extends TLShape,

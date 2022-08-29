@@ -1,5 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { TLResizeCorner, TLResizeEdge, TLSelectionHandle, TLCursor, TLRotateCorner } from '~types'
+
+import {
+  type TLSelectionHandle,
+  TLCursor,
+  TLResizeEdge,
+  TLResizeCorner,
+  TLRotateCorner,
+} from './types'
 
 export const PI = Math.PI
 

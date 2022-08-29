@@ -25,6 +25,7 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.graph-parser.property :as gp-property]
             [promesa.core :as p]
             [frontend.handler.notification :as notification])
   (:import
@@ -450,7 +451,7 @@
           (fn [properties]
             (when (seq properties)
               (->> (filter (fn [[k _v]]
-                             (gp-util/valid-edn-keyword? k)) properties)
+                             (gp-property/valid-property-name? (str k))) properties)
                    (into {}))))))
 
 (defn- blocks [db]

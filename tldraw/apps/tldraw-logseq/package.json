@@ -25,7 +25,7 @@
     "@types/react-dom": "^17.0.0",
     "autoprefixer": "^10.4.7",
     "concurrently": "^7.2.1",
-    "esbuild": "^0.14.48",
+    "esbuild": "^0.15.5",
     "mobx": "^6.6.0",
     "mobx-react-lite": "^3.4.0",
     "perfect-freehand": "^1.1.0",
@@ -35,9 +35,9 @@
     "react-dom": "^17.0.0",
     "rimraf": "3.0.2",
     "shadow-cljs": "^2.19.5",
-    "tsup": "^6.1.2",
-    "typescript": "^4.7.3",
-    "zx": "^6.2.4"
+    "tsup": "^6.2.3",
+    "typescript": "^4.8.2",
+    "zx": "^7.0.8"
   },
   "peerDependencies": {
     "react": "^16.8.0 || ^17.0.0 || ^18.0.0",

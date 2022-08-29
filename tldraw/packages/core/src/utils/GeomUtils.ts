@@ -1,5 +1,5 @@
 import Vec from '@tldraw/vec'
-import { PI, PI2, TAU } from '~constants'
+import { PI, PI2, TAU } from '../constants'
 
 export class GeomUtils {
   /**

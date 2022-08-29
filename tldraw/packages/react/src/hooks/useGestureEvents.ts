@@ -2,8 +2,8 @@ import Vec from '@tldraw/vec'
 import type { Handler, WebKitGestureEvent } from '@use-gesture/core/types'
 import { useGesture } from '@use-gesture/react'
 import * as React from 'react'
-import { useRendererContext } from '~hooks'
 import { TLTargetType, TLViewport } from '@tldraw/core'
+import { useRendererContext } from './useRendererContext'
 
 type PinchHandler = Handler<
   'pinch',

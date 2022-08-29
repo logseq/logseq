@@ -4,12 +4,13 @@ import {
   intersectLineSegmentPolyline,
   intersectPolygonBounds,
   intersectRayBounds,
+  TLBounds,
 } from '@tldraw/intersect'
 import Vec from '@tldraw/vec'
 import { action, computed, makeObservable, observable, toJS, transaction } from 'mobx'
-import { BINDING_DISTANCE } from '~constants'
-import type { TLAsset, TLBounds, TLHandle, TLResizeCorner, TLResizeEdge } from '~types'
-import { BoundsUtils, deepCopy, PointUtils } from '~utils'
+import { BINDING_DISTANCE } from '../../../constants'
+import type { TLHandle, TLResizeEdge, TLResizeCorner, TLAsset } from '../../../types'
+import { BoundsUtils, PointUtils, deepCopy } from '../../../utils'
 
 export type TLShapeModel<P extends TLShapeProps = TLShapeProps> = {
   nonce?: number

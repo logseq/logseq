@@ -1,7 +1,10 @@
 import { Vec } from '@tldraw/vec'
-import { TLApp, TLSelectTool, TLShape, TLToolState } from '~lib'
-import { TLCursor, TLEventMap, TLEvents } from '~types'
-import { uniqueId } from '~utils'
+import { type TLEventMap, TLCursor, type TLEvents } from '../../../../types'
+import { uniqueId } from '../../../../utils'
+import type { TLShape } from '../../../shapes'
+import type { TLApp } from '../../../TLApp'
+import { TLToolState } from '../../../TLToolState'
+import type { TLSelectTool } from '../TLSelectTool'
 
 export class TranslatingState<
   S extends TLShape,
@@ -108,7 +111,7 @@ export class TranslatingState<
     document.querySelectorAll<HTMLElement>('input,textarea').forEach(el => el.blur())
 
     // Clear selection
-    document.getSelection()?.empty();
+    document.getSelection()?.empty()
 
     if (inputs.altKey) {
       this.startCloning()

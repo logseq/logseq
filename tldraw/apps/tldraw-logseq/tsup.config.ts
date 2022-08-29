@@ -5,7 +5,7 @@ export default defineConfig({
   platform: 'browser',
   format: ['cjs'],
   entry: ['src/index.ts'],
-  clean: false,
+  clean: true,
   loader: {
     '.png': 'base64',
   },

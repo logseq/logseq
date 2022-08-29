@@ -1,5 +1,7 @@
-import { TLApp, TLShape, TLTool } from '~lib'
-import type { TLEvents, TLEventMap } from '~types'
+import type { TLEventMap } from '../../../types'
+import type { TLShape } from '../../shapes'
+import type { TLApp } from '../../TLApp'
+import { TLTool } from '../../TLTool'
 import {
   IdleState,
   BrushingState,
@@ -58,7 +60,7 @@ export class TLSelectTool<
 
   returnTo = ''
 
-  onEnter = (info: { fromId: string, returnTo: string } & any) => {
+  onEnter = (info: { fromId: string; returnTo: string } & any) => {
     this.returnTo = info?.returnTo
   }
 }

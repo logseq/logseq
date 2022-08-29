@@ -1,7 +1,6 @@
-import * as React from 'react'
 import { observer } from 'mobx-react-lite'
 import { TLResizeEdge } from '@tldraw/core'
-import { useBoundsEvents } from '~hooks/useBoundsEvents'
+import { useBoundsEvents } from '../../../../hooks'
 
 const edgeClassnames = {
   [TLResizeEdge.Top]: 'tl-cursor-ns',

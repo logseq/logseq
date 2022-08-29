@@ -3,10 +3,11 @@
   "exclude": ["node_modules", "dist", "docs", "tsup.config.ts"],
   "compilerOptions": {
     "outDir": "./dist/types",
-    "rootDir": "src",
-    "baseUrl": ".",
     "paths": {
-      "~*": ["src/*"]
+      "@tldraw/core": ["../../../core/src/*"],
+      "@tldraw/react": ["../../../react/src/*"],
+      "@tldraw/vec": ["../../../utils/vec/src/*"],
+      "@tldraw/intersect": ["../../../utils/intersect/src/*"]
     }
   },
   "references": [

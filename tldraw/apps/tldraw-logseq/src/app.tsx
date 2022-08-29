@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { deepEqual, TLApp, TLAsset, TLDocumentModel } from '@tldraw/core'
+import { deepEqual, TLDocumentModel } from '@tldraw/core'
 import {
   AppCanvas,
   AppProvider,
@@ -9,17 +9,14 @@ import {
   TLReactToolConstructor,
 } from '@tldraw/react'
 import * as React from 'react'
-import { AppUI } from '~components/AppUI'
-import { ContextBar } from '~components/ContextBar/ContextBar'
+import { AppUI } from './components/AppUI'
+import { ContextBar } from './components/ContextBar'
 import { ContextMenu } from '~components/ContextMenu/ContextMenu'
-import { useFileDrop } from '~hooks/useFileDrop'
-import { usePaste } from '~hooks/usePaste'
-import { useQuickAdd } from '~hooks/useQuickAdd'
-import { LogseqContext, LogseqContextValue } from '~lib/logseq-context'
-import { Shape, shapes } from '~lib/shapes'
+import { useFileDrop } from './hooks/useFileDrop'
+import { usePaste } from './hooks/usePaste'
+import { useQuickAdd } from './hooks/useQuickAdd'
 import {
   BoxTool,
-  // DotTool,
   EllipseTool,
   HighlighterTool,
   HTMLTool,
@@ -28,9 +25,12 @@ import {
   NuEraseTool,
   PencilTool,
   PolygonTool,
+  shapes,
   TextTool,
   YouTubeTool,
-} from '~lib/tools'
+  type Shape,
+} from './lib'
+import { LogseqContext, type LogseqContextValue } from './lib/logseq-context'
 
 const components: TLReactComponents<Shape> = {
   ContextBar: ContextBar,
@@ -103,14 +103,13 @@ export const App = function App({
         model={model}
         {...rest}
       >
-      <ContextMenu>
-        <div className="logseq-tldraw logseq-tldraw-wrapper">
-          <AppCanvas components={components}>
-            <AppUI />
-          </AppCanvas>
-        </div>
-      </ContextMenu>
-
+        <ContextMenu>
+          <div className="logseq-tldraw logseq-tldraw-wrapper">
+            <AppCanvas components={components}>
+              <AppUI />
+            </AppCanvas>
+          </div>
+        </ContextMenu>
       </AppProvider>
     </LogseqContext.Provider>
   )

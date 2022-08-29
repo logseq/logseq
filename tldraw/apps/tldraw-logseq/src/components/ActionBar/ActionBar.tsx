@@ -3,9 +3,9 @@
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
-import { TablerIcon } from '~components/icons'
-import { ZoomMenu } from '~components/ZoomMenu'
-import type { Shape } from '~lib'
+import type { Shape } from '../../lib'
+import { TablerIcon } from '../icons'
+import { ZoomMenu } from '../ZoomMenu'
 
 export const ActionBar = observer(function ActionBar(): JSX.Element {
   const app = useApp<Shape>()

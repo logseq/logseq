@@ -1,7 +1,7 @@
 import { autorun } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
-import { useRendererContext } from '~hooks'
+import { useRendererContext } from '../../hooks'
 
 interface HTMLLayerProps {
   children: React.ReactNode

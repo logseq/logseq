@@ -2,7 +2,11 @@
 import * as React from 'react'
 import { autorun } from 'mobx'
 import { observer } from 'mobx-react-lite'
-import type { TLEventHandlers, TLInputs, TLViewport } from '@tldraw/core'
+import { EMPTY_OBJECT, TLEventHandlers, TLInputs, TLViewport } from '@tldraw/core'
+import { getRendererContext } from '../../hooks'
+import type { TLReactShape } from '../../lib'
+import type { TLReactEventMap, TLReactComponents } from '../../types'
+
 import {
   SelectionBackground as _SelectionBackground,
   SelectionForeground as _SelectionForeground,
@@ -11,11 +15,7 @@ import {
   Brush as _Brush,
   Handle as _Handle,
   DirectionIndicator as _DirectionIndicator,
-} from '~components'
-import { getRendererContext } from '~hooks'
-import { EMPTY_OBJECT } from '~constants'
-import type { TLReactShape } from '~lib'
-import type { TLReactComponents, TLReactEventMap } from '~types'
+} from '../../components'
 
 type RendererCallbacks<S extends TLReactShape = TLReactShape> = Partial<
   TLEventHandlers<S, TLReactEventMap>

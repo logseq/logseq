@@ -1,5 +1,5 @@
-import type { TLReactShape } from '~lib'
 import type { TLEventInfo, TLEvents } from '@tldraw/core'
+import type { TLReactShape } from '../lib'
 import type { TLReactEventMap } from './TLReactEventMap'
 
 export interface TLReactEventHandlers<

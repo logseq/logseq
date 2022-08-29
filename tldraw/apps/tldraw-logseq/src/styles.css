@@ -16,6 +16,10 @@
 
 .logseq-tldraw-wrapper {
   @apply flex flex-col w-full h-full relative;
+
+  img {
+    -webkit-user-drag: none;
+  }
 }
 
 .tl-toolbar {

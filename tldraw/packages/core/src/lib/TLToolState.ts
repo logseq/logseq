@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { TLApp, TLShape, TLTool } from '~lib'
-import type { TLEventMap } from '~types'
+import type { TLEventMap } from '../types'
+import type { TLShape } from './shapes'
+import type { TLApp } from './TLApp'
 import { TLState } from './TLState'
+import type { TLTool } from './TLTool'
 
 export interface TLToolStateClass<
   S extends TLShape = TLShape,

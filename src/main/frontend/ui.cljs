@@ -231,7 +231,7 @@
                   "exiting" "transition ease-in duration-100 opacity-100"
                   "exited" "transition ease-in duration-100 opacity-0")}
         [:div.rounded-lg.shadow-xs {:style {:max-height "calc(100vh - 200px)"
-                                            :overflow-y "scroll"
+                                            :overflow-y "auto"
                                             :overflow-x "hidden"}}
          [:div.p-4
           [:div.flex.items-start

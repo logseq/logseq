@@ -1,7 +1,7 @@
 import { makeObservable } from 'mobx'
 import { intersectLineSegmentEllipse, intersectEllipseBounds, TLBounds } from '@tldraw/intersect'
-import { BoundsUtils, PointUtils } from '~utils'
 import { TLBoxShape, TLBoxShapeProps } from '../TLBoxShape'
+import { BoundsUtils, PointUtils } from '../../../utils'
 
 export interface TLEllipseShapeProps extends TLBoxShapeProps {
   point: number[]

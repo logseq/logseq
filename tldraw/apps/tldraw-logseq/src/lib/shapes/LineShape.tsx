@@ -166,7 +166,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
             stroke,
             fill,
             strokeWidth,
-            strokeType
+            strokeType,
           }}
           start={start.point}
           end={end.point}

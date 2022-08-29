@@ -1,9 +1,8 @@
-import * as React from 'react'
 import { observer } from 'mobx-react-lite'
-import { useHandleEvents } from '~hooks'
-import type { TLReactShape } from '~lib'
 import type { TLHandle } from '@tldraw/core'
-import type { TLHandleComponentProps } from '~types'
+import { useHandleEvents } from '../../../hooks'
+import type { TLReactShape } from '../../../lib'
+import type { TLHandleComponentProps } from '../../../types'
 
 export const Handle = observer(function Handle<S extends TLReactShape, H extends TLHandle>({
   shape,

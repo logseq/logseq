@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as React from 'react'
 import { observer } from 'mobx-react-lite'
-import { Container, SVGContainer } from '~components'
-import type { TLReactShape } from '~lib'
+import type { TLReactShape } from '../../lib'
+import { Container } from '../Container'
+import { SVGContainer } from '../SVGContainer'
 
 interface IndicatorProps {
   shape: TLReactShape

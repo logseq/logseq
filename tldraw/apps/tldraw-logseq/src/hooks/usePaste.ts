@@ -11,8 +11,15 @@ import type { TLReactCallbacks } from '@tldraw/react'
 import Vec from '@tldraw/vec'
 import * as React from 'react'
 import { NIL as NIL_UUID } from 'uuid'
-import { HTMLShape, LogseqPortalShape, Shape, YouTubeShape, ImageShape, VideoShape } from '~lib'
-import type { LogseqContextValue } from '~lib/logseq-context'
+import {
+  type Shape,
+  HTMLShape,
+  YouTubeShape,
+  LogseqPortalShape,
+  VideoShape,
+  ImageShape,
+} from '../lib'
+import type { LogseqContextValue } from '../lib/logseq-context'
 
 const isValidURL = (url: string) => {
   try {
@@ -200,7 +207,8 @@ export function usePaste(context: LogseqContextValue) {
       function handleURL(rawText: string) {
         if (isValidURL(rawText)) {
           const isYoutubeUrl = (url: string) => {
-            const youtubeRegex = /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
+            const youtubeRegex =
+              /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
             return youtubeRegex.test(url)
           }
           if (isYoutubeUrl(rawText)) {

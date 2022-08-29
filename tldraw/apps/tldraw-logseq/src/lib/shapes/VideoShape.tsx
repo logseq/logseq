@@ -3,9 +3,9 @@ import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
-import { useCameraMovingRef } from '~hooks/useCameraMoving'
-import type { Shape } from '~lib'
-import { LogseqContext } from '~lib/logseq-context'
+import type { Shape } from '.'
+import { useCameraMovingRef } from '../../hooks/useCameraMoving'
+import { LogseqContext } from '../logseq-context'
 
 export interface VideoShapeProps extends TLBoxShapeProps {
   type: 'video'

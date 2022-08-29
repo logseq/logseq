@@ -305,6 +305,13 @@
 (defmethod handle :getUserDefaultPlugins []
   (utils/get-ls-default-plugins))
 
+(defmethod handle :validateUserExternalPlugins [_win [_ urls]]
+  (zipmap urls (for [url urls]
+                 (try
+                   (and (fs-extra/pathExistsSync url)
+                        (fs-extra/pathExistsSync (path/join url "package.json")))
+                   (catch js/Error _e false)))))
+
 (defmethod handle :relaunchApp []
   (.relaunch app) (.quit app))
 

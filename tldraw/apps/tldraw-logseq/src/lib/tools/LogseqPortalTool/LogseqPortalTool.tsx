@@ -1,7 +1,7 @@
 import { TLApp, TLEvents, TLTool } from '@tldraw/core'
 import type { TLReactEventMap } from '@tldraw/react'
 import Vec from '@tldraw/vec'
-import { LogseqPortalShape, Shape } from '~lib/shapes'
+import { type Shape, LogseqPortalShape } from '../../shapes'
 import { CreatingState, IdleState } from './states'
 
 export class LogseqPortalTool extends TLTool<

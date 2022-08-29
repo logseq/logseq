@@ -5,10 +5,7 @@ module.exports = {
     'postcss-import-ext-glob': {},
     'tailwindcss/nesting': {},
     tailwindcss: {
-      content: [
-        './**/*.jsx',
-        '../apps/**/*.{js,jsx,ts,tsx}',
-      ]
+      content: ['./**/*.jsx', '../apps/**/*.{js,jsx,ts,tsx}'],
     },
     autoprefixer: {},
   },

@@ -1,7 +1,8 @@
 import Vec from '@tldraw/vec'
-import type { TLApp, TLPage, TLShapeModel, TLShape } from '~lib'
-import type { TLEventMap } from '~types'
-import { BoundsUtils } from '~utils'
+import type { TLEventMap } from '../../types'
+import { BoundsUtils } from '../../utils'
+import type { TLShape, TLShapeModel } from '../shapes'
+import type { TLApp } from '../TLApp'
 
 export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMap> {
   private app: TLApp<S, K>

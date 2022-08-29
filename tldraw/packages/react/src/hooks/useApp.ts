@@ -1,5 +1,5 @@
 import * as React from 'react'
-import type { TLReactShape, TLReactApp } from '~lib'
+import type { TLReactApp, TLReactShape } from '../lib'
 
 const contextMap: Record<string, React.Context<any>> = {}
 

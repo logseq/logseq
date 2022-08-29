@@ -1,4 +1,4 @@
-import type { TLReactShape } from '~lib'
+import type { TLReactShape } from '../lib'
 import type { TLReactEventHandlers } from './TLReactEventHandlers'
 import type { TLReactEvents } from './TLReactEvents'
 

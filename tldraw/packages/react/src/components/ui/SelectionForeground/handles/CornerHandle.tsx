@@ -1,7 +1,6 @@
-import { observer } from 'mobx-react-lite'
-import * as React from 'react'
-import { useBoundsEvents } from '~hooks/useBoundsEvents'
 import { TLResizeCorner } from '@tldraw/core'
+import { observer } from 'mobx-react-lite'
+import { useBoundsEvents } from '../../../../hooks'
 
 const cornerBgClassnames = {
   [TLResizeCorner.TopLeft]: 'tl-cursor-nwse',

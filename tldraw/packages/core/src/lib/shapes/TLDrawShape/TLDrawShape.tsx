@@ -7,7 +7,7 @@ import {
   intersectPolylineBounds,
   TLBounds,
 } from '@tldraw/intersect'
-import { BoundsUtils, PointUtils } from '~utils'
+import { BoundsUtils, PointUtils } from '../../../utils'
 
 export interface TLDrawShapeProps extends TLShapeProps {
   points: number[][]

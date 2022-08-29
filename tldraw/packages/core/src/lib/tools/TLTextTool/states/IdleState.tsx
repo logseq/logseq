@@ -1,6 +1,8 @@
+import type { TLEventMap, TLStateEvents } from '../../../../types'
+import type { TLShape, TLTextShape } from '../../../shapes'
+import type { TLApp } from '../../../TLApp'
+import { TLToolState } from '../../../TLToolState'
 import type { TLTextTool } from '../TLTextTool'
-import { TLShape, TLApp, TLToolState, TLTextShape } from '~lib'
-import type { TLEventMap, TLStateEvents } from '~types'
 
 export class IdleState<
   S extends TLShape,

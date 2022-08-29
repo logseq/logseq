@@ -1,12 +1,11 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import * as React from 'react'
 import { observer } from 'mobx-react-lite'
-import { HTMLContainer } from '~components'
-import { TAU } from '~constants'
-import { GeomUtils } from '@tldraw/core'
-import type { TLReactShape } from '~lib'
-import type { TLSelectionDetailProps } from '~types/component-props'
+import { GeomUtils, TAU } from '@tldraw/core'
 import Vec from '@tldraw/vec'
+import type { TLReactShape } from '../../../lib'
+import type { TLSelectionDetailProps } from '../../../types'
+import { HTMLContainer } from '../../HTMLContainer'
 
 export const SelectionDetail = observer(function SelectionDetail<S extends TLReactShape>({
   scaledBounds,

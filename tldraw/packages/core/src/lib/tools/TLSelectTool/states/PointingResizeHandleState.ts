@@ -1,8 +1,11 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { Vec } from '@tldraw/vec'
-import { TLApp, TLSelectTool, TLShape, TLToolState } from '~lib'
-import type { TLEvents, TLEventMap, TLEventSelectionInfo } from '~types'
-import { CURSORS } from '~constants'
+import { CURSORS } from '../../../../constants'
+import type { TLEventMap, TLEventSelectionInfo, TLEvents } from '../../../../types'
+import type { TLShape } from '../../../shapes'
+import type { TLApp } from '../../../TLApp'
+import { TLToolState } from '../../../TLToolState'
+import type { TLSelectTool } from '../TLSelectTool'
 
 export class PointingResizeHandleState<
   S extends TLShape,

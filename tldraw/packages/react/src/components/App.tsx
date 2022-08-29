@@ -1,11 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { AnyObject, TLDocumentModel, TLTheme, TLToolConstructor } from '@tldraw/core'
 import type * as React from 'react'
-import { AppProvider } from '~components'
-import type { TLReactApp, TLReactShape, TLReactShapeConstructor } from '~lib'
-import type { TLReactCallbacks, TLReactEventMap } from '~types'
-import type { TLReactComponents } from '~types/component-props'
+import type { TLReactShape, TLReactApp, TLReactShapeConstructor } from '../lib'
+import type { TLReactCallbacks, TLReactComponents, TLReactEventMap } from '../types'
 import { AppCanvas } from './AppCanvas'
+import { AppProvider } from './AppProvider'
 
 export interface TLCommonAppProps<
   S extends TLReactShape = TLReactShape,

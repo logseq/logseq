@@ -16,12 +16,7 @@
     "typescript",
     "javascript"
   ],
-  "files": [
-    "dist/**/*"
-  ],
-  "main": "./dist/cjs/index.js",
-  "module": "./dist/esm/index.js",
-  "types": "./dist/types/index.d.ts",
+  "main": "./src/index.ts",
   "scripts": {
     "start:all": "yarn start:utils",
     "start:utils": "node scripts/dev & yarn types:dev",

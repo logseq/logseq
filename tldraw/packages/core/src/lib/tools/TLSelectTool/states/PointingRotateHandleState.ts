@@ -1,7 +1,16 @@
 import { Vec } from '@tldraw/vec'
-import { CURSORS } from '~constants'
-import { TLApp, TLSelectTool, TLShape, TLToolState } from '~lib'
-import { TLCursor, TLEventMap, TLEvents, TLEventSelectionInfo, TLSelectionHandle } from '~types'
+import { CURSORS } from '../../../../constants'
+import {
+  type TLEventMap,
+  TLCursor,
+  type TLSelectionHandle,
+  type TLEventSelectionInfo,
+  type TLEvents,
+} from '../../../../types'
+import type { TLShape } from '../../../shapes'
+import type { TLApp } from '../../../TLApp'
+import { TLToolState } from '../../../TLToolState'
+import type { TLSelectTool } from '../TLSelectTool'
 
 export class PointingRotateHandleState<
   S extends TLShape,
@@ -16,6 +25,8 @@ export class PointingRotateHandleState<
   private handle = '' as TLSelectionHandle
 
   onEnter = (info: TLEventSelectionInfo) => {
+    // Pause the history when we enter
+    this.app.history.pause()
     this.handle = info.handle
     this.updateCursor()
   }
@@ -32,6 +43,8 @@ export class PointingRotateHandleState<
   }
 
   onPointerUp: TLEvents<S>['pointer'] = () => {
+    this.app.history.resume()
+    this.app.persist()
     this.tool.transition('idle')
   }
 

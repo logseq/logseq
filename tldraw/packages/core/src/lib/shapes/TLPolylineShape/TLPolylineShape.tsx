@@ -6,9 +6,9 @@ import {
   intersectPolylineBounds,
   TLBounds,
 } from '@tldraw/intersect'
-import type { TLHandle } from '~types'
-import { BoundsUtils, PointUtils, PolygonUtils } from '~utils'
 import { TLShapeProps, TLResizeInfo, TLShape } from '../TLShape'
+import type { TLHandle } from '../../../types'
+import { PolygonUtils, BoundsUtils, PointUtils } from '../../../utils'
 
 export interface TLPolylineShapeProps extends TLShapeProps {
   handles: Record<string, TLHandle>

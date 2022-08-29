@@ -1,16 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { action, makeObservable, observable, transaction } from 'mobx'
 import type {
+  TLEventMap,
   TLEventHandlers,
+  TLCursor,
+  AnyObject,
+  TLStateEvents,
   TLShortcut,
   TLEvents,
-  TLStateEvents,
-  AnyObject,
-  TLCursor,
-} from '~types'
-import type { TLShape } from '~lib'
-import { KeyUtils } from '~utils'
-import type { TLEventMap } from '~types/TLEventMap'
+} from '../types'
+import { KeyUtils } from '../utils'
+import type { TLShape } from './shapes'
 
 export interface TLStateClass<
   S extends TLShape,

@@ -1,7 +1,7 @@
 import { makeObservable } from 'mobx'
 import { Vec } from '@tldraw/vec'
 import { TLPolygonShape, TLPolygonShapeProps } from '../TLPolygonShape'
-import { PolygonUtils } from '~utils'
+import { PolygonUtils } from '../../../utils'
 
 export interface TLStarShapeProps extends TLPolygonShapeProps {
   sides: number

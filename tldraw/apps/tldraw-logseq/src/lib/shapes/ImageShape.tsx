@@ -3,7 +3,7 @@ import * as React from 'react'
 import { HTMLContainer, TLComponentProps } from '@tldraw/react'
 import { TLAsset, TLImageShape, TLImageShapeProps } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
-import { LogseqContext } from '~lib/logseq-context'
+import { LogseqContext } from '../logseq-context'
 
 export interface ImageShapeProps extends TLImageShapeProps {
   type: 'image'

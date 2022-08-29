@@ -1,9 +1,8 @@
 import { Vec } from '@tldraw/vec'
 import { computed, makeObservable } from 'mobx'
-import type { TLResizeInfo } from '~lib'
 import { intersectLineSegmentPolyline, intersectPolygonBounds, TLBounds } from '@tldraw/intersect'
-import { BoundsUtils, PointUtils, PolygonUtils } from '~utils'
 import { TLBoxShape, TLBoxShapeProps } from '../TLBoxShape'
+import { PolygonUtils, BoundsUtils, PointUtils } from '../../../utils'
 
 export interface TLPolygonShapeProps extends TLBoxShapeProps {
   sides: number

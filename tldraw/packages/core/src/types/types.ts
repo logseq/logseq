@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { TLApp, TLShape } from '~lib'
+import type { TLShape, TLApp } from '../lib'
 import type { TLEventMap } from './TLEventMap'
 import type { TLHandle } from './TLHandle'
 

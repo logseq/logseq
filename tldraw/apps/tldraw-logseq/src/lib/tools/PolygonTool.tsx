@@ -1,6 +1,6 @@
 import { TLBoxTool } from '@tldraw/core'
 import type { TLReactEventMap } from '@tldraw/react'
-import { PolygonShape, Shape } from '~lib'
+import { PolygonShape, type Shape } from '../shapes'
 
 export class PolygonTool extends TLBoxTool<PolygonShape, Shape, TLReactEventMap> {
   static id = 'polygon'

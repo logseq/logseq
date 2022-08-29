@@ -1,6 +1,6 @@
 import { intersectLineLine } from '@tldraw/intersect'
 import Vec from '@tldraw/vec'
-import { PI2, TAU } from '~constants'
+import { PI2, TAU } from '../constants'
 
 export class PolygonUtils {
   static getEdges = (points: number[][]) => {
