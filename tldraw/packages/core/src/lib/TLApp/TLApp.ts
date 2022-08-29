@@ -719,12 +719,6 @@ export class TLApp<
     )
   }
 
-  @computed get showContextMenu() {
-    return (
-      this.isIn('select.contextMenu')
-    )
-  }
-
   @computed get showRotateHandles() {
     const { selectedShapesArray } = this
     return (

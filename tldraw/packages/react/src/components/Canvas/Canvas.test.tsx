@@ -22,7 +22,6 @@ describe('Canvas', () => {
           showRotateHandles={app.showRotateHandles}
           showSelectionDetail={app.showSelectionDetail}
           showContextBar={app.showContextBar}
-          showContextMenu={app.showContextMenu}
         />
       )
     }
