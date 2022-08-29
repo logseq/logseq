@@ -245,7 +245,10 @@
             :active           (and (not srs-open?)
                                    (or (= route-name :all-journals) (= route-name :home)))
             :title            (t :left-side-bar/journals)
-            :on-click-handler route-handler/go-to-journals!
+            :on-click-handler (fn [e]
+                                (if (gobj/get e "shiftKey")
+                                  (route-handler/sidebar-journals!)
+                                  (route-handler/go-to-journals!)))
             :icon             "calendar"})))
 
         (when (state/enable-flashcards? (state/get-current-repo))
