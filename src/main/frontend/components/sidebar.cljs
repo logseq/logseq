@@ -333,8 +333,8 @@
                     :route-match route-match})
 
      [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
-      
-      {:tabindex "-1"}
+
+      {:tabIndex "-1"}
 
       (when (util/electron?)
         (find-in-page/search))
