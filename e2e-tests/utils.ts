@@ -117,7 +117,7 @@ export async function newInnerBlock(page: Page): Promise<Locator> {
 
 export async function newBlock(page: Page): Promise<Locator> {
   let blockNumber = await page.locator('.page-blocks-inner .ls-block').count()
-  const prev = await lastBlock(page)
+  await lastBlock(page)
   await page.press('textarea >> nth=0', 'Enter')
   await page.waitForSelector(`.page-blocks-inner .ls-block >> nth=${blockNumber} >> textarea`, { state: 'visible' })
   return page.locator('textarea >> nth=0')

@@ -65,7 +65,6 @@ async function alias_test(page: Page, page_name: string, search_kws: string[]) {
   await page.keyboard.press(hotkeyOpenLink)
 
   await lastBlock(page)
-  await page.waitForTimeout(500)
 
   // build target Page with alias
   // the target page will contains the content in
@@ -76,8 +75,9 @@ async function alias_test(page: Page, page_name: string, search_kws: string[]) {
   await page.press('textarea >> nth=0', 'Enter') // Enter for finishing selection
   await page.press('textarea >> nth=0', 'Enter') // double Enter for exit property editing
   await page.press('textarea >> nth=0', 'Enter') // double Enter for exit property editing
-  await page.waitForTimeout(500)
+  await lastBlock(page)
   await page.type('textarea >> nth=0', alias_test_content_1)
+  await lastBlock(page)
   await page.keyboard.press(hotkeyBack)
 
   await page.waitForTimeout(100) // await navigation
@@ -111,6 +111,7 @@ async function alias_test(page: Page, page_name: string, search_kws: string[]) {
   await page.keyboard.press(hotkeyBack)
 
   // clicking opening test
+  await newBlock(page)
   await page.waitForSelector('.page-blocks-inner .ls-block .page-ref >> nth=-1')
   await page.click('.page-blocks-inner .ls-block .page-ref >> nth=-1')
   await lastBlock(page)
