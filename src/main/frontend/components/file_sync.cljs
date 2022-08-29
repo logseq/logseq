@@ -124,17 +124,20 @@
             (close-fn)
             (if (mobile-util/iCloud-container-path? repo)
               (open-icloud-graph-clone-picker repo)
-              (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
-                (async/<! (fs-sync/sync-start))
-                ;; update existing repo
-                (state/set-repos! (map (fn [r]
-                                         (if (= (:url r) repo)
-                                           (assoc r
-                                                  :GraphUUID GraphUUID
-                                                  :GraphName graph-name
-                                                  :remote? true)
-                                           r))
-                                       (state/get-repos)))))))]
+              (do
+                (state/set-state! [:ui/loading? :graph/create-remote?] true)
+                (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
+                  (async/<! (fs-sync/sync-start))
+                  (state/set-state! [:ui/loading? :graph/create-remote?] false)
+                 ;; update existing repo
+                 (state/set-repos! (map (fn [r]
+                                          (if (= (:url r) repo)
+                                            (assoc r
+                                                   :GraphUUID GraphUUID
+                                                   :GraphName graph-name
+                                                   :remote? true)
+                                            r))
+                                     (state/get-repos))))))))]
 
     [:div.cp__file-sync-related-normal-modal
      [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "cloud-upload")]]
@@ -167,6 +170,7 @@
   [_state]
   (let [_                      (state/sub :auth/id-token)
         current-repo           (state/get-current-repo)
+        creating-remote-graph? (state/sub [:ui/loading? :graph/create-remote?])
         sync-state             (state/sub [:file-sync/sync-state current-repo])
         _                      (rum/react file-sync-handler/refresh-file-sync-component)
         synced-file-graph?     (file-sync-handler/synced-file-graph? current-repo)
@@ -221,86 +225,88 @@
                                     :else
                                     (create-remote-graph-fn)))]
 
-    [:div.cp__file-sync-indicator
-     (when (and (not config/publishing?)
-                (user-handler/logged-in?))
+    (if creating-remote-graph?
+      (ui/loading "")
+      [:div.cp__file-sync-indicator
+       (when (and (not config/publishing?)
+                  (user-handler/logged-in?))
 
-       (ui/dropdown-with-links
-        (fn [{:keys [toggle-fn]}]
-          (if (not off?)
-            [:a.button.cloud.on
-             {:on-click toggle-fn
-              :class    (util/classnames [{:syncing syncing?
-                                           :is-full full-syncing?
-                                           :queuing queuing?
-                                           :idle    (and (not queuing?) idle?)}])}
-             [:span.flex.items-center
-              (ui/icon "cloud"
-                       {:style {:fontSize ui/icon-size}})]]
+         (ui/dropdown-with-links
+          (fn [{:keys [toggle-fn]}]
+            (if (not off?)
+              [:a.button.cloud.on
+               {:on-click toggle-fn
+                :class    (util/classnames [{:syncing syncing?
+                                             :is-full full-syncing?
+                                             :queuing queuing?
+                                             :idle    (and (not queuing?) idle?)}])}
+               [:span.flex.items-center
+                (ui/icon "cloud"
+                         {:style {:fontSize ui/icon-size}})]]
 
-            [:a.button.cloud.off
-             {:on-click turn-on}
-             (ui/icon "cloud-off" {:style {:fontSize ui/icon-size}})]))
+              [:a.button.cloud.off
+               {:on-click turn-on}
+               (ui/icon "cloud-off" {:style {:fontSize ui/icon-size}})]))
 
-        (cond-> []
-          synced-file-graph?
-          (concat
-           (if (and no-active-files? idle?)
-             [{:item [:div.flex.justify-center.w-full.py-2
-                      [:span.opacity-60 "Everything is synced!"]]
-               :as-link? false}]
-             [{:title [:div.file-item.is-first ""] :options {:class "is-first-placeholder"}}])
+          (cond-> []
+            synced-file-graph?
+            (concat
+             (if (and no-active-files? idle?)
+               [{:item [:div.flex.justify-center.w-full.py-2
+                        [:span.opacity-60 "Everything is synced!"]]
+                 :as-link? false}]
+               [{:title [:div.file-item.is-first ""] :options {:class "is-first-placeholder"}}])
 
-           (map (fn [f] {:title [:div.file-item
-                                 {:key (str "downloading-" f)}
-                                 (js/decodeURIComponent f)]
-                         :key   (str "downloading-" f)
-                         :icon  (ui/icon "arrow-narrow-down")}) downloading-files)
-           (map (fn [e] (let [icon (case (.-type e)
-                                           "add"    "plus"
-                                           "unlink" "minus"
-                                           "edit")
-                              path (fs-sync/relative-path e)]
-                          {:title [:div.file-item
-                                   {:key (str "queue-" path)}
-                                   (js/decodeURIComponent path)]
-                           :key   (str "queue-" path)
-                           :icon  (ui/icon icon)})) (take 10 queuing-files))
-           (map (fn [f] {:title [:div.file-item
-                                 {:key (str "uploading-" f)}
-                                 (js/decodeURIComponent f)]
-                         :key   (str "uploading-" f)
-                         :icon  (ui/icon "arrow-up")}) uploading-files)
+             (map (fn [f] {:title [:div.file-item
+                                   {:key (str "downloading-" f)}
+                                   (js/decodeURIComponent f)]
+                           :key   (str "downloading-" f)
+                           :icon  (ui/icon "arrow-narrow-down")}) downloading-files)
+             (map (fn [e] (let [icon (case (.-type e)
+                                       "add"    "plus"
+                                       "unlink" "minus"
+                                       "edit")
+                                path (fs-sync/relative-path e)]
+                            {:title [:div.file-item
+                                     {:key (str "queue-" path)}
+                                     (js/decodeURIComponent path)]
+                             :key   (str "queue-" path)
+                             :icon  (ui/icon icon)})) (take 10 queuing-files))
+             (map (fn [f] {:title [:div.file-item
+                                   {:key (str "uploading-" f)}
+                                   (js/decodeURIComponent f)]
+                           :key   (str "uploading-" f)
+                           :icon  (ui/icon "arrow-up")}) uploading-files)
 
-           (when sync-state
-             (map-indexed (fn [i f] (:time f)
-                            (let [path       (:path f)
-                                  ext        (string/lower-case (util/get-file-ext path))
-                                  _supported? (gp-config/mldoc-support? ext)
-                                  full-path  (util/node-path.join (config/get-repo-dir current-repo) path)
-                                  page-name  (db/get-file-page full-path)]
-                              {:title [:div.files-history.cursor-pointer
-                                       {:key i :class (when (= i 0) "is-first")
-                                        :on-click (fn []
-                                                    (if page-name
-                                                      (rfe/push-state :page {:name page-name})
-                                                      (rfe/push-state :file {:path full-path})))}
-                                       [:span.file-sync-item (js/decodeURIComponent (:path f))]
-                                       [:div.opacity-50 (ui/humanity-time-ago (:time f) nil)]]}))
-                          (take 10 (:history sync-state))))))
+             (when sync-state
+               (map-indexed (fn [i f] (:time f)
+                              (let [path       (:path f)
+                                    ext        (string/lower-case (util/get-file-ext path))
+                                    _supported? (gp-config/mldoc-support? ext)
+                                    full-path  (util/node-path.join (config/get-repo-dir current-repo) path)
+                                    page-name  (db/get-file-page full-path)]
+                                {:title [:div.files-history.cursor-pointer
+                                         {:key i :class (when (= i 0) "is-first")
+                                          :on-click (fn []
+                                                      (if page-name
+                                                        (rfe/push-state :page {:name page-name})
+                                                        (rfe/push-state :file {:path full-path})))}
+                                         [:span.file-sync-item (js/decodeURIComponent (:path f))]
+                                         [:div.opacity-50 (ui/humanity-time-ago (:time f) nil)]]}))
+                            (take 10 (:history sync-state))))))
 
-        {:links-header
-         [:<>
-          (when (and synced-file-graph? queuing?)
-            [:div.head-ctls
-             (ui/button "Sync now"
-                        :class "block cursor-pointer"
-                        :small? true
-                        :on-click #(async/offer! fs-sync/immediately-local->remote-chan true))])
+          {:links-header
+           [:<>
+            (when (and synced-file-graph? queuing?)
+              [:div.head-ctls
+               (ui/button "Sync now"
+                 :class "block cursor-pointer"
+                 :small? true
+                 :on-click #(async/offer! fs-sync/immediately-local->remote-chan true))])
 
-          ;(when config/dev?
-          ;  [:strong.debug-status (str status)])
-          ]}))]))
+                                        ;(when config/dev?
+                                        ;  [:strong.debug-status (str status)])
+            ]}))])))
 
 (rum/defc pick-local-graph-for-sync [graph]
   (rum/use-effect!
