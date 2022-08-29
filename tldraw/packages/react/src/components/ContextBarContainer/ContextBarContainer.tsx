@@ -56,22 +56,11 @@ export const ContextBarContainer = observer(function ContextBarContainer<S exten
     BoundsUtils.boundsContain(vpBounds, screenBounds) ||
     BoundsUtils.boundsCollide(vpBounds, screenBounds)
 
-  React.useLayoutEffect(() => {
-    const elm = rBounds.current
-    if (!elm) return
-    if (hidden || !inView) {
-      elm.classList.add('tl-fade-out')
-      elm.classList.remove('tl-fade-in')
-    } else {
-      elm.classList.add('tl-fade-in')
-      elm.classList.remove('tl-fade-out')
-    }
-  }, [hidden, inView])
 
   return (
     <div
       ref={rBounds}
-      className="tl-counter-scaled-positioned tl-fade-out"
+      className="tl-counter-scaled-positioned"
       aria-label="context-bar-container"
       onPointerMove={stopEventPropagation}
       onPointerUp={stopEventPropagation}
