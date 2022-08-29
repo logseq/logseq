@@ -169,6 +169,7 @@ export interface BlockEntity {
   unordered: boolean
   content: string
   page: IEntityID
+  properties?: Record<string, any>
 
   // optional fields in dummy page
   anchor?: string
@@ -196,9 +197,12 @@ export interface PageEntity {
   file?: IEntityID
   namespace?: IEntityID
   children?: Array<PageEntity>
+  properties?: Record<string, any>
   format?: 'markdown' | 'org'
   journalDay?: number
   updatedAt?: number
+
+  [key: string]: any
 }
 
 export type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
