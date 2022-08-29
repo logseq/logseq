@@ -1,6 +1,7 @@
-import React from 'react'
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import { useApp } from '@tldraw/react'
+import { MOD_KEY} from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 
 export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
@@ -31,21 +32,21 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           onSelect={preventEvent}
           onClick={app.api.zoomToSelection}
         >
-          Zoom to Selection <div className="tl-zoom-menu-right-slot"><span className="keyboard-shortcut"><code>⌘</code> <code>-</code></span></div>
+          Zoom to Selection <div className="tl-zoom-menu-right-slot"><span className="keyboard-shortcut"><code>{MOD_KEY}</code> <code>-</code></span></div>
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
           className="menu-link tl-zoom-menu-dropdown-item"
           onSelect={preventEvent}
           onClick={app.api.zoomIn}
         >
-          Zoom In <div className="tl-zoom-menu-right-slot"><span className="keyboard-shortcut"><code>⌘</code> <code>+</code></span></div>
+          Zoom In <div className="tl-zoom-menu-right-slot"><span className="keyboard-shortcut"><code>{MOD_KEY}</code> <code>+</code></span></div>
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
           className="menu-link tl-zoom-menu-dropdown-item"
           onSelect={preventEvent}
           onClick={app.api.zoomOut}
         >
-          Zoom Out <div className="tl-zoom-menu-right-slot"><span className="keyboard-shortcut"><code>⌘</code> <code>-</code></span></div>
+          Zoom Out <div className="tl-zoom-menu-right-slot"><span className="keyboard-shortcut"><code>{MOD_KEY}</code> <code>-</code></span></div>
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
           className="menu-link tl-zoom-menu-dropdown-item"
