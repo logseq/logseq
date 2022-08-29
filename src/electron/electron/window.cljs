@@ -118,7 +118,7 @@
 (defn setup-window-listeners!
   [^js win]
   (when win
-    (let [web-contents (. win -webContents)          
+    (let [web-contents (. win -webContents)
           new-win-handler
           (fn [e url]
             (let [url (if (string/starts-with? url "file:")
@@ -140,7 +140,7 @@
 
           context-menu-handler
           (context-menu/setup-context-menu! win)]
-      
+
       (doto web-contents
         (.on "new-window" new-win-handler)
         (.on "will-navigate" will-navigate-handler))

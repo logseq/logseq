@@ -760,6 +760,9 @@
         (insert_block src content (bean/->js opts))))))
 
 ;; plugins
+(defn ^:export validate_external_plugins [urls]
+  (ipc/ipc :validateUserExternalPlugins urls))
+
 (def ^:export __install_plugin
   (fn [^js manifest]
     (when-let [{:keys [repo id] :as mft} (bean/->clj manifest)]

@@ -2,13 +2,8 @@
   "Util fns shared between graph-parser and rest of app. Util fns only rely on
   clojure standard libraries."
   (:require [clojure.walk :as walk]
-            [clojure.string :as string]))
-
-(defn safe-re-find
-  "Copy of frontend.util/safe-re-find. Too basic to couple to main app"
-  [pattern s]
-  (when (string? s)
-    (re-find pattern s)))
+            [clojure.string :as string]
+            [clojure.edn :as edn]))
 
 (defn path-normalize
   "Normalize file path (for reading paths from FS, not required by writting)"
@@ -38,7 +33,7 @@
 (defn tag-valid?
   [tag-name]
   (when (string? tag-name)
-    (not (safe-re-find #"[# \t\r\n]+" tag-name))))
+    (not (re-find #"[# \t\r\n]+" tag-name))))
 
 (defn safe-subs
   ([s start]
@@ -153,3 +148,12 @@
   [file]
   (when file
     (normalize-format (keyword (string/lower-case (last (string/split file #"\.")))))))
+
+(defn valid-edn-keyword?
+  "Determine if string is a valid edn keyword"
+  [s]
+  (try
+    (boolean (and (= \: (first s))
+                  (edn/read-string (str "{" s " nil}"))))
+    (catch :default _
+      false)))

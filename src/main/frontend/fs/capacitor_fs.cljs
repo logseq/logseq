@@ -185,15 +185,13 @@
             repo-dir (config/get-local-dir repo)
             ext (util/get-file-ext path)
             db-content (or old-content (db/get-file repo path) "")
-            contents-matched? (contents-matched? disk-content db-content)
-            pending-writes (state/get-write-chan-length)]
+            contents-matched? (contents-matched? disk-content db-content)]
       (cond
         (and
          (not= stat :not-found)   ; file on the disk was deleted
          (not contents-matched?)
          (not (contains? #{"excalidraw" "edn" "css"} ext))
-         (not (string/includes? path "/.recycle/"))
-         (zero? pending-writes))
+         (not (string/includes? path "/.recycle/")))
         (p/let [disk-content (encrypt/decrypt disk-content)]
           (state/pub-event! [:file/not-matched-from-disk path disk-content content]))
 
@@ -275,12 +273,10 @@
     (readdir dir))
   (unlink! [this repo path _opts]
     (p/let [path (get-file-path nil path)
-            path (if (string/starts-with? path "file://")
-                   (string/replace-first path "file://" "")
-                   path)
-            repo-dir (config/get-local-dir repo)
-            recycle-dir (str repo-dir config/app-name "/.recycle") ;; logseq/.recycle
-            file-name (-> (string/replace path repo-dir "")
+            repo-url (config/get-local-dir repo)
+            recycle-dir (str repo-url config/app-name "/.recycle") ;; logseq/.recycle
+            ;; convert url to pure path
+            file-name (-> (string/replace path repo-url "")
                           (string/replace "/" "_")
                           (string/replace "\\" "_"))
             new-path (str recycle-dir "/" file-name)]

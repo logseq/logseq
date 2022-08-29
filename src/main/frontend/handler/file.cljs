@@ -2,8 +2,6 @@
   (:refer-clojure :exclude [load-file])
   (:require ["/frontend/utils" :as utils]
             [borkdude.rewrite-edn :as rewrite]
-            [cljs.core.async.interop :refer [<p!]]
-            [clojure.core.async :as async]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.fs :as fs]
@@ -206,30 +204,8 @@
   (alter-file repo path new-content {:reset? false
                                      :re-render-root? false}))
 
-(defn alter-files
-  [repo files {:keys [reset? update-db?]
-               :or {reset? false
-                    update-db? true}
-               :as opts}]
-  ;; old file content
-  (let [file->content (let [paths (map first files)]
-                        (zipmap paths
-                                (map (fn [path] (db/get-file repo path)) paths)))]
-    ;; update db
-    (when update-db?
-      (doseq [[path content] files]
-        (if reset?
-          (reset-file! repo path content)
-          (db/set-file-content! repo path content))))
-
-    (when-let [chan (state/get-file-write-chan)]
-      (let [chan-callback (:chan-callback opts)]
-        (async/put! chan [repo files opts file->content])
-        (when chan-callback
-          (chan-callback))))))
-
 (defn alter-files-handler!
-  [repo files {:keys [finish-handler chan]} file->content]
+  [repo files {:keys [finish-handler]} file->content]
   (let [write-file-f (fn [[path content]]
                        (when path
                          (let [original-content (get file->content path)]
@@ -254,30 +230,30 @@
                                                                         :error error})))))))
         finish-handler (fn []
                          (when finish-handler
-                           (finish-handler))
-                         (ui-handler/re-render-file!))]
+                           (finish-handler)))]
     (-> (p/all (map write-file-f files))
         (p/then (fn []
-                  (finish-handler)
-                  (when chan
-                    (async/put! chan true))))
+                  (finish-handler)))
         (p/catch (fn [error]
                    (println "Alter files failed:")
-                   (js/console.error error)
-                   (async/put! chan false))))))
+                   (js/console.error error))))))
 
-(defn run-writes-chan!
-  []
-  (let [chan (state/get-file-write-chan)]
-    (async/go-loop []
-      (let [args (async/<! chan)]
-        ;; return a channel
-        (try
-          (<p! (apply alter-files-handler! args))
-          (catch js/Error e
-            (log/error :file/write-failed e))))
-      (recur))
-    chan))
+(defn alter-files
+  [repo files {:keys [reset? update-db?]
+               :or {reset? false
+                    update-db? true}
+               :as opts}]
+  ;; old file content
+  (let [file->content (let [paths (map first files)]
+                        (zipmap paths
+                                (map (fn [path] (db/get-file repo path)) paths)))]
+    ;; update db
+    (when update-db?
+      (doseq [[path content] files]
+        (if reset?
+          (reset-file! repo path content)
+          (db/set-file-content! repo path content))))
+    (alter-files-handler! repo files opts file->content)))
 
 (defn watch-for-current-graph-dir!
   []

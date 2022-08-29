@@ -271,7 +271,7 @@
     [:div "Recent search:"]
     (ui/with-shortcut :go/search-in-page "bottom"
       [:div.flex-row.flex.align-items
-       [:div.mr-2 "Search in page:"]
+       [:div.mr-2 "Search blocks in page:"]
        [:div {:style {:margin-top 3}}
         (ui/toggle in-page-search?
                    (fn [_value]
@@ -324,7 +324,8 @@
                                  (state/sidebar-add-block!
                                   (state/get-current-repo)
                                   (:db/id page)
-                                  :page))))
+                                  :page))
+                                (state/close-modal!)))
 
                             nil))
        :item-render (fn [{:keys [type data]}]

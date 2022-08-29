@@ -12,8 +12,13 @@
   (when-let [current-repo (state/get-current-repo)]
     [:div.export
      [:h1.title "Export"]
-
      [:ul.mr-1
+      [:li.mb-4
+       [:a.font-medium {:on-click #(export/export-repo-as-edn-v2! current-repo)}
+        (t :export-edn)]]
+      [:li.mb-4
+       [:a.font-medium {:on-click #(export/export-repo-as-json-v2! current-repo)}
+        (t :export-json)]]
       (when (util/electron?)
         [:li.mb-4
          [:a.font-medium {:on-click #(export/export-repo-as-html! current-repo)}
@@ -25,12 +30,6 @@
         [:li.mb-4
          [:a.font-medium {:on-click #(export/export-repo-as-opml! current-repo)}
           (t :export-opml)]])
-      [:li.mb-4
-       [:a.font-medium {:on-click #(export/export-repo-as-edn-v2! current-repo)}
-        (t :export-edn)]]
-      [:li.mb-4
-       [:a.font-medium {:on-click #(export/export-repo-as-json-v2! current-repo)}
-        (t :export-json)]]
       (when-not (mobile-util/native-platform?)
        [:li.mb-4
         [:a.font-medium {:on-click #(export/export-repo-as-roam-json! current-repo)}

@@ -52,6 +52,8 @@
   < rum/reactive
   {:did-mount (fn [state]
                 (let [^js el (rum/dom-node state)]
+                  ;; Passing aria-label as a prop to TextareaAutosize removes the dash
+                  (.setAttribute el "aria-label" "editing block")
                   (. el addEventListener "mouseup"
                      #(let [start (util/get-selection-start el)
                             end (util/get-selection-end el)]
@@ -166,7 +168,7 @@
    opts))
 
 (defn button
-  [text & {:keys [background href class intent on-click small? large?]
+  [text & {:keys [background href class intent on-click small? large? title]
            :or   {small? false large? false}
            :as   option}]
   (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center")
@@ -176,6 +178,7 @@
     [:button.ui__button
      (merge
       {:type  "button"
+       :title title
        :class (str (util/hiccup->class klass) " " class)}
       (dissoc option :background :class :small? :large?)
       (when href
@@ -228,7 +231,7 @@
                   "exiting" "transition ease-in duration-100 opacity-100"
                   "exited" "transition ease-in duration-100 opacity-0")}
         [:div.rounded-lg.shadow-xs {:style {:max-height "calc(100vh - 200px)"
-                                            :overflow-y "scroll"
+                                            :overflow-y "auto"
                                             :overflow-x "hidden"}}
          [:div.p-4
           [:div.flex.items-start
@@ -273,6 +276,11 @@
 (defn main-node
   []
   (gdom/getElement "main-content-container"))
+
+(defn focus-element
+  [element]
+  (when-let [element ^js (gdom/getElement element)]
+    (.focus element)))
 
 (defn get-scroll-top []
   (.-scrollTop (main-node)))

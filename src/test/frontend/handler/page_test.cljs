@@ -68,23 +68,46 @@
   (are [x y] (= (let [[content old-name new-name] x]
                   (page-handler/replace-tag-ref! content old-name new-name))
                 y)
-       ["#foo" "foo" "bar"] "#bar"
-       ["#foo" "foo" "new bar"] "#[[new bar]]"
+    ["#foo" "foo" "bar"] "#bar"
+    ["#foo" "foo" "new bar"] "#[[new bar]]"
 
-       ["bla #foo bla" "foo" "bar"] "bla #bar bla"
-       ["bla #foo bla" "foo" "new bar"] "bla #[[new bar]] bla"
+    ["bla #foo bla" "foo" "bar"] "bla #bar bla"
+    ["bla #foo bla" "foo" "new bar"] "bla #[[new bar]] bla"
 
-       ["bla #foo" "foo" "bar"] "bla #bar"
-       ["bla #foo" "foo" "new bar"] "bla #[[new bar]]"
+    ["bla #foo" "foo" "bar"] "bla #bar"
+    ["bla #foo" "foo" "new bar"] "bla #[[new bar]]"
 
-       ["#foo #foobar bar#foo #foo" "foo" "bar"]
-       "#bar #foobar bar#foo #bar"
-       
-       ["#foo #foobar bar#foo #foo" "foo" "new bar"]
-       "#[[new bar]] #foobar bar#foo #[[new bar]]"
+    ["#foo #foobar" "foo" "bar"]
+    "#bar #foobar"
 
-       ["#logseq/foo #logseq/foobar bar#logseq/foo #logseq/foo" "logseq/foo" "logseq/bar"]
-       "#logseq/bar #logseq/foobar bar#logseq/foo #logseq/bar"))
+    ["#foo #foobar bar#foo #foo" "foo" "bar"]
+    "#bar #foobar bar#foo #bar"
+
+    ["#foo #foobar bar#foo #foo,," "foo" "bar"]
+    "#bar #foobar bar#foo #bar,,"
+
+    ["#foo #foobar bar#foo #foo #foo ball" "foo" "bar"]
+    "#bar #foobar bar#foo #bar #bar ball"
+
+    ["#foo #foobar bar#foo #foo\t#foo ball" "foo" "bar"]
+    "#bar #foobar bar#foo #bar\t#bar ball"
+
+    ["#foo #foobar bar#foo #foo" "foo" "new bar"]
+    "#[[new bar]] #foobar bar#foo #[[new bar]]"
+
+    ["#logseq/foo #logseq/foobar bar#logseq/foo #logseq/foo" "logseq/foo" "logseq/bar"]
+    "#logseq/bar #logseq/foobar bar#logseq/foo #logseq/bar"
+
+    ;; #6451
+    ["#中文" "中文" "中文2"] "#中文2"
+    ["#2中文" "2中文" "中文234"] "#中文234"
+    ["#2中文2" "2中文2" "中文1999"] "#中文1999"
+    ["#2中文,SLKDF" "2中文" "中文1999"] "#2中文,SLKDF"
+    ["#2中文, SLKDF" "2中文" "中文1999"] "#中文1999, SLKDF"
+    ["#2中文看来减肥了" "2中文" "中文1999"] "#2中文看来减肥了"
+    ["两份健康 #2中文 看来减肥了" "2中文" "中文1999"] "两份健康 #中文1999 看来减肥了"
+    ["sdaflk  #2中文   看asdf了" "2中文" "中文1999"] "sdaflk  #中文1999   看asdf了"
+    ["sdaflk  #2中文" "2中文" "中文1999"] "sdaflk  #中文1999"))
 
 (deftest test-replace-old-page!
   (are [x y] (= (let [[content old-name new-name] x]

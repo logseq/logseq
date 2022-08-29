@@ -36,7 +36,7 @@
                                               (dissoc % lc-reference)))
                        (page-handler/save-filter! page-name @filters-atom))
            :small? true
-           :intent "link"
+           :intent "border-link"
            :key ref-name))))])
 
 (rum/defcs filter-dialog-inner < rum/reactive (rum/local "" ::filterSearch)
@@ -127,7 +127,7 @@
         *collapsed? (atom nil)]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
-      [:h2.font-bold.opacity-50 (str
+      [:h2.font-bold.opacity-80 (str
                                  (when (seq filters)
                                    (str filter-n " of "))
                                  total
@@ -200,7 +200,8 @@
           filters (when (seq filter-state)
                     (-> (group-by second filter-state)
                         (update-vals #(map first %))))
-          filtered-ref-blocks (block-handler/filter-blocks ref-blocks filters)
+          filtered-ref-blocks (->> (block-handler/filter-blocks ref-blocks filters)
+                                   (block-handler/get-filtered-ref-blocks-with-parents ref-blocks))
           total (count top-level-blocks)
           filtered-top-blocks (filter (fn [b] (top-level-blocks-ids (:db/id b))) filtered-ref-blocks)
           filter-n (count filtered-top-blocks)
@@ -274,7 +275,7 @@
         [:div.references.mt-6.flex-1.flex-row
          [:div.content.flex-1
           (ui/foldable
-           [:h2.font-bold {:style {:opacity "0.3"}}
+           [:h2.font-bold.opacity-80
             (if @n-ref
               (str @n-ref " Unlinked Reference" (when (> @n-ref 1)
                                                   "s"))

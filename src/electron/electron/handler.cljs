@@ -21,7 +21,8 @@
             [electron.plugin :as plugin]
             [electron.window :as win]
             [electron.file-sync-rsapi :as rsapi]
-            [electron.backup-file :as backup-file]))
+            [electron.backup-file :as backup-file]
+            [electron.find-in-page :as find]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -309,6 +310,13 @@
 (defmethod handle :getUserDefaultPlugins []
   (utils/get-ls-default-plugins))
 
+(defmethod handle :validateUserExternalPlugins [_win [_ urls]]
+  (zipmap urls (for [url urls]
+                 (try
+                   (and (fs-extra/pathExistsSync url)
+                        (fs-extra/pathExistsSync (path/join url "package.json")))
+                   (catch js/Error _e false)))))
+
 (defmethod handle :relaunchApp []
   (.relaunch app) (.quit app))
 
@@ -540,6 +548,12 @@
   (when-let [f (:window/once-persist-done @state/state)]
     (f)
     (state/set-state! :window/once-persist-done nil)))
+
+(defmethod handle :find-in-page [^js win [_ search option]]
+  (find/find! win search (bean/->js option)))
+
+(defmethod handle :clear-find-in-page [^js win [_]]
+  (find/clear! win))
 
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]

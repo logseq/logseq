@@ -17,7 +17,8 @@
             [frontend.ui :as ui]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.user :as user]))
+            [frontend.handler.user :as user]
+            [dommy.core :as dom]))
 
 (defn persist-dbs!
   []
@@ -123,6 +124,15 @@
                                        :on-success after-f
                                        :on-error   error-f}]
                          (repo-handler/persist-db! repo handlers))))
+
+  (js/window.apis.on "foundInPage"
+                     (fn [data]
+                       (let [data' (bean/->clj data)]
+                         (state/set-state! [:ui/find-in-page :matches] data')
+                         (dom/remove-style! (dom/by-id "search-in-page-input") :visibility)
+                         (dom/set-text! (dom/by-id "search-in-page-placeholder") "")
+                         (ui/focus-element "search-in-page-input")
+                         true)))
 
   (js/window.apis.on "loginCallback"
                      (fn [code]

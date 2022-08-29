@@ -168,9 +168,10 @@
                       (string/includes? % "logseq_local_/")) nfs-dbs))
       (do (notification/show! ["DB version is not compatible, please clear cache then re-add your graph back."
                                (ui/button
-                                (t :settings-page/clear-cache)
-                                :class    "text-sm p-1"
-                                :on-click clear-cache!)] :error false)
+                                 (t :settings-page/clear-cache)
+                                 :class    "ui__modal-enter"
+                                 :class    "text-sm p-1"
+                                 :on-click clear-cache!)] :error false)
           {:url config/local-repo
            :example? true})
 
@@ -211,12 +212,12 @@
 
     (p/let [repos (get-repos)]
       (state/set-repos! repos)
-      (restore-and-setup! repos db-schema)
-      (when (mobile-util/native-platform?)
-        (p/do! (mobile-util/hide-splash))))
+      (restore-and-setup! repos db-schema))
+    (when (mobile-util/native-platform?)
+      (p/do! (mobile-util/hide-splash)))
 
     (db/run-batch-txs!)
-    (file-handler/run-writes-chan!)
+
     (when config/dev?
       (enable-datalog-console))
     (when (util/electron?)
