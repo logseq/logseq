@@ -28,6 +28,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     point: [0, 0],
     handles: {
       start: { id: 'start', canBind: true, point: [0, 0] },
+      bend: { id: 'bend', canBind: true, point: [0.5, 0.5] },
       end: { id: 'end', canBind: true, point: [1, 1] },
     },
     stroke: 'var(--ls-primary-text-color, #000)',
@@ -102,7 +103,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       decorations,
       label,
       strokeWidth,
-      handles: { start, end },
+      handles: { start, bend, end },
     } = this.props
     const bounds = this.getBounds()
     const labelSize = label ? getTextLabelSize(label, font) : [0, 0]
@@ -150,18 +151,20 @@ export class LineShape extends TLLineShape<LineShapeProps> {
 
   getShapeSVGJsx({ preview }: any) {
     const {
+      id,
       stroke,
       fill,
       strokeWidth,
       strokeType,
       decorations,
       label,
-      handles: { start, end },
+      handles: { start, bend, end },
     } = this.props
     const midPoint = Vec.med(start.point, end.point)
     return (
       <>
         <Arrow
+          id={id}
           style={{
             stroke,
             fill,
@@ -170,8 +173,12 @@ export class LineShape extends TLLineShape<LineShapeProps> {
           }}
           start={start.point}
           end={end.point}
+          bend={bend.point}
+          arrowBend={0}
+          isDraw={false}
           decorationStart={decorations?.start}
           decorationEnd={decorations?.end}
+
         />
         {preview && (
           <>
