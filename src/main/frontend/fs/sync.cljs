@@ -1190,15 +1190,20 @@
           (swap! *get-graph-salt-memoize-cache conj [graph-uuid r])
           r)))))
 
-(def <get-graph-encrypt-keys-memoize
-  (let [*cache (atom {})]
-    (fn [remoteapi graph-uuid]
-      (go (or (get @*cache graph-uuid)
-              (let [{:keys [public-key encrypted-private-key] :as r}
-                    (<! (<get-graph-encrypt-keys remoteapi graph-uuid))]
-                (when (and public-key encrypted-private-key)
-                  (swap! *cache conj [graph-uuid r]))
-                r))))))
+(def ^:private *get-graph-encrypt-keys-memoize-cache (atom {}))
+(defn update-graph-encrypt-keys-cache [graph-uuid v]
+  {:pre [(map? v)
+         (= #{:public-key :encrypted-private-key} (set (keys v)))]}
+  (swap! *get-graph-encrypt-keys-memoize-cache conj [graph-uuid v]))
+
+(defn <get-graph-encrypt-keys-memoize [remoteapi graph-uuid]
+  (go
+    (or (get @*get-graph-encrypt-keys-memoize-cache graph-uuid)
+        (let [{:keys [public-key encrypted-private-key] :as r}
+              (<! (<get-graph-encrypt-keys remoteapi graph-uuid))]
+          (when (and public-key encrypted-private-key)
+            (swap! *get-graph-encrypt-keys-memoize-cache conj [graph-uuid r]))
+          r))))
 
 (defn add-new-version-file
   [repo path content]
@@ -1582,7 +1587,7 @@
           [salt-value _expired-at]
           (if gone?
             (let [r (<! (<create-graph-salt remoteapi graph-uuid))]
-              ;; (update-graph-salt-cache graph-uuid r)
+              (update-graph-salt-cache graph-uuid r)
               ((juxt :value :expired-at) r))
             [value expired-at])
           encrypted-pwd (<! (<encrypt-content pwd salt-value))]
@@ -1682,7 +1687,9 @@
                     (if (instance? ExceptionInfo upload-r)
                       (do (js/console.log "upload-graph-encrypt-keys err" upload-r)
                           ::stop)
-                      :recur))]
+                      (do (update-graph-encrypt-keys-cache graph-uuid {:public-key public-key
+                                                                       :encrypted-private-key encrypted-private-key})
+                          :recur)))]
               (if (= :recur next-state)
                 (recur)
                 next-state))
