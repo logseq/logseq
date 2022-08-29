@@ -1,5 +1,5 @@
 import { transaction } from 'mobx'
-import type { TLEventMap, TLEvents, TLTargetType } from '../../../../types'
+import { TLEventMap, TLEvents, TLTargetType } from '../../../../types'
 import type { TLShape } from '../../../shapes'
 import type { TLApp } from '../../../TLApp'
 import { TLToolState } from '../../../TLToolState'
