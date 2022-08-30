@@ -365,11 +365,12 @@
                  relative-path)]
       (and (not-empty path) (gp-util/path-normalize path)))))
 
+;; NOTE: js/encodeURIComponent cannot be used here
 (defn get-page-file-path
   "Get the path to the page file for the given page. This is used when creating new files."
   [repo-url sub-dir page-name ext]
   (let [page-basename (if (mobile-util/native-platform?)
-                        (util/url-encode page-name)
+                        (js/encodeURI page-name)
                         page-name)]
     (get-file-path repo-url (str sub-dir "/" page-basename "." ext))))
 
