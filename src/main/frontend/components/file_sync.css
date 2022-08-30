@@ -333,8 +333,8 @@
     }
 
     > .input-hints {
+      @apply flex-nowrap md:flex-wrap;
       background-color: var(--ls-primary-background-color);
-      flex-wrap: wrap;
 
       .strength-item {
         @apply flex items-center leading-none opacity-60 mr-2;

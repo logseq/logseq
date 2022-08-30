@@ -284,6 +284,7 @@ html.is-mobile {
   background-color: var(--ls-primary-background-color, #fff);
   border: 1px solid var(--ls-tertiary-background-color);
   min-width: 12rem;
+  border-radius: 6px;
 }
 
 .dropdown-caret {
