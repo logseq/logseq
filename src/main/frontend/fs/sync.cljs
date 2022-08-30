@@ -1543,25 +1543,7 @@
    (map #(partition-all n %))
    cat))
 
-(defn <file-change-event-revise
-  "filename is case-insensitive on macos.
-  when renamed a page(foo->Foo), generate following events:
-  1. change foo.md
-  2. add Foo.md
-  the 1st event should be converted to <unlink foo.md>"
-  [^FileChangeEvent e]
-  (go
-    (cond
-      (and (= "change" (.-type e))
-           ;; if not found in local fs
-           (<! (<local-file-not-exist? rsapi (.-dir e) (.-path e))))
-      [(->FileChangeEvent "unlink" (.-dir e) (.-path e) nil false)]
-
-      :else
-      [e]
-      )))
-
-(def local-changes-chan (chan (async/dropping-buffer 1000)))
+(defonce local-changes-chan (chan (async/dropping-buffer 1000)))
 (defn file-watch-handler
   "file-watcher callback"
   [type {:keys [dir path _content stat] :as _payload}]
@@ -1574,9 +1556,62 @@
             (let [path (remove-dir-prefix dir path)
                   files-meta (and (not= "unlink" type)
                                   (<! (<get-local-files-meta rsapi "" dir [path])))
-                  checksum (and (coll? files-meta) (some-> files-meta first :etag))
-                  es (<! (<file-change-event-revise (->FileChangeEvent type dir path stat checksum)))]
-              (<! (async/onto-chan! local-changes-chan es false)))))))))
+                  checksum (and (coll? files-meta) (some-> files-meta first :etag))]
+              (>! local-changes-chan (->FileChangeEvent type dir path stat checksum)))))))))
+
+(defn local-changes-revised-chan-builder
+  "return chan"
+  [local-changes-chan rename-page-event-chan]
+  (let [*rename-events (atom #{})
+        ch (chan 1000)]
+    (go-loop []
+      (let [{:keys [rename-event local-change]}
+            (async/alt!
+              rename-page-event-chan ([v] {:rename-event v}) ;; {:repo X :old-path X :new-path}
+              local-changes-chan ([v] {:local-change v}))]
+        (cond
+          rename-event
+          (let [repo-dir (config/get-repo-dir (:repo rename-event))
+                remove-dir-prefix-fn #(remove-dir-prefix repo-dir %)
+                rename-event* (-> rename-event
+                                  (update :old-path remove-dir-prefix-fn)
+                                  (update :new-path remove-dir-prefix-fn))
+                k1 [:old-path (:old-path rename-event*) repo-dir]
+                k2 [:new-path (:new-path rename-event*) repo-dir]]
+            (swap! *rename-events conj k1 k2)
+            ;; remove rename-events after 2s
+            (go (<! (timeout 3000))
+                (swap! *rename-events disj k1 k2))
+            ;; add 2 simulated file-watcher events
+            (>! ch (->FileChangeEvent "unlink" repo-dir (:old-path rename-event*) nil nil))
+            (>! ch (->FileChangeEvent "add" repo-dir (:new-path rename-event*)
+                                      {:mtime (tc/to-long (t/now))} "fake-checksum"))
+            (recur))
+          local-change
+          (cond
+            (and (= "change" (.-type local-change))
+                 (or (contains? @*rename-events [:old-path (.-path local-change) (.-dir local-change)])
+                     (contains? @*rename-events [:new-path (.-path local-change) (.-dir local-change)])))
+            (do (println :debug "ignore" local-change)
+                ;; ignore
+                (recur))
+
+            (and (= "add" (.-type local-change))
+                 (contains? @*rename-events [:new-path (.-path local-change) (.-dir local-change)]))
+            ;; ignore
+            (do (println :debug "ignore" local-change)
+                (recur))
+            (and (= "unlink" (.-type local-change))
+                 (contains? @*rename-events [:old-path (.-path local-change) (.-dir local-change)]))
+            (do (println :debug "ignore" local-change)
+                (recur))
+            :else
+            (do (>! ch local-change)
+                (recur))))))
+    ch))
+
+(defonce local-changes-revised-chan
+  (local-changes-revised-chan-builder local-changes-chan (state/get-file-rename-event-chan)))
 
 ;;; ### encryption
 (def pwd-map
@@ -2096,7 +2131,7 @@
             origin-map           (into {} (mapv (juxt relative-path identity) es))]
         (->>
          (merge-with
-          #(boolean (or (nil? %1) (= %1 %2)))
+          #(boolean (or (nil? %1) (= "fake-checksum" %1) (= %1 %2)))
           origin-checksum-map current-checksum-map)
          (filterv (comp true? second))
          (mapv first)
@@ -2312,7 +2347,7 @@
     (set! ops-chan (chan (async/dropping-buffer 10)))
     (set! _*ws (atom nil))
     (set! _remote-change-chan (ws-listen! graph-uuid _*ws))
-    (set! ratelimit-local-changes-chan (<ratelimit local->remote-syncer local-changes-chan))
+    (set! ratelimit-local-changes-chan (<ratelimit local->remote-syncer local-changes-revised-chan))
     (setup-local->remote! local->remote-syncer)
     (async/tap full-sync-mult private-full-sync-chan)
     (async/tap stop-sync-mult private-stop-sync-chan)
@@ -2382,7 +2417,7 @@
             ;;      we need to ignore all of them.
           (<! (timeout 3000))
           (println :drain-local-changes-chan-at-starting
-                   (count (util/drain-chan local-changes-chan))))
+                   (count (util/drain-chan local-changes-revised-chan))))
         (if @*stopped?
           (.schedule this ::stop nil nil)
           (.schedule this next-state nil nil)))))

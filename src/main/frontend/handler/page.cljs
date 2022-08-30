@@ -194,6 +194,7 @@
     (string/join "/" parts)))
 
 (defn rename-file!
+  "emit file-rename events to :file/rename-event-chan"
   [file new-name ok-handler]
   (let [repo (state/get-current-repo)
         file (db/pull (:db/id file))
@@ -203,7 +204,10 @@
     (db/transact! repo [{:db/id (:db/id file)
                          :file/path new-path}])
     (->
-     (p/let [_ (fs/rename! repo old-path new-path)]
+     (p/let [_ (state/offer-file-rename-event-chan! {:repo repo
+                                                     :old-path old-path
+                                                     :new-path new-path})
+             _ (fs/rename! repo old-path new-path)]
        (ok-handler))
      (p/catch (fn [error]
                 (println "file rename failed: " error))))))

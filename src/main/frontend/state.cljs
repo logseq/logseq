@@ -247,6 +247,7 @@
 
      :ui/find-in-page                       nil
 
+     :file/rename-event-chan                (async/chan 100)
      })))
 
 ;; block uuid -> {content(String) -> ast}
@@ -1766,3 +1767,13 @@
 (defn enable-search-remove-accents?
   []
   (:feature/enable-search-remove-accents? (get-config)))
+
+(defn get-file-rename-event-chan
+  []
+  (:file/rename-event-chan @state))
+
+(defn offer-file-rename-event-chan!
+  [v]
+  {:pre [(map? v)
+         (= #{:repo :old-path :new-path} (set (keys v)))]}
+  (async/offer! (get-file-rename-event-chan) v))
