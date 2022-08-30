@@ -225,7 +225,7 @@
   (when-let [database (get-db repo)]
     (.close database)
     (let [[db-name db-full-path db-ver-path] (get-db-version-path repo)]
-      (println "Delete search indice: " db-full-path)
+      (.info logger "Delete search indice" (str {:path db-full-path}))
       (fs/unlinkSync db-full-path)
       (fs/unlinkSync db-ver-path)
       (swap! databases dissoc db-name))))
