@@ -703,7 +703,8 @@
 (rum/defc page-embed < rum/reactive db-mixins/query
   [config page-name]
   (let [page-name (util/page-name-sanity-lc (string/trim page-name))
-        current-page (state/get-current-page)]
+        current-page (state/get-current-page)
+        whiteboard-page? (model/whiteboard-page? page-name)]
     [:div.color-level.embed.embed-page.bg-base-2
      {:class (when (:sidebar? config) "in-sidebar")
       :on-double-click #(edit-parent-block % config)
@@ -716,14 +717,16 @@
                   page-name)
             (not= (util/page-name-sanity-lc (get config :id ""))
                   page-name))
-       (let [page (model/get-page page-name)
-             blocks (db/get-paginated-blocks (state/get-current-repo) (:db/id page))]
-         (blocks-container blocks (assoc config
-                                         :db/id (:db/id page)
-                                         :id page-name
-                                         :embed? true
-                                         :page-embed? true
-                                         :ref? false))))]))
+       (if whiteboard-page?
+         ((state/get-component :whiteboard/tldraw-preview) page-name)
+         (let [page (model/get-page page-name)
+               blocks (db/get-paginated-blocks (state/get-current-repo) (:db/id page))]
+           (blocks-container blocks (assoc config
+                                           :db/id (:db/id page)
+                                           :id page-name
+                                           :embed? true
+                                           :page-embed? true
+                                           :ref? false)))))]))
 
 (defn- get-label-text
   [label]
