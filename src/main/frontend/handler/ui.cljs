@@ -124,6 +124,11 @@
                     ;; (state/get-custom-css-link)
 )]
     (util/add-style! style)))
+(defn reset-custom-css!
+  []
+  (when-let [el-style (gdom/getElement "logseq-custom-theme-id")]
+    (dom/remove! el-style))
+  (add-style-if-exists!))
 
 (def *js-execed (atom #{}))
 
