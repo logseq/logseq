@@ -99,7 +99,7 @@ const highlightedJSX = (input: string, keyword: string) => {
   )
 }
 
-const useSearch = (q: string) => {
+const useSearch = (q: string, searchFilter: 'B' | 'P' | null) => {
   const { handlers } = React.useContext(LogseqContext)
   const [results, setResults] = React.useState<SearchResult | null>(null)
 
@@ -107,7 +107,13 @@ const useSearch = (q: string) => {
     let canceled = false
     const searchHandler = handlers?.search
     if (q.length > 0 && searchHandler) {
-      handlers.search(q).then(_results => {
+      const filter = { 'pages?': true, 'blocks?': true, 'files?': false }
+      if (searchFilter === 'B') {
+        filter['pages?'] = false
+      } else if (searchFilter === 'P') {
+        filter['blocks?'] = false
+      }
+      handlers.search(q, filter).then(_results => {
         if (!canceled) {
           setResults(_results)
         }
@@ -324,10 +330,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     const [focusedOptionIdx, setFocusedOptionIdx] = React.useState<number>(0)
 
-    const searchResult = useSearch(q)
+    const [searchFilter, setSearchFilter] = React.useState<'B' | 'P' | null>(null)
+    const searchResult = useSearch(q, searchFilter)
 
     const [prefixIcon, setPrefixIcon] = React.useState<string>('circle-plus')
-    const [searchFilter, setSearchFilter] = React.useState<'B' | 'P' | null>(null)
 
     React.useEffect(() => {
       // autofocus seems not to be working
@@ -373,7 +379,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       })
 
       // New page option when no exact match
-      if (!searchResult?.pages.some(p => p.toLowerCase() === q.toLowerCase()) && q) {
+      if (!searchResult?.pages?.some(p => p.toLowerCase() === q.toLowerCase()) && q) {
         options.push({
           actionIcon: 'circle-plus',
           onChosen: () => {
