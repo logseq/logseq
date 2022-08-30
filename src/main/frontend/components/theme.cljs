@@ -47,7 +47,7 @@
 
     (rum/use-effect!
      (fn []
-       (ui-handler/add-style-if-exists!)
+       (ui-handler/reset-custom-css!)
        (pdf/reset-current-pdf!)
        (plugin-handler/hook-plugin-app :current-graph-changed {}))
      [current-repo])
