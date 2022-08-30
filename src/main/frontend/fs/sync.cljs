@@ -2070,9 +2070,8 @@
     (let [r-path (relative-path e)]
       (case (.-type e)
         "unlink"
-        (let [r (<! (<get-local-files-meta rsapi "" basepath [r-path]))]
-          ;; keep this e when it's not found
-          (empty? r))
+        ;; keep this e when it's not found
+        (<! (<local-file-not-exist? rsapi basepath r-path))
 
         ("add" "change")
         ;; 1. local file exists
