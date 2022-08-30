@@ -298,15 +298,15 @@ prop-d:: nada"}])
   (load-test-files
    [{:file/path "pages/page1.md"
      :file/content "---
-tags: [[page-tag-1]], page-tag-2
+tags: [[page-tag-1]], [[page-tag-2]]
 ---"}
     {:file/path "pages/page2.md"
      :file/content "---
-tags: page-tag-2, [[page-tag-3]]
+tags: [[page-tag-2]], [[page-tag-3]]
 ---"}
     {:file/path "pages/page3.md"
      :file/content "---
-tags: other
+tags: [[other]]
 ---"}])
 
   (are [x y] (= (set y) (set (map :block/name (dsl-query x))))

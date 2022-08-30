@@ -149,7 +149,7 @@
       (seq refs)
       refs
 
-      non-string-property
+      (some? non-string-property)
       non-string-property
 
       (and (= k "file-path")

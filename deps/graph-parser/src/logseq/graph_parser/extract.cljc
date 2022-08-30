@@ -167,7 +167,10 @@
             properties (let [properties (and (gp-property/properties-ast? first-block)
                                              (->> (last first-block)
                                                   (map (fn [[x y mldoc-ast]]
-                                                         [x (text/parse-property x y mldoc-ast user-config)]))
+                                                         (let [k (if (keyword? x)
+                                                                   (subs (str x) 1)
+                                                                   x)]
+                                                           [(string/lower-case k) (text/parse-property k y mldoc-ast user-config)])))
                                                   (into {})
                                                   (walk/keywordize-keys)))]
                          (when (and properties (seq properties))
