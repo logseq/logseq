@@ -40,8 +40,6 @@
   (when-let [first-match (re-find page-ref/page-ref-without-nested-re page-name)]
     (second first-match)))
 
-(def markdown-link #"\[([^\[]+)\](\(.*\))")
-
 (defn- remove-level-space-aux!
   [text pattern space? trim-left?]
   (let [pattern (gstring/format
@@ -135,6 +133,9 @@
       (contains? (set/union
                   #{"filters" "macro"}
                   (get config-state :ignored-page-references-keywords)) k)
+      v
+
+      (@non-parsing-properties k)
       v
 
       (string/blank? v)
