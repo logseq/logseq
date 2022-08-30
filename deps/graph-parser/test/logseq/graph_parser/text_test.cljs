@@ -109,9 +109,4 @@
       :tags "\"[[foo]], [[bar]]\"" "\"[[foo]], [[bar]]\""
       :tags "baz, \"[[foo]], [[bar]]\"" #{"baz"})))
 
-(deftest extract-page-refs-and-tags
-  (is (= #{"cljs" "nbb" "js" "amazing"}
-       (text/extract-page-refs-and-tags "This project is written with #cljs, #nbb and #js. #amazing!"))
-      "Don't extract punctation at end of a tag"))
-
 #_(cljs.test/test-ns 'logseq.graph-parser.text-test)

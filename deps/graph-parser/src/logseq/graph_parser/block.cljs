@@ -157,10 +157,8 @@
              distinct)
     []))
 
-;; TODO: Use text/parse-property to determine refs rather than maintain this similar
-;; implementation to parse-property
 (defn- get-page-ref-names-from-properties
-  [format properties user-config]
+  [properties user-config]
   (let [page-refs (->>
                    properties
                    (remove (fn [[k _]]
@@ -170,30 +168,9 @@
                                            gp-property/editable-linkable-built-in-properties)
                                          (gp-property/hidden-built-in-properties))
                               (keyword k))))
+                   ;; get links ast
                    (map last)
-                   (map (fn [v]
-                          (cond
-                            (and (string? v)
-                                 (not (gp-mldoc/link? format v)))
-                            (let [v (string/trim v)
-                                  result (if (:rich-property-values? user-config)
-                                           (if (gp-util/wrapped-by-quotes? v)
-                                             []
-                                             (text/extract-page-refs-and-tags v))
-                                           (text/split-page-refs-without-brackets v {:un-brackets? false}))]
-                              (if (coll? result)
-                                (map text/page-ref-un-brackets! result)
-                                []))
-
-                            (coll? v)
-                            (map (fn [s]
-                                   (when-not (and (string? v)
-                                                  (gp-mldoc/link? format v))
-                                     (text/page-ref-un-brackets! s))) v)
-
-                            :else
-                            nil)))
-                   (apply concat))
+                   (mapcat text/extract-refs-from-mldoc-ast))
         page-refs-from-property-names (get-page-refs-from-property-names properties user-config)]
     (->> (concat page-refs page-refs-from-property-names)
          (remove string/blank?)
@@ -203,11 +180,11 @@
   [format properties user-config]
   (when (seq properties)
     (let [properties (seq properties)
-          page-refs (get-page-ref-names-from-properties format properties user-config)
+          page-refs (get-page-ref-names-from-properties properties user-config)
           *invalid-properties (atom #{})
           properties (->> properties
-                          (map (fn [[k v]]
-                                 (let [k (-> (string/lower-case (name k))
+                          (map (fn [[k v mldoc-ast]]
+                                 (let [k (-> (string/lower-case (subs (str k) 1))
                                              (string/replace " " "-")
                                              (string/replace "_" "-")
                                              (string/replace #"[\"|^|(|)|{|}]+" ""))]
@@ -217,20 +194,8 @@
                                                k)
                                            v (if (coll? v)
                                                (remove string/blank? v)
-                                               (cond
-                                                 (string/blank? v)
-                                                 nil
-                                                 (and (= (keyword k) :file-path)
-                                                      (string/starts-with? v "file:"))
-                                                 v
-                                                 :else
-                                                 (text/parse-property format k v user-config)))
+                                               (text/parse-property k v mldoc-ast user-config))
                                            k (keyword k)
-                                           v (if (and
-                                                  (string? v)
-                                                  (contains? gp-property/editable-linkable-built-in-properties k))
-                                               (set [v])
-                                               v)
                                            v (if (coll? v) (set v) v)]
                                        [k v])
                                      (do (swap! *invalid-properties conj k)
@@ -445,7 +410,7 @@
 
 (defn get-page-refs-from-properties
   [format properties db date-formatter user-config]
-  (let [page-refs (get-page-ref-names-from-properties format properties user-config)]
+  (let [page-refs (get-page-ref-names-from-properties properties user-config)]
     (map (fn [page] (page-name->map page true db true date-formatter)) page-refs)))
 
 (defn- with-page-block-refs

@@ -240,7 +240,7 @@
   [v]
   (if-some [res (text/parse-non-string-property-value v)]
     res
-    (text/split-page-refs-without-brackets v)))
+    (page-ref/get-page-name v)))
 
 (defn- build-property-two-arg
   [e]

@@ -166,12 +166,9 @@
       (let [first-block (ffirst ast)
             properties (let [properties (and (gp-property/properties-ast? first-block)
                                              (->> (last first-block)
-                                                  (map (fn [[x y]]
-                                                         [x (if (and (string? y)
-                                                                     (not (and (= (keyword x) :file-path)
-                                                                               (string/starts-with? y "file:"))))
-                                                              (text/parse-property format x y user-config)
-                                                              y)]))
+                                                  (map (fn [[x y mldoc-ast]]
+                                                         (prn {:mldoc-ast mldoc-ast})
+                                                         [x (text/parse-property x y mldoc-ast user-config)]))
                                                   (into {})
                                                   (walk/keywordize-keys)))]
                          (when (and properties (seq properties))

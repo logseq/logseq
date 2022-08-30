@@ -218,44 +218,63 @@
                    ;; Don't capture punctuation at end of a tag
                    "#([\\S]+[^\\s.!,])")))
 
-(defn extract-page-refs-and-tags
-  "Returns set of page-refs and tags in given string or returns string if none
-  are found"
-  [string]
-  (let [refs (map #(or (second %) (get % 2))
-                  (re-seq page-ref-or-tag-re string))]
-    (if (seq refs) (set refs) string)))
+(defn- extract-refs-from-mldoc-ast
+  [v]
+  (->> v
+       (remove gp-mldoc/ast-link?)
+       (keep
+        (fn [[typ data]]
+          (case typ
+            "Link"
+            (case (first (:url data))
+              "Page_ref"
+              (second (:url data))
+
+              "Search"
+              (second (:url data))
+
+              nil)
+
+            "Nested_link"
+            (page-ref/get-page-name (:content data))
+
+            "Tag"
+            (second (first data))
+
+            nil)))
+       (map string/trim)))
 
 (defn parse-property
-  "Property value parsing that takes into account built-in properties, format
-  and user config"
-  ([k v config-state]
-   (parse-property :markdown k v config-state))
-  ([format k v config-state]
-   (let [k (name k)
-         v (if (or (symbol? v) (keyword? v)) (name v) (str v))
-         v (string/trim v)]
-     (cond
-       (contains? (set/union
-                   #{"title" "filters"}
-                   (get config-state :ignored-page-references-keywords)) k)
-       v
+  "Property value parsing that takes into account built-in properties, and user config"
+  [k v mldoc-ast config-state]
+  (prn {:k k
+        :v v
+        :mldoc-ast mldoc-ast})
+  (let [refs (extract-refs-from-mldoc-ast mldoc-ast)
+        k (subs (str k) 1)
+        v (if (or (symbol? v) (keyword? v))
+            (subs (str v) 1)
+            (str v))
+        v (string/trim v)
+        non-string-property (parse-non-string-property-value v)]
+    (cond
+      (contains? (set/union
+                  #{"title" "filters"}
+                  (get config-state :ignored-page-references-keywords)) k)
+      v
 
-       (gp-util/wrapped-by-quotes? v) ; wrapped in ""
-       v
+      (string/blank? v)
+      nil
 
-       (contains? @non-parsing-properties (string/lower-case k))
-       v
+      (seq refs)
+      refs
 
-       (gp-mldoc/link? format v)
-       v
+      non-string-property
+      non-string-property
 
-       (contains? gp-property/editable-linkable-built-in-properties (keyword k))
-       (split-page-refs-without-brackets v)
+      (and (= k "file-path")
+           (string/starts-with? v "file:"))
+      v
 
-       :else
-       (if-some [res (parse-non-string-property-value v)]
-         res
-         (if (:rich-property-values? config-state)
-           (extract-page-refs-and-tags v)
-           (split-page-refs-without-brackets v)))))))
+      :else
+      v)))

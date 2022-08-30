@@ -106,6 +106,8 @@
 
 (defn collect-page-properties
   [ast parse-property config-state]
+  (prn "debug ast")
+  (frontend.util/pprint ast)
   (if (seq ast)
     (let [original-ast ast
           ast (map first ast)           ; without position meta
@@ -118,13 +120,15 @@
                                        [(->> (map first directive-ast)
                                              (map rest))
                                         (get grouped-ast false)])
+          _ (prn "debug:"
+                 {:properties-ast properties-ast})
           properties (->>
                       properties-ast
-                      (map (fn [[k v]]
+                      (map (fn [[k v mldoc-ast]]
                              (let [k (keyword (string/lower-case k))
                                    v (if (contains? #{:title :description :filters :macro} k)
                                        v
-                                       (parse-property k v config-state))]
+                                       (parse-property k v mldoc-ast config-state))]
                                [k v]))))
           properties (into (linked/map) properties)
           macro-properties (filter (fn [x] (= :macro (first x))) properties)
@@ -197,20 +201,24 @@
     (catch :default _e
       [])))
 
+(defn ast-link?
+  [{:keys [type link]}]
+  (let [[ref-type ref-value] (:url link)]
+    (and (= "Link" type)
+         (or
+          ;; 1. url
+          (not (contains? #{"Page_ref" "Block_ref"} ref-type))
+
+          (and (contains? #{"Page_ref"} ref-type)
+               (or
+                ;; 2. excalidraw link
+                (gp-config/draw? ref-value)
+
+                ;; 3. local asset link
+                (boolean (gp-config/local-asset? ref-value))))))))
+
 (defn link?
   [format link]
   (when (string? link)
-    (let [[type link] (first (inline->edn link (default-config format)))
-          [ref-type ref-value] (:url link)]
-      (and (= "Link" type)
-           (or
-            ;; 1. url
-            (not (contains? #{"Page_ref" "Block_ref"} ref-type))
-
-            (and (contains? #{"Page_ref"} ref-type)
-                 (or
-                  ;; 2. excalidraw link
-                  (gp-config/draw? ref-value)
-
-                  ;; 3. local asset link
-                  (boolean (gp-config/local-asset? ref-value)))))))))
+    (some-> (first (inline->edn link (default-config format)))
+            ast-link?)))
