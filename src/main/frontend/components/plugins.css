@@ -762,6 +762,8 @@
   top: 40%;
   left: 30%;
   border: 2px solid var(--ls-border-color);
+  border-radius: 6px;
+  overflow: hidden;
 
   .draggable-handle {
   }

@@ -69,6 +69,7 @@ function registerSimpleCommand(
     desc?: string
     palette?: boolean
     keybinding?: SimpleCommandKeybinding
+    extras?: Record<string, any>
   },
   action: SimpleCommandCallback
 ) {
@@ -76,7 +77,7 @@ function registerSimpleCommand(
     return false
   }
 
-  const { key, label, desc, palette, keybinding } = opts
+  const { key, label, desc, palette, keybinding, extras } = opts
   const eventKey = `SimpleCommandHook${key}${++registeredCmdUid}`
 
   this.Editor['on' + eventKey](action)
@@ -85,7 +86,7 @@ function registerSimpleCommand(
     method: 'register-plugin-simple-command',
     args: [
       this.baseInfo.id,
-      [{ key, label, type, desc, keybinding }, ['editor/hook', eventKey]],
+      [{ key, label, type, desc, keybinding, extras}, ['editor/hook', eventKey]],
       palette,
     ],
   })
@@ -243,15 +244,14 @@ const editor: Partial<IEditorProxy> = {
 
   registerBlockContextMenuItem(
     this: LSPluginUser,
-    tag: string,
+    label: string,
     action: BlockCommandCallback
   ) {
     if (typeof action !== 'function') {
       return false
     }
 
-    const key = tag + '_' + this.baseInfo.id
-    const label = tag
+    const key = label + '_' + this.baseInfo.id
     const type = 'block-context-menu-item'
 
     registerSimpleCommand.call(
@@ -260,6 +260,30 @@ const editor: Partial<IEditorProxy> = {
       {
         key,
         label,
+      },
+      action
+    )
+  },
+
+  registerHighlightContextMenuItem(
+    this: LSPluginUser,
+    label: string,
+    action: SimpleCommandCallback,
+    opts?: { clearSelection: boolean }) {
+    if (typeof action !== 'function') {
+      return false
+    }
+
+    const key = label + '_' + this.baseInfo.id
+    const type = 'highlight-context-menu-item'
+
+    registerSimpleCommand.call(
+      this,
+      type,
+      {
+        key,
+        label,
+        extras: opts
       },
       action
     )

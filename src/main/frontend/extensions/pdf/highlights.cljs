@@ -7,7 +7,9 @@
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.pdf.toolbar :refer [pdf-toolbar *area-dashed? *area-mode? *highlight-mode? *highlights-ctx*]]
             [frontend.handler.notification :as notification]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.modules.shortcut.core :as shortcut]
+            [frontend.commands :as commands]
             [frontend.rum :refer [use-atom]]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -131,6 +133,9 @@
                             (pdf-assets/del-ref-block! highlight)
                             (pdf-assets/unlink-hl-area-image$ viewer (:pdf/current @state/state) highlight))
 
+                          "hook"
+                          :dune
+
                           ;; colors
                           (let [properties {:color action}]
                             (if-not id
@@ -179,6 +184,18 @@
      (and id [:li.item {:data-action "link"} (t :pdf/linked-ref)])
 
      (and id [:li.item {:data-action "del"} (t :delete)])
+
+     (when plugin-handler/lsp-enabled?
+       (for [[_ {:keys [key label extras] :as _cmd} action pid]
+             (state/get-plugins-commands-with-type :highlight-context-menu-item)]
+         [:li.item {:data-action "hook"
+                    :on-click    #(do
+                                    (commands/exec-plugin-simple-command!
+                                     pid {:key key :content content :point point} action)
+
+                                    (when (true? (:clearSelection extras))
+                                      (pdf-utils/clear-all-selection)))}
+          label]))
      ]))
 
 (rum/defc pdf-highlights-text-region
@@ -593,7 +610,6 @@
              (let [page-hls (get grouped-hls page)]
 
                (rum/mount
-                ;; TODO: area & text hls
                 (pdf-highlights-region-container
                  viewer page-hls {:show-ctx-tip! show-ctx-tip!
                                   :upd-hl!       upd-hl!})
@@ -607,11 +623,10 @@
     [:div.extensions__pdf-highlights-cnt
 
      ;; hl context tip menu
-     (when (:highlight tip-state)
+     (when-let [hl (:highlight tip-state)]
        (js/ReactDOM.createPortal
         (pdf-highlights-ctx-menu
-         viewer tip-state
-
+         viewer (assoc tip-state :highlight (if (fn? hl) (hl) hl))
          {:clear-ctx-tip! clear-ctx-tip!
           :add-hl!        add-hl!
           :del-hl!        del-hl!

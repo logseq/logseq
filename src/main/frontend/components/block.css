@@ -613,7 +613,7 @@ a.cloze-revealed {
 }
 
 .page-property-key {
-  @apply font-medium;
+  @apply font-medium whitespace-nowrap;
   color: var(--ls-secondary-text-color);
 }
 
