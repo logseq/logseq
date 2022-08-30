@@ -112,6 +112,7 @@
         id          (:id highlight)
         new?        (nil? id)
         content     (:content highlight)
+        text?       (string/blank? (:image content))
         action-fn!  (fn [action clear?]
                       (when-let [action (and action (name action))]
                         (case action
@@ -185,10 +186,11 @@
 
      (and id [:li.item {:data-action "del"} (t :delete)])
 
-     (when plugin-handler/lsp-enabled?
+     (when (and plugin-handler/lsp-enabled? text?)
        (for [[_ {:keys [key label extras] :as _cmd} action pid]
              (state/get-plugins-commands-with-type :highlight-context-menu-item)]
-         [:li.item {:data-action "hook"
+         [:li.item {:key         key
+                    :data-action "hook"
                     :on-click    #(do
                                     (commands/exec-plugin-simple-command!
                                      pid {:key key :content content :point point} action)
