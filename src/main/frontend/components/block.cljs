@@ -254,25 +254,25 @@
      (ui/resize-consumer
       (if-not (mobile-util/native-ios?)
         (cond->
-            {:className "resize image-resize"
-             :onSizeChanged (fn [value]
-                              (when (and (not @*resizing-image?)
-                                         (some? @size)
-                                         (not= value @size))
-                                (reset! *resizing-image? true))
-                              (reset! size value))
-             :onMouseUp (fn []
-                          (when (and @size @*resizing-image?)
-                            (when-let [block-id (:block/uuid config)]
-                              (let [size (bean/->clj @size)]
-                                (editor-handler/resize-image! block-id metadata full_text size))))
-                          (when @*resizing-image?
+         {:className "resize image-resize"
+          :onSizeChanged (fn [value]
+                           (when (and (not @*resizing-image?)
+                                      (some? @size)
+                                      (not= value @size))
+                             (reset! *resizing-image? true))
+                           (reset! size value))
+          :onMouseUp (fn []
+                       (when (and @size @*resizing-image?)
+                         (when-let [block-id (:block/uuid config)]
+                           (let [size (bean/->clj @size)]
+                             (editor-handler/resize-image! block-id metadata full_text size))))
+                       (when @*resizing-image?
                             ;; TODO: need a better way to prevent the clicking to edit current block
-                            (js/setTimeout #(reset! *resizing-image? false) 200)))
-             :onClick (fn [e]
-                        (when @*resizing-image? (util/stop e)))}
-            (and (:width metadata) (not (util/mobile?)))
-            (assoc :style {:width (:width metadata)}))
+                         (js/setTimeout #(reset! *resizing-image? false) 200)))
+          :onClick (fn [e]
+                     (when @*resizing-image? (util/stop e)))}
+          (and (:width metadata) (not (util/mobile?)))
+          (assoc :style {:width (:width metadata)}))
         {})
       [:div.asset-container {:key "resize-asset-container"}
        [:img.rounded-sm.shadow-xl.relative
@@ -281,51 +281,55 @@
           :src     src
           :title   title}
          metadata)]
-       [:span.ctl
-        [:a.delete
-         {:title "Delete this image"
-          :on-click
-          (fn [e]
-            (when-let [block-id (:block/uuid config)]
-              (let [confirm-fn (ui/make-confirm-modal
-                                {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
-                                 :sub-title     (if local? :asset/physical-delete "")
-                                 :sub-checkbox? local?
-                                 :on-confirm    (fn [_e {:keys [close-fn sub-selected]}]
-                                                  (close-fn)
-                                                  (editor-handler/delete-asset-of-block!
-                                                   {:block-id    block-id
-                                                    :local?      local?
-                                                    :delete-local? (and sub-selected (first sub-selected))
-                                                    :repo        (state/get-current-repo)
-                                                    :href        src
-                                                    :title       title
-                                                    :full-text   full_text}))})]
-                (state/set-modal! confirm-fn)
-                (util/stop e))))}
-         svg/trash-sm]
+       [:.asset-overlay]
+       [:.asset-action-bar
+        [:button.asset-action-btn title]
+        [:.flex
+         [:button.asset-action-btn
+          {:title "Delete image"
+           :on-click
+           (fn [e]
+             (when-let [block-id (:block/uuid config)]
+               (let [confirm-fn (ui/make-confirm-modal
+                                 {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                                  :sub-title     (if local? :asset/physical-delete "")
+                                  :sub-checkbox? local?
+                                  :on-confirm    (fn [_e {:keys [close-fn sub-selected]}]
+                                                   (close-fn)
+                                                   (editor-handler/delete-asset-of-block!
+                                                    {:block-id    block-id
+                                                     :local?      local?
+                                                     :delete-local? (and sub-selected (first sub-selected))
+                                                     :repo        (state/get-current-repo)
+                                                     :href        src
+                                                     :title       title
+                                                     :full-text   full_text}))})]
+                 (util/stop e)
+                 (state/set-modal! confirm-fn)
+                 )))}
+          (ui/icon "trash")]
 
-        [:a.delete.ml-1
-         {:title    "maximize image"
-          :on-click (fn [^js e] (let [images (js/document.querySelectorAll ".asset-container img")
-                                      images (to-array images)
-                                      images (if-not (= (count images) 1)
-                                               (let [^js _image (.closest (.-target e) ".asset-container")
-                                                     image (. _image querySelector "img")]
-                                                 (->> images
-                                                      (sort-by (juxt #(.-y %) #(.-x %)))
-                                                      (split-with (complement #{image}))
-                                                      reverse
-                                                      (apply concat)))
-                                               images)
-                                      images (for [^js it images] {:src (.-src it)
-                                                                   :w (.-naturalWidth it)
-                                                                   :h (.-naturalHeight it)})]
+         [:button.asset-action-btn
+          {:title    "Maximize image"
+           :on-click (fn [^js e] (let [images (js/document.querySelectorAll ".asset-container img")
+                                       images (to-array images)
+                                       images (if-not (= (count images) 1)
+                                                (let [^js _image (.closest (.-target e) ".asset-container")
+                                                      image (. _image querySelector "img")]
+                                                  (->> images
+                                                       (sort-by (juxt #(.-y %) #(.-x %)))
+                                                       (split-with (complement #{image}))
+                                                       reverse
+                                                       (apply concat)))
+                                                images)
+                                       images (for [^js it images] {:src (.-src it)
+                                                                    :w (.-naturalWidth it)
+                                                                    :h (.-naturalHeight it)})]
 
-                                  (when (seq images)
-                                    (lightbox/preview-images! images))))}
+                                   (when (seq images)
+                                     (lightbox/preview-images! images))))}
 
-         (svg/maximize)]]]))))
+          (ui/icon "maximize")]]]]))))
 
 (rum/defc audio-cp [src]
   [:audio {:src src
