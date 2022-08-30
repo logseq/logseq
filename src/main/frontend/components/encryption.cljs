@@ -109,6 +109,11 @@
                           (when init-graph-keys
                             (js/setTimeout #(state/pub-event! [:file-sync/maybe-onboarding-show :sync-learn]) 10000)))))))))))
 
+        cancel-handler
+        (fn []
+          (state/set-state! [:file-sync/set-remote-graph-password-result] {})
+          (close-fn))
+
         enter-handler
         (fn [^js e]
           (when-let [^js input (and e (= 13 (.-which e)) (.-target e))]
@@ -249,7 +254,7 @@
            [:span "You will still be able to access the local version of your graph."]]]])]
 
      [:div.mt-5.sm:mt-4.flex.justify-center.sm:justify-end.space-x-3
-      (ui/button (t :cancel) :background "gray" :disabled loading? :class "opacity-60" :on-click close-fn)
+      (ui/button (t :cancel) :background "gray" :disabled loading? :class "opacity-60" :on-click cancel-handler)
       (ui/button [:span.inline-flex.items-center.leading-none
                   [:span (t :submit)]
                   (when loading?
