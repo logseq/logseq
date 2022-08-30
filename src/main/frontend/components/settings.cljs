@@ -598,7 +598,7 @@
         developer-mode? (state/sub [:ui/developer-mode?])
         https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])]
     [:div.panel-wrap.is-advanced
-     (when (and util/mac? (util/electron?)) (app-auto-update-row t))
+     (when (and (or util/mac? util/win32?) (util/electron?)) (app-auto-update-row t))
      (usage-diagnostics-row t instrument-disabled?)
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
