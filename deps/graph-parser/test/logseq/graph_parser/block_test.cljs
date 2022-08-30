@@ -3,7 +3,7 @@
             [cljs.test :refer [deftest are testing is]]))
 
 (deftest test-extract-properties
-  (are [x y] (= (:properties (gp-block/extract-properties :markdown x {})) y)
+  (are [x y] (= (:properties (gp-block/extract-properties x {})) y)
        ;; Built-in properties
        [["background-color" "#000000"]] {:background-color "#000000"}
        [["alias" "name/with space"]] {:alias #{"name/with space"}}
@@ -31,7 +31,7 @@
 
   (testing "page-refs"
     (are [x y] (= (vec (:page-refs
-                        (gp-block/extract-properties :markdown x {:property-pages/enabled? true}))) y)
+                        (gp-block/extract-properties x {:property-pages/enabled? true}))) y)
          [["year" "1000"]] ["year"]
          [["year" "\"1000\""]] ["year"]
          [["year" "1000"] ["month" "12"]] ["year" "month"]
@@ -43,29 +43,27 @@
 
 
     (are [x y] (= (vec (:page-refs
-                        (gp-block/extract-properties :markdown x {:property-pages/enabled? false}))) y)
+                        (gp-block/extract-properties x {:property-pages/enabled? false}))) y)
          [["year" "1000"]] []
          [["year" "1000"] ["month" "12"]] []
          [["foo" "[[bar]] test"]] ["bar" "test"])
 
     (is (= ["year"]
            (:page-refs
-            (gp-block/extract-properties :markdown
-                                         [["year" "1000"] ["month" "12"]]
+            (gp-block/extract-properties [["year" "1000"] ["month" "12"]]
                                          {:property-pages/enabled? true
                                           :property-pages/excludelist #{:month :day}})))
         ":property-pages/exclude-list excludes specified properties")
 
     (is (= ["year"]
            (:page-refs
-            (gp-block/extract-properties :markdown
-                                         [["year" "1000"]]
+            (gp-block/extract-properties [["year" "1000"]]
                                          {})))
         "Default to enabled when :property-pages/enabled? is not in config")
 
     (is (= ["foo" "bar"]
            (:page-refs
-            (gp-block/extract-properties :markdown
+            (gp-block/extract-properties
                                          ;; tags is linkable and background-color is not
                                          [["tags" "foo, bar"] ["background-color" "#008000"]]
                                          {:property-pages/enabled? true})))

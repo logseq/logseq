@@ -160,8 +160,7 @@
           _ (when verbose (println "Parsing start: " file))
           ast (gp-mldoc/->edn content (gp-mldoc/default-config format
                                         ;; {:parse_outline_only? true}
-                                        )
-                              user-config)]
+                                        ))]
       (when verbose (println "Parsing finished: " file))
       (let [first-block (ffirst ast)
             properties (let [properties (and (gp-property/properties-ast? first-block)

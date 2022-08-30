@@ -51,7 +51,7 @@
           {:start_pos 0, :end_pos 15}]
          (first (gp-mldoc/->edn "```
 : hello
-```" md-config {})))
+```" md-config)))
       "Basic src example")
 
   (is (= [["Src"
@@ -64,12 +64,12 @@
   hello
   world
   ```
-" md-config {})))
+" md-config)))
       "Src example with leading whitespace"))
 
 (deftest md-properties-test
   (are [x y] (= [["Properties" y] nil]
-                (first (gp-mldoc/->edn x md-config {})))
+                (first (gp-mldoc/->edn x md-config)))
 
        ;; comma separates values
        "property:: foo, bar"
@@ -96,11 +96,11 @@
              :ordered false}]]
           {:start_pos 0, :end_pos 17}]
          (first (gp-mldoc/->edn "term
-: definition" md-config {})))))
+: definition" md-config)))))
 
 (defn- parse-properties
   [text]
-  (->> (gp-mldoc/->edn text (gp-mldoc/default-config :org) {})
+  (->> (gp-mldoc/->edn text (gp-mldoc/default-config :org))
        (filter #(= "Properties" (ffirst %)))
        ffirst
        second))
@@ -130,8 +130,7 @@ body"
                                                 :org :markdown)]
                                    [path
                                     (gp-mldoc/->edn content
-                                                    (gp-mldoc/default-config format)
-                                                    {})])))
+                                                    (gp-mldoc/default-config format))])))
                           (into {}))]
     (is (= {"CommentBlock" 1,
             "Custom" 41,

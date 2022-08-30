@@ -5,8 +5,7 @@
             [clojure.set :as set]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.util.page-ref :as page-ref :refer [right-brackets]]))
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defn get-file-basename
   [path]
@@ -95,12 +94,7 @@
     (re-find #"^\d+$" v)
     (parse-long v)))
 
-(def ^:private page-ref-or-tag-re
-  (re-pattern (str "#?" (page-ref/->page-ref-re-str "(.*?)") "|"
-                   ;; Don't capture punctuation at end of a tag
-                   "#([\\S]+[^\\s.!,])")))
-
-(defn- extract-refs-from-mldoc-ast
+(defn extract-refs-from-mldoc-ast
   [v]
   (->> v
        (remove gp-mldoc/ast-link?)

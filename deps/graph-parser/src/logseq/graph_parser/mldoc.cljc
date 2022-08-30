@@ -10,7 +10,6 @@
             [cljs-bean.core :as bean]
             [logseq.graph-parser.utf8 :as utf8]
             [clojure.string :as string]
-            [linked.core :as linked]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]))
 
@@ -99,22 +98,10 @@
               [block pos-meta])
             [block pos-meta])) ast)))
 
-(defn- ->vec
-  [s]
-  (if (string? s) [s] s))
-
-(defn- ->vec-concat
-  [& coll]
-  (->> (map ->vec coll)
-       (remove nil?)
-       (apply concat)
-       (distinct)))
-
 (defn collect-page-properties
   [ast config]
   (when (seq ast)
     (let [original-ast ast
-          ast (map first ast)           ; without position meta
           directive? (fn [[item _]] (= "directive" (string/lower-case (first item))))
           grouped-ast (group-by directive? original-ast)
           [properties-ast other-ast] [(->> (get grouped-ast true)
@@ -131,7 +118,7 @@
         original-ast))))
 
 (defn ->edn
-  [content config _config-state]
+  [content config]
   (if (string? content)
     (try
       (if (string/blank? content)

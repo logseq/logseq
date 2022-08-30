@@ -2,7 +2,6 @@
   "Mldoc code needed by app but not graph-parser"
   (:require [clojure.string :as string]
             [frontend.format.protocol :as protocol]
-            [frontend.state :as state]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             ["mldoc" :as mldoc :refer [Mldoc]]
@@ -53,7 +52,7 @@
 (defn ->edn
   "Wrapper around gp-mldoc/->edn which provides config state"
   [content config]
-  (gp-mldoc/->edn content config (state/get-config)))
+  (gp-mldoc/->edn content config))
 
 (defrecord MldocMode []
   protocol/Format

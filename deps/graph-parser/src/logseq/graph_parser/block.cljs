@@ -177,7 +177,7 @@
          distinct)))
 
 (defn extract-properties
-  [format properties user-config]
+  [properties user-config]
   (when (seq properties)
     (let [properties (seq properties)
           page-refs (get-page-ref-names-from-properties properties user-config)
@@ -495,7 +495,6 @@
 (defn- with-pre-block-if-exists
   [blocks body pre-block-properties encoded-content {:keys [supported-formats db date-formatter user-config]}]
   (let [first-block (first blocks)
-        format (or (:block/format first-block) :markdown)
         first-block-start-pos (get-in first-block [:block/meta :start_pos])
 
         ;; Add pre-block
@@ -613,7 +612,7 @@
                   (recur headings (rest blocks) timestamps' properties body))
 
                 (gp-property/properties-ast? block)
-                (let [properties (extract-properties format (second block) user-config)]
+                (let [properties (extract-properties (second block) user-config)]
                   (recur headings (rest blocks) timestamps properties body))
 
                 (heading-block? block)
