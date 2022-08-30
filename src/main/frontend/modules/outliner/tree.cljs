@@ -28,7 +28,8 @@
   [blocks root]
   (let [id-map (fn [m] {:db/id (:db/id m)})
         root (id-map root)
-        parent-blocks (group-by :block/parent blocks)
+        blocks (remove model/whiteboard-shape? blocks)
+        parent-blocks (group-by :block/parent blocks) ;; exclude whiteboard shapes
         sort-fn (fn [parent]
                   (db/sort-by-left (get parent-blocks parent) parent))
         block-children (fn block-children [parent level]
@@ -39,7 +40,7 @@
                                   (assoc m
                                          :block/level level
                                          :block/children children)))
-                           (sort-fn parent)))]
+                              (sort-fn parent)))]
     (block-children root 1)))
 
 (defn- get-root-and-page

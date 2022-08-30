@@ -1652,6 +1652,11 @@
        (when-let [path (:file/path (db-utils/entity (:db/id file)))]
          (gp-config/whiteboard? path))))))
 
+(defn whiteboard-shape?
+  [block]
+  (= :whiteboard-shape
+     (get-in block [:block/properties :ls-type] nil)))
+
 ;; ;; fixme: caching?
 ;; (defn get-all-whiteboard-tldrs
 ;;   "Returns a vector of all whiteboard tldrs."

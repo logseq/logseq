@@ -91,6 +91,7 @@
 (defn- get-whiteboard-clj [page-name]
   (when (model/page-exists? page-name)
     (let [page-block (model/get-page page-name)
+          ;; fixme: can we use cache?
           blocks (model/get-page-blocks-no-cache page-name)]
       [page-block blocks])))
 
@@ -177,10 +178,31 @@
     (editor-handler/set-blocks-id! [block-uuid])
     (.createShapes api (clj->js shape))))
 
+(defn- get-whiteboard-blocks
+  "Given a page, return all the logseq blocks (exlude all shapes)"
+  [page-name]
+  (let [blocks (model/get-page-blocks-no-cache page-name)]
+    (remove model/whiteboard-shape? blocks)))
+
+(defn- get-last-root-block
+  [page-name]
+  (let [page-id (:db/id (model/get-page page-name))
+        blocks (get-whiteboard-blocks page-name)
+        root-blocks (filter (fn [block] (= page-id (:db/id (:block/parent block)))) blocks)
+        root-block-left-ids (->> root-blocks
+                                 (map (fn [block] (get-in block [:block/left :db/id] nil)))
+                                 (remove nil?)
+                                 (set))
+        blocks-with-no-next (remove #(root-block-left-ids (:db/id %)) root-blocks)]
+    (when (seq blocks-with-no-next) (first blocks-with-no-next))))
+
 (defn add-new-block!
   [page-name content]
   (let [uuid (d/squuid)
-        tx {:block/uuid uuid
+        page-entity (model/get-page page-name)
+        last-root-block (or (get-last-root-block page-name) page-entity)
+        tx {:block/left (select-keys last-root-block [:db/id])
+            :block/uuid uuid
             :block/content (or content "")
             :block/format :markdown ; fixme
             :block/page {:block/name (util/page-name-sanity-lc page-name)}
