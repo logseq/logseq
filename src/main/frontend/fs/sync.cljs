@@ -2186,11 +2186,7 @@
                             (<with-pause (<update-remote-files rsapi graph-uuid base-path paths @*txid) *paused)
 
                             "unlink"
-                            (do
-                              ;; ensure local-file deleted, may return no such file exception, but ignore it.
-                              (let [paths* (mapv :path (<! (<get-local-files-meta rsapi "" base-path paths)))]
-                                (<delete-local-files rsapi graph-uuid base-path paths*))
-                              (<with-pause (<delete-remote-files rsapi graph-uuid base-path paths @*txid) *paused))))
+                            (<with-pause (<delete-remote-files rsapi graph-uuid base-path paths @*txid) *paused)))
                   _               (swap! *sync-state sync-state--add-current-local->remote-files paths)
                   r*              (<! r)
                   [succ? paused?] ((juxt number? :pause) r*)
