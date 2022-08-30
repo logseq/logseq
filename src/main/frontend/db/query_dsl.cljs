@@ -238,9 +238,12 @@
 (defn parse-property-value
   "Parses non-string property values or any page-ref like values"
   [v]
-  (if-some [res (text/parse-non-string-property-value v)]
-    res
-    (page-ref/get-page-name v)))
+  (let [v (string/trim v)]
+    (if-some [res (text/parse-non-string-property-value v)]
+     res
+     (if (string/starts-with? v "#")
+       (subs v 1)
+       (or (page-ref/get-page-name v) v)))))
 
 (defn- build-property-two-arg
   [e]
