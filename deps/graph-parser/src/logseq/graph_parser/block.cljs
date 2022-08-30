@@ -286,6 +286,7 @@
          [original-page-name (gp-util/page-name-sanity-lc original-page-name) day])
        [original-page-name page-name day]))))
 
+;; TODO: refactor
 (defn page-name->map
   "Create a page's map structure given a original page name (string).
    map as input is supported for legacy compatibility.
@@ -296,7 +297,8 @@
    with-timestamp?: assign timestampes to the map structure.
     Useful when creating new pages from references or namespaces,
     as there's no chance to introduce timestamps via editing in page"
-  [original-page-name with-id? db with-timestamp? date-formatter]
+  [original-page-name with-id? db with-timestamp? date-formatter
+   & {:keys [from-page]}]
   (cond
     (and original-page-name (string? original-page-name))
     (let [original-page-name (gp-util/remove-boundary-slashes original-page-name)
@@ -304,7 +306,7 @@
           namespace? (and (not (boolean (text/get-nested-page-name original-page-name)))
                           (text/namespace-page? original-page-name))
           page-entity (some-> db (d/entity [:block/name page-name]))
-          original-page-name (or (:block/original-name page-entity) original-page-name)]
+          original-page-name (or from-page (:block/original-name page-entity) original-page-name)]
       (merge
        {:block/name page-name
         :block/original-name original-page-name}
