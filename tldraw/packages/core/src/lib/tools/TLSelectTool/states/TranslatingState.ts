@@ -142,6 +142,12 @@ export class TranslatingState<
     this.moveSelectedShapesToPointer()
   }
 
+  onPointerDown: TLEvents<S>['pointer'] = () => {
+    this.app.history.resume()
+    this.app.persist()
+    this.tool.transition('idle')
+  }
+
   onPointerUp: TLEvents<S>['pointer'] = () => {
     this.app.history.resume()
     this.app.persist()

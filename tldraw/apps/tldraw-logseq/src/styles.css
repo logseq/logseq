@@ -389,6 +389,7 @@ button.tl-select-input-trigger {
   min-width: inherit;
   line-height: inherit;
   letter-spacing: inherit;
+  background-color: transparent;
   outline: 0;
   white-space: inherit;
   overflow-wrap: inherit;
@@ -449,7 +450,7 @@ button.tl-select-input-trigger {
   backface-visibility: hidden;
   display: inline-block;
   pointer-events: all;
-  background: var(--colors-boundsBg);
+  background: transparent;
   user-select: text;
   -webkit-font-smoothing: subpixel-antialiased;
   white-space: pre-wrap;
