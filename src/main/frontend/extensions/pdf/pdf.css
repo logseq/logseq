@@ -788,7 +788,7 @@ input::-webkit-inner-spin-button {
 
 .block-content {
   &[data-type=annotation] {
-    a.prefix-link {
+    .prefix-link {
       display: inline-flex;
       align-items: center;
       padding-right: 4px;
@@ -804,7 +804,7 @@ input::-webkit-inner-spin-button {
       margin-bottom: 10px;
       flex-direction: column;
 
-      a.prefix-link {
+      .prefix-link {
         display: inline;
       }
 
@@ -821,13 +821,18 @@ input::-webkit-inner-spin-button {
     }
 
     .hl-area {
-      display: block;
+      @apply relative;
+
+      display: inline-block;
       cursor: text;
+      background-color: rgba(241,110,94,0.15);
 
       img {
         margin: 0;
         box-shadow: none;
-        max-width: 80%;
+        max-width: 100%;
+        max-height: 420px;
+        cursor: alias;
       }
     }
   }
@@ -835,7 +840,7 @@ input::-webkit-inner-spin-button {
 
 .ls-hl-colored .block-content {
   &[data-hl-color=green] {
-    a.prefix-link {
+    .prefix-link {
       &:before {
         content: "🟢 ";
       }
@@ -843,7 +848,7 @@ input::-webkit-inner-spin-button {
   }
 
   &[data-hl-color=purple] {
-    a.prefix-link {
+    .prefix-link {
       &:before {
         content: "🟣 ";
       }
@@ -851,7 +856,7 @@ input::-webkit-inner-spin-button {
   }
 
   &[data-hl-color=blue] {
-    a.prefix-link {
+    .prefix-link {
       &:before {
         content: "🔵 ";
       }
@@ -859,7 +864,7 @@ input::-webkit-inner-spin-button {
   }
 
   &[data-hl-color=yellow] {
-    a.prefix-link {
+    .prefix-link {
       &:before {
         content: "🟡 ";
       }
@@ -867,7 +872,7 @@ input::-webkit-inner-spin-button {
   }
 
   &[data-hl-color=red] {
-    a.prefix-link {
+    .prefix-link {
       &:before {
         content: "🔴 ";
       }

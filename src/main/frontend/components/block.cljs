@@ -1788,19 +1788,27 @@
          (conj
           (map-inline config title)
           (when (and (util/electron?) (not= block-type :default))
-            [:a.prefix-link
-             {:on-click #(case block-type
-                           ;; pdf annotation
-                           :annotation (pdf-assets/open-block-ref! t)
-                           (.preventDefault %))}
+            (let [area? (= :area (keyword (:hl-type properties)))]
+              [:div.prefix-link
+               {:on-mouse-down (fn [^js e]
+                                 (let [^js target (.-target e)]
+                                   (case block-type
+                                     ;; pdf annotation
+                                     :annotation
+                                     (if (and area? (.contains (.-classList target) "blank"))
+                                       :actions
+                                       (do
+                                         (pdf-assets/open-block-ref! t)
+                                         (util/stop e)))
 
-             [:span.hl-page
-              [:strong.forbid-edit (str "P" (or (:hl-page properties) "?"))]
-              [:label.blank " "]]
+                                     :dune)))}
 
-             (when-let [st (and (= :area (keyword (:hl-type properties)))
-                                (:hl-stamp properties))]
-               (pdf-assets/area-display t st))]))
+               [:span.hl-page
+                [:strong.forbid-edit (str "P" (or (:hl-page properties) "?"))]
+                [:label.blank " "]]
+
+               (when-let [st (and area? (:hl-stamp properties))]
+                 (pdf-assets/area-display t st))])))
 
          [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])
        [tags])))))
