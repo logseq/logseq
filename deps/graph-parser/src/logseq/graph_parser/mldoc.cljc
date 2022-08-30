@@ -17,6 +17,7 @@
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
 (defonce astExportMarkdown (gobj/get Mldoc "astExportMarkdown"))
+(defonce getReferences (gobj/get Mldoc "getReferences"))
 
 (def default-references
   (js/JSON.stringify
@@ -39,6 +40,11 @@
 (defn inline-parse-json
   [text config]
   (parseInlineJson text config))
+
+(defn get-references
+  [text config]
+  (when-not (string/blank? text)
+    (getReferences text config)))
 
 (defn ast-export-markdown
   [ast config references]
@@ -105,77 +111,27 @@
        (distinct)))
 
 (defn collect-page-properties
-  [ast parse-property config-state]
-  (prn "debug ast")
-  (frontend.util/pprint ast)
-  (if (seq ast)
+  [ast config]
+  (when (seq ast)
     (let [original-ast ast
           ast (map first ast)           ; without position meta
           directive? (fn [[item _]] (= "directive" (string/lower-case (first item))))
           grouped-ast (group-by directive? original-ast)
-          directive-ast (take-while directive? original-ast)
-          [properties-ast other-ast] (if (= "Property_Drawer" (ffirst ast))
-                                       [(last (first ast))
-                                        (rest original-ast)]
-                                       [(->> (map first directive-ast)
-                                             (map rest))
-                                        (get grouped-ast false)])
-          _ (prn "debug:"
-                 {:properties-ast properties-ast})
-          properties (->>
-                      properties-ast
-                      (map (fn [[k v mldoc-ast]]
-                             (let [k (keyword (string/lower-case k))
-                                   v (if (contains? #{:title :description :filters :macro} k)
-                                       v
-                                       (parse-property k v mldoc-ast config-state))]
-                               [k v]))))
-          properties (into (linked/map) properties)
-          macro-properties (filter (fn [x] (= :macro (first x))) properties)
-          macros (if (seq macro-properties)
-                   (->>
-                    (map
-                     (fn [[_ v]]
-                       (let [[k v] (gp-util/split-first " " v)]
-                         (mapv
-                          string/trim
-                          [k v])))
-                     macro-properties)
-                    (into {}))
-                   {})
-          properties (->> (remove (fn [x] (= :macro (first x))) properties)
-                          (into (linked/map)))
-          properties (cond-> properties
-                             (seq macros)
-                             (assoc :macros macros))
-          alias (:alias properties)
-          alias (when alias
-                  (if (coll? alias)
-                    (remove string/blank? alias)
-                    [alias]))
-          filetags (when-let [org-file-tags (:filetags properties)]
-                     (->> (string/split org-file-tags ":")
-                          (remove string/blank?)))
-          tags (:tags properties)
-          tags (->> (->vec-concat tags filetags)
-                    (remove string/blank?)
-                    vec)
-          properties (assoc properties :tags tags :alias alias)
-          properties (-> properties
-                         (update :filetags (constantly filetags)))
-          properties (into (linked/map)
-                           (remove (fn [[_k v]]
-                                     (or (nil? v) (and (coll? v) (empty? v))))
-                                   properties))]
+          [properties-ast other-ast] [(->> (get grouped-ast true)
+                                           (map first))
+                                      (get grouped-ast false)]
+          properties (map (fn [[_directive k v]]
+                            (let [kname (string/lower-case k)
+                                  k (keyword kname)
+                                  mldoc-ast (-> (get-references v config) gp-util/json->clj)]
+                              [k v mldoc-ast]))
+                       properties-ast)]
       (if (seq properties)
-        (cons [["Properties" properties] nil] other-ast)
-        original-ast))
-    ast))
-
-(def parse-property nil)
+        (cons [["Property_Drawer" properties] nil] other-ast)
+        original-ast))))
 
 (defn ->edn
-  [content config config-state]
+  [content config _config-state]
   (if (string? content)
     (try
       (if (string/blank? content)
@@ -184,7 +140,7 @@
             (parse-json config)
             (gp-util/json->clj)
             (update-src-full-content content)
-            (collect-page-properties parse-property config-state)))
+            (collect-page-properties config)))
       (catch :default e
         (log/error :unexpected-error e)
         []))

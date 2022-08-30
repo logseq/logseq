@@ -1904,18 +1904,13 @@
          [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])
        [tags])))))
 
-(rum/defc span-comma
-  []
-  [:span ", "])
-
 (rum/defc property-cp
   [config block k value]
   (let [date (and (= k :date) (date/get-locale-string (str value)))
         user-config (state/get-config)
-        ;; In this mode and when value is a set of refs, display full property text
+        ;; When value is a set of refs, display full property text
         ;; because :block/properties value only contains refs but user wants to see text
-        v (if (and (:rich-property-values? user-config)
-                   (coll? value)
+        v (if (and (coll? value) (seq value)
                    (not (contains? gp-property/editable-linkable-built-in-properties k)))
             (gp-property/property-value-from-content (name k) (:block/content block))
             value)
@@ -1934,15 +1929,6 @@
 
        date
        date
-
-       (coll? v)
-       (let [v (->> (remove string/blank? v)
-                    (filter string?))
-             vals (for [v-item v]
-                    (page-cp config {:block/name v-item}))
-             elems (interpose (span-comma) vals)]
-         (for [elem elems]
-           (rum/with-key elem (str (random-uuid)))))
 
        (and (string? v) (gp-util/wrapped-by-quotes? v))
        (gp-util/unquote-string v)

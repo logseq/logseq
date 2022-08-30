@@ -167,7 +167,6 @@
             properties (let [properties (and (gp-property/properties-ast? first-block)
                                              (->> (last first-block)
                                                   (map (fn [[x y mldoc-ast]]
-                                                         (prn {:mldoc-ast mldoc-ast})
                                                          [x (text/parse-property x y mldoc-ast user-config)]))
                                                   (into {})
                                                   (walk/keywordize-keys)))]
@@ -199,7 +198,3 @@
          vals
          (map (partial apply merge))
          (with-block-uuid))))
-
-;; TODO: Properly fix this circular dependency:
-;; mldoc/->edn > text/parse-property > mldoc/link? ->mldoc/inline->edn + mldoc/default-config
-(set! gp-mldoc/parse-property text/parse-property)

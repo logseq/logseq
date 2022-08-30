@@ -92,9 +92,7 @@
 
 (deftest quoted-property-values
   (testing "With default config"
-    (quoted-property-values-test {}))
-  (testing "With :rich-property-values config"
-    (quoted-property-values-test {:rich-property-values? true})))
+    (quoted-property-values-test {})))
 
 (deftest page-properties-persistence
   (testing "Non-string property values"
@@ -195,16 +193,7 @@
         :multi-link #{"Logseq" "is the fastest" "triples" "text editor"}
         :desc #{"This is a multiple sentence description. It has one" "link"}
         :comma-prop #{"one" "two" "three"}}
-       {}))
-
-    (testing "With :rich-property-values config"
-      (property-relationships-test
-       properties
-       {:single-link #{"bar"}
-        :multi-link #{"Logseq" "triples" "text editor"}
-        :desc #{"link"}
-        :comma-prop "one, two,three"}
-       {:rich-property-values? true}))))
+       {}))))
 
 (deftest invalid-properties
   (let [conn (ldb/start-conn)

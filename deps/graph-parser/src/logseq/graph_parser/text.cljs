@@ -36,130 +36,12 @@
   [s]
   (or (get-page-name s) s))
 
-;; E.g "Foo Bar"
-(defn sep-by-comma
-  [s]
-  (when s
-    (some->>
-     (string/split s #"[\,|，]{1}")
-     (remove string/blank?)
-     (map string/trim))))
-
-(defn sep-by-hashtag
-  [s]
-  (when s
-    (some->>
-     (string/split s #"#")
-     (remove string/blank?)
-     (map string/trim))))
-
-(defn- not-matched-nested-pages
-  [s]
-  (and (string? s)
-       (> (count (re-seq page-ref/left-brackets-re s))
-          (count (re-seq page-ref/right-brackets-re s)))))
-
-(defn- ref-matched?
-  [s]
-  (let [x (re-seq page-ref/left-brackets-re s)
-        y (re-seq page-ref/right-brackets-re s)]
-    (and (> (count x) 0) (= (count x) (count y)))))
-
 (defn get-nested-page-name
   [page-name]
   (when-let [first-match (re-find page-ref/page-ref-without-nested-re page-name)]
     (second first-match)))
 
-(defn- concat-nested-pages
-  [coll]
-  (first
-   (reduce (fn [[acc not-matched-s] s]
-             (cond
-               (and not-matched-s (= s right-brackets))
-               (let [s' (str not-matched-s s)]
-                 (if (ref-matched? s')
-                   [(conj acc s') nil]
-                   [acc s']))
-
-               not-matched-s
-               [acc (str not-matched-s s)]
-
-               (not-matched-nested-pages s)
-               [acc s]
-
-               :else
-               [(conj acc s) not-matched-s])) [[] nil] coll)))
-
-(defn- sep-by-quotes
-  [s]
-  (string/split s #"(\"[^\"]*\")"))
-
 (def markdown-link #"\[([^\[]+)\](\(.*\))")
-
-(defn split-page-refs-without-brackets
-  ([s]
-   (split-page-refs-without-brackets s {}))
-  ([s {:keys [un-brackets?]
-       :or {un-brackets? true}}]
-   (cond
-     (and (string? s) (gp-util/wrapped-by-quotes? s))
-     (gp-util/unquote-string s)
-
-     (and (string? s) (re-find markdown-link s))
-     s
-
-     (and (string? s)
-            ;; Either a page ref, a tag or a comma separated collection
-            (or (re-find page-ref/page-ref-re s)
-                (re-find #"[\,|，|#|\"]+" s)))
-     (let [result (->> (sep-by-quotes s)
-                       (mapcat
-                        (fn [s]
-                          (when-not (gp-util/wrapped-by-quotes? (string/trim s))
-                            (string/split s page-ref/page-ref-outer-capture-re))))
-                       (mapcat (fn [s]
-                                 (cond
-                                   (gp-util/wrapped-by-quotes? s)
-                                   nil
-
-                                   (string/includes? (string/trimr s)
-                                                     (str right-brackets ","))
-                                   (let [idx (string/index-of s (str right-brackets ","))]
-                                     [(subs s 0 idx)
-                                      right-brackets
-                                      (subs s (+ idx 3))])
-
-                                   :else
-                                   [s])))
-                       (remove #(= % ""))
-                       (mapcat (fn [s] (if (string/ends-with? s right-brackets)
-                                         [(subs s 0 (- (count s) 2))
-                                          right-brackets]
-                                         [s])))
-                       concat-nested-pages
-                       (remove string/blank?)
-                       (mapcat (fn [s]
-                                 (cond
-                                   (gp-util/wrapped-by-quotes? s)
-                                   nil
-
-                                   (page-ref/page-ref? s)
-                                   [(if un-brackets? (page-ref-un-brackets! s) s)]
-
-                                   :else
-                                   (->> (sep-by-comma s)
-                                        (mapcat sep-by-hashtag)))))
-                       (distinct))]
-       (if (or (coll? result)
-               (and (string? result)
-                    (string/starts-with? result "#")))
-         (let [result (if coll? result [result])
-               result (map (fn [s] (string/replace s #"^#+" "")) result)]
-           (set result))
-         (first result)))
-
-     :else
-     s)))
 
 (defn- remove-level-space-aux!
   [text pattern space? trim-left?]
@@ -242,16 +124,14 @@
             (second (first data))
 
             nil)))
-       (map string/trim)))
+       (map string/trim)
+       (set)))
 
 (defn parse-property
   "Property value parsing that takes into account built-in properties, and user config"
   [k v mldoc-ast config-state]
-  (prn {:k k
-        :v v
-        :mldoc-ast mldoc-ast})
   (let [refs (extract-refs-from-mldoc-ast mldoc-ast)
-        k (subs (str k) 1)
+        k (if (or (symbol? k) (keyword? k)) (subs (str k) 1) k)
         v (if (or (symbol? v) (keyword? v))
             (subs (str v) 1)
             (str v))
@@ -259,7 +139,7 @@
         non-string-property (parse-non-string-property-value v)]
     (cond
       (contains? (set/union
-                  #{"title" "filters"}
+                  #{"filters" "macro"}
                   (get config-state :ignored-page-references-keywords)) k)
       v
 

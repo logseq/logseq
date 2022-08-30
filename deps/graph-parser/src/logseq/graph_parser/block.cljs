@@ -170,7 +170,7 @@
                               (keyword k))))
                    ;; get links ast
                    (map last)
-                   (mapcat text/extract-refs-from-mldoc-ast))
+                   (mapcat (or (:extract-refs-from-property-value-fn user-config) text/extract-refs-from-mldoc-ast)))
         page-refs-from-property-names (get-page-refs-from-property-names properties user-config)]
     (->> (concat page-refs page-refs-from-property-names)
          (remove string/blank?)
@@ -184,7 +184,10 @@
           *invalid-properties (atom #{})
           properties (->> properties
                           (map (fn [[k v mldoc-ast]]
-                                 (let [k (-> (string/lower-case (subs (str k) 1))
+                                 (let [k (if (or (keyword? k) (symbol? k))
+                                           (subs (str k) 1)
+                                           k)
+                                       k (-> (string/lower-case k)
                                              (string/replace " " "-")
                                              (string/replace "_" "-")
                                              (string/replace #"[\"|^|(|)|{|}]+" ""))]
@@ -409,7 +412,7 @@
       (d/squuid)))
 
 (defn get-page-refs-from-properties
-  [format properties db date-formatter user-config]
+  [properties db date-formatter user-config]
   (let [page-refs (get-page-ref-names-from-properties properties user-config)]
     (map (fn [page] (page-name->map page true db true date-formatter)) page-refs)))
 
@@ -503,7 +506,13 @@
                    (let [content (utf8/substring encoded-content 0 first-block-start-pos)
                          {:keys [properties properties-order invalid-properties]} pre-block-properties
                          id (get-custom-id-or-new-id {:properties properties})
-                         property-refs (->> (get-page-refs-from-properties format properties db date-formatter user-config)
+                         property-refs (->> (get-page-refs-from-properties
+                                             properties db date-formatter
+                                             (assoc user-config
+                                                    :extract-refs-from-property-value-fn
+                                                    (fn [refs]
+                                                      (when (coll? refs)
+                                                        refs))))
                                             (map :block/original-name))
                          block {:uuid id
                                 :content content

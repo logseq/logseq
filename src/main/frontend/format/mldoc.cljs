@@ -40,12 +40,12 @@
                "Heading"} type))
 
 (defn opml->edn
-  [content]
+  [config content]
   (try
     (if (string/blank? content)
       {}
       (let [[headers blocks] (-> content (parse-opml) (gp-util/json->clj))]
-        [headers (gp-mldoc/collect-page-properties blocks gp-mldoc/parse-property (state/get-config))]))
+        [headers (gp-mldoc/collect-page-properties blocks config)]))
     (catch js/Error e
       (log/error :edn/convert-failed e)
       [])))

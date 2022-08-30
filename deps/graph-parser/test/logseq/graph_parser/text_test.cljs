@@ -35,37 +35,6 @@
     "[single bracket]" "[single bracket]"
     "no brackets" "no brackets"))
 
-(deftest sep-by-comma
-  []
-  (are [x y] (= (text/sep-by-comma x) y)
-    "foo,bar" ["foo" "bar"]
-    "foo, bar" ["foo" "bar"]
-    "foo bar" ["foo bar"]
-    "[[foo]] [[bar]]" ["[[foo]] [[bar]]"]
-    "[[foo]],[[bar]]" ["[[foo]]", "[[bar]]"]
-    "[[foo]], [[bar]]" ["[[foo]]", "[[bar]]"]
-    "[[foo]]" ["[[foo]]"]
-    "[[nested [[foo]]]]" ["[[nested [[foo]]]]"]))
-
-(deftest split-page-refs-without-brackets
-  []
-  (are [x y] (= (text/split-page-refs-without-brackets x) y)
-    "foobar" "foobar"
-    "foo bar" "foo bar"
-    "foo, bar" #{"foo" "bar"}
-    "[[foo]] [[bar]]" #{"foo" "bar"}
-    "[[foo]],[[bar]]" #{"foo", "bar"}
-    "[[foo]], [[bar]]" #{"foo", "bar"}
-    "[[foo]]" #{"foo"}
-    "[[nested [[foo]]]]" #{"nested [[foo]]"}
-    "[[nested [[foo]]]], [[foo]]" #{"nested [[foo]]" "foo"}
-    "[[nested [[foo]] [[bar]]]], [[foo]]" #{"nested [[foo]] [[bar]]" "foo"}
-    "[[nested [[foo]], [[bar]]]], [[foo]]" #{"nested [[foo]], [[bar]]" "foo"}
-    "#tag," #{"tag"}
-    "#tag" #{"tag"}
-    "#tag1,#tag2" #{"tag1" "tag2"}
-    "[[Jan 26th, 2021]], hello" #{"hello" "Jan 26th, 2021"}))
-
 (def block-patterns
   {:markdown "-"
    :org "*"})

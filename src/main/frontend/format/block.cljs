@@ -10,7 +10,8 @@
             ["@sentry/react" :as Sentry]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.mldoc :as gp-mldoc]))
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [lambdaisland.glogi :as log]))
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
@@ -25,6 +26,7 @@ and handles unexpected failure."
                               :db (db/get-db (state/get-current-repo))
                               :date-formatter (state/get-date-formatter)})
     (catch :default e
+      (log/error :exception e)
       (Sentry/captureException e)
       (notification/show! "An unexpected error occurred during block extraction." :error)
       [])))
