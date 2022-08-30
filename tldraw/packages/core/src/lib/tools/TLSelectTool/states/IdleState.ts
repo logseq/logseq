@@ -47,7 +47,7 @@ export class IdleState<
     } = this.app
 
     if (event.button === 2) {
-      this.tool.transition('contextMenu')
+      this.tool.transition('contextMenu', info)
       return
     }
 
@@ -56,6 +56,7 @@ export class IdleState<
       this.tool.transition('pointingCanvas')
       return
     }
+
 
     switch (info.type) {
       case TLTargetType.Selection: {
