@@ -50,7 +50,7 @@
   [graph-id subdir]
   (let [body (json/generate-string {"GraphUUID" graph-id
                                     "Dir" subdir})
-        resp (post "https://api.logseq.com/file-sync/get_all_files"
+        resp (post "https://api-dev.logseq.com/file-sync/get_all_files"
                    {:headers (build-headers)
                     :body body})
         body (json/parse-string (:body resp) keyword)]
@@ -67,7 +67,7 @@
 
 (defn- api-post-get-graphs
   []
-  (let [resp (post "https://api.logseq.com/file-sync/list_graphs"
+  (let [resp (post "https://api-dev.logseq.com/file-sync/list_graphs"
                    {:headers (build-headers)})
         body (json/parse-string (:body resp) keyword)]
     (->> body
