@@ -78,7 +78,7 @@ export function usePaste(context: LogseqContextValue) {
             }
             imageAssetsToCreate.push(asset)
             return true
-          } finally {
+          } catch {
             return false
           }
         }
