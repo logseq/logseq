@@ -29,24 +29,30 @@
 
 (rum/defcs pdf-highlight-finder
   < rum/static rum/reactive
+    (rum/local false ::mounted?)
   [state ^js viewer]
-  (when viewer
-    (when-let [ref-hl (state/sub :pdf/ref-highlight)]
-      ;; delay handle: aim to fix page blink
-      (js/setTimeout #(pdf-utils/scroll-to-highlight viewer ref-hl) 100)
-      (js/setTimeout #(state/set-state! :pdf/ref-highlight nil) 1000))))
+  (let [*mounted? (::mounted? state)]
+    (when viewer
+      (when-let [ref-hl (state/sub :pdf/ref-highlight)]
+        ;; delay handle: aim to fix page blink
+        (js/setTimeout #(pdf-utils/scroll-to-highlight viewer ref-hl) (if @*mounted? 50 500))
+        (js/setTimeout #(state/set-state! :pdf/ref-highlight nil) 1000)))
+    (reset! *mounted? true)))
 
 (rum/defc pdf-page-finder < rum/static
   [^js viewer]
-  (when viewer
-    (when-let [current (:pdf/current @state/state)]
-      (let [active-hl (:pdf/ref-highlight @state/state)
-            page-key  (:filename current)
-            last-page (and page-key
-                           (util/safe-parse-int (storage/get (str "ls-pdf-last-page-" page-key))))]
+  (rum/use-effect!
+   (fn []
+     (when viewer
+       (when-let [current (:pdf/current @state/state)]
+         (let [active-hl (:pdf/ref-highlight @state/state)
+               page-key  (:filename current)
+               last-page (and page-key
+                              (util/safe-parse-int (storage/get (str "ls-pdf-last-page-" page-key))))]
 
-        (when (and last-page (nil? active-hl))
-          (set! (.-currentPageNumber viewer) last-page)))))
+           (when (and last-page (nil? active-hl))
+             (set! (.-currentPageNumber viewer) last-page))))))
+   [viewer])
   nil)
 
 (rum/defc pdf-resizer
