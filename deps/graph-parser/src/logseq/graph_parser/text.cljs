@@ -92,31 +92,36 @@
     (re-find #"^\d+$" v)
     (parse-long v)))
 
+(defn get-ref-from-ast
+  [[typ data]]
+  (case typ
+    "Link"
+    (case (first (:url data))
+      "Page_ref"
+      (second (:url data))
+
+      "Search"
+      (second (:url data))
+
+      nil)
+
+    "Nested_link"
+    (page-ref/get-page-name (:content data))
+
+    "Tag"
+    (if (= "Plain" (ffirst data))
+      (second (first data))
+      (get-ref-from-ast (first data)))
+
+    nil))
+
 (defn extract-refs-from-mldoc-ast
   [v]
   (->> v
        (remove gp-mldoc/ast-link?)
-       (keep
-        (fn [[typ data]]
-          (case typ
-            "Link"
-            (case (first (:url data))
-              "Page_ref"
-              (second (:url data))
-
-              "Search"
-              (second (:url data))
-
-              nil)
-
-            "Nested_link"
-            (page-ref/get-page-name (:content data))
-
-            "Tag"
-            (second (first data))
-
-            nil)))
-       (map string/trim)
+       (keep get-ref-from-ast)
+       (map (fn [x]
+              (string/trim x)))
        (set)))
 
 (defn parse-property
