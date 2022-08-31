@@ -100,7 +100,6 @@
 
      :config                                {}
      :config/root-dir                       nil
-     :global-config                         {}
      :block/component-editing-mode?         false
      :editor/hidden-editors                 #{}             ;; page names
      :editor/draw-mode?                     false
@@ -334,6 +333,8 @@
    (get-config (get-current-repo)))
   ([repo-url]
    (merge default-config
+          ;; TODO: Confirm merging works for all cases
+          (get-in @state [:config ::global-config])
           (get-in @state [:config repo-url]))))
 
 (defn get-arweave-gateway
@@ -350,8 +351,11 @@
     (:macros (get-config))))
 
 (defn sub-config
-  []
-  (sub :config))
+  "Sub equivalent to get-config"
+  ([] (sub-config (get-current-repo)))
+  ([repo]
+   (let [config (sub :config)]
+     (merge (get config ::global-config) (get config repo)))))
 
 (defn get-custom-css-link
   []
@@ -375,36 +379,27 @@
 
 (defn enable-grammarly?
   []
-  (true? (:feature/enable-grammarly?
-           (get (sub-config) (get-current-repo)))))
-
-;; (defn store-block-id-in-file?
-;;   []
-;;   (true? (:block/store-id-in-file? (get-config))))
+  (true? (:feature/enable-grammarly? (sub-config))))
 
 (defn scheduled-deadlines-disabled?
   []
-  (true? (:feature/disable-scheduled-and-deadline-query?
-           (get (sub-config) (get-current-repo)))))
+  (true? (:feature/disable-scheduled-and-deadline-query? (sub-config))))
 
 (defn enable-timetracking?
   []
-  (not (false? (:feature/enable-timetracking?
-                 (get (sub-config) (get-current-repo))))))
+  (not (false? (:feature/enable-timetracking? (sub-config)))))
 
 (defn enable-journals?
   ([]
    (enable-journals? (get-current-repo)))
   ([repo]
-   (not (false? (:feature/enable-journals?
-                 (get (sub-config) repo))))))
+   (not (false? (:feature/enable-journals? (sub-config repo))))))
 
 (defn enable-flashcards?
   ([]
    (enable-flashcards? (get-current-repo)))
   ([repo]
-   (not (false? (:feature/enable-flashcards?
-                 (get (sub-config) repo))))))
+   (not (false? (:feature/enable-flashcards? (sub-config repo))))))
 
 (defn user-groups
   []
@@ -416,32 +411,24 @@
 
 (defn export-heading-to-list?
   []
-  (not (false? (:export/heading-to-list?
-                 (get (sub-config) (get-current-repo))))))
+  (not (false? (:export/heading-to-list? (sub-config)))))
 
 (defn enable-git-auto-push?
   [repo]
-  (not (false? (:git-auto-push
-                 (get (sub-config) repo)))))
+  (not (false? (:git-auto-push (sub-config repo)))))
 
 (defn enable-block-timestamps?
   []
-  (true? (:feature/enable-block-timestamps?
-           (get (sub-config) (get-current-repo)))))
+  (true? (:feature/enable-block-timestamps? (sub-config))))
 
-(defn sub-graph-config
+(defn graph-settings
   []
-  (get (sub-config) (get-current-repo)))
-
-(defn sub-graph-config-settings
-  []
-  (:graph/settings (sub-graph-config)))
+  (:graph/settings (sub-config)))
 
 ;; Enable by default
 (defn show-brackets?
   []
-  (not (false? (:ui/show-brackets?
-                 (get (sub-config) (get-current-repo))))))
+  (not (false? (:ui/show-brackets? (sub-config)))))
 
 (defn get-default-home
   []
@@ -449,7 +436,7 @@
 
 (defn sub-default-home-page
   []
-  (get-in (sub-config) [(get-current-repo) :default-home :page] ""))
+  (get-in (sub-config) [:default-home :page] ""))
 
 (defn custom-home-page?
   []
@@ -896,7 +883,7 @@
 
 (defn block-content-max-length
   [repo]
-  (or (:block/content-max-length (get (sub-config) repo)) 5000))
+  (or (:block/content-max-length (sub-config repo)) 5000))
 
 (defn clear-edit!
   []
@@ -1055,7 +1042,7 @@
   (gp-config/get-date-formatter (get-config)))
 
 (defn shortcuts []
-  (get-in @state [:config (get-current-repo) :shortcuts]))
+  (:shortcuts (get-config)))
 
 (defn get-me
   []
@@ -1193,7 +1180,7 @@
 (defn doc-mode-enter-for-new-line?
   []
   (and (document-mode?)
-       (not (:shortcut/doc-mode-enter-for-new-block? (sub-graph-config)))))
+       (not (:shortcut/doc-mode-enter-for-new-block? (sub-config)))))
 
 (defn toggle-document-mode!
   []
@@ -1219,15 +1206,11 @@
   []
   (if (mobile?)
     false
-    (get (get (sub-config) (get-current-repo))
-         :ui/enable-tooltip?
-         true)))
+    (get (sub-config) :ui/enable-tooltip? true)))
 
 (defn show-command-doc?
   []
-  (get (get (sub-config) (get-current-repo))
-       :ui/show-command-doc?
-       true))
+  (get (sub-config) :ui/show-command-doc? true))
 
 (defn set-config!
   [repo-url value]
@@ -1235,7 +1218,8 @@
 
 (defn set-global-config!
   [value]
-  (set-state! [:global-config] value))
+  ;; Placed under :config so cursors can work seamlessly
+  (set-config! ::global-config value))
 
 (defn get-wide-mode?
   []
@@ -1433,11 +1417,9 @@
 
 (defn get-start-of-week
   []
-  (or
-    (when-let [repo (get-current-repo)]
-      (get-in @state [:config repo :start-of-week]))
-    (get-in @state [:me :settings :start-of-week])
-    6))
+  (or (:start-of-week (get-config))
+      (get-in @state [:me :settings :start-of-week])
+      6))
 
 (defn get-ref-open-blocks-level
   []
@@ -1507,8 +1489,7 @@
 
 (defn logical-outdenting?
   []
-  (:editor/logical-outdenting?
-    (get (sub-config) (get-current-repo))))
+  (:editor/logical-outdenting? (sub-config)))
 
 (defn get-editor-args
   []
@@ -1753,8 +1734,7 @@
 
 (defn enable-encryption?
   [repo]
-  (:feature/enable-encryption?
-   (get (sub-config) repo)))
+  (:feature/enable-encryption? (sub-config repo)))
 
 (defn set-mobile-app-state-change
   [is-active?]

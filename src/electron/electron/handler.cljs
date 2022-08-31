@@ -470,14 +470,14 @@
         windows (win/get-graph-all-windows dir)]
     (> (count windows) 1)))
 
-(defmethod handle :addDirWatcher [^js _window [_ dir]]
+(defmethod handle :addDirWatcher [^js _window [_ dir options]]
   ;; receive dir path (not repo / graph) from frontend
   ;; Windows on same dir share the same watcher
   ;; Only close file watcher when:
   ;;    1. there is no one window on the same dir
   ;;    2. reset file watcher to resend `add` event on window refreshing
   (when dir
-    (watcher/watch-dir! dir)))
+    (watcher/watch-dir! dir options)))
 
 (defmethod handle :unwatchDir [^js _window [_ dir]]
   (when dir

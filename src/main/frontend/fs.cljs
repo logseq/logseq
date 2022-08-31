@@ -172,8 +172,8 @@
         result))))
 
 (defn watch-dir!
-  [dir]
-  (protocol/watch-dir! (get-record) dir))
+  ([dir] (watch-dir! dir {}))
+  ([dir options] (protocol/watch-dir! (get-record) dir options)))
 
 (defn unwatch-dir!
   [dir]

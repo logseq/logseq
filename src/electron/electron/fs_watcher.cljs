@@ -21,7 +21,7 @@
                         (send file-watcher-chan
                               (bean/->js {:type type :payload payload})))
                     true))
-        wins (window/get-graph-all-windows dir)]
+        wins (window/get-graph-all-windows (or (:current-repo-dir payload) dir))]
     (if (contains? #{"unlinkDir" "addDir"} type)
       ;; notify every windows
       (doseq [win wins] (send-fn win))
@@ -33,7 +33,7 @@
                                (str "unhandled file event will cause uncatched file modifications!. target:" dir)))))))
 
 (defn- publish-file-event!
-  [dir path event]
+  [dir path event options]
   (let [dir-path? (= dir path)
         content (when (and (not= event "unlink")
                            (not dir-path?)
@@ -42,14 +42,17 @@
         stat (when (and (not= event "unlink")
                         (not dir-path?))
                (fs/statSync path))]
-    (send-file-watcher! dir event {:dir (utils/fix-win-path! dir)
-                                   :path (utils/fix-win-path! path)
-                                   :content content
-                                   :stat stat})))
+    (send-file-watcher! dir event (merge options
+                                         {:dir (utils/fix-win-path! dir)
+                                          :path (utils/fix-win-path! path)
+                                          :content content
+                                          :stat stat}))))
 
 (defn watch-dir!
-  "Watch a directory if no such file watcher exists"
-  [dir]
+  "Watch a directory if no such file watcher exists. Has the following options:
+* :current-repo-dir - Provides current repo-dir for global directories. Needed as watch events need to take place in a repo context in order for window and db to function correctly"
+  [dir options]
+  (prn :WATCH dir options)
   (when-not (get @*file-watcher dir)
     (if (fs/existsSync dir)
       (let [watcher-opts (clj->js
@@ -70,22 +73,22 @@
         (.on dir-watcher "unlinkDir"
              (fn [path]
                (when (= dir path)
-                 (publish-file-event! dir dir "unlinkDir"))))
+                 (publish-file-event! dir dir "unlinkDir" options))))
         (.on dir-watcher "addDir"
              (fn [path]
                (when (= dir path)
-                 (publish-file-event! dir dir "addDir"))))
+                 (publish-file-event! dir dir "addDir" options))))
         (.on dir-watcher "add"
              (fn [path]
-               (publish-file-event! dir path "add")))
+               (publish-file-event! dir path "add" options)))
         (.on dir-watcher "change"
              (fn [path]
-               (publish-file-event! dir path "change")))
+               (publish-file-event! dir path "change" options)))
         (.on dir-watcher "unlink"
              ;; delay 500ms for syncing disks
              (fn [path]
                (js/setTimeout #(when (not (fs/existsSync path))
-                                 (publish-file-event! dir path "unlink"))
+                                 (publish-file-event! dir path "unlink" options))
                               500)))
         (.on dir-watcher "error"
              (fn [path]
@@ -99,7 +102,7 @@
         true)
       ;; retry if the `dir` not exists, which is useful when a graph's folder is
       ;; back after refreshing the window
-      (js/setTimeout #(watch-dir! dir) 5000))))
+      (js/setTimeout #(watch-dir! dir {}) 5000))))
 
 (defn close-watcher!
   "If no `dir` provided, close all watchers;

@@ -115,6 +115,7 @@
 
          (watch-for-date!)
          (file-handler/watch-for-current-graph-dir!)
+         (file-handler/watch-for-global-config-dir!)
          (state/pub-event! [:graph/restored (state/get-current-repo)])))
       (p/catch (fn [error]
                  (log/error :exception error)))))
