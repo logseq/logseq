@@ -256,7 +256,9 @@ test('undo after starting an action should close the action menu #6269', async (
     await page.waitForTimeout(550)
     for (const char of commandTrigger) {
       await page.keyboard.type(char)
+      await page.waitForTimeout(50)
     }
+    await page.waitForTimeout(100) // Tolerable delay for the action menu to open
     await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
 
     // Undo, removing "/today", and closing the action modal
@@ -281,6 +283,7 @@ test('#6266 moving cursor outside of brackets should close autocomplete menu', a
       await page.keyboard.type(char)
       await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
     }
+    await page.waitForTimeout(100) // Sometimes it doesn't trigger without this
     await autocompleteMenu.expectVisible(modalName)
 
     await page.keyboard.press('ArrowLeft')
@@ -321,6 +324,7 @@ test('#6266 moving cursor outside of parens immediately after searching should s
     }
     await page.waitForTimeout(100)
     await page.keyboard.type("some block search text")
+    await page.waitForTimeout(100) // Sometimes it doesn't trigger without this
     await autocompleteMenu.expectVisible(modalName)
 
     // Move cursor outside of the space strictly between the double parens
@@ -340,6 +344,7 @@ test('pressing up and down should NOT close autocomplete menu', async ({ page, b
       await page.keyboard.type(char)
       await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
     }
+    await page.waitForTimeout(100) // Sometimes it doesn't trigger without this
     await autocompleteMenu.expectVisible(modalName)
     const cursorPos = await block.selectionStart()
 
@@ -392,6 +397,7 @@ test('moving cursor inside of brackets when autocomplete menu is closed should N
       await page.keyboard.type(char)
       await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
     }
+    await page.waitForTimeout(100) // Sometimes it doesn't trigger without this
     await autocompleteMenu.expectVisible(modalName)
 
     await block.escapeEditing()
