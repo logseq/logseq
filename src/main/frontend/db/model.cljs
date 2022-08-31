@@ -17,6 +17,7 @@
             [logseq.db.default :as default-db]
             [logseq.db.rules :refer [rules]]
             [logseq.db.schema :as db-schema]
+            [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util :as gp-util]))
@@ -1354,7 +1355,8 @@
                       :where
                       [_ :block/properties ?p]]
                     (conn/get-db))
-        properties (remove (fn [m] (empty? m)) properties)]
+        properties (remove (fn [m] (or (empty? m) 
+                                       (gp-block/whiteboard-properties? m))) properties)]
     (->> (map keys properties)
          (apply concat)
          distinct
@@ -1654,8 +1656,7 @@
 
 (defn whiteboard-shape?
   [block]
-  (= :whiteboard-shape
-     (get-in block [:block/properties :ls-type] nil)))
+  (gp-block/whiteboard-properties? (:properties block)))
 
 ;; ;; fixme: caching?
 ;; (defn get-all-whiteboard-tldrs

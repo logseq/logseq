@@ -212,7 +212,7 @@
 (defn with-whiteboard-block-props
   [block page-name]
   (let [shape (:block/properties block)
-        shape? (= :whiteboard-shape (:ls-type shape))
+        shape? (gp-block/whiteboard-properties? shape)
         default-page-ref {:block/name (gp-util/page-name-sanity-lc page-name)}]
     (merge (when shape?
              (merge

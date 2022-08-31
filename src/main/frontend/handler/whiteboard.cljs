@@ -7,6 +7,7 @@
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.extract :as gp-extract]))
 
 ;; (defn set-linked-page-or-block!
@@ -59,7 +60,9 @@
         page-entity (model/get-page page-name)
         page-block (merge {:block/name page-name
                            :block/whiteboard? true
-                           :block/properties (dissoc tldr-data :shapes)}
+                           :block/properties (-> tldr-data
+                                                 (dissoc :shapes)
+                                                 (assoc :ls-type :whiteboard-page))}
                           (when page-entity (select-keys page-entity [:block/created-at])))
         page-block (outliner/block-with-timestamps page-block)
         ;; todo: use get-paginated-blocks instead?
@@ -99,7 +102,7 @@
   (let [id (str (:block/uuid page-block))
         shapes (->> blocks
                     (map block->shape)
-                    (filter #(= :whiteboard-shape (:ls-type %)))
+                    (filter gp-block/whiteboard-properties?)
                     (sort-by :index))
         page-properties (:block/properties page-block)
         assets (:assets page-properties)
@@ -120,14 +123,15 @@
 
 (defn get-default-tldr
   [page-id]
-  #js {:currentPageId page-id,
-       :selectedIds #js [],
-       :pages #js [#js {:id page-id,
-                        :name "Page",
-                        :shapes #js [],
-                        :bindings #js {},
-                        :nonce 1}],
-       :assets #js []})
+  {:currentPageId page-id,
+   :selectedIds [],
+   :pages [{:id page-id
+            :name page-id
+            :ls-type :whiteboard-page
+            :shapes []
+            :bindings {}
+            :nonce 1}]
+   :assets []})
 
 (defn get-whiteboard-entity [page-name]
   (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)]))

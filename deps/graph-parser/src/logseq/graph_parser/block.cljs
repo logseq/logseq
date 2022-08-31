@@ -20,6 +20,14 @@
    (vector? block)
    (= "Heading" (first block))))
 
+(defn whiteboard-properties?
+  [properties]
+  (and properties
+       (or (#{:whiteboard-shape :whiteboard-page} (:ls-type properties))
+           ;; whiteboard page will have the following properties. We use them as a hint
+           (and (:assets properties)
+                (:bindings properties)))))
+
 (defn get-tag
   [block]
   (when-let [tag-value (and (vector? block)
