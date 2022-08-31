@@ -165,7 +165,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
 
         switch env {
         case "production", "product", "prod":
-            URL_BASE = URL(string: "https://api-prod.logseq.com/file-sync/")!
+            URL_BASE = URL(string: "https://api.logseq.com/file-sync/")!
             BUCKET = "logseq-file-sync-bucket-prod"
             REGION = "us-east-1"
         case "development", "develop", "dev":
