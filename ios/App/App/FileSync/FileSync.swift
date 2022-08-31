@@ -14,7 +14,7 @@ import CryptoKit
 // MARK: Global variable
 
 // Defualts to dev
-var URL_BASE = URL(string: "https://api.logseq.com/file-sync/")!
+var URL_BASE = URL(string: "https://api-dev.logseq.com/file-sync/")!
 var BUCKET: String = "logseq-file-sync-bucket"
 var REGION: String = "us-east-2"
 
@@ -169,7 +169,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             BUCKET = "logseq-file-sync-bucket-prod"
             REGION = "us-east-1"
         case "development", "develop", "dev":
-            URL_BASE = URL(string: "https://api.logseq.com/file-sync/")!
+            URL_BASE = URL(string: "https://api-dev.logseq.com/file-sync/")!
             BUCKET = "logseq-file-sync-bucket"
             REGION = "us-east-2"
         default:
