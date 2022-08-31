@@ -87,7 +87,7 @@
 }
 
 .ui__modal {
-  @apply fixed px-4 pb-4 inset-0 flex items-baseline justify-center top-24;
+  @apply fixed px-4 pb-4 inset-0 flex items-baseline justify-center top-12 sm:top-24;
 
   &-overlay {
     @apply fixed inset-0 transition-opacity;
@@ -107,12 +107,13 @@
       overflow-y: auto;
       overflow-x: hidden;
       width: 94vw;
-      max-height: 85vh;
+      max-height: 89vh;
       padding: 2rem 1.5rem;
 
-      @screen md {
+      @screen sm {
         overflow-y: overlay;
         min-width: 720px;
+        max-height: 85vh;
         padding: 2rem;
         width: auto;
 
@@ -183,7 +184,7 @@
     }
 }
 
-html.is-native-andorid,
+html.is-native-android,
 html.is-native-iphone,
 html.is-native-iphone-without-notch
 {
