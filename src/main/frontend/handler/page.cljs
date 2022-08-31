@@ -564,31 +564,32 @@
 
 (defn rename!
   "Accepts unsanitized page names"
-  [old-name new-name]
-  (let [repo          (state/get-current-repo)
-        old-name      (string/trim old-name)
-        new-name      (string/trim new-name)
-        old-page-name (util/page-name-sanity-lc old-name)
-        new-page-name (util/page-name-sanity-lc new-name)
-        name-changed? (not= old-name new-name)]
-    (if (and old-name
-             new-name
-             (not (string/blank? new-name))
-             name-changed?)
-      (do
-        (cond
-          (= old-page-name new-page-name)
-          (rename-page-aux old-name new-name true)
+  ([old-name new-name] (rename! old-name new-name true))
+  ([old-name new-name redirect?]
+    (let [repo          (state/get-current-repo)
+          old-name      (string/trim old-name)
+          new-name      (string/trim new-name)
+          old-page-name (util/page-name-sanity-lc old-name)
+          new-page-name (util/page-name-sanity-lc new-name)
+          name-changed? (not= old-name new-name)]
+      (if (and old-name
+              new-name
+              (not (string/blank? new-name))
+              name-changed?)
+        (do
+          (cond
+            (= old-page-name new-page-name)
+            (rename-page-aux old-name new-name redirect?)
 
-          (db/pull [:block/name new-page-name])
-          (merge-pages! old-page-name new-page-name)
+            (db/pull [:block/name new-page-name])
+            (merge-pages! old-page-name new-page-name)
 
-          :else
-          (rename-namespace-pages! repo old-name new-name))
-        (rename-nested-pages old-name new-name))
-      (when (string/blank? new-name)
-        (notification/show! "Please use a valid name, empty name is not allowed!" :error)))
-    (ui-handler/re-render-root!)))
+            :else
+            (rename-namespace-pages! repo old-name new-name))
+          (rename-nested-pages old-name new-name))
+        (when (string/blank? new-name)
+          (notification/show! "Please use a valid name, empty name is not allowed!" :error)))
+      (ui-handler/re-render-root!))))
 
 (defn- split-col-by-element
   [col element]

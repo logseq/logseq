@@ -459,7 +459,7 @@
   (let [tag? (:tag? config)
         config (assoc config :whiteboard-page? whiteboard-page?)]
     [:a
-     {:tabindex "0"
+     {:tabIndex "0"
       :class (cond-> (if tag? "tag" "page-ref")
                (:property? config)
                (str " page-property-key block-property"))

@@ -259,6 +259,18 @@ jobs:
           mkdir builds
           mv static\out\make\squirrel.windows\x64\*.exe builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
 
+      - name: Code Sign the Installer
+        uses: andelf/code-sign-action@master
+        if: ${{ github.repository == 'logseq/logseq' }}
+        with:
+          certificate: ${{ secrets.CODE_SIGN_CERTIFICATE }}
+          password: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
+          certificatesha1: ${{ secrets.CODE_SIGN_CERTIFICATE_SHA1 }}
+          certificatename: "Logseq, Inc."
+          timestampUrl: http://timestamp.digicert.com
+          folder: "builds"
+          recursive: false
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v2
         with:
