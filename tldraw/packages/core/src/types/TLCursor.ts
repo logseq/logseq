@@ -5,6 +5,8 @@ export enum TLCursor {
   Cross = 'crosshair',
   Grab = 'grab',
   Rotate = 'rotate',
+  Wait = 'wait',
+  Progress = 'progress',
   Grabbing = 'grabbing',
   ResizeEdge = 'resize-edge',
   ResizeCorner = 'resize-corner',

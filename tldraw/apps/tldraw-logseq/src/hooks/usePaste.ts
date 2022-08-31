@@ -3,6 +3,7 @@ import {
   getSizeFromSrc,
   TLAsset,
   TLBinding,
+  TLCursor,
   TLShapeModel,
   uniqueId,
   validUUID,
@@ -38,6 +39,10 @@ const safeParseJson = (json: string) => {
   }
 }
 
+const IMAGE_EXTENSIONS = ['.png', '.svg', '.jpg', '.jpeg', '.gif']
+const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogg']
+
+// FIXME: for assets, we should prompt the user a loading spinner
 export function usePaste(context: LogseqContextValue) {
   const { handlers } = context
 
@@ -56,11 +61,32 @@ export function usePaste(context: LogseqContextValue) {
         return await handlers.saveAsset(file)
       }
 
+      async function handleAssetUrl(url: string, isVideo: boolean) {
+        // Do we already have an asset for this image?
+        const existingAsset = Object.values(app.assets).find(asset => asset.src === url)
+        if (existingAsset) {
+          imageAssetsToCreate.push(existingAsset as VideoImageAsset)
+          return true
+        } else {
+          try {
+            // Create a new asset for this image
+            const asset: VideoImageAsset = {
+              id: uniqueId(),
+              type: isVideo ? 'video' : 'image',
+              src: url,
+              size: await getSizeFromSrc(handlers.makeAssetUrl(url), isVideo),
+            }
+            imageAssetsToCreate.push(asset)
+            return true
+          } finally {
+            return false
+          }
+        }
+      }
+
       // TODO: handle PDF?
       async function handleFiles(files: File[]) {
-        const IMAGE_EXTENSIONS = ['.png', '.svg', '.jpg', '.jpeg', '.gif']
-        const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogg']
-
+        let added = false
         for (const file of files) {
           // Get extension, verify that it's an image
           const extensionMatch = file.name.match(/\.[0-9a-z]+$/i)
@@ -78,24 +104,14 @@ export function usePaste(context: LogseqContextValue) {
             if (!dataurl) {
               continue
             }
-            // Do we already have an asset for this image?
-            const existingAsset = Object.values(app.assets).find(asset => asset.src === dataurl)
-            if (existingAsset) {
-              imageAssetsToCreate.push(existingAsset as VideoImageAsset)
-              continue
+            if (await handleAssetUrl(dataurl, isVideo)) {
+              added = true
             }
-            // Create a new asset for this image
-            const asset: VideoImageAsset = {
-              id: uniqueId(),
-              type: isVideo ? 'video' : 'image',
-              src: dataurl,
-              size: await getSizeFromSrc(handlers.makeAssetUrl(dataurl), isVideo),
-            }
-            imageAssetsToCreate.push(asset)
           } catch (error) {
             console.error(error)
           }
         }
+        return added
       }
 
       async function handleHTML(item: ClipboardItem) {
@@ -118,7 +134,7 @@ export function usePaste(context: LogseqContextValue) {
           const blob = await item.getType('text/plain')
           const rawText = (await blob.text()).trim()
 
-          if (handleURL(rawText)) {
+          if (await handleURL(rawText)) {
             return true
           }
 
@@ -204,7 +220,7 @@ export function usePaste(context: LogseqContextValue) {
         return false
       }
 
-      function handleURL(rawText: string) {
+      async function handleURL(rawText: string) {
         if (isValidURL(rawText)) {
           const isYoutubeUrl = (url: string) => {
             const youtubeRegex =
@@ -217,6 +233,14 @@ export function usePaste(context: LogseqContextValue) {
               url: rawText,
               point: [point[0], point[1]],
             })
+            return true
+          }
+          const extension = rawText.match(/\.[0-9a-z]+$/i)?.[0].toLowerCase()
+          if (
+            extension &&
+            [...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS].includes(extension) &&
+            (await handleAssetUrl(rawText, VIDEO_EXTENSIONS.includes(extension)))
+          ) {
             return true
           }
           // ??? deal with normal URLs?
@@ -279,6 +303,8 @@ export function usePaste(context: LogseqContextValue) {
         return false
       }
 
+      app.cursors.setCursor(TLCursor.Progress)
+
       try {
         if (files && files.length > 0) {
           await handleFiles(files)
@@ -324,6 +350,7 @@ export function usePaste(context: LogseqContextValue) {
         app.currentPage.updateBindings(Object.fromEntries(bindingsToCreate.map(b => [b.id, b])))
         app.setSelectedShapes(allShapesToAdd.map(s => s.id))
       })
+      app.cursors.setCursor(TLCursor.Default)
     },
     []
   )

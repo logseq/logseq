@@ -24,6 +24,8 @@ const CURSORS: Record<TLCursor, (r: number, f?: boolean) => string> = {
   [TLCursor.Pointer]: (r, f) => 'pointer',
   [TLCursor.Cross]: (r, f) => 'crosshair',
   [TLCursor.Move]: (r, f) => 'move',
+  [TLCursor.Wait]: (r, f) => 'wait',
+  [TLCursor.Progress]: (r, f) => 'progress',
   [TLCursor.Grab]: (r, f) => getCursorCss(GRAB_SVG, r, f),
   [TLCursor.Grabbing]: (r, f) => getCursorCss(GRABBING_SVG, r, f),
   [TLCursor.Text]: (r, f) => getCursorCss(TEXT_SVG, r, f),

@@ -77,7 +77,7 @@ export function fileToBase64(file: Blob): Promise<string | ArrayBuffer | null> {
 }
 
 export function getSizeFromSrc(dataURL: string, isVideo: boolean): Promise<number[]> {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     if (isVideo) {
       const video = document.createElement('video')
 
@@ -100,6 +100,7 @@ export function getSizeFromSrc(dataURL: string, isVideo: boolean): Promise<numbe
       const img = new Image()
       img.onload = () => resolve([img.width, img.height])
       img.src = dataURL
+      img.onerror = err => reject(err)
     }
   })
 }
