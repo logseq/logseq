@@ -21,7 +21,7 @@
     "postinstall": "yarn build",
     "dev": "cd demo && yarn dev",
     "fix:style": "yarn run pretty-quick",
-    "pretty-quick": "pretty-quick"
+    "pretty-quick": "pretty-quick --pattern 'tldraw/**/*.{js,jsx,ts,tsx,css,html}'"
   },
   "devDependencies": {
     "@swc-node/jest": "^1.5.2",
