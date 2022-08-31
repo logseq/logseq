@@ -397,6 +397,8 @@
      source "../assets" (util/format "%s://%s/assets" protocol (get-repo-dir (state/get-current-repo))))))
 
 (def alias-assets? (and (util/electron?) true))
+(def Origin_Log_Seq "log.seq")
+(def Spliter_Asset_File "~~_~~")
 
 (defn normalize-asset-resource-uri
   ;; try to convert resource file to uri asset link
@@ -420,8 +422,9 @@
 
                       (if alias-assets?
                         (str "assets://"
-                             (string/replace-first full-path gp-config/local-assets-dir "log.seq")
-                             (str "?v=" graph-root "/" gp-config/local-assets-dir))
+                             (string/replace-first
+                              full-path gp-config/local-assets-dir
+                              (str Origin_Log_Seq graph-root "/" gp-config/local-assets-dir "/" Spliter_Asset_File)))
                         ;; TODO: bfs
                         (str "file://" (util/node-path.join graph-root full-path)))))]
     url))
