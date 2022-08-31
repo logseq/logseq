@@ -677,7 +677,7 @@
      [:header
       [:h1.title (t :settings)]]
 
-     [:div.cp__settings-inner.md:flex
+     [:div.cp__settings-inner
 
       [:aside.md:w-64 {:style {:min-width "10rem"}}
        [:ul.settings-menu

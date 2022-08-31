@@ -104,12 +104,14 @@
     background: var(--ls-secondary-background-color);
 
     .panel-content {
-      overflow: overlay;
+      overflow-y: auto;
+      overflow-x: hidden;
       width: 94vw;
       max-height: 85vh;
       padding: 2rem 1.5rem;
 
       @screen md {
+        overflow-y: overlay;
         min-width: 720px;
         padding: 2rem;
         width: auto;
