@@ -310,6 +310,13 @@
           (ui/icon "trash")]
 
          [:button.asset-action-btn
+          {:title "Copy image"
+           :on-click
+           (fn [e]
+             (util/stop e))}
+          (ui/icon "copy")]
+
+         [:button.asset-action-btn
           {:title    "Maximize image"
            :on-click (fn [^js e] (let [images (js/document.querySelectorAll ".asset-container img")
                                        images (to-array images)
