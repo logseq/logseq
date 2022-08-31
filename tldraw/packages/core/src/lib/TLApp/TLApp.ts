@@ -828,8 +828,6 @@ export class TLApp<
   }
 
   readonly onPointerDown: TLEvents<S, K>['pointer'] = (info, e) => {
-
-
     // Pan canvas when holding middle click
     if (!this.editingShape && e.button === 1 && !this.isIn('move')) {
       this.temporaryTransitionToMove(e)

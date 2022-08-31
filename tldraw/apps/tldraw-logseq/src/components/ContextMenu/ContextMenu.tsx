@@ -117,6 +117,14 @@ export const ContextMenu = observer(function ContextMenu({
                   </span>
                 </div>
               </ReactContextMenu.Item>
+              <ReactContextMenu.Item className="tl-context-menu-button">
+                Move forwards
+                <div className="tl-context-menu-right-slot">
+                  <span className="keyboard-shortcut">
+                    <code>]</code>
+                  </span>
+                </div>
+              </ReactContextMenu.Item>
               <ReactContextMenu.Item
                 className="tl-context-menu-button"
                 onClick={() => app.sendToBack()}
@@ -125,6 +133,17 @@ export const ContextMenu = observer(function ContextMenu({
                 <div className="tl-context-menu-right-slot">
                   <span className="keyboard-shortcut">
                     <code>⇧</code> <code>[</code>
+                  </span>
+                </div>
+              </ReactContextMenu.Item>
+              <ReactContextMenu.Item
+                className="tl-context-menu-button"
+                onClick={() => app.sendBackward()}
+              >
+                Move backwards
+                <div className="tl-context-menu-right-slot">
+                  <span className="keyboard-shortcut">
+                    <code>[</code>
                   </span>
                 </div>
               </ReactContextMenu.Item>

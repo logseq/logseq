@@ -112,7 +112,6 @@
   opacity: 100%;
   background-color: var(--ls-primary-background-color);
 
-
   > span svg {
     display: none !important;
   }

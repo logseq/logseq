@@ -56,7 +56,6 @@ export const ContextBarContainer = observer(function ContextBarContainer<S exten
     BoundsUtils.boundsContain(vpBounds, screenBounds) ||
     BoundsUtils.boundsCollide(vpBounds, screenBounds)
 
-
   return (
     <div
       ref={rBounds}

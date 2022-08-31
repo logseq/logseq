@@ -81,7 +81,7 @@ export const App = function App({
   const onFileDrop = useFileDrop(contextValue)
   const onPaste = usePaste(contextValue)
   const onQuickAdd = useQuickAdd()
-  const ref = React.useRef<HTMLDivElement>(null);
+  const ref = React.useRef<HTMLDivElement>(null)
 
   const onPersistOnDiff: TLReactCallbacks<Shape>['onPersist'] = React.useCallback(
     (app, info) => {

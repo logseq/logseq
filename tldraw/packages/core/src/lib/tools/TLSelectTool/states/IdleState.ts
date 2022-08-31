@@ -57,7 +57,6 @@ export class IdleState<
       return
     }
 
-
     switch (info.type) {
       case TLTargetType.Selection: {
         switch (info.handle) {
