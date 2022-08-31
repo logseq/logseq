@@ -2119,24 +2119,41 @@
   compare checksum in FileChangeEvent and checksum calculated now"
   [es]
   {:pre [(coll? es)
-         (seq es)
          (every? #(instance? FileChangeEvent %) es)]}
   (go
-    (if (= "unlink" (.-type ^FileChangeEvent (first es)))
-      es
-      (let [base-path            (.-dir (first es))
-            files-meta           (<! (<get-local-files-meta rsapi "" base-path (mapv relative-path es)))
-            current-checksum-map (when (coll? files-meta) (into {} (mapv (juxt :path :etag) files-meta)))
-            origin-checksum-map  (into {} (mapv (juxt relative-path #(.-checksum ^FileChangeEvent %)) es))
-            origin-map           (into {} (mapv (juxt relative-path identity) es))]
-        (->>
-         (merge-with
-          #(boolean (or (nil? %1) (= "fake-checksum" %1) (= %1 %2)))
-          origin-checksum-map current-checksum-map)
-         (filterv (comp true? second))
-         (mapv first)
-         (select-keys origin-map)
-         vals)))))
+    (when (seq es)
+      (if (= "unlink" (.-type ^FileChangeEvent (first es)))
+        es
+        (let [base-path            (.-dir (first es))
+              files-meta           (<! (<get-local-files-meta rsapi "" base-path (mapv relative-path es)))
+              current-checksum-map (when (coll? files-meta) (into {} (mapv (juxt :path :etag) files-meta)))
+              origin-checksum-map  (into {} (mapv (juxt relative-path #(.-checksum ^FileChangeEvent %)) es))
+              origin-map           (into {} (mapv (juxt relative-path identity) es))]
+          (->>
+           (merge-with
+            #(boolean (or (nil? %1) (= "fake-checksum" %1) (= %1 %2)))
+            origin-checksum-map current-checksum-map)
+           (filterv (comp true? second))
+           (mapv first)
+           (select-keys origin-map)
+           vals))))))
+
+(def ^:private file-size-limit (* 100 1000 1024)) ;100MB
+(defn- filter-too-huge-files-aux
+  [e]
+  {:post [(boolean? %)]}
+  (if (= "unlink" (.-type ^FileChangeEvent e))
+    true
+    (boolean
+     (when-some [size (:size (.-stat e))]
+       (< size file-size-limit)))))
+
+(defn- filter-too-huge-files
+  "filter out files > `file-size-limit`"
+  [es]
+  {:pre [(coll? es)
+         (every? #(instance? FileChangeEvent %) es)]}
+  (filterv filter-too-huge-files-aux es))
 
 
 (defrecord ^:large-vars/cleanup-todo
@@ -2212,7 +2229,11 @@
                   _     (when (not= (count es*) (count es))
                           (println :debug :filter-checksum-changed
                                    (mapv relative-path (set/difference (set es) (set es*)))))
-                  paths (sequence es->paths-xf es*)
+                  es**  (filter-too-huge-files es*)
+                  _     (when (not= (count es**) (count es*))
+                          (println :debug :filter-too-huge-files
+                                   (mapv relative-path (set/difference (set es*) (set es**)))))
+                  paths (sequence es->paths-xf es**)
                   _     (println :sync-local->remote type paths)
                   r     (if (empty? paths)
                           (go @*txid)
@@ -2245,7 +2266,7 @@
                 paused?
                 {:pause true}
 
-                succ?               ; succ
+                succ?                   ; succ
                 (do
                   (println "sync-local->remote! update txid" r*)
                   ;; persist txid
@@ -2280,7 +2301,8 @@
                   (sequence
                    (comp
                     ;; convert to FileChangeEvent
-                    (map #(->FileChangeEvent "change" base-path (.get-normalized-path ^FileMetadata %) nil nil))
+                    (map #(->FileChangeEvent "change" base-path (.get-normalized-path ^FileMetadata %)
+                                             {:size (:size %)} (:etag %)))
                     ;; filter ignore-files & monitored-dirs
                     (filter #(let [path (relative-path %)]
                                (and (not (contains-path? ignored-files path))
@@ -2783,4 +2805,12 @@
   (<get-local-all-files-meta rsapi graph-uuid
                              (config/get-repo-dir (state/get-current-repo)))
   (def base-path (config/get-repo-dir (state/get-current-repo)))
+  )
+
+
+;;; add-tap
+(comment
+  (def *x (atom nil))
+  (add-tap (fn [v] (reset! *x v)))
+
   )
