@@ -30,7 +30,7 @@ export const ContextMenu = observer(function ContextMenu({
       <ReactContextMenu.Content
         className="tl-context-menu"
         ref={rContent}
-        onEscapeKeyDown={()=> app.transition('select')}
+        onEscapeKeyDown={() => app.transition('select')}
         collisionBoundary={collisionRef.current}
         asChild
         tabIndex={-1}
@@ -38,7 +38,10 @@ export const ContextMenu = observer(function ContextMenu({
         <div>
           {app.selectedShapes?.size > 0 && (
             <>
-              <ReactContextMenu.Item className="tl-context-menu-button" onClick={() => runAndTransition(app.copy)}>
+              <ReactContextMenu.Item
+                className="tl-context-menu-button"
+                onClick={() => runAndTransition(app.copy)}
+              >
                 Copy
                 <div className="tl-context-menu-right-slot">
                   <span className="keyboard-shortcut">
@@ -48,7 +51,10 @@ export const ContextMenu = observer(function ContextMenu({
               </ReactContextMenu.Item>
             </>
           )}
-          <ReactContextMenu.Item className="tl-context-menu-button" onClick={() => runAndTransition(app.paste)}>
+          <ReactContextMenu.Item
+            className="tl-context-menu-button"
+            onClick={() => runAndTransition(app.paste)}
+          >
             Paste
             <div className="tl-context-menu-right-slot">
               <span className="keyboard-shortcut">
