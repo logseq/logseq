@@ -277,16 +277,15 @@
 
       (when (and left-sidebar-open? (not config/publishing?)) (recent-pages t))
 
-      (when-not (mobile-util/native-platform?)
-        [:footer.px-2 {:class "new-page"}
-         (when-not config/publishing?
-           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
-            {:on-click (fn []
-                         (and (util/sm-breakpoint?)
-                              (state/toggle-left-sidebar!))
-                         (state/pub-event! [:go/search]))}
-            (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
-            [:span.flex-1 (t :right-side-bar/new-page)]])])]]))
+      [:footer.px-2 {:class "new-page"}
+       (when-not config/publishing?
+         [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
+          {:on-click (fn []
+                       (and (util/sm-breakpoint?)
+                            (state/toggle-left-sidebar!))
+                       (state/pub-event! [:go/search]))}
+          (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
+          [:span.flex-1 (t :right-side-bar/new-page)]])]]]))
 
 (rum/defc left-sidebar < rum/reactive
   [{:keys [left-sidebar-open? route-match]}]
