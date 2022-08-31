@@ -18,9 +18,9 @@
 
 (defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
-       current-graph (let [graph (storage/get :git/current-repo)]
-                       (when graph (ipc/ipc "setCurrentGraph" graph))
-                       graph)]
+        current-graph  (let [graph (storage/get :git/current-repo)]
+                        (when graph (ipc/ipc "setCurrentGraph" graph))
+                        graph)]
    (atom
     {:route-match                           nil
      :today                                 nil
@@ -36,13 +36,13 @@
      :nfs/refreshing?                       nil
      :instrument/disabled?                  (storage/get "instrument-disabled")
      ;; TODO: how to detect the network reliably?
-     :network/online?                       true
-     :indexeddb/support?                    true
-     :me                                    nil
-     :git/current-repo                      current-graph
-     :format/loading                        {}
-     :draw?                                 false
-     :db/restoring?                         nil
+     :network/online?         true
+     :indexeddb/support?      true
+     :me                      nil
+     :git/current-repo        current-graph
+     :format/loading          {}
+     :draw?                   false
+     :db/restoring?           nil
 
      :journals-length                       3
 
@@ -52,12 +52,14 @@
      :search/graph-filters                  []
 
      ;; modals
+     :modal/dropdowns                       {}
      :modal/id                              nil
      :modal/label                           ""
      :modal/show?                           false
      :modal/panel-content                   nil
      :modal/fullscreen?                     false
      :modal/close-btn?                      nil
+     :modal/close-backdrop?                 true
      :modal/subsets                         []
 
      ;; left sidebar
@@ -98,6 +100,7 @@
 
      :config                                {}
      :block/component-editing-mode?         false
+     :editor/hidden-editors                 #{}             ;; page names
      :editor/draw-mode?                     false
      :editor/action                         nil
      :editor/action-data                    nil
@@ -153,6 +156,10 @@
      :mobile/show-toolbar?                  false
      :mobile/show-recording-bar?            false
      :mobile/show-tabbar?                   false
+     ;;; Used to monitor mobile app status,
+     ;;; value spec:
+     ;;; {:is-active? bool, :timestamp int}
+     :mobile/app-state-change                 (atom nil)
 
      ;; plugin
      :plugin/enabled                        (and (util/electron?)
@@ -222,16 +229,23 @@
      :auth/id-token                         nil
 
      ;; file-sync
+     :file-sync/jstour-inst                   nil
+     :file-sync/remote-graphs               {:loading false :graphs nil}
      :file-sync/sync-manager                nil
      :file-sync/sync-state-manager          nil
      :file-sync/sync-state                  nil
      :file-sync/sync-uploading-files        nil
      :file-sync/sync-downloading-files      nil
-
-     :file-sync/download-init-progress      nil
+     :file-sync/onboarding-state            (or (storage/get :file-sync/onboarding-state)
+                                                {:welcome false})
 
      :encryption/graph-parsing?             false
 
+     :ui/loading?                           {}
+     :file-sync/set-remote-graph-password-result {}
+     :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
+
+     :file/rename-event-chan                (async/chan 100)
      :ui/find-in-page                       nil
      :graph/importing                       nil
      :graph/importing-state                 {}
@@ -386,6 +400,14 @@
    (not (false? (:feature/enable-flashcards?
                  (get (sub-config) repo))))))
 
+(defn user-groups
+  []
+  (set (get-in @state [:user/info :UserGroups])))
+
+(defn enable-sync?
+  []
+  (sub :feature/enable-sync?))
+
 (defn export-heading-to-list?
   []
   (not (false? (:export/heading-to-list?
@@ -497,6 +519,15 @@
   name unless it is missing."
   []
   (:page-name-order (get-config)))
+
+(defn get-remote-repos
+  []
+  (get-in @state [:file-sync/remote-graphs :graphs]))
+
+(defn get-remote-graph-info-by-uuid
+  [uuid]
+  (when-let [graphs (seq (get-in @state [:file-sync/remote-graphs :graphs]))]
+    (some #(when (= (:GraphUUID %) (str uuid)) %) graphs)))
 
 (defn get-repos
   []
@@ -1090,7 +1121,7 @@
    (set-modal! modal-panel-content
                {:fullscreen? false
                 :close-btn?  true}))
-  ([modal-panel-content {:keys [id label fullscreen? close-btn? center?]}]
+  ([modal-panel-content {:keys [id label fullscreen? close-btn? close-backdrop? center?]}]
    (when (seq (get-sub-modals))
      (close-sub-modal! true))
    (swap! state assoc
@@ -1099,19 +1130,21 @@
           :modal/show? (boolean modal-panel-content)
           :modal/panel-content modal-panel-content
           :modal/fullscreen? fullscreen?
-          :modal/close-btn? close-btn?)))
+          :modal/close-btn? close-btn?
+          :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)) nil))
 
 (defn close-modal!
   []
-  (if (seq (get-sub-modals))
-    (close-sub-modal!)
-    (swap! state assoc
-           :modal/id nil
-           :modal/label ""
-           :modal/show? false
-           :modal/fullscreen? false
-           :modal/panel-content nil
-           :ui/open-select nil)))
+  (when-not (editing?)
+    (if (seq (get-sub-modals))
+      (close-sub-modal!)
+      (swap! state assoc
+             :modal/id nil
+             :modal/label ""
+             :modal/show? false
+             :modal/fullscreen? false
+             :modal/panel-content nil
+             :ui/open-select nil))))
 
 (defn get-db-batch-txs-chan
   []
@@ -1688,29 +1721,15 @@
 
 (defn set-file-sync-manager [v]
   (set-state! :file-sync/sync-manager v))
-(defn set-file-sync-state [v]
+(defn set-file-sync-state [graph v]
   (when v (s/assert :frontend.fs.sync/sync-state v))
-  (set-state! :file-sync/sync-state v))
+  (set-state! [:file-sync/sync-state graph] v))
 
 (defn get-file-sync-manager []
   (:file-sync/sync-manager @state))
 
-(defn get-file-sync-state []
-  (:file-sync/sync-state @state))
-
-(defn reset-file-sync-download-init-state!
-  []
-  (set-state! [:file-sync/download-init-progress (get-current-repo)] {}))
-
-(defn set-file-sync-download-init-state!
-  [m]
-  (update-state! [:file-sync/download-init-progress (get-current-repo)]
-                 (if (fn? m) m
-                     (fn [old-value] (merge old-value m)))))
-
-(defn get-file-sync-download-init-state
-  []
-  (get-in @state [:file-sync/download-init-progress (get-current-repo)]))
+(defn get-file-sync-state [repo]
+  (get-in @state [:file-sync/sync-state repo]))
 
 (defn reset-parsing-state!
   []
@@ -1732,6 +1751,17 @@
   (:feature/enable-encryption?
    (get (sub-config) repo)))
 
+(defn set-mobile-app-state-change
+  [is-active?]
+  (set-state! :mobile/app-state-change
+              {:is-active? is-active?
+               :timestamp (inst-ms (js/Date.))}))
+
+(defn get-sync-graph-by-uuid
+  [graph-uuid]
+  (when graph-uuid
+    (first (filter #(= graph-uuid (:GraphUUID %))(get-repos)))))
+
 (defn unlinked-dir?
   [dir]
   (contains? (:file/unlinked-dirs @state) dir))
@@ -1739,3 +1769,13 @@
 (defn enable-search-remove-accents?
   []
   (:feature/enable-search-remove-accents? (get-config)))
+
+(defn get-file-rename-event-chan
+  []
+  (:file/rename-event-chan @state))
+
+(defn offer-file-rename-event-chan!
+  [v]
+  {:pre [(map? v)
+         (= #{:repo :old-path :new-path} (set (keys v)))]}
+  (async/offer! (get-file-rename-event-chan) v))

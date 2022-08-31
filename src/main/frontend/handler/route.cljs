@@ -35,6 +35,10 @@
   []
   (redirect! {:to :graph}))
 
+(defn redirect-to-all-graphs
+  []
+  (redirect! {:to :repos}))
+
 (defn redirect-to-page!
   "Must ensure `page-name` is dereferenced (not an alias), or it will create a wrong new page with that name (#3511)."
   ([page-name]

@@ -28,12 +28,15 @@
   ILoad
   (-load [_]
     (when-not (config/demo-graph?)
-      (let [repo (state/get-current-repo)]
-        (p/let [content (p/catch
-                         (fs/read-file
-                          (config/get-repo-dir (state/get-current-repo))
-                          (load-path location))
-                         (constantly nil))]
+      (let [repo (state/get-current-repo)
+            dir (config/get-repo-dir repo)
+            path (load-path location)]
+        (p/let [stat (p/catch (fs/stat dir path)
+                              (constantly nil))
+                content (when stat
+                          (p/catch
+                           (fs/read-file dir path)
+                           (constantly nil)))]
           (when-let [content (and (some? content)
                                   (try (cljs.reader/read-string content)
                                        (catch js/Error e

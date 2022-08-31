@@ -15,6 +15,7 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         registerPlugin(FolderPicker.class);
         registerPlugin(FsWatcher.class);
+        registerPlugin(FileSync.class);
 
         new Timer().schedule(new TimerTask() {
             @Override

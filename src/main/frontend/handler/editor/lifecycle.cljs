@@ -1,7 +1,7 @@
 (ns frontend.handler.editor.lifecycle
   (:require [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.editor.keyboards :as keyboards-handler]
-            [frontend.state :as state]
+            [frontend.state :as state :refer [sub]]
             [frontend.util :as util]
             [goog.dom :as gdom]))
 
@@ -17,6 +17,10 @@
     ;; Here we delay this listener, otherwise the click to edit event will trigger a outside click event,
     ;; which will hide the editor so no way for editing.
     (js/setTimeout #(keyboards-handler/esc-save! state) 100)
+
+    ;; try to close all opened dropdown menu
+    (when-let [close-fns (vals (sub :modal/dropdowns))]
+      (try (doseq [f close-fns] (f)) (catch js/Error _e ())))
 
     (when-let [element (gdom/getElement id)]
       (.focus element)
