@@ -45,7 +45,8 @@
                      (fn [data]
                        (let [{:keys [type payload]} (bean/->clj data)]
                          (watcher-handler/handle-changed! type payload)
-                         (sync/file-watch-handler type payload))))
+                         (when config/enable-file-sync?
+                           (sync/file-watch-handler type payload)))))
 
   (js/window.apis.on "notification"
                      (fn [data]
