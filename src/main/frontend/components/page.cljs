@@ -634,7 +634,7 @@
                    (state/set-search-mode! :global)
                    state)}
   [state]
-  (let [settings (state/sub-graph-config-settings)
+  (let [settings (state/graph-settings)
         theme (state/sub :ui/theme)
         graph (graph-handler/build-global-graph theme settings)
         search-graph-filters (state/sub :search/graph-filters)

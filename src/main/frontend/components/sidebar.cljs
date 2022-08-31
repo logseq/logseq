@@ -135,7 +135,7 @@
       (rfe/push-state :page {:name "Favorites"})
       (util/stop e))}
 
-   (let [favorites (->> (:favorites (state/sub-graph-config))
+   (let [favorites (->> (:favorites (state/sub-config))
                         (remove string/blank?)
                         (filter string?))]
      (when (seq favorites)

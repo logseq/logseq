@@ -351,7 +351,7 @@
       (into [] (concat [{:path path}] files))))
   (get-files [_this path-or-handle _ok-handler]
     (readdir path-or-handle))
-  (watch-dir! [_this dir]
+  (watch-dir! [_this dir _options]
     (p/do!
      (.unwatch mobile-util/fs-watcher)
      (.watch mobile-util/fs-watcher (clj->js {:path dir}))))

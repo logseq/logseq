@@ -176,6 +176,7 @@
                            re-render-root? false
                            from-disk? false
                            skip-compare? false}}]
+  (prn :ALTER repo path)
   (let [original-content (db/get-file repo path)
         write-file! (if from-disk?
                       #(p/resolved nil)
@@ -281,6 +282,15 @@
     (when-let [dir (config/get-repo-dir repo)]
       (fs/unwatch-dir! dir)
       (fs/watch-dir! dir))))
+
+(defn watch-for-global-config-dir!
+  []
+  (let [dir (config/get-global-config-dir)
+        repo-dir (config/get-repo-dir (state/get-current-repo))]
+    (fs/unwatch-dir! dir)
+    ;; Even a global dir needs to know it's current graph in order to send
+    ;; change events to the right window and graph db
+    (fs/watch-dir! dir {:current-repo-dir repo-dir})))
 
 (defn create-metadata-file
   [repo-url encrypted?]
