@@ -60,7 +60,7 @@ export const ContextMenu = observer(function ContextMenu({
             className="tl-context-menu-button"
             onClick={() => app.api.selectAll()}
           >
-            Select All
+            Select all
             <div className="tl-context-menu-right-slot">
               <span className="keyboard-shortcut">
                 <code>{MOD_KEY}</code> <code>A</code>
@@ -72,7 +72,7 @@ export const ContextMenu = observer(function ContextMenu({
               className="tl-context-menu-button"
               onClick={() => app.api.deselectAll()}
             >
-              Deselect All
+              Deselect all
             </ReactContextMenu.Item>
           )}
           {app.selectedShapes?.size > 0 && (
@@ -95,13 +95,13 @@ export const ContextMenu = observer(function ContextMenu({
                     className="tl-context-menu-button"
                     onClick={() => app.flipHorizontal()}
                   >
-                    Flip Horizontally
+                    Flip horizontally
                   </ReactContextMenu.Item>
                   <ReactContextMenu.Item
                     className="tl-context-menu-button"
                     onClick={() => app.flipVertical()}
                   >
-                    Flip Vertically
+                    Flip vertically
                   </ReactContextMenu.Item>
                 </>
               )}
@@ -110,7 +110,7 @@ export const ContextMenu = observer(function ContextMenu({
                 className="tl-context-menu-button"
                 onClick={() => app.bringToFront()}
               >
-                Move to Front
+                Move to front
                 <div className="tl-context-menu-right-slot">
                   <span className="keyboard-shortcut">
                     <code>⇧</code> <code>]</code>
