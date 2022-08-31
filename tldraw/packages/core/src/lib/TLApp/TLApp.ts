@@ -708,6 +708,7 @@ export class TLApp<
     return (
       !ctrlKey &&
       this.isInAny('select.idle', 'select.hoveringSelectionHandle') &&
+      !this.isIn('select.contextMenu') &&
       selectedShapesArray.length > 0 &&
       !selectedShapesArray.every(shape => shape.hideContextBar)
     )

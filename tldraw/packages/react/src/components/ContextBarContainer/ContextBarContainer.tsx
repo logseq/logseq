@@ -52,10 +52,6 @@ export const ContextBarContainer = observer(function ContextBarContainer<S exten
     height: screenBounds.height,
   }
 
-  const inView =
-    BoundsUtils.boundsContain(vpBounds, screenBounds) ||
-    BoundsUtils.boundsCollide(vpBounds, screenBounds)
-
   return (
     <div
       ref={rBounds}
