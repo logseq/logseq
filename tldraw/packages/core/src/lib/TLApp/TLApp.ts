@@ -819,7 +819,7 @@ export class TLApp<
   }
 
   readonly onWheel: TLEvents<S, K>['wheel'] = (info, e) => {
-    if (e.ctrlKey) {
+    if (e.ctrlKey || this.isIn('select.contextMenu')) {
       return
     }
 
