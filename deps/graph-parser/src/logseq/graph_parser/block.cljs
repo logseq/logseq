@@ -666,7 +666,8 @@
   [page-id blocks]
   (let [[blocks other-blocks] (split-with
                                (fn [b]
-                                 (not= "macro" (:block/type b)))
+                                 (or (not= "macro" (:block/type b))
+                                     (whiteboard-properties? (:block/properties b))))
                                 blocks)
         result (loop [blocks (map (fn [block] (assoc block :block/level-spaces (:block/level block))) blocks)
                       parents [{:page/id page-id     ; db id or a map {:block/name "xxx"}

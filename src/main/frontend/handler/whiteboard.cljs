@@ -189,6 +189,7 @@
     (remove model/whiteboard-shape? blocks)))
 
 (defn- get-last-root-block
+  "Get the last root Logseq block in the page. Main purpose is to calculate the new :block/left id"
   [page-name]
   (let [page-id (:db/id (model/get-page page-name))
         blocks (get-whiteboard-blocks page-name)
