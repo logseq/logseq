@@ -28,7 +28,8 @@ const consoleLogWatcher = (msg: ConsoleMessage) => {
   expect(text, logs).not.toMatch(/^(Failed to|Uncaught)/)
 
   // youtube video
-  if (!text.match(/^Error with Permissions-Policy header: Unrecognized feature/)) {
+  // Error with Permissions-Policy header: Origin trial controlled feature not enabled: 'ch-ua-reduced'.
+  if (!text.match(/^Error with Permissions-Policy header:/)) {
     expect(text, logs).not.toMatch(/^Error/)
   }
 

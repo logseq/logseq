@@ -14,7 +14,7 @@
             [rum.core :as rum]))
 
 (when (mobile-util/native-ios?)
-  (defn iOS-ensure-documents!
+  (defn ios-ensure-documents!
     []
     (.ensureDocuments mobile-util/ios-file-container)))
 
@@ -126,7 +126,10 @@
 (def backup-dir "logseq/bak")
 (defn- get-backup-dir
   [repo-dir path ext]
-  (let [relative-path (-> (string/replace path repo-dir "")
+  (let [path (if (string/starts-with? path "file://")
+               (subs path 7)
+               path)
+        relative-path (-> (string/replace path repo-dir "")
                           (string/replace (str "." ext) ""))]
     (util/safe-path-join repo-dir (str backup-dir "/" relative-path))))
 
@@ -252,7 +255,7 @@
      :webkit-allow-full-screen "webkitallowfullscreen"
      :height "100%"}]])
 
-(defrecord Capacitorfs []
+(defrecord ^:large-vars/cleanup-todo Capacitorfs []
   protocol/Fs
   (mkdir! [_this dir]
     (-> (.mkdir Filesystem
@@ -270,7 +273,10 @@
       (js/console.log result)
       result))
   (readdir [_this dir]                  ; recursive
-    (readdir dir))
+    (let [dir (if-not (string/starts-with? dir "file://")
+                 (str "file://" dir)
+                 dir)]
+      (readdir dir)))
   (unlink! [this repo path _opts]
     (p/let [path (get-file-path nil path)
             repo-url (config/get-local-dir repo)
@@ -283,7 +289,7 @@
       (protocol/mkdir! this recycle-dir)
       (protocol/rename! this repo path new-path)))
   (rmdir! [_this _dir]
-    ;; Too dangerious!!! We'll never implement this.
+    ;; Too dangerous!!! We'll never implement this.
     nil)
   (read-file [_this dir path _options]
     (let [path (get-file-path dir path)]
@@ -307,6 +313,15 @@
                             :to new-path}))])
        (fn [error]
          (log/error :rename-file-failed error)))))
+  (copy! [_this _repo old-path new-path]
+    (let [[old-path new-path] (map #(get-file-path "" %) [old-path new-path])]
+      (p/catch
+       (p/let [_ (.copy Filesystem
+                        (clj->js
+                         {:from old-path
+                          :to new-path}))])
+       (fn [error]
+         (log/error :copy-file-failed error)))))
   (stat [_this dir path]
     (let [path (get-file-path dir path)]
       (p/let [result (.stat Filesystem (clj->js

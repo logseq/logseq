@@ -65,5 +65,5 @@
   ;; stop is called before any code is reloaded
   ;; this is controlled by :before-load in the config
   (handler/stop!)
-  (sync/sync-stop)
+  (sync/<sync-stop)
   (js/console.log "stop"))

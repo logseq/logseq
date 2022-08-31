@@ -173,10 +173,7 @@
 
         (:file-path config)
         (let [path (:file-path config)
-              content (db/get-file path)
-              [_ id _ _ _] (:rum/args state)
-              value (some-> (gdom/getElement id)
-                            (gobj/get "value"))]
+              content (db/get-file path)]
           (when (and
                  (not (string/blank? value))
                  (not= (string/trim value) (string/trim content)))
@@ -212,7 +209,7 @@
 
 (defn render!
   [state]
-  (let [[config id attr _code theme] (:rum/args state)
+  (let [[config id attr _code theme user-options] (:rum/args state)
         default-open? (and (:editor/code-mode? @state/state)
                            (= (:block/uuid (state/get-edit-block))
                               (get-in config [:block :block/uuid])))
@@ -231,7 +228,7 @@
         cm-options (merge default-cm-options
                           (extra-codemirror-options)
                           {:mode mode
-                           :tabindex -1 ;; do not accept TAB-in, since TAB is bind globally
+                           :tabIndex -1 ;; do not accept TAB-in, since TAB is bind globally
                            :extraKeys #js {"Esc" (fn [cm]
                                                    ;; Avoid reentrancy
                                                    (gobj/set cm "escPressed" true)
@@ -241,7 +238,8 @@
                                                        (editor-handler/edit-block! block :max block-id))))}}
                           (when config/publishing?
                             {:readOnly true
-                             :cursorBlinkRate -1}))
+                             :cursorBlinkRate -1})
+                          user-options)
         editor (when textarea
                  (from-textarea textarea (clj->js cm-options)))]
     (when editor
@@ -254,7 +252,9 @@
                                    (reset! (:calc-atom state) (calc/eval-lines new-code))))))
         (.on editor "blur" (fn [cm e]
                              (when e (util/stop e))
-                             (when-not (gobj/get cm "escPressed")
+                             (when (or
+                                    (= :file (state/get-current-route))
+                                    (not (gobj/get cm "escPressed")))
                                (save-file-or-block-when-blur-or-esc! editor textarea config state))
                              (state/set-block-component-editing-mode! false)))
         (.on editor "focus" (fn [_e]

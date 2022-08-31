@@ -256,8 +256,10 @@ test('undo after starting an action should close the action menu #6269', async (
     await page.waitForTimeout(550)
     for (const char of commandTrigger) {
       await page.keyboard.type(char)
+      await page.waitForTimeout(50)
     }
     await expect(page.locator('textarea >> nth=0')).toHaveText('text1 ' + expectedText)
+    await page.waitForTimeout(100) // Tolerable delay for the action menu to open
     await expect(page.locator(`[data-modal-name="${modalName}"]`)).toBeVisible()
 
     // Undo, removing "/today", and closing the action modal
@@ -283,6 +285,7 @@ test('#6266 moving cursor outside of brackets should close autocomplete menu', a
       await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
     }
     await expect(page.locator('textarea >> nth=0')).toHaveText(expectedText)
+    await page.waitForTimeout(100) // Sometimes it doesn't trigger without this
     await autocompleteMenu.expectVisible(modalName)
 
     await page.keyboard.press('ArrowLeft')
@@ -323,6 +326,7 @@ test('#6266 moving cursor outside of parens immediately after searching should s
     }
     await page.waitForTimeout(100)
     await page.keyboard.type("some block search text")
+    await page.waitForTimeout(100) // Sometimes it doesn't trigger without this
     await autocompleteMenu.expectVisible(modalName)
 
     // Move cursor outside of the space strictly between the double parens
@@ -342,6 +346,7 @@ test('pressing up and down should NOT close autocomplete menu', async ({ page, b
       await page.keyboard.type(char)
       await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
     }
+    await page.waitForTimeout(100) // Sometimes it doesn't trigger without this
     await autocompleteMenu.expectVisible(modalName)
     const cursorPos = await block.selectionStart()
 
@@ -396,6 +401,7 @@ test('moving cursor inside of brackets when autocomplete menu is closed should N
       await page.waitForTimeout(10) // Sometimes it doesn't trigger without this
     }
     await expect(page.locator('textarea >> nth=0')).toHaveText(expectedText)
+    await page.waitForTimeout(100) // Sometimes it doesn't trigger without this
     await autocompleteMenu.expectVisible(modalName)
 
     await block.escapeEditing()
@@ -470,6 +476,7 @@ test('pressing backspace and remaining inside of brackets should NOT close autoc
     await autocompleteMenu.expectVisible(modalName)
   }
 })
+
 test('press escape when autocomplete menu is open, should close autocomplete menu only #6270', async ({ page, block }) => {
   for (const [commandTrigger, expectedText, modalName] of [['[[', '[[]]', 'page-search'], ['/', '/', 'commands']]) {
     await createRandomPage(page)
@@ -575,4 +582,49 @@ test('typing multiple ` should autopair multiple times in a row', async ({ page,
       await expect(page.locator('textarea >> nth=0')).toHaveText(`${typed}${typed}`)
     }
   }
+})
+
+test('should show text after soft return when node is collapsed #5074', async ({ page, block }) => {
+  const delay = 100
+  await createRandomPage(page)
+
+  await page.type('textarea >> nth=0', 'Before soft return')
+  await page.waitForTimeout(delay)
+  await page.keyboard.press('Shift+Enter')
+  await page.waitForTimeout(delay)
+  await page.type('textarea >> nth=0', 'After soft return')
+  await page.waitForTimeout(delay)
+
+  await block.enterNext()
+  expect(await block.indent()).toBe(true)
+  await block.mustType('Child text')
+  await page.waitForTimeout(delay)
+
+  // collapse
+  await page.click('.block-control >> nth=0')
+  await page.waitForTimeout(delay)
+
+  // select the block that has the soft return
+  await page.keyboard.press('ArrowDown')
+  await page.waitForTimeout(delay)
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(delay)
+
+  expect(await page.inputValue('textarea >> nth=0')).toBe(
+    'Before soft return\nAfter soft return'
+  )
+
+  // zoom into the block
+  await page.click('a.block-control + a')
+  await page.waitForTimeout(delay)
+
+  // select the block that has the soft return
+  await page.keyboard.press('ArrowDown')
+  await page.waitForTimeout(delay)
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(delay)
+
+  expect(await page.inputValue('textarea >> nth=0')).toBe(
+    'Before soft return\nAfter soft return'
+  )
 })

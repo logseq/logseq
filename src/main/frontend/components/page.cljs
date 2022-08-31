@@ -309,6 +309,7 @@
 (rum/defcs ^:large-vars/cleanup-todo page < rum/reactive
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
+  (rum/local nil   ::current-page)
   [state {:keys [repo page-name] :as option}]
   (when-let [path-page-name (or page-name
                                 (get-page-name state)
@@ -343,7 +344,8 @@
                   journal?
                   (= page-name (util/page-name-sanity-lc (date/journal-name))))
           *control-show? (::control-show? state)
-          *all-collapsed? (::all-collapsed? state)]
+          *all-collapsed? (::all-collapsed? state)
+          *current-block-page (::current-page state)]
       [:div.flex-1.page.relative
        (merge (if (seq (:block/tags page))
                 (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
@@ -381,7 +383,10 @@
          ;; blocks
          (let [page (if block?
                       (db/entity repo [:block/uuid block-id])
-                      page)]
+                      page)
+               _ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
+               _ (when (and block? (not page))
+                   (route-handler/redirect-to-page! @*current-block-page))]
            (page-blocks-cp repo page {:sidebar? sidebar?}))]]
 
        (when today?

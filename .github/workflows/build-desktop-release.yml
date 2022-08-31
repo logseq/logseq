@@ -33,6 +33,11 @@ on:
         type: boolean
         required: true
         default: false
+      enable-file-sync-production:
+        description: 'File sync production mode'
+        type: boolean
+        required: true
+        default: false
       enable-plugins:
         description: 'Build with plugin system support'
         type: boolean
@@ -125,6 +130,7 @@ jobs:
         run: |
           echo "ENABLE_FILE_SYNC=${{ github.event.inputs.enable-file-sync }}" >> $GITHUB_ENV
           echo "ENABLE_PLUGINS=${{ github.event.inputs.enable-plugins }}" >> $GITHUB_ENV
+          echo "ENABLE_FILE_SYNC_PRODUCTION=${{ github.event.inputs.enable-file-sync-production }}" >> $GITHUB_ENV
 
       - name: Compile CLJS
         run: yarn install && gulp build && yarn cljs:release-electron
@@ -258,6 +264,18 @@ jobs:
         run: |
           mkdir builds
           mv static\out\make\squirrel.windows\x64\*.exe builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
+
+      - name: Code Sign the Installer
+        uses: andelf/code-sign-action@master
+        if: ${{ github.repository == 'logseq/logseq' }}
+        with:
+          certificate: ${{ secrets.CODE_SIGN_CERTIFICATE }}
+          password: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
+          certificatesha1: ${{ secrets.CODE_SIGN_CERTIFICATE_SHA1 }}
+          certificatename: "Logseq, Inc."
+          timestampUrl: http://timestamp.digicert.com
+          folder: "builds"
+          recursive: false
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v2
@@ -415,6 +433,7 @@ jobs:
     with:
       build-target: "${{ github.event.inputs.build-target }}"
       enable-file-sync: "${{ github.event.inputs.enable-file-sync == 'true' }}"
+      enable-file-sync-production: "${{ github.event.inputs.enable-file-sync-production == 'true' }}"
     secrets:
       ANDROID_KEYSTORE: "${{ secrets.ANDROID_KEYSTORE }}"
       ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
