@@ -99,12 +99,6 @@
      (doseq [component (state/get-custom-query-components)]
        (rum/request-render component)))))
 
-(defn re-render-file!
-  []
-  (when-let [component (state/get-file-component)]
-    (when (= :file (state/get-current-route))
-      (rum/request-render component))))
-
 (defn highlight-element!
   [fragment]
   (let [id (and
@@ -130,6 +124,11 @@
                     ;; (state/get-custom-css-link)
 )]
     (util/add-style! style)))
+(defn reset-custom-css!
+  []
+  (when-let [el-style (gdom/getElement "logseq-custom-theme-id")]
+    (dom/remove! el-style))
+  (add-style-if-exists!))
 
 (def *js-execed (atom #{}))
 

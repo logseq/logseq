@@ -1948,7 +1948,12 @@
   [tree-vec format {:keys [target-block keep-uuid?] :as opts}]
   (let [blocks (block-tree->blocks tree-vec format keep-uuid?)
         page-id (:db/id (:block/page target-block))
-        blocks (gp-block/with-parent-and-left page-id blocks)]
+        blocks (gp-block/with-parent-and-left page-id blocks)
+        block-refs (->> (mapcat :block/refs blocks)
+                        (set)
+                        (filter (fn [ref] (and (vector? ref) (= :block/uuid (first ref))))))]
+    (when (seq block-refs)
+      (db/transact! (map (fn [[_ id]] {:block/uuid id}) block-refs)))
     (paste-blocks
      blocks
      opts)))
@@ -2715,9 +2720,15 @@
         (do (util/stop e)
             (autopair input-id "(" format nil))
 
+        ;; If you type `xyz`, the last backtick should close the first and not add another autopair
+        ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)        
         (contains? (set (keys autopair-map)) key)
-        (do (util/stop e)
-            (autopair input-id key format nil))
+        (let [curr (get-current-input-char input)
+                  prev (util/nth-safe value (dec pos))]
+            (util/stop e) 
+            (if (and (= key "`") (= "`" curr) (not= "`" prev))
+              (cursor/move-cursor-forward input)
+              (autopair input-id key format nil)))
 
         (and hashtag? (or (zero? pos) (re-matches #"\s" (get value (dec pos)))))
         (do

@@ -72,7 +72,7 @@ class LSPluginCaller extends EventEmitter {
     let syncGCTimer: any = 0
     let syncTag = 0
     const syncActors = new Map<number, DeferredActor>()
-    const readyDeferred = deferred(1000 * 5)
+    const readyDeferred = deferred(1000 * 60)
 
     const model: any = this._extendUserModel({
       [LSPMSG_READY]: async (baseInfo) => {
@@ -266,7 +266,8 @@ class LSPluginCaller extends EventEmitter {
     return new Promise((resolve, reject) => {
       timer = setTimeout(() => {
         reject(new Error(`handshake Timeout`))
-      }, 8 * 1000) // 8 secs
+        pt.destroy()
+      }, 4 * 1000) // 4 secs
 
       handshake
         .then((refChild: ParentAPI) => {

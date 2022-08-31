@@ -40,14 +40,14 @@
               (or file-name first-block-name)))))))
 
 (defn- build-page-entity
-  [properties file page-name page ref-tags {:keys [date-formatter db]}]
+  [properties file page-name page ref-tags {:keys [date-formatter db from-page]}]
   (let [alias (:alias properties)
-        alias (if (string? alias) [alias] alias)
-        aliases (and alias
+        alias' (if (string? alias) [alias] alias)
+        aliases (and alias'
                      (seq (remove #(or (= page-name (gp-util/page-name-sanity-lc %))
                                        (string/blank? %)) ;; disable blank alias
-                                  alias)))
-        aliases (->>
+                                  alias')))
+        aliases' (->>
                  (map
                   (fn [alias]
                     (let [page-name (gp-util/page-name-sanity-lc alias)
@@ -65,17 +65,27 @@
                          :block/alias aliases}
                         {:block/name page-name})))
                   aliases)
-                 (remove nil?))]
+                 (remove nil?))
+        [*valid-properties *invalid-properties]
+        ((juxt filter remove)
+         (fn [[k _v]] (gp-property/valid-property-name? (str k))) properties)
+        valid-properties (into {} *valid-properties)
+        invalid-properties (set (map (comp name first) *invalid-properties))]
     (cond->
      (gp-util/remove-nils
       (assoc
-       (gp-block/page-name->map page false db true date-formatter)
+       (gp-block/page-name->map page false db true date-formatter
+                                :from-page from-page)
        :block/file {:file/path (gp-util/path-normalize file)}))
-     (seq properties)
-     (assoc :block/properties properties)
 
-     (seq aliases)
-     (assoc :block/alias aliases)
+     (seq valid-properties)
+     (assoc :block/properties valid-properties)
+
+     (seq invalid-properties)
+     (assoc :block/invalid-properties invalid-properties)
+
+     (seq aliases')
+     (assoc :block/alias aliases')
 
      (:tags properties)
      (assoc :block/tags (let [tags (:tags properties)
@@ -112,7 +122,8 @@
                                        :block/refs block-ref-pages
                                        :block/path-refs block-path-ref-pages)))))
                    blocks)
-          page-entity (build-page-entity properties file page-name page ref-tags options)
+          page-entity (build-page-entity properties file page-name page ref-tags
+                                         (assoc options :from-page page))
           namespace-pages (let [page (:block/original-name page-entity)]
                             (when (text/namespace-page? page)
                               (->> (gp-util/split-namespace-pages page)

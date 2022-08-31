@@ -66,7 +66,7 @@
       result)))
 
 (defn surround-by?
-  "`pos` must be surrounded by `before` and `and` in string `value`, e.g. ((|))"
+  "`pos` must be surrounded by `before` and `end` in string `value`, e.g. ((|))"
   [value pos before end]
   (let [start-pos (if (= :start before) 0 (- pos (count before)))
         end-pos (if (= :end end) (count value) (+ pos (count end)))]
@@ -97,7 +97,7 @@
        acc))))
 
 (defn wrapped-by?
-  "`pos` must be wrapped by `before` and `and` in string `value`, e.g. ((a|b))"
+  "`pos` must be wrapped by `before` and `end` in string `value`, e.g. ((a|b))"
   [value pos before end]
   ;; Increment 'before' matches by (length of before string - 0.5) to make them be just before the cursor position they precede.
   ;; Increment 'after' matches by 0.5 to make them be just after the cursor position they follow.

@@ -248,18 +248,17 @@
   (reset! *swipe nil))
 
 (defn get-blocks-refed-pages
-  [aliases ref-blocks]
-  (let [refs (->> (mapcat :block/refs ref-blocks)
-                  (remove #(aliases (:db/id %))))
-        pages (->> (map :block/page ref-blocks)
-                   (distinct)
-                   (remove #(aliases (:db/id %))))
-        all-refs (concat pages refs)]
+  [aliases [block & children]]
+  (let [children-refs (mapcat :block/refs children)
+        refs (->>
+              (:block/path-refs block)
+              (concat children-refs)
+              (remove #(aliases (:db/id %))))]
     (keep (fn [ref]
             (when (:block/name ref)
               {:db/id (:db/id ref)
                :block/name (:block/name ref)
-               :block/original-name (:block/original-name ref)})) all-refs)))
+               :block/original-name (:block/original-name ref)})) refs)))
 
 (defn filter-blocks
   [ref-blocks filters]
@@ -287,7 +286,8 @@
           get-parents (fn [block]
                         (loop [block block
                                result [block]]
-                          (if-let [parent (id->block (:db/id (:block/parent block)))]
-                            (recur parent (conj result parent))
-                            result)))]
+                          (let [parent (id->block (:db/id (:block/parent block)))]
+                            (if (and parent (not= (:db/id parent) (:db/id block)))
+                              (recur parent (conj result parent))
+                              result))))]
       (distinct (mapcat get-parents filtered-ref-blocks)))))

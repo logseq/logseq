@@ -46,7 +46,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    opacity: .5;
+    opacity: .8;
 
     .ti {
       font-size: 20px;

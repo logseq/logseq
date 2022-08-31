@@ -2,9 +2,11 @@
   (:require [frontend.state :as state]
             [rum.core :as rum]
             [frontend.ui :as ui]
+            [frontend.context.i18n :refer [t]]
             [frontend.components.svg :as svg]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.util :as util]
             [frontend.handler.web.nfs :as nfs]
             [frontend.mobile.util :as mobile-util]
@@ -126,15 +128,13 @@
               [:strong.uppercase title]
               [:small.opacity-50 label]]]))]]])))
 
-(defonce *roam-importing? (atom nil))
-(defonce *lsq-importing? (atom nil))
-(defonce *opml-importing? (atom nil))
 (defonce *opml-imported-pages (atom nil))
 
 (defn- finished-cb
   []
+  (route-handler/redirect-to-home!)
   (notification/show! "Import finished!" :success)
-  (route-handler/redirect-to-home!))
+  (ui-handler/re-render-root!))
 
 (defn- roam-import-handler
   [e]
@@ -142,13 +142,16 @@
         file-name (gobj/get file "name")]
     (if (string/ends-with? file-name ".json")
       (do
-        (reset! *roam-importing? true)
+        (state/set-state! :graph/importing :roam-json)
         (let [reader (js/FileReader.)]
           (set! (.-onload reader)
                 (fn [e]
                   (let [text (.. e -target -result)]
-                    (external-handler/import-from-roam-json! text
-                                                             #(do (reset! *roam-importing? false) (finished-cb))))))
+                    (external-handler/import-from-roam-json!
+                     text
+                     #(do
+                        (state/set-state! :graph/importing nil)
+                        (finished-cb))))))
           (.readAsText reader file)))
       (notification/show! "Please choose a JSON file."
                           :error))))
@@ -157,32 +160,27 @@
   [e]
   (let [file      (first (array-seq (.-files (.-target e))))
         file-name (some-> (gobj/get file "name")
-                          (string/lower-case))]
-    (cond (string/ends-with? file-name ".edn")
-          (do
-            (reset! *lsq-importing? true)
-            (let [reader (js/FileReader.)]
-              (set! (.-onload reader)
-                    (fn [e]
-                      (let [text (.. e -target -result)]
-                        (external-handler/import-from-edn! text
-                                                           #(do (reset! *lsq-importing? false) (finished-cb))))))
-              (.readAsText reader file)))
-
-          (string/ends-with? file-name ".json")
-          (do
-            (reset! *lsq-importing? true)
-            (let [reader (js/FileReader.)]
-              (set! (.-onload reader)
-                    (fn [e]
-                      (let [text (.. e -target -result)]
-                        (external-handler/import-from-json! text
-                                                            #(do (reset! *lsq-importing? false) (finished-cb))))))
-              (.readAsText reader file)))
-
-          :else
-          (notification/show! "Please choose an EDN or a JSON file."
-                              :error))))
+                          (string/lower-case))
+        edn? (string/ends-with? file-name ".edn")
+        json? (string/ends-with? file-name ".json")]
+    (if (or edn? json?)
+      (do
+        (state/set-state! :graph/importing :logseq)
+        (let [reader (js/FileReader.)
+              import-f (if edn?
+                         external-handler/import-from-edn!
+                         external-handler/import-from-json!)]
+          (set! (.-onload reader)
+                (fn [e]
+                  (let [text (.. e -target -result)]
+                    (import-f
+                     text
+                     #(do
+                        (state/set-state! :graph/importing nil)
+                        (finished-cb))))))
+          (.readAsText reader file)))
+      (notification/show! "Please choose an EDN or a JSON file."
+                          :error))))
 
 (defn- opml-import-handler
   [e]
@@ -190,7 +188,7 @@
         file-name (gobj/get file "name")]
     (if (string/ends-with? file-name ".opml")
       (do
-        (reset! *opml-importing? true)
+        (state/set-state! :graph/importing :opml)
         (let [reader (js/FileReader.)]
           (set! (.-onload reader)
                 (fn [e]
@@ -198,7 +196,7 @@
                     (external-handler/import-from-opml! text
                                                         (fn [pages]
                                                           (reset! *opml-imported-pages pages)
-                                                          (reset! *opml-importing? false)
+                                                          (state/set-state! :graph/importing nil)
                                                           (finished-cb))))))
           (.readAsText reader file)))
       (notification/show! "Please choose a OPML file."
@@ -206,11 +204,18 @@
 
 (rum/defc importer < rum/reactive
   [{:keys [query-params]}]
-  (let [roam-importing? (rum/react *roam-importing?)
-        lsq-importing?  (rum/react *lsq-importing?)
-        opml-importing? (rum/react *opml-importing?)
-        importing?      (or roam-importing? lsq-importing? opml-importing?)]
-
+  (if (state/sub :graph/importing)
+    (let [{:keys [total current-idx current-page]} (state/sub :graph/importing-state)
+          left-label [:div.flex.flex-row.font-bold
+                      (t :importing)
+                      [:div.hidden.md:flex.flex-row
+                       [:span.mr-1 ": "]
+                       [:div.text-ellipsis-wrapper {:style {:max-width 300}}
+                        current-page]]]
+          width (js/Math.round (* (.toFixed (/ current-idx total) 2) 100))
+          process (when (and total current-idx)
+                    (str current-idx "/" total))]
+      (ui/progress-bar-with-label width left-label process))
     (setups-container
      :importer
      [:article.flex.flex-col.items-center.importer.py-16.px-8
@@ -219,39 +224,30 @@
        [:h2 "If they are in a JSON, EDN or Markdown format Logseq can work with them."]]
       [:section.d.md:flex
        [:label.action-input.flex.items-center.mx-2.my-2
-        {:disabled importing?}
         [:span.as-flex-center [:i (svg/roam-research 28)]]
         [:div.flex.flex-col
-         (if roam-importing?
-           (ui/loading "Importing ...")
-           [[:strong "RoamResearch"]
-            [:small "Import a JSON Export of your Roam graph"]])]
+         [[:strong "RoamResearch"]
+          [:small "Import a JSON Export of your Roam graph"]]]
         [:input.absolute.hidden
          {:id        "import-roam"
           :type      "file"
           :on-change roam-import-handler}]]
 
        [:label.action-input.flex.items-center.mx-2.my-2
-        {:disabled importing?}
         [:span.as-flex-center [:i (svg/logo 28)]]
         [:span.flex.flex-col
-         (if lsq-importing?
-           (ui/loading "Importing ...")
-           [[:strong "EDN / JSON"]
-            [:small "Import an EDN or a JSON Export of your Logseq graph"]])]
+         [[:strong "EDN / JSON"]
+          [:small "Import an EDN or a JSON Export of your Logseq graph"]]]
         [:input.absolute.hidden
          {:id        "import-lsq"
           :type      "file"
           :on-change lsq-import-handler}]]
 
        [:label.action-input.flex.items-center.mx-2.my-2
-        {:disabled importing?}
         [:span.as-flex-center (ui/icon "sitemap" {:style {:fontSize "26px"}})]
         [:span.flex.flex-col
-         (if opml-importing?
-           (ui/loading "Importing ...")
-           [[:strong "OPML"]
-            [:small " Import OPML files"]])]
+         [[:strong "OPML"]
+          [:small " Import OPML files"]]]
 
         [:input.absolute.hidden
          {:id        "import-opml"

@@ -173,10 +173,7 @@
 
         (:file-path config)
         (let [path (:file-path config)
-              content (db/get-file path)
-              [_ id _ _ _] (:rum/args state)
-              value (some-> (gdom/getElement id)
-                            (gobj/get "value"))]
+              content (db/get-file path)]
           (when (and
                  (not (string/blank? value))
                  (not= (string/trim value) (string/trim content)))
@@ -231,7 +228,7 @@
         cm-options (merge default-cm-options
                           (extra-codemirror-options)
                           {:mode mode
-                           :tabindex -1 ;; do not accept TAB-in, since TAB is bind globally
+                           :tabIndex -1 ;; do not accept TAB-in, since TAB is bind globally
                            :extraKeys #js {"Esc" (fn [cm]
                                                    ;; Avoid reentrancy
                                                    (gobj/set cm "escPressed" true)
@@ -255,7 +252,9 @@
                                    (reset! (:calc-atom state) (calc/eval-lines new-code))))))
         (.on editor "blur" (fn [cm e]
                              (when e (util/stop e))
-                             (when-not (gobj/get cm "escPressed")
+                             (when (or
+                                    (= :file (state/get-current-route))
+                                    (not (gobj/get cm "escPressed")))
                                (save-file-or-block-when-blur-or-esc! editor textarea config state))
                              (state/set-block-component-editing-mode! false)))
         (.on editor "focus" (fn [_e]

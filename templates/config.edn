@@ -141,12 +141,12 @@
  :default-queries
  {:journals
   [{:title "🔨 NOW"
-    :query [:find (pull ?b [*])
+    :query [:find (pull ?h [*])
             :in $ ?start ?today
             :where
-            [?b :block/marker ?marker]
+            [?h :block/marker ?marker]
             [(contains? #{"NOW" "DOING"} ?marker)]
-            [?b :block/page ?p]
+            [?h :block/page ?p]
             [?p :block/journal? true]
             [?p :block/journal-day ?d]
             [(>= ?d ?start)]
@@ -157,12 +157,12 @@
                                    (get h :block/priority "Z")) result))
     :collapsed? false}
    {:title "📅 NEXT"
-    :query [:find (pull ?b [*])
+    :query [:find (pull ?h [*])
             :in $ ?start ?next
             :where
-            [?b :block/marker ?marker]
+            [?h :block/marker ?marker]
             [(contains? #{"NOW" "LATER" "TODO"} ?marker)]
-            [?b :block/page ?p]
+            [?h :block/page ?p]
             [?p :block/journal? true]
             [?p :block/journal-day ?d]
             [(> ?d ?start)]
@@ -229,7 +229,8 @@
  ;; :property-pages/excludelist
 
  ;; Enables property values to contain a mix of tags, page-refs, special
- ;; punctuation and free-form text
+ ;; punctuation and free-form text.
+ ;; Re-index current graph for config to take effect
  ;; :rich-property-values? true
 
  ;; logbook setup
@@ -267,10 +268,26 @@
  ;;  :media "[[quick capture]] **{time}**: {url}"}
 
  ;; File sync options
- ;; files in these directories will be synchronized.
- ;; Except for dirs in :file-sync/monitor-dirs,
- ;; ["assets" "journals" "logseq" "pages" "draws"] will also be synchronized.
+
+ ;; In addition to those directories created by Logseq,
+ ;; files specified in the `:file-sync/monitor-dirs` directories will be synchronized too.
+ ;;
+ ;; Directories created by Logseq include:
+ ;; ["assets" "journals" "logseq" "pages" "draws"].
  :file-sync/monitor-dirs []
- ;; Ignore these files when syncing, use regexp
+
+ ;; Ignore these files when syncing, regexp is supported.
  :file-sync/ignore-files [".DS_Store$"]
+
+ ;; dwim (do what I mean) for Enter key when editing.
+ ;; Context-awareness of Enter key makes editing more easily
+ ; :dwim/settings {
+ ;   :admonition&src?  true
+ ;   :markup?          false
+ ;   :block-ref?       true
+ ;   :page-ref?        true
+ ;   :properties?      true
+ ;   :list?            true
+ ; }
+
  }

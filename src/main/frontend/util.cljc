@@ -541,17 +541,18 @@
          (str prefix new-value)))
      s)))
 
-(defonce default-escape-chars "[]{}().+*?|")
+(defonce escape-chars "[]{}().+*?|")
+
+(defn escape-regex-chars
+  "Escapes characters in string `old-value"
+  [old-value]
+  (reduce (fn [acc escape-char]
+            (string/replace acc escape-char (str "\\" escape-char)))
+          old-value escape-chars))
 
 (defn replace-ignore-case
-  [s old-value new-value & [escape-chars]]
-  (let [escape-chars (or escape-chars default-escape-chars)
-        old-value (if (string? escape-chars)
-                    (reduce (fn [acc escape-char]
-                              (string/replace acc escape-char (str "\\" escape-char)))
-                            old-value escape-chars)
-                    old-value)]
-    (string/replace s (re-pattern (str "(?i)" old-value)) new-value)))
+  [s old-value new-value]
+  (string/replace s (re-pattern (str "(?i)" (escape-regex-chars old-value))) new-value))
 
 ;; copy from https://stackoverflow.com/questions/18735665/how-can-i-get-the-positions-of-regex-matches-in-clojurescript
 #?(:cljs

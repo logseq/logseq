@@ -23,6 +23,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.outliner.datascript :as outliner-db]
+            [frontend.modules.outliner.file :as file]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -153,30 +154,6 @@
               (js/window.location.reload)))
      2000)))
 
-;;; commented out, because of lint:carve
-;; (defn- get-repos
-;;   []
-;;   (p/let [nfs-dbs (db-persist/get-all-graphs)]
-;;     ;; TODO: Better IndexDB migration handling
-;;     (cond
-;;       (and (mobile-util/native-platform?)
-;;            (some #(or (string/includes? % " ")
-;;                       (string/includes? % "logseq_local_/")) nfs-dbs))
-;;       (do (notification/show! ["DB version is not compatible, please clear cache then re-add your graph back."
-;;                                (ui/button
-;;                                 (t :settings-page/clear-cache)
-;;                                 :class    "text-sm p-1"
-;;                                 :on-click clear-cache!)] :error false)
-;;           {:url config/local-repo
-;;            :example? true})
-
-;;       (seq nfs-dbs)
-;;       (map (fn [db] {:url db :nfs? true}) nfs-dbs)
-
-;;       :else
-;;       [{:url config/local-repo
-;;         :example? true}])))
-
 (defn- register-components-fns!
   []
   (state/set-page-blocks-cp! page/page-blocks-cp)
@@ -207,12 +184,13 @@
 
     (p/let [repos (repo-handler/get-repos)]
       (state/set-repos! repos)
-      (restore-and-setup! repos db-schema)
-      (when (mobile-util/native-platform?)
-        (p/do! (mobile-util/hide-splash))))
+      (restore-and-setup! repos db-schema))
+    (when (mobile-util/native-platform?)
+      (p/do! (mobile-util/hide-splash)))
 
     (db/run-batch-txs!)
-    (file-handler/run-writes-chan!)
+    (file/<ratelimit-file-writes!)
+
     (when config/dev?
       (enable-datalog-console))
     (when (util/electron?)

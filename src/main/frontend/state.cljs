@@ -22,19 +22,19 @@
                         (when graph (ipc/ipc "setCurrentGraph" graph))
                         graph)]
    (atom
-    {:route-match             nil
-     :today                   nil
-     :system/events           (async/chan 100)
-     :db/batch-txs            (async/chan 100)
-     :file/writes             (async/chan 100)
-     :file/unlinked-dirs      #{}
-     :reactive/custom-queries (async/chan 100)
-     :notification/show?      false
-     :notification/content    nil
-     :repo/loading-files?     {}
-     :nfs/user-granted?       {}
-     :nfs/refreshing?         nil
-     :instrument/disabled?    (storage/get "instrument-disabled")
+    {:route-match                           nil
+     :today                                 nil
+     :system/events                         (async/chan 1000)
+     :db/batch-txs                          (async/chan 1000)
+     :file/writes                           (async/chan 10000)
+     :file/unlinked-dirs                    #{}
+     :reactive/custom-queries               (async/chan 1000)
+     :notification/show?                    false
+     :notification/content                  nil
+     :repo/loading-files?                   {}
+     :nfs/user-granted?                     {}
+     :nfs/refreshing?                       nil
+     :instrument/disabled?                  (storage/get "instrument-disabled")
      ;; TODO: how to detect the network reliably?
      :network/online?         true
      :indexeddb/support?      true
@@ -245,9 +245,10 @@
      :file-sync/set-remote-graph-password-result {}
      :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
 
-     :ui/find-in-page                       nil
-
      :file/rename-event-chan                (async/chan 100)
+     :ui/find-in-page                       nil
+     :graph/importing                       nil
+     :graph/importing-state                 {}
      })))
 
 ;; block uuid -> {content(String) -> ast}
@@ -1037,10 +1038,6 @@
   []
   (set-state! :ui/file-component nil))
 
-(defn get-file-component
-  []
-  (get @state :ui/file-component))
-
 (defn set-journals-length!
   [value]
   (when value
@@ -1191,11 +1188,6 @@
 (defn get-reactive-custom-queries-chan
   []
   (:reactive/custom-queries @state))
-
-(defn get-write-chan-length
-  []
-  (let [c (get-file-write-chan)]
-    (count (gobj/get c "buf"))))
 
 (defn get-left-sidebar-open?
   []

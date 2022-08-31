@@ -226,11 +226,12 @@
                                [".favorites .bd" ".recent .bd" ".dropdown-wrapper" ".nav-header"])
                      (close-modal-fn)))}
      [:div.flex.flex-col.pb-4.wrap.gap-4
-      [:nav.px-4.flex.flex-col.gap-1 {:aria-label "Sidebar"}
+      [:nav.px-4.flex.flex-col.gap-1 {:aria-label "Navigation menu"}
        (repo/repos-dropdown)
 
        [:div.nav-header.flex.gap-1.flex-col
-        (if-let [page (:page default-home)]
+        (let [page (:page default-home)]
+          (if (and page (not (state/enable-journals? (state/get-current-repo))))
           (sidebar-item
            {:class            "home-nav"
             :title            page
@@ -245,7 +246,7 @@
                                    (or (= route-name :all-journals) (= route-name :home)))
             :title            (t :left-side-bar/journals)
             :on-click-handler route-handler/go-to-journals!
-            :icon             "calendar"}))
+            :icon             "calendar"})))
 
         (when (state/enable-flashcards? (state/get-current-repo))
           [:div.flashcards-nav
@@ -270,8 +271,7 @@
       (when (and left-sidebar-open? (not config/publishing?)) (recent-pages t))
 
       (when-not (mobile-util/native-platform?)
-        [:nav.px-2 {:aria-label "Sidebar"
-                    :class      "new-page"}
+        [:footer.px-2 {:class "new-page"}
          (when-not config/publishing?
            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
             {:on-click (fn []
@@ -333,6 +333,8 @@
                     :route-match route-match})
 
      [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
+
+      {:tabIndex "-1"}
 
       (when (util/electron?)
         (find-in-page/search))
@@ -558,7 +560,8 @@
         default-home (get-default-home-if-valid)
         logged? (user-handler/logged-in?)
         show-action-bar? (state/sub :mobile/show-action-bar?)
-        show-recording-bar? (state/sub :mobile/show-recording-bar?)]
+        show-recording-bar? (state/sub :mobile/show-recording-bar?)
+        preferred-language (state/sub [:preferred-language])]
     (theme/container
      {:t             t
       :theme         theme
@@ -572,15 +575,20 @@
       :sidebar-blocks-len (count right-sidebar-blocks)
       :system-theme? system-theme?
       :onboarding-state onboarding-state
+      :preferred-language preferred-language
       :on-click      (fn [e]
                        (editor-handler/unhighlight-blocks!)
                        (util/fix-open-external-with-shift! e))}
 
-     [:div.theme-inner
+     [:main.theme-inner
       {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?
                                  :ls-right-sidebar-open sidebar-open?
                                  :ls-wide-mode wide-mode?}])}
-
+      [:button#skip-to-main
+       {:on-key-up (fn [e]
+                        (when (= (.-key e) "Enter")
+                          (ui/focus-element (ui/main-node))))}
+       "Skip to main content"]
       [:div.#app-container
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}

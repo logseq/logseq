@@ -126,7 +126,7 @@
                 (into {})))
         "Counts for blocks with common block attributes")
 
-    (is (= #{"term" "setting" "book" "Templates" "Query" "Query/table" "page"}
+    (is (= #{"term" "setting" "book" "templates" "Query" "Query/table" "page"}
            (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
                 (map (comp :block/original-name first))
                 set))
@@ -142,7 +142,7 @@
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
     (is (= 211 (count files)) "Correct file count")
-    (is (= 41672 (count (d/datoms db :eavt))) "Correct datoms count")
+    (is (= 41776 (count (d/datoms db :eavt))) "Correct datoms count")
 
     (is (= 3600
            (ffirst

@@ -1,13 +1,13 @@
 (ns frontend.modules.file.core
-  (:require [cljs.core.async :as async]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
-            [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.property :as property]))
+            [frontend.util.property :as property]
+            [frontend.state :as state]
+            [frontend.handler.file :as file-handler]))
 
 (defn- indented-block-content
   [content spaces-tabs]
@@ -101,16 +101,6 @@
 
 (def init-level 1)
 
-(defn push-to-write-chan
-  [files & opts]
-  (let [repo (state/get-current-repo)
-        chan (state/get-file-write-chan)]
-    (assert (some? chan) "File write chan shouldn't be nil")
-    (let [chan-callback (:chan-callback opts)]
-      (async/put! chan [repo files opts])
-      (when chan-callback
-        (chan-callback)))))
-
 (defn- transact-file-tx-if-not-exists!
   [page ok-handler]
   (when-let [repo (state/get-current-repo)]
@@ -143,8 +133,9 @@
         file-path (-> (db-utils/entity file-db-id) :file/path)
         _ (assert (string? file-path) "File path should satisfy string?")
         ;; FIXME: name conflicts between multiple graphs
-        files [[file-path new-content]]]
-    (push-to-write-chan files)))
+        files [[file-path new-content]]
+        repo (state/get-current-repo)]
+    (file-handler/alter-files-handler! repo files {} {})))
 
 (defn save-tree
   [page-block tree]

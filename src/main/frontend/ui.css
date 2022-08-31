@@ -264,7 +264,7 @@ html.is-mobile {
     }
   }
 
-  &[intent='link'] {
+  &[intent='link'], &[intent='border-link'] {
     @apply focus:border-gray-500 dark:hover:text-gray-200;
 
     color: var(--ls-primary-text-color);
@@ -273,6 +273,10 @@ html.is-mobile {
     &:hover {
       color: var(--ls-link-text-color);
     }
+  }
+
+  &[intent='border-link'] {
+      border: 1px solid;
   }
 
   &.p-1 {

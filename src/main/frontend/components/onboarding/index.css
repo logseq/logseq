@@ -314,7 +314,6 @@ body[data-page=import] {
 
       small {
         font-size: 11px;
-        text-align: center;
       }
 
       &:hover {

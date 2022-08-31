@@ -246,9 +246,14 @@
         new-tag (if (re-find #"[\s\t]+" new-name)
                   (util/format "#[[%s]]" new-name)
                   (str "#" new-name))]
-    (-> (util/replace-ignore-case content (str "^" old-tag "\\b") new-tag)
-        (util/replace-ignore-case (str " " old-tag " ") (str " " new-tag " "))
-        (util/replace-ignore-case (str " " old-tag "$") (str " " new-tag)))))
+    ;; hash tag parsing rules https://github.com/logseq/mldoc/blob/701243eaf9b4157348f235670718f6ad19ebe7f8/test/test_markdown.ml#L631 
+    ;; Safari doesn't support look behind, don't use
+    ;; TODO: parse via mldoc
+    (string/replace content 
+                    (re-pattern (str "(?i)(^|\\s)(" (util/escape-regex-chars old-tag) ")(?=[,\\.]*($|\\s))"))
+                    ;;    case_insense^    ^lhs   ^_grp2                       look_ahead^         ^_grp3
+                    (fn [[_match lhs _grp2 _grp3]]
+                      (str lhs new-tag)))))
 
 (defn- replace-property-ref!
   [content old-name new-name]
@@ -560,31 +565,32 @@
 
 (defn rename!
   "Accepts unsanitized page names"
-  [old-name new-name]
-  (let [repo          (state/get-current-repo)
-        old-name      (string/trim old-name)
-        new-name      (string/trim new-name)
-        old-page-name (util/page-name-sanity-lc old-name)
-        new-page-name (util/page-name-sanity-lc new-name)
-        name-changed? (not= old-name new-name)]
-    (if (and old-name
-             new-name
-             (not (string/blank? new-name))
-             name-changed?)
-      (do
-        (cond
-          (= old-page-name new-page-name)
-          (rename-page-aux old-name new-name true)
+  ([old-name new-name] (rename! old-name new-name true))
+  ([old-name new-name redirect?]
+    (let [repo          (state/get-current-repo)
+          old-name      (string/trim old-name)
+          new-name      (string/trim new-name)
+          old-page-name (util/page-name-sanity-lc old-name)
+          new-page-name (util/page-name-sanity-lc new-name)
+          name-changed? (not= old-name new-name)]
+      (if (and old-name
+              new-name
+              (not (string/blank? new-name))
+              name-changed?)
+        (do
+          (cond
+            (= old-page-name new-page-name)
+            (rename-page-aux old-name new-name redirect?)
 
-          (db/pull [:block/name new-page-name])
-          (merge-pages! old-page-name new-page-name)
+            (db/pull [:block/name new-page-name])
+            (merge-pages! old-page-name new-page-name)
 
-          :else
-          (rename-namespace-pages! repo old-name new-name))
-        (rename-nested-pages old-name new-name))
-      (when (string/blank? new-name)
-        (notification/show! "Please use a valid name, empty name is not allowed!" :error)))
-    (ui-handler/re-render-root!)))
+            :else
+            (rename-namespace-pages! repo old-name new-name))
+          (rename-nested-pages old-name new-name))
+        (when (string/blank? new-name)
+          (notification/show! "Please use a valid name, empty name is not allowed!" :error)))
+      (ui-handler/re-render-root!))))
 
 (defn- split-col-by-element
   [col element]

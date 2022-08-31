@@ -52,6 +52,8 @@
   < rum/reactive
   {:did-mount (fn [state]
                 (let [^js el (rum/dom-node state)]
+                  ;; Passing aria-label as a prop to TextareaAutosize removes the dash
+                  (.setAttribute el "aria-label" "editing block")
                   (. el addEventListener "mouseup"
                      #(let [start (util/get-selection-start el)
                             end (util/get-selection-end el)]
@@ -243,7 +245,7 @@
                   "exiting" "transition ease-in duration-100 opacity-100"
                   "exited" "transition ease-in duration-100 opacity-0")}
         [:div.rounded-lg.shadow-xs {:style {:max-height "calc(100vh - 200px)"
-                                            :overflow-y "scroll"
+                                            :overflow-y "auto"
                                             :overflow-x "hidden"}}
          [:div.p-4
           [:div.flex.items-start

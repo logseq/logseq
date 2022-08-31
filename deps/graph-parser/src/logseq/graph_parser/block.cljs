@@ -199,22 +199,19 @@
          (remove string/blank?)
          distinct)))
 
-(defn- invalid-property-key?
-  [s]
-  (string/includes? s "`"))
-
 (defn extract-properties
   [format properties user-config]
   (when (seq properties)
     (let [properties (seq properties)
           page-refs (get-page-ref-names-from-properties format properties user-config)
+          *invalid-properties (atom #{})
           properties (->> properties
                           (map (fn [[k v]]
                                  (let [k (-> (string/lower-case (name k))
                                              (string/replace " " "-")
                                              (string/replace "_" "-")
                                              (string/replace #"[\"|^|(|)|{|}]+" ""))]
-                                   (when-not (invalid-property-key? k)
+                                   (if (gp-property/valid-property-name? (str ":" k))
                                      (let [k (if (contains? #{"custom_id" "custom-id"} k)
                                                "id"
                                                k)
@@ -235,10 +232,14 @@
                                                (set [v])
                                                v)
                                            v (if (coll? v) (set v) v)]
-                                       [k v])))))
-                          (remove #(nil? (second %))))]
-      {:properties (into {} properties)
+                                       [k v])
+                                     (do (swap! *invalid-properties conj k)
+                                         nil)))))
+                          (remove #(nil? (second %))))
+          properties' (into {} properties)]
+      {:properties properties'
        :properties-order (map first properties)
+       :invalid-properties @*invalid-properties
        :page-refs page-refs})))
 
 (defn- paragraph-timestamp-block?
@@ -285,6 +286,7 @@
          [original-page-name (gp-util/page-name-sanity-lc original-page-name) day])
        [original-page-name page-name day]))))
 
+;; TODO: refactor
 (defn page-name->map
   "Create a page's map structure given a original page name (string).
    map as input is supported for legacy compatibility.
@@ -295,7 +297,8 @@
    with-timestamp?: assign timestampes to the map structure.
     Useful when creating new pages from references or namespaces,
     as there's no chance to introduce timestamps via editing in page"
-  [original-page-name with-id? db with-timestamp? date-formatter]
+  [original-page-name with-id? db with-timestamp? date-formatter
+   & {:keys [from-page]}]
   (cond
     (and original-page-name (string? original-page-name))
     (let [original-page-name (gp-util/remove-boundary-slashes original-page-name)
@@ -303,7 +306,7 @@
           namespace? (and (not (boolean (text/get-nested-page-name original-page-name)))
                           (text/namespace-page? original-page-name))
           page-entity (some-> db (d/entity [:block/name page-name]))
-          original-page-name (or (:block/original-name page-entity) original-page-name)]
+          original-page-name (or from-page (:block/original-name page-entity) original-page-name)]
       (merge
        {:block/name page-name
         :block/original-name original-page-name}
@@ -533,7 +536,7 @@
                  (cons
                   (merge
                    (let [content (utf8/substring encoded-content 0 first-block-start-pos)
-                         {:keys [properties properties-order]} pre-block-properties
+                         {:keys [properties properties-order invalid-properties]} pre-block-properties
                          id (get-custom-id-or-new-id {:properties properties})
                          property-refs (->> (get-page-refs-from-properties format properties db date-formatter user-config)
                                             (map :block/original-name))
@@ -542,6 +545,7 @@
                                 :level 1
                                 :properties properties
                                 :properties-order (vec properties-order)
+                                :invalid-properties invalid-properties
                                 :refs property-refs
                                 :pre-block? true
                                 :unordered true
@@ -578,7 +582,10 @@
                 (assoc :properties (:properties properties))
 
                 (seq (:properties-order properties))
-                (assoc :properties-order (vec (:properties-order properties))))
+                (assoc :properties-order (vec (:properties-order properties)))
+
+                (seq (:invalid-properties properties))
+                (assoc :invalid-properties (:invalid-properties properties)))
         block (if (get-in block [:properties :collapsed])
                 (-> (assoc block :collapsed? true)
                     (update :properties (fn [m] (dissoc m :collapsed)))
