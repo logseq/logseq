@@ -613,8 +613,13 @@
             (when edit-block?
               (if (and replace-empty-target?
                        (string/blank? (:block/content last-block)))
-                (js/setTimeout #(edit-block! last-block :max (:block/uuid last-block)) 10)
-                (js/setTimeout #(edit-block! new-block :max (:block/uuid new-block)) 10)))
+                ;; 20ms of waiting for DOM to load the block, to avoid race condition. 
+                ;; It's ensuring good response under M1 pro
+                ;; Used to be 10ms before, but is causing occasional failure on M1 pro with a full page of blocks,
+                ;; or failing E2E with a small number of blocks.
+                ;; Should be related to the # of elements in page
+                (js/setTimeout #(edit-block! last-block :max (:block/uuid last-block)) 20)
+                (js/setTimeout #(edit-block! new-block :max (:block/uuid new-block)) 20)))
             new-block))))))
 
 (defn insert-first-page-block-if-not-exists!

@@ -140,6 +140,13 @@
     (state/set-search-mode! search-mode))
   (state/pub-event! [:go/search]))
 
+(defn sidebar-journals!
+  []
+  (state/sidebar-add-block!
+   (state/get-current-repo)
+   (:db/id (db/get-page (date/today)))
+   :page))
+
 (defn go-to-journals!
   []
   (state/set-journals-length! 3)
