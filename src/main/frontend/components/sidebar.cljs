@@ -225,7 +225,14 @@
                    (when (some (fn [sel] (boolean (.closest target sel)))
                                [".favorites .bd" ".recent .bd" ".dropdown-wrapper" ".nav-header"])
                      (close-modal-fn)))}
-     [:div.flex.flex-col.pb-4.wrap.gap-4
+
+     [:div.flex.flex-col.pb-4.wrap.gap-4.relative
+      (when (mobile-util/native-platform?)
+        [:div.fake-bar.absolute
+         [:button
+          {:on-click state/toggle-left-sidebar!}
+          (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]])
+
       [:nav.px-4.flex.flex-col.gap-1 {:aria-label "Navigation menu"}
        (repo/repos-dropdown)
 

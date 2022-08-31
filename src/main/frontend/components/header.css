@@ -317,10 +317,6 @@ html.is-native-iphone {
   --ls-headbar-inner-top-padding: 36px;
 
   .left-sidebar-inner {
-    > .wrap {
-      padding-top: 12px;
-    }
-
     .new-page {
       padding-bottom: 12px;
     }

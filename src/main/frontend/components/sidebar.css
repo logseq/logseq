@@ -90,6 +90,12 @@
     margin-top: 40px;
     padding-bottom: 60px;
     width: 100%;
+
+    > .fake-bar {
+      @apply w-full px-5 pt-1 sm:hidden;
+
+      top: -45px;
+    }
   }
 
   .dropdown-wrapper {
@@ -536,3 +542,4 @@ html[data-theme='dark'] {
 .full-height-without-header {
   height: calc(100vh - var(--ls-headbar-height) - 4rem);
 }
+
