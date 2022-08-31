@@ -124,10 +124,32 @@
               (string/trim x)))
        (set)))
 
+(defn sep-by-comma
+  [s]
+  (when s
+    (some->>
+     (string/split s #"[\,|，]{1}")
+     (remove string/blank?)
+     (map string/trim))))
+
+(defn separated-by-commas?
+  [config-state k]
+  (let [k' (if (keyword? k) k (keyword k))]
+    (contains? (set/union #{:alias :tags}
+                          (set (get config-state :property/separated-by-commas)))
+               k')))
+
 (defn parse-property
   "Property value parsing that takes into account built-in properties, and user config"
   [k v mldoc-ast config-state]
   (let [refs (extract-refs-from-mldoc-ast mldoc-ast)
+        property-separated-by-commas? (and (separated-by-commas? config-state k)
+                                           (empty? refs))
+        refs' (if property-separated-by-commas?
+                (if (string/includes? v ",")
+                  (distinct (sep-by-comma v))
+                  [(string/trim v)])
+                refs)
         k (if (or (symbol? k) (keyword? k)) (subs (str k) 1) k)
         v (if (or (symbol? v) (keyword? v))
             (subs (str v) 1)
@@ -149,8 +171,8 @@
       (and (string? v) (gp-util/wrapped-by-quotes? v))
       v
 
-      (seq refs)
-      refs
+      (seq refs')
+      refs'
 
       (some? non-string-property)
       non-string-property

@@ -232,6 +232,11 @@
  ;; E.g.:property-pages/excludelist #{:duration :author}
  ;; :property-pages/excludelist
 
+ ;; By default, property value separated by commas will not be treated as
+ ;; page references. You can add properties to enable it.
+ ;; E.g. :property/separated-by-commas #{:alias :tags}
+ ;; :property/separated-by-commas []
+
  ;; logbook setup
  ;; :logbook/settings
  ;; {:with-second-support? false ;limit logbook to minutes, seconds will be eliminated

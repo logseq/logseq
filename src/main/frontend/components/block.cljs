@@ -1904,17 +1904,25 @@
          [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])
        [tags])))))
 
+(rum/defc span-comma
+  []
+  [:span ", "])
+
 (rum/defc property-cp
   [config block k value]
   (let [date (and (= k :date) (date/get-locale-string (str value)))
         user-config (state/get-config)
         ;; When value is a set of refs, display full property text
         ;; because :block/properties value only contains refs but user wants to see text
+        property-separated-by-commas? (text/separated-by-commas? (state/get-config) k)
         v (if (and (coll? value) (seq value)
-                   (not (contains? gp-property/editable-linkable-built-in-properties k)))
+                   (not (contains? gp-property/editable-linkable-built-in-properties k))
+                   (not property-separated-by-commas?))
             (gp-property/property-value-from-content (name k) (:block/content block))
             value)
         property-pages-enabled? (contains? #{true nil} (:property-pages/enabled? user-config))]
+    (prn {:k k
+          :property-separated-by-commas? property-separated-by-commas?})
     [:div
      (if property-pages-enabled?
        (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})
@@ -1932,6 +1940,15 @@
 
        (and (string? v) (gp-util/wrapped-by-quotes? v))
        (gp-util/unquote-string v)
+
+       (and property-separated-by-commas? (coll? v))
+       (let [v (->> (remove string/blank? v)
+                    (filter string?))
+             vals (for [v-item v]
+                    (page-cp config {:block/name v-item}))
+             elems (interpose (span-comma) vals)]
+         (for [elem elems]
+           (rum/with-key elem (str (random-uuid)))))
 
        :else
        (inline-text config (:block/format block) (str v)))]))
