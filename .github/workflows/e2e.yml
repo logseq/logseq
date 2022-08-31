@@ -1,4 +1,4 @@
-name: E2E Test Repeat
+name: E2E
 
 # Running E2E test multiple times to confirm test stability.
 # E2E test could be randomly failed due to the batch update mechanism of React.
@@ -27,9 +27,10 @@ jobs:
 
   e2e-test-repeat:
     runs-on: ubuntu-latest
+    continue-on-error: true # Don't block other runs in matrix for fast debugging
     strategy:
       matrix:
-        repeat: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] # Test 10 times for E2E robustness
+        repeat: [1, 2, 3, 4] # Test 4 times for E2E robustness
 
     steps:
       - name: Repeat message
