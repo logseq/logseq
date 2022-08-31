@@ -19,7 +19,7 @@
             [rum.core :as rum]))
 
 (defn dd [& args]
-  (apply js/console.debug args))
+  (apply js/console.debug (cons (str :debug-pdf) args)))
 
 (def *highlight-last-color (atom :yellow))
 
@@ -795,14 +795,12 @@
                        ;;:cMapUrl       "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.8.335/cmaps/"
                        :cMapPacked    true}]
 
-         (p/finally
-          (p/catch (p/then
-                    (do
-                      (set-state! {:status :loading})
-                      (get-doc$ (clj->js opts)))
-                    #(set-state! {:pdf-document %}))
-                   #(set-state! {:error %}))
-          #(set-state! {:status :completed}))
+         (set-state! {:status :loading})
+
+         (-> (get-doc$ (clj->js opts))
+             (p/then #(set-state! {:pdf-document %}))
+             (p/catch #(set-state! {:error %}))
+             (p/finally #(set-state! {:status :completed})))
 
          #()))
      [url])
@@ -815,7 +813,7 @@
            "MissingPDFException"
            (do
              (notification/show!
-              (str (.-message error) " Is this the correct path?")
+              (str "Error: " (.-message error) "\n Is this the correct path?")
               :error
               false)
              (state/set-state! :pdf/current nil))
@@ -823,9 +821,17 @@
            "InvalidPDFException"
            (do
              (notification/show!
-              (str (.-message error) "\n"
+              (str "Error: " (.-message error) "\n"
                    "Is this .pdf file corrupted?\n"
                    "Please confirm with external pdf viewer.")
+              :error
+              false)
+             (state/set-state! :pdf/current nil))
+
+           (do
+             (notification/show!
+              (str "Error: " (.-name error) "\n" (.-message error) "\n"
+                   "Please confirm with pdf file resource.")
               :error
               false)
              (state/set-state! :pdf/current nil)))))

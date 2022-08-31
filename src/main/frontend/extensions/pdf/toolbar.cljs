@@ -258,8 +258,7 @@
      {:class (util/classnames [{:has-children has-child? :is-expand expanded?}])}
      [:div.inner
       [:a
-       {:href      "javascript:void(0);"
-        :data-dest (js/JSON.stringify (bean/->js dest))
+       {:data-dest (js/JSON.stringify (bean/->js dest))
         :on-click  (fn [^js/MouseEvent e]
                      (let [target (.-target e)]
                        (if (.closest target "i")

@@ -21,30 +21,15 @@
   [filename]
   (and filename (string? filename) (string/starts-with? filename "hls__")))
 
+(def alias-assets? true)
+
 (defn inflate-asset
-  [full-path]
-  (let [filename (util/node-path.basename full-path)
-        web-link? (string/starts-with? full-path "http")
+  [original-path]
+  (let [filename (util/node-path.basename original-path)
+        web-link? (string/starts-with? original-path "http")
         ext-name (util/get-file-ext filename)
-        url (cond
-              web-link?
-              full-path
-
-              (util/absolute-path? full-path)
-              (str "file://" full-path)
-
-              (string/starts-with? full-path "file:/")
-              full-path
-
-              :else
-              (let [full-path (string/replace full-path #"^[.\/\\]+" "")
-                    full-path (if-not (string/starts-with? full-path gp-config/local-assets-dir)
-                                (util/node-path.join gp-config/local-assets-dir full-path)
-                                full-path)]
-                (str "file://"  ;; TODO: bfs
-                     (util/node-path.join
-                       (config/get-repo-dir (state/get-current-repo))
-                       full-path))))]
+        url (config/normalize-asset-resource-uri
+             (state/get-current-repo) original-path)]
     (when-let [key
                (if web-link?
                  (str (hash url))
@@ -55,7 +40,8 @@
        :identity (subs key (- (count key) 15))
        :filename filename
        :url      url
-       :hls-file (str "assets/" key ".edn")})))
+       :hls-file (str "assets/" key ".edn")
+       :original-path original-path})))
 
 (defn resolve-area-image-file
   [img-stamp current {:keys [page id] :as _hl}]
@@ -163,14 +149,14 @@
   (let [page-name (:key pdf-current)
         page-name (string/trim page-name)
         page-name (str "hls__" page-name)
-        page (db-model/get-page page-name)
-        url (:url pdf-current)
-        format (state/get-preferred-format)
-        repo-dir (config/get-repo-dir (state/get-current-repo))
+        page      (db-model/get-page page-name)
+        file-path (:original-path pdf-current)
+        format    (state/get-preferred-format)
+        repo-dir  (config/get-repo-dir (state/get-current-repo))
         asset-dir (util/node-path.join repo-dir gp-config/local-assets-dir)
-        url (if (string/includes? url asset-dir)
-              (str ".." (last (string/split url repo-dir)))
-              url)]
+        url       (if (string/includes? file-path asset-dir)
+                    (str ".." (last (string/split file-path repo-dir)))
+                    file-path)]
     (if-not page
       (let [label (:filename pdf-current)]
         (page-handler/create! page-name {:redirect?        false :create-first-block? false
@@ -235,7 +221,7 @@
     (when-let [target-key (and page-name (subs page-name 5))]
       (p/let [hls (resolve-hls-data-by-key$ target-key)
               hls (and hls (:highlights hls))]
-        (let [file-path (if file-path file-path (str target-key ".pdf"))]
+        (let [file-path (or file-path (str "../assets/" target-key ".pdf"))]
           (if-let [matched (and hls (medley/find-first #(= id (:id %)) hls))]
             (do
               (state/set-state! :pdf/ref-highlight matched)

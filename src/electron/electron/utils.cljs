@@ -25,6 +25,7 @@
 (defonce HttpsProxyAgent (js/require "https-proxy-agent"))
 (defonce _fetch (js/require "node-fetch"))
 (defonce extract-zip (js/require "extract-zip"))
+(defn format [fmt & args] (apply gstring/format fmt args))
 
 (defn fetch
   ([url] (fetch url nil))
@@ -137,6 +138,21 @@
   "reversing `get-graph-dir`"
   [graph-dir]
   (str "logseq_local_" graph-dir))
+
+(def Origin_Log_Seq "log.seq")
+(defn resolve-url-asset-real-path
+  [url]
+  (let [alias-enabled? (cfgs/get-item :assets/alias-enabled?)
+        full-path (string/replace-first url "assets://" "")]
+    (if-let [^js url' (and alias-enabled?
+                           (string/starts-with? full-path Origin_Log_Seq)
+                           (try (js/URL. url) (catch js/Error _e nil)))]
+      (if-let [file-root (.get (.-searchParams url') "v")]
+        (let [file-path (.-pathname url')]
+          (-> (.join path file-root file-path)
+              (js/decodeURI)))
+        (throw (js/Error. (str "Bad asset: " full-path))))
+      (js/decodeURI full-path))))
 
 ;; Keep update with the normalization in main
 (defn normalize
