@@ -1,6 +1,8 @@
 (ns logseq.graph-parser.text-test
   (:require [cljs.test :refer [are deftest testing]]
-            [logseq.graph-parser.text :as text]))
+            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.util :as gp-util]))
 
 (deftest test-get-page-name
   []
@@ -59,23 +61,28 @@
       "**foobar" "foobar"
       "*********************foobar" "foobar")))
 
+(defn- parse-property
+  [k v]
+  (let [references (-> (gp-mldoc/get-references v (gp-mldoc/default-config :markdown))
+                       (gp-util/json->clj))]
+    (text/parse-property k v references {})))
+
 (deftest test-parse-property
   (testing "parse-property"
-    (are [k v y] (= (text/parse-property k v [] {}) y)
+    (are [k v y] (= (parse-property k v) y)
       :tags "foo" "foo"
-      :tags "foo, bar" #{"foo" "bar"}
-      :tags "foo,bar" #{"foo" "bar"}
+      :tags "[[foo]], [[bar]]" #{"foo" "bar"}
+      :tags "[[foo]],[[bar]]" #{"foo" "bar"}
       :tags "[[foo]]" #{"foo"}
       :tags "[[foo]] [[bar]]" #{"foo" "bar"}
       :tags "[[foo]], [[bar]]" #{"foo" "bar"}
       :tags "[[foo]], [[bar]], #baz" #{"foo" "bar" "baz"}
       :tags "#baz, [[foo]], [[bar]]" #{"foo" "bar" "baz"}
       :tags "[[foo [[bar]]]]" #{"foo [[bar]]"}
-      :tags "[[foo [[bar]]]], baz" #{"baz" "foo [[bar]]"}))
+      :tags "[[foo [[bar]]]], [[baz]]" #{"baz" "foo [[bar]]"}))
   (testing "parse-property with quoted strings"
-    (are [k v y] (= (text/parse-property k v [] {}) y)
+    (are [k v y] (= (parse-property k v) y)
       :tags "\"foo, bar\"" "\"foo, bar\""
-      :tags "\"[[foo]], [[bar]]\"" "\"[[foo]], [[bar]]\""
-      :tags "baz, \"[[foo]], [[bar]]\"" #{"baz"})))
+      :tags "\"[[foo]], [[bar]]\"" "\"[[foo]], [[bar]]\"")))
 
 #_(cljs.test/test-ns 'logseq.graph-parser.text-test)

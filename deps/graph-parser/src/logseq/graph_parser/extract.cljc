@@ -39,62 +39,69 @@
               (or first-block-name file-name)
               (or file-name first-block-name)))))))
 
-(defn- build-page-entity
-  [properties file page-name page ref-tags {:keys [date-formatter db from-page]}]
+(defn- extract-page-alias-and-tags
+  [page-m page page-name properties]
   (let [alias (:alias properties)
-        alias' (if (string? alias) [alias] alias)
+        alias' (if (coll? alias) alias [(str alias)])
         aliases (and alias'
                      (seq (remove #(or (= page-name (gp-util/page-name-sanity-lc %))
                                        (string/blank? %)) ;; disable blank alias
                                   alias')))
-        aliases' (->>
-                 (map
-                  (fn [alias]
-                    (let [page-name (gp-util/page-name-sanity-lc alias)
-                          aliases (distinct
-                                   (conj
-                                    (remove #{alias} aliases)
-                                    page))
-                          aliases (when (seq aliases)
-                                    (map
-                                     (fn [alias]
-                                       {:block/name (gp-util/page-name-sanity-lc alias)})
-                                     aliases))]
-                      (if (seq aliases)
-                        {:block/name page-name
-                         :block/alias aliases}
-                        {:block/name page-name})))
-                  aliases)
-                 (remove nil?))
-        [*valid-properties *invalid-properties]
+        aliases' (keep
+                   (fn [alias]
+                     (let [page-name (gp-util/page-name-sanity-lc alias)
+                           aliases (distinct
+                                    (conj
+                                     (remove #{alias} aliases)
+                                     page))
+                           aliases (when (seq aliases)
+                                     (map
+                                       (fn [alias]
+                                         {:block/name (gp-util/page-name-sanity-lc alias)})
+                                       aliases))]
+                       (if (seq aliases)
+                         {:block/name page-name
+                          :block/original-name alias
+                          :block/alias aliases}
+                         {:block/name page-name
+                          :block/original-name alias})))
+                   aliases)
+        result (cond-> page-m
+                 (seq aliases')
+                 (assoc :block/alias aliases')
+
+                 (:tags properties)
+                 (assoc :block/tags (let [tags (:tags properties)
+                                          tags (if (coll? tags) tags [(str tags)])
+                                          tags (remove string/blank? tags)]
+                                      (map (fn [tag] {:block/name (gp-util/page-name-sanity-lc tag)
+                                                      :block/original-name tag})
+                                        tags))))]
+    (update result :block/properties #(dissoc % :tags :alias))))
+
+(defn- build-page-map
+  [properties file page page-name {:keys [date-formatter db from-page]}]
+  (let [[*valid-properties *invalid-properties]
         ((juxt filter remove)
          (fn [[k _v]] (gp-property/valid-property-name? (str k))) properties)
-        valid-properties (into {} *valid-properties)
-        invalid-properties (set (map (comp name first) *invalid-properties))]
+        valid-properties (-> (into {} *valid-properties)
+                             (dissoc :tags :alias))
+        invalid-properties (set (map (comp name first) *invalid-properties))
+        page-m (->
+                (gp-util/remove-nils
+                 (assoc
+                  (gp-block/page-name->map page false db true date-formatter
+                                           :from-page from-page)
+                  :block/file {:file/path (gp-util/path-normalize file)}))
+                (extract-page-alias-and-tags page page-name properties))]
     (cond->
-     (gp-util/remove-nils
-      (assoc
-       (gp-block/page-name->map page false db true date-formatter
-                                :from-page from-page)
-       :block/file {:file/path (gp-util/path-normalize file)}))
+      page-m
 
-     (seq valid-properties)
-     (assoc :block/properties valid-properties)
+      (seq valid-properties)
+      (assoc :block/properties valid-properties)
 
-     (seq invalid-properties)
-     (assoc :block/invalid-properties invalid-properties)
-
-     (seq aliases')
-     (assoc :block/alias aliases')
-
-     (:tags properties)
-     (assoc :block/tags (let [tags (:tags properties)
-                              tags (if (string? tags) [tags] tags)
-                              tags (remove string/blank? tags)]
-                          (swap! ref-tags set/union (set tags))
-                          (map (fn [tag] {:block/name (gp-util/page-name-sanity-lc tag)
-                                          :block/original-name tag})
-                               tags))))))
+      (seq invalid-properties)
+      (assoc :block/invalid-properties invalid-properties))))
 
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
@@ -102,10 +109,14 @@
   (try
     (let [page (get-page-name file ast page-name-order)
           [page page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
-          blocks (->> (gp-block/extract-blocks ast content false format (dissoc options :page-name-order))
-                      (gp-block/with-parent-and-left {:block/name page-name}))
+          options' (-> options
+                       (assoc :page-name page-name
+                              :original-page-name page)
+                       (dissoc :page-name-order))
+          blocks (->> (gp-block/extract-blocks ast content false format options')
+                      (gp-block/with-parent-and-left {:block/name page-name})
+                      (vec))
           ref-pages (atom #{})
-          ref-tags (atom #{})
           blocks (map (fn [block]
                         (if (contains? #{"macro"} (:block/type block))
                           block
@@ -122,22 +133,19 @@
                                        :block/refs block-ref-pages
                                        :block/path-refs block-path-ref-pages)))))
                    blocks)
-          page-entity (build-page-entity properties file page-name page ref-tags
-                                         (assoc options :from-page page))
-          namespace-pages (let [page (:block/original-name page-entity)]
+          properties (if (:block/pre-block? (first blocks))
+                       (:block/properties (first blocks))
+                       properties)
+          page-map (build-page-map properties file page page-name (assoc options' :from-page page))
+          namespace-pages (let [page (:block/original-name page-map)]
                             (when (text/namespace-page? page)
                               (->> (gp-util/split-namespace-pages page)
                                    (map (fn [page]
                                           (-> (gp-block/page-name->map page true db true date-formatter)
                                               (assoc :block/format format)))))))
           pages (->> (concat
-                      [page-entity]
+                      [page-map]
                       @ref-pages
-                      (map
-                       (fn [page]
-                         {:block/original-name page
-                          :block/name (gp-util/page-name-sanity-lc page)})
-                       @ref-tags)
                       namespace-pages)
                      ;; remove block references
                      (remove vector?)

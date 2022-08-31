@@ -177,9 +177,18 @@
          distinct)))
 
 (defn extract-properties
-  [properties user-config]
+  [properties user-config & {:keys [format]
+                             :or {format :markdown}}]
   (when (seq properties)
     (let [properties (seq properties)
+          properties (if (= 2 (count (first properties))) ; property value not parsed yet
+                       (map
+                         (fn [[k v]]
+                           (let [mldoc-ast (-> (gp-mldoc/get-references v (gp-mldoc/default-config format))
+                                               gp-util/json->clj)]
+                             [k v mldoc-ast]))
+                         properties)
+                       properties)
           page-refs (get-page-ref-names-from-properties properties user-config)
           *invalid-properties (atom #{})
           properties (->> properties
@@ -612,7 +621,7 @@
                   (recur headings (rest blocks) timestamps' properties body))
 
                 (gp-property/properties-ast? block)
-                (let [properties (extract-properties (second block) user-config)]
+                (let [properties (extract-properties (second block) user-config :format format)]
                   (recur headings (rest blocks) timestamps properties body))
 
                 (heading-block? block)

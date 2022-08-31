@@ -1,5 +1,6 @@
 (ns logseq.graph-parser.mldoc-test
   (:require [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.text :as gp-text]
             [clojure.string :as string]
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [logseq.graph-parser.cli :as gp-cli]
@@ -55,10 +56,10 @@
       "Basic src example")
 
   (is (= [["Src"
-            {:lines ["  hello" "\n" "  world" "\n"],
-             :pos_meta {:start_pos 7, :end_pos 25},
-             :full_content "```\nhello\nworld\n```"}]
-           {:start_pos 1, :end_pos 29}]
+           {:lines ["  hello" "\n" "  world" "\n"],
+            :pos_meta {:start_pos 7, :end_pos 25},
+            :full_content "```\nhello\nworld\n```"}]
+          {:start_pos 1, :end_pos 29}]
          (second (gp-mldoc/->edn "
   ```
   hello
@@ -67,25 +68,32 @@
 " md-config)))
       "Src example with leading whitespace"))
 
+(defn- get-properties
+  [x]
+  (->> (gp-mldoc/->edn x md-config)
+       ffirst second
+       (map (fn [[k v ast]]
+              [(keyword k) (gp-text/parse-property k v ast {})]))
+       (into {})))
+
 (deftest md-properties-test
-  (are [x y] (= [["Properties" y] nil]
-                (first (gp-mldoc/->edn x md-config)))
+  (are [x y] (= y (get-properties x))
 
-       ;; comma separates values
-       "property:: foo, bar"
-       {:property #{"foo" "bar"}}
+    ;; comma separates values
+    "property:: [[foo]], [[bar]]"
+    {:property #{"foo" "bar"}}
 
-       ;; alias property
-       "alias:: foo,, bar"
-       {:alias ["foo" "bar"]}
+    ;; alias property
+    "alias:: [[foo]], #bar"
+    {:alias #{"foo" "bar"}}
 
-       ;; tags property
-       "tags:: foo,bar,foo"
-       {:tags ["foo" "bar"]}
+    ;; tags property
+    "tags:: #foo,#bar,#foo"
+    {:tags #{"foo" "bar"}}
 
-       ;; title property
-       "title:: comma, is ok"
-       {:title "comma, is ok"}))
+    ;; title property
+    "title:: comma, is ok"
+    {:title "comma, is ok"}))
 
 (deftest name-definition-test
   (is (= [["List"
@@ -110,7 +118,7 @@
   (testing "just title"
     (let [content "#+TITLE:   some title   "
           props (parse-properties content)]
-      (is (= "some title   " (:title props)))))
+      (is (= "some title   " (second (first props))))))
 
   (testing "filetags"
     (let [content "#+FILETAGS:   :tag1:tag2:@tag:

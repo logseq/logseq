@@ -141,6 +141,9 @@
       (string/blank? v)
       nil
 
+      (and (string? v) (gp-util/wrapped-by-quotes? v))
+      v
+
       (seq refs)
       refs
 

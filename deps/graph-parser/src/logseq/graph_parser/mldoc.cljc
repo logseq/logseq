@@ -114,7 +114,7 @@
                               [k v mldoc-ast]))
                        properties-ast)]
       (if (seq properties)
-        (cons [["Property_Drawer" properties] nil] other-ast)
+        (cons [["Properties" properties] nil] other-ast)
         original-ast))))
 
 (defn ->edn
@@ -145,7 +145,7 @@
       [])))
 
 (defn ast-link?
-  [{:keys [type link]}]
+  [[type link]]
   (let [[ref-type ref-value] (:url link)]
     (and (= "Link" type)
          (or
