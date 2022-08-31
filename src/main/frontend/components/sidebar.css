@@ -280,7 +280,7 @@
   width: 0;
   top: var(--ls-headbar-inner-top-padding);
   left: 0;
-  z-index: 9;
+  z-index: var(--ls-z-index-level-5);
   transition: width 1.2s;
 
   a {
@@ -328,6 +328,7 @@
 
   @screen sm {
     width: 0;
+    z-index: var(--ls-z-index-level-1);
 
     &:before {
       background-color: var(--ls-secondary-background-color);
