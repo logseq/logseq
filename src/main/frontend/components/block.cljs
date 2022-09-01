@@ -283,10 +283,18 @@
          metadata)]
        [:.asset-overlay]
        [:.asset-action-bar
-        [:button.asset-action-btn title]
+        (when (and (util/electron?) local?)
+          [:button.asset-action-btn.text-left
+           {:title "Show item in folder"
+            :on-mouse-down util/stop
+            :on-click (fn [e]
+                        ((util/stop e)
+                         (js/window.apis.showItemInFolder (string/replace src #"^assets://" ""))))}
+           title])
         [:.flex
          [:button.asset-action-btn
           {:title "Delete image"
+           :on-mouse-down util/stop
            :on-click
            (fn [e]
              (when-let [block-id (:block/uuid config)]
@@ -305,19 +313,25 @@
                                                      :title       title
                                                      :full-text   full_text}))})]
                  (util/stop e)
-                 (state/set-modal! confirm-fn)
-                 )))}
+                 (state/set-modal! confirm-fn))))}
           (ui/icon "trash")]
 
          [:button.asset-action-btn
           {:title "Copy image"
-           :on-click
-           (fn [e]
-             (util/stop e))}
+           :on-mouse-down util/stop
+           :on-click (fn [e]
+                       (let [image-src (string/replace src #"^assets://" "")]
+                         (util/stop e)
+                         (-> (js/fetch image-src)
+                             (.then (fn [data]
+                                      (-> (.blob data)
+                                          (.then (fn [blob]
+                                                   (js/navigator.clipboard.write (clj->js [(js/ClipboardItem. (clj->js {(.-type blob) blob}))]))))))))))}
           (ui/icon "copy")]
 
          [:button.asset-action-btn
           {:title    "Maximize image"
+           :on-mouse-down util/stop
            :on-click (fn [^js e] (let [images (js/document.querySelectorAll ".asset-container img")
                                        images (to-array images)
                                        images (if-not (= (count images) 1)
