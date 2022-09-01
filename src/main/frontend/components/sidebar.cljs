@@ -90,7 +90,7 @@
      (pdf-assets/fix-local-asset-filename original-name)]))
 
 (defn get-page-icon [page-entity]
-  (let [default-icon (ui/icon "page")
+  (let [default-icon (ui/icon "page" {:extension? true})
         from-properties (get-in (into {} page-entity) [:block/properties :icon])]
     (or
      (when (not= from-properties "") from-properties)
