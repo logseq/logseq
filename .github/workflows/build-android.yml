@@ -19,11 +19,6 @@ on:
         description: "Build from Git Ref(master)"
         required: true
         default: "master"
-      enable-file-sync:
-        description: 'Build with file sync support'
-        type: boolean
-        required: true
-        default: false
       enable-file-sync-production:
         description: 'File sync production mode'
         type: boolean
@@ -34,9 +29,6 @@ on:
       build-target:
         type: string
         required: true
-      enable-file-sync:
-        description: 'Build with file sync support'
-        type: boolean
       enable-file-sync-production:
         description: 'File sync production mode'
         type: boolean
@@ -111,7 +103,6 @@ jobs:
 
       - name: Set Build Environment Variables
         run: |
-          echo "ENABLE_FILE_SYNC=${{ inputs.enable-file-sync == 'true' || github.event.inputs.enable-file-sync == 'true' }}" >> $GITHUB_ENV
           echo "ENABLE_FILE_SYNC_PRODUCTION=${{ inputs.enable-file-sync-production == 'true' || github.event.inputs.enable-file-sync-production == 'true' }}" >> $GITHUB_ENV
 
       - name: Compile CLJS - android variant, use es6 instead of es-next
