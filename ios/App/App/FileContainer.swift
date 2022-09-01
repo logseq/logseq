@@ -29,8 +29,8 @@ public class FileContainer: CAPPlugin, UIDocumentPickerDelegate {
             validateDocuments(at: self.localContainerUrl!)
         }
         
-        call.resolve(["path": [self.iCloudContainerUrl?.path as Any,
-                               self.localContainerUrl?.path as Any]])
+        call.resolve(["path": [self.iCloudContainerUrl?.absoluteString as Any,
+                               self.localContainerUrl?.absoluteString as Any]])
     }
     
     func validateDocuments(at url: URL) {

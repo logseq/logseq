@@ -5,6 +5,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.config :as config]
             [clojure.string :as string]
             [cljs-bean.core :as bean]
@@ -45,7 +46,8 @@
                      (fn [data]
                        (let [{:keys [type payload]} (bean/->clj data)]
                          (watcher-handler/handle-changed! type payload)
-                         (sync/file-watch-handler type payload))))
+                         (when (file-sync-handler/enable-sync?)
+                           (sync/file-watch-handler type payload)))))
 
   (js/window.apis.on "notification"
                      (fn [data]

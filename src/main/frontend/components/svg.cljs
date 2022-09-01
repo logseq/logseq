@@ -23,15 +23,20 @@
            {:d
             "M64.177 100.069a7.889 7.889 0 01-5.6-2.316l-55.98-55.98a7.92 7.92 0 010-11.196c3.086-3.085 8.105-3.092 11.196 0l50.382 50.382 50.382-50.382a7.92 7.92 0 0111.195 0c3.086 3.086 3.092 8.104 0 11.196l-55.98 55.98a7.892 7.892 0 01-5.595 2.316z"}]])
 
-(defonce loading
-         [:svg.h-5.w-5.animate-spin
-          {:version  "1.1"
+
+(defn loader-fn [opts]
+  [:svg.animate-spin
+   (merge {:version  "1.1"
            :view-box "0 0 24 24"
            :fill     "none"
+           :class    "w-5 h-5"
            :display  "inline-block"}
-          [:circle.opacity-25 {:cx 12 :cy 12 :r 10 :stroke "currentColor" :stroke-width 4}]
-          [:path.opacity-75 {:fill "currentColor"
-                             :d    "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"}]])
+          opts)
+   [:circle.opacity-25 {:cx 12 :cy 12 :r 10 :stroke "currentColor" :stroke-width 4}]
+   [:path.opacity-75 {:fill "currentColor"
+                      :d    "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"}]])
+
+(defonce loading (loader-fn nil))
 
 (defn- hero-icon
   ([d]

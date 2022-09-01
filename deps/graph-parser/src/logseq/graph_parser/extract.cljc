@@ -101,7 +101,7 @@
   [format ast properties file content {:keys [date-formatter page-name-order db] :as options}]
   (try
     (let [page (get-page-name file ast page-name-order)
-          [_original-page-name page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
+          [page page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
           blocks (->> (gp-block/extract-blocks ast content false format (dissoc options :page-name-order))
                       (gp-block/with-parent-and-left {:block/name page-name}))
           ref-pages (atom #{})
