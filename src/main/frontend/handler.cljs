@@ -1,6 +1,5 @@
 (ns frontend.handler
   (:require [cljs.reader :refer [read-string]]
-            [clojure.string :as string]
             [electron.ipc :as ipc]
             [electron.listener :as el]
             [frontend.components.block :as block]
@@ -9,10 +8,9 @@
             [frontend.components.reference :as reference]
             [frontend.components.whiteboard :as whiteboard]
             [frontend.config :as config]
-            [frontend.context.i18n :as i18n :refer [t]]
+            [frontend.context.i18n :as i18n]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
-            [frontend.db.persist :as db-persist]
             [frontend.db.react :as react]
             [frontend.error :as error]
             [frontend.extensions.srs :as srs]
@@ -28,16 +26,16 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.outliner.datascript :as outliner-db]
+            [frontend.modules.outliner.file :as file]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.storage :as storage]
-            [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [logseq.db.schema :as db-schema]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db.schema :as db-schema]))
 
 (defn set-global-error-notification!
   []
@@ -61,7 +59,6 @@
               (when (and (not (state/nfs-refreshing?))
                          (not (contains? (:file/unlinked-dirs @state/state)
                                          (config/get-repo-dir repo))))
-
                 ;; Don't create the journal file until user writes something
                 (page-handler/create-today-journal!))))]
     (f)
@@ -118,7 +115,6 @@
 
          (watch-for-date!)
          (file-handler/watch-for-current-graph-dir!)
-         (state/pub-event! [:graph/ready (state/get-current-repo)])
          (state/pub-event! [:graph/restored (state/get-current-repo)])))
       (p/catch (fn [error]
                  (log/error :exception error)))))
@@ -161,30 +157,6 @@
               (js/window.location.reload)))
      2000)))
 
-(defn- get-repos
-  []
-  (p/let [nfs-dbs (db-persist/get-all-graphs)]
-    ;; TODO: Better IndexDB migration handling
-    (cond
-      (and (mobile-util/native-platform?)
-           (some #(or (string/includes? % " ")
-                      (string/includes? % "logseq_local_/")) nfs-dbs))
-      (do (notification/show! ["DB version is not compatible, please clear cache then re-add your graph back."
-                               (ui/button
-                                 (t :settings-page/clear-cache)
-                                 :class    "ui__modal-enter"
-                                 :class    "text-sm p-1"
-                                 :on-click clear-cache!)] :error false)
-          {:url config/local-repo
-           :example? true})
-
-      (seq nfs-dbs)
-      (map (fn [db] {:url db :nfs? true}) nfs-dbs)
-
-      :else
-      [{:url config/local-repo
-        :example? true}])))
-
 (defn- register-components-fns!
   []
   (state/set-page-blocks-cp! page/page-blocks-cp)
@@ -216,19 +188,21 @@
 
     (events/run!)
 
-    (p/let [repos (get-repos)]
+    (p/let [repos (repo-handler/get-repos)]
       (state/set-repos! repos)
       (restore-and-setup! repos db-schema))
     (when (mobile-util/native-platform?)
       (p/do! (mobile-util/hide-splash)))
 
     (db/run-batch-txs!)
+    (file/<ratelimit-file-writes!)
 
     (when config/dev?
       (enable-datalog-console))
     (when (util/electron?)
       (el/listen!))
     (persist-var/load-vars)
+    (user-handler/restore-tokens-from-localstorage)
     (user-handler/refresh-tokens-loop)
     (js/setTimeout instrument! (* 60 1000))))
 

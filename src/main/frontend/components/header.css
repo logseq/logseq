@@ -210,7 +210,7 @@
     margin: 0 6px;
 }
 
-.is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a) {
+.is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a):not(.file-sync-item) {
   cursor: default !important;
 }
 
@@ -317,12 +317,8 @@ html.is-native-iphone {
   --ls-headbar-inner-top-padding: 36px;
 
   .left-sidebar-inner {
-    > .wrap {
-      padding-top: 12px;
-    }
-
     .new-page {
-      padding-bottom: 12px;
+      padding-bottom: 32px;
     }
   }
 

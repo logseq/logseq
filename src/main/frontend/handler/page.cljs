@@ -197,6 +197,7 @@
     (string/join "/" parts)))
 
 (defn rename-file!
+  "emit file-rename events to :file/rename-event-chan"
   [file new-name ok-handler]
   (let [repo (state/get-current-repo)
         file (db/pull (:db/id file))
@@ -206,7 +207,10 @@
     (db/transact! repo [{:db/id (:db/id file)
                          :file/path new-path}])
     (->
-     (p/let [_ (fs/rename! repo old-path new-path)]
+     (p/let [_ (state/offer-file-rename-event-chan! {:repo repo
+                                                     :old-path old-path
+                                                     :new-path new-path})
+             _ (fs/rename! repo old-path new-path)]
        (ok-handler))
      (p/catch (fn [error]
                 (println "file rename failed: " error))))))
@@ -316,10 +320,12 @@
 (defn unfavorite-page!
   [page-name]
   (when-not (string/blank? page-name)
-    (let [favorites (->> (:favorites (state/get-config))
-                         (remove #(= (string/lower-case %) (string/lower-case page-name)))
-                         (vec))]
-      (config-handler/set-config! :favorites favorites))))
+    (let [old-favorites (:favorites (state/get-config))
+          new-favorites (->> old-favorites
+                             (remove #(= (string/lower-case %) (string/lower-case page-name)))
+                             (vec))]
+      (when-not (= old-favorites new-favorites)
+        (config-handler/set-config! :favorites new-favorites)))))
 
 (defn toggle-favorite! []
   ;; NOTE: in journals or settings, current-page is nil
@@ -671,11 +677,13 @@
           (contains? (set templates) (string/lower-case title)))))))
 
 (defn ls-dir-files!
-  [ok-handler]
-  (web-nfs/ls-dir-files-with-handler!
-   (fn []
-     (init-commands!)
-     (when ok-handler (ok-handler)))))
+  ([ok-handler] (ls-dir-files! ok-handler nil))
+  ([ok-handler opts]
+   (web-nfs/ls-dir-files-with-handler!
+     (fn [e]
+       (init-commands!)
+       (when ok-handler (ok-handler e)))
+     opts)))
 
 (defn get-all-pages
   [repo]

@@ -4,9 +4,9 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
-            [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.property :as property]
+            [frontend.state :as state]
             [frontend.handler.file :as file-handler]))
 
 (defn- indented-block-content

@@ -15,13 +15,14 @@
 
 .tie {
   display: inline-block;
-  font-family: 'tabler-icons-extension' !important;
+  font-family: "tabler-icons-extension" !important;
   font-style: normal !important;
   font-weight: normal !important;
   font-variant: normal !important;
   text-transform: none !important;
   speak: none;
-  vertical-align: -0.125em;
+  line-height: 1;
+  vertical-align: -.125em;
   text-rendering: auto;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

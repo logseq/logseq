@@ -100,7 +100,7 @@
      (cond
        ;; image type
        (and format (contains? (gp-config/img-formats) format))
-       [:img {:src path}]
+       [:img {:src (util/node-path.join "file://" path)}]
 
        (and format (contains? (gp-config/text-formats) format))
        (when-let [file-content (or (db/get-file path) "")]

@@ -12,13 +12,7 @@
             [lambdaisland.glogi :as log]
             [frontend.state :as state]))
 
-(defonce write-chan-batch-buf (atom []))
-
 (def batch-write-interval 1000)
-
-(defn writes-finished?
-  []
-  (empty? @write-chan-batch-buf))
 
 (def whiteboard-blocks-pull-keys-with-persisted-ids
   '[:block/properties
@@ -40,6 +34,7 @@
             :block/page
             :block/parent) ;; these are auto-generated for whiteboard shapes
     (dissoc block :block/page)))
+
 
 (defn do-write-file!
   [repo page-db-id]
@@ -86,7 +81,14 @@
         (write-files! [[repo page-db-id]])
         (async/put! (state/get-file-write-chan) [repo page-db-id])))))
 
-(util/batch (state/get-file-write-chan)
-            batch-write-interval
-            write-files!
-            write-chan-batch-buf)
+(def *writes-finished? (atom true))
+
+(defn <ratelimit-file-writes!
+  []
+  (util/<ratelimit (state/get-file-write-chan) batch-write-interval
+                 :filter-fn
+                 #(do (reset! *writes-finished? false) true)
+                 :flush-fn
+                 #(do
+                    (write-files! %)
+                    (reset! *writes-finished? true))))

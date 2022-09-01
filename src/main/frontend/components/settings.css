@@ -14,17 +14,19 @@
   }
 
   &-inner {
+    @apply flex flex-col md:flex-row;
+    
     > aside {
-        border-right: 0px solid var(--ls-quaternary-background-color);
-        border-bottom: 1px solid var(--ls-quaternary-background-color);
-        @screen md {
-            border-right: 1px solid var(--ls-quaternary-background-color);
-            border-bottom: 0px solid var(--ls-quaternary-background-color);
-        }
+      border-right: 0 solid var(--ls-quaternary-background-color);
+      border-bottom: 1px solid var(--ls-quaternary-background-color);
+
+      @screen md {
+        border-right: 1px solid var(--ls-quaternary-background-color);
+        border-bottom: 0 solid var(--ls-quaternary-background-color);
+      }
 
       ul {
-        padding: 12px;
-        padding-left: 5px;
+        padding: 12px 12px 12px 5px;
         margin: 0;
 
         > li {
@@ -68,7 +70,6 @@
     > article {
       flex: 1;
       padding: 0 12px 12px;
-      max-height: 70vh;
       min-height: 380px;
       width: auto;
       overflow: auto;
@@ -76,6 +77,7 @@
       margin-bottom: -17px;
 
       @screen md {
+        max-height: 70vh;
         width: 680px;
       }
     }

@@ -84,12 +84,21 @@
                      :on-composition-end on-composition)]
     (textarea props)))
 
-(rum/defc dropdown-content-wrapper [state content class]
+(rum/defc dropdown-content-wrapper
+  < {:did-mount    (fn [_state]
+                     (let [k    (inc (count (state/sub :modal/dropdowns)))
+                           args (:rum/args _state)]
+                       (state/set-state! [:modal/dropdowns k] (second args))
+                       (assoc _state ::k k)))
+     :will-unmount (fn [_state]
+                     (state/update-state! :modal/dropdowns #(dissoc % (::k _state)))
+                     _state)}
+  [dropdown-state _close-fn content class]
   (let [class (or class
                   (util/hiccup->class "origin-top-right.absolute.right-0.mt-2"))]
     [:div.dropdown-wrapper
      {:class (str class " "
-                  (case state
+                  (case dropdown-state
                     "entering" "transition ease-out duration-100 transform opacity-0 scale-95"
                     "entered" "transition ease-out duration-100 transform opacity-100 scale-100"
                     "exiting" "transition ease-in duration-75 transform opacity-100 scale-100"
@@ -102,14 +111,15 @@
    & [{:keys [modal-class z-index trigger-class]
        :or   {z-index 999}}]]
   (let [{:keys [open?]} state
-        modal-content (modal-content-fn state)]
+        modal-content (modal-content-fn state)
+        close-fn (:close-fn state)]
     [:div.relative.ui__dropdown-trigger {:style {:z-index z-index} :class trigger-class}
      (content-fn state)
      (css-transition
       {:in @open? :timeout 0}
       (fn [dropdown-state]
         (when @open?
-          (dropdown-content-wrapper dropdown-state modal-content modal-class))))]))
+          (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class))))]))
 
 ;; `sequence` can be a list of symbols, a list of strings, or a string
 (defn render-keyboard-shortcut [sequence]
@@ -144,14 +154,18 @@
    (fn [{:keys [close-fn]}]
      [:.menu-links-wrapper
       (when links-header links-header)
-      (for [{:keys [options title icon hr hover-detail item]} (if (fn? links) (links) links)]
+
+      (for [{:keys [options title icon key hr hover-detail item _as-link?]} (if (fn? links) (links) links)]
         (let [new-options
               (merge options
-                     {:title    hover-detail
-                      :on-click (fn [e]
-                                  (when-not (false? (when-let [on-click-fn (:on-click options)]
-                                                      (on-click-fn e)))
-                                    (close-fn)))})
+                     (cond->
+                       {:title    hover-detail
+                        :on-click (fn [e]
+                                    (when-not (false? (when-let [on-click-fn (:on-click options)]
+                                                        (on-click-fn e)))
+                                      (close-fn)))}
+                       key
+                       (assoc :key key)))
               child (if hr
                       nil
                       (or item
@@ -267,6 +281,25 @@
                       (fn [state]
                         (notification-content state (:content v) (:status v) k)))))
                  contents)))))
+
+(rum/defc humanity-time-ago
+  [input opts]
+  (let [time-fn (fn []
+                  (try
+                    (util/time-ago input)
+                    (catch js/Error _e
+                      (js/console.error _e)
+                      input)))
+        [time set-time] (rum/use-state (time-fn))]
+
+    (rum/use-effect!
+     (fn []
+       (let [timer (js/setInterval
+                    #(set-time (time-fn)) (* 1000 30))]
+         #(js/clearInterval timer)))
+     [])
+
+    [:span.ui__humanity-time (merge {} opts) time]))
 
 (defn checkbox
   [option]
@@ -480,14 +513,14 @@
     (shortcut-helper/decorate-binding binding)))
 
 (rum/defc modal-overlay
-  [state close-fn]
+  [state close-fn close-backdrop?]
   [:div.ui__modal-overlay
-   {:class (case state
-             "entering" "ease-out duration-300 opacity-0"
-             "entered" "ease-out duration-300 opacity-100"
-             "exiting" "ease-in duration-200 opacity-100"
-             "exited" "ease-in duration-200 opacity-0")
-    :on-click close-fn}
+   {:class    (case state
+                "entering" "ease-out duration-300 opacity-0"
+                "entered" "ease-out duration-300 opacity-100"
+                "exiting" "ease-in duration-200 opacity-100"
+                "exited" "ease-in duration-200 opacity-0")
+    :on-click #(when close-backdrop? (close-fn))}
    [:div.absolute.inset-0.opacity-75]])
 
 (rum/defc modal-panel-content <
@@ -542,6 +575,7 @@
   (let [modal-panel-content (state/sub :modal/panel-content)
         fullscreen? (state/sub :modal/fullscreen?)
         close-btn? (state/sub :modal/close-btn?)
+        close-backdrop? (state/sub :modal/close-backdrop?)
         show? (state/sub :modal/show?)
         label (state/sub :modal/label)
         close-fn (fn []
@@ -554,7 +588,7 @@
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
-        (modal-overlay state close-fn)))
+        (modal-overlay state close-fn close-backdrop?)))
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
@@ -613,6 +647,7 @@
       (let [id (:modal/id modal)
             modal-panel-content (:modal/panel-content modal)
             close-btn? (:modal/close-btn? modal)
+            close-backdrop? (:modal/close-backdrop? modal)
             show? (:modal/show? modal)
             label (:modal/label modal)
             close-fn (fn []
@@ -624,17 +659,19 @@
          (css-transition
           {:in show? :timeout 0}
           (fn [state]
-            (modal-overlay state close-fn)))
+            (modal-overlay state close-fn close-backdrop?)))
          (css-transition
           {:in show? :timeout 0}
           (fn [state]
             (modal-panel show? modal-panel-content state close-fn false close-btn?)))]))))
 
 (defn loading
-  [content]
-  [:div.flex.flex-row.items-center
-   [:span.icon.flex.items-center svg/loading]
-   [:span.text.pl-2 content]])
+  ([content] (loading content nil))
+  ([content opts]
+   [:div.flex.flex-row.items-center.inline
+    [:span.icon.flex.items-center (svg/loader-fn opts)
+     (when-not (string/blank? content)
+       [:span.text.pl-2 content])]]))
 
 (rum/defc rotating-arrow
   [collapsed?]
@@ -811,7 +848,7 @@
 
 (rum/defcs tippy < rum/reactive
   (rum/local false ::mounted?)
-  [state {:keys [fixed-position? open? in-editor?] :as opts} child]
+  [state {:keys [fixed-position? open? in-editor? html] :as opts} child]
   (let [*mounted? (::mounted? state)
         manual (not= open? nil)
         edit-id (ffirst (state/sub :editor/editing?))
@@ -845,7 +882,7 @@
             (assoc :html (or
                           (when open?
                             (try
-                              (when-let [html (:html opts)]
+                              (when html
                                 (if (fn? html)
                                   (html)
                                   [:div.px-2.py-1
@@ -877,24 +914,15 @@
              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
              :on-tweet-load-success #(reset! *loading? false)})]]))
 
-;; Extended tabler icons managed by Webfont app
-(defonce tie-names
-  #{"block"
-    "block-search"
-    "page"
-    "page-search"
-    "references-hide"
-    "references-show"
-    "whiteboard"
-    "whiteboard-element"})
-
 (defn icon
   ([class] (icon class nil))
-  ([class opts]
-   [:i (merge {:class (str (if (tie-names class) "tie tie-" "ti ti-") class
-                           (when (:class opts)
-                             (str " " (string/trim (:class opts)))))}
-              (dissoc opts :class))]))
+  ([class {:keys [extension?] :as opts}]
+   [:i (merge {:class (util/format
+                       (str "%s-" class
+                            (when (:class opts)
+                              (str " " (string/trim (:class opts)))))
+                       (if extension? "tie tie" "ti ti"))}
+              (dissoc opts :class :extension?))]))
 
 (rum/defc with-shortcut < rum/reactive
   [shortcut-key position content]

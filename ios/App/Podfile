@@ -27,4 +27,5 @@ target 'Logseq' do
   # Add your Pods here
   pod 'AWSMobileClient'
   pod 'AWSS3'
+  pod 'AgeEncryption', :podspec => './LogseqSpecs/AgeEncryption.podspec'
 end

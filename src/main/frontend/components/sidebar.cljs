@@ -209,6 +209,7 @@
     class :class
     title :title
     icon :icon
+    icon-extention? :icon-extention?
     active :active
     href :href}]
   [:div
@@ -217,7 +218,7 @@
     {:on-click on-click-handler
      :class (when active "active")
      :href href}
-    (ui/icon (str icon))
+    (ui/icon (str icon) {:extension? icon-extention?})
     [:span.flex-1 title]]])
 
 (rum/defc sidebar-nav
@@ -230,7 +231,14 @@
                    (when (some (fn [sel] (boolean (.closest target sel)))
                                [".favorites .bd" ".recent .bd" ".dropdown-wrapper" ".nav-header"])
                      (close-modal-fn)))}
-     [:div.flex.flex-col.pb-4.wrap.gap-4
+
+     [:div.flex.flex-col.pb-4.wrap.gap-4.relative
+      (when (mobile-util/native-platform?)
+        [:div.fake-bar.absolute
+         [:button
+          {:on-click state/toggle-left-sidebar!}
+          (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]])
+
       [:nav.px-4.flex.flex-col.gap-1 {:aria-label "Navigation menu"}
        (repo/repos-dropdown)
 
@@ -250,7 +258,10 @@
             :active           (and (not srs-open?)
                                    (or (= route-name :all-journals) (= route-name :home)))
             :title            (t :left-side-bar/journals)
-            :on-click-handler route-handler/go-to-journals!
+            :on-click-handler (fn [e]
+                                (if (gobj/get e "shiftKey")
+                                  (route-handler/sidebar-journals!)
+                                  (route-handler/go-to-journals!)))
             :icon             "calendar"})))
 
         (when (state/enable-flashcards? (state/get-current-repo))
@@ -277,22 +288,22 @@
             :title (t :right-side-bar/whiteboards)
             :href  (rfe/href :whiteboards)
             :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
-            :icon  "whiteboard"}))]]
+            :icon  "whiteboard"
+            :icon-extention? true}))]]
 
       (when left-sidebar-open? (favorites t))
 
       (when (and left-sidebar-open? (not config/publishing?)) (recent-pages t))
 
-      (when-not (mobile-util/native-platform?)
-        [:footer.px-2 {:class "new-page"}
-         (when-not config/publishing?
-           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
-            {:on-click (fn []
-                         (and (util/sm-breakpoint?)
-                              (state/toggle-left-sidebar!))
-                         (state/pub-event! [:go/search]))}
-            (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
-            [:span.flex-1 (t :right-side-bar/new-page)]])])]]))
+      [:footer.px-2 {:class "new-page"}
+       (when-not config/publishing?
+         [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
+          {:on-click (fn []
+                       (and (util/sm-breakpoint?)
+                            (state/toggle-left-sidebar!))
+                       (state/pub-event! [:go/search]))}
+          (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
+          [:span.flex-1 (t :right-side-bar/new-page)]])]]]))
 
 (rum/defc left-sidebar < rum/reactive
   [{:keys [left-sidebar-open? route-match]}]
@@ -410,20 +421,6 @@
                        (:current-parsing-file state))]]]]
     (ui/progress-bar-with-label width left-label (str finished "/" total))))
 
-(rum/defc file-sync-download-progress < rum/static
-  [state]
-  (let [finished (or (:finished state) 0)
-        total (:total state)
-        width (js/Math.round (* (.toFixed (/ finished total) 2) 100))
-        left-label [:div.flex.flex-row.font-bold
-                    "Downloading"
-                    [:div.hidden.md:flex.flex-row
-                     [:span.mr-1 ": "]
-                     [:ul
-                      (for [file (:downloading-files state)]
-                        [:li file])]]]]
-    (ui/progress-bar-with-label width left-label (str finished "/" total))))
-
 (rum/defc main-content < rum/reactive db-mixins/query
   {:init (fn [state]
            (when-not @sidebar-inited?
@@ -449,16 +446,8 @@
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
         journals-length (state/sub :journals-length)
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
-        graph-parsing-state (state/sub [:graph/parsing-state current-repo])
-        graph-file-sync-download-init-state (state/sub [:file-sync/download-init-progress current-repo])]
+        graph-parsing-state (state/sub [:graph/parsing-state current-repo])]
     (cond
-      (or
-       (:downloading? graph-file-sync-download-init-state)
-       (not= (:total graph-file-sync-download-init-state) (:finished graph-file-sync-download-init-state)))
-      [:div.flex.items-center.justify-center.full-height-without-header
-       [:div.flex-1
-        (file-sync-download-progress graph-file-sync-download-init-state)]]
-
       (or
        (:graph-loading? graph-parsing-state)
        (not= (:total graph-parsing-state) (:finished graph-parsing-state)))
@@ -584,6 +573,7 @@
         settings-open? (state/sub :ui/settings-open?)
         left-sidebar-open?  (state/sub :ui/left-sidebar-open?)
         wide-mode? (state/sub :ui/wide-mode?)
+        onboarding-state (state/sub :file-sync/onboarding-state)
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
         margin-less-pages? (boolean (#{:graph :whiteboard} route-name))
@@ -609,6 +599,7 @@
       :settings-open? settings-open?
       :sidebar-blocks-len (count right-sidebar-blocks)
       :system-theme? system-theme?
+      :onboarding-state onboarding-state
       :preferred-language preferred-language
       :on-click      (fn [e]
                        (editor-handler/unhighlight-blocks!)

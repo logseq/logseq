@@ -428,6 +428,10 @@ body[data-page=import] {
         &.back {
           background-color: rgba(0, 0, 0, .3);
         }
+
+        &.bg-gray {
+          @apply bg-gray-400;
+        }
       }
     }
   }

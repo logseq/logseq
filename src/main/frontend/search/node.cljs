@@ -3,20 +3,22 @@
             [electron.ipc :as ipc]
             [frontend.search.db :as search-db]
             [frontend.search.protocol :as protocol]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.state :as state]))
 
 (defrecord Node [repo]
   protocol/Engine
   (query [_this q opts]
     (p/let [result (ipc/ipc "search-blocks" repo q opts)
             result (bean/->clj result)]
-      (map (fn [{:keys [content uuid page]}]
-             {:block/uuid uuid
-              :block/content content
-              :block/page page}) result)))
+      (keep (fn [{:keys [content uuid page]}]
+              (when-not (> (count content) (state/block-content-max-length repo))
+                {:block/uuid uuid
+                 :block/content content
+                 :block/page page})) result)))
   (cache-stale? [_this repo]
-                ;; only FTS require cache validating
-                (ipc/ipc "searchVersionChanged?" repo))
+    ;; only FTS require cache validating
+    (ipc/ipc "searchVersionChanged?" repo))
   (rebuild-blocks-indice! [_this]
     (let [indice (search-db/build-blocks-indice repo)]
       (ipc/ipc "rebuild-blocks-indice" repo indice)))
