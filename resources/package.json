@@ -1,6 +1,6 @@
 {
   "name": "Logseq",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "main": "electron.js",
   "author": "Logseq",
   "license": "AGPL-3.0",
