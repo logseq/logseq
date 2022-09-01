@@ -190,12 +190,11 @@
              (ui/icon "chevron-left" {:style {:fontSize 25}})])))]
 
      [:div.r.flex
-      (do
-        (when (and sync-enabled?
-                  current-repo
-                  (not (config/demo-graph? current-repo))
-                  (user-handler/alpha-user?))
-         (fs-sync/indicator)))
+      (when (and sync-enabled?
+                 current-repo
+                 (not (config/demo-graph? current-repo))
+                 (user-handler/alpha-user?))
+        (fs-sync/indicator))
 
       (when (and (not= (state/get-current-route) :home)
                  (not custom-home-page?))
