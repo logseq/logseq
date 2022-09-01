@@ -23,7 +23,7 @@ on:
         description: 'File sync production mode'
         type: boolean
         required: true
-        default: false
+        default: true
   workflow_call:
     inputs:
       build-target:

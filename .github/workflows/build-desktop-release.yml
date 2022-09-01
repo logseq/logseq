@@ -32,7 +32,7 @@ on:
         description: 'File sync production mode'
         type: boolean
         required: true
-        default: false
+        default: true
       enable-plugins:
         description: 'Build with plugin system support'
         type: boolean
