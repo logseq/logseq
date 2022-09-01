@@ -595,8 +595,10 @@
 
   (state/set-state! :plugin/indicator-text "LOADING")
 
-  (-> (p/let [root            (get-ls-dotdir-root)
-              _               (.setupPluginCore js/LSPlugin (bean/->js {:localUserConfigRoot root :dotConfigRoot root}))
+  (->
+    (p/let [root (get-ls-dotdir-root)
+            _ (.setupPluginCore js/LSPlugin (bean/->js {:localUserConfigRoot root :dotConfigRoot root}))
+            _ (state/set-state! :config/root-dir root)
 
               clear-commands! (fn [pid]
                                 ;; commands
