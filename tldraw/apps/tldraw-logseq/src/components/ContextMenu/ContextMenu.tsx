@@ -40,6 +40,17 @@ export const ContextMenu = observer(function ContextMenu({
             <>
               <ReactContextMenu.Item
                 className="tl-context-menu-button"
+                onClick={() => runAndTransition(app.cut)}
+              >
+                Cut
+                <div className="tl-context-menu-right-slot">
+                  <span className="keyboard-shortcut">
+                    <code>{MOD_KEY}</code> <code>X</code>
+                  </span>
+                </div>
+              </ReactContextMenu.Item>
+              <ReactContextMenu.Item
+                className="tl-context-menu-button"
                 onClick={() => runAndTransition(app.copy)}
               >
                 Copy

@@ -96,7 +96,11 @@ export class TLApp<
         fn: () => this.api.resetZoom(),
       },
       {
-        keys: 'mod+-',
+        keys: '1',
+        fn: () => this.api.zoomToFit(),
+      },
+      {
+        keys: 'shift+1',
         fn: () => this.api.zoomToSelection(),
       },
       {
@@ -110,6 +114,10 @@ export class TLApp<
       {
         keys: 'mod+z',
         fn: () => this.undo(),
+      },
+      {
+        keys: 'mod+x',
+        fn: () => this.cut(),
       },
       {
         keys: 'mod+shift+z',
@@ -435,6 +443,11 @@ export class TLApp<
         files: fileList ? Array.from(fileList) : undefined,
       })
     }
+  }
+
+  cut = () => {
+    this.copy()
+    this.api.deleteShapes()
   }
 
   dropFiles = (files: FileList, point?: number[]) => {
