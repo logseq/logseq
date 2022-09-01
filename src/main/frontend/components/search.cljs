@@ -213,7 +213,7 @@
         (when alias
           (let [target-original-name (model/get-page-original-name alias)]
             [:span.mr-2.text-sm.font-medium.mb-2 (str "Alias -> " target-original-name)]))
-        (search-result-item "Page" (highlight-exact-query data search-q))]
+        (search-result-item (if (model/whiteboard-page? data) "Whiteboard" "Page") (highlight-exact-query data search-q))]
 
        :file
        (search-result-item "File" (highlight-exact-query data search-q))
