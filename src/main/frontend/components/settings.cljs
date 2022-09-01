@@ -609,13 +609,11 @@
   []
   (let [instrument-disabled? (state/sub :instrument/disabled?)
         developer-mode? (state/sub [:ui/developer-mode?])
-        https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])
-        enable-whiteboards? (state/enable-whiteboards? (state/get-current-repo))]
+        https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])]
     [:div.panel-wrap.is-advanced
      (when (and util/mac? (util/electron?)) (app-auto-update-row t))
      (usage-diagnostics-row t instrument-disabled?)
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
-     (when (util/electron?) (whiteboards-switcher-row enable-whiteboards?))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (clear-cache-row t)
 
@@ -643,7 +641,8 @@
         enable-journals? (state/enable-journals? current-repo)
         enable-encryption? (state/enable-encryption? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
-        enable-sync? (state/enable-sync?)]
+        enable-sync? (state/enable-sync?)
+        enable-whiteboards? (state/enable-whiteboards? current-repo)]
     [:div.panel-wrap.is-features.mb-8
      (journal-row enable-journals?)
      (when (not enable-journals?)
@@ -663,6 +662,7 @@
      (flashcards-switcher-row enable-flashcards?)
      (zotero-settings-row)
      (encryption-row enable-encryption?)
+     (when (util/electron?) (whiteboards-switcher-row enable-whiteboards?))
 
      (when-not web-platform?
        [:div
