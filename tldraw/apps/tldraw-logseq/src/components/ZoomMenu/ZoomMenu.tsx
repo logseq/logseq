@@ -24,17 +24,22 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           onSelect={preventEvent}
           onClick={app.api.zoomToFit}
         >
-          Zoom to Fit <div className="tl-zoom-menu-right-slot"></div>
+          Zoom to fit
+          <div className="tl-zoom-menu-right-slot">
+            <span className="keyboard-shortcut">
+              <code>1</code>
+            </span>
+          </div>
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
           className="menu-link tl-zoom-menu-dropdown-item"
           onSelect={preventEvent}
           onClick={app.api.zoomToSelection}
         >
-          Zoom to Selection{' '}
+          Zoom to selection
           <div className="tl-zoom-menu-right-slot">
             <span className="keyboard-shortcut">
-              <code>{MOD_KEY}</code> <code>-</code>
+              <code>⇧</code> <code>1</code>
             </span>
           </div>
         </DropdownMenuPrimitive.Item>
@@ -43,7 +48,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           onSelect={preventEvent}
           onClick={app.api.zoomIn}
         >
-          Zoom In{' '}
+          Zoom in
           <div className="tl-zoom-menu-right-slot">
             <span className="keyboard-shortcut">
               <code>{MOD_KEY}</code> <code>+</code>
@@ -55,7 +60,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           onSelect={preventEvent}
           onClick={app.api.zoomOut}
         >
-          Zoom Out{' '}
+          Zoom out
           <div className="tl-zoom-menu-right-slot">
             <span className="keyboard-shortcut">
               <code>{MOD_KEY}</code> <code>-</code>
@@ -67,7 +72,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           onSelect={preventEvent}
           onClick={app.api.resetZoom}
         >
-          Reset Zoom{' '}
+          Reset zoom
           <div className="tl-zoom-menu-right-slot">
             <span className="keyboard-shortcut">
               <code>⇧</code> <code>0</code>

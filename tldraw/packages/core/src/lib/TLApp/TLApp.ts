@@ -96,7 +96,11 @@ export class TLApp<
         fn: () => this.api.resetZoom(),
       },
       {
-        keys: 'mod+-',
+        keys: '1',
+        fn: () => this.api.zoomToFit(),
+      },
+      {
+        keys: 'shift+1',
         fn: () => this.api.zoomToSelection(),
       },
       {
@@ -110,6 +114,10 @@ export class TLApp<
       {
         keys: 'mod+z',
         fn: () => this.undo(),
+      },
+      {
+        keys: 'mod+x',
+        fn: () => this.cut(),
       },
       {
         keys: 'mod+shift+z',
@@ -437,6 +445,11 @@ export class TLApp<
     }
   }
 
+  cut = () => {
+    this.copy()
+    this.api.deleteShapes()
+  }
+
   dropFiles = (files: FileList, point?: number[]) => {
     this.notify('drop-files', {
       files: Array.from(files),
@@ -708,6 +721,7 @@ export class TLApp<
     return (
       !ctrlKey &&
       this.isInAny('select.idle', 'select.hoveringSelectionHandle') &&
+      !this.isIn('select.contextMenu') &&
       selectedShapesArray.length > 0 &&
       !selectedShapesArray.every(shape => shape.hideContextBar)
     )
@@ -819,7 +833,7 @@ export class TLApp<
   }
 
   readonly onWheel: TLEvents<S, K>['wheel'] = (info, e) => {
-    if (e.ctrlKey) {
+    if (e.ctrlKey || this.isIn('select.contextMenu')) {
       return
     }
 

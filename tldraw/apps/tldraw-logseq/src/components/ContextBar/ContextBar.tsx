@@ -43,7 +43,10 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) 
         <div
           ref={rContextBar}
           className="tl-contextbar"
-          style={{ pointerEvents: hidden ? 'none' : 'all' }}
+          style={{
+            visibility: hidden ? 'hidden' : 'visible',
+            pointerEvents: hidden ? 'none' : 'all'
+          }}
         >
           {Actions.map((Action, idx) => (
             <React.Fragment key={idx}>

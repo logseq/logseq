@@ -2,6 +2,7 @@
 /* eslint-disable no-undef */
 import 'zx/globals'
 import fs from 'fs'
+import path from 'path'
 
 // Build with [tsup](https://tsup.egoist.sh)
 await $`tsup`
@@ -16,4 +17,7 @@ Object.assign(glob, {
 
 fs.writeFileSync('dist/package.json', JSON.stringify(glob, null, 2))
 
-await $`ln -f ${__dirname}/dist/index.js ${__dirname}/../../../src/js/tldraw-logseq.js`
+const dest = path.join(__dirname, '/../../../src/js/tldraw-logseq.js')
+
+fs.unlinkSync(dest)
+fs.linkSync(path.join(__dirname, '/dist/index.js'), dest)
