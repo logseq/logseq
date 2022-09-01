@@ -338,13 +338,9 @@
                                     (when nfs?
                                       (swap! path-handles assoc path handle))))
                     global-dir (config/get-global-config-dir)
-                    global-dir-exists? (fs/dir-exists? global-dir)
-                    ;; TODO: Handle nfs?
-                    global-files-result (if global-dir-exists?
-                                          (fs/get-files global-dir
-                                                        (fn [path handle]
-                                                          (when nfs?
-                                                            (swap! path-handles assoc path handle))))
+                    global-config-supported? (and electron? (fs/dir-exists? global-dir))
+                    global-files-result (if global-config-supported?
+                                          (fs/get-files global-dir (constantly nil))
                                           [])
                     new-local-files (-> (->db-files mobile-native? electron? dir-name local-files-result)
                                         (remove-ignore-files dir-name nfs?))

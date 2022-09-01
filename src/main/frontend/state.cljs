@@ -100,6 +100,7 @@
 
      :config                                {}
      :config/root-dir                       nil
+     :global-config                         {}
      :block/component-editing-mode?         false
      :editor/hidden-editors                 #{}             ;; page names
      :editor/draw-mode?                     false
@@ -1231,6 +1232,10 @@
 (defn set-config!
   [repo-url value]
   (set-state! [:config repo-url] value))
+
+(defn set-global-config!
+  [value]
+  (set-state! [:global-config] value))
 
 (defn get-wide-mode?
   []

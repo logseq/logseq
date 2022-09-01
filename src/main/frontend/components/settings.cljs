@@ -546,8 +546,7 @@
      (version-row t version)
      (language-row t preferred-language)
      (theme-modes-row t switch-theme system-theme? dark?)
-     ;; TODO: Disable for mobile
-     (edit-global-config-edn)
+     (when (util/electron?) (edit-global-config-edn))
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))
      (when current-repo (edit-export-css))

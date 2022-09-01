@@ -17,7 +17,8 @@
             [promesa.core :as p]
             [frontend.mobile.util :as mobile]
             [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser :as graph-parser]))
+            [logseq.graph-parser :as graph-parser]
+            ["path" :as path]))
 
 ;; TODO: extract all git ops using a channel
 
@@ -57,9 +58,14 @@
    (restore-config! repo-url nil))
   ([repo-url config-content]
    (let [config-content (if config-content config-content
-                            (common-handler/get-config repo-url))]
+                          (common-handler/get-config repo-url))]
      (when config-content
        (common-handler/reset-config! repo-url config-content)))))
+
+(defn set-global-config-state!
+  [repo-url]
+  (let [config-content (common-handler/get-global-config-content repo-url)]
+    (common-handler/reset-global-config! config-content)))
 
 (defn load-files-contents!
   [repo-url files ok-handler]
@@ -173,29 +179,43 @@
   (let [original-content (db/get-file repo path)
         write-file! (if from-disk?
                       #(p/resolved nil)
-                      #(fs/write-file! repo (config/get-repo-dir repo) path content
-                                       (assoc (when original-content {:old-content original-content})
-                                              :skip-compare? skip-compare?)))
+                      #(let [path-dir (if (= (path/dirname path) (config/get-global-config-dir))
+                                        (config/get-global-config-dir)
+                                        (config/get-repo-dir repo))]
+                         (fs/write-file! repo path-dir path content
+                                        (assoc (when original-content {:old-content original-content})
+                                               :skip-compare? skip-compare?))))
         opts {:new-graph? new-graph?
               :from-disk? from-disk?}]
     (if reset?
       (do
         (when-let [page-id (db/get-file-page-id path)]
           (db/transact! repo
-            [[:db/retract page-id :block/alias]
-             [:db/retract page-id :block/tags]]
-            opts))
+                        [[:db/retract page-id :block/alias]
+                         [:db/retract page-id :block/tags]]
+                        opts))
         (reset-file! repo path content (merge opts
                                               (when (some? verbose) {:verbose verbose}))))
       (db/set-file-content! repo path content opts))
     (util/p-handle (write-file!)
                    (fn [_]
-                     (when (= path (config/get-config-path repo))
-                       (restore-config! repo))
-                     (when (= path (config/get-custom-css-path repo))
+                     (cond
+                       (= path (config/get-config-path repo))
+                       (restore-config! repo)
+
+                       (= path (config/get-global-config-path))
+                       (set-global-config-state! repo)
+
+                       (= path (config/get-custom-css-path repo))
                        (ui-handler/add-style-if-exists!))
+
                      (when re-render-root? (ui-handler/re-render-root!)))
                    (fn [error]
+                     (when (= path (config/get-global-config-path))
+                       (state/pub-event! [:notification/show
+                                         {:content (str "Failed to write to file " path)
+                                          :status :error}]))
+
                      (println "Write file failed, path: " path ", content: " content)
                      (log/error :write/failed error)))))
 

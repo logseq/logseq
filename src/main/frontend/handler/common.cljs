@@ -50,9 +50,14 @@
                 (hidden? path patterns))) files)
     files))
 
+;; TODO: Rename to get-repo-config-content
 (defn get-config
   [repo-url]
   (db/get-file repo-url (config/get-config-path)))
+
+(defn get-global-config-content
+  [repo-url]
+  (db/get-file repo-url (config/get-global-config-path)))
 
 (defn safe-read-string
   [content error-message-or-handler]
@@ -78,6 +83,12 @@
     (let [config (read-config content)]
       (state/set-config! repo-url config)
       config)))
+
+(defn reset-global-config!
+  [content]
+  (let [config (reader/read-string content)]
+    (state/set-global-config! config)
+    config))
 
 (defn read-metadata!
   [content]
