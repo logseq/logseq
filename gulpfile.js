@@ -86,7 +86,7 @@ const common = {
     ], { ignoreInitial: true }, common.syncJS_CSSinRt)
   },
 
-  async env (cb) {
+  async runCapWithLocalDevServerEntry (cb) {
     const mode = process.env.PLATFORM || 'ios'
 
     const IP = ip.address()
@@ -166,7 +166,7 @@ exports.electronMaker = async () => {
   })
 }
 
-exports.env = common.env
+exports.cap = common.runCapWithLocalDevServerEntry
 exports.clean = common.clean
 exports.watch = gulp.series(common.syncResourceFile, common.syncAssetFiles, common.syncAllStatic,
   gulp.parallel(common.keepSyncResourceFile, css.watchCSS))
