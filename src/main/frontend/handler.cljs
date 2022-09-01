@@ -214,7 +214,7 @@
           (state/set-repos! repos)
           (restore-and-setup! repos db-schema))
         (p/catch (fn [e]
-                   (js/console.error "Errow while restoring repos: " e)))
+                   (js/console.error "Error while restoring repos: " e)))
         (p/finally (fn []
                      (state/set-db-restoring! false))))
     (when (mobile-util/native-platform?)
