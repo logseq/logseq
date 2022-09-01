@@ -126,7 +126,7 @@
                 (into {})))
         "Counts for blocks with common block attributes")
 
-    (is (= #{"term" "setting" "book" "Templates" "Query" "Query/table" "page"}
+    (is (= #{"term" "setting" "book" "templates" "Query" "Query/table" "page"}
            (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
                 (map (comp :block/original-name first))
                 set))

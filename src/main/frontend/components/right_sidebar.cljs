@@ -111,7 +111,7 @@
   ([on-close]
    (close nil on-close))
   ([class on-close]
-   [:a.close.opacity-50.hover:opacity-100.flex.items-center
+   [:a.close.flex.items-center
     (cond-> {:on-click on-close
              :style {:margin-right -4}}
       class
@@ -212,7 +212,7 @@
                                                             repo
                                                             page
                                                             :page-graph)))}
-          (t :right-side-bar/page)]]
+          (t :right-side-bar/page-graph)]]
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]

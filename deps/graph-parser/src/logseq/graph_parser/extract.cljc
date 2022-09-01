@@ -40,7 +40,7 @@
               (or file-name first-block-name)))))))
 
 (defn- build-page-entity
-  [properties file page-name page ref-tags {:keys [date-formatter db]}]
+  [properties file page-name page ref-tags {:keys [date-formatter db from-page]}]
   (let [alias (:alias properties)
         alias' (if (string? alias) [alias] alias)
         aliases (and alias'
@@ -74,7 +74,8 @@
     (cond->
      (gp-util/remove-nils
       (assoc
-       (gp-block/page-name->map page false db true date-formatter)
+       (gp-block/page-name->map page false db true date-formatter
+                                :from-page from-page)
        :block/file {:file/path (gp-util/path-normalize file)}))
 
      (seq valid-properties)
@@ -121,7 +122,8 @@
                                        :block/refs block-ref-pages
                                        :block/path-refs block-path-ref-pages)))))
                    blocks)
-          page-entity (build-page-entity properties file page-name page ref-tags options)
+          page-entity (build-page-entity properties file page-name page ref-tags
+                                         (assoc options :from-page page))
           namespace-pages (let [page (:block/original-name page-entity)]
                             (when (text/namespace-page? page)
                               (->> (gp-util/split-namespace-pages page)

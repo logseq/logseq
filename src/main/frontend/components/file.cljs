@@ -100,17 +100,17 @@
      (cond
        ;; image type
        (and format (contains? (gp-config/img-formats) format))
-       [:img {:src path}]
+       [:img {:src (util/node-path.join "file://" path)}]
 
        (and format (contains? (gp-config/text-formats) format))
-       (when-let [file-content (db/get-file path)]
+       (when-let [file-content (or (db/get-file path) "")]
          (let [content (string/trim file-content)
                mode (util/get-file-ext path)]
-           (lazy-editor/editor {:file? true
-                                :file-path path}
-                               (str "file-edit-" random-id)
-                               {:data-lang mode}
-                               content
+            (lazy-editor/editor {:file?     true
+                                 :file-path path}
+                                (str "file-edit-" random-id)
+                                {:data-lang mode}
+                                content
                                {})))
 
        :else

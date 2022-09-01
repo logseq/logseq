@@ -1,0 +1,59 @@
+@font-face {
+  font-family: "tabler-icons-extension";
+  src: url("../fonts/tabler-icons-extension.woff2?6z5ubs") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+}
+
+.tie {
+  display: inline-block;
+  font-family: "tabler-icons-extension" !important;
+  font-style: normal !important;
+  font-weight: normal !important;
+  font-variant: normal !important;
+  text-transform: none !important;
+  speak: none;
+  line-height: 1;
+  vertical-align: -.125em;
+  text-rendering: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+
+.tie-app-feature::before {
+  content: "\ea01";
+}
+.tie-block::before {
+  content: "\ea02";
+}
+.tie-block-search::before {
+  content: "\ea03";
+}
+.tie-connector::before {
+  content: "\ea04";
+}
+.tie-page::before {
+  content: "\ea05";
+}
+.tie-page-search::before {
+  content: "\ea06";
+}
+.tie-references-hide::before {
+  content: "\ea07";
+}
+.tie-references-show::before {
+  content: "\ea08";
+}
+.tie-select-cursor::before {
+  content: "\ea09";
+}
+.tie-text::before {
+  content: "\ea0a";
+}
+.tie-whiteboard::before {
+  content: "\ea0b";
+}
+.tie-whiteboard-element::before {
+  content: "\ea0c";
+}

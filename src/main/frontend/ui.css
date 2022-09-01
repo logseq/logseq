@@ -87,7 +87,7 @@
 }
 
 .ui__modal {
-  @apply fixed px-4 pb-4 inset-0 flex items-baseline justify-center top-24;
+  @apply fixed px-4 pb-4 inset-0 flex items-baseline justify-center top-12 sm:top-24;
 
   &-overlay {
     @apply fixed inset-0 transition-opacity;
@@ -104,13 +104,17 @@
     background: var(--ls-secondary-background-color);
 
     .panel-content {
-      overflow: overlay;
+      overflow-y: auto;
+      overflow-x: hidden;
       width: 94vw;
-      max-height: 85vh;
-      padding: 2rem;
+      max-height: 89vh;
+      padding: 2rem 1.5rem;
 
-      @screen md {
-        min-width: 768px;
+      @screen sm {
+        overflow-y: overlay;
+        min-width: 720px;
+        max-height: 85vh;
+        padding: 2rem;
         width: auto;
 
         .ls-card, .ls-search {
@@ -131,6 +135,15 @@
     transition ease-in-out duration-150;
   }
 
+  &[label="ls-modal-align-center"] {
+    top: 0;
+
+    .ui__modal-panel {
+      top: 50vh;
+      transform: translateY(-52%);
+    }
+  }
+
   &[label="diff__cp"] {
       .panel-content {
           padding: 2rem 1rem;
@@ -143,7 +156,7 @@
 
   &[label="flashcards__cp"] {
       .panel-content {
-          padding: 2rem 0rem;
+          padding: 2rem 0;
 
           @screen sm {
               padding: 2rem 2rem;
@@ -171,7 +184,7 @@
     }
 }
 
-html.is-native-andorid,
+html.is-native-android,
 html.is-native-iphone,
 html.is-native-iphone-without-notch
 {
@@ -235,7 +248,7 @@ html.is-mobile {
     cursor: not-allowed;
   }
 
-  &:hover {
+  &:hover:not([disabled]) {
     opacity: 0.8;
   }
 
@@ -272,6 +285,13 @@ html.is-mobile {
   &.p-1 {
     padding: 0.25rem 0.5rem !important;
   }
+}
+
+.dropdown-wrapper {
+  background-color: var(--ls-primary-background-color, #fff);
+  border: 1px solid var(--ls-tertiary-background-color);
+  min-width: 12rem;
+  border-radius: 6px;
 }
 
 .dropdown-caret {
