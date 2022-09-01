@@ -14,8 +14,12 @@
 
 (def *beta-unavailable? (volatile! false))
 
-(def hiding-login&file-sync (not config/enable-file-sync?))
 (def refresh-file-sync-component (atom false))
+
+(defn enable-sync?
+  []
+  (or (state/enable-sync?)
+      config/dev?))
 
 (defn current-graph-sync-on?
   []

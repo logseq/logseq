@@ -21,13 +21,6 @@
 
 (goog-define ENABLE-FILE-SYNC-PRODUCTION false)
 
-;; prod env
-;; (goog-define FILE-SYNC-PROD? true)
-;; (goog-define LOGIN-URL
-;;              "https://logseq-prod.auth.us-east-1.amazoncognito.com/login?client_id=3c7np6bjtb4r1k1bi9i049ops5&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
-;; (goog-define API-DOMAIN "api-prod.logseq.com")
-;; (goog-define WS-URL "wss://b2rp13onu2.execute-api.us-east-1.amazonaws.com/production?graphuuid=%s")
-
 (if ENABLE-FILE-SYNC-PRODUCTION
   (do (def FILE-SYNC-PROD? true)
       (def LOGIN-URL
@@ -42,8 +35,6 @@
       (def WS-URL "wss://ws-dev.logseq.com/file-sync?graphuuid=%s")))
 
 ;; feature flags
-(goog-define ENABLE-FILE-SYNC false)
-(defonce enable-file-sync? (or ENABLE-FILE-SYNC dev?)) ;; always enable file-sync when dev
 
 (goog-define ENABLE-PLUGINS true)
 (defonce enable-plugins? ENABLE-PLUGINS)
