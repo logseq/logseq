@@ -1,12 +1,12 @@
 (ns frontend.config
   (:require [clojure.set :as set]
             [clojure.string :as string]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
-            [shadow.resource :as rc]
-            [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
-            [frontend.mobile.util :as mobile-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [shadow.resource :as rc]))
 
 (goog-define DEV-RELEASE false)
 (defonce dev-release? DEV-RELEASE)
@@ -252,10 +252,12 @@
 (defonce local-repo "local")
 
 (defn demo-graph?
+  "Demo graph or nil graph?"
   ([]
    (demo-graph? (state/get-current-repo)))
   ([graph]
-   (= graph local-repo)))
+   (when (string? graph)
+     (= graph local-repo))))
 
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")
