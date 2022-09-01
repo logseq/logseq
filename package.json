@@ -65,8 +65,8 @@
         "cljs:report": "clojure -M:cljs run shadow.cljs.build-report app report.html",
         "cljs:build-electron": "clojure -A:cljs compile app electron",
         "cljs:lint": "clojure -M:clj-kondo --parallel --lint src --cache false",
-        "ios:dev": "cross-env PLATFORM=ios gulp env",
-        "android:dev": "cross-env PLATFORM=android gulp env"
+        "ios:dev": "cross-env PLATFORM=ios gulp cap",
+        "android:dev": "cross-env PLATFORM=android gulp cap"
     },
     "dependencies": {
         "@capacitor/android": "3.2.2",
