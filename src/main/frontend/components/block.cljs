@@ -282,15 +282,17 @@
           :title   title}
          metadata)]
        [:.asset-overlay]
-       [:.asset-action-bar
-        (when (and (util/electron?) local?)
-          [:button.asset-action-btn.text-left
-           {:title "Show item in folder"
-            :on-mouse-down util/stop
-            :on-click (fn [e]
-                        ((util/stop e)
-                         (js/window.apis.showItemInFolder (string/replace src #"^assets://" ""))))}
-           title])
+       (let [image-src (string/replace src #"^assets://" "")]
+         [:.asset-action-bar
+        [:button.asset-action-btn.text-left
+         {:title (if local? "Show item in folder" "Open image")
+          :on-mouse-down util/stop
+          :on-click (fn [e]
+                      (util/stop e)
+                      (if (and (util/electron?) local?)
+                        (js/window.apis.showItemInFolder image-src)
+                        (js/window.apis.openExternal src)))}
+         image-src]
         [:.flex
          [:button.asset-action-btn
           {:title "Delete image"
@@ -320,13 +322,12 @@
           {:title "Copy image"
            :on-mouse-down util/stop
            :on-click (fn [e]
-                       (let [image-src (string/replace src #"^assets://" "")]
-                         (util/stop e)
-                         (-> (js/fetch image-src)
-                             (.then (fn [data]
-                                      (-> (.blob data)
-                                          (.then (fn [blob]
-                                                   (js/navigator.clipboard.write (clj->js [(js/ClipboardItem. (clj->js {(.-type blob) blob}))]))))))))))}
+                       (util/stop e)
+                       (-> (js/fetch image-src)
+                           (.then (fn [data]
+                                    (-> (.blob data)
+                                        (.then (fn [blob]
+                                                 (js/navigator.clipboard.write (clj->js [(js/ClipboardItem. (clj->js {(.-type blob) blob}))])))))))))}
           (ui/icon "copy")]
 
          [:button.asset-action-btn
@@ -350,7 +351,7 @@
                                    (when (seq images)
                                      (lightbox/preview-images! images))))}
 
-          (ui/icon "maximize")]]]]))))
+          (ui/icon "maximize")]]])]))))
 
 (rum/defc audio-cp [src]
   [:audio {:src src

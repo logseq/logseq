@@ -58,7 +58,7 @@
     }
 
     .asset-action-btn {
-      @apply m-1 p-1 rounded;
+      @apply m-1 p-1 rounded truncate;
 
       opacity: 0.8;
       user-select: none;
