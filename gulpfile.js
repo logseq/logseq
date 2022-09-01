@@ -92,7 +92,7 @@ const common = {
     const IP = ip.address()
     const LOGSEQ_APP_SERVER_URL = `http://${IP}:3001`
 
-    if (typeof global.fetch != null) {
+    if (typeof global.fetch === 'function') {
       try {
         await fetch(LOGSEQ_APP_SERVER_URL)
       } catch (e) {
