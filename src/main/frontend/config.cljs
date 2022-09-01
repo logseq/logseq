@@ -6,7 +6,8 @@
             [frontend.util :as util]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
-            [shadow.resource :as rc]))
+            [shadow.resource :as rc]
+            ["path" :as path]))
 
 (goog-define DEV-RELEASE false)
 (defonce dev-release? DEV-RELEASE)
@@ -374,6 +375,14 @@
   ([repo]
    (when repo
      (get-file-path repo (str app-name "/" config-file)))))
+
+(defn get-global-config-dir
+  []
+  (path/join (state/get-root-dir) "config"))
+
+(defn get-global-config-path
+  []
+  (path/join (state/get-root-dir) "config" "config.edn"))
 
 (defn get-metadata-path
   ([]

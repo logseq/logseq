@@ -144,6 +144,14 @@
      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
      :-for         "config_edn"}))
 
+(defn edit-global-config-edn []
+  (row-with-button-action
+    {:left-label   (t :settings-page/custom-global-configuration)
+     :button-label (t :settings-page/edit-global-config-edn)
+     :href         (rfe/href :file {:path (config/get-global-config-path)})
+     :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
+     :-for         "global_config_edn"}))
+
 (defn edit-custom-css []
   (row-with-button-action
     {:left-label   (t :settings-page/custom-theme)
@@ -538,6 +546,8 @@
      (version-row t version)
      (language-row t preferred-language)
      (theme-modes-row t switch-theme system-theme? dark?)
+     ;; TODO: Disable for mobile
+     (edit-global-config-edn)
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))
      (when current-repo (edit-export-css))

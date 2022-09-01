@@ -38,10 +38,10 @@
                                   %) files)]
       (if-let [file (:file/file ignore-file)]
         (p/let [content (.text file)]
-          (when content
-            (let [paths (set (common-handler/ignore-files content (map :file/path files)))]
-              (when (seq paths)
-                (filter (fn [f] (contains? paths (:file/path f))) files)))))
+               (when content
+                 (let [paths (set (common-handler/ignore-files content (map :file/path files)))]
+                   (when (seq paths)
+                     (filter (fn [f] (contains? paths (:file/path f))) files)))))
         (p/resolved files))
       (p/resolved files))))
 
@@ -331,13 +331,27 @@
         (p/let [handle (when-not electron? (idb/get-item handle-path))]
           (when (or handle electron? mobile-native?)   ; electron doesn't store the file handle
             (p/let [_ (when handle (nfs/verify-permission repo handle true))
-                    files-result (fs/get-files (if nfs? handle
-                                                   (config/get-local-dir repo))
-                                               (fn [path handle]
-                                                 (when nfs?
-                                                   (swap! path-handles assoc path handle))))
-                    new-files (-> (->db-files mobile-native? electron? dir-name files-result)
-                                  (remove-ignore-files dir-name nfs?))
+                    local-files-result
+                    (fs/get-files (if nfs? handle
+                                    (config/get-local-dir repo))
+                                  (fn [path handle]
+                                    (when nfs?
+                                      (swap! path-handles assoc path handle))))
+                    global-dir (config/get-global-config-dir)
+                    global-dir-exists? (fs/dir-exists? global-dir)
+                    ;; TODO: Handle nfs?
+                    global-files-result (if global-dir-exists?
+                                          (fs/get-files global-dir
+                                                        (fn [path handle]
+                                                          (when nfs?
+                                                            (swap! path-handles assoc path handle))))
+                                          [])
+                    new-local-files (-> (->db-files mobile-native? electron? dir-name local-files-result)
+                                        (remove-ignore-files dir-name nfs?))
+                    new-global-files (-> (->db-files mobile-native? electron? global-dir global-files-result)
+                                         (remove-ignore-files global-dir nfs?))
+                    new-files (concat new-local-files new-global-files)
+
                     _ (when nfs?
                         (let [file-paths (set (map :file/path new-files))]
                           (swap! path-handles (fn [handles]
@@ -347,7 +361,7 @@
                                                                           (string/replace-first path (str dir-name "/") ""))))
                                                      (into {})))))
                         (set-files! @path-handles))]
-              (handle-diffs! repo nfs? old-files new-files handle-path path-handles re-index?))))
+                   (handle-diffs! repo nfs? old-files new-files handle-path path-handles re-index?))))
         (p/catch (fn [error]
                    (log/error :nfs/load-files-error repo)
                    (log/error :exception error)))
