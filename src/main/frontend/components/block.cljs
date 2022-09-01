@@ -285,7 +285,7 @@
        (let [image-src (string/replace src #"^assets://" "")]
          [:.asset-action-bar
         [:button.asset-action-btn.text-left
-         {:title (if local? "Show item in folder" "Open image")
+         {:title (if local? "Show image in folder" "Open image")
           :on-mouse-down util/stop
           :on-click (fn [e]
                       (util/stop e)
