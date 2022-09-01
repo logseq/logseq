@@ -1,4 +1,4 @@
-cou(ns frontend.components.block
+(ns frontend.components.block
   (:refer-clojure :exclude [range])
   (:require ["/frontend/utils" :as utils]
             ["@capacitor/share" :refer [^js Share]]
