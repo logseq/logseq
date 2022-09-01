@@ -256,8 +256,7 @@
   ([]
    (demo-graph? (state/get-current-repo)))
   ([graph]
-   (when (string? graph)
-     (= graph local-repo))))
+   (or (nil? graph) (= graph local-repo))))
 
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")
