@@ -34,16 +34,6 @@ export default defineConfig({
         replacement: bases.tldrawLogseq,
       },
       {
-        find: /~(.*)/,
-        replacement: '$1',
-        customResolver: (id, importer) => {
-          if (id) {
-            const base = Object.values(bases).find(value => importer.startsWith(value))
-            return base ? path.join('/@fs', base, id) : null
-          }
-        },
-      },
-      {
         find: '@tldraw/core',
         replacement: bases.core,
       },

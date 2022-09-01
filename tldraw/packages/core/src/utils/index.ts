@@ -58,6 +58,10 @@ export function debounce<T extends (...args: any[]) => void>(
   }
 }
 
+export function dedupe<T>(arr: T[]) {
+  return [...new Set(arr)]
+}
+
 /** Linear interpolate between two values. */
 export function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t

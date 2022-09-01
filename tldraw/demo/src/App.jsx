@@ -145,7 +145,7 @@ export default function App() {
   React.useEffect(() => {
     const interval = setInterval(() => {
       setModel(onLoad())
-    }, 5000)
+    }, 2000)
 
     return () => {
       clearInterval(interval)

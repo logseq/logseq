@@ -70,6 +70,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
         .map(s => toJS(s)),
       bindings: deepCopy(this.bindings),
       nonce: this.nonce,
+      selectedIds: deepCopy(this.app.selectedIds),
     }
   }
 
