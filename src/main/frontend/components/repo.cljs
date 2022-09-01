@@ -186,7 +186,9 @@
                                 {:on-click
                                  (fn []
                                    (state/pub-event! [:graph/ask-for-re-index *multiple-windows?]))})}
-        new-window-link (when (util/electron?)
+        new-window-link (when (and (util/electron?)
+                                   ;; New Window button in menu bar of macOS is available.
+                                   (not util/mac?))
                           {:title        (t :open-new-window)
                            :options {:on-click #(state/pub-event! [:graph/open-new-window nil])}})]
     (->>
