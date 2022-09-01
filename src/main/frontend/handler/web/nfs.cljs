@@ -217,7 +217,6 @@
                    (throw error))))
       (p/finally
         (fn []
-          (state/set-db-restoring! false)
           (state/set-loading-files! @*repo false)))))))
 
 (defn ls-dir-files-with-path!
