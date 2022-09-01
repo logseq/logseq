@@ -120,6 +120,20 @@
                [old-path new-path])]
       (protocol/rename! (get-fs old-path) repo old-path new-path))))
 
+(defn copy!
+  [repo old-path new-path]
+  (cond
+    (= old-path new-path)
+    (p/resolved nil)
+
+    :else
+    (let [[old-path new-path]
+          (map #(if (or (util/electron?) (mobile-util/native-platform?))
+                  %
+                  (str (config/get-repo-dir repo) "/" %))
+               [old-path new-path])]
+      (protocol/copy! (get-fs old-path) repo old-path new-path))))
+
 (defn stat
   [dir path]
   (protocol/stat (get-fs dir) dir path))

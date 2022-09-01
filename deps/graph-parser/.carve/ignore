@@ -19,6 +19,7 @@ logseq.graph-parser.util.page-ref/->page-ref
 ;; API
 logseq.graph-parser.util.page-ref/get-page-name!
 ;; API
+logseq.graph-parser.config/remove-asset-protocol
 logseq.graph-parser.property/->block-content
 ;; API
 logseq.graph-parser.property/property-value-from-content

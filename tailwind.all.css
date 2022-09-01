@@ -18,5 +18,6 @@
 @import "resources/css/tooltip.css";
 @import "resources/css/common.css";
 @import "resources/css/srs_cards.css";
+@import "resources/css/tabler-extension.css";
 @import-glob "src/main/frontend/**/[!_]*.css";
 @import "tailwindcss/utilities";

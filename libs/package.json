@@ -12,7 +12,8 @@
     "dev:core": "npm run build:core -- --mode development --watch",
     "build": "tsc && rm dist/*.js && npm run build:user",
     "lint": "prettier --check \"src/**/*.{ts, js}\"",
-    "fix": "prettier --write \"src/**/*.{ts, js}\""
+    "fix": "prettier --write \"src/**/*.{ts, js}\"",
+    "build:docs": "typedoc --plugin typedoc-plugin-lsp-docs src/LSPlugin.user.ts"
   },
   "dependencies": {
     "csstype": "3.1.0",
@@ -32,6 +33,8 @@
     "prettier-config-standard": "^5.0.0",
     "ts-loader": "9.3.0",
     "typescript": "4.7.3",
+    "typedoc": "^0.22.15",
+    "typedoc-plugin-lsp-docs": "*",
     "webpack": "5.73.0",
     "webpack-bundle-analyzer": "4.5.0",
     "webpack-cli": "4.9.2"
