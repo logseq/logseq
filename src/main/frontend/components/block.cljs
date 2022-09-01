@@ -180,6 +180,34 @@
                 parts (remove #(string/blank? %) parts)]
             (string/join "/" (reverse parts))))))))
 
+(defn open-lightbox
+  [e]
+  (let [images (js/document.querySelectorAll ".asset-container img")
+        images (to-array images)
+        images (if-not (= (count images) 1)
+                 (let [^js _image (.closest (.-target e) ".asset-container")
+                       image (. _image querySelector "img")]
+                   (->> images
+                        (sort-by (juxt #(.-y %) #(.-x %)))
+                        (split-with (complement #{image}))
+                        reverse
+                        (apply concat)))
+                 images)
+        images (for [^js it images] {:src (.-src it)
+                                     :w (.-naturalWidth it)
+                                     :h (.-naturalHeight it)})]
+
+    (when (seq images)
+      (lightbox/preview-images! images))))
+
+(defn copy-image-to-clipboard
+  [src]
+  (-> (js/fetch src)
+      (.then (fn [data]
+               (-> (.blob data)
+                   (.then (fn [blob]
+                            (js/navigator.clipboard.write (clj->js [(js/ClipboardItem. (clj->js {(.-type blob) blob}))])))))))))
+
 (defonce *resizing-image? (atom false))
 (rum/defcs resizable-image <
   (rum/local nil ::size)
@@ -261,33 +289,13 @@
            :on-mouse-down util/stop
            :on-click (fn [e]
                        (util/stop e)
-                       (-> (js/fetch image-src)
-                           (.then (fn [data]
-                                    (-> (.blob data)
-                                        (.then (fn [blob]
-                                                 (js/navigator.clipboard.write (clj->js [(js/ClipboardItem. (clj->js {(.-type blob) blob}))])))))))))}
+                       (copy-image-to-clipboard image-src))}
           (ui/icon "copy")]
 
          [:button.asset-action-btn
           {:title    "Maximize image"
            :on-mouse-down util/stop
-           :on-click (fn [^js e] (let [images (js/document.querySelectorAll ".asset-container img")
-                                       images (to-array images)
-                                       images (if-not (= (count images) 1)
-                                                (let [^js _image (.closest (.-target e) ".asset-container")
-                                                      image (. _image querySelector "img")]
-                                                  (->> images
-                                                       (sort-by (juxt #(.-y %) #(.-x %)))
-                                                       (split-with (complement #{image}))
-                                                       reverse
-                                                       (apply concat)))
-                                                images)
-                                       images (for [^js it images] {:src (.-src it)
-                                                                    :w (.-naturalWidth it)
-                                                                    :h (.-naturalHeight it)})]
-
-                                   (when (seq images)
-                                     (lightbox/preview-images! images))))}
+           :on-click open-lightbox}
 
           (ui/icon "maximize")]]])]))))
 
