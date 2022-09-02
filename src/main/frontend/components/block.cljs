@@ -320,7 +320,9 @@
                         (util/stop e)
                         (if (and (util/electron?) local?)
                           (js/window.apis.showItemInFolder image-src)
-                          (js/window.apis.openExternal src)))}
+                          (if (util/electron?)
+                            (js/window.apis.openExternal image-src)
+                            (js/window.open image-src "_blank"))))}
            image-src]
           [:.flex
            [:button.asset-action-btn
