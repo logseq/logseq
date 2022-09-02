@@ -48,8 +48,9 @@
       (fn [a]
         (cond
           (keyword? a)
-          (-> (name a)
-              (#(if camel-case? (csk/->camelCase %) %)))
+          (cond-> (name a)  
+            camel-case? 
+            (csk/->camelCase))
 
           (uuid? a) (str a)
           :else a)) input))))
