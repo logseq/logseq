@@ -312,18 +312,17 @@
        [:.asset-overlay]
        (let [image-src (string/replace src #"^assets://" "")]
          [:.asset-action-bar {:aria-hidden "true"}
-          [:button.asset-action-btn.text-left
-           {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))
-            :tabIndex "-1"
-            :on-mouse-down util/stop
-            :on-click (fn [e]
-                        (util/stop e)
-                        (if (and (util/electron?) local?)
-                          (js/window.apis.showItemInFolder image-src)
-                          (if (util/electron?)
-                            (js/window.apis.openExternal image-src)
-                            (js/window.open image-src "_blank"))))}
-           image-src]
+          (when (util/electron?)
+            [:button.asset-action-btn.text-left
+             {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))
+              :tabIndex "-1"
+              :on-mouse-down util/stop
+              :on-click (fn [e]
+                          (util/stop e)
+                          (if local?
+                            (js/window.apis.showItemInFolder image-src)
+                            (js/window.apis.openExternal image-src)))}
+             image-src])
           [:.flex
            [:button.asset-action-btn
             {:title (t :asset/delete)
