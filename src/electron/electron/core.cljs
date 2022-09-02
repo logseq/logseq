@@ -207,7 +207,10 @@
                                             (p/let [graph-name (get-graph-name (state/get-graph-path))
                                                     _ (handler/broadcast-persist-graph! graph-name)]
                                               (handler/open-new-window!)))
-                                   :accelerator "CommandOrControl+N"}
+                                   :accelerator (if mac? 
+                                                  "CommandOrControl+N"
+                                                  ;; Avoid conflict with `Control+N` shortcut to move down in the text editor on Windows/Linux
+                                                  "Shift+CommandOrControl+N")}
                                   (if mac?
                                     {:role "close"}
                                     {:role "quit"})]}

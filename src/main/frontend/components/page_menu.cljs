@@ -74,7 +74,7 @@
           file-path (when (util/electron?) (page-handler/get-page-file-path))
           _ (state/sub :auth/id-token)
           file-sync-graph-uuid (and (user-handler/logged-in?)
-                                    (not file-sync-handler/hiding-login&file-sync)
+                                    (file-sync-handler/enable-sync?)
                                     (file-sync-handler/get-current-graph-uuid))]
       (when (and page (not block?))
         (->>

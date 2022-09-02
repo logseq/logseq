@@ -1,13 +1,15 @@
 (ns frontend.handler
   (:require [cljs.reader :refer [read-string]]
+            [clojure.string :as string]
             [electron.ipc :as ipc]
             [electron.listener :as el]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
             [frontend.config :as config]
-            [frontend.context.i18n :as i18n]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
+            [frontend.db.persist :as db-persist]
             [frontend.db.react :as react]
             [frontend.error :as error]
             [frontend.extensions.srs :as srs]
@@ -27,6 +29,7 @@
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.storage :as storage]
+            [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [goog.object :as gobj]
@@ -154,6 +157,31 @@
               (js/window.location.reload)))
      2000)))
 
+;; FIXME: Another get-repos implementation at src\main\frontend\handler\repo.cljs
+(defn- get-repos
+  []
+  (p/let [nfs-dbs (db-persist/get-all-graphs)]
+    ;; TODO: Better IndexDB migration handling
+    (cond
+      (and (mobile-util/native-platform?)
+           (some #(or (string/includes? % " ")
+                      (string/includes? % "logseq_local_/")) nfs-dbs))
+      (do (notification/show! ["DB version is not compatible, please clear cache then re-add your graph back."
+                               (ui/button
+                                (t :settings-page/clear-cache)
+                                :class    "ui__modal-enter"
+                                :class    "text-sm p-1"
+                                :on-click clear-cache!)] :error false)
+          {:url config/local-repo
+           :example? true})
+
+      (seq nfs-dbs)
+      (map (fn [db] {:url db :nfs? true}) nfs-dbs)
+
+      :else
+      [{:url config/local-repo
+        :example? true}])))
+
 (defn- register-components-fns!
   []
   (state/set-page-blocks-cp! page/page-blocks-cp)
@@ -182,9 +210,13 @@
 
     (events/run!)
 
-    (p/let [repos (repo-handler/get-repos)]
-      (state/set-repos! repos)
-      (restore-and-setup! repos db-schema))
+    (-> (p/let [repos (get-repos)]
+          (state/set-repos! repos)
+          (restore-and-setup! repos db-schema))
+        (p/catch (fn [e]
+                   (js/console.error "Error while restoring repos: " e)))
+        (p/finally (fn []
+                     (state/set-db-restoring! false))))
     (when (mobile-util/native-platform?)
       (p/do! (mobile-util/hide-splash)))
 
