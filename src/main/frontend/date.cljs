@@ -29,6 +29,7 @@
      "do MMMM yyyy"
      "MMM do, yyyy"
      "MMMM do, yyyy"
+     "MMMM do,yyyy"
      "E, dd-MM-yyyy"
      "E, dd.MM.yyyy"
      "E, MM/dd/yyyy"

@@ -1,16 +1,19 @@
 (ns frontend.format.block
   "Block code needed by app but not graph-parser"
-  (:require [clojure.string :as string]
-            [logseq.graph-parser.block :as gp-block]
-            [frontend.config :as config]
-            [frontend.db :as db]
-            [frontend.format :as format]
-            [frontend.state :as state]
-            [frontend.handler.notification :as notification]
-            ["@sentry/react" :as Sentry]
-            [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.mldoc :as gp-mldoc]))
+  (:require
+   ["@sentry/react" :as Sentry]
+   [cljs-time.format :as tf]
+   [clojure.string :as string]
+   [frontend.config :as config]
+   [frontend.date :as date]
+   [frontend.db :as db]
+   [frontend.format :as format]
+   [frontend.handler.notification :as notification]
+   [frontend.state :as state]
+   [logseq.graph-parser.block :as gp-block]
+   [logseq.graph-parser.config :as gp-config]
+   [logseq.graph-parser.mldoc :as gp-mldoc]
+   [logseq.graph-parser.property :as gp-property]))
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
@@ -35,6 +38,33 @@ and handles unexpected failure."
    (page-name->map original-page-name with-id? true))
   ([original-page-name with-id? with-timestamp?]
    (gp-block/page-name->map original-page-name with-id? (db/get-db (state/get-current-repo)) with-timestamp? (state/get-date-formatter))))
+(defn- block-to-string 
+  "Convert block to string handling edge cases such as a,b,c being parsed as a set"
+  ([block]
+   (if (set? block) (string/join "," block) (str block))))
+
+(defn- normalize-as-percentage
+  ([block]
+   (some->> block
+            block-to-string 
+            (re-matches #"(-?\d+\.?\d*)%") 
+            second 
+            (#(/ % 100)))))
+
+(defn- normalize-as-date
+  ([block]
+   (some->> block
+            block-to-string 
+            date/valid?
+                        (tf/unparse date/custom-formatter))))
+
+(defn normalize-block
+  "Normalizes supported formats such as dates and percentages."
+  ([block]
+   (->> [normalize-as-percentage normalize-as-date identity]
+        (map #(% block))
+        (remove nil?)
+        (first))))
 
 (defn parse-block
   ([block]
