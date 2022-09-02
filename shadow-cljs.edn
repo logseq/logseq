@@ -32,8 +32,8 @@
                            :warnings           {:fn-deprecated false
                                                 :redef false}}
         :closure-defines  {goog.debug.LOGGING_ENABLED       true
-                           frontend.config/ENABLE-FILE-SYNC #shadow/env ["ENABLE_FILE_SYNC" :as :bool :default false]
-                           frontend.config/ENABLE-PLUGINS   #shadow/env ["ENABLE_PLUGINS"   :as :bool :default true]}
+                           frontend.config/ENABLE-PLUGINS   #shadow/env ["ENABLE_PLUGINS"   :as :bool :default true]
+                           frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default false]}
 
         ;; NOTE: electron, browser/mobile-app use different asset-paths.
         ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).

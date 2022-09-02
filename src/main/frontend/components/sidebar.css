@@ -76,8 +76,8 @@
   height: 100%;
   padding-top: 12px;
   width: var(--ls-left-sidebar-sm-width);
-  overflow-x: hidden;
   overflow-y: auto;
+  overflow-x: hidden;
   background-color: var(--ls-primary-background-color);
   transition: transform .3s;
   transform: translateX(-100%);
@@ -88,12 +88,27 @@
   > .wrap {
     height: calc(100vh - var(--ls-headbar-inner-top-padding) - 50px);
     margin-top: 40px;
-    padding-bottom: 60px;
-    overflow-y: auto;
+    width: 100%;
+
+    > .fake-bar {
+      @apply w-full px-5 pt-1 sm:hidden;
+
+      top: -45px;
+    }
   }
 
   .dropdown-wrapper {
     min-width: 180px;
+    margin-top: 1px;
+
+    .menu-link {
+      padding: 5px 15px;
+      opacity: .8;
+
+      &:hover {
+        opacity: 1;
+      }
+    }
   }
 
   .page-icon {
@@ -107,6 +122,8 @@
   }
 
   a.item {
+    @apply px-2 py-2 sm:py-1.5;
+    
     user-select: none;
     transition: background-color .3s;
 
@@ -127,6 +144,17 @@
       .ti {
         opacity: .8;
       }
+    }
+  }
+
+  .nav-contents-container {
+    @apply h-full flex-grow-0 flex-grow-0
+    overflow-x-hidden overflow-y-auto;
+
+    padding-bottom: 60px;
+
+    &.is-scrolled {
+      border-top: 1px solid var(--ls-tertiary-border-color);
     }
   }
 
@@ -270,8 +298,8 @@
   width: 0;
   top: var(--ls-headbar-inner-top-padding);
   left: 0;
-  z-index: 9;
-  transition: width 1.2s;
+  z-index: var(--ls-z-index-level-5);
+  transition: width .5s;
 
   a {
     color: var(--ls-primary-text-color);
@@ -296,6 +324,7 @@
 
     .left-sidebar-inner {
       transform: translateX(0);
+      overflow: visible;
     }
 
     > .shade-mask {
@@ -317,6 +346,7 @@
 
   @screen sm {
     width: 0;
+    z-index: var(--ls-z-index-level-1);
 
     &:before {
       background-color: var(--ls-secondary-background-color);
@@ -524,3 +554,4 @@ html[data-theme='dark'] {
 .full-height-without-header {
   height: calc(100vh - var(--ls-headbar-height) - 4rem);
 }
+

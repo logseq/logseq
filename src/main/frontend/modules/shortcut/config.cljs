@@ -328,6 +328,8 @@
    :go/graph-view                  {:binding "g g"
                                     :fn      route-handler/redirect-to-graph-view!}
 
+   :go/all-graphs                  {:binding "g shift+g"
+                                    :fn      route-handler/redirect-to-all-graphs}
 
    :go/keyboard-shortcuts          {:binding "g s"
                                     :fn      #(route-handler/redirect! {:to :shortcut-setting})}
@@ -538,6 +540,7 @@
                           :go/all-pages
                           :go/flashcards
                           :go/graph-view
+                          :go/all-graphs
                           :go/keyboard-shortcuts
                           :go/tomorrow
                           :go/next-journal
@@ -603,6 +606,7 @@
     :go/journals
     :go/all-pages
     :go/graph-view
+    :go/all-graphs
     :go/flashcards
     :go/tomorrow
     :go/next-journal

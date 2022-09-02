@@ -58,4 +58,5 @@
             :document/mode?
             :ui/shortcut-tooltip?
             :copy/export-block-text-indent-style
-            :copy/export-block-text-remove-options]))
+            :copy/export-block-text-remove-options
+            :file-sync/onboarding-state]))

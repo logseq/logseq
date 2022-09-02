@@ -209,7 +209,7 @@
 
 (defn render!
   [state]
-  (let [[config id attr _code theme] (:rum/args state)
+  (let [[config id attr _code theme user-options] (:rum/args state)
         default-open? (and (:editor/code-mode? @state/state)
                            (= (:block/uuid (state/get-edit-block))
                               (get-in config [:block :block/uuid])))
@@ -238,7 +238,8 @@
                                                        (editor-handler/edit-block! block :max block-id))))}}
                           (when config/publishing?
                             {:readOnly true
-                             :cursorBlinkRate -1}))
+                             :cursorBlinkRate -1})
+                          user-options)
         editor (when textarea
                  (from-textarea textarea (clj->js cm-options)))]
     (when editor

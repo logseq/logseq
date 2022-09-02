@@ -119,6 +119,10 @@
  ;; Set this to `true` so that it's the same behaviour as the usual outliner mode.
  :shortcut/doc-mode-enter-for-new-block? false
 
+ ;; Block content larger than `block/content-max-length` will not be searchable
+ ;; or editable for performance.
+ :block/content-max-length 5000
+
  ;; Whether to show command doc on hover
  :ui/show-command-doc? true
 
@@ -266,6 +270,18 @@
  ;; :quick-capture-templates
  ;; {:text "[[quick capture]] **{time}**: {text} from {url}"
  ;;  :media "[[quick capture]] **{time}**: {url}"}
+
+ ;; File sync options
+
+ ;; In addition to those directories created by Logseq,
+ ;; files specified in the `:file-sync/monitor-dirs` directories will be synchronized too.
+ ;;
+ ;; Directories created by Logseq include:
+ ;; ["assets" "journals" "logseq" "pages" "draws"].
+ :file-sync/monitor-dirs []
+
+ ;; Ignore these files when syncing, regexp is supported.
+ :file-sync/ignore-files [".DS_Store$"]
 
  ;; dwim (do what I mean) for Enter key when editing.
  ;; Context-awareness of Enter key makes editing more easily

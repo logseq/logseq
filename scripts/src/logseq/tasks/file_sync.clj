@@ -3,23 +3,24 @@
 
 * Login to electron app and toggle file-sync on
 * Set up file-sync-auth.json file per #'read-config
-* Run `bb file-sync:integration-tests GRAPH_DIRECTORY`
+* Run `bb file-sync:integration-tests`
 * Wait for test results. Each action takes 10-20s and prints results as it goes"
   (:require [clojure.string :as str]
             [cheshire.core :as json]
+            [clojure.pprint :as pp]
             [babashka.fs :as fs]
             [babashka.curl :as curl]
             [clojure.data :as data]
-            [clojure.test :as t :refer [deftest is]])
+            [clojure.test :as t :refer [deftest is]]
+            [clj-commons.digest :as digest]
+            [logseq.tasks.file-sync-actions :as file-sync-actions])
   (:import (java.net URLDecoder)))
 
-(def root-dir
-  "Root directory for graph that is being tested"
-  (atom nil))
+;; Root directory for graph that is being tested
+(defonce root-dir (atom nil))
 
-(def root-graph-id
-  "Graph id for given graph"
-  (atom nil))
+;; Graph id for given graph
+(defonce root-graph-id (atom nil))
 
 (defn- read-config*
   []
@@ -42,24 +43,31 @@
 
 (defn- build-headers
   []
-  (let [{:strs [access_token]} (read-config)]
-    {"authorization" (str "Bearer " access_token)}))
+  (let [{:strs [id_token]} (read-config)]
+    {"authorization" (str "Bearer " id_token)}))
 
 (defn- api-get-all-files
   [graph-id subdir]
   (let [body (json/generate-string {"GraphUUID" graph-id
                                     "Dir" subdir})
-        resp (post "https://api.logseq.com/file-sync/get_all_files"
+        resp (post "https://api-dev.logseq.com/file-sync/get_all_files"
                    {:headers (build-headers)
                     :body body})
         body (json/parse-string (:body resp) keyword)]
     (->> body
          :Objects
-         (map (comp #(URLDecoder/decode %) fs/file-name :Key)))))
+         (map (juxt (comp #(URLDecoder/decode %) fs/file-name :Key) :checksum)))))
+
+(defn- get-local-all-files
+  [dir subdir]
+  (let [files (map fs/file (fs/list-dir (fs/file dir subdir)))
+        f (juxt fs/file-name digest/md5)]
+    (map f files)))
+
 
 (defn- api-post-get-graphs
   []
-  (let [resp (post "https://api.logseq.com/file-sync/list_graphs"
+  (let [resp (post "https://api-dev.logseq.com/file-sync/list_graphs"
                    {:headers (build-headers)})
         body (json/parse-string (:body resp) keyword)]
     (->> body
@@ -85,13 +93,24 @@
   (fs/move (fs/file dir file)
            (fs/file dir new-file)))
 
+(defmethod run-action* :update-file
+  [{{:keys [file blocks dir]} :args}]
+  (let [origin-content (slurp (fs/file dir file))
+        new-content (str (str/trim-newline origin-content) "\n"
+                         (->> blocks
+                              (map #(str "- " %))
+                              (str/join "\n")))]
+    (spit (fs/file dir file) new-content)))
+
 (defn run-action [action-map]
-  (println "\n===\nRUN" (pr-str action-map) "\n===")
+  (println "===\nRUN")
+  (pp/pprint ((juxt :action #(get-in % [:args :file])) action-map))
+  (println "===")
   (run-action* action-map))
 
 (defn- ensure-dir-is-synced!
   [dir graph-id subdir]
-  (let [actual (set (map fs/file-name (fs/list-dir (fs/file dir subdir))))
+  (let [actual (set (get-local-all-files dir subdir))
         expected (set (api-get-all-files graph-id subdir))]
     (assert (= actual expected)
             (let [[local-only remote-only _] (data/diff actual expected)]
@@ -119,45 +138,64 @@
 
 (defn- files-are-in-sync?
   [dir graph-id subdir]
-  ;; Approximate polling time before file changes are picked up by client
-  (println "Wait 10s for logseq to pick up changes...")
-  (Thread/sleep 10000)
-  (try-fn-n-times (fn []
-                    (try (ensure-dir-is-synced! dir graph-id subdir)
-                      true
-                      (catch Throwable e
-                        (println (.getMessage e))
-                        false)))
-                  10))
+  (try (ensure-dir-is-synced! dir graph-id subdir)
+       true
+       (catch Throwable e
+         (println (.getMessage e))
+         false)))
 
-(deftest file-changes
+(defn- wait&files-are-in-sync?
+  [dir graph-id subdir & [msg]]
+  ;; Approximate polling time before file changes are picked up by client
+  (if msg
+    (println msg)
+    (println "Wait 10s for logseq to pick up changes..."))
+  (Thread/sleep 10000)
+  (try-fn-n-times #(files-are-in-sync? dir graph-id subdir) 10))
+
+(defn- clear-dir-pages
+  [subdir]
+  (fs/delete-tree (str @root-dir "/" subdir))
+  (fs/create-dir (str @root-dir "/" subdir)))
+
+(deftest rand-file-changes
   (let [subdir "pages"
-        ;; Directory must be in sync in order for assertions to pass
-        _ (ensure-dir-is-synced! @root-dir @root-graph-id subdir)
-        ;; These actions are data driven which allows us to spec to generate them
-        ;; when the API is able to handle more randomness
+        actions (:generated-action (file-sync-actions/generate-rand-actions 30))
         actions (mapv
                  #(assoc-in % [:args :dir] @root-dir)
-                 [{:action :create-file
-                   :args {:file (str subdir "/test.create-page.md")
-                          :blocks ["hello world"]}}
-                  {:action :move-file
-                   :args {:file (str subdir "/test.create-page.md")
-                          :new-file (str subdir "/test.create-page-new.md")}}
-                  {:action :delete-file
-                   :args {:file (str subdir "/test.create-page-new.md")}}])]
+                 actions)
+        partitioned-actions (partition-all 3 actions)]
+    (clear-dir-pages subdir)
+    (wait&files-are-in-sync? @root-dir @root-graph-id subdir
+                             (format "clear dir [%s], and ensure it's in sync" subdir))
+    (doseq [actions partitioned-actions]
+      (doseq [action actions]
+        (run-action action)
+        (Thread/sleep 1000))
+      (is (wait&files-are-in-sync? @root-dir @root-graph-id subdir)
+          (str "Test " (mapv (juxt :action #(get-in % [:args :file])) actions))))))
 
-    (doseq [action-map actions]
-      (run-action action-map)
-      (is (files-are-in-sync? @root-dir @root-graph-id subdir)
-          (str "Test " (select-keys action-map [:action]))))))
-
-(defn integration-tests
-  "Run file-sync integration tests on graph directory"
-  [dir & _args]
-  (let [graph-names-to-ids (api-post-get-graphs)
+(defn setup-vars
+  []
+  (let [{:strs [dir]} (read-config)
+        graph-names-to-ids (api-post-get-graphs)
         graph-id (get graph-names-to-ids (fs/file-name dir))]
     (assert dir "No graph id for given dir")
     (reset! root-dir dir)
-    (reset! root-graph-id graph-id)
-    (t/run-tests 'logseq.tasks.file-sync)))
+    (reset! root-graph-id graph-id)))
+
+(defn integration-tests
+  "Run file-sync integration tests on graph directory
+  requirements:
+
+  * file-sync-auth.json, and it looks like:
+  ```
+  {\"id_token\":\"<id-token>\",
+    \"dir\": \"/Users/me/Documents/untitled folder 31\"}
+  ```
+
+  * you alse need to open logseq-app(or yarn electron-watch),
+    and open <dir> and start file-sync"
+  [& _args]
+  (setup-vars)
+  (t/run-tests 'logseq.tasks.file-sync))

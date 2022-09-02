@@ -11,8 +11,9 @@
             [frontend.state :as state]
             [frontend.util :as util]))
 
+
 (def *url (atom nil))
-;; FIXME: `appUrlOpen` are fired twice when receiving a same intent. 
+;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
 ;; The following two variable atoms are used to compare whether
 ;; they are from the same intent share.
 (def *last-shared-url (atom nil))
@@ -21,20 +22,20 @@
 (defn- ios-init
   "Initialize iOS-specified event listeners"
   []
-  (p/let [path (mobile-fs/iOS-ensure-documents!)]
+  (p/let [path (mobile-fs/ios-ensure-documents!)]
     (println "iOS container path: " (js->clj path)))
 
   (state/pub-event! [:validate-appId])
-  
+
   (.addEventListener js/window
                      "load"
                      (fn [_event]
                        (when @*url
                          (js/setTimeout #(deeplink/deeplink @*url)
                                         1000))))
-  
+
   (mobile-util/check-ios-zoomed-display)
-  
+
   (.removeAllListeners mobile-util/file-sync)
 
   (.addListener mobile-util/file-sync "debug"
@@ -67,6 +68,14 @@
 
   (.addEventListener js/window "sendIntentReceived"
                        #(intent/handle-received)))
+(defn- app-state-change-handler
+  [^js state]
+  (println :debug :app-state-change-handler state (js/Date.))
+  (when (state/get-current-repo)
+    (let [is-active? (.-isActive state)]
+      (state/set-mobile-app-state-change is-active?)
+      (when-not is-active?
+        (editor-handler/save-current-block!)))))
 
 (defn- general-init
   "Initialize event listeners used by both iOS and Android"
@@ -87,23 +96,19 @@
                   (state/pub-event! [:file-watcher/changed event])))
 
   (.addListener Keyboard "keyboardWillShow"
-                  (fn [^js info]
-                    (let [keyboard-height (.-keyboardHeight info)]
-                      (state/pub-event! [:mobile/keyboard-will-show keyboard-height]))))
+                (fn [^js info]
+                  (let [keyboard-height (.-keyboardHeight info)]
+                    (state/pub-event! [:mobile/keyboard-will-show keyboard-height]))))
 
   (.addListener Keyboard "keyboardWillHide"
-                  (fn []
-                    (state/pub-event! [:mobile/keyboard-will-hide])))
+                (fn []
+                  (state/pub-event! [:mobile/keyboard-will-hide])))
 
   (.addEventListener js/window "statusTap"
                      #(util/scroll-to-top true))
 
-  (.addListener App "appStateChange"
-                (fn [^js state]
-                  (when (state/get-current-repo)
-                    (let [is-active? (.-isActive state)]
-                      (when-not is-active?
-                        (editor-handler/save-current-block!)))))))
+  (.addListener App "appStateChange" app-state-change-handler))
+
 
 (defn init! []
   (when (mobile-util/native-android?)
@@ -111,6 +116,6 @@
 
   (when (mobile-util/native-ios?)
     (ios-init))
-  
+
   (when (mobile-util/native-platform?)
     (general-init)))
