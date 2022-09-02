@@ -18,7 +18,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
     type: 'youtube',
     parentId: 'page',
     point: [0, 0],
-    size: [600, 320],
+    size: [853, 480],
     url: '',
   }
 
@@ -56,7 +56,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
         <div
           className="rounded-lg w-full h-full relative overflow-hidden shadow-xl"
           style={{
-            pointerEvents: isEditing || isSelected ? 'all' : 'none',
+            pointerEvents: isEditing ? 'all' : 'none',
             userSelect: 'none',
           }}
         >
@@ -64,9 +64,8 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
             <div
               style={{
                 overflow: 'hidden',
-                paddingBottom: '56.25%',
                 position: 'relative',
-                height: 0,
+                height: '100%',
               }}
             >
               <iframe
@@ -120,7 +119,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
         size: [w, h],
       },
     } = this
-    return <rect width={w} height={h} fill="transparent" stroke="none" />
+    return <rect width={w} height={h} fill="transparent" rx={8} ry={8} />
   })
 
   validateProps = (props: Partial<YouTubeShapeProps>) => {
