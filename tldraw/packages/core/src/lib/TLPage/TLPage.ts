@@ -21,15 +21,17 @@ export interface TLPageProps<S> {
   name: string
   shapes: S[]
   bindings: Record<string, TLBinding>
+  nonce?: number
 }
 
 export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventMap> {
   constructor(app: TLApp<S, E>, props = {} as TLPageProps<S>) {
-    const { id, name, shapes = [], bindings = {} } = props
+    const { id, name, shapes = [], bindings = {}, nonce } = props
     this.id = id
     this.name = name
     this.bindings = Object.assign({}, bindings) // make sure it is type of object
     this.app = app
+    this.nonce = nonce || 0
     this.addShapes(...shapes)
     makeObservable(this)
 
@@ -73,9 +75,9 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     }
   }
 
-  nonce = 0
+  @observable nonce = 0
 
-  private bump = () => {
+  @action bump = () => {
     this.nonce++
   }
 

@@ -1,9 +1,15 @@
-import { computed, makeObservable, transaction } from 'mobx'
+import { action, computed, makeObservable, observable, transaction } from 'mobx'
 import type { TLEventMap } from '../types'
-import { deepEqual } from '../utils'
+import { deepCopy, deepEqual, omit } from '../utils'
 import type { TLShape } from './shapes'
 import type { TLApp, TLDocumentModel } from './TLApp'
 import { TLPage } from './TLPage'
+
+const shouldPersist = (a: TLDocumentModel, b: TLDocumentModel) => {
+  const page0 = omit(a.pages[0], 'nonce')
+  const page1 = omit(b.pages[0], 'nonce')
+  return !deepEqual(page0, page1)
+}
 
 export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEventMap> {
   constructor(app: TLApp<S, K>) {
@@ -12,8 +18,8 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
   }
 
   app: TLApp<S, K>
-  stack: TLDocumentModel[] = []
-  pointer = 0
+  @observable stack: TLDocumentModel[] = []
+  @observable pointer = 0
   isPaused = true
 
   get creating() {
@@ -40,7 +46,7 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
     this.isPaused = false
   }
 
-  reset = () => {
+  @action reset = () => {
     this.stack = [this.app.serialized]
     this.pointer = 0
     this.resume()
@@ -48,13 +54,15 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
     this.app.notify('persist', null)
   }
 
-  persist = (replace = false) => {
+  @action persist = (replace = false) => {
     if (this.isPaused || this.creating) return
 
     const { serialized } = this.app
 
     // Do not persist if the serialized state is the same as the last one
-    if (deepEqual(this.stack[this.pointer], serialized)) return
+    if (!shouldPersist(this.stack[this.pointer], serialized)) {
+      return
+    }
 
     if (replace) {
       this.stack[this.pointer] = serialized
@@ -62,37 +70,38 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
       if (this.pointer < this.stack.length) {
         this.stack = this.stack.slice(0, this.pointer + 1)
       }
-
       this.stack.push(serialized)
       this.pointer = this.stack.length - 1
     }
 
+    this.app.pages.forEach(page => page.bump()) // Is it ok here?
     this.app.notify('persist', null)
   }
 
-  undo = () => {
+  @action setPointer = (pointer: number) => {
+    this.pointer = pointer
+    const snapshot = this.stack[this.pointer]
+    this.deserialize(snapshot)
+    this.app.notify('persist', null)
+  }
+
+  @action undo = () => {
     if (this.isPaused) return
     if (this.app.selectedTool.currentState.id !== 'idle') return
     if (this.canUndo) {
-      this.pointer--
-      const snapshot = this.stack[this.pointer]
-      this.deserialize(snapshot)
-      this.app.notify('persist', null)
+      this.setPointer(this.pointer - 1)
     }
   }
 
-  redo = () => {
+  @action redo = () => {
     if (this.isPaused) return
     if (this.app.selectedTool.currentState.id !== 'idle') return
     if (this.canRedo) {
-      this.pointer++
-      const snapshot = this.stack[this.pointer]
-      this.deserialize(snapshot)
-      this.app.notify('persist', null)
+      this.setPointer(this.pointer + 1)
     }
   }
 
-  deserialize = (snapshot: TLDocumentModel) => {
+  @action deserialize = (snapshot: TLDocumentModel) => {
     transaction(() => {
       const { pages } = snapshot
       const wasPaused = this.isPaused
@@ -127,11 +136,6 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
               }
             }
 
-            // Do not remove any currently selected shapes
-            newSelectedIds.forEach(id => {
-              shapesMap.delete(id)
-            })
-
             // Do not remove shapes if currently state is creating or editing
             // Any shapes remaining in the shapes map need to be removed
             if (shapesMap.size > 0 && !this.app.selectedTool.isInAny('creating', 'editingShape')) {
@@ -142,13 +146,15 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
             // Remove the page from the map
             pagesMap.delete(serializedPage.id)
             page.updateBindings(serializedPage.bindings)
+            page.nonce = serializedPage.nonce ?? 0
           } else {
             // Create the page
-            const { id, name, shapes, bindings } = serializedPage
+            const { id, name, shapes, bindings, nonce } = serializedPage
             pagesToAdd.push(
               new TLPage(this.app, {
                 id,
                 name,
+                nonce,
                 bindings,
                 shapes: shapes.map(serializedShape => {
                   const ShapeClass = this.app.getShapeClass(serializedShape.type)

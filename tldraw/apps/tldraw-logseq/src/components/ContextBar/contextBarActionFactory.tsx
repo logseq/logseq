@@ -304,7 +304,7 @@ const SwatchAction = observer(() => {
       shapes.forEach(s => {
         s.update({ fill: latestValue, stroke: latestValue })
       })
-      app.persist(true)
+      app.persist()
     }
     return debounce(handler, 100, e => {
       latestValue = e.target.value
