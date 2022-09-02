@@ -3,11 +3,11 @@
   "private": true,
   "version": "0.0.0-dev",
   "devDependencies": {
+    "@babel/plugin-proposal-decorators": "^7.18.2",
     "autoprefixer": "^10.4.7",
     "postcss": "^8.4.13",
     "tailwindcss": "^3.0.24",
-    "vite": "^3.0.0",
-    "@babel/plugin-proposal-decorators": "^7.18.2"
+    "vite": "^3.0.9"
   },
   "scripts": {
     "dev": "vite"

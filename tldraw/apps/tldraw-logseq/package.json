@@ -25,7 +25,7 @@
     "@types/react-dom": "^17.0.0",
     "autoprefixer": "^10.4.7",
     "concurrently": "^7.2.1",
-    "esbuild": "^0.15.5",
+    "esbuild": "^0.15.6",
     "mobx": "^6.6.0",
     "mobx-react-lite": "^3.4.0",
     "perfect-freehand": "^1.1.0",
