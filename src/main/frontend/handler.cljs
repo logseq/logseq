@@ -195,6 +195,7 @@
   (set-global-error-notification!)
   (let [db-schema (storage/get :db-schema)]
     (register-components-fns!)
+    (state/load-app-user-cfgs)
     (state/set-db-restoring! true)
     (render)
     (i18n/start)

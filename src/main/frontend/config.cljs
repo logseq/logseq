@@ -415,9 +415,12 @@
     (string/replace
      source "../assets" (util/format "%s://%s/assets" protocol (get-repo-dir (state/get-current-repo))))))
 
-(def alias-assets? (and (util/electron?) true))
+(defn alias-assets-enabled? []
+  (and (util/electron?)
+       (:assets/alias-enabled? (state/sub :electron/user-cfgs))))
+
 (def Origin_Log_Seq "log.seq")
-(def Spliter_Asset_File "~~_~~")
+(def Spliter_Asset_File "~~@~~")
 
 (defn normalize-asset-resource-uri
   ;; try to convert resource file to uri asset link
@@ -439,7 +442,7 @@
                                        full-path)
                           graph-root (get-repo-dir repo)]
 
-                      (if alias-assets?
+                      (if (alias-assets-enabled?)
                         (str "assets://"
                              (string/replace-first
                               full-path gp-config/local-assets-dir

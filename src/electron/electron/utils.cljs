@@ -141,7 +141,7 @@
   (str "logseq_local_" graph-dir))
 
 (def Origin_Log_Seq "log.seq")
-(def Spliter_Asset_File "~~_~~")
+(def Spliter_Asset_File "~~@~~")
 
 (defn resolve-url-asset-real-path
   [url]

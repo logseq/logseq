@@ -793,6 +793,7 @@ input::-webkit-inner-spin-button {
       align-items: center;
       padding-right: 4px;
       cursor: alias;
+      color: var(--ls-link-ref-text-color);
 
       &:before {
         content: "📌 ";

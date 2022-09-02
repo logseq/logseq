@@ -15,7 +15,7 @@
 
   &-inner {
     @apply flex flex-col md:flex-row;
-    
+
     > aside {
       border-right: 0 solid var(--ls-quaternary-background-color);
       border-bottom: 1px solid var(--ls-quaternary-background-color);
@@ -43,6 +43,7 @@
             > i {
               width: 20px;
               height: 20px;
+              font-size: 20px;
               overflow: hidden;
               opacity: .6;
             }
@@ -96,6 +97,8 @@
       }
 
       > .it {
+        @apply border sm:grid sm:grid-cols-3 sm:gap-6;
+
         margin-bottom: 0;
         padding-bottom: 12px;
         align-items: center;
@@ -286,6 +289,15 @@
         font-weight: 500;
         width: 60px;
       }
+    }
+  }
+}
+
+.cp__assets {
+  &-alias-directories {
+    @apply border py-2;
+
+    > ul {
     }
   }
 }

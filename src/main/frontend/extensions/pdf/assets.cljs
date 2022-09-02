@@ -21,8 +21,6 @@
   [filename]
   (and filename (string? filename) (string/starts-with? filename "hls__")))
 
-(def alias-assets? true)
-
 (defn inflate-asset
   [original-path]
   (let [filename (util/node-path.basename original-path)

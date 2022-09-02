@@ -352,6 +352,21 @@
   []
   (sub :config))
 
+(defn get-app-config
+  ([] (get-app-config nil))
+  ([k]
+   (cond-> (:electron/user-cfgs @state)
+     (some? k) (get k))))
+
+(defn set-app-config!
+  [k v]
+  (set-state! [:electron/user-cfgs k] v)
+  (ipc/ipc :userAppCfgs k v))
+
+(defn sub-app-config
+  [k]
+  (sub [:electron/user-cfgs k]) )
+
 (defn get-custom-css-link
   []
   (:custom-css-url (get-config)))
@@ -987,11 +1002,12 @@
 (defn load-app-user-cfgs
   ([] (load-app-user-cfgs false))
   ([refresh?]
-   (p/let [cfgs (if (or refresh? (nil? (:electron/user-cfgs @state)))
-                  (ipc/ipc "userAppCfgs")
-                  (:electron/user-cfgs @state))
-           cfgs (if (object? cfgs) (bean/->clj cfgs) cfgs)]
-          (set-state! :electron/user-cfgs cfgs))))
+   (when (util/electron?)
+     (p/let [cfgs (if (or refresh? (nil? (:electron/user-cfgs @state)))
+                    (ipc/ipc :userAppCfgs)
+                    (:electron/user-cfgs @state))
+             cfgs (if (object? cfgs) (bean/->clj cfgs) cfgs)]
+       (set-state! :electron/user-cfgs cfgs)))))
 
 (defn setup-electron-updater!
   []
