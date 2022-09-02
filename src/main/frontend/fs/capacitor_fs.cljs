@@ -220,6 +220,11 @@
 
 (defn get-file-path [dir path]
   (let [dir (some-> dir (string/replace #"/+$" ""))
+        dir (if (string/starts-with? dir "/")
+              (do
+                (js/console.trace "WARN: detect absolute path, use URL instead")
+                (str "file://" (js/encodeURI dir)))
+              dir)
         path (some-> path (string/replace #"^/+" ""))]
     (cond (nil? path)
           dir
@@ -274,8 +279,8 @@
       result))
   (readdir [_this dir]                  ; recursive
     (let [dir (if-not (string/starts-with? dir "file://")
-                 (str "file://" dir)
-                 dir)]
+                (str "file://" dir)
+                dir)]
       (readdir dir)))
   (unlink! [this repo path _opts]
     (p/let [path (get-file-path nil path)

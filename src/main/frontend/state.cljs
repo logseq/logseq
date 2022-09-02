@@ -402,7 +402,7 @@
 
 (defn user-groups
   []
-  (set (get-in @state [:user/info :UserGroups])))
+  (set (sub [:user/info :UserGroups])))
 
 (defn enable-sync?
   []

@@ -515,7 +515,7 @@
         payload (-> event
                     (js->clj :keywordize-keys true))]
     (fs-watcher/handle-changed! type payload)
-    (when config/enable-file-sync?
+    (when (file-sync-handler/enable-sync?)
      (sync/file-watch-handler type payload))))
 
 (defmethod handle :rebuild-slash-commands-list [[_]]

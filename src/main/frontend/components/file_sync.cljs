@@ -230,7 +230,6 @@
       [:div.cp__file-sync-indicator
        (when (and (not config/publishing?)
                   (user-handler/logged-in?))
-
          (ui/dropdown-with-links
           (fn [{:keys [toggle-fn]}]
             (if (not off?)
