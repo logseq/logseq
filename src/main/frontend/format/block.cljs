@@ -1,19 +1,18 @@
 (ns frontend.format.block
   "Block code needed by app but not graph-parser"
-  (:require
-   ["@sentry/react" :as Sentry]
-   [cljs-time.format :as tf]
-   [clojure.string :as string]
-   [frontend.config :as config]
-   [frontend.date :as date]
-   [frontend.db :as db]
-   [frontend.format :as format]
-   [frontend.handler.notification :as notification]
-   [frontend.state :as state]
-   [logseq.graph-parser.block :as gp-block]
-   [logseq.graph-parser.config :as gp-config]
-   [logseq.graph-parser.mldoc :as gp-mldoc]
-   [logseq.graph-parser.property :as gp-property]))
+  (:require ["@sentry/react" :as Sentry]
+            [cljs-time.format :as tf]
+            [clojure.string :as string]
+            [frontend.config :as config]
+            [frontend.date :as date]
+            [frontend.db :as db]
+            [frontend.format :as format]
+            [frontend.handler.notification :as notification]
+            [frontend.state :as state]
+            [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.property :as gp-property]))
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
