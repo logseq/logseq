@@ -313,7 +313,7 @@
        (let [image-src (string/replace src #"^assets://" "")]
          [:.asset-action-bar
         [:button.asset-action-btn.text-left
-         {:title (if local? "Show image in folder" "Open image")
+         {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))
           :on-mouse-down util/stop
           :on-click (fn [e]
                       (util/stop e)
@@ -323,7 +323,7 @@
          image-src]
         [:.flex
          [:button.asset-action-btn
-          {:title "Delete image"
+          {:title (t :asset/delete)
            :on-mouse-down util/stop
            :on-click
            (fn [e]
@@ -347,7 +347,7 @@
           (ui/icon "trash")]
 
          [:button.asset-action-btn
-          {:title "Copy image"
+          {:title (t :asset/copy)
            :on-mouse-down util/stop
            :on-click (fn [e]
                        (util/stop e)
@@ -355,7 +355,7 @@
           (ui/icon "copy")]
 
          [:button.asset-action-btn
-          {:title    "Maximize image"
+          {:title (t :asset/maximize)
            :on-mouse-down util/stop
            :on-click open-lightbox}
 
