@@ -311,55 +311,59 @@
          metadata)]
        [:.asset-overlay]
        (let [image-src (string/replace src #"^assets://" "")]
-         [:.asset-action-bar
-        [:button.asset-action-btn.text-left
-         {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))
-          :on-mouse-down util/stop
-          :on-click (fn [e]
-                      (util/stop e)
-                      (if (and (util/electron?) local?)
-                        (js/window.apis.showItemInFolder image-src)
-                        (js/window.apis.openExternal src)))}
-         image-src]
-        [:.flex
-         [:button.asset-action-btn
-          {:title (t :asset/delete)
-           :on-mouse-down util/stop
-           :on-click
-           (fn [e]
-             (when-let [block-id (:block/uuid config)]
-               (let [confirm-fn (ui/make-confirm-modal
-                                 {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
-                                  :sub-title     (if local? :asset/physical-delete "")
-                                  :sub-checkbox? local?
-                                  :on-confirm    (fn [_e {:keys [close-fn sub-selected]}]
-                                                   (close-fn)
-                                                   (editor-handler/delete-asset-of-block!
-                                                    {:block-id    block-id
-                                                     :local?      local?
-                                                     :delete-local? (and sub-selected (first sub-selected))
-                                                     :repo        (state/get-current-repo)
-                                                     :href        src
-                                                     :title       title
-                                                     :full-text   full_text}))})]
-                 (util/stop e)
-                 (state/set-modal! confirm-fn))))}
-          (ui/icon "trash")]
+         [:.asset-action-bar {:aria-hidden "true"}
+          [:button.asset-action-btn.text-left
+           {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))
+            :tabIndex "-1"
+            :on-mouse-down util/stop
+            :on-click (fn [e]
+                        (util/stop e)
+                        (if (and (util/electron?) local?)
+                          (js/window.apis.showItemInFolder image-src)
+                          (js/window.apis.openExternal src)))}
+           image-src]
+          [:.flex
+           [:button.asset-action-btn
+            {:title (t :asset/delete)
+             :tabIndex "-1"
+             :on-mouse-down util/stop
+             :on-click
+             (fn [e]
+               (when-let [block-id (:block/uuid config)]
+                 (let [confirm-fn (ui/make-confirm-modal
+                                   {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                                    :sub-title     (if local? :asset/physical-delete "")
+                                    :sub-checkbox? local?
+                                    :on-confirm    (fn [_e {:keys [close-fn sub-selected]}]
+                                                     (close-fn)
+                                                     (editor-handler/delete-asset-of-block!
+                                                      {:block-id    block-id
+                                                       :local?      local?
+                                                       :delete-local? (and sub-selected (first sub-selected))
+                                                       :repo        (state/get-current-repo)
+                                                       :href        src
+                                                       :title       title
+                                                       :full-text   full_text}))})]
+                   (util/stop e)
+                   (state/set-modal! confirm-fn))))}
+            (ui/icon "trash")]
 
-         [:button.asset-action-btn
-          {:title (t :asset/copy)
-           :on-mouse-down util/stop
-           :on-click (fn [e]
-                       (util/stop e)
-                       (copy-image-to-clipboard image-src))}
-          (ui/icon "copy")]
+           [:button.asset-action-btn
+            {:title (t :asset/copy)
+             :tabIndex "-1"
+             :on-mouse-down util/stop
+             :on-click (fn [e]
+                         (util/stop e)
+                         (copy-image-to-clipboard image-src))}
+            (ui/icon "copy")]
 
-         [:button.asset-action-btn
-          {:title (t :asset/maximize)
-           :on-mouse-down util/stop
-           :on-click open-lightbox}
+           [:button.asset-action-btn
+            {:title (t :asset/maximize)
+             :tabIndex "-1"
+             :on-mouse-down util/stop
+             :on-click open-lightbox}
 
-          (ui/icon "maximize")]]])]))))
+            (ui/icon "maximize")]]])]))))
 
 (rum/defc audio-cp [src]
   [:audio {:src src
