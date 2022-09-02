@@ -166,7 +166,7 @@
 
 (defn- get-monitor-dirs
   []
-  (into #{#"^assets/" #"^journals/" #"^logseq/" #"^pages/" #"^draws/"}
+  (into #{#"^assets/" #"^journals/" #"^logseq/" #"^pages/" #"^draws/" #"^whiteboards/"}
         (map #(re-pattern (str "^" % "/")))
         (:file-sync/monitor-dirs (state/get-config))))
 

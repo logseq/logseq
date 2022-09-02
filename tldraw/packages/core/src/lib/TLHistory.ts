@@ -1,6 +1,6 @@
 import { computed, makeObservable, transaction } from 'mobx'
 import type { TLEventMap } from '../types'
-import { dedupe, deepEqual } from '../utils'
+import { deepEqual } from '../utils'
 import type { TLShape } from './shapes'
 import type { TLApp, TLDocumentModel } from './TLApp'
 import { TLPage } from './TLPage'
@@ -94,11 +94,11 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
 
   deserialize = (snapshot: TLDocumentModel) => {
     transaction(() => {
-      const { selectedIds, pages } = snapshot
+      const { pages } = snapshot
       const wasPaused = this.isPaused
       this.pause()
 
-      const newSelectedIds = dedupe([...this.app.selectedIds, ...selectedIds])
+      const newSelectedIds = [...this.app.selectedIds]
 
       try {
         const pagesMap = new Map(this.app.pages)
