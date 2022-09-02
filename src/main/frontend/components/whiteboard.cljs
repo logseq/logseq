@@ -203,7 +203,8 @@
 
     (page-refs-count name
                      "text-md px-3 py-2 cursor-default whiteboard-page-refs-count"
-                     (fn [open?] [:<> "Reference" (ui/icon (if open? "references-hide" "references-show"))]))]
+                     (fn [open?] [:<> "References" (ui/icon (if open? "references-hide" "references-show")
+                                                            {:extension? true})]))]
    (tldraw-app name block-id)])
 
 (rum/defc whiteboard-route
