@@ -114,7 +114,6 @@
   @apply py-2 rounded shadow-lg;
   opacity: 100%;
   background-color: var(--ls-primary-background-color);
-
 }
 
 .tl-zoom-menu-dropdown-item {
