@@ -45,7 +45,7 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) 
           className="tl-contextbar"
           style={{
             visibility: hidden ? 'hidden' : 'visible',
-            pointerEvents: hidden ? 'none' : 'all'
+            pointerEvents: hidden ? 'none' : 'all',
           }}
         >
           {Actions.map((Action, idx) => (

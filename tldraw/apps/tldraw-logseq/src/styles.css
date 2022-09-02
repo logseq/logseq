@@ -75,34 +75,37 @@
   color: whites;
 }
 
-.tl-action-bar {
-  @apply absolute bottom-0 flex border-0;
+.tl-zoom-bar,
+.tl-history-bar {
+  @apply flex items-center border-0 rounded gap-1 p-1;
 
-  border-radius: 12px 12px 0 0;
-  left: 53px;
-  align-items: center;
-  gap: 12px;
-  padding: 8px;
-  color: black;
+  background: var(--ls-secondary-background-color);
+  box-shadow: var(--shadow-medium);
+}
+
+.tl-zoom-bar {
+  @apply ml-4;
+}
+
+.tl-action-bar {
+  @apply absolute bottom-0 flex items-center border-0 left-10 bottom-10;
+
   z-index: 100000;
   user-select: none;
-  background: var(--ls-primary-background-color);
-  box-shadow: var(--shadow-medium);
 
-  > button {
-    @apply text-sm rounded border-0 inline-flex items-center justify-center;
+  button {
+    @apply text-sm rounded border-0 inline-flex items-center justify-center p-2;
 
-    height: 32px;
-    padding: 0 8px;
+    height: 30px;
+    background: transparent;
     color: var(--ls-primary-text-color);
     font-family: var(--ls-font-family);
-    background: none;
     cursor: pointer;
     opacity: 1;
     white-space: nowrap;
 
     &:hover {
-      background-color: var(--color-hover);
+      background-color: var(--ls-primary-background-color);
     }
   }
 }
@@ -111,10 +114,6 @@
   @apply py-2 rounded shadow-lg;
   opacity: 100%;
   background-color: var(--ls-primary-background-color);
-
-  > span svg {
-    display: none !important;
-  }
 }
 
 .tl-zoom-menu-dropdown-item {

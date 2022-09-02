@@ -8,6 +8,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
   const preventEvent = (e: Event) => {
     e.preventDefault()
   }
+
   return (
     <DropdownMenuPrimitive.Root>
       <DropdownMenuPrimitive.Trigger>
@@ -18,7 +19,6 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
         id="zoomPopup"
         sideOffset={12}
       >
-        <DropdownMenuPrimitive.Arrow style={{ fill: 'white' }}></DropdownMenuPrimitive.Arrow>
         <DropdownMenuPrimitive.Item
           className="menu-link tl-zoom-menu-dropdown-item"
           onSelect={preventEvent}
