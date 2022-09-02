@@ -17,15 +17,34 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
     app.api.redo()
   }, [app])
 
+  const zoomIn = React.useCallback(() => {
+    app.api.zoomIn()
+  }, [app])
+
+  const zoomOut = React.useCallback(() => {
+    app.api.zoomOut()
+  }, [app])
+
   return (
     <div className="tl-action-bar">
-      <button onClick={undo}>
-        <TablerIcon name="arrow-back-up" />
-      </button>
-      <button onClick={redo}>
-        <TablerIcon name="arrow-forward-up" />
-      </button>
-      <ZoomMenu />
+      <div className="tl-history-bar">
+        <button title="Undo" onClick={undo}>
+          <TablerIcon name="arrow-back-up" />
+        </button>
+        <button title="Redo" onClick={redo}>
+          <TablerIcon name="arrow-forward-up" />
+        </button>
+      </div>
+
+      <div className="tl-zoom-bar">
+        <button title="Zoom in" onClick={zoomIn}>
+          <TablerIcon name="plus" />
+        </button>
+        <button title="Zoom out" onClick={zoomOut}>
+          <TablerIcon name="minus" />
+        </button>
+        <ZoomMenu />
+      </div>
     </div>
   )
 })
