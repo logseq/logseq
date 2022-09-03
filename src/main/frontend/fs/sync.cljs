@@ -37,7 +37,6 @@
 ;; - logseq/version-files
 ;;   downloaded version-files
 ;; files included by `get-ignored-files` will not be synchronized.
-;; files in these `get-monitored-dirs` dirs will be synchronized.
 ;;
 ;; sync strategy:
 ;; - when toggle file-sync on,
