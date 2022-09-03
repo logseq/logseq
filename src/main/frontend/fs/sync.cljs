@@ -2712,10 +2712,13 @@
     (go
       ;; stop previous sync
       (<! (<sync-stop))
-      (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
-                                             (config/get-repo-dir repo) repo
-                                             txid *sync-state)]
-        (when (and repo (not (config/demo-graph? repo)))
+      (when (and user-uuid graph-uuid txid
+                 (user/logged-in?)
+                 repo
+                 (not (config/demo-graph? repo)))
+        (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
+                                               (config/get-repo-dir repo) repo
+                                               txid *sync-state)]
           ;; 1. if remote graph has been deleted, clear graphs-txid.edn
           ;; 2. if graphs-txid.edn's content isn't [user-uuid graph-uuid txid], clear it
           (if (not= 3 (count @graphs-txid))
