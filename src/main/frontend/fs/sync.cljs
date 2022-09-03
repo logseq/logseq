@@ -440,7 +440,7 @@
 (defn- contains-path? [regexps path]
   (reduce #(when (re-find %2 path) (reduced true)) false regexps))
 
-(defn- ignored?
+(defn ignored?
   "Whether file is ignored when syncing."
   [path]
   (->
