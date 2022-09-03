@@ -1544,8 +1544,7 @@
   [type {:keys [dir path _content stat] :as _payload}]
   (when-let [current-graph (state/get-current-repo)]
     (when (string/ends-with? current-graph dir)
-      (when-not (some-> (state/get-file-sync-state current-graph)
-                        sync-state--stopped?)
+      (when-not (sync-state--stopped? (state/get-file-sync-state current-graph))
         (when (or (:mtime stat) (= type "unlink"))
           (go
             (let [path (remove-dir-prefix dir path)
@@ -1976,8 +1975,9 @@
       add-history? (update :history add-history-items paths now))))
 
 (defn sync-state--stopped?
+  "Graph syncing is stopped or not enabled"
   [sync-state]
-  (= ::stop (:state sync-state)))
+  (or (nil? sync-state) (= ::stop (:state sync-state))))
 
 ;;; ### remote->local syncer & local->remote syncer
 
