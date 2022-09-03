@@ -100,7 +100,6 @@
      :document/mode?                        document-mode?
 
      :config                                {}
-     :config/root-dir                       nil
      :block/component-editing-mode?         false
      :editor/hidden-editors                 #{}             ;; page names
      :editor/draw-mode?                     false
@@ -288,15 +287,26 @@
 ;; State that most user config is dependent on
 (declare get-current-repo)
 
+(defn merge-configs
+  "Merges user configs in given orders. All values are overriden except for maps
+  which are merged."
+  [& configs]
+  (apply merge-with
+    (fn merge-config [current new]
+      (if (and (map? current) (map? new))
+        (merge current new)
+        new))
+    configs))
+
 (defn get-config
   "User config for the given repo or current repo if none given"
   ([]
    (get-config (get-current-repo)))
   ([repo-url]
-   (merge default-config
-          ;; TODO: Confirm merging works for all cases
-          (get-in @state [:config ::global-config])
-          (get-in @state [:config repo-url]))))
+   (merge-configs
+    default-config
+    (get-in @state [:config ::global-config])
+    (get-in @state [:config repo-url]))))
 
 (defonce publishing? (atom nil))
 
@@ -653,10 +663,6 @@ Similar to re-frame subscriptions"
   (or (:git/current-repo @state)
       (when-not (mobile-util/native-platform?)
         "local")))
-
-(defn get-root-dir
-  []
-  (:config/root-dir @state))
 
 (defn get-remote-repos
   []

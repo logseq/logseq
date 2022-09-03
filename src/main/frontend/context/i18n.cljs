@@ -1,6 +1,7 @@
 (ns frontend.context.i18n
-  "Handles translation for the entire application. The dependencies for this ns
-  must be small since it is used throughout the application."
+  "This ns is a system component that handles translation for the entire
+  application. The ns dependencies for this ns must be small since it is used
+  throughout the application."
   (:require [frontend.dicts :as dicts]
             [frontend.modules.shortcut.dicts :as shortcut-dicts]
             [tongue.core :as tongue]
