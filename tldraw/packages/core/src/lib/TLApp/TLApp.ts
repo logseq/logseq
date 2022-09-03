@@ -31,7 +31,7 @@ import { TLViewport } from '../TLViewport'
 import { TLSelectTool, TLMoveTool } from '../tools'
 
 export interface TLDocumentModel<S extends TLShape = TLShape, A extends TLAsset = TLAsset> {
-  currentPageId: string
+  // currentPageId: string
   selectedIds: string[]
   pages: TLPageModel<S>[]
   assets?: A[]
@@ -247,7 +247,7 @@ export class TLApp<
 
   loadDocumentModel(model: TLDocumentModel<S>): this {
     this.history.deserialize(model)
-    if (model.assets) this.addAssets(model.assets)
+    if (model.assets && model.assets.length > 0) this.addAssets(model.assets)
 
     return this
   }
@@ -272,7 +272,7 @@ export class TLApp<
 
   @computed get serialized(): TLDocumentModel<S> {
     return {
-      currentPageId: this.currentPageId,
+      // currentPageId: this.currentPageId,
       selectedIds: Array.from(this.selectedIds.values()),
       pages: Array.from(this.pages.values()).map(page => page.serialized),
       assets: this.getCleanUpAssets(),

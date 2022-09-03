@@ -244,7 +244,6 @@ export class TextShape extends TLTextShape<TextShapeProps> {
         rx={borderRadius}
         ry={borderRadius}
         fill="transparent"
-        stroke="none"
       />
     )
   })

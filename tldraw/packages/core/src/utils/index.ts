@@ -62,6 +62,11 @@ export function dedupe<T>(arr: T[]) {
   return [...new Set(arr)]
 }
 
+export function omit<T, K extends keyof T>(obj: T, key: K): Omit<T, K> {
+  const { [key]: _, ...rest } = obj
+  return rest
+}
+
 /** Linear interpolate between two values. */
 export function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t
