@@ -97,7 +97,7 @@
       }
 
       > .it {
-        @apply border sm:grid sm:grid-cols-3 sm:gap-6;
+        @apply sm:grid sm:grid-cols-3 sm:gap-6;
 
         margin-bottom: 0;
         padding-bottom: 12px;
@@ -295,9 +295,36 @@
 
 .cp__assets {
   &-alias-directories {
-    @apply border py-2;
+    @apply py-2;
 
     > ul {
+      @apply m-0 list-none -mx-2;
+
+      > li {
+        border-top: 1px solid var(--ls-secondary-border-color);
+
+        &:hover {
+          .ext-label.is-plus {
+            opacity: 100;
+          }
+        }
+      }
+    }
+
+    .ext-label {
+      @apply rounded px-1.5 opacity-70 cursor-pointer;
+
+      background-color: var(--ls-secondary-border-color);
+
+      &.is-plus {
+        background-color: var(--ls-primary-background-color);
+        border: 1px solid var(--ls-border-color);
+      }
+    }
+
+    .ext-input {
+      line-height: 1;
+      width: 60px;
     }
   }
 }
@@ -311,22 +338,22 @@ html.is-native-android,
 html.is-native-iphone,
 html.is-native-iphone-without-notch {
 
-    .cp__settings-inner {
-        > article {
-            padding-bottom: 0px;
-        }
-
-        .panel-wrap {
-            padding-bottom: 0px;
-        }
+  .cp__settings-inner {
+    > article {
+      padding-bottom: 0px;
     }
+
+    .panel-wrap {
+      padding-bottom: 0px;
+    }
+  }
 }
 
 svg.git {
-    margin-left: -4px;
-    transform: scale(0.9);
+  margin-left: -4px;
+  transform: scale(0.9);
 }
 
 svg.cmd {
-    margin-left: -1px;
+  margin-left: -1px;
 }
