@@ -1,7 +1,7 @@
 (ns frontend.modules.instrumentation.posthog
   (:require [frontend.config :as config]
             [frontend.util :as util]
-            [frontend.mobile.util :as mobile]
+            [frontend.mobile.util :as mobile-util]
             [frontend.version :refer [version]]
             ["posthog-js" :as posthog]
             [cljs-bean.core :as bean]))
@@ -12,7 +12,7 @@
 (defn register []
   (posthog/register
    (clj->js
-    {:app_type (let [platform (mobile/platform)]
+    {:app_type (let [platform (mobile-util/platform)]
                  (cond
                    (util/electron?)
                    "electron"

@@ -6,8 +6,7 @@
             [frontend.util :as util]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
-            [shadow.resource :as rc]
-            ["path" :as path]))
+            [shadow.resource :as rc]))
 
 (goog-define DEV-RELEASE false)
 (defonce dev-release? DEV-RELEASE)
@@ -260,6 +259,10 @@
 
 (def config-default-content (rc/inline "config.edn"))
 
+;; Desktop only as other platforms requires better understanding of their
+;; multi-graph workflows and optimal place for a "global" dir
+(def global-config-enabled? util/electron?)
+
 (defonce idb-db-prefix "logseq-db/")
 (defonce local-db-prefix "logseq_local_")
 (defonce local-handle "handle")
@@ -369,20 +372,12 @@
                         page-name)]
     (get-file-path repo-url (str sub-dir "/" page-basename "." ext))))
 
-(defn get-config-path
+(defn get-repo-config-path
   ([]
-   (get-config-path (state/get-current-repo)))
+   (get-repo-config-path (state/get-current-repo)))
   ([repo]
    (when repo
      (get-file-path repo (str app-name "/" config-file)))))
-
-(defn get-global-config-dir
-  []
-  (path/join (state/get-root-dir) "config"))
-
-(defn get-global-config-path
-  []
-  (path/join (state/get-root-dir) "config" "config.edn"))
 
 (defn get-metadata-path
   ([]

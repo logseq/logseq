@@ -11,6 +11,7 @@
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.idb :as idb]
@@ -329,35 +330,34 @@
          (state/set-graph-syncing? true))
        (->
         (p/let [handle (when-not electron? (idb/get-item handle-path))]
-          (when (or handle electron? mobile-native?)   ; electron doesn't store the file handle
-            (p/let [_ (when handle (nfs/verify-permission repo handle true))
-                    local-files-result
-                    (fs/get-files (if nfs? handle
-                                    (config/get-local-dir repo))
-                                  (fn [path handle]
-                                    (when nfs?
-                                      (swap! path-handles assoc path handle))))
-                    global-dir (config/get-global-config-dir)
-                    global-config-supported? (and electron? (fs/dir-exists? global-dir))
-                    global-files-result (if global-config-supported?
-                                          (fs/get-files global-dir (constantly nil))
-                                          [])
-                    new-local-files (-> (->db-files mobile-native? electron? dir-name local-files-result)
-                                        (remove-ignore-files dir-name nfs?))
-                    new-global-files (-> (->db-files mobile-native? electron? global-dir global-files-result)
-                                         (remove-ignore-files global-dir nfs?))
-                    new-files (concat new-local-files new-global-files)
+               (when (or handle electron? mobile-native?)   ; electron doesn't store the file handle
+                 (p/let [_ (when handle (nfs/verify-permission repo handle true))
+                         local-files-result
+                         (fs/get-files (if nfs? handle
+                                         (config/get-local-dir repo))
+                                       (fn [path handle]
+                                         (when nfs?
+                                           (swap! path-handles assoc path handle))))
+                         global-dir (global-config-handler/global-config-dir)
+                         global-files-result (if (config/global-config-enabled?)
+                                               (fs/get-files global-dir (constantly nil))
+                                               [])
+                         new-local-files (-> (->db-files mobile-native? electron? dir-name local-files-result)
+                                             (remove-ignore-files dir-name nfs?))
+                         new-global-files (-> (->db-files mobile-native? electron? global-dir global-files-result)
+                                              (remove-ignore-files global-dir nfs?))
+                         new-files (concat new-local-files new-global-files)
 
-                    _ (when nfs?
-                        (let [file-paths (set (map :file/path new-files))]
-                          (swap! path-handles (fn [handles]
-                                                (->> handles
-                                                     (filter (fn [[path _handle]]
-                                                               (contains? file-paths
-                                                                          (string/replace-first path (str dir-name "/") ""))))
-                                                     (into {})))))
-                        (set-files! @path-handles))]
-                   (handle-diffs! repo nfs? old-files new-files handle-path path-handles re-index?))))
+                         _ (when nfs?
+                             (let [file-paths (set (map :file/path new-files))]
+                               (swap! path-handles (fn [handles]
+                                                     (->> handles
+                                                          (filter (fn [[path _handle]]
+                                                                    (contains? file-paths
+                                                                               (string/replace-first path (str dir-name "/") ""))))
+                                                          (into {})))))
+                             (set-files! @path-handles))]
+                        (handle-diffs! repo nfs? old-files new-files handle-path path-handles re-index?))))
         (p/catch (fn [error]
                    (log/error :nfs/load-files-error repo)
                    (log/error :exception error)))

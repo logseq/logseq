@@ -21,6 +21,8 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.handler.global-config :as global-config-handler]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
@@ -84,7 +86,9 @@
        {:repos repos}
        old-db-schema
        (fn [repo]
-         (file-handler/restore-config! repo)))
+         (repo-config-handler/start {:repo repo})
+         (when (config/global-config-enabled?)
+           (global-config-handler/start {:repo repo}))))
       (p/then
        (fn []
          ;; try to load custom css only for current repo
@@ -115,7 +119,6 @@
 
          (watch-for-date!)
          (file-handler/watch-for-current-graph-dir!)
-         (file-handler/watch-for-global-config-dir!)
          (state/pub-event! [:graph/restored (state/get-current-repo)])))
       (p/catch (fn [error]
                  (log/error :exception error)))))

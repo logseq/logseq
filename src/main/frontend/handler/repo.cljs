@@ -9,9 +9,12 @@
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.handler.common.file :as file-common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.metadata :as metadata-handler]
+            [frontend.handler.global-config :as global-config-handler]
             [frontend.idb :as idb]
             [frontend.search :as search]
             [frontend.spec :as spec]
@@ -34,20 +37,6 @@
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
 ;; 2. Git pulls the new change (fn: load-files)
 
-(defn create-config-file-if-not-exists
-  [repo-url]
-  (spec/validate :repos/url repo-url)
-  (let [repo-dir (config/get-repo-dir repo-url)
-        app-dir config/app-name
-        dir (str repo-dir "/" app-dir)]
-    (p/let [_ (fs/mkdir-if-not-exists dir)]
-      (let [default-content config/config-default-content
-            path (str app-dir "/" config/config-file)]
-        (p/let [file-exists? (fs/create-if-not-exists repo-url repo-dir (str app-dir "/" config/config-file) default-content)]
-          (when-not file-exists?
-            (file-handler/reset-file! repo-url path default-content)
-            (common-handler/reset-config! repo-url default-content)))))))
-
 (defn create-contents-file
   [repo-url]
   (spec/validate :repos/url repo-url)
@@ -67,7 +56,7 @@
         (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir pages-dir))
                 file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
           (when-not file-exists?
-            (file-handler/reset-file! repo-url path default-content)))))))
+            (file-common-handler/reset-file! repo-url path default-content)))))))
 
 (defn create-custom-theme
   [repo-url]
@@ -79,7 +68,7 @@
     (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
-        (file-handler/reset-file! repo-url path default-content)))))
+        (file-common-handler/reset-file! repo-url path default-content)))))
 
 (defn create-dummy-notes-page
   [repo-url content]
@@ -89,7 +78,7 @@
         file-path (str "/" path)]
     (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-pages-directory)))
             _file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
-      (file-handler/reset-file! repo-url path content))))
+      (file-common-handler/reset-file! repo-url path content))))
 
 (defn- create-today-journal-if-not-exists
   [repo-url {:keys [content]}]
@@ -123,7 +112,7 @@
                 _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-journals-directory)))
                 file-exists? (fs/file-exists? repo-dir file-path)]
           (when-not file-exists?
-            (p/let [_ (file-handler/reset-file! repo-url path content)]
+            (p/let [_ (file-common-handler/reset-file! repo-url path content)]
               (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-path content)]
                 (when-not (state/editing?)
                   (ui-handler/re-render-root!)))))
@@ -140,7 +129,7 @@
              _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (str config/app-name "/" config/recycle-dir)))
              _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-journals-directory)))
              _ (file-handler/create-metadata-file repo-url encrypted?)
-             _ (create-config-file-if-not-exists repo-url)
+             _ (repo-config-handler/create-config-file-if-not-exists repo-url)
              _ (create-contents-file repo-url)
              _ (create-custom-theme repo-url)]
        (state/pub-event! [:page/create-today-journal repo-url])))))
@@ -280,9 +269,9 @@
   (spec/validate :repos/url repo-url)
   (route-handler/redirect-to-home!)
   (state/set-parsing-state! {:graph-loading? true})
-  (let [config (or (when-let [content (some-> (first (filter #(= (config/get-config-path repo-url) (:file/path %)) nfs-files))
+  (let [config (or (when-let [content (some-> (first (filter #(= (config/get-repo-config-path repo-url) (:file/path %)) nfs-files))
                                               :file/content)]
-                     (common-handler/read-config content))
+                     (repo-config-handler/read-repo-config repo-url content))
                    (state/get-config repo-url))
         ;; NOTE: Use config while parsing. Make sure it's the corrent journal title format
         _ (state/set-config! repo-url config)
@@ -368,7 +357,7 @@
                (let [tutorial (t :tutorial/text)
                      tutorial (string/replace-first tutorial "$today" (date/today))]
                  (create-today-journal-if-not-exists repo {:content tutorial})))
-             (create-config-file-if-not-exists repo)
+             (repo-config-handler/create-config-file-if-not-exists repo)
              (create-contents-file repo)
              (create-custom-theme repo)
              (state/set-db-restoring! false)
@@ -391,7 +380,8 @@
   [repo]
   (p/let [_ (state/set-db-restoring! true)
           _ (db/restore-graph! repo)]
-         (file-handler/restore-config! repo)
+         (repo-config-handler/restore-repo-config! repo)
+         (global-config-handler/restore-global-config! repo)
          ;; Don't have to unlisten the old listerner, as it will be destroyed with the conn
          (db/listen-and-persist! repo)
          (ui-handler/add-style-if-exists!)
