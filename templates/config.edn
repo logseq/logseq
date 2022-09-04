@@ -272,16 +272,8 @@
  ;;  :media "[[quick capture]] **{time}**: {url}"}
 
  ;; File sync options
-
- ;; In addition to those directories created by Logseq,
- ;; files specified in the `:file-sync/monitor-dirs` directories will be synchronized too.
- ;;
- ;; Directories created by Logseq include:
- ;; ["assets" "journals" "logseq" "pages" "draws"].
- :file-sync/monitor-dirs []
-
  ;; Ignore these files when syncing, regexp is supported.
- :file-sync/ignore-files [".DS_Store$"]
+ ;; :file-sync/ignore-files []
 
  ;; dwim (do what I mean) for Enter key when editing.
  ;; Context-awareness of Enter key makes editing more easily
