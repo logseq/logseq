@@ -37,7 +37,6 @@
 ;; - logseq/version-files
 ;;   downloaded version-files
 ;; files included by `get-ignored-files` will not be synchronized.
-;; files in these `get-monitored-dirs` dirs will be synchronized.
 ;;
 ;; sync strategy:
 ;; - when toggle file-sync on,
@@ -153,22 +152,21 @@
 
 ;;; ### configs in config.edn
 ;; - :file-sync/ignore-files
-;; - :file-sync/monitor-dirs
 
 (defn- get-ignored-files
   []
   (into #{#"logseq/graphs-txid.edn$"
-          #"logseq/\.recycle/.*"
-          #"logseq/version-files/.*"
-          #"logseq/bak/.*"}
+          #"logseq/version-files/"
+          #"logseq/bak/"
+          #"node_modules/"
+          ;; path starts with `.` in the root directory, e.g. .gitignore
+          #"^\.[^.]+"
+          ;; path includes `/.`, e.g. .git, .DS_store
+          #"/\."
+          ;; Emacs/Vim backup files end with `~` by default
+          #"~$"}
         (map re-pattern)
         (:file-sync/ignore-files (state/get-config))))
-
-(defn- get-monitor-dirs
-  []
-  (into #{#"^assets/" #"^journals/" #"^logseq/" #"^pages/" #"^draws/"}
-        (map #(re-pattern (str "^" % "/")))
-        (:file-sync/monitor-dirs (state/get-config))))
 
 ;;; ### configs ends
 
@@ -354,9 +352,6 @@
                "\" (updated? " updated? ", renamed? " (.renamed? coll) ", deleted? " deleted?
                ", txid " txid ", checksum " checksum ")]")))
 
-(defn- contains-path? [regexps path]
-  (reduce #(when (re-find %2 path) (reduced true)) false regexps))
-
 (defn- assert-filetxns
   [filetxns]
   (every? true?
@@ -441,16 +436,16 @@
             (map list ts))))
    cat))
 
-(defn- filter-filetxns-by-config
-  "return transducer.
-  filter filetxns by `get-ignored-files` and `get-monitored-dirs`"
-  []
-  (let [ignored-files (get-ignored-files)
-        monitored-dirs (get-monitor-dirs)]
-    (filter
-     #(let [path (relative-path %)]
-        (and (contains-path? monitored-dirs path)
-             (not (contains-path? ignored-files path)))))))
+(defn- contains-path? [regexps path]
+  (reduce #(when (re-find %2 path) (reduced true)) false regexps))
+
+(defn ignored?
+  "Whether file is ignored when syncing."
+  [path]
+  (->
+   (get-ignored-files)
+   (contains-path? (relative-path path))
+   (boolean)))
 
 (defn- diffs->partitioned-filetxns
   "transducer.
@@ -465,7 +460,7 @@
   (comp
    (map diff->filetxns)
    cat
-   (filter-filetxns-by-config)
+   (remove ignored?)
    distinct-update-filetxns-xf
    remove-deleted-filetxns-xf
    (partition-filetxns n)))
@@ -2172,8 +2167,7 @@
                    true)
                  (or (string/starts-with? (.-dir e) base-path)
                      (string/starts-with? (str "file://" (.-dir e)) base-path)) ; valid path prefix
-                 (not (contains-path? (get-ignored-files) (relative-path e))) ;not ignored
-                 (contains-path? (get-monitor-dirs) (relative-path e)) ; dir is monitored
+                 (not (ignored? e)) ;not ignored
                  ;; download files will also trigger file-change-events, ignore them
                  (let [r (not (contains? (:recent-remote->local-files @*sync-state)
                                          (<! (<file-change-event=>recent-remote->local-file-item e))))]
@@ -2220,10 +2214,9 @@
       (if (empty? es)
         (go {:succ true})
         (let [type          (.-type ^FileChangeEvent (first es))
-              ignored-files (get-ignored-files)
               es->paths-xf  (comp
                              (map #(relative-path %))
-                             (filter #(not (contains-path? ignored-files %))))]
+                             (remove ignored?))]
           (go
             (let [es*   (<! (<filter-checksum-not-consistent es))
                   _     (when (not= (count es*) (count es))
@@ -2295,18 +2288,13 @@
             (let [remote-all-files-meta remote-all-files-meta-or-exp
                   local-all-files-meta  (<! local-all-files-meta-c)
                   diff-local-files      (diff-file-metadata-sets local-all-files-meta remote-all-files-meta)
-                  monitored-dirs        (get-monitor-dirs)
-                  ignored-files         (get-ignored-files)
                   change-events
                   (sequence
                    (comp
                     ;; convert to FileChangeEvent
                     (map #(->FileChangeEvent "change" base-path (.get-normalized-path ^FileMetadata %)
                                              {:size (:size %)} (:etag %)))
-                    ;; filter ignore-files & monitored-dirs
-                    (filter #(let [path (relative-path %)]
-                               (and (not (contains-path? ignored-files path))
-                                    (contains-path? monitored-dirs path)))))
+                    (remove ignored?))
                    diff-local-files)
                   change-events-partitions
                   (sequence
