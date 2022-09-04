@@ -62,7 +62,7 @@
    (fn [^js request callback]
      (let [url (.-url request)
            path (js/decodeURI url)
-           _ (prn "===>> resolved asset:" url " <->" path)]
+           path (string/replace path "assets://" "")]
        (callback #js {:path path}))))
 
   (.registerFileProtocol

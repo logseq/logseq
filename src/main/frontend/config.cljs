@@ -415,42 +415,6 @@
     (string/replace
      source "../assets" (util/format "%s://%s/assets" protocol (get-repo-dir (state/get-current-repo))))))
 
-(defn alias-assets-enabled? []
-  (and (util/electron?)
-       (:assets/alias-enabled? (state/sub :electron/user-cfgs))))
-
-(def Origin_Log_Seq "log.seq")
-(def Spliter_Asset_File "~~@~~")
-
-(defn normalize-asset-resource-uri
-  ;; try to convert resource file to uri asset link
-  [repo full-path]
-  (let [_filename (util/node-path.basename full-path)
-        protocol-link? (->> #{:file :http :https :assets}
-                            (some #(string/starts-with? full-path (str (name %) ":/"))))
-        url       (cond
-                    protocol-link?
-                    full-path
-
-                    (util/absolute-path? full-path)
-                    (str "file://" full-path)
-
-                    :else
-                    (let [full-path  (string/replace full-path #"^[.\/\\]+" "")
-                          full-path  (if-not (string/starts-with? full-path gp-config/local-assets-dir)
-                                       (util/node-path.join gp-config/local-assets-dir full-path)
-                                       full-path)
-                          graph-root (get-repo-dir repo)]
-
-                      (if (alias-assets-enabled?)
-                        (str "assets://"
-                             (string/replace-first
-                              full-path gp-config/local-assets-dir
-                              (str Origin_Log_Seq graph-root "/" gp-config/local-assets-dir "/" Spliter_Asset_File)))
-                        ;; TODO: bfs
-                        (str "file://" (util/node-path.join graph-root full-path)))))]
-    url))
-
 (defn get-custom-js-path
   ([]
    (get-custom-js-path (state/get-current-repo)))

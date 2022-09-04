@@ -7,6 +7,7 @@
             [frontend.fs :as fs]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.assets :as assets-handler]
             [frontend.util.page-property :as page-property]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -26,8 +27,7 @@
   (let [filename (util/node-path.basename original-path)
         web-link? (string/starts-with? original-path "http")
         ext-name (util/get-file-ext filename)
-        url (config/normalize-asset-resource-uri
-             (state/get-current-repo) original-path)]
+        url (assets-handler/normalize-asset-resource-url original-path)]
     (when-let [key
                (if web-link?
                  (str (hash url))
@@ -258,10 +258,11 @@
   [filename]
   (when-not (string/blank? filename)
     (let [local-asset? (re-find #"[0-9]{13}_\d$" filename)
-          hls? (and local-asset? (re-find #"^hls__" filename))]
+          hls?         (re-find #"^hls__" filename)
+          len          (count filename)]
       (if (or local-asset? hls?)
         (-> filename
-            (subs 0 (- (count filename) 15))
+            (subs 0 (if local-asset? (- len 15) len))
             (string/replace #"^hls__" "")
             (string/replace "_" " ")
             (string/trimr))
