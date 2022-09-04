@@ -61,7 +61,7 @@
    protocol FILE_ASSETS_SCHEME
    (fn [^js request callback]
      (let [url (.-url request)
-           path (resolve-url-asset-real-path url)
+           path (js/decodeURI url)
            _ (prn "===>> resolved asset:" url " <->" path)]
        (callback #js {:path path}))))
 

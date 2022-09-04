@@ -150,6 +150,10 @@
      :electron/updater                      {}
      :electron/user-cfgs                    nil
 
+     ;; assets
+     :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) true)
+     :assets/alias-dirs                     (or (storage/get :assets/alias-dirs) [])
+
      ;; mobile
      :mobile/show-action-bar?               false
      :mobile/actioned-block                 nil
@@ -362,6 +366,17 @@
   [k v]
   (set-state! [:electron/user-cfgs k] v)
   (ipc/ipc :userAppCfgs k v))
+
+(defn set-assets-alias-enabled!
+  [v]
+  (set-state! :assets/alias-enabled? (boolean v))
+  (storage/set :assets/alias-enabled? (boolean v)))
+
+(defn set-assets-alias-dirs!
+  [dirs]
+  (when dirs
+    (set-state! :assets/alias-dirs dirs)
+    (storage/set :assets/alias-dirs dirs)))
 
 (defn sub-app-config
   [k]

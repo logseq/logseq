@@ -295,7 +295,7 @@
 
 .cp__assets {
   &-alias-directories {
-    @apply py-2;
+    @apply py-2 px-1;
 
     > ul {
       @apply m-0 list-none -mx-2;
@@ -306,6 +306,10 @@
         &:hover {
           .ext-label.is-plus {
             opacity: 100;
+          }
+
+          .ctrls {
+            display: block;
           }
         }
       }
@@ -323,8 +327,22 @@
     }
 
     .ext-input {
-      line-height: 1;
+      @apply leading-none;
+      
+      padding: 1px 4px;
       width: 60px;
+    }
+  }
+
+  &-alias-name-content {
+    margin: -8px;
+
+    > p {
+      @apply py-1.5 text-lg px-1 my-0;
+
+      strong {
+        @apply inline-block pr-4 text-right w-40 opacity-70;
+      }
     }
   }
 }
