@@ -26,7 +26,8 @@
             [frontend.fs :as fs]
             [frontend.encrypt :as encrypt]
             [medley.core :refer [dedupe-by]]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [goog.object :as gobj]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -507,16 +508,10 @@
   (-hash [_] (hash {:etag etag :path path}))
 
   ILookup
-  (-lookup [o k] (-lookup o k nil))
-  (-lookup [_ k not-found]
-    (case k
-      :size size
-      :etag etag
-      :path path
-      :encrypted-path encrypted-path
-      :last-modified last-modified
-      :remote? remote?
-      not-found))
+  (-lookup [this k]
+    (gobj/get this (name k)))
+  (-lookup [this k not-found]
+    (or (gobj/get this (name k)) not-found))
 
   IPrintWithWriter
   (-pr-writer [_ w _opts]
