@@ -26,7 +26,8 @@
             [frontend.fs :as fs]
             [frontend.encrypt :as encrypt]
             [medley.core :refer [dedupe-by]]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [goog.object :as gobj]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -497,6 +498,12 @@
 
   IRelativePath
   (-relative-path [_] path)
+
+  ILookup
+  (-lookup [this k]
+    (gobj/get this (name k)))
+  (-lookup [this k not-found]
+    (or (gobj/get this (name k)) not-found))
 
   IEquiv
   (-equiv [o ^FileMetadata other]
