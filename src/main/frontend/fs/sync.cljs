@@ -1544,15 +1544,15 @@
   [type {:keys [dir path _content stat] :as _payload}]
   (when-let [current-graph (state/get-current-repo)]
     (when (string/ends-with? current-graph dir)
-      (when-not (some-> (state/get-file-sync-state current-graph)
-                        sync-state--stopped?)
-        (when (or (:mtime stat) (= type "unlink"))
-          (go
-            (let [path (remove-dir-prefix dir path)
-                  files-meta (and (not= "unlink" type)
-                                  (<! (<get-local-files-meta rsapi "" dir [path])))
-                  checksum (and (coll? files-meta) (some-> files-meta first :etag))]
-              (>! local-changes-chan (->FileChangeEvent type dir path stat checksum)))))))))
+      (let [sync-state (state/get-file-sync-state current-graph)]
+        (when (and sync-state (not (sync-state--stopped? sync-state)))
+          (when (or (:mtime stat) (= type "unlink"))
+            (go
+              (let [path (remove-dir-prefix dir path)
+                    files-meta (and (not= "unlink" type)
+                                    (<! (<get-local-files-meta rsapi "" dir [path])))
+                    checksum (and (coll? files-meta) (some-> files-meta first :etag))]
+                (>! local-changes-chan (->FileChangeEvent type dir path stat checksum))))))))))
 
 (defn local-changes-revised-chan-builder
   "return chan"
@@ -1976,7 +1976,9 @@
       add-history? (update :history add-history-items paths now))))
 
 (defn sync-state--stopped?
+  "Graph syncing is stopped"
   [sync-state]
+  {:pre [(s/valid? ::sync-state sync-state)]}
   (= ::stop (:state sync-state)))
 
 ;;; ### remote->local syncer & local->remote syncer
@@ -2712,10 +2714,13 @@
     (go
       ;; stop previous sync
       (<! (<sync-stop))
-      (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
-                                             (config/get-repo-dir repo) repo
-                                             txid *sync-state)]
-        (when (and repo (not (config/demo-graph? repo)))
+      (when (and user-uuid graph-uuid txid
+                 (user/logged-in?)
+                 repo
+                 (not (config/demo-graph? repo)))
+        (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
+                                               (config/get-repo-dir repo) repo
+                                               txid *sync-state)]
           ;; 1. if remote graph has been deleted, clear graphs-txid.edn
           ;; 2. if graphs-txid.edn's content isn't [user-uuid graph-uuid txid], clear it
           (if (not= 3 (count @graphs-txid))

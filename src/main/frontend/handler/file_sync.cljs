@@ -16,6 +16,9 @@
 
 (def refresh-file-sync-component (atom false))
 
+
+(defn get-current-graph-uuid [] (second @sync/graphs-txid))
+
 (defn enable-sync?
   []
   (or (state/enable-sync?)
@@ -58,7 +61,7 @@
 (defn <delete-graph
   [graph-uuid]
   (go
-    (when (= graph-uuid @sync/graphs-txid)
+    (when (= graph-uuid (get-current-graph-uuid))
       (<! (sync/<sync-stop)))
     (let [r (<! (sync/<delete-graph sync/remoteapi graph-uuid))]
       (if (instance? ExceptionInfo r)
@@ -159,7 +162,6 @@
                                                  >))]
             all-version-list))))))
 
-(defn get-current-graph-uuid [] (second @sync/graphs-txid))
 
 (def *wait-syncing-graph (atom nil))
 
