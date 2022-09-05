@@ -1978,6 +1978,7 @@
 (defn sync-state--stopped?
   "Graph syncing is stopped"
   [sync-state]
+  {:pre [(s/valid? ::sync-state sync-state)]}
   (= ::stop (:state sync-state)))
 
 ;;; ### remote->local syncer & local->remote syncer
