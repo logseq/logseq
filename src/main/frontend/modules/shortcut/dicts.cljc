@@ -1341,6 +1341,7 @@
              :command.graph/re-index                 "Mevcut grafiği yeniden oluştur"
              :command.command/run                    "Git komutunu çalıştır"
              :command.go/home                        "Ana sayfaya git"
+             :command.go/all-graphs                  "Bütün grafiklere git"
              :command.go/all-pages                   "Bütün sayfalara git"
              :command.go/graph-view                  "Grafik görünümüne git"
              :command.go/keyboard-shortcuts          "Klavye kısayollarına git"
