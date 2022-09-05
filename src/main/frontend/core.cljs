@@ -45,7 +45,8 @@
     (set-router!)
     (rum/mount (page/current-page) node)
     (display-welcome-message)
-    (persist-var/load-vars)))
+    (persist-var/load-vars)
+    (sync/sync-start)))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads
