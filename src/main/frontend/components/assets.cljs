@@ -28,7 +28,8 @@
     [:div.cp__assets-alias-name-content
      [:h1.text-2xl.opacity-90.mb-6 "What's the alias name of this selected directory?"]
      [:p [:strong "Directory path:"]
-      [:a dir]]
+      [:a {:on-click #(when (util/electron?)
+                        (js/apis.openPath dir))} dir]]
      [:p [:strong "Alias name:"]
       [:input.px-1.border.rounded
        {:autoFocus   true
@@ -88,7 +89,7 @@
                                (set-dir! name dir exts))))
 
         confirm-dir      (fn [dir set-dir!]
-                           (state/set-modal!
+                           (state/set-sub-modal!
                             #(confirm-dir-with-alias-name dir set-dir!)))]
 
     [:div.cp__assets-alias-directories

@@ -647,11 +647,11 @@
 
 (rum/defc asset-reference
   [config title path]
-  (let [repo-path (config/get-repo-dir (state/get-current-repo))
-        full-path (if (util/absolute-path? path)
+  (let [repo (state/get-current-repo)
+        real-path-url (if (util/absolute-path? path)
                     path
-                    (.. util/node-path (join repo-path (config/get-local-asset-absolute-path path))))
-        ext-name (util/get-file-ext full-path)
+                    (assets-handler/resolve-asset-real-path-url repo path))
+        ext-name (util/get-file-ext path)
         title-or-path (cond
                         (string? title)
                         title
@@ -659,26 +659,18 @@
                         (->elem :span (map-inline config title))
                         :else
                         path)]
+
     [:div.asset-ref-wrap
      {:data-ext ext-name}
-
-     (if (= "pdf" ext-name)
-       [:a.asset-ref.is-pdf
-        {:on-mouse-down (fn [e]
-                          (when-let [current (pdf-assets/inflate-asset full-path)]
-                            (util/stop e)
-                            (state/set-state! :pdf/current current)))}
-        title-or-path]
-       [:a.asset-ref {:target "_blank" :href full-path}
-        title-or-path])
 
      (case ext-name
        ;; https://en.wikipedia.org/wiki/HTML5_video
        ("mp4" "ogg" "webm" "mov")
-       [:video {:src full-path
+       [:video {:src real-path-url
                 :controls true}]
 
-       nil)]))
+       [:a.asset-ref {:target "_blank" :href real-path-url}
+        title-or-path])]))
 
 (defonce excalidraw-loaded? (atom false))
 (rum/defc excalidraw < rum/reactive
