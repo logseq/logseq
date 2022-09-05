@@ -2745,27 +2745,22 @@
         (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
                                                (config/get-repo-dir repo) repo
                                                txid *sync-state)]
-          ;; 1. if remote graph has been deleted, clear graphs-txid.edn
-          ;; 2. if graphs-txid.edn's content isn't [user-uuid graph-uuid txid], clear it
-          (if (not (and user-uuid graph-uuid txid))
-            (do (clear-graphs-txid! repo)
-                (state/set-file-sync-state repo nil))
-            (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
-              (if-not (<! (<check-remote-graph-exists graph-uuid))
-                (clear-graphs-txid! repo)
-                (do
-                  (state/set-file-sync-state repo @*sync-state)
-                  (state/set-file-sync-manager sm)
+          (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
+            (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
+              (clear-graphs-txid! repo)
+              (do
+                (state/set-file-sync-state repo @*sync-state)
+                (state/set-file-sync-manager sm)
 
-                  ;; update global state when *sync-state changes
-                  (add-watch *sync-state ::update-global-state
-                             (fn [_ _ _ n]
-                               (state/set-file-sync-state repo n)))
+                ;; update global state when *sync-state changes
+                (add-watch *sync-state ::update-global-state
+                           (fn [_ _ _ n]
+                             (state/set-file-sync-state repo n)))
 
-                  (.start sm)
+                (.start sm)
 
-                  (offer! remote->local-full-sync-chan true)
-                  (offer! full-sync-chan true))))))))))
+                (offer! remote->local-full-sync-chan true)
+                (offer! full-sync-chan true)))))))))
 
 ;;; ### some add-watches
 
