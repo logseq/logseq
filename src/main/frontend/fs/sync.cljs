@@ -517,8 +517,7 @@
   (-pr-writer [_ w _opts]
     (write-all w (str {:size size :etag etag :path path :remote? remote?}))))
 
-(defn map->FileMetadata [m]
-  (apply ->FileMetadata ((juxt :size :etag :path :encrypted-path :last-modified :remote? (constantly nil)) m)))
+
 
 (def ^:private higher-priority-remote-files
   "when diff all remote files and local files, following remote files always need to download(when checksum not matched),
@@ -561,6 +560,9 @@
    #{} s1))
 
 (comment
+  (defn map->FileMetadata [m]
+    (apply ->FileMetadata ((juxt :size :etag :path :encrypted-path :last-modified :remote? (constantly nil)) m)))
+
   (assert
    (=
     #{(map->FileMetadata {:size 1 :etag 2 :path 2 :encrypted-path 2 :last-modified 2})}
