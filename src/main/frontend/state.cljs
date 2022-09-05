@@ -1071,11 +1071,6 @@
   []
   (:me @state))
 
-(defn deprecated-logged?
-  "Whether the user has logged in."
-  []
-  false)
-
 (defn set-db-restoring!
   [value]
   (set-state! :db/restoring? value))
