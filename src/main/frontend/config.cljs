@@ -75,16 +75,40 @@
 (def markup-formats
   #{:org :md :markdown :asciidoc :adoc :rst})
 
-(defn doc-formats
-  []
+(def doc-formats
   #{:doc :docx :xls :xlsx :ppt :pptx :one :pdf :epub})
 
-(def audio-formats #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
+(def image-formats
+  #{:png :jpg :jpeg :bmp :gif :webp :svg})
+
+(def audio-formats
+  #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
+
+(def video-formats
+  #{:mp4 :ogg :webm :mov})
 
 (def media-formats (set/union (gp-config/img-formats) audio-formats))
 
 (def html-render-formats
   #{:adoc :asciidoc})
+
+(defn extname-of-supported?
+  ([input] (extname-of-supported?
+            input
+            [image-formats doc-formats audio-formats
+             video-formats markup-formats html-render-formats]))
+  ([input formats]
+   (when-let [input (some->
+                     (cond-> input
+                       (and (string? input)
+                            (not (string/blank? input)))
+                       (string/replace-first "." ""))
+                     (util/safe-lower-case)
+                     (keyword))]
+     (some
+      (fn [s]
+        (contains? s input))
+      formats))))
 
 (def mobile?
   (when-not util/node-test?

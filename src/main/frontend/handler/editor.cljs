@@ -1369,15 +1369,17 @@
     (for [[index ^js file] (map-indexed vector files)]
       ;; WARN file name maybe fully qualified path when paste file
       (let [file-name (util/node-path.basename (.-name file))
-            [file-base ext] (if file-name
-                              (let [last-dot-index (string/last-index-of file-name ".")]
-                                [(subs file-name 0 last-dot-index)
-                                 (subs file-name last-dot-index)])
-                              ["" ""])
-            filename  (str (gen-filename index file-base) ext)
+            [file-base ext-full ext-base] (if file-name
+                              (let [ext-base (util/node-path.extname file-name)
+                                    ext-full (if-not (config/extname-of-supported? ext-base)
+                                               (util/full-path-extname file-name) ext-base)]
+                                [(subs file-name 0 (- (count file-name)
+                                                      (count ext-full))) ext-full ext-base])
+                              ["" "" ""])
+            filename  (str (gen-filename index file-base) ext-full)
             filename  (str path "/" filename)]
-        ;(js/console.debug "Write asset #" dir filename file)
-        (let [matched-alias (assets-handler/get-matched-alias-by-ext ext)
+
+        (let [matched-alias (assets-handler/get-matched-alias-by-ext ext-base)
               filename (cond-> filename
                          (not (nil? matched-alias))
                          (string/replace #"^[.\/\\]*assets[\/\\]+" ""))
@@ -1387,11 +1389,16 @@
             (let [from (.-path file)
                   from (if (string/blank? from) nil from)]
 
-              (p/then (js/window.apis.copyFileToAssets dir filename from)
-                      #(p/resolved [filename
-                                    (if (string? %) (js/File. #js[] %) file)
-                                    (.join util/node-path dir filename)
-                                    matched-alias])))
+              (js/console.debug "Debug: Copy Asset #" dir filename from)
+
+              (-> (js/window.apis.copyFileToAssets dir filename from)
+                  (p/then
+                   (fn [dest]
+                     [filename
+                      (if (string? dest) (js/File. #js[] dest) file)
+                      (.join util/node-path dir filename)
+                      matched-alias]))
+                  (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
 
             (p/then (fs/write-file! repo dir filename (.stream file) nil)
                     #(p/resolved [filename file nil matched-alias])))))))))

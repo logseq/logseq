@@ -1,8 +1,8 @@
 import path from 'path/path.js'
 
 // TODO split the capacitor abilities to a separate file for capacitor APIs
-import { StatusBar, Style } from '@capacitor/status-bar'
 import { Clipboard as CapacitorClipboard } from '@capacitor/clipboard'
+import { posix as completeExtname } from 'path-complete-extname'
 
 if (typeof window === 'undefined') {
   global.window = {}
@@ -289,6 +289,12 @@ export const writeClipboard = ({text, html}) => {
 
 export const toPosixPath = (input) => {
   return input && input.replace(/\\+/g, '/')
+}
+
+export const fullPathExtname = (input) => {
+  if (!input) return
+  input = toPosixPath(input)
+  return completeExtname(input)
 }
 
 export const nodePath = Object.assign({}, path, {

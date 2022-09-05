@@ -117,7 +117,7 @@
                     (gp-config/mldoc-support? application-type)
                     (embed-text-file url title)
 
-                    (contains? (set/union (config/doc-formats) config/media-formats)
+                    (contains? (set/union config/doc-formats config/media-formats)
                                (keyword application-type))
                     (embed-asset-file url format)
 

@@ -663,12 +663,13 @@
     [:div.asset-ref-wrap
      {:data-ext ext-name}
 
-     (case ext-name
+     (cond
        ;; https://en.wikipedia.org/wiki/HTML5_video
-       ("mp4" "ogg" "webm" "mov")
+       (contains? config/video-formats (keyword ext-name))
        [:video {:src real-path-url
                 :controls true}]
 
+       :else
        [:a.asset-ref {:target "_blank" :href real-path-url}
         title-or-path])]))
 
@@ -976,7 +977,7 @@
         (mobile-util/native-platform?)
         (asset-link config label-text s metadata full_text))
 
-      (contains? (config/doc-formats) ext)
+      (contains? config/doc-formats ext)
       (asset-link config label-text s metadata full_text)
 
       (not (contains? #{:mp4 :webm :mov} ext))

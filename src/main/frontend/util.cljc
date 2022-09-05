@@ -39,6 +39,7 @@
        (-write writer (str "\"" (.toString sym) "\"")))))
 
 #?(:cljs (defonce ^js node-path utils/nodePath))
+#?(:cljs (defonce ^js full-path-extname utils/fullPathExtname))
 #?(:cljs (defn app-scroll-container-node []
            (gdom/getElement "main-content-container")))
 
