@@ -186,7 +186,7 @@
            :on-click (fn [_e]
                        (editor-handler/open-block-in-sidebar! block-id))}
           "Open in sidebar"
-          ["shift" "click"])
+          ["⇧" "click"])
 
          [:hr.menu-separator]
 
