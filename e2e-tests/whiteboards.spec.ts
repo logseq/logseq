@@ -41,9 +41,7 @@ test('draw a rectangle', async ({ page }) => {
     await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
     await page.mouse.up();
 
-    await page.keyboard.press('Escape')
-
-    await expect(page.locator('.logseq-tldraw .tl-positioned-svg rect')).toHaveCount(2);
+    await expect(page.locator('.logseq-tldraw .tl-positioned-svg rect')).not.toHaveCount(0);
 })
 
 test('zoom in', async ({ page }) => {
