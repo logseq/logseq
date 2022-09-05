@@ -1469,7 +1469,9 @@
                   id
                   (get-asset-file-link format
                                        (if matched-alias
-                                         (str "@" (:name matched-alias) "/" asset-file-name)
+                                         (str
+                                          (if image? "../assets/" "")
+                                          "@" (:name matched-alias) "/" asset-file-name)
                                          (resolve-relative-path (or full-file-path asset-file-name)))
                                        (if file (.-name file) (if image? "image" "asset"))
                                        image?)

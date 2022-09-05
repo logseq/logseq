@@ -959,7 +959,9 @@
                  href
 
                  :else
-                 (get-file-absolute-path config href))]
+                 (if (assets-handler/check-alias-path? href)
+                   (assets-handler/resolve-asset-real-path-url (state/get-current-repo) href)
+                   (get-file-absolute-path config href)))]
       (audio-cp href))))
 
 (defn- media-link
