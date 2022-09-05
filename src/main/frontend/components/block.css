@@ -36,47 +36,47 @@
   }
 
   .asset-container {
-    display: inline-block;
-    position: relative;
+    @apply relative inline-block;
+
     margin-top: 0.5rem;
 
-    .ctl {
-      position: absolute;
-      top: 0;
-      right: 0;
-      padding: 5px;
-      z-index: 1;
-      display: none;
+    .asset-overlay {
+      @apply inset-0 absolute p-2;
 
-      > a {
-        padding: 3px;
-        border-radius: 4px;
-        opacity: 0.4;
-        user-select: none;
-        background: var(--ls-primary-background-color);
+      opacity: 0;
+      transition: opacity 300ms;
+      background-image: linear-gradient(var(--ls-primary-background-color), transparent);
+      pointer-events: none;
+    }
 
-        &.delete {
-          svg {
-            color: var(--ls-primary-text-color);
+    .asset-action-bar {
+      @apply top-0 left-0 w-full flex absolute items-start justify-between px-1;
 
-            opacity: 0.5;
-            font-weight: normal;
-          }
-        }
+      transition: opacity 300ms;
+      opacity: 0;
+      color: var(--ls-primary-text-color);
+    }
 
-        &:hover {
-          opacity: 1;
-        }
+    .asset-action-btn {
+      @apply m-1 p-1 rounded truncate;
 
-        &:active {
-          opacity: 1;
-        }
+      opacity: 0.8;
+      user-select: none;
+
+      &:hover,
+      &:active {
+        opacity: 1;
       }
     }
 
-    &:hover {
-      .ctl {
-        display: flex;
+    &:hover,
+    &:focus {
+      .asset-overlay {
+        opacity: 0.9;
+      }
+
+      .asset-action-bar {
+        opacity: 1;
       }
     }
   }
