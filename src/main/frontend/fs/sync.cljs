@@ -26,7 +26,8 @@
             [frontend.fs :as fs]
             [frontend.encrypt :as encrypt]
             [medley.core :refer [dedupe-by]]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [goog.object :as gobj]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -485,7 +486,7 @@
    (diffs->partitioned-filetxns n)))
 
 
-(defrecord FileMetadata [size etag path encrypted-path last-modified remote? ^:mutable normalized-path]
+(deftype FileMetadata [size etag path encrypted-path last-modified remote? ^:mutable normalized-path]
   Object
   (get-normalized-path [_]
     (when-not normalized-path
@@ -496,7 +497,27 @@
     normalized-path)
 
   IRelativePath
-  (-relative-path [_] path))
+  (-relative-path [_] path)
+
+  IEquiv
+  (-equiv [o ^FileMetadata other]
+    (and (= (.get-normalized-path o) (.get-normalized-path other))
+         (= etag (.-etag other))))
+
+  IHash
+  (-hash [_] (hash {:etag etag :path path}))
+
+  ILookup
+  (-lookup [this k]
+    (gobj/get this (name k)))
+  (-lookup [this k not-found]
+    (or (gobj/get this (name k)) not-found))
+
+  IPrintWithWriter
+  (-pr-writer [_ w _opts]
+    (write-all w (str {:size size :etag etag :path path :remote? remote?}))))
+
+
 
 (def ^:private higher-priority-remote-files
   "when diff all remote files and local files, following remote files always need to download(when checksum not matched),
@@ -539,6 +560,9 @@
    #{} s1))
 
 (comment
+  (defn map->FileMetadata [m]
+    (apply ->FileMetadata ((juxt :size :etag :path :encrypted-path :last-modified :remote? (constantly nil)) m)))
+
   (assert
    (=
     #{(map->FileMetadata {:size 1 :etag 2 :path 2 :encrypted-path 2 :last-modified 2})}
@@ -1544,15 +1568,15 @@
   [type {:keys [dir path _content stat] :as _payload}]
   (when-let [current-graph (state/get-current-repo)]
     (when (string/ends-with? current-graph dir)
-      (when-not (some-> (state/get-file-sync-state current-graph)
-                        sync-state--stopped?)
-        (when (or (:mtime stat) (= type "unlink"))
-          (go
-            (let [path (remove-dir-prefix dir path)
-                  files-meta (and (not= "unlink" type)
-                                  (<! (<get-local-files-meta rsapi "" dir [path])))
-                  checksum (and (coll? files-meta) (some-> files-meta first :etag))]
-              (>! local-changes-chan (->FileChangeEvent type dir path stat checksum)))))))))
+      (let [sync-state (state/get-file-sync-state current-graph)]
+        (when (and sync-state (not (sync-state--stopped? sync-state)))
+          (when (or (:mtime stat) (= type "unlink"))
+            (go
+              (let [path (remove-dir-prefix dir path)
+                    files-meta (and (not= "unlink" type)
+                                    (<! (<get-local-files-meta rsapi "" dir [path])))
+                    checksum (and (coll? files-meta) (some-> files-meta first :etag))]
+                (>! local-changes-chan (->FileChangeEvent type dir path stat checksum))))))))))
 
 (defn local-changes-revised-chan-builder
   "return chan"
@@ -1976,7 +2000,9 @@
       add-history? (update :history add-history-items paths now))))
 
 (defn sync-state--stopped?
+  "Graph syncing is stopped"
   [sync-state]
+  {:pre [(s/valid? ::sync-state sync-state)]}
   (= ::stop (:state sync-state)))
 
 ;;; ### remote->local syncer & local->remote syncer
@@ -2712,13 +2738,16 @@
     (go
       ;; stop previous sync
       (<! (<sync-stop))
-      (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
-                                             (config/get-repo-dir repo) repo
-                                             txid *sync-state)]
-        (when (and repo (not (config/demo-graph? repo)))
+      (when (and user-uuid graph-uuid txid
+                 (user/logged-in?)
+                 repo
+                 (not (config/demo-graph? repo)))
+        (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
+                                               (config/get-repo-dir repo) repo
+                                               txid *sync-state)]
           ;; 1. if remote graph has been deleted, clear graphs-txid.edn
           ;; 2. if graphs-txid.edn's content isn't [user-uuid graph-uuid txid], clear it
-          (if (not= 3 (count @graphs-txid))
+          (if (not (and user-uuid graph-uuid txid))
             (do (clear-graphs-txid! repo)
                 (state/set-file-sync-state repo nil))
             (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
