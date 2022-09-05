@@ -26,8 +26,7 @@
             [frontend.fs :as fs]
             [frontend.encrypt :as encrypt]
             [medley.core :refer [dedupe-by]]
-            [rum.core :as rum]
-            [goog.object :as gobj]))
+            [rum.core :as rum]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -490,6 +489,7 @@
 (deftype FileMetadata [size etag path encrypted-path last-modified remote? ^:mutable normalized-path]
   Object
   (get-normalized-path [_]
+    (assert (string? path) path)
     (when-not normalized-path
       (set! normalized-path
             (cond-> path
@@ -509,14 +509,21 @@
   (-hash [_] (hash {:etag etag :path path}))
 
   ILookup
-  (-lookup [this k]
-    (gobj/get this (name k)))
-  (-lookup [this k not-found]
-    (or (gobj/get this (name k)) not-found))
+  (-lookup [o k] (-lookup o k nil))
+  (-lookup [_ k not-found]
+    (case k
+      :size size
+      :etag etag
+      :path path
+      :encrypted-path encrypted-path
+      :last-modified last-modified
+      :remote? remote?
+      not-found))
+
 
   IPrintWithWriter
   (-pr-writer [_ w _opts]
-    (write-all w (str {:size size :etag etag :path path :remote? remote?}))))
+    (write-all w (str {:size size :etag etag :path path :remote? remote? :last-modified last-modified}))))
 
 
 
@@ -813,7 +820,7 @@
                js->clj
                (map (fn [[path metadata]]
                       (->FileMetadata (get metadata "size") (get metadata "md5") path
-                                      (get metadata "encryptedFname") nil false nil)))
+                                      (get metadata "encryptedFname") (get metadata "mtime") false nil)))
                set)))))
 
   (<get-local-files-meta [_ _graph-uuid base-path filepaths]
@@ -826,7 +833,7 @@
              js->clj
              (map (fn [[path metadata]]
                     (->FileMetadata (get metadata "size") (get metadata "md5") path
-                                    (get metadata "encryptedFname") nil false nil)))
+                                    (get metadata "encryptedFname") (get metadata "mtime") false nil)))
              set))))
 
   (<rename-local-file [_ _graph-uuid base-path from to]

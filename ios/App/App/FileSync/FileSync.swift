@@ -235,7 +235,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             if let meta = SyncMetadata(of: url) {
                 var metaObj: [String: Any] = ["md5": meta.md5,
                                               "size": meta.size,
-                                              "ctime": meta.ctime]
+                                              "mtime": meta.mtime]
                 if fnameEncryptionEnabled() {
                     metaObj["encryptedFname"] = filePath.fnameEncrypt(rawKey: FNAME_ENCRYPTION_KEY!)
                 }
@@ -263,7 +263,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
                         let filePath = fileURL.relativePath(from: baseURL)!
                         var metaObj: [String: Any] = ["md5": meta.md5,
                                                       "size": meta.size,
-                                                      "ctime": meta.ctime]
+                                                      "mtime": meta.mtime]
                         if fnameEncryptionEnabled() {
                             metaObj["encryptedFname"] = filePath.fnameEncrypt(rawKey: FNAME_ENCRYPTION_KEY!)
                         }
