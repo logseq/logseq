@@ -4242,7 +4242,7 @@
         :settings "Ayarlar"
         :settings-of-plugins "Eklenti ayarları"
         :plugins "Eklentiler"
-        :themes "Temelar"
+        :themes "Temalar"
         :developer-mode-alert "Eklenti sistemini etkinleştirmek için uygulamayı yeniden başlatmanız gerekir. Şimdi yeniden başlatmak istiyor musunuz?"
         :relaunch-confirm-to-work "Çalışması için uygulama yeniden başlatılmalı. Şimdi yeniden başlatmak istiyor musunuz?"
         :import "İçeri aktar"

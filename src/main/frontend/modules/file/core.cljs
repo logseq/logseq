@@ -16,19 +16,20 @@
 
 (defn- content-with-collapsed-state
   "Only accept nake content (without any indentation)"
-  [format content collapsed? properties]
+  [format content collapsed?]
   (cond
     collapsed?
     (property/insert-property format content :collapsed true)
 
-    (and (:collapsed properties) (false? collapsed?))
+    ;; Don't check properties. Collapsed is an internal state log as property in file, but not counted into properties
+    (false? collapsed?)
     (property/remove-property format :collapsed content)
 
     :else
     content))
 
 (defn transform-content
-  [{:block/keys [collapsed? format pre-block? unordered content heading-level left page parent properties]} level {:keys [heading-to-list?]}]
+  [{:block/keys [collapsed? format pre-block? unordered content heading-level left page parent]} level {:keys [heading-to-list?]}]
   (let [content (or content "")
         pre-block? (or pre-block?
                        (and (= page parent left) ; first block
@@ -69,7 +70,7 @@
                                   (-> (string/replace content #"^\s?#+\s+" "")
                                       (string/replace #"^\s?#+\s?$" ""))
                                   content)
-                        content (content-with-collapsed-state format content collapsed? properties)
+                        content (content-with-collapsed-state format content collapsed?)
                         new-content (indented-block-content (string/trim content) spaces-tabs)
                         sep (if (or markdown-top-heading?
                                     (string/blank? new-content))
