@@ -1,7 +1,7 @@
 (ns frontend.handler.global-config
-  "This ns is a system component that encapsulates global config functionality
-  and defines how to start and stop it. Unlike repo config, this manages a directory
-for configuration. This app component depends on a repo."
+  "This ns is a system component that encapsulates global config functionality.
+  Unlike repo config, this also manages a directory for configuration. This app
+  component depends on a repo."
   (:require [frontend.config :as config]
             [frontend.fs :as fs]
             [frontend.handler.common.file :as file-common-handler]
@@ -54,16 +54,20 @@ for configuration. This app component depends on a repo."
   (let [config-content (get-global-config-content repo-url)]
     (set-global-config-state! config-content)))
 
-(defn watch-for-global-config-dir!
+(defn- watch-dir!
   "Watches global config dir for given repo/db"
   [repo]
-  (let [dir (global-config-dir)
-        repo-dir (config/get-repo-dir repo)]
-    ;; Don't want multiple file watchers, especially when switching graphs
-    (fs/unwatch-dir! dir)
-    ;; Even a global dir needs to know it's current graph in order to send
-    ;; change events to the right window and graph db
-    (fs/watch-dir! dir {:current-repo-dir repo-dir})))
+  (fs/watch-dir! (global-config-dir)
+                 ;; Global dir needs to know it's current graph in order to send
+                 ;; change events to the right window and graph db
+                 {:current-repo-dir (config/get-repo-dir repo)}))
+
+(defn re-watch-dir!
+  "Rewatch global config dir for given repo/db. Unwatches dir first as we don't
+  want multiple file watchers, especially when switching graphs"
+  [repo]
+  (fs/unwatch-dir! (global-config-dir))
+  (watch-dir! repo))
 
 (defn start
   "This component has four responsibilities on start:
@@ -76,4 +80,4 @@ for configuration. This app component depends on a repo."
           _ (reset! root-dir root-dir')
           _ (restore-global-config! repo)
           _ (create-global-config-file-if-not-exists repo)
-          _ (watch-for-global-config-dir! repo)]))
+          _ (watch-dir! repo)]))

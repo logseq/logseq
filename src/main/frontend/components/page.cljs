@@ -157,7 +157,7 @@
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
   (when (and today? (not sidebar?))
-    (let [queries (state/sub [:config repo :default-queries :journals])]
+    (let [queries (get-in (state/sub-config repo) [:default-queries :journals])]
       (when (seq queries)
         [:div#today-queries.mt-10
          (for [query queries]

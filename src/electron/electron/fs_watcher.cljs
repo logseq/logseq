@@ -1,4 +1,7 @@
 (ns electron.fs-watcher
+  "This ns is a wrapper around the chokidar file watcher,
+  https://www.npmjs.com/package/chokidar. File watcher events are sent to the
+  `file-watcher` ipc channel"
   (:require [cljs-bean.core :as bean]
             ["fs" :as fs]
             ["chokidar" :as watcher]
@@ -52,7 +55,6 @@
   "Watch a directory if no such file watcher exists. Has the following options:
 * :current-repo-dir - Provides current repo-dir for global directories. Needed as watch events need to take place in a repo context in order for window and db to function correctly"
   [dir options]
-  (prn :WATCH dir options)
   (when-not (get @*file-watcher dir)
     (if (fs/existsSync dir)
       (let [watcher-opts (clj->js

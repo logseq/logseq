@@ -1,8 +1,8 @@
 (ns frontend.handler.repo-config
-  "This ns is a system component that encapsulates repo config functionality and
-  defines how to start it. This component only concerns itself with one
-  user-facing repo config, logseq/config.edn. In the future it may manage more.
-  This app component depends on a repo."
+  "This ns is a system component that encapsulates repo config functionality.
+  This component only concerns itself with one user-facing repo config file,
+  logseq/config.edn. In the future it may manage more files. This app component
+  depends on a repo."
   (:require [frontend.db :as db]
             [frontend.config :as config]
             [frontend.state :as state]
@@ -18,6 +18,8 @@
   (db/get-file repo-url (config/get-repo-config-path)))
 
 (defn read-repo-config
+  "Converts file content to edn and handles read failure by backing up file and
+  reverting to a default file"
   [repo content]
   (common-handler/safe-read-string
    content
@@ -26,12 +28,14 @@
      (reader/read-string config/config-default-content))))
 
 (defn set-repo-config-state!
+  "Sets repo config state using given file content"
   [repo-url content]
   (let [config (read-repo-config repo-url content)]
     (state/set-config! repo-url config)
     config))
 
 (defn create-config-file-if-not-exists
+  "Creates a default logseq/config.edn if it doesn't exist"
   [repo-url]
   (spec/validate :repos/url repo-url)
   (let [repo-dir (config/get-repo-dir repo-url)
