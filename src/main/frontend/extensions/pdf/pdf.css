@@ -633,6 +633,7 @@ input::-webkit-inner-spin-button {
 .hls-text-region-item {
   cursor: pointer;
   position: absolute;
+  z-index: 2;
   transition: background 0.3s;
 
   background-color: rgba(252, 219, 97, 0.7);
