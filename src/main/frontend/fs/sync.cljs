@@ -485,7 +485,7 @@
    (diffs->partitioned-filetxns n)))
 
 
-(defrecord FileMetadata [size etag path encrypted-path last-modified remote? ^:mutable normalized-path]
+(deftype FileMetadata [size etag path encrypted-path last-modified remote? ^:mutable normalized-path]
   Object
   (get-normalized-path [_]
     (when-not normalized-path
@@ -496,7 +496,20 @@
     normalized-path)
 
   IRelativePath
-  (-relative-path [_] path))
+  (-relative-path [_] path)
+
+  IEquiv
+  (-equiv [o ^FileMetadata other]
+    (and (= (.get-normalized-path o) (.get-normalized-path other))
+         (= etag (.-etag other))))
+
+  IHash
+  (-hash [_] (hash {:etag etag :path path}))
+
+  IPrintWithWriter
+  (-pr-writer [_ w _opts]
+    (write-all w (str {:size size :etag etag :path path :remote? remote?}))))
+
 
 (def ^:private higher-priority-remote-files
   "when diff all remote files and local files, following remote files always need to download(when checksum not matched),
@@ -2723,7 +2736,7 @@
                                                txid *sync-state)]
           ;; 1. if remote graph has been deleted, clear graphs-txid.edn
           ;; 2. if graphs-txid.edn's content isn't [user-uuid graph-uuid txid], clear it
-          (if (not= 3 (count @graphs-txid))
+          (if (not (and user-uuid graph-uuid txid))
             (do (clear-graphs-txid! repo)
                 (state/set-file-sync-state repo nil))
             (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
