@@ -65,9 +65,10 @@
                                   result)]
                      (model/with-pages result))
                    result)
-          result-transform-fn (:result-transform q)
-          repo (state/get-current-repo)]
-      (if-let [result-transform (if (keyword? result-transform-fn) (state/sub [:config repo :query/result-transforms result-transform-fn]) result-transform-fn)]
+          result-transform-fn (:result-transform q)]
+      (if-let [result-transform (if (keyword? result-transform-fn)
+                                  (get-in (state/sub-config) [:query/result-transforms result-transform-fn])
+                                  result-transform-fn)]
         (if-let [f (sci/eval-string (pr-str result-transform))]
           (try
             (sci/call-fn f result)

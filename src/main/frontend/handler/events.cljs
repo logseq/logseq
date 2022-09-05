@@ -121,7 +121,7 @@
          (route-handler/redirect-to-home!))
        (when-let [dir-name (config/get-repo-dir graph)]
          (fs/watch-dir! dir-name))
-       (global-config-handler/watch-for-global-config-dir! graph)
+       (global-config-handler/re-watch-dir! graph)
        (srs/update-cards-due-count!)
        (state/pub-event! [:graph/ready graph])
        (repo-handler/refresh-repos!)

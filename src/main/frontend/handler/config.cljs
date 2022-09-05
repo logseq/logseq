@@ -30,6 +30,7 @@
         (file-handler/set-file-content! repo path new-content)))))
 
 (defn set-config!
+  "Sets config state for repo-specific config"
   [k v]
   (let [path (config/get-repo-config-path)]
     (repo-config-set-key-value path k v)))

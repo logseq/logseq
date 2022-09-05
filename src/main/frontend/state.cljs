@@ -299,7 +299,8 @@
     configs))
 
 (defn get-config
-  "User config for the given repo or current repo if none given"
+  "User config for the given repo or current repo if none given. All config fetching
+should be done through this fn in order to get global config and config defaults"
   ([]
    (get-config (get-current-repo)))
   ([repo-url]
@@ -499,11 +500,13 @@ Similar to re-frame subscriptions"
     (util/react (rum/cursor state ks))))
 
 (defn sub-config
-  "Sub equivalent to get-config"
+  "Sub equivalent to get-config which should handle all sub user-config access"
   ([] (sub-config (get-current-repo)))
   ([repo]
    (let [config (sub :config)]
-     (merge (get config ::global-config) (get config repo)))))
+     (merge-configs default-config
+                    (get config ::global-config)
+                    (get config repo)))))
 
 (defn enable-grammarly?
   []

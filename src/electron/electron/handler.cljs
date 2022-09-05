@@ -1,4 +1,6 @@
 (ns electron.handler
+  "This ns starts the event handling for the electron main process and defines
+  all the application-specific event types"
   (:require ["electron" :refer [ipcMain dialog app autoUpdater shell]]
             [cljs-bean.core :as bean]
             ["fs" :as fs]
