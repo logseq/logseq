@@ -1544,14 +1544,15 @@
   [type {:keys [dir path _content stat] :as _payload}]
   (when-let [current-graph (state/get-current-repo)]
     (when (string/ends-with? current-graph dir)
-      (when-not (sync-state--stopped? (state/get-file-sync-state current-graph))
-        (when (or (:mtime stat) (= type "unlink"))
-          (go
-            (let [path (remove-dir-prefix dir path)
-                  files-meta (and (not= "unlink" type)
-                                  (<! (<get-local-files-meta rsapi "" dir [path])))
-                  checksum (and (coll? files-meta) (some-> files-meta first :etag))]
-              (>! local-changes-chan (->FileChangeEvent type dir path stat checksum)))))))))
+      (let [sync-state (state/get-file-sync-state current-graph)]
+        (when (and sync-state (not (sync-state--stopped? sync-state)))
+          (when (or (:mtime stat) (= type "unlink"))
+            (go
+              (let [path (remove-dir-prefix dir path)
+                    files-meta (and (not= "unlink" type)
+                                    (<! (<get-local-files-meta rsapi "" dir [path])))
+                    checksum (and (coll? files-meta) (some-> files-meta first :etag))]
+                (>! local-changes-chan (->FileChangeEvent type dir path stat checksum))))))))))
 
 (defn local-changes-revised-chan-builder
   "return chan"
@@ -1975,9 +1976,10 @@
       add-history? (update :history add-history-items paths now))))
 
 (defn sync-state--stopped?
-  "Graph syncing is stopped or not enabled"
+  "Graph syncing is stopped"
   [sync-state]
-  (or (nil? sync-state) (= ::stop (:state sync-state))))
+  {:pre [(s/valid? ::sync-state sync-state)]}
+  (= ::stop (:state sync-state)))
 
 ;;; ### remote->local syncer & local->remote syncer
 
