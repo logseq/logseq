@@ -120,7 +120,7 @@
 
 (rum/defc dashboard-create-card
   []
-  [:div.dashboard-card.dashboard-create-card.cursor-pointer
+  [:div.dashboard-card.dashboard-create-card.cursor-pointer#tl-create-whiteboard
    {:on-click
     (fn [e]
       (util/stop e)

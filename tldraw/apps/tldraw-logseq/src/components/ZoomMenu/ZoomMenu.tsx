@@ -11,7 +11,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
 
   return (
     <DropdownMenuPrimitive.Root>
-      <DropdownMenuPrimitive.Trigger>
+      <DropdownMenuPrimitive.Trigger id="tl-zoom">
         {(app.viewport.camera.zoom * 100).toFixed(0) + '%'}
       </DropdownMenuPrimitive.Trigger>
       <DropdownMenuPrimitive.Content

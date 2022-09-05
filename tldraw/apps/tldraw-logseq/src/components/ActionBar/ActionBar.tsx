@@ -37,10 +37,10 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
       </div>
 
       <div className="tl-zoom-bar">
-        <button title="Zoom in" onClick={zoomIn}>
+        <button title="Zoom in" onClick={zoomIn} id="tl-zoom-in">
           <TablerIcon name="plus" />
         </button>
-        <button title="Zoom out" onClick={zoomOut}>
+        <button title="Zoom out" onClick={zoomOut} id="tl-zoom-out">
           <TablerIcon name="minus" />
         </button>
         <ZoomMenu />

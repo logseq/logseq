@@ -12,7 +12,7 @@ test('enable whiteboards', async ({ page }) => {
 
 test('create new whiteboard', async ({ page }) => {
     await page.click('.nav-header .whiteboard')
-    await page.click('#main-content-container .dashboard-create-card')
+    await page.click('#tl-create-whiteboard')
     await expect(page.locator('.logseq-tldraw')).toBeVisible()
 })
 
@@ -22,6 +22,38 @@ test('set whiteboard title', async ({ page }) => {
     await page.type('.whiteboard-page-title .title', title)
     await page.keyboard.press('Enter')
     await expect(page.locator('.whiteboard-page-title .title')).toContainText(title);
+})
+
+test('select rectangle tool', async ({ page }) => {
+    await page.keyboard.press('R')
+    await expect(page.locator('.tl-geometry-tools-pane-anchor [title="Rectangle (r)"]')).toHaveAttribute('data-selected', 'true')
+})
+
+test('draw a rectangle', async ({ page }) => {
+    const canvas = await page.waitForSelector('.logseq-tldraw');
+    const bounds = (await canvas.boundingBox())!;
+
+    await page.keyboard.press('R')
+
+    await page.mouse.move(bounds.x, bounds.y);
+    await page.mouse.down();
+
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    await page.mouse.up();
+
+    await page.keyboard.press('Escape')
+
+    await expect(page.locator('.logseq-tldraw .tl-positioned-svg rect')).toHaveCount(2);
+})
+
+test('zoom in', async ({ page }) => {
+    await page.click('#tl-zoom-in')
+    await expect(page.locator('#tl-zoom')).toContainText('125%');
+})
+
+test('zoom out', async ({ page }) => {
+    await page.click('#tl-zoom-out')
+    await expect(page.locator('#tl-zoom')).toContainText('100%');
 })
 
 test('open context menu', async ({ page }) => {
