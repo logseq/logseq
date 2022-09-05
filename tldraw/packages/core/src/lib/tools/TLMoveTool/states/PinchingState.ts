@@ -1,4 +1,3 @@
-import { Vec } from '@tldraw/vec'
 import type { TLEventMap, TLEventInfo, TLEvents } from '../../../../types'
 import type { TLShape } from '../../../shapes'
 import type { TLApp } from '../../../TLApp'
@@ -26,21 +25,13 @@ export class PinchingState<
 
   private prevDelta: number[] = [0, 0]
 
-  private pinchCamera(point: number[], delta: number[], zoom: number) {
-    const { camera } = this.app.viewport
-    const nextPoint = Vec.sub(camera.point, Vec.div(delta, camera.zoom))
-    const p0 = Vec.sub(Vec.div(point, camera.zoom), nextPoint)
-    const p1 = Vec.sub(Vec.div(point, zoom), nextPoint)
-    this.app.setCamera(Vec.toFixed(Vec.add(nextPoint, Vec.sub(p1, p0))), zoom)
-  }
-
   onEnter = (info: GestureInfo<S, K>) => {
     this.prevDelta = info.info.delta
     this.origin = info.info.point
   }
 
   onPinch: TLEvents<S>['pinch'] = info => {
-    this.pinchCamera(info.point, [0, 0], info.offset[0])
+    this.app.viewport.pinchCamera(info.point, [0, 0], info.offset[0])
   }
 
   onPinchEnd: TLEvents<S>['pinch'] = () => {

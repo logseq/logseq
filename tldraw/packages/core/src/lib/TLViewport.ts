@@ -82,22 +82,30 @@ export class TLViewport {
     return Vec.mul(Vec.add(point, camera.point), camera.zoom)
   }
 
-  zoomIn = (): this => {
-    const { camera, bounds } = this
-    const zoom: number = Math.min(TLViewport.maxZoom, camera.zoom / ZOOM_UPDATE_FACTOR)
-    const center = [bounds.width / 2, bounds.height / 2]
-    const p0 = Vec.sub(Vec.div(center, camera.zoom), center)
-    const p1 = Vec.sub(Vec.div(center, zoom), center)
-    return this.update({ point: Vec.toFixed(Vec.add(camera.point, Vec.sub(p1, p0))), zoom })
+  pinchCamera = (point: number[], delta: number[], zoom: number): this => {
+    const { camera } = this
+    zoom = Math.max(TLViewport.minZoom, Math.min(TLViewport.maxZoom, zoom));
+    const nextPoint = Vec.sub(camera.point, Vec.div(delta, camera.zoom))
+    const p0 = Vec.sub(Vec.div(point, camera.zoom), nextPoint)
+    const p1 = Vec.sub(Vec.div(point, zoom), nextPoint)
+    return this.update({ point: Vec.toFixed(Vec.add(nextPoint, Vec.sub(p1, p0))), zoom })
   }
 
-  zoomOut = (): this => {
-    const { camera, bounds } = this
-    const zoom: number = Math.max(TLViewport.minZoom, camera.zoom * ZOOM_UPDATE_FACTOR)
+  setZoom = (zoom: number) => {
+    const { bounds } = this
     const center = [bounds.width / 2, bounds.height / 2]
-    const p0 = Vec.sub(Vec.div(center, camera.zoom), center)
-    const p1 = Vec.sub(Vec.div(center, zoom), center)
-    return this.update({ point: Vec.toFixed(Vec.add(camera.point, Vec.sub(p1, p0))), zoom })
+    this.pinchCamera(center, [0, 0], zoom)
+  }
+
+  zoomIn = () => {
+    const { camera } = this
+    this.setZoom(camera.zoom / ZOOM_UPDATE_FACTOR)
+  }
+
+  zoomOut = () => {
+    const { camera, bounds } = this
+    this.setZoom(camera.zoom * ZOOM_UPDATE_FACTOR)
+
   }
 
   resetZoom = (): this => {
