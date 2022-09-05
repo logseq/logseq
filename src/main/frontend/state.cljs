@@ -151,7 +151,7 @@
      :electron/user-cfgs                    nil
 
      ;; assets
-     :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) true)
+     :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)
      :assets/alias-dirs                     (or (storage/get :assets/alias-dirs) [])
 
      ;; mobile

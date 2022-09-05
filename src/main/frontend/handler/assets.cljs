@@ -11,6 +11,13 @@
   (and (util/electron?)
        (:assets/alias-enabled? @state/state)))
 
+(defn check-alias-path?
+  [path]
+  (and (string? path)
+       (some-> path
+               (string/replace-first #"^[.\/\\]*(assets)[\/\\]+" "")
+               (string/starts-with? "@"))))
+
 (defn get-alias-dirs
   []
   (:assets/alias-dirs @state/state))
@@ -27,20 +34,25 @@
     (medley/find-first #(= name (:name (second %1)))
                        (medley/indexed alias-dirs))))
 
-(defn resolve-asset-path-url
+(defn resolve-asset-real-path-url
   [repo full-path]
   (let [full-path  (string/replace full-path #"^[.\/\\]+" "")
-        full-path' (string/replace full-path (re-pattern (str "^" gp-config/local-assets-dir "[\\/\\\\]+")) "")
         full-path  (if-not (string/starts-with? full-path gp-config/local-assets-dir)
                      (util/node-path.join gp-config/local-assets-dir full-path)
                      full-path)
         graph-root (config/get-repo-dir repo)]
 
-    (if-let [alias (and (alias-enabled?)
-                        (string/starts-with? full-path' "@")
-                        (and (seq (get-alias-dirs))
-                             (second (get-alias-by-name (second (re-find #"^@([^\/]+)" full-path'))))))]
+    (if-let [[full-path' alias]
+             (and (alias-enabled?)
+                  (let [full-path' (string/replace full-path (re-pattern (str "^" gp-config/local-assets-dir "[\\/\\\\]+")) "")]
+                    (and
+                     (string/starts-with? full-path' "@")
+                     (some->> (and (seq (get-alias-dirs))
+                                   (second (get-alias-by-name (second (re-find #"^@([^\/]+)" full-path')))))
+                              (vector full-path')))))]
+
       (str "assets://" (string/replace full-path' (str "@" (:name alias)) (:dir alias)))
+
       ;; TODO: bfs
       (str "file://" (util/node-path.join graph-root full-path)))))
 
@@ -50,18 +62,31 @@
   [full-path]
   (let [_filename      (util/node-path.basename full-path)
         protocol-link? (->> #{:file :http :https :assets}
-                            (some #(string/starts-with? full-path (str (name %) ":/"))))
-        url            (cond
-                         protocol-link?
-                         full-path
+                            (some #(string/starts-with? full-path (str (name %) ":/"))))]
 
-                         (util/absolute-path? full-path)
-                         (str "file://" full-path)
+    (cond
+      protocol-link?
+      full-path
 
-                         :else
-                         (resolve-asset-path-url (state/get-current-repo) full-path))]
-    url))
+      (util/absolute-path? full-path)
+      (str "file://" full-path)
 
+      :else
+      (resolve-asset-real-path-url (state/get-current-repo) full-path))))
+
+
+(defn get-matched-alias-by-ext
+  [ext]
+  (when-let [ext (and (alias-enabled?)
+                      (string? ext)
+                      (not (string/blank? ext))
+                      (util/safe-lower-case ext))]
+
+    (let [alias (medley/find-first
+                 (fn [{:keys [exts]}]
+                   (some #(string/ends-with? ext %) exts))
+                 (get-alias-dirs))]
+      alias)))
 
 (comment
  (normalize-asset-resource-url "https://x.com/a.pdf")

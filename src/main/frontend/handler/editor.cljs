@@ -22,6 +22,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.assets :as assets-handler]
             [frontend.idb :as idb]
             [frontend.image :as image]
             [frontend.mobile.util :as mobile-util]
@@ -1373,25 +1374,41 @@
                                 [(subs file-name 0 last-dot-index)
                                  (subs file-name last-dot-index)])
                               ["" ""])
-            filename (str (gen-filename index file-base) ext)
-            filename (str path "/" filename)]
-                                        ;(js/console.debug "Write asset #" dir filename file)
-        (if (util/electron?)
-          (let [from (.-path file)
-                from (if (string/blank? from) nil from)]
-            (p/then (js/window.apis.copyFileToAssets dir filename from)
-                    #(p/resolved [filename (if (string? %) (js/File. #js[] %) file) (.join util/node-path dir filename)])))
-          (p/then (fs/write-file! repo dir filename (.stream file) nil)
-                  #(p/resolved [filename file]))))))))
+            filename  (str (gen-filename index file-base) ext)
+            filename  (str path "/" filename)]
+        ;(js/console.debug "Write asset #" dir filename file)
+        (let [matched-alias (assets-handler/get-matched-alias-by-ext ext)
+              filename (cond-> filename
+                         (not (nil? matched-alias))
+                         (string/replace #"^[.\/\\]*assets[\/\\]+" ""))
+              dir (or (:dir matched-alias) dir)]
+
+          (if (util/electron?)
+            (let [from (.-path file)
+                  from (if (string/blank? from) nil from)]
+
+              (p/then (js/window.apis.copyFileToAssets dir filename from)
+                      #(p/resolved [filename
+                                    (if (string? %) (js/File. #js[] %) file)
+                                    (.join util/node-path dir filename)
+                                    matched-alias])))
+
+            (p/then (fs/write-file! repo dir filename (.stream file) nil)
+                    #(p/resolved [filename file nil matched-alias])))))))))
 
 (defonce *assets-url-cache (atom {}))
 
 (defn make-asset-url
   [path] ;; path start with "/assets" or compatible for "../assets"
-  (let [repo-dir (config/get-repo-dir (state/get-current-repo))
-        path (string/replace path "../" "/")
+  (let [repo      (state/get-current-repo)
+        repo-dir  (config/get-repo-dir repo)
+        path      (string/replace path "../" "/")
         full-path (util/node-path.join repo-dir path)]
     (cond
+      (and (assets-handler/alias-enabled?)
+           (assets-handler/check-alias-path? path))
+      (assets-handler/resolve-asset-real-path-url (state/get-current-repo) path)
+
       (util/electron?)
       (str "assets://" full-path)
 
@@ -1446,11 +1463,14 @@
       (-> (save-assets! block repo (js->clj files))
           (p/then
            (fn [res]
-             (when-let [[asset-file-name file full-file-path] (and (seq res) (first res))]
+             (when-let [[asset-file-name file full-file-path matched-alias] (and (seq res) (first res))]
                (let [image? (util/ext-of-image? asset-file-name)]
                  (insert-command!
                   id
-                  (get-asset-file-link format (resolve-relative-path (or full-file-path asset-file-name))
+                  (get-asset-file-link format
+                                       (if matched-alias
+                                         (str "@" (:name matched-alias) "/" asset-file-name)
+                                         (resolve-relative-path (or full-file-path asset-file-name)))
                                        (if file (.-name file) (if image? "image" "asset"))
                                        image?)
                   format
@@ -2731,7 +2751,7 @@
         (contains? (set (keys autopair-map)) key)
         (let [curr (get-current-input-char input)
                   prev (util/nth-safe value (dec pos))]
-            (util/stop e) 
+            (util/stop e)
             (if (and (= key "`") (= "`" curr) (not= "`" prev))
               (cursor/move-cursor-forward input)
               (autopair input-id key format nil)))
