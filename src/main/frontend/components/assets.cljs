@@ -108,7 +108,10 @@
          [:div.flex.justify-between.items-center
           [:div.flex.mt-2.space-x-2.pr-6
            (for [ext exts]
-             [:small.ext-label {:key ext} ext])
+             [:small.ext-label.is-del
+              {:key ext :on-click #(del-ext dir ext)}
+              [:span ext]
+              (ui/icon "circle-minus")])
            (if (= dir @*ext-editing-dir)
              [:input.ext-input
               {:autoFocus   true

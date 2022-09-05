@@ -316,9 +316,30 @@
     }
 
     .ext-label {
-      @apply rounded px-1.5 opacity-70 cursor-pointer;
+      @apply rounded px-1.5 opacity-70 cursor-pointer flex items-center select-none active:opacity-50;
 
       background-color: var(--ls-secondary-border-color);
+
+      &.is-del {
+        i.ti {
+          width: 0;
+          overflow: hidden;
+          opacity: .9;
+          color: red;
+          transition: width .3s;
+
+          &:hover {
+            opacity: 1;
+          }
+        }
+
+        &:hover {
+          i.ti {
+            width: 14px;
+            padding-left: 2px;
+          }
+        }
+      }
 
       &.is-plus {
         background-color: var(--ls-primary-background-color);
@@ -328,7 +349,7 @@
 
     .ext-input {
       @apply leading-none;
-      
+
       padding: 1px 4px;
       width: 60px;
     }
