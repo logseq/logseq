@@ -506,10 +506,24 @@
   IHash
   (-hash [_] (hash {:etag etag :path path}))
 
+  ILookup
+  (-lookup [o k] (-lookup o k nil))
+  (-lookup [_ k not-found]
+    (case k
+      :size size
+      :etag etag
+      :path path
+      :encrypted-path encrypted-path
+      :last-modified last-modified
+      :remote? remote?
+      not-found))
+
   IPrintWithWriter
   (-pr-writer [_ w _opts]
     (write-all w (str {:size size :etag etag :path path :remote? remote?}))))
 
+(defn map->FileMetadata [m]
+  (apply ->FileMetadata ((juxt :size :etag :path :encrypted-path :last-modified :remote? (constantly nil)) m)))
 
 (def ^:private higher-priority-remote-files
   "when diff all remote files and local files, following remote files always need to download(when checksum not matched),
