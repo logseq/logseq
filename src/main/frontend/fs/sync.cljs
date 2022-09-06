@@ -535,7 +535,7 @@
     "logseq/metadata.edn"})
 
 ;; TODO: use fn some to filter FileMetadata here, it cause too much loop
-(defn- diff-file-metadata-sets
+(defn diff-file-metadata-sets
   "Find the `FileMetadata`s that exists in s1 and does not exist in s2,
   compare by path+checksum+last-modified,
   if s1.path = s2.path & s1.checksum <> s2.checksum & s1.last-modified > s2.last-modified
