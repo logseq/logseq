@@ -1,7 +1,7 @@
 (ns frontend.handler.repo-config
   "This ns is a system component that encapsulates repo config functionality.
   This component only concerns itself with one user-facing repo config file,
-  logseq/config.edn. In the future it may manage more files. This app component
+  logseq/config.edn. In the future it may manage more files. This component
   depends on a repo."
   (:require [frontend.db :as db]
             [frontend.config :as config]

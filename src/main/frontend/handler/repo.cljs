@@ -382,7 +382,7 @@
           _ (db/restore-graph! repo)
           _ (repo-config-handler/restore-repo-config! repo)
           _ (global-config-handler/restore-global-config!)]
-    ;; Don't have to unlisten the old listerner, as it will be destroyed with the conn
+    ;; Don't have to unlisten the old listener, as it will be destroyed with the conn
     (db/listen-and-persist! repo)
     (state/pub-event! [:shortcut/refresh])
     (ui-handler/add-style-if-exists!)

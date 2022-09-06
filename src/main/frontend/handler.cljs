@@ -30,14 +30,12 @@
             [frontend.modules.outliner.file :as file]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
-            [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]
-            [logseq.db.schema :as db-schema]))
+            [promesa.core :as p]))
 
 (defn set-global-error-notification!
   []
@@ -75,11 +73,6 @@
     (state/pub-event! [:instrument {:type :blocks/count
                                     :payload {:total (db/blocks-count)}}])))
 
-(defn store-schema!
-  []
-  (storage/set :db-schema (assoc db-schema/schema
-                                 :db/version db-schema/version)))
-
 (defn restore-and-setup!
   [repos]
   (when-let [repo (or (state/get-current-repo) (:url (first repos)))]
@@ -112,7 +105,6 @@
         (p/then
          (fn []
            (js/console.log "db restored, setting up repo hooks")
-           (store-schema!)
 
            (state/pub-event! [:modal/nfs-ask-permission])
 

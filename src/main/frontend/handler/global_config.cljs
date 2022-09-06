@@ -1,6 +1,6 @@
 (ns frontend.handler.global-config
   "This ns is a system component that encapsulates global config functionality.
-  Unlike repo config, this also manages a directory for configuration. This app
+  Unlike repo config, this also manages a directory for configuration. This
   component depends on a repo."
   (:require [frontend.config :as config]
             [frontend.fs :as fs]
@@ -44,7 +44,7 @@
              (set-global-config-state! default-content)))))
 
 (defn restore-global-config!
-  "Sets global config state from db"
+  "Sets global config state from config file"
   []
   (let [config-dir (global-config-dir)
         config-path (global-config-path)]
@@ -69,7 +69,7 @@
 (defn start
   "This component has four responsibilities on start:
 - Fetch root-dir for later use with config paths
-- Manage db and ui state of global config
+- Manage ui state of global config
 - Create a global config dir and file if it doesn't exist
 - Start a file watcher for global config dir"
   [{:keys [repo]}]
