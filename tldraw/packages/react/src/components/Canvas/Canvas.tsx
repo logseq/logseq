@@ -137,7 +137,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                 onEditingEnd={onEditingEnd}
               />
             ))}
-          {selectedShapes?.map(shape => (
+          {!app.isIn('select.pinching') && selectedShapes?.map(shape => (
             <Indicator
               key={'selected_indicator_' + shape.id}
               shape={shape}

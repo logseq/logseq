@@ -19,10 +19,12 @@ export const HTMLLayer = observer(function HTMLLayer({ children }: HTMLLayerProp
         if (!layer) return
 
         const { zoom, point } = viewport.camera
-        layer.style.setProperty(
-          'transform',
-          `scale(${zoom}) translate3d(${point[0]}px, ${point[1]}px, 0)`
-        )
+        requestAnimationFrame(() => {
+          layer.style.setProperty(
+            'transform',
+            `scale(${zoom}) translate3d(${point[0]}px, ${point[1]}px, 0)`
+          )
+        })
       }),
     []
   )
