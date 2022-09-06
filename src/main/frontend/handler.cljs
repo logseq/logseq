@@ -90,9 +90,9 @@
            (ui-handler/add-style-if-exists!)
 
            (->
-            (p/let [_ (repo-config-handler/start {:repo repo})
-                    _ (when (config/global-config-enabled?)
-                        (global-config-handler/start {:repo repo}))])
+            (p/do! (repo-config-handler/start {:repo repo})
+                   (when (config/global-config-enabled?)
+                        (global-config-handler/start {:repo repo})))
             (p/finally
               (fn []
                 ;; install after config is restored
