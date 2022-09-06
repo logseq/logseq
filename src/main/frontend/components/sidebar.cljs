@@ -208,7 +208,7 @@
     href :href}]
   [:div
    {:class class}
-   [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
+   [:a.item.group.flex.items-center.text-sm.font-medium.rounded-md
     {:on-click on-click-handler
      :class (when active "active")
      :href href}
@@ -218,7 +218,14 @@
 (rum/defc sidebar-nav
   [route-match close-modal-fn left-sidebar-open? srs-open?]
   (let [default-home (get-default-home-if-valid)
-        route-name (get-in route-match [:data :name])]
+        route-name (get-in route-match [:data :name])
+        on-contents-scroll #(when-let [^js el (.-target %)]
+                              (let [top (.-scrollTop el)
+                                    cls (.-classList el)
+                                    cls' "is-scrolled"]
+                                (if (> top 2)
+                                  (.add cls cls')
+                                  (.remove cls cls'))))]
 
     [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
      {:on-click #(when-let [^js target (and (util/sm-breakpoint?) (.-target %))]
@@ -226,14 +233,15 @@
                                [".favorites .bd" ".recent .bd" ".dropdown-wrapper" ".nav-header"])
                      (close-modal-fn)))}
 
-     [:div.flex.flex-col.pb-4.wrap.gap-4.relative
+     [:div.flex.flex-col.wrap.gap-1.relative
       (when (mobile-util/native-platform?)
         [:div.fake-bar.absolute
          [:button
           {:on-click state/toggle-left-sidebar!}
           (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]])
 
-      [:nav.px-4.flex.flex-col.gap-1 {:aria-label "Navigation menu"}
+      [:nav.px-4.flex.flex-col.gap-1
+       {:aria-label "Navigation menu"}
        (repo/repos-dropdown)
 
        [:div.nav-header.flex.gap-1.flex-col
@@ -276,9 +284,13 @@
           :active (and (not srs-open?) (= route-name :all-pages))
           :icon   "files"})]]
 
-      (when left-sidebar-open? (favorites t))
+      [:div.nav-contents-container.flex.flex-col.gap-1.pt-1
+       {:on-scroll on-contents-scroll}
+       (when left-sidebar-open?
+         (favorites t))
 
-      (when (and left-sidebar-open? (not config/publishing?)) (recent-pages t))
+       (when (and left-sidebar-open? (not config/publishing?))
+         (recent-pages t))]
 
       [:footer.px-2 {:class "new-page"}
        (when-not config/publishing?

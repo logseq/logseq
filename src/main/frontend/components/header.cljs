@@ -34,10 +34,12 @@
 (rum/defc login < rum/reactive
   []
   (let [_ (state/sub :auth/id-token)
-        loading? (state/sub [:ui/loading? :login])]
+        loading? (state/sub [:ui/loading? :login])
+        sync-enabled? (file-sync-handler/enable-sync?)
+        logged? (user-handler/logged-in?)]
     (when-not (or config/publishing?
-                  (user-handler/logged-in?)
-                  (not (state/enable-sync?)))
+                  logged?
+                  (not sync-enabled?))
       [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
        [:span (t :login)]
        (when loading?
@@ -155,7 +157,8 @@
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)
-                               (= (state/sub-default-home-page) (state/get-current-page)))]
+                               (= (state/sub-default-home-page) (state/get-current-page)))
+        sync-enabled? (file-sync-handler/enable-sync?)]
     [:div.cp__header#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -187,7 +190,7 @@
              (ui/icon "chevron-left" {:style {:fontSize 25}})])))]
 
      [:div.r.flex
-      (when (and (not file-sync-handler/hiding-login&file-sync)
+      (when (and sync-enabled?
                  current-repo
                  (not (config/demo-graph? current-repo))
                  (user-handler/alpha-user?))
@@ -197,7 +200,7 @@
                  (not custom-home-page?))
         (home-button))
 
-      (when-not file-sync-handler/hiding-login&file-sync
+      (when sync-enabled?
         (login))
 
       (when plugin-handler/lsp-enabled?

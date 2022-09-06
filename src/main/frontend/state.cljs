@@ -402,7 +402,7 @@
 
 (defn user-groups
   []
-  (set (get-in @state [:user/info :UserGroups])))
+  (set (sub [:user/info :UserGroups])))
 
 (defn enable-sync?
   []
@@ -1054,11 +1054,6 @@
 (defn get-me
   []
   (:me @state))
-
-(defn deprecated-logged?
-  "Whether the user has logged in."
-  []
-  false)
 
 (defn set-db-restoring!
   [value]

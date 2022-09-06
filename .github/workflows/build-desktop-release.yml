@@ -28,16 +28,11 @@ on:
         type: boolean
         required: true
         default: true
-      enable-file-sync:
-        description: 'Build with file sync support'
-        type: boolean
-        required: true
-        default: false
       enable-file-sync-production:
         description: 'File sync production mode'
         type: boolean
         required: true
-        default: false
+        default: true
       enable-plugins:
         description: 'Build with plugin system support'
         type: boolean
@@ -127,10 +122,10 @@ jobs:
 
       - name: Set Build Environment Variables (only when workflow_dispath)
         if: ${{ github.event_name == 'workflow_dispatch' }}
+        # if scheduled, use default settings
         run: |
-          echo "ENABLE_FILE_SYNC=${{ github.event.inputs.enable-file-sync }}" >> $GITHUB_ENV
-          echo "ENABLE_PLUGINS=${{ github.event.inputs.enable-plugins }}" >> $GITHUB_ENV
-          echo "ENABLE_FILE_SYNC_PRODUCTION=${{ github.event.inputs.enable-file-sync-production }}" >> $GITHUB_ENV
+          echo "ENABLE_PLUGINS=${{ github.event_name == 'schedule' || github.event.inputs.enable-plugins == 'true' }}" >> $GITHUB_ENV
+          echo "ENABLE_FILE_SYNC_PRODUCTION=${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}" >> $GITHUB_ENV
 
       - name: Compile CLJS
         run: yarn install && gulp build && yarn cljs:release-electron
@@ -432,8 +427,8 @@ jobs:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-android == 'true' }}
     with:
       build-target: "${{ github.event.inputs.build-target }}"
-      enable-file-sync: "${{ github.event.inputs.enable-file-sync == 'true' }}"
-      enable-file-sync-production: "${{ github.event.inputs.enable-file-sync-production == 'true' }}"
+      # if scheduled, use production mode
+      enable-file-sync-production: "${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}"
     secrets:
       ANDROID_KEYSTORE: "${{ secrets.ANDROID_KEYSTORE }}"
       ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"

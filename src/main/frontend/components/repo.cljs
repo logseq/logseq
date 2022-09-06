@@ -185,14 +185,20 @@
                       :options (cond->
                                 {:on-click
                                  (fn []
-                                   (state/pub-event! [:graph/ask-for-re-index *multiple-windows?]))})}]
+                                   (state/pub-event! [:graph/ask-for-re-index *multiple-windows?]))})}
+        new-window-link (when (and (util/electron?)
+                                   ;; New Window button in menu bar of macOS is available.
+                                   (not util/mac?))
+                          {:title        (t :open-new-window)
+                           :options {:on-click #(state/pub-event! [:graph/open-new-window nil])}})]
     (->>
      (concat repo-links
              [(when (seq repo-links) {:hr true})
               {:title (t :new-graph) :options {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)}}
               {:title (t :all-graphs) :options {:href (rfe/href :repos)}}
               refresh-link
-              reindex-link])
+              reindex-link
+              new-window-link])
      (remove nil?))))
 
 (rum/defcs repos-dropdown < rum/reactive

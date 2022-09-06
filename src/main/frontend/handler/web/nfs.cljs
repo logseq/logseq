@@ -2,28 +2,28 @@
   "The File System Access API, https://web.dev/file-system-access/."
   (:require ["/frontend/utils" :as utils]
             [cljs-bean.core :as bean]
+            [clojure.core.async :as async]
             [clojure.set :as set]
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.encrypt :as encrypt]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.idb :as idb]
+            [frontend.mobile.util :as mobile-util]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.fs :as util-fs]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]
-            [frontend.mobile.util :as mobile-util]
-            [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
-            [clojure.core.async :as async]
-            [frontend.encrypt :as encrypt]))
+            [logseq.graph-parser.util :as gp-util]
+            [promesa.core :as p]))
 
 (defn remove-ignore-files
   [files dir-name nfs?]
@@ -118,17 +118,17 @@
     (set-files-aux! handles)))
 
 ;; TODO: extract code for `ls-dir-files` and `reload-dir!`
-(defn ls-dir-files-with-handler!
+(defn ^:large-vars/cleanup-todo ls-dir-files-with-handler!
   ([ok-handler] (ls-dir-files-with-handler! ok-handler nil))
   ([ok-handler {:keys [empty-dir?-or-pred dir-result-fn]}]
-  (let [path-handles (atom {})
-        electron? (util/electron?)
-        mobile-native? (mobile-util/native-platform?)
-        nfs? (and (not electron?)
-                  (not mobile-native?))
-        *repo (atom nil)]
+   (let [path-handles (atom {})
+         electron? (util/electron?)
+         mobile-native? (mobile-util/native-platform?)
+         nfs? (and (not electron?)
+                   (not mobile-native?))
+         *repo (atom nil)]
     ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
-    (->
+     (->
       (p/let [result (if (fn? dir-result-fn)
                        (dir-result-fn {:path-handles path-handles :nfs? nfs?})
                        (fs/open-dir (fn [path handle]
@@ -150,63 +150,63 @@
               _ (state/set-loading-files! repo true)
               _ (when-not (or (state/home?) (state/setups-picker?))
                   (route-handler/redirect-to-home! false))]
-             (reset! *repo repo)
-             (when-not (string/blank? dir-name)
-               (p/let [root-handle-path (str config/local-handle-prefix dir-name)
-                       _ (when nfs?
-                           (idb/set-item! root-handle-path root-handle)
-                           (nfs/add-nfs-file-handle! root-handle-path root-handle))
-                       result (nth result 1)
-                       files (-> (->db-files mobile-native? electron? dir-name result)
-                                 (remove-ignore-files dir-name nfs?))
-                       _ (when nfs?
-                           (let [file-paths (set (map :file/path files))]
-                             (swap! path-handles (fn [handles]
-                                                   (->> handles
-                                                        (filter (fn [[path _handle]]
-                                                                  (or
-                                                                    (contains? file-paths
-                                                                               (string/replace-first path (str dir-name "/") ""))
-                                                                    (let [last-part (last (string/split path "/"))]
-                                                                      (contains? #{config/app-name
-                                                                                   gp-config/default-draw-directory
-                                                                                   (config/get-journals-directory)
-                                                                                   (config/get-pages-directory)}
-                                                                                 last-part)))))
-                                                        (into {})))))
+        (reset! *repo repo)
+        (when-not (string/blank? dir-name)
+          (p/let [root-handle-path (str config/local-handle-prefix dir-name)
+                  _ (when nfs?
+                      (idb/set-item! root-handle-path root-handle)
+                      (nfs/add-nfs-file-handle! root-handle-path root-handle))
+                  result (nth result 1)
+                  files (-> (->db-files mobile-native? electron? dir-name result)
+                            (remove-ignore-files dir-name nfs?))
+                  _ (when nfs?
+                      (let [file-paths (set (map :file/path files))]
+                        (swap! path-handles (fn [handles]
+                                              (->> handles
+                                                   (filter (fn [[path _handle]]
+                                                             (or
+                                                              (contains? file-paths
+                                                                         (string/replace-first path (str dir-name "/") ""))
+                                                              (let [last-part (last (string/split path "/"))]
+                                                                (contains? #{config/app-name
+                                                                             gp-config/default-draw-directory
+                                                                             (config/get-journals-directory)
+                                                                             (config/get-pages-directory)}
+                                                                           last-part)))))
+                                                   (into {})))))
 
-                           (set-files! @path-handles))
-                       markup-files (filter-markup-and-built-in-files files)]
-                      (-> (p/all (map (fn [file]
-                                        (p/let [content (if nfs?
-                                                          (.text (:file/file file))
-                                                          (:file/content file))
-                                                content (encrypt/decrypt content)]
-                                               (assoc file :file/content content))) markup-files))
-                          (p/then (fn [result]
-                                    (p/let [files (map #(dissoc % :file/file) result)
-                                            graph-txid-meta (util-fs/read-graph-txid-info dir-name)
-                                            graph-uuid (and (vector? graph-txid-meta) (second graph-txid-meta))]
-                                      (if-let [exists-graph (state/get-sync-graph-by-uuid graph-uuid)]
-                                        (state/pub-event!
-                                         [:notification/show
-                                          {:content (str "This graph already exists in \"" (:root exists-graph) "\"")
-                                           :status :warning}])
-                                        (do
-                                          (repo-handler/start-repo-db-if-not-exists! repo)
-                                          (async/go
-                                            (let [_finished? (async/<! (repo-handler/load-repo-to-db! repo
-                                                                                                      {:new-graph?   true
-                                                                                                       :empty-graph? (nil? (seq markup-files))
-                                                                                                       :nfs-files    files}))]
-                                              (state/add-repo! {:url repo :nfs? true})
-                                              (state/set-loading-files! repo false)
-                                              (when ok-handler (ok-handler {:url repo}))
-                                              (fs/watch-dir! dir-name)
-                                              (db/persist-if-idle! repo))))))))
-                          (p/catch (fn [error]
-                                     (log/error :nfs/load-files-error repo)
-                                     (log/error :exception error)))))))
+                      (set-files! @path-handles))
+                  markup-files (filter-markup-and-built-in-files files)]
+            (-> (p/all (map (fn [file]
+                              (p/let [content (if nfs?
+                                                (.text (:file/file file))
+                                                (:file/content file))
+                                      content (encrypt/decrypt content)]
+                                (assoc file :file/content content))) markup-files))
+                (p/then (fn [result]
+                          (p/let [files (map #(dissoc % :file/file) result)
+                                  graph-txid-meta (util-fs/read-graph-txid-info dir-name)
+                                  graph-uuid (and (vector? graph-txid-meta) (second graph-txid-meta))]
+                            (if-let [exists-graph (state/get-sync-graph-by-uuid graph-uuid)]
+                              (state/pub-event!
+                               [:notification/show
+                                {:content (str "This graph already exists in \"" (:root exists-graph) "\"")
+                                 :status :warning}])
+                              (do
+                                (repo-handler/start-repo-db-if-not-exists! repo)
+                                (async/go
+                                  (let [_finished? (async/<! (repo-handler/load-repo-to-db! repo
+                                                                                            {:new-graph?   true
+                                                                                             :empty-graph? (nil? (seq markup-files))
+                                                                                             :nfs-files    files}))]
+                                    (state/add-repo! {:url repo :nfs? true})
+                                    (state/set-loading-files! repo false)
+                                    (when ok-handler (ok-handler {:url repo}))
+                                    (fs/watch-dir! dir-name)
+                                    (db/persist-if-idle! repo))))))))
+                (p/catch (fn [error]
+                           (log/error :nfs/load-files-error repo)
+                           (log/error :exception error)))))))
       (p/catch (fn [error]
                  (log/error :exception error)
                  (when mobile-native?
@@ -214,8 +214,10 @@
                     [:notification/show {:content (str error) :status :error}]))
                  (when (contains? #{"AbortError" "Error"} (gobj/get error "name"))
                    (when @*repo (state/set-loading-files! @*repo false))
-                   (throw error)
-                   )))))))
+                   (throw error))))
+      (p/finally
+        (fn []
+          (state/set-loading-files! @*repo false)))))))
 
 (defn ls-dir-files-with-path!
   ([path] (ls-dir-files-with-path! path nil))
@@ -227,7 +229,7 @@
                                                 (fn [path handle]
                                                   (when nfs?
                                                     (swap! path-handles assoc path handle))))]
-                                 [path files-result])))]
+                            [path files-result])))]
      (ls-dir-files-with-handler!
       (:ok-handler opts)
       (merge {:dir-result-fn dir-result-fn} opts)))))

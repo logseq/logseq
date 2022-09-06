@@ -41,14 +41,19 @@
 
 ;; helpers
 (defn- normalize-keyword-for-json
-  [input]
-  (when input
-    (walk/postwalk
+  ([input] (normalize-keyword-for-json input true))
+  ([input camel-case?]
+   (when input
+     (walk/postwalk
       (fn [a]
         (cond
-          (keyword? a) (csk/->camelCase (name a))
+          (keyword? a)
+          (cond-> (name a)  
+            camel-case? 
+            (csk/->camelCase))
+
           (uuid? a) (str a)
-          :else a)) input)))
+          :else a)) input))))
 
 (defn- parse-hiccup-ui
   [input]
@@ -784,7 +789,7 @@
       (let [query (cljs.reader/read-string query)
             resolved-inputs (map (comp query-react/resolve-input cljs.reader/read-string) inputs)
             result (apply d/q query db resolved-inputs)]
-        (clj->js result)))))
+        (bean/->js (normalize-keyword-for-json result false))))))
 
 (defn ^:export custom_query
   [query-string]

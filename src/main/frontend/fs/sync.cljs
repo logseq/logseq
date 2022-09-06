@@ -26,7 +26,8 @@
             [frontend.fs :as fs]
             [frontend.encrypt :as encrypt]
             [medley.core :refer [dedupe-by]]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [goog.object :as gobj]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -37,7 +38,6 @@
 ;; - logseq/version-files
 ;;   downloaded version-files
 ;; files included by `get-ignored-files` will not be synchronized.
-;; files in these `get-monitored-dirs` dirs will be synchronized.
 ;;
 ;; sync strategy:
 ;; - when toggle file-sync on,
@@ -153,22 +153,21 @@
 
 ;;; ### configs in config.edn
 ;; - :file-sync/ignore-files
-;; - :file-sync/monitor-dirs
 
 (defn- get-ignored-files
   []
   (into #{#"logseq/graphs-txid.edn$"
-          #"logseq/\.recycle/.*"
-          #"logseq/version-files/.*"
-          #"logseq/bak/.*"}
+          #"logseq/version-files/"
+          #"logseq/bak/"
+          #"node_modules/"
+          ;; path starts with `.` in the root directory, e.g. .gitignore
+          #"^\.[^.]+"
+          ;; path includes `/.`, e.g. .git, .DS_store
+          #"/\."
+          ;; Emacs/Vim backup files end with `~` by default
+          #"~$"}
         (map re-pattern)
         (:file-sync/ignore-files (state/get-config))))
-
-(defn- get-monitor-dirs
-  []
-  (into #{#"^assets/" #"^journals/" #"^logseq/" #"^pages/" #"^draws/"}
-        (map #(re-pattern (str "^" % "/")))
-        (:file-sync/monitor-dirs (state/get-config))))
 
 ;;; ### configs ends
 
@@ -354,9 +353,6 @@
                "\" (updated? " updated? ", renamed? " (.renamed? coll) ", deleted? " deleted?
                ", txid " txid ", checksum " checksum ")]")))
 
-(defn- contains-path? [regexps path]
-  (reduce #(when (re-find %2 path) (reduced true)) false regexps))
-
 (defn- assert-filetxns
   [filetxns]
   (every? true?
@@ -441,16 +437,16 @@
             (map list ts))))
    cat))
 
-(defn- filter-filetxns-by-config
-  "return transducer.
-  filter filetxns by `get-ignored-files` and `get-monitored-dirs`"
-  []
-  (let [ignored-files (get-ignored-files)
-        monitored-dirs (get-monitor-dirs)]
-    (filter
-     #(let [path (relative-path %)]
-        (and (contains-path? monitored-dirs path)
-             (not (contains-path? ignored-files path)))))))
+(defn- contains-path? [regexps path]
+  (reduce #(when (re-find %2 path) (reduced true)) false regexps))
+
+(defn ignored?
+  "Whether file is ignored when syncing."
+  [path]
+  (->
+   (get-ignored-files)
+   (contains-path? (relative-path path))
+   (boolean)))
 
 (defn- diffs->partitioned-filetxns
   "transducer.
@@ -465,7 +461,7 @@
   (comp
    (map diff->filetxns)
    cat
-   (filter-filetxns-by-config)
+   (remove ignored?)
    distinct-update-filetxns-xf
    remove-deleted-filetxns-xf
    (partition-filetxns n)))
@@ -490,7 +486,7 @@
    (diffs->partitioned-filetxns n)))
 
 
-(defrecord FileMetadata [size etag path encrypted-path last-modified remote? ^:mutable normalized-path]
+(deftype FileMetadata [size etag path encrypted-path last-modified remote? ^:mutable normalized-path]
   Object
   (get-normalized-path [_]
     (when-not normalized-path
@@ -501,7 +497,27 @@
     normalized-path)
 
   IRelativePath
-  (-relative-path [_] path))
+  (-relative-path [_] path)
+
+  IEquiv
+  (-equiv [o ^FileMetadata other]
+    (and (= (.get-normalized-path o) (.get-normalized-path other))
+         (= etag (.-etag other))))
+
+  IHash
+  (-hash [_] (hash {:etag etag :path path}))
+
+  ILookup
+  (-lookup [this k]
+    (gobj/get this (name k)))
+  (-lookup [this k not-found]
+    (or (gobj/get this (name k)) not-found))
+
+  IPrintWithWriter
+  (-pr-writer [_ w _opts]
+    (write-all w (str {:size size :etag etag :path path :remote? remote?}))))
+
+
 
 (def ^:private higher-priority-remote-files
   "when diff all remote files and local files, following remote files always need to download(when checksum not matched),
@@ -544,6 +560,9 @@
    #{} s1))
 
 (comment
+  (defn map->FileMetadata [m]
+    (apply ->FileMetadata ((juxt :size :etag :path :encrypted-path :last-modified :remote? (constantly nil)) m)))
+
   (assert
    (=
     #{(map->FileMetadata {:size 1 :etag 2 :path 2 :encrypted-path 2 :last-modified 2})}
@@ -1549,15 +1568,15 @@
   [type {:keys [dir path _content stat] :as _payload}]
   (when-let [current-graph (state/get-current-repo)]
     (when (string/ends-with? current-graph dir)
-      (when-not (some-> (state/get-file-sync-state current-graph)
-                        sync-state--stopped?)
-        (when (or (:mtime stat) (= type "unlink"))
-          (go
-            (let [path (remove-dir-prefix dir path)
-                  files-meta (and (not= "unlink" type)
-                                  (<! (<get-local-files-meta rsapi "" dir [path])))
-                  checksum (and (coll? files-meta) (some-> files-meta first :etag))]
-              (>! local-changes-chan (->FileChangeEvent type dir path stat checksum)))))))))
+      (let [sync-state (state/get-file-sync-state current-graph)]
+        (when (and sync-state (not (sync-state--stopped? sync-state)))
+          (when (or (:mtime stat) (= type "unlink"))
+            (go
+              (let [path (remove-dir-prefix dir path)
+                    files-meta (and (not= "unlink" type)
+                                    (<! (<get-local-files-meta rsapi "" dir [path])))
+                    checksum (and (coll? files-meta) (some-> files-meta first :etag))]
+                (>! local-changes-chan (->FileChangeEvent type dir path stat checksum))))))))))
 
 (defn local-changes-revised-chan-builder
   "return chan"
@@ -1981,7 +2000,9 @@
       add-history? (update :history add-history-items paths now))))
 
 (defn sync-state--stopped?
+  "Graph syncing is stopped"
   [sync-state]
+  {:pre [(s/valid? ::sync-state sync-state)]}
   (= ::stop (:state sync-state)))
 
 ;;; ### remote->local syncer & local->remote syncer
@@ -2172,8 +2193,7 @@
                    true)
                  (or (string/starts-with? (.-dir e) base-path)
                      (string/starts-with? (str "file://" (.-dir e)) base-path)) ; valid path prefix
-                 (not (contains-path? (get-ignored-files) (relative-path e))) ;not ignored
-                 (contains-path? (get-monitor-dirs) (relative-path e)) ; dir is monitored
+                 (not (ignored? e)) ;not ignored
                  ;; download files will also trigger file-change-events, ignore them
                  (let [r (not (contains? (:recent-remote->local-files @*sync-state)
                                          (<! (<file-change-event=>recent-remote->local-file-item e))))]
@@ -2220,10 +2240,9 @@
       (if (empty? es)
         (go {:succ true})
         (let [type          (.-type ^FileChangeEvent (first es))
-              ignored-files (get-ignored-files)
               es->paths-xf  (comp
                              (map #(relative-path %))
-                             (filter #(not (contains-path? ignored-files %))))]
+                             (remove ignored?))]
           (go
             (let [es*   (<! (<filter-checksum-not-consistent es))
                   _     (when (not= (count es*) (count es))
@@ -2295,18 +2314,13 @@
             (let [remote-all-files-meta remote-all-files-meta-or-exp
                   local-all-files-meta  (<! local-all-files-meta-c)
                   diff-local-files      (diff-file-metadata-sets local-all-files-meta remote-all-files-meta)
-                  monitored-dirs        (get-monitor-dirs)
-                  ignored-files         (get-ignored-files)
                   change-events
                   (sequence
                    (comp
                     ;; convert to FileChangeEvent
                     (map #(->FileChangeEvent "change" base-path (.get-normalized-path ^FileMetadata %)
                                              {:size (:size %)} (:etag %)))
-                    ;; filter ignore-files & monitored-dirs
-                    (filter #(let [path (relative-path %)]
-                               (and (not (contains-path? ignored-files path))
-                                    (contains-path? monitored-dirs path)))))
+                    (remove ignored?))
                    diff-local-files)
                   change-events-partitions
                   (sequence
@@ -2724,31 +2738,29 @@
     (go
       ;; stop previous sync
       (<! (<sync-stop))
-      (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
-                                             (config/get-repo-dir repo) repo
-                                             txid *sync-state)]
-        (when (and repo (not (config/demo-graph? repo)))
-          ;; 1. if remote graph has been deleted, clear graphs-txid.edn
-          ;; 2. if graphs-txid.edn's content isn't [user-uuid graph-uuid txid], clear it
-          (if (not= 3 (count @graphs-txid))
-            (do (clear-graphs-txid! repo)
-                (state/set-file-sync-state repo nil))
-            (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
-              (if-not (<! (<check-remote-graph-exists graph-uuid))
-                (clear-graphs-txid! repo)
-                (do
-                  (state/set-file-sync-state repo @*sync-state)
-                  (state/set-file-sync-manager sm)
+      (when (and user-uuid graph-uuid txid
+                 (user/logged-in?)
+                 repo
+                 (not (config/demo-graph? repo)))
+        (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
+                                               (config/get-repo-dir repo) repo
+                                               txid *sync-state)]
+          (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
+            (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
+              (clear-graphs-txid! repo)
+              (do
+                (state/set-file-sync-state repo @*sync-state)
+                (state/set-file-sync-manager sm)
 
-                  ;; update global state when *sync-state changes
-                  (add-watch *sync-state ::update-global-state
-                             (fn [_ _ _ n]
-                               (state/set-file-sync-state repo n)))
+                ;; update global state when *sync-state changes
+                (add-watch *sync-state ::update-global-state
+                           (fn [_ _ _ n]
+                             (state/set-file-sync-state repo n)))
 
-                  (.start sm)
+                (.start sm)
 
-                  (offer! remote->local-full-sync-chan true)
-                  (offer! full-sync-chan true))))))))))
+                (offer! remote->local-full-sync-chan true)
+                (offer! full-sync-chan true)))))))))
 
 ;;; ### some add-watches
 
