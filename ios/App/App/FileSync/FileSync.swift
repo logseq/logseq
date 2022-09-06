@@ -72,15 +72,18 @@ public struct SyncMetadata: CustomStringConvertible, Equatable {
     var md5: String
     var size: Int
     var ctime: Int64
+    var mtime: Int64
 
     public init?(of fileURL: URL) {
         do {
-            let fileAttributes = try fileURL.resourceValues(forKeys:[.isRegularFileKey, .fileSizeKey, .contentModificationDateKey])
+            let fileAttributes = try fileURL.resourceValues(forKeys:[.isRegularFileKey, .fileSizeKey, .contentModificationDateKey,
+                                                                     .creationDateKey])
             guard fileAttributes.isRegularFile! else {
                 return nil
             }
             size = fileAttributes.fileSize ?? 0
-            ctime = Int64((fileAttributes.contentModificationDate?.timeIntervalSince1970 ?? 0.0) * 1000)
+            mtime = Int64((fileAttributes.contentModificationDate?.timeIntervalSince1970 ?? 0.0) * 1000)
+            ctime = Int64((fileAttributes.creationDate?.timeIntervalSince1970 ?? 0.0) * 1000)
 
             // incremental MD5 checksum
             let bufferSize = 512 * 1024
@@ -107,7 +110,7 @@ public struct SyncMetadata: CustomStringConvertible, Equatable {
     }
 
     public var description: String {
-        return "SyncMetadata(md5=\(md5), size=\(size))"
+        return "SyncMetadata(md5=\(md5), size=\(size), mtime=\(mtime))"
     }
 }
 
