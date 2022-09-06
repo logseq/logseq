@@ -2720,7 +2720,7 @@
 
 (defn <check-remote-graph-exists
   [local-graph-uuid]
-  {:pre [(uuid? local-graph-uuid)]}
+  {:pre [(util/uuid-string? local-graph-uuid)]}
   (go
     (let [result (->> (<! (<list-remote-graphs remoteapi))
                       :Graphs
