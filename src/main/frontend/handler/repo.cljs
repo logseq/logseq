@@ -379,13 +379,14 @@
   conn, or replace the conn in state with a new one."
   [repo]
   (p/let [_ (state/set-db-restoring! true)
-          _ (db/restore-graph! repo)]
-         (repo-config-handler/restore-repo-config! repo)
-         (global-config-handler/restore-global-config! repo)
-         ;; Don't have to unlisten the old listerner, as it will be destroyed with the conn
-         (db/listen-and-persist! repo)
-         (ui-handler/add-style-if-exists!)
-         (state/set-db-restoring! false)))
+          _ (db/restore-graph! repo)
+          _ (repo-config-handler/restore-repo-config! repo)
+          _ (global-config-handler/restore-global-config!)]
+    ;; Don't have to unlisten the old listerner, as it will be destroyed with the conn
+    (db/listen-and-persist! repo)
+    (state/pub-event! [:shortcut/refresh])
+    (ui-handler/add-style-if-exists!)
+    (state/set-db-restoring! false)))
 
 (defn rebuild-index!
   [url]
