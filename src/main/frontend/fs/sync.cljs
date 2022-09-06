@@ -2146,7 +2146,7 @@
   "filter out FileChangeEvents checksum changed,
   compare checksum in FileChangeEvent and checksum calculated now"
   [es]
-  {:pre [(coll? es)
+  {:pre [(or (nil? es) (coll? es))
          (every? #(instance? FileChangeEvent %) es)]}
   (go
     (when (seq es)
@@ -2179,7 +2179,7 @@
 (defn- filter-too-huge-files
   "filter out files > `file-size-limit`"
   [es]
-  {:pre [(coll? es)
+  {:pre [(or (nil? es) (coll? es))
          (every? #(instance? FileChangeEvent %) es)]}
   (filterv filter-too-huge-files-aux es))
 
