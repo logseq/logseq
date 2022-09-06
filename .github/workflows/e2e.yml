@@ -100,7 +100,6 @@ jobs:
     needs: [ e2e-test-build ]
     name: Test Shard ${{ matrix.shard }} Repeat ${{ matrix.repeat }}
     runs-on: ubuntu-latest
-    continue-on-error: true # Don't block other runs in matrix for fast debugging
     strategy:
       matrix:
         repeat: [1, 2]
