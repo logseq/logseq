@@ -65,10 +65,10 @@
          (:file/path (:block/file page)))))))
 
 (defn- build-title [page]
-  (let [original-name (:block/original-name page)]
-    (if (string/includes? original-name ",")
-      (util/format "\"%s\"" original-name)
-      original-name)))
+  ;; Don't wrap `\"` anymore, as tiitle property is not effected by `,` now
+  ;; The previous extract behavior isn't unwrapping the `'"` either. So no need
+  ;; to maintain the compatibility.
+  (:block/original-name page))
 
 (defn default-properties-block
   ([title format page]

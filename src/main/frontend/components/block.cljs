@@ -246,6 +246,34 @@
           [:p.text-red-500.text-xs [:small.opacity-80
                                     (util/format "%s not found!" (string/capitalize type))]])))))
 
+(defn open-lightbox
+  [e]
+  (let [images (js/document.querySelectorAll ".asset-container img")
+        images (to-array images)
+        images (if-not (= (count images) 1)
+                 (let [^js _image (.closest (.-target e) ".asset-container")
+                       image (. _image querySelector "img")]
+                   (->> images
+                        (sort-by (juxt #(.-y %) #(.-x %)))
+                        (split-with (complement #{image}))
+                        reverse
+                        (apply concat)))
+                 images)
+        images (for [^js it images] {:src (.-src it)
+                                     :w (.-naturalWidth it)
+                                     :h (.-naturalHeight it)})]
+
+    (when (seq images)
+      (lightbox/preview-images! images))))
+
+(defn copy-image-to-clipboard
+  [src]
+  (-> (js/fetch src)
+      (.then (fn [data]
+               (-> (.blob data)
+                   (.then (fn [blob]
+                            (js/navigator.clipboard.write (clj->js [(js/ClipboardItem. (clj->js {(.-type blob) blob}))])))))))))
+
 (defonce *resizing-image? (atom false))
 (rum/defcs resizable-image <
   (rum/local nil ::size)
@@ -258,25 +286,25 @@
      (ui/resize-consumer
       (if-not (mobile-util/native-ios?)
         (cond->
-            {:className "resize image-resize"
-             :onSizeChanged (fn [value]
-                              (when (and (not @*resizing-image?)
-                                         (some? @size)
-                                         (not= value @size))
-                                (reset! *resizing-image? true))
-                              (reset! size value))
-             :onMouseUp (fn []
-                          (when (and @size @*resizing-image?)
-                            (when-let [block-id (:block/uuid config)]
-                              (let [size (bean/->clj @size)]
-                                (editor-handler/resize-image! block-id metadata full_text size))))
-                          (when @*resizing-image?
+         {:className "resize image-resize"
+          :onSizeChanged (fn [value]
+                           (when (and (not @*resizing-image?)
+                                      (some? @size)
+                                      (not= value @size))
+                             (reset! *resizing-image? true))
+                           (reset! size value))
+          :onMouseUp (fn []
+                       (when (and @size @*resizing-image?)
+                         (when-let [block-id (:block/uuid config)]
+                           (let [size (bean/->clj @size)]
+                             (editor-handler/resize-image! block-id metadata full_text size))))
+                       (when @*resizing-image?
                             ;; TODO: need a better way to prevent the clicking to edit current block
-                            (js/setTimeout #(reset! *resizing-image? false) 200)))
-             :onClick (fn [e]
-                        (when @*resizing-image? (util/stop e)))}
-            (and (:width metadata) (not (util/mobile?)))
-            (assoc :style {:width (:width metadata)}))
+                         (js/setTimeout #(reset! *resizing-image? false) 200)))
+          :onClick (fn [e]
+                     (when @*resizing-image? (util/stop e)))}
+          (and (:width metadata) (not (util/mobile?)))
+          (assoc :style {:width (:width metadata)}))
         {})
       [:div.asset-container {:key "resize-asset-container"}
        [:img.rounded-sm.shadow-xl.relative
@@ -285,51 +313,62 @@
           :src     src
           :title   title}
          metadata)]
-       [:span.ctl
-        [:a.delete
-         {:title "Delete this image"
-          :on-click
-          (fn [e]
-            (when-let [block-id (:block/uuid config)]
-              (let [confirm-fn (ui/make-confirm-modal
-                                {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
-                                 :sub-title     (if local? :asset/physical-delete "")
-                                 :sub-checkbox? local?
-                                 :on-confirm    (fn [_e {:keys [close-fn sub-selected]}]
-                                                  (close-fn)
-                                                  (editor-handler/delete-asset-of-block!
-                                                   {:block-id    block-id
-                                                    :local?      local?
-                                                    :delete-local? (and sub-selected (first sub-selected))
-                                                    :repo        (state/get-current-repo)
-                                                    :href        src
-                                                    :title       title
-                                                    :full-text   full_text}))})]
-                (state/set-modal! confirm-fn)
-                (util/stop e))))}
-         svg/trash-sm]
+       [:.asset-overlay]
+       (let [image-src (string/replace src #"^assets://" "")]
+         [:.asset-action-bar {:aria-hidden "true"}
+          (when (util/electron?)
+            [:button.asset-action-btn.text-left
+             {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))
+              :tabIndex "-1"
+              :on-mouse-down util/stop
+              :on-click (fn [e]
+                          (util/stop e)
+                          (if local?
+                            (js/window.apis.showItemInFolder image-src)
+                            (js/window.apis.openExternal image-src)))}
+             image-src])
+          [:.flex
+           [:button.asset-action-btn
+            {:title (t :asset/delete)
+             :tabIndex "-1"
+             :on-mouse-down util/stop
+             :on-click
+             (fn [e]
+               (when-let [block-id (:block/uuid config)]
+                 (let [confirm-fn (ui/make-confirm-modal
+                                   {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                                    :sub-title     (if local? :asset/physical-delete "")
+                                    :sub-checkbox? local?
+                                    :on-confirm    (fn [_e {:keys [close-fn sub-selected]}]
+                                                     (close-fn)
+                                                     (editor-handler/delete-asset-of-block!
+                                                      {:block-id    block-id
+                                                       :local?      local?
+                                                       :delete-local? (and sub-selected (first sub-selected))
+                                                       :repo        (state/get-current-repo)
+                                                       :href        src
+                                                       :title       title
+                                                       :full-text   full_text}))})]
+                   (util/stop e)
+                   (state/set-modal! confirm-fn))))}
+            (ui/icon "trash")]
 
-        [:a.delete.ml-1
-         {:title    "maximize image"
-          :on-click (fn [^js e] (let [images (js/document.querySelectorAll ".asset-container img")
-                                      images (to-array images)
-                                      images (if-not (= (count images) 1)
-                                               (let [^js _image (.closest (.-target e) ".asset-container")
-                                                     image (. _image querySelector "img")]
-                                                 (->> images
-                                                      (sort-by (juxt #(.-y %) #(.-x %)))
-                                                      (split-with (complement #{image}))
-                                                      reverse
-                                                      (apply concat)))
-                                               images)
-                                      images (for [^js it images] {:src (.-src it)
-                                                                   :w (.-naturalWidth it)
-                                                                   :h (.-naturalHeight it)})]
+           [:button.asset-action-btn
+            {:title (t :asset/copy)
+             :tabIndex "-1"
+             :on-mouse-down util/stop
+             :on-click (fn [e]
+                         (util/stop e)
+                         (copy-image-to-clipboard image-src))}
+            (ui/icon "copy")]
 
-                                  (when (seq images)
-                                    (lightbox/preview-images! images))))}
+           [:button.asset-action-btn
+            {:title (t :asset/maximize)
+             :tabIndex "-1"
+             :on-mouse-down util/stop
+             :on-click open-lightbox}
 
-         (svg/maximize)]]]))))
+            (ui/icon "maximize")]]])]))))
 
 (rum/defc audio-cp [src]
   [:audio {:src src
@@ -1167,7 +1206,7 @@
 ;;;; Macro component render functions
 (defn- macro-query-cp
   [config arguments]
-  [:div.dsl-query.overflow-x-hidden.pr-3.sm:pr-0
+  [:div.dsl-query.pr-3.sm:pr-0
    (let [query (->> (string/join ", " arguments)
                     (string/trim))]
      (when-not (string/blank? query)
@@ -1900,7 +1939,9 @@
         user-config (state/get-config)
         ;; In this mode and when value is a set of refs, display full property text
         ;; because :block/properties value only contains refs but user wants to see text
-        v (if (and (:rich-property-values? user-config) (coll? value))
+        v (if (and (:rich-property-values? user-config)
+                   (coll? value)
+                   (not (contains? gp-property/editable-linkable-built-in-properties k)))
             (gp-property/property-value-from-content (name k) (:block/content block))
             value)
         property-pages-enabled? (contains? #{true nil} (:property-pages/enabled? user-config))]

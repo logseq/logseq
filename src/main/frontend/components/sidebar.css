@@ -85,7 +85,7 @@
   overflow-x: hidden;
   background-color: var(--ls-primary-background-color);
   transition: transform .3s;
-  transform: translateX(-100%);
+  transform: translate3d(-100%, 0, 0);
   z-index: 3;
 
   -webkit-font-smoothing: antialiased;
@@ -128,7 +128,7 @@
 
   a.item {
     @apply px-2 py-2 sm:py-1.5;
-    
+
     user-select: none;
     transition: background-color .3s;
 
@@ -328,7 +328,7 @@
     width: 100%;
 
     .left-sidebar-inner {
-      transform: translateX(0);
+      transform: translate3d(0, 0, 0);
       overflow: visible;
     }
 
@@ -559,4 +559,3 @@ html[data-theme='dark'] {
 .full-height-without-header {
   height: calc(100vh - var(--ls-headbar-height) - 4rem);
 }
-
