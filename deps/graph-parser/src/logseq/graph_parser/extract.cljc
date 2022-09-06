@@ -216,11 +216,12 @@
   (let [shape (:block/properties block)
         shape? (gp-block/whiteboard-properties? shape)
         default-page-ref {:block/name (gp-util/page-name-sanity-lc page-name)}]
-    (merge (when shape?
+    (merge (if shape?
              (merge
               {:block/uuid (uuid (:id shape))}
               (with-whiteboard-block-refs shape)
-              (with-whiteboard-content shape)))
+              (with-whiteboard-content shape))
+             {:block/unordered true})
            (when (nil? (:block/parent block)) {:block/parent default-page-ref})
            (when (nil? (:block/format block)) {:block/format :markdown}) ;; TODO: read from config
            {:block/page default-page-ref})))
@@ -244,11 +245,9 @@
         page-entity (build-page-entity (:block/properties page-block) file page-name page-original-name nil options)
         page-block (merge page-block page-entity (when-not (:block/uuid page-block) {:block/uuid (d/squuid)}))
         blocks (->> blocks
-                    (map #(merge % {:block/level 1 ;; fixme
-                                    :block/uuid (or (:block/uuid %)
+                    (map #(merge % {:block/uuid (or (:block/uuid %)
                                                     (gp-block/get-custom-id-or-new-id (:block/properties %)))}
-                                 (with-whiteboard-block-props % page-name)))
-                    (gp-block/with-parent-and-left {:block/name page-name}))
+                                 (with-whiteboard-block-props % page-name))))
         _ (when verbose (println "Parsing finished: " file))]
     {:pages (list page-block)
      :blocks blocks}))
