@@ -7,7 +7,6 @@
             [frontend.handler.common.file :as file-common-handler]
             [frontend.state :as state]
             [cljs.reader :as reader]
-            [frontend.db :as db]
             [promesa.core :as p]
             [shadow.resource :as rc]
             [electron.ipc :as ipc]
@@ -44,15 +43,13 @@
              (file-common-handler/reset-file! repo-url config-path default-content)
              (set-global-config-state! default-content)))))
 
-(defn- get-global-config-content
-  [repo-url]
-  (db/get-file repo-url (global-config-path)))
-
 (defn restore-global-config!
   "Sets global config state from db"
-  [repo-url]
-  (let [config-content (get-global-config-content repo-url)]
-    (set-global-config-state! config-content)))
+  []
+  (let [config-dir (global-config-dir)
+        config-path (global-config-path)]
+    (p/let [config-content (fs/read-file config-dir config-path)]
+      (set-global-config-state! config-content))))
 
 (defn- watch-dir!
   "Watches global config dir for given repo/db"
@@ -78,6 +75,6 @@
   [{:keys [repo]}]
   (p/let [root-dir' (ipc/ipc "getLogseqDotDirRoot")
           _ (reset! root-dir root-dir')
-          _ (restore-global-config! repo)
+          _ (restore-global-config!)
           _ (create-global-config-file-if-not-exists repo)
           _ (watch-dir! repo)]))

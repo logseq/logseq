@@ -527,6 +527,9 @@
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))
 
+(defmethod handle :shortcut/refresh [[_]]
+  (st/refresh!))
+
 (defn- refresh-cb []
   (page-handler/create-today-journal!)
   (st/refresh!)

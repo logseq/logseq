@@ -116,10 +116,12 @@
                    (fn [_]
                      (cond
                        (= path (config/get-repo-config-path repo))
-                       (repo-config-handler/restore-repo-config! repo)
+                       (p/let [_ (repo-config-handler/restore-repo-config! repo)]
+                         (state/pub-event! [:shortcut/refresh]))
 
                        (= path (global-config-handler/global-config-path))
-                       (global-config-handler/restore-global-config! repo)
+                       (p/let [_ (global-config-handler/restore-global-config!)]
+                         (state/pub-event! [:shortcut/refresh]))
 
                        (= path (config/get-custom-css-path repo))
                        (ui-handler/add-style-if-exists!))
