@@ -24,38 +24,24 @@
 ;; get block&children react-query
 (s/def ::block-and-children (s/tuple #(= ::block-and-children %) uuid?))
 
-(s/def ::block-direct-children (s/tuple #(= ::block-direct-children %) uuid?))
 ;; ::journals
 ;; get journal-list react-query
 (s/def ::journals (s/tuple #(= ::journals %)))
-;; ::page->pages
-;; get PAGES referenced by PAGE
-(s/def ::page->pages (s/tuple #(= ::page->pages %) int?))
 ;; ::page<-pages
 ;; get PAGES referencing PAGE
 (s/def ::page<-pages (s/tuple #(= ::page<-pages %) int?))
-;; ::page<-blocks-or-block<-blocks
+;; ::refs
 ;; get BLOCKS referencing PAGE or BLOCK
-(s/def ::page<-blocks-or-block<-blocks
-  (s/tuple #(= ::page<-blocks-or-block<-blocks %) int?))
-;; FIXME: this react-query has performance issues
-(s/def ::page-unlinked-refs (s/tuple #(= ::page-unlinked-refs %) int?))
-;; ::block<-block-ids
-;; get BLOCK-IDS referencing BLOCK
-(s/def ::block<-block-ids (s/tuple #(= ::block<-block-ids %) int?))
+(s/def ::refs (s/tuple #(= ::refs %) int?))
 ;; custom react-query
 (s/def ::custom any?)
 
 (s/def ::react-query-keys (s/or :block ::block
                                 :page-blocks ::page-blocks
                                 :block-and-children ::block-and-children
-                                :block-direct-children ::block-direct-children
                                 :journals ::journals
-                                :page->pages ::page->pages
                                 :page<-pages ::page<-pages
-                                :page<-blocks-or-block<-blocks ::page<-blocks-or-block<-blocks
-                                :page-unlinked-refs ::page-unlinked-refs
-                                :block<-block-ids ::block<-block-ids
+                                :refs ::refs
                                 :custom ::custom))
 
 (s/def ::affected-keys (s/coll-of ::react-query-keys))
@@ -95,6 +81,11 @@
     (let [new-result' (f @result-atom)]
       (reset! result-atom new-result'))))
 
+(defn get-query-time
+  [q]
+  (let [k [(state/get-current-repo) :custom q]]
+    (get-in @query-state [k :query-time])))
+
 (defn kv
   [key value]
   {:db/id -1
@@ -119,13 +110,15 @@
     (reset! query-state state)))
 
 (defn add-q!
-  [k query inputs result-atom transform-fn query-fn inputs-fn]
-  (swap! query-state assoc k {:query query
-                              :inputs inputs
-                              :result result-atom
-                              :transform-fn transform-fn
-                              :query-fn query-fn
-                              :inputs-fn inputs-fn})
+  [k query time inputs result-atom transform-fn query-fn inputs-fn]
+  (let [time' (int (util/safe-parse-float time))]
+    (swap! query-state assoc k {:query query
+                               :query-time time'
+                               :inputs inputs
+                               :result result-atom
+                               :transform-fn transform-fn
+                               :query-fn query-fn
+                               :inputs-fn inputs-fn}))
   result-atom)
 
 (defn remove-q!
@@ -135,14 +128,16 @@
 (defn add-query-component!
   [key component]
   (when (and key component)
-    (swap! query-components assoc component key)))
+    (swap! query-components update component (fn [col] (set (conj col key))))))
 
 (defn remove-query-component!
   [component]
-  (when-let [query (get @query-components component)]
-    (let [matched-queries (filter #(= query %) (vals @query-components))]
-      (when (= 1 (count matched-queries))
-        (remove-q! query))))
+  (when-let [queries (get @query-components component)]
+    (let [all-queries (apply concat (vals @query-components))]
+      (doseq [query queries]
+        (let [matched-queries (filter #(= query %) all-queries)]
+          (when (= 1 (count matched-queries))
+            (remove-q! query))))))
   (swap! query-components dissoc component))
 
 ;; TODO: rename :custom to :query/custom
@@ -169,29 +164,30 @@
           (add-query-component! k component))
         (if (and use-cache? result-atom)
           result-atom
-          (let [result (cond
-                         query-fn
-                         (query-fn db nil nil)
+          (let [{:keys [result time]} (util/with-time
+                                        (-> (cond
+                                              query-fn
+                                              (query-fn db nil nil)
 
-                         inputs-fn
-                         (let [inputs (inputs-fn)]
-                           (apply d/q query db inputs))
+                                              inputs-fn
+                                              (let [inputs (inputs-fn)]
+                                                (apply d/q query db inputs))
 
-                         kv?
-                         (d/entity db (last k))
+                                              kv?
+                                              (d/entity db (last k))
 
-                         (seq inputs)
-                         (apply d/q query db inputs)
+                                              (seq inputs)
+                                              (apply d/q query db inputs)
 
-                         :else
-                         (d/q query db))
-                result (transform-fn result)
+                                              :else
+                                              (d/q query db))
+                                            transform-fn))
                 result-atom (or result-atom (atom nil))]
             ;; Don't notify watches now
             (set! (.-state result-atom) result)
             (if disable-reactive?
               result-atom
-              (add-q! k query inputs result-atom transform-fn query-fn inputs-fn))))))))
+              (add-q! k query time inputs result-atom transform-fn query-fn inputs-fn))))))))
 
 
 ;; TODO: Extract several parts to handlers
@@ -213,121 +209,147 @@
       (let [page-name (util/page-name-sanity-lc page)]
         (db-utils/entity [:block/name page-name])))))
 
+(defn- get-block-parents
+  [db id]
+  (let [get-parent (fn [id] (:db/id (:block/parent (d/entity db id))))]
+    (loop [result [id]
+           id id]
+      (if-let [parent (get-parent id)]
+        (recur (conj result parent) parent)
+        result))))
+
+(defn- get-blocks-parents-from-both-dbs
+  [db-after db-before block-entities]
+  (let [current-db-parent-ids (->> (set (keep :block/parent block-entities))
+                                   (mapcat (fn [parent]
+                                             (get-block-parents db-after (:db/id parent)))))
+        before-db-parent-ids (->> (map :db/id block-entities)
+                                  (mapcat (fn [id]
+                                            (get-block-parents db-before id))))]
+    (set (concat current-db-parent-ids before-db-parent-ids))))
+
 (defn get-affected-queries-keys
   "Get affected queries through transaction datoms."
-  [{:keys [tx-data db-before]}]
+  [{:keys [tx-data db-before db-after]}]
   {:post [(s/valid? ::affected-keys %)]}
   (let [blocks (->> (filter (fn [datom] (contains? #{:block/left :block/parent :block/page} (:a datom))) tx-data)
                     (map :v)
                     (distinct))
-        refs (->> (filter (fn [datom] (= :block/refs (:a datom))) tx-data)
+        refs (->> (filter (fn [datom]
+                            (when (contains? #{:block/refs :block/path-refs} (:a datom))
+                              (not= (:v datom)
+                                    (:db/id (:block/page (db-utils/entity (:e datom))))))) tx-data)
                   (map :v)
                   (distinct))
         other-blocks (->> (filter (fn [datom] (= "block" (namespace (:a datom)))) tx-data)
                           (map :e))
         blocks (-> (concat blocks other-blocks) distinct)
+        block-entities (keep (fn [block-id]
+                              (let [block-id (if (and (string? block-id) (util/uuid-string? block-id))
+                                               [:block/uuid block-id]
+                                               block-id)]
+                                (db-utils/entity block-id))) blocks)
         affected-keys (concat
                        (mapcat
-                        (fn [block-id]
-                          (let [block-id (if (and (string? block-id) (util/uuid-string? block-id))
-                                           [:block/uuid block-id]
-                                           block-id)]
-                            (when-let [block (db-utils/entity block-id)]
-                              (let [page-id (or
-                                             (when (:block/name block) (:db/id block))
-                                             (:db/id (:block/page block)))
-                                    blocks [[::block (:block/uuid block)]]
-                                    others (when page-id
-                                             (let [db-after-parent-uuid (:block/uuid (:block/parent block))
-                                                   db-before-parent-uuid (:block/uuid (:block/parent (d/entity db-before
-                                                                                                               [:block/uuid (:block/uuid block)])))]
-                                               [[::page-blocks page-id]
-                                                [::page->pages page-id]
-                                                [::block-direct-children db-after-parent-uuid]
-                                                (when (and db-before-parent-uuid
-                                                           (not= db-before-parent-uuid db-after-parent-uuid))
-                                                  [::block-direct-children db-before-parent-uuid])]))]
-                                (concat blocks others)))))
-                        blocks)
+                        (fn [block]
+                          (let [page-id (or
+                                         (when (:block/name block) (:db/id block))
+                                         (:db/id (:block/page block)))
+                                blocks [[::block (:db/id block)]]
+                                path-refs (:block/path-refs block)
+                                path-refs' (keep (fn [ref]
+                                                   (when-not (= (:db/id ref) page-id)
+                                                     [::refs (:db/id ref)])) path-refs)
+                                page-blocks (when page-id
+                                              [[::page-blocks page-id]])]
+                            (concat blocks page-blocks path-refs')))
+                        block-entities)
+
+                       (mapcat
+                        (fn [ref]
+                          [[::refs ref]])
+                        refs)
 
                        (when-let [current-page-id (:db/id (get-current-page))]
-                         [[::page->pages current-page-id]
-                          [::page<-pages current-page-id]])
-
-                       (map (fn [ref]
-                              (let [entity (db-utils/entity ref)]
-                                (if (:block/name entity) ; page
-                                  [::page-blocks ref]
-                                  [::page-blocks (:db/id (:block/page entity))])))
-                         refs))
-        others (->>
-                (keys @query-state)
-                (filter (fn [ks]
-                          (contains? #{::block-and-children
-                                       ::page<-blocks-or-block<-blocks}
-                                     (second ks))))
-                (map (fn [v] (vec (rest v)))))]
+                         [[::page<-pages current-page-id]]))
+        parent-ids (get-blocks-parents-from-both-dbs db-after db-before block-entities)
+        block-children-keys (->>
+                             (keys @query-state)
+                             (keep (fn [ks]
+                                     (when (and (= ::block-and-children (second ks))
+                                                (contains? parent-ids (last ks)))
+                                       (vec (rest ks))))))]
     (->>
      (util/concat-without-nil
       affected-keys
-      others)
+      block-children-keys)
      set)))
 
 (defn- execute-query!
-  [graph db k tx {:keys [query inputs transform-fn query-fn inputs-fn result]}]
-  (let [new-result (->
-                    (cond
-                      query-fn
-                      (let [result (query-fn db tx result)]
-                        (if (coll? result)
-                          (doall result)
-                          result))
+  [graph db k tx {:keys [query query-time inputs transform-fn query-fn inputs-fn result]}
+   {:keys [skip-query-time-check?]}]
+  (when (or skip-query-time-check?
+            (<= (or query-time 0) 80))
+    (let [new-result (->
+                     (cond
+                       query-fn
+                       (let [result (query-fn db tx result)]
+                         (if (coll? result)
+                           (doall result)
+                           result))
 
-                      inputs-fn
-                      (let [inputs (inputs-fn)]
-                        (apply d/q query db inputs))
+                       inputs-fn
+                       (let [inputs (inputs-fn)]
+                         (apply d/q query db inputs))
 
-                      (keyword? query)
-                      (db-utils/get-key-value graph query)
+                       (keyword? query)
+                       (db-utils/get-key-value graph query)
 
-                      (seq inputs)
-                      (apply d/q query db inputs)
+                       (seq inputs)
+                       (apply d/q query db inputs)
 
-                      :else
-                      (d/q query db))
-                    transform-fn)]
-    (when-not (= new-result result)
-      (set-new-result! k new-result tx))))
+                       :else
+                       (d/q query db))
+                     transform-fn)]
+     (when-not (= new-result result)
+       (set-new-result! k new-result tx)))))
+
+(defn path-refs-need-recalculated?
+  [tx-meta]
+  (when-let [outliner-op (:outliner-op tx-meta)]
+    (not (or
+          (contains? #{:collapse-expand-blocks :delete-blocks} outliner-op)
+          (:undo? tx-meta) (:redo? tx-meta)))))
 
 (defn refresh!
   "Re-compute corresponding queries (from tx) and refresh the related react components."
   [repo-url {:keys [tx-data tx-meta] :as tx}]
   (when (and repo-url
-             (seq tx-data)
              (not (:skip-refresh? tx-meta)))
-    (let [db (conn/get-db repo-url)
-          affected-keys (get-affected-queries-keys tx)]
-      (doseq [[k cache] @query-state]
-        (let [custom? (= :custom (second k))
-              kv? (= :kv (second k))]
-          (when (and
-                 (= (first k) repo-url)
-                 (or (get affected-keys (vec (rest k)))
-                     custom?
-                     kv?))
-            (let [{:keys [query query-fn]} cache]
-              (when (or query query-fn)
-                (try
-                  (let [f #(execute-query! repo-url db k tx cache)]
-                    ;; Detects whether user is editing in a custom query, if so, execute the query immediately
-                    (if (and custom?
-                             ;; modifying during cards review need to be executed immediately
-                             (not (:cards-query? (meta query)))
-                             (not (state/edit-in-query-component)))
-                      (async/put! (state/get-reactive-custom-queries-chan) [f query])
-                      (f)))
-                  (catch js/Error e
-                    (js/console.error e)))))))))))
+    (when (seq tx-data)
+      (let [db (conn/get-db repo-url)
+            affected-keys (get-affected-queries-keys tx)]
+        (doseq [[k cache] @query-state]
+          (let [custom? (= :custom (second k))
+                kv? (= :kv (second k))]
+            (when (and
+                   (= (first k) repo-url)
+                   (or (get affected-keys (vec (rest k)))
+                       custom?
+                       kv?))
+              (let [{:keys [query query-fn]} cache
+                    {:keys [custom-query?]} (state/edit-in-query-or-refs-component)]
+                (util/profile
+                 (str "refresh! " (rest k))
+                 (when (or query query-fn)
+                   (try
+                     (let [f #(execute-query! repo-url db k tx cache {:skip-query-time-check? custom-query?})]
+                       ;; Detects whether user is editing in a custom query, if so, execute the query immediately
+                       (if (and custom? (not custom-query?))
+                         (async/put! (state/get-reactive-custom-queries-chan) [f query])
+                         (f)))
+                     (catch js/Error e
+                       (js/console.error e)))))))))))))
 
 (defn set-key-value
   [repo-url key value]

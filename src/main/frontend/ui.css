@@ -87,7 +87,7 @@
 }
 
 .ui__modal {
-  @apply fixed px-4 pb-4 inset-0 flex items-baseline justify-center top-24;
+  @apply fixed px-4 pb-4 inset-0 flex items-baseline justify-center top-12 sm:top-24;
 
   &-overlay {
     @apply fixed inset-0 transition-opacity;
@@ -104,19 +104,26 @@
     background: var(--ls-secondary-background-color);
 
     .panel-content {
-      overflow: overlay;
+      overflow-y: auto;
+      overflow-x: hidden;
       width: 94vw;
-      max-height: 85vh;
-      padding: 2rem;
+      max-height: 89vh;
+      padding: 2rem 1.5rem;
 
-      @screen md {
-        min-width: 760px;
+      @screen sm {
+        overflow-y: overlay;
+        min-width: 720px;
+        max-height: 85vh;
+        padding: 2rem;
         width: auto;
 
-        .ls-card {
+        .ls-card, .ls-search {
           width: 740px;
           min-height: 60vh;
-          max-height: 740px;
+        }
+
+        .ls-search {
+          width: var(--ls-main-content-max-width);
         }
       }
     }
@@ -133,7 +140,7 @@
 
     .ui__modal-panel {
       top: 50vh;
-      transform: translateY(-60%);
+      transform: translateY(-52%);
     }
   }
 
@@ -149,8 +156,8 @@
 
   &[label="flashcards__cp"] {
       .panel-content {
-          padding: 2rem 0rem;
-          
+          padding: 2rem 0;
+
           @screen sm {
               padding: 2rem 2rem;
           }
@@ -162,7 +169,7 @@
       .ui__modal-panel {
           height: 90%;
       }
-    
+
       .panel-content {
           height: 100%;
       }
@@ -177,7 +184,7 @@
     }
 }
 
-html.is-native-andorid,
+html.is-native-android,
 html.is-native-iphone,
 html.is-native-iphone-without-notch
 {
@@ -241,7 +248,7 @@ html.is-mobile {
     cursor: not-allowed;
   }
 
-  &:hover {
+  &:hover:not([disabled]) {
     opacity: 0.8;
   }
 
@@ -260,7 +267,7 @@ html.is-mobile {
     }
   }
 
-  &[intent='link'] {
+  &[intent='link'], &[intent='border-link'] {
     @apply focus:border-gray-500 dark:hover:text-gray-200;
 
     color: var(--ls-primary-text-color);
@@ -271,6 +278,10 @@ html.is-mobile {
     }
   }
 
+  &[intent='border-link'] {
+      border: 1px solid;
+  }
+
   &.p-1 {
     padding: 0.25rem 0.5rem !important;
   }
@@ -278,7 +289,9 @@ html.is-mobile {
 
 .dropdown-wrapper {
   background-color: var(--ls-primary-background-color, #fff);
+  border: 1px solid var(--ls-tertiary-background-color);
   min-width: 12rem;
+  border-radius: 6px;
 }
 
 .dropdown-caret {

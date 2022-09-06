@@ -70,10 +70,11 @@
 
 (defn transact-tree!
   [tree]
-  (db/transact! test-db (concat [{:db/id 1
-                                  :block/uuid 1
-                                  :block/name "Test page"}]
-                                (build-blocks tree))))
+  (let [blocks (build-blocks tree)]
+    (db/transact! test-db (concat [{:db/id 1
+                                    :block/uuid 1
+                                    :block/name "Test page"}]
+                                  blocks))))
 
 (def tree
   [[22 [[2 [[3 [[4]
@@ -621,10 +622,75 @@
                                                                            :use-cache? false})))
                total))))))
 
+(deftest test-non-consecutive-blocks->vec-tree
+  (let [blocks [{:block/page #:db{:id 2313},
+                 :block/uuid #uuid "62f49b4c-f9f0-4739-9985-8bd55e4c68d4",
+                 :block/parent #:db{:id 2313},
+                 :db/id 2315}
+                {:block/page #:db{:id 2313},
+                 :block/uuid #uuid "62f49b4c-aa84-416e-9554-b486b4e59b1b",
+                 :block/parent #:db{:id 2315},
+                 :db/id 2316}
+                {:block/page #:db{:id 2313},
+                 :block/uuid #uuid "62f49b4c-f80c-49b4-ae83-f78c4520c071",
+                 :block/parent #:db{:id 2316},
+                 :db/id 2317}
+                {:block/page #:db{:id 2313},
+                 :block/uuid #uuid "62f49b4c-8f5b-4a04-b749-68d34b28bcf2",
+                 :block/parent #:db{:id 2317},
+                 :db/id 2318}
+                {:block/page #:db{:id 2313},
+                 :block/uuid #uuid "62f4b8c1-a99b-434f-84c3-011d6afc48ba",
+                 :block/parent #:db{:id 2315},
+                 :db/id 2333}
+                {:block/page #:db{:id 2313},
+                 :block/uuid #uuid "62f4b8c6-072e-4133-90e2-0591021a7fea",
+                 :block/parent #:db{:id 2333},
+                 :db/id 2334}]]
+    (= (tree/non-consecutive-blocks->vec-tree blocks)
+       '({:db/id 2315,
+          :block/uuid #uuid "62f49b4c-f9f0-4739-9985-8bd55e4c68d4",
+          :block/parent #:db{:id 2313},
+          :block/page #:db{:id 2313},
+          :block/level 1,
+          :block/children
+          [{:db/id 2316,
+            :block/uuid #uuid "62f49b4c-aa84-416e-9554-b486b4e59b1b",
+            :block/parent #:db{:id 2315},
+            :block/page #:db{:id 2313},
+            :block/level 2,
+            :block/children
+            [{:db/id 2317,
+              :block/uuid #uuid "62f49b4c-f80c-49b4-ae83-f78c4520c071",
+              :block/parent #:db{:id 2316},
+              :block/page #:db{:id 2313},
+              :block/level 3,
+              :block/children
+              [{:db/id 2318,
+                :block/uuid #uuid "62f49b4c-8f5b-4a04-b749-68d34b28bcf2",
+                :block/parent #:db{:id 2317},
+                :block/page #:db{:id 2313},
+                :block/level 4}]}]}
+           {:db/id 2333,
+            :block/uuid #uuid "62f4b8c1-a99b-434f-84c3-011d6afc48ba",
+            :block/parent #:db{:id 2315},
+            :block/page #:db{:id 2313},
+            :block/level 2,
+            :block/children
+            [{:db/id 2334,
+              :block/uuid #uuid "62f4b8c6-072e-4133-90e2-0591021a7fea",
+              :block/parent #:db{:id 2333},
+              :block/page #:db{:id 2313},
+              :block/level 3}]}]}))))
+
 (comment
   (dotimes [i 5]
     (do
       (frontend.test.fixtures/reset-datascript test-db)
-      (cljs.test/run-tests))
-    )
+      (cljs.test/run-tests)))
+
+  (do
+    (frontend.test.fixtures/reset-datascript test-db)
+    (cljs.test/test-vars [#'random-deletes]))
+
   )

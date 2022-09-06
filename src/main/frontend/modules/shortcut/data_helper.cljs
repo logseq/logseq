@@ -46,14 +46,16 @@
 
 (defn normalize-user-keyname
   [k]
-  (some-> k
-          (util/safe-lower-case)
-          (str/replace #";+" "semicolon")
-          (str/replace #"=+" "equals")
-          (str/replace #"~+" "dash")
-          (str/replace "[" "open-square-bracket")
-          (str/replace "]" "close-square-bracket")
-          (str/replace "'" "single-quote")))
+  (let [keynames {";" "semicolon"
+                   "=" "equals"
+                   "-" "dash"
+                   "[" "open-square-bracket"
+                   "]" "close-square-bracket"
+                   "'" "single-quote"}]
+    (some-> k
+            (util/safe-lower-case)
+            (str/replace #"[;=-\[\]']" (fn [s]
+                                         (get keynames s))))))
 
 ;; returns a vector to preserve order
 (defn binding-by-category [name]

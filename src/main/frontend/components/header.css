@@ -46,7 +46,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    opacity: .5;
+    opacity: .8;
 
     .ti {
       font-size: 20px;
@@ -90,7 +90,6 @@
 
     a.restart {
       position: relative;
-      cursor: pointer !important;
       display: flex;
       align-items: center;
 
@@ -102,6 +101,7 @@
       > strong {
         display: inline-block;
         padding-left: 2px;
+        cursor: pointer;
       }
     }
   }
@@ -210,7 +210,7 @@
     margin: 0 6px;
 }
 
-.is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a) {
+.is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a):not(.file-sync-item) {
   cursor: default !important;
 }
 
@@ -317,12 +317,8 @@ html.is-native-iphone {
   --ls-headbar-inner-top-padding: 36px;
 
   .left-sidebar-inner {
-    > .wrap {
-      padding-top: 12px;
-    }
-
     .new-page {
-      padding-bottom: 12px;
+      padding-bottom: 32px;
     }
   }
 

@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, openLeftSidebar, searchAndJumpToPage } from './utils'
+import { createPage, createRandomPage, openLeftSidebar, randomString, searchAndJumpToPage } from './utils'
 
 /***
  * Test side bar features
@@ -51,4 +51,13 @@ test('recent is updated #4320', async ({ page }) => {
   await searchAndJumpToPage(page, page1)
   expect(await firstRecent.textContent()).toContain(page1)
   expect(await secondRecent.textContent()).toContain(page2)
+})
+
+test('recent file name is displayed correctly #6297', async ({ page }) => {
+  const pageName = randomString(5) + "_@#$%^&*()_" + randomString(5)
+  await createPage(page, pageName)
+  await page.fill('textarea >> nth=0', 'Random Content')
+
+  const firstRecent = page.locator('.nav-content-item.recent li >> nth=0')
+  expect(await firstRecent.textContent()).toContain(pageName)
 })

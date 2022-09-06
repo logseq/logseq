@@ -27,6 +27,9 @@
   (defonce ios-file-container (registerPlugin "FileContainer"))
   (defonce file-sync (registerPlugin "FileSync")))
 
+(when (native-android?)
+  (defonce file-sync (registerPlugin "FileSync")))
+
 ;; NOTE: both iOS and android share the same FsWatcher API
 (when (native-platform?)
   (defonce fs-watcher (registerPlugin "FsWatcher")))

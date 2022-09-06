@@ -1,18 +1,36 @@
 (ns logseq.graph-parser.config
   "Config that is shared between graph-parser and rest of app"
-  (:require [logseq.graph-parser.util :as gp-util]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.string :as string]))
 
 (def app-name
   "Copy of frontend.config/app-name. Too small to couple to main app"
   "logseq")
 
+(defonce asset-protocol "assets://")
+(defonce capacitor-protocol "capacitor://")
+(defonce capacitor-protocol-with-prefix (str capacitor-protocol "localhost/_capacitor_file_"))
+
 (defonce local-assets-dir "assets")
 
 (defn local-asset?
   [s]
-  (gp-util/safe-re-find (re-pattern (str "^[./]*" local-assets-dir)) s))
+  (and (string? s)
+       (re-find (re-pattern (str "^[./]*" local-assets-dir)) s)))
+
+(defn local-protocol-asset?
+  [s]
+  (when (string? s)
+    (or (string/starts-with? s asset-protocol)
+        (string/starts-with? s capacitor-protocol))))
+
+(defn remove-asset-protocol
+  [s]
+  (if (local-protocol-asset? s)
+    (-> s
+        (string/replace-first asset-protocol "")
+        (string/replace-first capacitor-protocol-with-prefix "file://"))
+    s))
 
 (defonce default-draw-directory "draws")
 

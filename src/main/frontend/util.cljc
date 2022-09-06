@@ -7,9 +7,11 @@
             ["@capacitor/status-bar" :refer [^js StatusBar Style]]
             ["grapheme-splitter" :as GraphemeSplitter]
             ["remove-accents" :as removeAccents]
+            ["check-password-strength" :refer [passwordStrength]]
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
+            [clojure.pprint]
             [dommy.core :as d]
             [frontend.mobile.util :refer [native-platform?]]
             [logseq.graph-parser.util :as gp-util]
@@ -18,9 +20,10 @@
             [goog.string :as gstring]
             [goog.userAgent]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [clojure.core.async :as async]
+            [cljs.core.async.impl.channels :refer [ManyToManyChannel]]))
   (:require
-   [clojure.core.async :as async]
    [clojure.pprint]
    [clojure.string :as string]
    [clojure.walk :as walk]))
@@ -49,12 +52,17 @@
        (re-find pattern s))))
 
 #?(:cljs
-  (do
-    (def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
-    (defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
-    (defn uuid-string?
-      [s]
-      (safe-re-find exactly-uuid-pattern s))))
+   (do
+     (def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
+     (defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
+     (defn uuid-string?
+       [s]
+       (safe-re-find exactly-uuid-pattern s))
+     (defn check-password-strength [input]
+       (when-let [^js ret (and (string? input)
+                               (not (string/blank? input))
+                               (passwordStrength input))]
+         (bean/->clj ret)))))
 
 #?(:cljs
    (defn ios?
@@ -78,8 +86,7 @@
    (defn electron?
      []
      (when (and js/window (gobj/get js/window "navigator"))
-       (let [ua (string/lower-case js/navigator.userAgent)]
-         (string/includes? ua " electron")))))
+       (gstring/caseInsensitiveContains js/navigator.userAgent " electron"))))
 
 #?(:cljs
    (defn mocked-open-dir-path
@@ -88,8 +95,10 @@
      (when (electron?) (. js/window -__MOCKED_OPEN_DIR_PATH__))))
 
 #?(:cljs
-   (def nfs? (and (not (electron?))
-                  (not (native-platform?)))))
+   (do
+     (def nfs? (and (not (electron?))
+                    (not (native-platform?))))
+     (def web-platform? nfs?)))
 
 #?(:cljs
    (defn file-protocol?
@@ -338,10 +347,6 @@
      (when e (.stopPropagation e))))
 
 #?(:cljs
-   (defn cur-doc-top []
-     (.. js/document -documentElement -scrollTop)))
-
-#?(:cljs
    (defn element-top [elem top]
      (when elem
        (if (.-offsetParent elem)
@@ -487,6 +492,13 @@
   (if (string? s)
     (string/lower-case s) s))
 
+#?(:cljs
+   (defn safe-path-join [prefix & paths]
+     (let [path (apply node-path.join (cons prefix paths))]
+       (if (and (electron?) (gstring/caseInsensitiveStartsWith path "file://"))
+         (js/decodeURIComponent (subs path 7))
+         path))))
+
 (defn trim-safe
   [s]
   (when s
@@ -529,17 +541,18 @@
          (str prefix new-value)))
      s)))
 
-(defonce default-escape-chars "[]{}().+*?|")
+(defonce escape-chars "[]{}().+*?|")
+
+(defn escape-regex-chars
+  "Escapes characters in string `old-value"
+  [old-value]
+  (reduce (fn [acc escape-char]
+            (string/replace acc escape-char (str "\\" escape-char)))
+          old-value escape-chars))
 
 (defn replace-ignore-case
-  [s old-value new-value & [escape-chars]]
-  (let [escape-chars (or escape-chars default-escape-chars)
-        old-value (if (string? escape-chars)
-                    (reduce (fn [acc escape-char]
-                              (string/replace acc escape-char (str "\\" escape-char)))
-                            old-value escape-chars)
-                    old-value)]
-    (string/replace s (re-pattern (str "(?i)" old-value)) new-value)))
+  [s old-value new-value]
+  (string/replace s (re-pattern (str "(?i)" (escape-regex-chars old-value))) new-value))
 
 ;; copy from https://stackoverflow.com/questions/18735665/how-can-i-get-the-positions-of-regex-matches-in-clojurescript
 #?(:cljs
@@ -891,11 +904,6 @@
      [string]
      (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
 
-#?(:cljs
-   (defn url-decode
-     [string]
-     (some-> string str (js/decodeURIComponent))))
-
 (def windows-reserved-chars #"[:\\*\\?\"<>|]+")
 
 #?(:cljs
@@ -917,8 +925,11 @@
 #?(:cljs
    (defn search-normalize
      "Normalize string for searching (loose)"
-     [s]
-     (removeAccents (.normalize (string/lower-case s) "NFKC"))))
+     [s remove-accents?]
+     (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
+      (if remove-accents?
+        (removeAccents  normalize-str)
+        normalize-str))))
 
 #?(:cljs
    (defn file-name-sanity
@@ -1031,6 +1042,15 @@
             res#))
         (do ~@body))))
 
+#?(:clj
+   (defmacro with-time
+     "Evaluates expr and prints the time it took. Returns the value of expr and the spent time."
+     [expr]
+     `(let [start# (cljs.core/system-time)
+            ret# ~expr]
+        {:result ret#
+         :time (.toFixed (- (cljs.core/system-time) start#) 6)})))
+
 ;; TODO: profile and profileEnd
 
 ;; Copy from hiccup
@@ -1063,6 +1083,8 @@
   (= (get-relative-path "a/b/c/d/g.org" "a/b/c/e/f.org")
      "../e/f.org"))
 
+(defn keyname [key] (str (namespace key) "/" (name key)))
+
 #?(:cljs
    (defn select-highlight!
      [blocks]
@@ -1075,21 +1097,66 @@
      (doseq [block blocks]
        (d/remove-class! block "selected" "noselect"))))
 
-(defn keyname [key] (str (namespace key) "/" (name key)))
+#?(:cljs
+   (defn drain-chan
+     "drop all stuffs in CH, and return all of them"
+     [ch]
+     (->> (repeatedly #(async/poll! ch))
+          (take-while identity))))
 
-(defn batch [in max-time handler buf-atom]
-  (async/go-loop [buf buf-atom t (async/timeout max-time)]
-    (let [[v p] (async/alts! [in t])]
-      (cond
-        (or (= p t) (nil? v))
-        (let [timeout (async/timeout max-time)]
-          (handler @buf)
-          (reset! buf [])
-          (recur buf timeout))
+#?(:cljs
+   (defn <ratelimit
+     "return a channel CH,
+  ratelimit flush items in in-ch every max-duration(ms),
+  opts:
+  - :filter-fn filter item before putting items into returned CH, (filter-fn item)
+               will poll it when its return value is channel,
+  - :flush-fn exec flush-fn when time to flush, (flush-fn item-coll)
+  - :stop-ch stop go-loop when stop-ch closed
+  - :distinct-coll? distinct coll when put into CH
+  - :chan-buffer buffer of return CH, default use (async/chan 1000)
+  - :flush-now-ch flush the content in the queue immediately
+  - :refresh-timeout-ch refresh (timeout max-duration)"
+     [in-ch max-duration & {:keys [filter-fn flush-fn stop-ch distinct-coll? chan-buffer flush-now-ch refresh-timeout-ch]}]
+     (let [ch (if chan-buffer (async/chan chan-buffer) (async/chan 1000))
+           stop-ch* (or stop-ch (async/chan))
+           flush-now-ch* (or flush-now-ch (async/chan))
+           refresh-timeout-ch* (or refresh-timeout-ch (async/chan))]
+       (async/go-loop [timeout-ch (async/timeout max-duration) coll []]
+         (let [{:keys [refresh-timeout timeout e stop flush-now]}
+               (async/alt! refresh-timeout-ch* {:refresh-timeout true}
+                           timeout-ch {:timeout true}
+                           in-ch ([e] {:e e})
+                           stop-ch* {:stop true}
+                           flush-now-ch* {:flush-now true})]
+           (cond
+             refresh-timeout
+             (recur (async/timeout max-duration) coll)
 
-        :else
-        (do (swap! buf conj v)
-            (recur buf t))))))
+             (or flush-now timeout)
+             (do (async/onto-chan! ch coll false)
+                 (flush-fn coll)
+                 (drain-chan flush-now-ch*)
+                 (recur (async/timeout max-duration) []))
+
+             (some? e)
+             (let [filter-v (filter-fn e)
+                   filter-v* (if (instance? ManyToManyChannel filter-v)
+                               (async/<! filter-v)
+                               filter-v)]
+               (if filter-v*
+                 (recur timeout-ch (cond-> (conj coll e)
+                                     distinct-coll? distinct
+                                     true vec))
+                 (recur timeout-ch coll)))
+
+             (or stop
+                 ;; got nil from in-ch, means in-ch is closed
+                 ;; so we stop the whole go-loop
+                 (nil? e))
+             (async/close! ch))))
+       ch)))
+
 
 #?(:cljs
    (defn trace!
@@ -1314,7 +1381,9 @@
 
 ;; https://stackoverflow.com/questions/32511405/how-would-time-ago-function-implementation-look-like-in-clojure
 #?(:cljs
-   (defn time-ago [time]
+   (defn time-ago
+     "time: inst-ms or js/Date"
+     [time]
      (let [units [{:name "second" :limit 60 :in-second 1}
                   {:name "minute" :limit 3600 :in-second 60}
                   {:name "hour" :limit 86400 :in-second 3600}
@@ -1322,7 +1391,7 @@
                   {:name "week" :limit 2629743 :in-second 604800}
                   {:name "month" :limit 31556926 :in-second 2629743}
                   {:name "year" :limit js/Number.MAX_SAFE_INTEGER :in-second 31556926}]
-           diff (t/in-seconds (t/interval time (t/now)))]
+           diff (t/in-seconds (t/interval (if (instance? js/Date time) time (js/Date. time)) (t/now)))]
        (if (< diff 5)
          "just now"
          (let [unit (first (drop-while #(or (>= diff (:limit %))

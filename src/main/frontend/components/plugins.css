@@ -545,7 +545,12 @@
 
         .form-input {
           padding: 5px;
-          width: 50%;
+          width: 70%;
+        }
+
+        textarea.form-input {
+          overflow-y: auto;
+          resize: vertical;
         }
 
         .form-select {

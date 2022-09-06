@@ -1,5 +1,6 @@
 (ns frontend.modules.outliner.tree
   (:require [frontend.db :as db]
+            [frontend.db.model :as model]
             [clojure.string :as string]
             [frontend.state :as state]))
 
@@ -50,6 +51,7 @@
     [false root-id]))
 
 (defn blocks->vec-tree
+  "`blocks` need to be in the same page."
   ([blocks root-id]
    (blocks->vec-tree (state/get-current-repo) blocks root-id))
   ([repo blocks root-id]
@@ -63,6 +65,49 @@
            (let [root-block (some #(when (= (:db/id %) (:db/id root)) %) blocks)
                  root-block (assoc root-block :block/children result)]
              [root-block])))))))
+
+(defn- tree [parent->children root]
+  (let [root-id (:db/id root)
+        nodes (fn nodes [parent-id level]
+                (mapv (fn [b]
+                        (let [b' (assoc b :block/level (inc level))
+                              children (nodes (:db/id b) (inc level))]
+                          (if (seq children)
+                            (assoc b' :block/children children)
+                            b')))
+                      (let [parent {:db/id parent-id}]
+                        (-> (get parent->children parent)
+                            (model/try-sort-by-left parent)))))
+        children (nodes root-id 1)
+        root' (assoc root :block/level 1)]
+    (if (seq children)
+      (assoc root' :block/children children)
+      root')))
+
+(defn block-entity->map
+  [e]
+  {:db/id (:db/id e)
+   :block/uuid (:block/uuid e)
+   :block/parent {:db/id (:db/id (:block/parent e))}
+   :block/left {:db/id (:db/id (:block/left e))}
+   :block/page (:block/page e)
+   :block/refs (:block/refs e)})
+
+(defn filter-top-level-blocks
+  [blocks]
+  (let [id->blocks (zipmap (map :db/id blocks) blocks)]
+    (filter #(nil?
+              (id->blocks
+               (:db/id (:block/parent (id->blocks (:db/id %)))))) blocks)))
+
+(defn non-consecutive-blocks->vec-tree
+  "`blocks` need to be in the same page."
+  [blocks]
+  (let [blocks (map block-entity->map blocks)
+        top-level-blocks (filter-top-level-blocks blocks)
+        top-level-blocks' (model/try-sort-by-left top-level-blocks (:block/parent (first top-level-blocks)))
+        parent->children (group-by :block/parent blocks)]
+    (map #(tree parent->children %) top-level-blocks')))
 
 (defn- sort-blocks-aux
   [parents parent-groups]

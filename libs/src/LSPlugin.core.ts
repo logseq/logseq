@@ -437,9 +437,11 @@ class ExistedImportedPluginPackageError extends Error {
 /**
  * Host plugin for local
  */
-class PluginLocal extends EventEmitter<
-  'loaded' | 'unloaded' | 'beforeunload' | 'error' | string
-> {
+class PluginLocal extends EventEmitter<'loaded'
+  | 'unloaded'
+  | 'beforeunload'
+  | 'error'
+  | string> {
   private _sdk: Partial<PluginLocalSDKMetadata> = {}
   private _disposes: Array<() => Promise<any>> = []
   private _id: PluginLocalIdentity
@@ -573,7 +575,7 @@ class PluginLocal extends EventEmitter<
     const localRoot = (this._localRoot = safetyPathNormalize(url))
     const logseq: Partial<LSPluginPkgConfig> = pkg.logseq || {}
 
-    // Pick legal attrs
+      // Pick legal attrs
     ;[
       'name',
       'author',
@@ -681,10 +683,10 @@ class PluginLocal extends EventEmitter<
     <meta charset="UTF-8">
     <title>logseq plugin entry</title>
     ${
-      IS_DEV
-        ? `<script src="${sdkPathRoot}/lsplugin.user.js?v=${tag}"></script>`
-        : `<script src="https://cdn.jsdelivr.net/npm/@logseq/libs/dist/lsplugin.user.min.js?v=${tag}"></script>`
-    }
+        IS_DEV
+          ? `<script src="${sdkPathRoot}/lsplugin.user.js?v=${tag}"></script>`
+          : `<script src="https://cdn.jsdelivr.net/npm/@logseq/libs/dist/lsplugin.user.min.js?v=${tag}"></script>`
+      }
     
   </head>
   <body>
@@ -905,7 +907,7 @@ class PluginLocal extends EventEmitter<
 
       this._dispose(cleanInjectedScripts.bind(this))
     } catch (e) {
-      debug('[Load Plugin Error] ', e)
+      console.error('[Load Plugin Error] ', e)
       this.logger?.error(e)
 
       this._status = PluginLocalLoadStatus.ERROR
@@ -1119,24 +1121,22 @@ class PluginLocal extends EventEmitter<
  * Host plugin core
  */
 class LSPluginCore
-  extends EventEmitter<
-    | 'beforeenable'
+  extends EventEmitter<'beforeenable'
     | 'enabled'
     | 'beforedisable'
     | 'disabled'
     | 'registered'
     | 'error'
     | 'unregistered'
+    | 'ready'
     | 'themes-changed'
     | 'theme-selected'
     | 'reset-custom-theme'
     | 'settings-changed'
     | 'unlink-plugin'
     | 'beforereload'
-    | 'reloaded'
-  >
-  implements ILSPluginThemeManager
-{
+    | 'reloaded'>
+  implements ILSPluginThemeManager {
   private _isRegistering = false
   private _readyIndicator?: DeferredActor
   private readonly _hostMountedActor: DeferredActor = deferred()
@@ -1150,10 +1150,8 @@ class LSPluginCore
     externals: [],
   }
   private readonly _registeredThemes = new Map<PluginLocalIdentity, Theme[]>()
-  private readonly _registeredPlugins = new Map<
-    PluginLocalIdentity,
-    PluginLocal
-  >()
+  private readonly _registeredPlugins = new Map<PluginLocalIdentity,
+    PluginLocal>()
   private _currentTheme: {
     pid: PluginLocalIdentity
     opt: Theme | LegacyTheme
@@ -1229,21 +1227,22 @@ class LSPluginCore
       return
     }
 
-    const perfTable = new Map<
-      string,
-      { o: PluginLocal; s: number; e: number }
-    >()
+    const perfTable = new Map<string,
+      { o: PluginLocal; s: number; e: number }>()
     const debugPerfInfo = () => {
-      const data = Array.from(perfTable.values()).reduce((ac, it) => {
-        const { options, status, disabled } = it.o
+      const data: any = Array.from(perfTable.values()).reduce((ac, it) => {
+        const { id, options, status, disabled } = it.o
 
-        ac[it.o.id] = {
-          name: options.name,
-          entry: options.entry,
-          status: status,
-          enabled:
-            typeof disabled === 'boolean' ? (!disabled ? '🟢' : '⚫️') : '🔴',
-          perf: !it.e ? it.o.loadErr : `${(it.e - it.s).toFixed(2)}ms`,
+        if (disabled !== true &&
+          (options.entry || (!options.name && !options.entry))) {
+          ac[id] = {
+            name: options.name,
+            entry: options.entry,
+            status: status,
+            enabled:
+              typeof disabled === 'boolean' ? (!disabled ? '🟢' : '⚫️') : '🔴',
+            perf: !it.e ? it.o.loadErr : `${(it.e - it.s).toFixed(2)}ms`,
+          }
         }
 
         return ac
@@ -1263,7 +1262,26 @@ class LSPluginCore
 
       await this.loadUserPreferences()
 
-      const externals = new Set(this._userPreferences.externals)
+      let externals = new Set(this._userPreferences.externals)
+
+      // valid externals
+      if (externals?.size) {
+        try {
+          const validatedExternals: Record<string, boolean> = await invokeHostExportedApi(
+            'validate_external_plugins', [...externals]
+          )
+
+          externals = new Set([...Object.entries(validatedExternals)].reduce(
+            (a, [k, v]) => {
+              if (v) {
+                a.push(k)
+              }
+              return a
+            }, []))
+        } catch (e) {
+          console.error('[validatedExternals Error]', e)
+        }
+      }
 
       if (initial) {
         plugins = plugins.concat(
@@ -1289,9 +1307,11 @@ class LSPluginCore
         )
 
         const perfInfo = { o: pluginLocal, s: performance.now(), e: 0 }
-        perfTable.set(pluginLocal.id, perfInfo)
+        perfTable.set(url, perfInfo)
 
         await pluginLocal.load({ indicator: readyIndicator })
+
+        perfInfo.e = performance.now()
 
         const { loadErr } = pluginLocal
 
@@ -1309,7 +1329,6 @@ class LSPluginCore
           }
         }
 
-        perfInfo.e = performance.now()
 
         pluginLocal.settings?.on('change', (a) => {
           this.emit('settings-changed', pluginLocal.id, a)
@@ -1333,6 +1352,7 @@ class LSPluginCore
       console.error(e)
     } finally {
       this._isRegistering = false
+      this.emit('ready', perfTable)
       debugPerfInfo()
     }
   }
@@ -1554,12 +1574,12 @@ class LSPluginCore
       await this.saveUserPreferences(
         theme.mode
           ? {
-              themes: {
-                ...this._userPreferences.themes,
-                mode: theme.mode,
-                [theme.mode]: theme,
-              },
-            }
+            themes: {
+              ...this._userPreferences.themes,
+              mode: theme.mode,
+              [theme.mode]: theme,
+            },
+          }
           : { theme: theme }
       )
     }

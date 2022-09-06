@@ -25,7 +25,7 @@
 
     (let [input-as (util/safe-lower-case (or inputAs (name type)))
           input-as (if (= input-as "string") :text (keyword input-as))]
-      [:input
+      [(if (= input-as :textarea) :textarea :input)
        {:class        (util/classnames [{:form-input (not (contains? #{:color :range} input-as))}])
         :type         (name input-as)
         :defaultValue (or val default)
@@ -79,7 +79,7 @@
     [:div.pl-1 (edit-settings-file pid nil)]]])
 
 (rum/defc render-item-heading
-  [{:keys [title]}]
+  [{:keys [key title]}]
 
   [:div.heading-item
    {:data-key key}

@@ -2,6 +2,7 @@ import { Page, Locator } from 'playwright'
 import { expect, ConsoleMessage } from '@playwright/test'
 import * as process from 'process'
 import { Block } from './types'
+import pathlib from 'path'
 
 export const IsMac = process.platform === 'darwin'
 export const IsLinux = process.platform === 'linux'
@@ -41,6 +42,8 @@ export async function createRandomPage(page: Page) {
   await page.fill('[placeholder="Search or create page"]', randomTitle)
   // Click text=/.*New page: "new page".*/
   await page.click('text=/.*New page: ".*/')
+  // Wait for h1 to be from our new page
+  await page.waitForSelector(`h1 >> text="${randomTitle}"`, { state: 'visible' })
   // wait for textarea of first block
   await page.waitForSelector('textarea >> nth=0', { state: 'visible' })
 
@@ -114,7 +117,7 @@ export async function newInnerBlock(page: Page): Promise<Locator> {
 
 export async function newBlock(page: Page): Promise<Locator> {
   let blockNumber = await page.locator('.page-blocks-inner .ls-block').count()
-  const prev = await lastBlock(page)
+  await lastBlock(page)
   await page.press('textarea >> nth=0', 'Enter')
   await page.waitForSelector(`.page-blocks-inner .ls-block >> nth=${blockNumber} >> textarea`, { state: 'visible' })
   return page.locator('textarea >> nth=0')
@@ -159,39 +162,35 @@ export async function openLeftSidebar(page: Page): Promise<void> {
   let sidebar = page.locator('#left-sidebar')
 
   // Left sidebar is toggled by `is-open` class
-  if (!/is-open/.test(await sidebar.getAttribute('class'))) {
+  if (!/is-open/.test(await sidebar.getAttribute('class') || '')) {
     await page.click('#left-menu.button')
     await page.waitForTimeout(10)
     await expect(sidebar).toHaveClass(/is-open/)
   }
 }
 
-export async function loadLocalGraph(page: Page, path?: string): Promise<void> {
+export async function loadLocalGraph(page: Page, path: string): Promise<void> {
   await setMockedOpenDirPath(page, path);
-
+  
   const onboardingOpenButton = page.locator('strong:has-text("Choose a folder")')
 
   if (await onboardingOpenButton.isVisible()) {
     await onboardingOpenButton.click()
   } else {
-    await page.click('#left-menu.button')
+    console.log("No onboarding button, loading file manually")
     let sidebar = page.locator('#left-sidebar')
-    if (!/is-open/.test(await sidebar.getAttribute('class'))) {
+    if (!/is-open/.test(await sidebar.getAttribute('class') || '')) {
       await page.click('#left-menu.button')
       await expect(sidebar).toHaveClass(/is-open/)
     }
-
+    
     await page.click('#left-sidebar #repo-switch');
     await page.waitForSelector('#left-sidebar .dropdown-wrapper >> text="Add new graph"',
-      { state: 'visible', timeout: 5000 })
-
+    { state: 'visible', timeout: 5000 })
     await page.click('text=Add new graph')
-    await page.waitForSelector('strong:has-text("Choose a folder")',
-      { state: 'visible', timeout: 5000 })
-    await page.click('strong:has-text("Choose a folder")')
+    await page.waitForSelector('strong:has-text("Choose a folder")',{ state: 'visible', timeout: 5000 })
 
-    const skip = page.locator('a:has-text("Skip")')
-    await skip.click()
+    expect(page.locator('#repo-name')).toHaveText(pathlib.basename(path))
   }
 
   setMockedOpenDirPath(page, ''); // reset it
@@ -207,6 +206,16 @@ export async function loadLocalGraph(page: Page, path?: string): Promise<void> {
   }
 
   await page.waitForFunction('window.document.title === "Logseq"')
+  await page.waitForTimeout(500)
+
+  // If there is an error notification from a previous test graph being deleted,
+  // close it first so it doesn't cover up the UI
+  let locator = await page.locator('.notification-close-button').first()
+  while (await locator?.isVisible()) {
+    await locator.click()
+    await page.waitForTimeout(250)
+    locator = await page.locator('.notification-close-button', {timeout: 1000}).first()
+  }
 
   console.log('Graph loaded for ' + path)
 }

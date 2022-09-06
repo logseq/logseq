@@ -17,6 +17,7 @@
             [frontend.spec :as spec]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.fs :as util-fs]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [shadow.resource :as rc]
@@ -24,8 +25,10 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser :as graph-parser]
             [electron.ipc :as ipc]
+            [cljs-bean.core :as bean]
             [clojure.core.async :as async]
-            [frontend.encrypt :as encrypt]))
+            [frontend.encrypt :as encrypt]
+            [frontend.mobile.util :as mobile-util]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -61,7 +64,7 @@
                               "org" (rc/inline "contents.org")
                               "markdown" (rc/inline "contents.md")
                               "")]
-        (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" pages-dir))
+        (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir pages-dir))
                 file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
           (when-not file-exists?
             (file-handler/reset-file! repo-url path default-content)))))))
@@ -73,7 +76,7 @@
         path (str config/app-name "/" config/custom-css-file)
         file-path (str "/" path)
         default-content ""]
-    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
+    (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
         (file-handler/reset-file! repo-url path default-content)))))
@@ -84,7 +87,7 @@
   (let [repo-dir (config/get-repo-dir repo-url)
         path (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")
         file-path (str "/" path)]
-    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-pages-directory)))
+    (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-pages-directory)))
             _file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
       (file-handler/reset-file! repo-url path content))))
 
@@ -110,14 +113,14 @@
 
                     :else
                     default-content)
-          path (str (config/get-journals-directory) "/" file-name "."
-                    (config/get-file-extension format))
+          path (util/safe-path-join (config/get-journals-directory) (str file-name "."
+                                                                         (config/get-file-extension format)))
           file-path (str "/" path)
           page-exists? (db/entity repo-url [:block/name (util/page-name-sanity-lc title)])
           empty-blocks? (db/page-empty? repo-url (util/page-name-sanity-lc title))]
       (when (or empty-blocks? (not page-exists?))
         (p/let [_ (nfs/check-directory-permission! repo-url)
-                _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
+                _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-journals-directory)))
                 file-exists? (fs/file-exists? repo-dir file-path)]
           (when-not file-exists?
             (p/let [_ (file-handler/reset-file! repo-url path content)]
@@ -133,9 +136,9 @@
   ([repo-url encrypted?]
    (spec/validate :repos/url repo-url)
    (let [repo-dir (config/get-repo-dir repo-url)]
-     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
-             _ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name "/" config/recycle-dir))
-             _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
+     (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
+             _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (str config/app-name "/" config/recycle-dir)))
+             _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-journals-directory)))
              _ (file-handler/create-metadata-file repo-url encrypted?)
              _ (create-config-file-if-not-exists repo-url)
              _ (create-contents-file repo-url)
@@ -183,14 +186,15 @@
     (load-pages-metadata! repo file-paths files force?)))
 
 (defn- parse-and-load-file!
-  [repo-url file new-graph?]
+  [repo-url file {:keys [new-graph? verbose]}]
   (try
     (file-handler/alter-file repo-url
                              (:file/path file)
                              (:file/content file)
-                             {:new-graph? new-graph?
-                              :re-render-root? false
-                              :from-disk? true})
+                             (merge {:new-graph? new-graph?
+                                     :re-render-root? false
+                                     :from-disk? true}
+                                    (when (some? verbose) {:verbose verbose})))
     (catch :default e
       (state/set-parsing-state! (fn [m]
                                   (update m :failed-parsing-files conj [(:file/path file) e])))))
@@ -215,7 +219,6 @@
 (defn- parse-files-and-create-default-files-inner!
   [repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts]
   (let [supported-files (graph-parser/filter-files files)
-        new-graph? (:new-graph? opts)
         delete-data (->> (concat delete-files delete-blocks)
                          (remove nil?))
         chan (async/to-chan! supported-files)
@@ -229,7 +232,7 @@
         (doseq [file supported-files]
           (state/set-parsing-state! (fn [m]
                                       (assoc m :current-parsing-file (:file/path file))))
-          (parse-and-load-file! repo-url file new-graph?))
+          (parse-and-load-file! repo-url file (select-keys opts [:new-graph? :verbose])))
         (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan))
       (async/go-loop []
         (if-let [file (async/<! chan)]
@@ -237,7 +240,7 @@
             (state/set-parsing-state! (fn [m]
                                         (assoc m :current-parsing-file (:file/path file))))
             (async/<! (async/timeout 10))
-            (parse-and-load-file! repo-url file new-graph?)
+            (parse-and-load-file! repo-url file (select-keys opts [:new-graph? :verbose]))
             (recur))
           (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan))))
     graph-added-chan))
@@ -277,10 +280,12 @@
   (spec/validate :repos/url repo-url)
   (route-handler/redirect-to-home!)
   (state/set-parsing-state! {:graph-loading? true})
-  (let [config (or (state/get-config repo-url)
-                   (when-let [content (some-> (first (filter #(= (config/get-config-path repo-url) (:file/path %)) nfs-files))
+  (let [config (or (when-let [content (some-> (first (filter #(= (config/get-config-path repo-url) (:file/path %)) nfs-files))
                                               :file/content)]
-                     (common-handler/read-config content)))
+                     (common-handler/read-config content))
+                   (state/get-config repo-url))
+        ;; NOTE: Use config while parsing. Make sure it's the corrent journal title format
+        _ (state/set-config! repo-url config)
         relate-path-fn (fn [m k]
                          (some-> (get m k)
                                  (string/replace (js/decodeURI (config/get-local-dir repo-url)) "")))
@@ -386,7 +391,7 @@
   [repo]
   (p/let [_ (state/set-db-restoring! true)
           _ (db/restore-graph! repo)]
-         (file-handler/restore-config! repo false)
+         (file-handler/restore-config! repo)
          ;; Don't have to unlisten the old listerner, as it will be destroyed with the conn
          (db/listen-and-persist! repo)
          (ui-handler/add-style-if-exists!)
@@ -448,6 +453,62 @@
   [graph]
   (p/let [_ (ipc/ipc "broadcastPersistGraph" graph)] ;; invoke for chaining promise
     nil))
+
+(defn get-repos
+  []
+  (p/let [nfs-dbs (db-persist/get-all-graphs)
+          nfs-dbs (map (fn [db]
+                         {:url db
+                          :root (config/get-local-dir db)
+                          :nfs? true}) nfs-dbs)
+          nfs-dbs (and (seq nfs-dbs)
+                       (cond (util/electron?)
+                             (ipc/ipc :inflateGraphsInfo nfs-dbs)
+
+                             (mobile-util/native-platform?)
+                             (util-fs/inflate-graphs-info nfs-dbs)
+
+                             :else
+                             nil))
+          nfs-dbs (seq (bean/->clj nfs-dbs))]
+    (cond
+      (seq nfs-dbs)
+      nfs-dbs
+
+      :else
+      [{:url config/local-repo
+        :example? true}])))
+
+(defn combine-local-&-remote-graphs
+  [local-repos remote-repos]
+  (when-let [repos' (seq (concat (map #(if-let [sync-meta (seq (:sync-meta %))]
+                                         (assoc % :GraphUUID (second sync-meta)) %)
+                                      local-repos)
+                                 (some->> remote-repos
+                                          (map #(assoc % :remote? true)))))]
+    (let [repos' (group-by :GraphUUID repos')
+          repos'' (mapcat (fn [[k vs]]
+                            (if-not (nil? k)
+                              [(merge (first vs) (second vs))] vs))
+                          repos')]
+      (sort-by (fn [repo]
+                 (let [graph-name (or (:GraphName repo)
+                                      (last (string/split (:root repo) #"/")))]
+                   [(:remote? repo) (string/lower-case graph-name)])) repos''))))
+
+(defn get-detail-graph-info
+  [url]
+  (when-let [graphs (seq (and url (combine-local-&-remote-graphs
+                                    (state/get-repos)
+                                    (state/get-remote-repos))))]
+    (first (filter #(when-let [url' (:url %)]
+                      (= url url')) graphs))))
+
+(defn refresh-repos!
+  []
+  (p/let [repos (get-repos)]
+    (state/set-repos! repos)
+    repos))
 
 (defn graph-ready!
   "Call electron that the graph is loaded."

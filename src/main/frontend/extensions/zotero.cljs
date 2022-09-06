@@ -107,14 +107,14 @@
          :on-click
          (fn []
            (set! (.-scrollTop (.-parentNode (gdom/getElement "zotero-search"))) 0)
-           (go (<! (search-fn prev-search-term prev-page))))))
+           (search-fn prev-search-term prev-page))))
       (when-not (str/blank? next-page)
         (ui/button
          "next"
          :on-click
          (fn []
            (set! (.-scrollTop (.-parentNode (gdom/getElement "zotero-search"))) 0)
-           (go (<! (search-fn prev-search-term next-page))))))]]))
+           (search-fn prev-search-term next-page))))]]))
 
 (rum/defcs user-or-group-setting <
   (rum/local (setting/setting :type-id) ::type-id)

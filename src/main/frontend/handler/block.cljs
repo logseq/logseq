@@ -21,58 +21,6 @@
   [repo page-id]
   (>= (db/get-page-blocks-count repo page-id) db-model/initial-blocks-length))
 
-(defn get-block-refs-with-children
-  [block]
-  (->>
-   (tree-seq :block/refs
-             :block/children
-             block)
-   (mapcat :block/refs)
-   (distinct)))
-
-(defn filter-blocks
-  [repo ref-blocks filters group-by-page?]
-  (let [ref-pages-ids (->> (if group-by-page?
-                             (mapcat last ref-blocks)
-                             ref-blocks)
-                           (mapcat (fn [b] (get-block-refs-with-children b)))
-                           (concat (when group-by-page? (map first ref-blocks)))
-                           (distinct)
-                           (map :db/id)
-                           (remove nil?))
-        ref-pages (db/pull-many repo '[:db/id :block/name] ref-pages-ids)
-        ref-pages (zipmap (map :block/name ref-pages) (map :db/id ref-pages))
-        exclude-ids (->> (map (fn [page] (get ref-pages page)) (get filters false))
-                         (remove nil?)
-                         (set))
-        include-ids (->> (map (fn [page] (get ref-pages page)) (get filters true))
-                         (remove nil?)
-                         (set))]
-    (if (empty? filters)
-      ref-blocks
-      (let [filter-f (fn [ref-blocks]
-                       (cond->> ref-blocks
-                         (seq exclude-ids)
-                         (remove (fn [block]
-                                   (let [ids (set (concat (map :db/id (get-block-refs-with-children block))
-                                                          [(:db/id (:block/page block))]))]
-                                     (seq (set/intersection exclude-ids ids)))))
-
-                         (seq include-ids)
-                         (remove (fn [block]
-                                   (let [page-block-id (:db/id (:block/page block))
-                                         ids (set (map :db/id (get-block-refs-with-children block)))]
-                                     (if (and (contains? include-ids page-block-id)
-                                              (= 1 (count include-ids)))
-                                       (not= page-block-id (first include-ids))
-                                       (empty? (set/intersection include-ids (set (conj ids page-block-id))))))))))]
-        (if group-by-page?
-          (->> (map (fn [[p ref-blocks]]
-                      [p (filter-f ref-blocks)]) ref-blocks)
-               (remove #(empty? (second %))))
-          (->> (filter-f ref-blocks)
-               (remove nil?)))))))
-
 ;; TODO: reduced version
 (defn- walk-block
   [block check? transform]
@@ -138,8 +86,8 @@
 (defn indent-outdent-block!
   [block direction]
   (outliner-tx/transact!
-   {:outliner-op :move-blocks}
-   (outliner-core/indent-outdent-blocks! [block] (= direction :right))))
+    {:outliner-op :move-blocks}
+    (outliner-core/indent-outdent-blocks! [block] (= direction :right))))
 
 (defn select-block!
   [block-uuid]
@@ -298,3 +246,48 @@
   (reset! *show-left-menu? false)
   (reset! *show-right-menu? false)
   (reset! *swipe nil))
+
+(defn get-blocks-refed-pages
+  [aliases [block & children]]
+  (let [children-refs (mapcat :block/refs children)
+        refs (->>
+              (:block/path-refs block)
+              (concat children-refs)
+              (remove #(aliases (:db/id %))))]
+    (keep (fn [ref]
+            (when (:block/name ref)
+              {:db/id (:db/id ref)
+               :block/name (:block/name ref)
+               :block/original-name (:block/original-name ref)})) refs)))
+
+(defn filter-blocks
+  [ref-blocks filters]
+  (if (empty? filters)
+    ref-blocks
+    (let [exclude-ids (->> (keep (fn [page] (:db/id (db/entity [:block/name (util/page-name-sanity-lc page)]))) (get filters false))
+                           (set))
+          include-ids (->> (keep (fn [page] (:db/id (db/entity [:block/name (util/page-name-sanity-lc page)]))) (get filters true))
+                           (set))]
+      (cond->> ref-blocks
+        (seq exclude-ids)
+        (remove (fn [block]
+                  (let [ids (set (map :db/id (:block/path-refs block)))]
+                    (seq (set/intersection exclude-ids ids)))))
+
+        (seq include-ids)
+        (filter (fn [block]
+                  (let [ids (set (map :db/id (:block/path-refs block)))]
+                    (set/subset? include-ids ids))))))))
+
+(defn get-filtered-ref-blocks-with-parents
+  [all-ref-blocks filtered-ref-blocks]
+  (when (seq filtered-ref-blocks)
+    (let [id->block (zipmap (map :db/id all-ref-blocks) all-ref-blocks)
+          get-parents (fn [block]
+                        (loop [block block
+                               result [block]]
+                          (let [parent (id->block (:db/id (:block/parent block)))]
+                            (if (and parent (not= (:db/id parent) (:db/id block)))
+                              (recur parent (conj result parent))
+                              result))))]
+      (distinct (mapcat get-parents filtered-ref-blocks)))))

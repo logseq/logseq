@@ -6,6 +6,23 @@
             [goog.string :as gstring]
             [goog.string.format]))
 
+(def colons "Property delimiter for markdown mode" "::")
+
+(defn ->block-content
+  "Creates a block content string from properties map"
+  [properties]
+  (->> properties
+       (map #(str (name (key %)) (str colons " ") (val %)))
+       (string/join "\n")))
+
+(defn property-value-from-content
+  "Extracts full property value from block content"
+  [property content]
+  (second (re-find (re-pattern (str property colons "\\s+(.*)"))
+                   content)))
+
+(def valid-property-name? gp-util/valid-edn-keyword?)
+
 (defn properties-ast?
   [block]
   (and
@@ -33,7 +50,9 @@
 (defn editable-built-in-properties
   "Properties used by logseq that user can edit"
   []
-  (into #{:title :icon :template :template-including-parent :public :filters :exclude-from-graph-view}
+  (into #{:title :icon :template :template-including-parent :public :filters :exclude-from-graph-view
+          ;; org-mode only
+          :macro :filetags}
         editable-linkable-built-in-properties))
 
 (defn hidden-built-in-properties
@@ -43,7 +62,7 @@
    #{:id :custom-id :background-color :background_color :heading :collapsed
      :created-at :updated-at :last-modified-at :created_at :last_modified_at
      :query-table :query-properties :query-sort-by :query-sort-desc :ls-type
-     :hl-type :hl-page :hl-stamp}
+     :hl-type :hl-page :hl-stamp :logseq.macro-name :logseq.macro-arguments}
    (set (map keyword markers))
    @built-in-extended-properties))
 
@@ -56,7 +75,7 @@
   [content]
   (when content
     (and (string/includes? content properties-start)
-         (gp-util/safe-re-find properties-end-pattern content))))
+         (re-find properties-end-pattern content))))
 
 (defn ->new-properties
   "New syntax: key:: value"
@@ -75,7 +94,7 @@
                                            compare-k (keyword (string/lower-case k))
                                            k (if (contains? #{:id :custom_id :custom-id} compare-k) "id" k)
                                            k (if (contains? #{:last-modified-at} compare-k) "updated-at" k)]
-                                       (str k ":: " (string/trim v)))
+                                       (str k colons " " (string/trim v)))
                                      text)))))
               after (subvec lines (inc end-idx))
               lines (concat before middle after)]

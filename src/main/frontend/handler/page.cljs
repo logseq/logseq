@@ -36,6 +36,8 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.format.block :as block]
             [goog.functions :refer [debounce]]))
 
@@ -62,10 +64,10 @@
          (:file/path (:block/file page)))))))
 
 (defn- build-title [page]
-  (let [original-name (:block/original-name page)]
-    (if (string/includes? original-name ",")
-      (util/format "\"%s\"" original-name)
-      original-name)))
+  ;; Don't wrap `\"` anymore, as tiitle property is not effected by `,` now
+  ;; The previous extract behavior isn't unwrapping the `'"` either. So no need
+  ;; to maintain the compatibility.
+  (:block/original-name page))
 
 (defn default-properties-block
   ([title format page]
@@ -80,6 +82,7 @@
                                                       (state/get-date-formatter)
                                                       (state/get-config))]
      {:block/uuid (db/new-block-id)
+      :block/pre-block? true
       :block/properties ps
       :block/properties-order (keys ps)
       :block/refs refs
@@ -191,6 +194,7 @@
     (string/join "/" parts)))
 
 (defn rename-file!
+  "emit file-rename events to :file/rename-event-chan"
   [file new-name ok-handler]
   (let [repo (state/get-current-repo)
         file (db/pull (:db/id file))
@@ -200,7 +204,10 @@
     (db/transact! repo [{:db/id (:db/id file)
                          :file/path new-path}])
     (->
-     (p/let [_ (fs/rename! repo old-path new-path)]
+     (p/let [_ (state/offer-file-rename-event-chan! {:repo repo
+                                                     :old-path old-path
+                                                     :new-path new-path})
+             _ (fs/rename! repo old-path new-path)]
        (ok-handler))
      (p/catch (fn [error]
                 (println "file rename failed: " error))))))
@@ -209,7 +216,7 @@
   "Unsanitized names"
   [content old-name new-name]
   (let [[original-old-name original-new-name] (map string/trim [old-name new-name])
-        [old-ref new-ref] (map #(util/format "[[%s]]" %) [old-name new-name])
+        [old-ref new-ref] (map page-ref/->page-ref [old-name new-name])
         [old-name new-name] (map #(if (string/includes? % "/")
                                     (string/replace % "/" ".")
                                     %)
@@ -239,15 +246,20 @@
         new-tag (if (re-find #"[\s\t]+" new-name)
                   (util/format "#[[%s]]" new-name)
                   (str "#" new-name))]
-    (-> (util/replace-ignore-case content (str "^" old-tag "\\b") new-tag)
-        (util/replace-ignore-case (str " " old-tag " ") (str " " new-tag " "))
-        (util/replace-ignore-case (str " " old-tag "$") (str " " new-tag)))))
+    ;; hash tag parsing rules https://github.com/logseq/mldoc/blob/701243eaf9b4157348f235670718f6ad19ebe7f8/test/test_markdown.ml#L631 
+    ;; Safari doesn't support look behind, don't use
+    ;; TODO: parse via mldoc
+    (string/replace content 
+                    (re-pattern (str "(?i)(^|\\s)(" (util/escape-regex-chars old-tag) ")(?=[,\\.]*($|\\s))"))
+                    ;;    case_insense^    ^lhs   ^_grp2                       look_ahead^         ^_grp3
+                    (fn [[_match lhs _grp2 _grp3]]
+                      (str lhs new-tag)))))
 
 (defn- replace-property-ref!
   [content old-name new-name]
   (let [new-name (keyword (string/replace (string/lower-case new-name) #"\s+" "-"))
-        old-property (str old-name "::")
-        new-property (str (name new-name) "::")]
+        old-property (str old-name gp-property/colons)
+        new-property (str (name new-name) gp-property/colons)]
     (util/replace-ignore-case content old-property new-property)))
 
 (defn- replace-old-page!
@@ -305,10 +317,12 @@
 (defn unfavorite-page!
   [page-name]
   (when-not (string/blank? page-name)
-    (let [favorites (->> (:favorites (state/get-config))
-                         (remove #(= (string/lower-case %) (string/lower-case page-name)))
-                         (vec))]
-      (config-handler/set-config! :favorites favorites))))
+    (let [old-favorites (:favorites (state/get-config))
+          new-favorites (->> old-favorites
+                             (remove #(= (string/lower-case %) (string/lower-case page-name)))
+                             (vec))]
+      (when-not (= old-favorites new-favorites)
+        (config-handler/set-config! :favorites new-favorites)))))
 
 (defn toggle-favorite! []
   ;; NOTE: in journals or settings, current-page is nil
@@ -367,9 +381,9 @@
   ;; update all pages which have references to this page
   (let [repo (state/get-current-repo)
         to-page (db/entity [:block/name (util/page-name-sanity-lc new-name)])
-        blocks   (db/get-page-referenced-blocks-no-cache (:db/id page))
-        page-ids (->> (map :block/page blocks)
-                      (remove nil?)
+        blocks (:block/_refs (db/entity (:db/id page)))
+        page-ids (->> (map (fn [b]
+                             {:db/id (:db/id (:block/page b))}) blocks)
                       (set))
         tx       (->> (map (fn [{:block/keys [uuid content properties] :as block}]
                              (let [content    (let [content' (replace-old-page! content old-original-name new-name)]
@@ -383,9 +397,11 @@
                                   {:block/uuid       uuid
                                    :block/content    content
                                    :block/properties properties
-                                   :block/properties-order (map first properties)
-                                   :block/refs (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))
-                                   :block/path-refs (rename-update-block-refs! (:block/path-refs block) (:db/id page) (:db/id to-page))})))) blocks)
+                                   :block/properties-order (when (seq properties)
+                                                             (map first properties))
+                                   :block/refs (->> (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))
+                                                    (map :db/id)
+                                                    (set))})))) blocks)
                       (remove nil?))]
     (db/transact! repo tx)
     (doseq [page-id page-ids]
@@ -454,8 +470,9 @@
   "Unsanitized names only"
   [old-ns-name new-ns-name]
   (let [repo            (state/get-current-repo)
-        nested-page-str (util/format "[[%s]]" (util/page-name-sanity-lc old-ns-name))
-        ns-prefix       (util/format "[[%s/" (util/page-name-sanity-lc old-ns-name))
+        nested-page-str (page-ref/->page-ref (util/page-name-sanity-lc old-ns-name))
+        ns-prefix-format-str (str page-ref/left-brackets "%s/")
+        ns-prefix       (util/format ns-prefix-format-str (util/page-name-sanity-lc old-ns-name))
         nested-pages    (db/get-pages-by-name-partition repo nested-page-str)
         nested-pages-ns (db/get-pages-by-name-partition repo ns-prefix)]
     (when nested-pages
@@ -464,8 +481,8 @@
         (let [old-page-title (or original-name name)
               new-page-title (string/replace
                               old-page-title
-                              (util/format "[[%s]]" old-ns-name)
-                              (util/format "[[%s]]" new-ns-name))]
+                              (page-ref/->page-ref old-ns-name)
+                              (page-ref/->page-ref new-ns-name))]
           (when (and old-page-title new-page-title)
             (p/do!
              (rename-page-aux old-page-title new-page-title false)
@@ -476,8 +493,8 @@
         (let [old-page-title (or original-name name)
               new-page-title (string/replace
                               old-page-title
-                              (util/format "[[%s/" old-ns-name)
-                              (util/format "[[%s/" new-ns-name))]
+                              (util/format ns-prefix-format-str old-ns-name)
+                              (util/format ns-prefix-format-str new-ns-name))]
           (when (and old-page-title new-page-title)
             (p/do!
              (rename-page-aux old-page-title new-page-title false)
@@ -526,7 +543,6 @@
                            (cond->
                             {:db/id id
                              :block/page {:db/id to-id}
-                             :block/path-refs (rename-update-block-refs! (:block/path-refs block) from-id to-id)
                              :block/refs (rename-update-block-refs! (:block/refs block) from-id to-id)}
 
                              (and from-first-child (= id (:db/id from-first-child)))
@@ -549,31 +565,32 @@
 
 (defn rename!
   "Accepts unsanitized page names"
-  [old-name new-name]
-  (let [repo          (state/get-current-repo)
-        old-name      (string/trim old-name)
-        new-name      (string/trim new-name)
-        old-page-name (util/page-name-sanity-lc old-name)
-        new-page-name (util/page-name-sanity-lc new-name)
-        name-changed? (not= old-name new-name)]
-    (if (and old-name
-             new-name
-             (not (string/blank? new-name))
-             name-changed?)
-      (do
-        (cond
-          (= old-page-name new-page-name)
-          (rename-page-aux old-name new-name true)
+  ([old-name new-name] (rename! old-name new-name true))
+  ([old-name new-name redirect?]
+    (let [repo          (state/get-current-repo)
+          old-name      (string/trim old-name)
+          new-name      (string/trim new-name)
+          old-page-name (util/page-name-sanity-lc old-name)
+          new-page-name (util/page-name-sanity-lc new-name)
+          name-changed? (not= old-name new-name)]
+      (if (and old-name
+              new-name
+              (not (string/blank? new-name))
+              name-changed?)
+        (do
+          (cond
+            (= old-page-name new-page-name)
+            (rename-page-aux old-name new-name redirect?)
 
-          (db/pull [:block/name new-page-name])
-          (merge-pages! old-page-name new-page-name)
+            (db/pull [:block/name new-page-name])
+            (merge-pages! old-page-name new-page-name)
 
-          :else
-          (rename-namespace-pages! repo old-name new-name))
-        (rename-nested-pages old-name new-name))
-      (when (string/blank? new-name)
-        (notification/show! "Please use a valid name, empty name is not allowed!" :error)))
-    (ui-handler/re-render-root!)))
+            :else
+            (rename-namespace-pages! repo old-name new-name))
+          (rename-nested-pages old-name new-name))
+        (when (string/blank? new-name)
+          (notification/show! "Please use a valid name, empty name is not allowed!" :error)))
+      (ui-handler/re-render-root!))))
 
 (defn- split-col-by-element
   [col element]
@@ -637,7 +654,7 @@
           (util/format "[[file:%s][%s]]"
                        (util/get-relative-path edit-block-file-path ref-file-path)
                        page)))
-      (util/format "[[%s]]" page))))
+      (page-ref/->page-ref page))))
 
 (defn init-commands!
   []
@@ -655,11 +672,13 @@
           (contains? (set templates) (string/lower-case title)))))))
 
 (defn ls-dir-files!
-  [ok-handler]
-  (web-nfs/ls-dir-files-with-handler!
-   (fn []
-     (init-commands!)
-     (when ok-handler (ok-handler)))))
+  ([ok-handler] (ls-dir-files! ok-handler nil))
+  ([ok-handler opts]
+   (web-nfs/ls-dir-files-with-handler!
+     (fn [e]
+       (init-commands!)
+       (when ok-handler (ok-handler e)))
+     opts)))
 
 (defn get-all-pages
   [repo]
@@ -690,7 +709,7 @@
   (if (state/org-mode-file-link? (state/get-current-repo))
     (let [page-ref-text (get-page-ref-text q)
           value (gobj/get input "value")
-          old-page-ref (util/format "[[%s]]" q)
+          old-page-ref (page-ref/->page-ref q)
           new-value (string/replace value
                                     old-page-ref
                                     page-ref-text)]
@@ -718,13 +737,13 @@
     (if hashtag?
       (fn [chosen _click?]
         (state/clear-editor-action!)
-        (let [wrapped? (= "[[" (gp-util/safe-subs edit-content (- pos 2) pos))
+        (let [wrapped? (= page-ref/left-brackets (gp-util/safe-subs edit-content (- pos 2) pos))
               prefix (str (t :new-page) ": ")
               chosen (if (string/starts-with? chosen prefix) ;; FIXME: What if a page named "New page: XXX"?
                        (string/replace-first chosen prefix "")
                        chosen)
               chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
-                       (util/format "[[%s]]" chosen)
+                       (page-ref/->page-ref chosen)
                        chosen)
               q (if @editor-handler/*selected-text "" q)
               [last-pattern forward-pos] (if wrapped?
@@ -732,12 +751,12 @@
                                            (if (= \# (first q))
                                              [(subs q 1) 1]
                                              [q 2]))
-              last-pattern (str "#" (when wrapped? "[[") last-pattern)]
+              last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)]
           (editor-handler/insert-command! id
-                                          (str "#" (when wrapped? "[[") chosen)
+                                          (str "#" (when wrapped? page-ref/left-brackets) chosen)
                                           format
                                           {:last-pattern last-pattern
-                                           :end-pattern (when wrapped? "]]")
+                                           :end-pattern (when wrapped? page-ref/right-brackets)
                                            :forward-pos forward-pos})))
       (fn [chosen _click?]
         (state/clear-editor-action!)
@@ -749,9 +768,9 @@
           (editor-handler/insert-command! id
                                           page-ref-text
                                           format
-                                          {:last-pattern (str "[[" (if @editor-handler/*selected-text "" q))
-                                           :end-pattern "]]"
-                                           :postfix-fn   (fn [s] (util/replace-first "]]" s ""))
+                                          {:last-pattern (str page-ref/left-brackets (if @editor-handler/*selected-text "" q))
+                                           :end-pattern page-ref/right-brackets
+                                           :postfix-fn   (fn [s] (util/replace-first page-ref/right-brackets s ""))
                                            :forward-pos 3}))))))
 
 (defn create-today-journal!

@@ -374,6 +374,14 @@ export class Postmate {
       this.frame.src = url
     })
   }
+
+
+  destroy() {
+    if (process.env.NODE_ENV !== 'production') {
+      log('Postmate: Destroying Postmate instance')
+    }
+    this.frame.parentNode.removeChild(this.frame)
+  }
 }
 
 /**

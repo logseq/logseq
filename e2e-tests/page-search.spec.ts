@@ -38,7 +38,7 @@ import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastBlo
   await page.fill('[placeholder="Search or create page"]', 'Einführung in die Allgemeine Sprachwissenschaft' + rand)
 
   await page.waitForTimeout(500)
-  const results = await page.$$('#ui__ac-inner .block')
+  const results = await page.$$('#ui__ac-inner>div')
   expect(results.length).toEqual(3) // 2 blocks + 1 page
   await page.keyboard.press("Escape")
 })
@@ -65,10 +65,9 @@ async function alias_test(page: Page, page_name: string, search_kws: string[]) {
   await page.keyboard.press(hotkeyOpenLink)
 
   await lastBlock(page)
-  await page.waitForTimeout(500)
 
   // build target Page with alias
-  // the target page will contains the content in 
+  // the target page will contains the content in
   //   alias_test_content_1,
   //   alias_test_content_2, and
   //   alias_test_content_3 sequentialy, to validate the target page state
@@ -76,8 +75,9 @@ async function alias_test(page: Page, page_name: string, search_kws: string[]) {
   await page.press('textarea >> nth=0', 'Enter') // Enter for finishing selection
   await page.press('textarea >> nth=0', 'Enter') // double Enter for exit property editing
   await page.press('textarea >> nth=0', 'Enter') // double Enter for exit property editing
-  await page.waitForTimeout(500)
+  await lastBlock(page)
   await page.type('textarea >> nth=0', alias_test_content_1)
+  await lastBlock(page)
   await page.keyboard.press(hotkeyBack)
 
   await page.waitForTimeout(100) // await navigation
@@ -111,6 +111,7 @@ async function alias_test(page: Page, page_name: string, search_kws: string[]) {
   await page.keyboard.press(hotkeyBack)
 
   // clicking opening test
+  await newBlock(page)
   await page.waitForSelector('.page-blocks-inner .ls-block .page-ref >> nth=-1')
   await page.click('.page-blocks-inner .ls-block .page-ref >> nth=-1')
   await lastBlock(page)
@@ -127,7 +128,7 @@ async function alias_test(page: Page, page_name: string, search_kws: string[]) {
     await page.fill('[placeholder="Search or create page"]', kw_name)
     await page.waitForTimeout(500)
 
-    const results = await page.$$('#ui__ac-inner .block')
+    const results = await page.$$('#ui__ac-inner>div')
     expect(results.length).toEqual(3) // page + block + alias property
 
     // test search results

@@ -12,7 +12,7 @@
  :preferred-workflow :now
 
  ;; The app will ignore those directories or files.
- ;; E.g. "/archived" "/test.md"
+ ;; E.g. :hidden ["/archived" "/test.md" "../assets/archived"]
  :hidden []
 
  ;; When creating the new journal page, the app will use your template if there is one.
@@ -26,6 +26,10 @@
 
  ;; Enable Block timestamp
  :feature/enable-block-timestamps? false
+
+ ;; Enable remove accents when searching.
+ ;; After toggle this option, please remember to rebuild your search index by press (cmd+c cmd+s).
+ :feature/enable-search-remove-accents? true
 
  ;; Disable Built-in Scheduled and deadline Query
  ;; :feature/disable-scheduled-and-deadline-query? true
@@ -115,6 +119,10 @@
  ;; Set this to `true` so that it's the same behaviour as the usual outliner mode.
  :shortcut/doc-mode-enter-for-new-block? false
 
+ ;; Block content larger than `block/content-max-length` will not be searchable
+ ;; or editable for performance.
+ :block/content-max-length 5000
+
  ;; Whether to show command doc on hover
  :ui/show-command-doc? true
 
@@ -158,7 +166,7 @@
             :where
             [?h :block/marker ?marker]
             [(contains? #{"NOW" "LATER" "TODO"} ?marker)]
-            [?h :block/ref-pages ?p]
+            [?h :block/page ?p]
             [?p :block/journal? true]
             [?p :block/journal-day ?d]
             [(> ?d ?start)]
@@ -166,8 +174,13 @@
     :inputs [:today :7d-after]
     :collapsed? false}]}
 
- ;; Add your own commands to speedup.
- ;; E.g. [["js" "Javascript"]]
+ ;; Add your own commands to slash menu to speedup.
+ ;; E.g.
+ ;; :commands
+ ;; [
+ ;; ["js" "Javascript"]
+ ;; ["md" "Markdown"]
+ ;; ]
  :commands
  []
 
@@ -209,15 +222,20 @@
  ;; :srs/initial-interval 4
 
  ;; hide specific properties for blocks
- ;; E.g. #{:created-at :updated-at}
+ ;; E.g. :block-hidden-properties #{:created-at :updated-at}
  ;; :block-hidden-properties #{}
 
  ;; Enable all your properties to have corresponding pages
  :property-pages/enabled? true
 
  ;; Properties to exclude from having property pages
- ;; E.g. #{:duration :author}
+ ;; E.g.:property-pages/excludelist #{:duration :author}
  ;; :property-pages/excludelist
+
+ ;; Enables property values to contain a mix of tags, page-refs, special
+ ;; punctuation and free-form text.
+ ;; Re-index current graph for config to take effect
+ ;; :rich-property-values? true
 
  ;; logbook setup
  ;; :logbook/settings
@@ -252,4 +270,20 @@
  ;; :quick-capture-templates
  ;; {:text "[[quick capture]] **{time}**: {text} from {url}"
  ;;  :media "[[quick capture]] **{time}**: {url}"}
+
+ ;; File sync options
+ ;; Ignore these files when syncing, regexp is supported.
+ ;; :file-sync/ignore-files []
+
+ ;; dwim (do what I mean) for Enter key when editing.
+ ;; Context-awareness of Enter key makes editing more easily
+ ; :dwim/settings {
+ ;   :admonition&src?  true
+ ;   :markup?          false
+ ;   :block-ref?       true
+ ;   :page-ref?        true
+ ;   :properties?      true
+ ;   :list?            true
+ ; }
+
  }

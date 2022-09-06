@@ -21,7 +21,9 @@
             [electron.plugin :as plugin]
             [electron.window :as win]
             [electron.file-sync-rsapi :as rsapi]
-            [electron.backup-file :as backup-file]))
+            [electron.backup-file :as backup-file]
+            [cljs.reader :as reader]
+            [electron.find-in-page :as find]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -210,6 +212,30 @@
 (defmethod handle :getGraphs [_window [_]]
   (get-graphs))
 
+(defn- read-txid-info!
+  [root]
+  (try
+    (let [txid-path (.join path root "logseq/graphs-txid.edn")]
+      (when (fs/existsSync txid-path)
+        (when-let [sync-meta (and (not (string/blank? root))
+                                  (.toString (.readFileSync fs txid-path)))]
+          (reader/read-string sync-meta))))
+    (catch js/Error _e
+      (js/console.debug "[read txid meta] #" root (.-message _e)))))
+
+(defmethod handle :inflateGraphsInfo [_win [_ graphs]]
+  (if (seq graphs)
+    (for [{:keys [root] :as graph} graphs]
+      (if-let [sync-meta (read-txid-info! root)]
+        (assoc graph
+               :sync-meta sync-meta
+               :GraphUUID (second sync-meta))
+        graph))
+    []))
+
+(defmethod handle :readGraphTxIdInfo [_win [_ root]]
+  (read-txid-info! root))
+
 (defn- get-graph-path
   [graph-name]
   (when graph-name
@@ -289,6 +315,9 @@
 (defmethod handle :openDialog [^js _window _messages]
   (open-dir-dialog))
 
+(defmethod handle :copyDirectory [^js _window [_ src dest opts]]
+  (fs-extra/copy src dest opts))
+
 (defmethod handle :getLogseqDotDirRoot []
   (utils/get-ls-dotdir-root))
 
@@ -303,6 +332,13 @@
 
 (defmethod handle :getUserDefaultPlugins []
   (utils/get-ls-default-plugins))
+
+(defmethod handle :validateUserExternalPlugins [_win [_ urls]]
+  (zipmap urls (for [url urls]
+                 (try
+                   (and (fs-extra/pathExistsSync url)
+                        (fs-extra/pathExistsSync (path/join url "package.json")))
+                   (catch js/Error _e false)))))
 
 (defmethod handle :relaunchApp []
   (.relaunch app) (.quit app))
@@ -482,6 +518,9 @@
 ;; file-sync-rs-apis ;;
 ;;;;;;;;;;;;;;;;;;;;;;;
 
+(defmethod handle :key-gen [_]
+  (rsapi/key-gen))
+
 (defmethod handle :set-env [_ args]
   (apply rsapi/set-env (rest args)))
 
@@ -500,6 +539,9 @@
 (defmethod handle :update-local-files [_ args]
   (apply rsapi/update-local-files (rest args)))
 
+(defmethod handle :download-version-files [_ args]
+  (apply rsapi/download-version-files (rest args)))
+
 (defmethod handle :delete-remote-files [_ args]
   (apply rsapi/delete-remote-files (rest args)))
 
@@ -508,6 +550,18 @@
 
 (defmethod handle :update-remote-files [_ args]
   (apply rsapi/update-remote-files (rest args)))
+
+(defmethod handle :decrypt-fnames [_ args]
+  (apply rsapi/decrypt-fnames (rest args)))
+
+(defmethod handle :encrypt-fnames [_ args]
+  (apply rsapi/encrypt-fnames (rest args)))
+
+(defmethod handle :encrypt-with-passphrase [_ args]
+  (apply rsapi/encrypt-with-passphrase (rest args)))
+
+(defmethod handle :decrypt-with-passphrase [_ args]
+  (apply rsapi/decrypt-with-passphrase (rest args)))
 
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))
@@ -535,6 +589,12 @@
   (when-let [f (:window/once-persist-done @state/state)]
     (f)
     (state/set-state! :window/once-persist-done nil)))
+
+(defmethod handle :find-in-page [^js win [_ search option]]
+  (find/find! win search (bean/->js option)))
+
+(defmethod handle :clear-find-in-page [^js win [_]]
+  (find/clear! win))
 
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]

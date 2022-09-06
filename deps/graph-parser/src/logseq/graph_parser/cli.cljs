@@ -44,7 +44,8 @@ TODO: Fail fast when process exits 1"
 
 (defn- parse-files
   [conn files {:keys [config] :as options}]
-  (let [extract-options (merge {:date-formatter (gp-config/get-date-formatter config)}
+  (let [extract-options (merge {:date-formatter (gp-config/get-date-formatter config)
+                                :user-config config}
                                (select-keys options [:verbose]))]
     (mapv
      (fn [{:file/keys [path content]}]

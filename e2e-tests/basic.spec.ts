@@ -15,7 +15,7 @@ test('create page and blocks, save to disk', async ({ page, block, graphDir }) =
   await block.waitForBlocks(2)
 
   await page.keyboard.type('second bullet')
-  await block.clickNext()
+  await block.enterNext()
 
   await page.keyboard.type('third bullet')
   expect(await block.indent()).toBe(true)

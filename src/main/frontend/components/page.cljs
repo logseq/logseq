@@ -7,6 +7,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
+            [frontend.components.scheduled-deadlines :as scheduled]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -90,7 +91,7 @@
       [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
        [:span.bullet-container.cursor
         [:span.bullet]]]
-      [:div.flex.flex-1 {:tabindex 0
+      [:div.flex.flex-1 {:tabIndex 0
                          :on-key-press (fn [e]
                                          (when (= "Enter" (util/ekey e))
                                            (handler-fn)))
@@ -305,9 +306,10 @@
     (ui/rotating-arrow @*all-collapsed?)]])
 
 ;; A page is just a logical block
-(rum/defcs page < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo page < rum/reactive
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
+  (rum/local nil   ::current-page)
   [state {:keys [repo page-name] :as option}]
   (when-let [path-page-name (or page-name
                                 (get-page-name state)
@@ -342,7 +344,8 @@
                   journal?
                   (= page-name (util/page-name-sanity-lc (date/journal-name))))
           *control-show? (::control-show? state)
-          *all-collapsed? (::all-collapsed? state)]
+          *all-collapsed? (::all-collapsed? state)
+          *current-block-page (::current-page state)]
       [:div.flex-1.page.relative
        (merge (if (seq (:block/tags page))
                 (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
@@ -380,20 +383,27 @@
          ;; blocks
          (let [page (if block?
                       (db/entity repo [:block/uuid block-id])
-                      page)]
+                      page)
+               _ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
+               _ (when (and block? (not page))
+                   (route-handler/redirect-to-page! @*current-block-page))]
            (page-blocks-cp repo page {:sidebar? sidebar?}))]]
 
-       (when-not block?
+       (when today?
          (today-queries repo today? sidebar?))
+
+       (when today?
+         (scheduled/scheduled-and-deadlines page-name))
 
        (when-not block?
          (tagged-pages repo page-name))
 
        ;; referenced blocks
-       [:div {:key "page-references"}
-        (rum/with-key
-          (reference/references route-page-name)
-          (str route-page-name "-refs"))]
+       (when-not block?
+         [:div {:key "page-references"}
+          (rum/with-key
+            (reference/references route-page-name)
+            (str route-page-name "-refs"))])
 
        (when-not block?
          [:div
@@ -521,7 +531,7 @@
                              (let [value (not excluded-pages?)]
                                (reset! *excluded-pages? value)
                                (set-setting! :excluded-pages? value)))
-                           true)]]              
+                           true)]]
               (when (seq focus-nodes)
                 [:div.flex.flex-col.mb-2
                  [:p {:title "N hops from selected nodes"}

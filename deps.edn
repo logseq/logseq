@@ -35,7 +35,7 @@
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.54"}
                                 org.clojure/tools.namespace      {:mvn/version "0.2.11"}
-                                cider/cider-nrepl                {:mvn/version "0.26.0"}
+                                cider/cider-nrepl                {:mvn/version "0.28.4"}
                                 org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}}
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
 

@@ -9,9 +9,8 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [logseq.graph-parser.util :as gp-util]
-            [frontend.util.text :as text-util]
+            [logseq.graph-parser.util.block-ref :as block-ref]
             [lambdaisland.glogi :as log]
-            [electron.ipc :as ipc]
             [promesa.core :as p]
             [frontend.state :as state]
             [frontend.encrypt :as encrypt]
@@ -22,7 +21,7 @@
 (defn- set-missing-block-ids!
   [content]
   (when (string? content)
-    (doseq [block-id (text-util/extract-all-block-refs content)]
+    (doseq [block-id (block-ref/get-all-block-ref-ids content)]
       (when-let [block (try
                          (model/get-block-by-uuid block-id)
                          (catch js/Error _e
@@ -35,7 +34,11 @@
   [repo path content db-content mtime backup?]
   (p/let [
           ;; save the previous content in a versioned bak file to avoid data overwritten.
-          _ (when backup? (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content content))
+          _ (when backup?
+              (-> (when-let [repo-dir (config/get-local-dir repo)]
+                    (file-handler/backup-file! repo-dir path db-content content))
+                  (p/catch #(js/console.error "❌ Bak Error: " path %))))
+
           _ (file-handler/alter-file repo path content {:re-render-root? true
                                                         :from-disk? true})]
     (set-missing-block-ids! content)

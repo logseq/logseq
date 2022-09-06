@@ -18,17 +18,17 @@
 
 (defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
-       current-graph (let [graph (storage/get :git/current-repo)]
-                       (when graph (ipc/ipc "setCurrentGraph" graph))
-                       graph)]
+        current-graph  (let [graph (storage/get :git/current-repo)]
+                        (when graph (ipc/ipc "setCurrentGraph" graph))
+                        graph)]
    (atom
     {:route-match                           nil
      :today                                 nil
-     :system/events                         (async/chan 100)
-     :db/batch-txs                          (async/chan 100)
-     :file/writes                           (async/chan 100)
+     :system/events                         (async/chan 1000)
+     :db/batch-txs                          (async/chan 1000)
+     :file/writes                           (async/chan 10000)
      :file/unlinked-dirs                    #{}
-     :reactive/custom-queries               (async/chan 100)
+     :reactive/custom-queries               (async/chan 1000)
      :notification/show?                    false
      :notification/content                  nil
      :repo/loading-files?                   {}
@@ -36,13 +36,13 @@
      :nfs/refreshing?                       nil
      :instrument/disabled?                  (storage/get "instrument-disabled")
      ;; TODO: how to detect the network reliably?
-     :network/online?                       true
-     :indexeddb/support?                    true
-     :me                                    nil
-     :git/current-repo                      current-graph
-     :format/loading                        {}
-     :draw?                                 false
-     :db/restoring?                         nil
+     :network/online?         true
+     :indexeddb/support?      true
+     :me                      nil
+     :git/current-repo        current-graph
+     :format/loading          {}
+     :draw?                   false
+     :db/restoring?           nil
 
      :journals-length                       3
 
@@ -52,14 +52,18 @@
      :search/graph-filters                  []
 
      ;; modals
+     :modal/dropdowns                       {}
      :modal/id                              nil
      :modal/label                           ""
      :modal/show?                           false
      :modal/panel-content                   nil
      :modal/fullscreen?                     false
      :modal/close-btn?                      nil
+     :modal/close-backdrop?                 true
      :modal/subsets                         []
 
+     ;; left sidebar
+     :ui/navigation-item-collapsed?         {}
 
      ;; right sidebar
      :ui/fullscreen?                        false
@@ -96,6 +100,7 @@
 
      :config                                {}
      :block/component-editing-mode?         false
+     :editor/hidden-editors                 #{}             ;; page names
      :editor/draw-mode?                     false
      :editor/action                         nil
      :editor/action-data                    nil
@@ -119,6 +124,7 @@
      :db/last-transact-time                 {}
      ;; whether database is persisted
      :db/persisted?                         {}
+
      :cursor-range                          nil
 
      :selection/mode                        false
@@ -130,6 +136,7 @@
      :selection/direction                   :down
      :custom-context-menu/show?             false
      :custom-context-menu/links             nil
+     :custom-context-menu/position          nil
 
      ;; pages or blocks in the right sidebar
      ;; It is a list of `[repo db-id block-type block-data]` 4-tuple
@@ -149,7 +156,11 @@
      :mobile/show-toolbar?                  false
      :mobile/show-recording-bar?            false
      :mobile/show-tabbar?                   false
-     
+     ;;; Used to monitor mobile app status,
+     ;;; value spec:
+     ;;; {:is-active? bool, :timestamp int}
+     :mobile/app-state-change                 (atom nil)
+
      ;; plugin
      :plugin/enabled                        (and (util/electron?)
                                                  ;; true false :theme-only
@@ -218,15 +229,26 @@
      :auth/id-token                         nil
 
      ;; file-sync
+     :file-sync/jstour-inst                   nil
+     :file-sync/remote-graphs               {:loading false :graphs nil}
      :file-sync/sync-manager                nil
      :file-sync/sync-state-manager          nil
      :file-sync/sync-state                  nil
      :file-sync/sync-uploading-files        nil
      :file-sync/sync-downloading-files      nil
-
-     :file-sync/download-init-progress      nil
+     :file-sync/onboarding-state            (or (storage/get :file-sync/onboarding-state)
+                                                {:welcome false})
 
      :encryption/graph-parsing?             false
+
+     :ui/loading?                           {}
+     :file-sync/set-remote-graph-password-result {}
+     :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
+
+     :file/rename-event-chan                (async/chan 100)
+     :ui/find-in-page                       nil
+     :graph/importing                       nil
+     :graph/importing-state                 {}
      })))
 
 ;; block uuid -> {content(String) -> ast}
@@ -295,17 +317,22 @@
       (when-not (mobile-util/native-platform?)
         "local")))
 
+(def default-config
+  "Default config for a repo-specific, user config"
+  {:feature/enable-search-remove-accents? true
+   :default-arweave-gateway "https://arweave.net"})
+
 (defn get-config
+  "User config for the given repo or current repo if none given"
   ([]
    (get-config (get-current-repo)))
   ([repo-url]
-   (get-in @state [:config repo-url])))
-
-(def default-arweave-gateway "https://arweave.net")
+   (merge default-config
+          (get-in @state [:config repo-url]))))
 
 (defn get-arweave-gateway
   []
-  (:arweave/gateway (get-config) default-arweave-gateway))
+  (:arweave/gateway (get-config)))
 
 (defonce built-in-macros
          {"img" "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]"})
@@ -360,14 +387,26 @@
                  (get (sub-config) (get-current-repo))))))
 
 (defn enable-journals?
-  [repo]
-  (not (false? (:feature/enable-journals?
-                (get (sub-config) repo)))))
+  ([]
+   (enable-journals? (get-current-repo)))
+  ([repo]
+   (not (false? (:feature/enable-journals?
+                 (get (sub-config) repo))))))
 
 (defn enable-flashcards?
-  [repo]
-  (not (false? (:feature/enable-flashcards?
-                (get (sub-config) repo)))))
+  ([]
+   (enable-flashcards? (get-current-repo)))
+  ([repo]
+   (not (false? (:feature/enable-flashcards?
+                 (get (sub-config) repo))))))
+
+(defn user-groups
+  []
+  (set (sub [:user/info :UserGroups])))
+
+(defn enable-sync?
+  []
+  (sub :feature/enable-sync?))
 
 (defn export-heading-to-list?
   []
@@ -480,6 +519,15 @@
   name unless it is missing."
   []
   (:page-name-order (get-config)))
+
+(defn get-remote-repos
+  []
+  (get-in @state [:file-sync/remote-graphs :graphs]))
+
+(defn get-remote-graph-info-by-uuid
+  [uuid]
+  (when-let [graphs (seq (get-in @state [:file-sync/remote-graphs :graphs]))]
+    (some #(when (= (:GraphUUID %) (str uuid)) %) graphs)))
 
 (defn get-repos
   []
@@ -681,12 +729,24 @@
   []
   (:selection/blocks @state))
 
-(defn get-selection-block-ids
-  []
-  (->> (sub :selection/blocks)
+(defn- get-selected-block-ids
+  [blocks]
+  (->> blocks
        (keep #(when-let [id (dom/attr % "blockid")]
                 (uuid id)))
        (distinct)))
+
+(defn get-selection-block-ids
+  []
+  (get-selected-block-ids (get-selection-blocks)))
+
+(defn sub-block-selected?
+  [block-uuid]
+  (rum/react
+   (rum/derived-atom [state] [::select-block block-uuid]
+     (fn [state]
+       (contains? (set (get-selected-block-ids (:selection/blocks state)))
+                  block-uuid)))))
 
 (defn get-selection-start-block-or-first
   []
@@ -705,7 +765,6 @@
 
 (defn conj-selection-block!
   [block direction]
-  (dom/add-class! block "selected noselect")
   (swap! state assoc
          :selection/mode true
          :selection/blocks (-> (conj (vec (:selection/blocks @state)) block)
@@ -714,10 +773,18 @@
 
 (defn drop-last-selection-block!
   []
-  (let [last-block (peek (vec (:selection/blocks @state)))]
+  (let [direction (:selection/direction @state)
+        up? (= direction :up)
+        blocks (:selection/blocks @state)
+        last-block (if up?
+                     (first blocks)
+                     (peek (vec blocks)))
+        blocks' (if up?
+                  (rest blocks)
+                  (pop (vec blocks)))]
     (swap! state assoc
            :selection/mode true
-           :selection/blocks (pop (vec (:selection/blocks @state))))
+           :selection/blocks blocks')
     last-block))
 
 (defn get-selection-direction
@@ -725,16 +792,22 @@
   (:selection/direction @state))
 
 (defn show-custom-context-menu!
-  [links]
+  [links position]
   (swap! state assoc
          :custom-context-menu/show? true
-         :custom-context-menu/links links))
+         :custom-context-menu/links links
+         :custom-context-menu/position position))
 
 (defn hide-custom-context-menu!
   []
   (swap! state assoc
          :custom-context-menu/show? false
-         :custom-context-menu/links nil))
+         :custom-context-menu/links nil
+         :custom-context-menu/position nil))
+
+(defn toggle-navigation-item-collapsed!
+  [item]
+  (update-state! [:ui/navigation-item-collapsed? item] not))
 
 (defn toggle-sidebar-open?!
   []
@@ -815,40 +888,9 @@
   []
   (or (not @publishing?) (:publishing/enable-editing? (get-config))))
 
-(defn set-editing!
-  ([edit-input-id content block cursor-range]
-   (set-editing! edit-input-id content block cursor-range true))
-  ([edit-input-id content block cursor-range move-cursor?]
-   (when (and edit-input-id block
-              (or
-                (publishing-enable-editing?)
-                (not @publishing?)))
-     (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
-           container (util/get-block-container block-element)
-           block (if container
-                   (assoc block
-                     :block/container (gobj/get container "id"))
-                   block)
-           content (string/trim (or content ""))]
-       (swap! state
-              (fn [state]
-                (-> state
-                    (assoc-in [:editor/content edit-input-id] content)
-                    (assoc
-                     :editor/block block
-                     :editor/editing? {edit-input-id true}
-                     :editor/last-key-code nil
-                     :cursor-range cursor-range))))
-       (when-let [input (gdom/getElement edit-input-id)]
-         (let [pos (count cursor-range)]
-           (when content
-             (util/set-change-value input content))
-
-           (when move-cursor?
-             (cursor/move-cursor-to input pos))
-
-           (when (or (util/mobile?) (mobile-util/native-platform?))
-             (set-state! :mobile/show-action-bar? false))))))))
+(defn block-content-max-length
+  [repo]
+  (or (:block/content-max-length (get (sub-config) repo)) 5000))
 
 (defn clear-edit!
   []
@@ -965,10 +1007,6 @@
   []
   (set-state! :ui/file-component nil))
 
-(defn get-file-component
-  []
-  (get @state :ui/file-component))
-
 (defn set-journals-length!
   [value]
   (when value
@@ -1016,11 +1054,6 @@
 (defn get-me
   []
   (:me @state))
-
-(defn deprecated-logged?
-  "Whether the user has logged in."
-  []
-  false)
 
 (defn set-db-restoring!
   [value]
@@ -1083,7 +1116,7 @@
    (set-modal! modal-panel-content
                {:fullscreen? false
                 :close-btn?  true}))
-  ([modal-panel-content {:keys [id label fullscreen? close-btn? center?]}]
+  ([modal-panel-content {:keys [id label fullscreen? close-btn? close-backdrop? center?]}]
    (when (seq (get-sub-modals))
      (close-sub-modal! true))
    (swap! state assoc
@@ -1092,19 +1125,21 @@
           :modal/show? (boolean modal-panel-content)
           :modal/panel-content modal-panel-content
           :modal/fullscreen? fullscreen?
-          :modal/close-btn? close-btn?)))
+          :modal/close-btn? close-btn?
+          :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)) nil))
 
 (defn close-modal!
   []
-  (if (seq (get-sub-modals))
-    (close-sub-modal!)
-    (swap! state assoc
-           :modal/id nil
-           :modal/label ""
-           :modal/show? false
-           :modal/fullscreen? false
-           :modal/panel-content nil
-           :ui/open-select nil)))
+  (when-not (editing?)
+    (if (seq (get-sub-modals))
+      (close-sub-modal!)
+      (swap! state assoc
+             :modal/id nil
+             :modal/label ""
+             :modal/show? false
+             :modal/fullscreen? false
+             :modal/panel-content nil
+             :ui/open-select nil))))
 
 (defn get-db-batch-txs-chan
   []
@@ -1117,11 +1152,6 @@
 (defn get-reactive-custom-queries-chan
   []
   (:reactive/custom-queries @state))
-
-(defn get-write-chan-length
-  []
-  (let [c (get-file-write-chan)]
-    (count (gobj/get c "buf"))))
 
 (defn get-left-sidebar-open?
   []
@@ -1313,12 +1343,13 @@
         (>= (- now last-time) 3000)))))
 
 (defn input-idle?
-  [repo]
+  [repo & {:keys [diff]
+           :or {diff 1000}}]
   (when repo
     (or
       (when-let [last-time (get-in @state [:editor/last-input-time repo])]
         (let [now (util/time-ms)]
-          (>= (- now last-time) 500)))
+          (>= (- now last-time) diff)))
       ;; not in editing mode
       (not (get-edit-input-id)))))
 
@@ -1509,6 +1540,47 @@
    (clear-edit!)
    (set-selection-blocks! blocks direction)))
 
+(defn set-editing!
+  ([edit-input-id content block cursor-range]
+   (set-editing! edit-input-id content block cursor-range true))
+  ([edit-input-id content block cursor-range move-cursor?]
+   (if (> (count content)
+          (block-content-max-length (get-current-repo)))
+     (let [elements (array-seq (js/document.getElementsByClassName (:block/uuid block)))]
+       (when (first elements)
+         (util/scroll-to-element (gobj/get (first elements) "id")))
+       (exit-editing-and-set-selected-blocks! elements))
+     (when (and edit-input-id block
+               (or
+                (publishing-enable-editing?)
+                (not @publishing?)))
+      (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
+            container (util/get-block-container block-element)
+            block (if container
+                    (assoc block
+                           :block/container (gobj/get container "id"))
+                    block)
+            content (string/trim (or content ""))]
+        (swap! state
+               (fn [state]
+                 (-> state
+                     (assoc-in [:editor/content edit-input-id] content)
+                     (assoc
+                      :editor/block block
+                      :editor/editing? {edit-input-id true}
+                      :editor/last-key-code nil
+                      :cursor-range cursor-range))))
+        (when-let [input (gdom/getElement edit-input-id)]
+          (let [pos (count cursor-range)]
+            (when content
+              (util/set-change-value input content))
+
+            (when move-cursor?
+              (cursor/move-cursor-to input pos))
+
+            (when (or (util/mobile?) (mobile-util/native-platform?))
+              (set-state! :mobile/show-action-bar? false)))))))))
+
 (defn remove-watch-state [key]
   (remove-watch state key))
 
@@ -1618,11 +1690,11 @@
   []
   (:modal/id @state))
 
-(defn edit-in-query-component
+(defn edit-in-query-or-refs-component
   []
-  (and (editing?)
-       ;; config
-       (:custom-query? (last (get-editor-args)))))
+  (let [config (last (get-editor-args))]
+    {:custom-query? (:custom-query? config)
+     :ref? (:ref? config)}))
 
 (defn set-auth-id-token
   [id-token]
@@ -1644,29 +1716,15 @@
 
 (defn set-file-sync-manager [v]
   (set-state! :file-sync/sync-manager v))
-(defn set-file-sync-state [v]
+(defn set-file-sync-state [graph v]
   (when v (s/assert :frontend.fs.sync/sync-state v))
-  (set-state! :file-sync/sync-state v))
+  (set-state! [:file-sync/sync-state graph] v))
 
 (defn get-file-sync-manager []
   (:file-sync/sync-manager @state))
 
-(defn get-file-sync-state []
-  (:file-sync/sync-state @state))
-
-(defn reset-file-sync-download-init-state!
-  []
-  (set-state! [:file-sync/download-init-progress (get-current-repo)] {}))
-
-(defn set-file-sync-download-init-state!
-  [m]
-  (update-state! [:file-sync/download-init-progress (get-current-repo)]
-                 (if (fn? m) m
-                     (fn [old-value] (merge old-value m)))))
-
-(defn get-file-sync-download-init-state
-  []
-  (get-in @state [:file-sync/download-init-progress (get-current-repo)]))
+(defn get-file-sync-state [repo]
+  (get-in @state [:file-sync/sync-state repo]))
 
 (defn reset-parsing-state!
   []
@@ -1688,6 +1746,31 @@
   (:feature/enable-encryption?
    (get (sub-config) repo)))
 
+(defn set-mobile-app-state-change
+  [is-active?]
+  (set-state! :mobile/app-state-change
+              {:is-active? is-active?
+               :timestamp (inst-ms (js/Date.))}))
+
+(defn get-sync-graph-by-uuid
+  [graph-uuid]
+  (when graph-uuid
+    (first (filter #(= graph-uuid (:GraphUUID %))(get-repos)))))
+
 (defn unlinked-dir?
   [dir]
   (contains? (:file/unlinked-dirs @state) dir))
+
+(defn enable-search-remove-accents?
+  []
+  (:feature/enable-search-remove-accents? (get-config)))
+
+(defn get-file-rename-event-chan
+  []
+  (:file/rename-event-chan @state))
+
+(defn offer-file-rename-event-chan!
+  [v]
+  {:pre [(map? v)
+         (= #{:repo :old-path :new-path} (set (keys v)))]}
+  (async/offer! (get-file-rename-event-chan) v))

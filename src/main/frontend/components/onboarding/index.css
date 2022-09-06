@@ -314,7 +314,6 @@ body[data-page=import] {
 
       small {
         font-size: 11px;
-        text-align: center;
       }
 
       &:hover {
@@ -428,6 +427,10 @@ body[data-page=import] {
 
         &.back {
           background-color: rgba(0, 0, 0, .3);
+        }
+
+        &.bg-gray {
+          @apply bg-gray-400;
         }
       }
     }

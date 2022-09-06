@@ -49,7 +49,7 @@ public class SyncClient {
         
         let payload = [
             "GraphUUID": self.graphUUID ?? "",
-            "Files": filePaths.map { filePath in filePath.encodeAsFname()}
+            "Files": filePaths
         ] as [String : Any]
         let bodyData = try? JSONSerialization.data(
             withJSONObject: payload,
@@ -83,6 +83,50 @@ public class SyncClient {
         task.resume()
     }
     
+    public func getVersionFiles(at filePaths: [String], completionHandler: @escaping ([String: URL], Error?) -> Void) {
+        let url = URL_BASE.appendingPathComponent("get_version_files")
+        
+        var request = URLRequest(url: url)
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.setValue("Logseq-sync/0.1", forHTTPHeaderField: "User-Agent")
+        request.setValue("Bearer \(self.token)", forHTTPHeaderField: "Authorization")
+        
+        let payload = [
+            "GraphUUID": self.graphUUID ?? "",
+            "Files": filePaths
+        ] as [String : Any]
+        let bodyData = try? JSONSerialization.data(
+            withJSONObject: payload,
+            options: []
+        )
+        request.httpMethod = "POST"
+        request.httpBody = bodyData
+        
+        let task = URLSession.shared.dataTask(with: request) { (data, response, error) in
+            guard error == nil else {
+                completionHandler([:], error)
+                return
+            }
+            
+            if (response as? HTTPURLResponse)?.statusCode != 200 {
+                let body = String(data: data!, encoding: .utf8) ?? "";
+                completionHandler([:], NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "http error \(body)"]))
+                return
+            }
+            
+            if let data = data {
+                let resp = try? JSONDecoder().decode([String:[String:String]].self, from: data)
+                let files = resp?["PresignedFileUrls"] ?? [:]
+                self.delegate?.debugNotification(["event": "version-download:prepare"])
+                completionHandler(files.mapValues({ url in URL(string: url)!}), nil)
+            } else {
+                // Handle unexpected error
+                completionHandler([:], NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "unexpected error"]))
+            }
+        }
+        task.resume()
+    }
+    
     
     public func deleteFiles(_ filePaths: [String], completionHandler: @escaping  (Int?, Error?) -> Void) {
         let url = URL_BASE.appendingPathComponent("delete_files")
@@ -94,7 +138,7 @@ public class SyncClient {
         
         let payload = [
             "GraphUUID": self.graphUUID ?? "",
-            "Files": filePaths.map { filePath in filePath.encodeAsFname()},
+            "Files": filePaths,
             "TXId": self.txid,
         ] as [String : Any]
         let bodyData = try? JSONSerialization.data(
@@ -148,7 +192,8 @@ public class SyncClient {
     }
     
     // (txid, error)
-    public func updateFiles(_ fileKeyDict: [String: String], completionHandler: @escaping  (Int?, Error?) -> Void) {
+    // filePath => [S3Key, md5]
+    public func updateFiles(_ fileKeyDict: [String: [String]], completionHandler: @escaping  (Int?, Error?) -> Void) {
         let url = URL_BASE.appendingPathComponent("update_files")
         
         var request = URLRequest(url: url)
@@ -158,7 +203,7 @@ public class SyncClient {
         
         let payload = [
             "GraphUUID": self.graphUUID ?? "",
-            "Files": Dictionary(uniqueKeysWithValues: fileKeyDict.map { ($0, $1) }) as [String: String] as Any,
+            "Files": Dictionary(uniqueKeysWithValues: fileKeyDict.map { ($0, $1) }) as [String: [String]] as Any,
             "TXId": self.txid,
         ] as [String : Any]
         let bodyData = try? JSONSerialization.data(
@@ -252,10 +297,17 @@ public class SyncClient {
     }
     
     // [filePath, Key]
-    public func uploadTempFiles(_ files: [String: URL], credentials: S3Credential, completionHandler: @escaping ([String: String], Error?) -> Void) {
+    public func uploadTempFiles(_ files: [String: URL], credentials: S3Credential, completionHandler: @escaping ([String: String], [String: String], Error?) -> Void) {
         let credentialsProvider = AWSBasicSessionCredentialsProvider(
             accessKey: credentials.AccessKeyId, secretKey: credentials.SecretKey, sessionToken: credentials.SessionToken)
-        let configuration = AWSServiceConfiguration(region: .USEast2, credentialsProvider: credentialsProvider)
+        var region = AWSRegionType.USEast2
+        if REGION == "us-east-2" {
+            region = .USEast2
+        } else if REGION == "us-east-1" {
+            region = .USEast1
+        } // TODO: string to REGION conversion
+        
+        let configuration = AWSServiceConfiguration(region: region, credentialsProvider: credentialsProvider)
         configuration?.timeoutIntervalForRequest = 5.0
         configuration?.timeoutIntervalForResource = 5.0
         
@@ -280,6 +332,7 @@ public class SyncClient {
         let group = DispatchGroup()
         var keyFileDict: [String: String] = [:]
         var fileKeyDict: [String: String] = [:]
+        var fileMd5Dict: [String: String] = [:]
         
         let uploadCompletionHandler = { (task: AWSS3TransferUtilityUploadTask, error: Error?) -> Void in
             // ignore any errors in first level of handler
@@ -303,16 +356,18 @@ public class SyncClient {
         for (filePath, fileLocalURL) in files {
             print("debug, upload temp \(fileLocalURL) \(filePath)")
             guard let rawData = try? Data(contentsOf: fileLocalURL) else { continue }
+            guard let encryptedRawDat = maybeEncrypt(rawData) else { continue }
             group.enter()
             
             let randFileName = String.random(length: 15).appending(".").appending(fileLocalURL.pathExtension)
             let key = "\(self.s3prefix!)/ios\(randFileName)"
 
             keyFileDict[key] = filePath
-            transferUtility?.uploadData(rawData, key: key, contentType: "application/octet-stream", expression: uploadExpression, completionHandler: uploadCompletionHandler)
+            fileMd5Dict[filePath] = rawData.MD5
+            transferUtility?.uploadData(encryptedRawDat, key: key, contentType: "application/octet-stream", expression: uploadExpression, completionHandler: uploadCompletionHandler)
                 .continueWith(block: { (task) in
                     if let error = task.error {
-                        completionHandler([:], error)
+                        completionHandler([:], [:], error)
                     }
                     return nil
                 })
@@ -320,7 +375,7 @@ public class SyncClient {
         
         group.notify(queue: .main) {
             AWSS3TransferUtility.remove(forKey: transferKey)
-            completionHandler(fileKeyDict, nil)
+            completionHandler(fileKeyDict, fileMd5Dict, nil)
         }
     }
 }

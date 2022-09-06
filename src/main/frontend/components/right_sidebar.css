@@ -8,6 +8,10 @@ html[data-theme=light] {
       --ls-page-inline-code-bg-color: var(--ls-quaternary-background-color);
       --ls-page-blockquote-bg-color: var(--ls-quaternary-background-color);
     }
+
+    .cp__right-sidebar-topbar button {
+      opacity: 1;
+    }
   }
 }
 

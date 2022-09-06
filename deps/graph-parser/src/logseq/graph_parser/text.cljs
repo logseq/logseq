@@ -4,11 +4,9 @@
             [clojure.string :as string]
             [clojure.set :as set]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.util :as gp-util]))
-
-(def page-ref-re-0 #"\[\[(.*)\]\]")
-(def org-page-ref-re #"\[\[(file:.*)\]\[.+?\]\]")
-(def markdown-page-ref-re #"\[(.*)\]\(file:.*\)")
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.util.page-ref :as page-ref :refer [right-brackets]]))
 
 (defn get-file-basename
   [path]
@@ -16,7 +14,14 @@
     ;; Same as util/node-path.name
     (.-name (path/parse (string/replace path "+" "/")))))
 
+(def page-ref-re-0 #"\[\[(.*)\]\]")
+(def org-page-ref-re #"\[\[(file:.*)\]\[.+?\]\]")
+(def markdown-page-ref-re #"\[(.*)\]\(file:.*\)")
+
 (defn get-page-name
+  "Extracts page names from format-specific page-refs e.g. org/md specific and
+  logseq page-refs. Only call in contexts where format-specific page-refs are
+  used. For logseq page-refs use page-ref/get-page-name"
   [s]
   (and (string? s)
        (or (when-let [[_ label _path] (re-matches markdown-page-ref-re s)]
@@ -27,40 +32,9 @@
            (-> (re-matches page-ref-re-0 s)
                second))))
 
-(defn page-ref?
-  [s]
-  (and
-   (string? s)
-   (string/starts-with? s "[[")
-   (string/ends-with? s "]]")))
-
-(def block-ref-re #"\(\(([a-zA-z0-9]{8}-[a-zA-z0-9]{4}-[a-zA-z0-9]{4}-[a-zA-z0-9]{4}-[a-zA-z0-9]{12})\)\)")
-
-(defn get-block-ref
-  [s]
-  (and (string? s)
-       (second (re-matches block-ref-re s))))
-
-(defn block-ref?
-  [s]
-  (boolean (get-block-ref s)))
-
-(defonce page-ref-re #"\[\[(.*?)\]\]")
-
-(defonce page-ref-re-2 #"(\[\[.*?\]\])")
-
-(def page-ref-re-without-nested #"\[\[([^\[\]]+)\]\]")
-
 (defn page-ref-un-brackets!
   [s]
   (or (get-page-name s) s))
-
-(defn block-ref-un-brackets!
-  [s]
-  (when (string? s)
-    (if (block-ref? s)
-      (subs s 2 (- (count s) 2))
-      s)))
 
 ;; E.g "Foo Bar"
 (defn sep-by-comma
@@ -82,18 +56,18 @@
 (defn- not-matched-nested-pages
   [s]
   (and (string? s)
-       (> (count (re-seq #"\[\[" s))
-          (count (re-seq #"\]\]" s)))))
+       (> (count (re-seq page-ref/left-brackets-re s))
+          (count (re-seq page-ref/right-brackets-re s)))))
 
 (defn- ref-matched?
   [s]
-  (let [x (re-seq #"\[\[" s)
-        y (re-seq #"\]\]" s)]
+  (let [x (re-seq page-ref/left-brackets-re s)
+        y (re-seq page-ref/right-brackets-re s)]
     (and (> (count x) 0) (= (count x) (count y)))))
 
 (defn get-nested-page-name
   [page-name]
-  (when-let [first-match (re-find page-ref-re-without-nested page-name)]
+  (when-let [first-match (re-find page-ref/page-ref-without-nested-re page-name)]
     (second first-match)))
 
 (defn- concat-nested-pages
@@ -101,7 +75,7 @@
   (first
    (reduce (fn [[acc not-matched-s] s]
              (cond
-               (and not-matched-s (= s "]]"))
+               (and not-matched-s (= s right-brackets))
                (let [s' (str not-matched-s s)]
                  (if (ref-matched? s')
                    [(conj acc s') nil]
@@ -136,30 +110,31 @@
 
      (and (string? s)
             ;; Either a page ref, a tag or a comma separated collection
-            (or (gp-util/safe-re-find page-ref-re s)
-                (gp-util/safe-re-find #"[\,|，|#|\"]+" s)))
+            (or (re-find page-ref/page-ref-re s)
+                (re-find #"[\,|，|#|\"]+" s)))
      (let [result (->> (sep-by-quotes s)
                        (mapcat
                         (fn [s]
                           (when-not (gp-util/wrapped-by-quotes? (string/trim s))
-                            (string/split s page-ref-re-2))))
+                            (string/split s page-ref/page-ref-outer-capture-re))))
                        (mapcat (fn [s]
                                  (cond
                                    (gp-util/wrapped-by-quotes? s)
                                    nil
 
-                                   (string/includes? (string/trimr s) "]],")
-                                   (let [idx (string/index-of s "]],")]
+                                   (string/includes? (string/trimr s)
+                                                     (str right-brackets ","))
+                                   (let [idx (string/index-of s (str right-brackets ","))]
                                      [(subs s 0 idx)
-                                      "]]"
+                                      right-brackets
                                       (subs s (+ idx 3))])
 
                                    :else
                                    [s])))
                        (remove #(= % ""))
-                       (mapcat (fn [s] (if (string/ends-with? s "]]")
+                       (mapcat (fn [s] (if (string/ends-with? s right-brackets)
                                          [(subs s 0 (- (count s) 2))
-                                          "]]"]
+                                          right-brackets]
                                          [s])))
                        concat-nested-pages
                        (remove string/blank?)
@@ -168,7 +143,7 @@
                                    (gp-util/wrapped-by-quotes? s)
                                    nil
 
-                                   (page-ref? s)
+                                   (page-ref/page-ref? s)
                                    [(if un-brackets? (page-ref-un-brackets! s) s)]
 
                                    :else
@@ -225,7 +200,35 @@
 (defonce non-parsing-properties
   (atom #{"background-color" "background_color"}))
 
+(defn parse-non-string-property-value
+  "Return parsed non-string property value or nil if none is found"
+  [v]
+  (cond
+    (= v "true")
+    true
+
+    (= v "false")
+    false
+
+    (re-find #"^\d+$" v)
+    (parse-long v)))
+
+(def ^:private page-ref-or-tag-re
+  (re-pattern (str "#?" (page-ref/->page-ref-re-str "(.*?)") "|"
+                   ;; Don't capture punctuation at end of a tag
+                   "#([\\S]+[^\\s.!,])")))
+
+(defn extract-page-refs-and-tags
+  "Returns set of page-refs and tags in given string or returns string if none
+  are found"
+  [string]
+  (let [refs (map #(or (second %) (get % 2))
+                  (re-seq page-ref-or-tag-re string))]
+    (if (seq refs) (set refs) string)))
+
 (defn parse-property
+  "Property value parsing that takes into account built-in properties, format
+  and user config"
   ([k v config-state]
    (parse-property :markdown k v config-state))
   ([format k v config-state]
@@ -238,14 +241,6 @@
                    (get config-state :ignored-page-references-keywords)) k)
        v
 
-       (= v "true")
-       true
-       (= v "false")
-       false
-
-       (and (not= k "alias") (gp-util/safe-re-find #"^\d+$" v))
-       (parse-long v)
-
        (gp-util/wrapped-by-quotes? v) ; wrapped in ""
        v
 
@@ -255,5 +250,12 @@
        (gp-mldoc/link? format v)
        v
 
+       (contains? gp-property/editable-linkable-built-in-properties (keyword k))
+       (split-page-refs-without-brackets v)
+
        :else
-       (split-page-refs-without-brackets v)))))
+       (if-some [res (parse-non-string-property-value v)]
+         res
+         (if (:rich-property-values? config-state)
+           (extract-page-refs-and-tags v)
+           (split-page-refs-without-brackets v)))))))

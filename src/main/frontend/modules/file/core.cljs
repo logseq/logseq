@@ -1,13 +1,13 @@
 (ns frontend.modules.file.core
-  (:require [cljs.core.async :as async]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
-            [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.property :as property]))
+            [frontend.util.property :as property]
+            [frontend.state :as state]
+            [frontend.handler.file :as file-handler]))
 
 (defn- indented-block-content
   [content spaces-tabs]
@@ -16,19 +16,20 @@
 
 (defn- content-with-collapsed-state
   "Only accept nake content (without any indentation)"
-  [format content collapsed? properties]
+  [format content collapsed?]
   (cond
     collapsed?
     (property/insert-property format content :collapsed true)
 
-    (and (:collapsed properties) (false? collapsed?))
+    ;; Don't check properties. Collapsed is an internal state log as property in file, but not counted into properties
+    (false? collapsed?)
     (property/remove-property format :collapsed content)
 
     :else
     content))
 
 (defn transform-content
-  [{:block/keys [collapsed? format pre-block? unordered content heading-level left page parent properties]} level {:keys [heading-to-list?]}]
+  [{:block/keys [collapsed? format pre-block? unordered content heading-level left page parent]} level {:keys [heading-to-list?]}]
   (let [content (or content "")
         pre-block? (or pre-block?
                        (and (= page parent left) ; first block
@@ -69,7 +70,7 @@
                                   (-> (string/replace content #"^\s?#+\s+" "")
                                       (string/replace #"^\s?#+\s?$" ""))
                                   content)
-                        content (content-with-collapsed-state format content collapsed? properties)
+                        content (content-with-collapsed-state format content collapsed?)
                         new-content (indented-block-content (string/trim content) spaces-tabs)
                         sep (if (or markdown-top-heading?
                                     (string/blank? new-content))
@@ -101,16 +102,6 @@
 
 (def init-level 1)
 
-(defn push-to-write-chan
-  [files & opts]
-  (let [repo (state/get-current-repo)
-        chan (state/get-file-write-chan)]
-    (assert (some? chan) "File write chan shouldn't be nil")
-    (let [chan-callback (:chan-callback opts)]
-      (async/put! chan [repo files opts])
-      (when chan-callback
-        (chan-callback)))))
-
 (defn- transact-file-tx-if-not-exists!
   [page ok-handler]
   (when-let [repo (state/get-current-repo)]
@@ -123,15 +114,11 @@
                        (date/date->file-name journal-page?)
                        (-> (or (:block/original-name page) (:block/name page))
                            (util/file-name-sanity)))
-            path (str
-                  (if journal-page?
-                    (config/get-journals-directory)
-                    (config/get-pages-directory))
-                  "/"
-                  filename
-                  "."
-                  (if (= format "markdown") "md" format))
-            file-path (config/get-file-path repo path)
+            sub-dir (if journal-page?
+                      (config/get-journals-directory)
+                      (config/get-pages-directory))
+            ext (if (= format "markdown") "md" format)
+            file-path (config/get-page-file-path repo sub-dir filename ext)
             file {:file/path file-path}
             tx [{:file/path file-path}
                 {:block/name (:block/name page)
@@ -147,8 +134,9 @@
         file-path (-> (db-utils/entity file-db-id) :file/path)
         _ (assert (string? file-path) "File path should satisfy string?")
         ;; FIXME: name conflicts between multiple graphs
-        files [[file-path new-content]]]
-    (push-to-write-chan files)))
+        files [[file-path new-content]]
+        repo (state/get-current-repo)]
+    (file-handler/alter-files-handler! repo files {} {})))
 
 (defn save-tree
   [page-block tree]

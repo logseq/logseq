@@ -41,14 +41,19 @@
 
 ;; helpers
 (defn- normalize-keyword-for-json
-  [input]
-  (when input
-    (walk/postwalk
+  ([input] (normalize-keyword-for-json input true))
+  ([input camel-case?]
+   (when input
+     (walk/postwalk
       (fn [a]
         (cond
-          (keyword? a) (csk/->camelCase (name a))
+          (keyword? a)
+          (cond-> (name a)  
+            camel-case? 
+            (csk/->camelCase))
+
           (uuid? a) (str a)
-          :else a)) input)))
+          :else a)) input))))
 
 (defn- parse-hiccup-ui
   [input]
@@ -102,7 +107,15 @@
          :preferred-start-of-week (state/get-start-of-week)
          :current-graph         (state/get-current-repo)
          :show-brackets         (state/show-brackets?)
+         :enabled-journals      (state/enable-journals?)
+         :enabled-flashcards    (state/enable-flashcards?)
          :me                    (state/get-me)}))))
+
+(def ^:export get_current_graph_configs
+  (fn []
+    (some-> (get (:config @state/state) (state/get-current-repo))
+            (normalize-keyword-for-json)
+            (bean/->js))))
 
 (def ^:export get_current_graph
   (fn []
@@ -442,6 +455,14 @@
   [block-uuid]
   (editor-handler/open-block-in-sidebar! (uuid block-uuid)))
 
+(defn ^:export new_block_uuid []
+  (str (db/new-block-id)))
+
+(def ^:export select_block
+  (fn [block-uuid]
+    (when-let [block (db-model/get-block-by-uuid block-uuid)]
+      (editor-handler/select-block! (:block/uuid block)) nil)))
+
 (def ^:export edit_block
   (fn [block-uuid ^js opts]
     (when-let [block-uuid (and block-uuid (uuid block-uuid))]
@@ -451,8 +472,16 @@
 
 (def ^:export insert_block
   (fn [block-uuid-or-page-name content ^js opts]
-    (let [{:keys [before sibling isPageBlock properties]} (bean/->clj opts)
+    (let [{:keys [before sibling isPageBlock customUUID properties]} (bean/->clj opts)
           page-name (and isPageBlock block-uuid-or-page-name)
+          custom-uuid (or customUUID (:id properties))
+          _ (when (not (string/blank? custom-uuid))
+              (when-not (util/uuid-string? custom-uuid)
+                (throw (js/Error.
+                        (util/format "Illegal custom block UUID pattern (%s)." custom-uuid))))
+              (when (db-model/query-block-by-uuid custom-uuid)
+                (throw (js/Error.
+                        (util/format "Custom block UUID already exists (%s)." custom-uuid)))))
           block-uuid (if isPageBlock nil (uuid block-uuid-or-page-name))
           block-uuid' (if (and (not sibling) before block-uuid)
                         (let [block (db/entity [:block/uuid block-uuid])
@@ -472,11 +501,13 @@
                     before?)
           new-block (editor-handler/api-insert-new-block!
                       content
-                      {:block-uuid block-uuid'
-                       :sibling?   sibling?
-                       :before?    before?
-                       :page       page-name
-                       :properties properties})]
+                      {:block-uuid  block-uuid'
+                       :sibling?    sibling?
+                       :before?     before?
+                       :page        page-name
+                       :custom-uuid custom-uuid
+                       :properties  (merge properties
+                                           (when custom-uuid {:id custom-uuid}))})]
       (bean/->js (normalize-keyword-for-json new-block)))))
 
 (def ^:export insert_batch_block
@@ -545,7 +576,9 @@
 (def ^:export get_current_block
   (fn [^js opts]
     (let [block (state/get-edit-block)
-          block (or block (some-> (first (state/get-selection-blocks))
+          block (or block
+                    (some-> (or (first (state/get-selection-blocks))
+                                (gdom/getElement (state/get-editing-block-dom-id)))
                             (.getAttribute "blockid")
                             (db-model/get-block-by-uuid)))]
       (get_block (:db/id block) opts))))
@@ -617,7 +650,7 @@
   (when-let [page (and page-name-or-uuid (db-model/get-page page-name-or-uuid))]
     (let [page-name (:block/name page)
           ref-blocks (if page-name
-                       (db-model/get-page-referenced-blocks page-name)
+                       (db-model/get-page-referenced-blocks-full page-name)
                        (db-model/get-block-referenced-blocks (:block/uuid page)))
           ref-blocks (and (seq ref-blocks) (into [] ref-blocks))]
       (bean/->js (normalize-keyword-for-json ref-blocks)))))
@@ -683,6 +716,9 @@
         (insert_block src content (bean/->js opts))))))
 
 ;; plugins
+(defn ^:export validate_external_plugins [urls]
+  (ipc/ipc :validateUserExternalPlugins urls))
+
 (def ^:export __install_plugin
   (fn [^js manifest]
     (when-let [{:keys [repo id] :as mft} (bean/->clj manifest)]
@@ -704,9 +740,13 @@
       (let [query (cljs.reader/read-string query)
             resolved-inputs (map (comp query-react/resolve-input cljs.reader/read-string) inputs)
             result (apply d/q query db resolved-inputs)]
-        (clj->js result)))))
+        (bean/->js (normalize-keyword-for-json result false))))))
 
-(def ^:export custom_query db/custom-query)
+(defn ^:export custom_query
+  [query-string]
+  (let [result (let [query (cljs.reader/read-string query-string)]
+                 (db/custom-query {:query query}))]
+    (bean/->js (normalize-keyword-for-json (flatten @result)))))
 
 (defn ^:export download_graph_db
   []

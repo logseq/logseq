@@ -11,6 +11,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.util.block-ref :as block-ref]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -213,7 +214,7 @@
 (defn copy-hl-ref!
   [highlight]
   (when-let [ref-block (create-ref-block! highlight)]
-    (util/copy-to-clipboard! (str "((" (:block/uuid ref-block) "))"))))
+    (util/copy-to-clipboard! (block-ref/->block-ref (:block/uuid ref-block)))))
 
 (defn open-block-ref!
   [block]
@@ -260,11 +261,15 @@
 (defn fix-local-asset-filename
   [filename]
   (when-not (string/blank? filename)
-    (let [local-asset? (re-find #"[0-9]{13}_\d$" filename)]
-      (-> filename
-          (subs 0 (- (count filename) (if local-asset? 15 0)))
-          (string/replace #"^hls__" "")
-          (string/replace "_" " ")))))
+    (let [local-asset? (re-find #"[0-9]{13}_\d$" filename)
+          hls? (and local-asset? (re-find #"^hls__" filename))]
+      (if (or local-asset? hls?)
+        (-> filename
+            (subs 0 (- (count filename) 15))
+            (string/replace #"^hls__" "")
+            (string/replace "_" " ")
+            (string/trimr))
+        filename))))
 
 (rum/defc human-hls-filename-display
   [title]

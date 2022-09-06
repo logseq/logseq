@@ -15,7 +15,7 @@
             [logseq.graph-parser.util :as gp-util]
             [cljs.spec.alpha :as s]))
 
-(s/def ::block-map (s/keys :req [:db/id :block/uuid]
+(s/def ::block-map (s/keys :req [:db/id]
                            :opt [:block/page :block/left :block/parent]))
 
 (s/def ::block-map-or-entity (s/or :entity de/entity?
@@ -141,8 +141,10 @@
           other-tx (:db/other-tx m)
           id (:db/id (:data this))
           block-entity (db/entity id)
-          old-refs (:block/refs block-entity)
-          new-refs (:block/refs m)]
+          remove-self-page #(remove (fn [b]
+                                      (= (:db/id b) (:db/id (:block/page block-entity)))) %)
+          old-refs (remove-self-page (:block/refs block-entity))
+          new-refs (remove-self-page (:block/refs m))]
       (when (seq other-tx)
         (swap! txs-state (fn [txs]
                            (vec (concat txs other-tx)))))
@@ -156,12 +158,24 @@
                                       db-schema/retract-attributes)))))
 
         (when-let [e (:block/page block-entity)]
-          (let [m {:db/id (:db/id e)
+          (let [m' {:db/id (:db/id e)
                    :block/updated-at (util/time-ms)}
-                m (if (:block/created-at e)
-                    m
-                    (assoc m :block/created-at (util/time-ms)))]
-            (swap! txs-state conj m))
+                m' (if (:block/created-at e)
+                    m'
+                    (assoc m' :block/created-at (util/time-ms)))
+                m' (if (or (:block/pre-block? block-entity)
+                           (:block/pre-block? m))
+                     (let [properties (:block/properties m)
+                           alias (set (:alias properties))
+                           tags (set (:tags properties))
+                           alias (map (fn [p] {:block/name (util/page-name-sanity-lc p)}) alias)
+                           tags (map (fn [p] {:block/name (util/page-name-sanity-lc p)}) tags)]
+                       (assoc m'
+                              :block/alias alias
+                              :block/tags tags
+                              :block/properties properties))
+                     m')]
+            (swap! txs-state conj m'))
           (remove-orphaned-page-refs! (:db/id block-entity) txs-state old-refs new-refs)))
 
       (swap! txs-state conj (dissoc m :db/other-tx))
@@ -192,8 +206,15 @@
                                                  (assoc :block/left parent))))
                                            immediate-children)))
                     txs))
-                txs)]
-      (swap! txs-state concat txs)
+                txs)
+          page-tx (let [block (db/entity [:block/uuid block-id])]
+                    (when (:block/pre-block? block)
+                      (let [id (:db/id (:block/page block))]
+                        [[:db/retract id :block/properties]
+                         [:db/retract id :block/properties-order]
+                         [:db/retract id :block/alias]
+                         [:db/retract id :block/tags]])))]
+      (swap! txs-state concat txs page-tx)
       block-id))
 
   (-get-children [this]
@@ -666,13 +687,14 @@
                     move-blocks-next-tx [(build-move-blocks-next-tx blocks non-consecutive-blocks?)]
                     children-page-tx (when not-same-page?
                                        (let [children-ids (mapcat #(db/get-block-children-ids (state/get-current-repo) (:block/uuid %)) blocks)]
-                                         (map (fn [uuid] {:block/uuid uuid
-                                                          :block/page target-page}) children-ids)))
+                                         (map (fn [id] {:block/uuid id
+                                                        :block/page target-page}) children-ids)))
                     fix-non-consecutive-tx (->> (fix-non-consecutive-blocks blocks target-block sibling?)
                                                 (remove (fn [b]
                                                           (contains? (set (map :db/id move-blocks-next-tx)) (:db/id b)))))
                     full-tx (util/concat-without-nil tx-data move-blocks-next-tx children-page-tx fix-non-consecutive-tx)
                     tx-meta (cond-> {:move-blocks (mapv :db/id blocks)
+                                     :move-op outliner-op
                                      :target (:db/id target-block)}
                               not-same-page?
                               (assoc :from-page first-block-page

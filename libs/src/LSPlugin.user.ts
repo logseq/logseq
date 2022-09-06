@@ -5,6 +5,7 @@ import {
   safetyPathJoin,
 } from './helpers'
 import { LSPluginCaller } from './LSPlugin.caller'
+import * as callableAPIs from './callable.apis'
 import {
   IAppProxy,
   IDBProxy,
@@ -47,6 +48,9 @@ declare global {
     logseq: LSPluginUser
   }
 }
+
+type callableMethods =
+  keyof typeof callableAPIs | string // host exported SDK apis & host platform related apis
 
 const PROXY_CONTINUE = Symbol.for('proxy-continue')
 const debug = Debug('LSPlugin:user')
@@ -185,6 +189,10 @@ const app: Partial<IAppProxy> = {
 let registeredCmdUid = 0
 
 const editor: Partial<IEditorProxy> = {
+  newBlockUUID(this: LSPluginUser): Promise<string> {
+    return this._execCallableAPIAsync('new_block_uuid')
+  },
+
   registerSlashCommand(
     this: LSPluginUser,
     tag: string,
@@ -269,7 +277,7 @@ const editor: Partial<IEditorProxy> = {
     } else {
       this.App.pushState('page', { name: pageName }, { anchor })
     }
-  },
+  }
 }
 
 const db: Partial<IDBProxy> = {
@@ -623,14 +631,14 @@ export class LSPluginUser
     })
   }
 
-  _execCallableAPIAsync(method, ...args) {
+  _execCallableAPIAsync(method: callableMethods, ...args) {
     return this._caller.callAsync(`api:call`, {
       method,
       args,
     })
   }
 
-  _execCallableAPI(method, ...args) {
+  _execCallableAPI(method: callableMethods, ...args) {
     this._caller.call(`api:call`, {
       method,
       args,

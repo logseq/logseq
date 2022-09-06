@@ -23,6 +23,7 @@
             [frontend.util.cursor :as cursor]
             [frontend.util.keycode :as keycode]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.property :as gp-property]
             [goog.dom :as gdom]
             [promesa.core :as p]
             [react-draggable]
@@ -177,7 +178,7 @@
      result
      {:on-chosen   chosen-handler
       :on-enter    non-exist-block-handler
-      :empty-placeholder   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
+      :empty-placeholder   [:div.text-gray-500.pl-4.pr-4 (t :editor/block-search)]
       :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
                      (let [page (or (:block/original-name page)
                                     (:block/name page))
@@ -262,7 +263,8 @@
                (not (string/blank? property)))
       (let [current-pos (cursor/pos input)
             edit-content (state/sub [:editor/content id])
-            start-idx (string/last-index-of (subs edit-content 0 current-pos) "::")
+            start-idx (string/last-index-of (subs edit-content 0 current-pos)
+                                            gp-property/colons)
             q (or
                (when (>= current-pos (+ start-idx 2))
                  (subs edit-content (+ start-idx 2) current-pos))
@@ -296,8 +298,12 @@
                 (let [[_id on-submit] (:rum/args state)
                       command (:command (first input-option))]
                   (on-submit command @input-value))
-                (reset! input-value nil))))})))
-  [state _id on-submit]
+                (reset! input-value nil))))
+       ;; escape
+       27 (fn [_state _e]
+            (let [[id _on-submit on-cancel] (:rum/args state)]
+              (on-cancel id)))})))
+  [state _id on-submit _on-cancel]
   (when (= :input (state/sub :editor/action))
     (when-let [action-data (state/sub :editor/action-data)]
       (let [{:keys [pos options]} action-data
@@ -329,7 +335,7 @@
                  (on-submit command @input-value pos)))]))))))
 
 (rum/defc absolute-modal < rum/static
-  [cp set-default-width? {:keys [top left rect]}]
+  [cp modal-name set-default-width? {:keys [top left rect]}]
   (let [max-height 370
         max-width 300
         offset-top 24
@@ -374,6 +380,7 @@
                    {:left (if (or (nil? y-diff) (and y-diff (= y-diff 0))) left 0)})))]
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
      {:ref *el
+      :data-modal-name modal-name
       :class (if y-overflow-vh? "is-overflow-vh-y" "")
       :on-mouse-down (fn [e]
                        (.stopPropagation e))
@@ -381,13 +388,13 @@
      cp]))
 
 (rum/defc transition-cp < rum/reactive
-  [cp set-default-width?]
+  [cp modal-name set-default-width?]
   (when-let [pos (:pos (state/sub :editor/action-data))]
     (ui/css-transition
      {:class-names "fade"
       :timeout     {:enter 500
                     :exit  300}}
-     (absolute-modal cp set-default-width? pos))))
+     (absolute-modal cp modal-name set-default-width? pos))))
 
 (rum/defc image-uploader < rum/reactive
   [id format]
@@ -406,6 +413,7 @@
         [:div.flex.flex-row.align-center.rounded-md.shadow-sm.bg-base-2.px-1.py-1
          (ui/loading
           (util/format "Uploading %s%" (util/format "%2d" processing)))]
+        "upload-file"
         false)))])
 
 (defn- set-up-key-down!
@@ -416,11 +424,11 @@
    {:not-matched-handler (editor-handler/keydown-not-matched-handler format)}))
 
 (defn- set-up-key-up!
-  [state input input-id search-timeout]
+  [state input input-id]
   (mixins/on-key-up
    state
    {}
-   (editor-handler/keyup-handler state input input-id search-timeout)))
+   (editor-handler/keyup-handler state input input-id)))
 
 (def search-timeout (atom nil))
 
@@ -430,7 +438,7 @@
         input-id id
         input (gdom/getElement input-id)]
     (set-up-key-down! state format)
-    (set-up-key-up! state input input-id search-timeout)))
+    (set-up-key-up! state input input-id)))
 
 (def starts-with? clojure.string/starts-with?)
 
@@ -504,10 +512,10 @@
     (mock-textarea content)))
 
 (rum/defc animated-modal < rum/reactive
-  [key component set-default-width?]
+  [modal-name component set-default-width?]
   (when-let [pos (:pos (state/get-editor-action-data))]
     (ui/css-transition
-     {:key key
+     {:key modal-name
       :class-names {:enter "origin-top-left opacity-0 transform scale-95"
                     :enter-done "origin-top-left transition opacity-100 transform scale-100"
                     :exit "origin-top-left transition opacity-0 transform scale-95"}
@@ -516,6 +524,7 @@
      (fn [_]
        (absolute-modal
         component
+        modal-name
         set-default-width?
         pos)))))
 
@@ -551,7 +560,9 @@
       (= :input action)
       (animated-modal "input" (input id
                                      (fn [command m]
-                                       (editor-handler/handle-command-input command id format m)))
+                                       (editor-handler/handle-command-input command id format m))
+                                     (fn []
+                                       (editor-handler/handle-command-input-close id)))
                       true)
 
       (= :zotero action)

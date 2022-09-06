@@ -9,7 +9,10 @@
             [promesa.core :as p]
             [logseq.graph-parser.text :as text]
             [frontend.util.drawer :as drawer]
-            [frontend.util.property :as property]))
+            [frontend.util.property :as property]
+            [electron.ipc :as ipc]
+            [goog.functions :refer [debounce]]
+            [dommy.core :as dom]))
 
 (defn add-search-to-recent!
   [repo q]
@@ -47,6 +50,56 @@
                           :files (search/file-search q)}))
                search-key (if more? :search/more-result :search/result)]
            (swap! state/state assoc search-key result)))))))
+
+(defn open-find-in-page!
+  []
+  (when (util/electron?)
+    (let [{:keys [active?]} (:ui/find-in-page @state/state)]
+      (when-not active? (state/set-state! [:ui/find-in-page :active?] true)))))
+
+(defn electron-find-in-page!
+  []
+  (when (util/electron?)
+    (let [{:keys [active? backward? match-case? q]} (:ui/find-in-page @state/state)
+          option (cond->
+                  {}
+
+                   (not active?)
+                   (assoc :findNext true)
+
+                   backward?
+                   (assoc :forward false)
+
+                   match-case?
+                   (assoc :matchCase true))]
+      (open-find-in-page!)
+      (when-not (string/blank? q)
+        (dom/set-style! (dom/by-id "search-in-page-input")
+                        :visibility "hidden")
+        (when (> (count q) 1)
+          (dom/set-html! (dom/by-id "search-in-page-placeholder")
+                         (util/format
+                          "<span><span>%s</span><span style=\"margin-left: -4px;\">%s</span></span>"
+                          (first q)
+                          (str " " (subs q 1)))))
+        (ipc/ipc "find-in-page" q option)))))
+
+(defonce debounced-search (debounce electron-find-in-page! 500))
+
+(defn loop-find-in-page!
+  [backward?]
+  (when (and (get-in @state/state [:ui/find-in-page :active?])
+             (not (state/editing?)))
+    (state/set-state! [:ui/find-in-page :backward?] backward?)
+    (debounced-search)))
+
+(defn electron-exit-find-in-page!
+  [& {:keys [clear-state?]
+      :or {clear-state? true}}]
+  (when (util/electron?)
+    (ipc/ipc "clear-find-in-page")
+    (when clear-state?
+      (state/set-state! :ui/find-in-page nil))))
 
 (defn clear-search!
   ([]

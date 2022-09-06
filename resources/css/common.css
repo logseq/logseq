@@ -842,8 +842,14 @@ i.ti {
 
 .heading-bg {
   border-radius: 50%;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
+
+  &.remove {
+    @apply border flex items-center justify-center;
+
+    border-color: var(--border-color);
+  }
 }
 
 /** endregion **/
@@ -900,20 +906,30 @@ button.menu:focus {
   background-color: var(--ls-menu-hover-color, #f4f5f7);
 }
 
+.menu-links-wrapper {
+  @apply py-2 rounded-md shadow-lg overflow-y-auto;
+
+  max-height: calc(100vh - 100px) !important;
+  background-color: var(--ls-primary-background-color, #fff);
+  min-width: 12rem;
+}
+
+.menu-backdrop {
+  @apply w-full h-full fixed top-0 left-0;
+
+  z-index: var(--ls-z-index-level-1);
+}
+
 .menu-link {
   background-color: var(--ls-primary-background-color, #fff);
   color: var(--ls-primary-text-color);
   user-select: none;
 }
 
-.menu-link:first-of-type {
-  border-top-left-radius: var(--ls-border-radius-low);
-  border-top-right-radius: var(--ls-border-radius-low);
-}
+.menu-separator {
+  @apply my-1;
 
-.menu-link:last-of-type {
-  border-bottom-left-radius: var(--ls-border-radius-low);
-  border-bottom-right-radius: var(--ls-border-radius-low);
+  opacity: .5;
 }
 
 a.login {
@@ -1023,7 +1039,7 @@ hr {
 
 .cp__header-logo,
 .fade-link {
-  opacity: 0.6;
+  opacity: 0.8;
   transition: 0.3s;
   color: var(--ls-primary-text-color);
 }

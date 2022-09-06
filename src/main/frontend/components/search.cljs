@@ -29,8 +29,8 @@
     content
     (when (and content q)
       (let [q-words (string/split q #" ")
-            lc-content (util/search-normalize content)
-            lc-q (util/search-normalize q)]
+            lc-content (util/search-normalize content (state/enable-search-remove-accents?))
+            lc-q (util/search-normalize q (state/enable-search-remove-accents?))]
         (if (and (string/includes? lc-content lc-q)
                  (not (util/safe-re-find #" " q)))
           (let [i (string/index-of lc-content lc-q)
@@ -46,8 +46,8 @@
                                 result []]
                            (if (and (seq words) content)
                              (let [word (first words)
-                                   lc-word (util/search-normalize word)
-                                   lc-content (util/search-normalize content)]
+                                   lc-word (util/search-normalize word (state/enable-search-remove-accents?))
+                                   lc-content (util/search-normalize content (state/enable-search-remove-accents?))]
                                (if-let [i (string/index-of lc-content lc-word)]
                                  (recur (rest words)
                                         (subs content (+ i (count word)))
@@ -138,7 +138,7 @@
       (if page
         (if (or collapsed? long-page?)
           (route/redirect-to-page! block-uuid)
-          (route/redirect-to-page! (:block/name page) (str "ls-block-" (:block/uuid data))))
+          (route/redirect-to-page! (:block/name page) {:anchor (str "ls-block-" (:block/uuid data))}))
         ;; search indice outdated
         (println "[Error] Block page missing: "
                  {:block-id block-uuid
@@ -271,7 +271,7 @@
     [:div "Recent search:"]
     (ui/with-shortcut :go/search-in-page "bottom"
       [:div.flex-row.flex.align-items
-       [:div.mr-2 "Search in page:"]
+       [:div.mr-2 "Search blocks in page:"]
        [:div {:style {:margin-top 3}}
         (ui/toggle in-page-search?
                    (fn [_value]
@@ -324,7 +324,8 @@
                                  (state/sidebar-add-block!
                                   (state/get-current-repo)
                                   (:db/id page)
-                                  :page))))
+                                  :page))
+                                (state/close-modal!)))
 
                             nil))
        :item-render (fn [{:keys [type data]}]
@@ -354,7 +355,8 @@
         timeout 300
         in-page-search? (= search-mode :page)]
     [:div.cp__palette.cp__palette-main
-     [:div.input-wrap
+     [:div.ls-search
+      [:div.input-wrap
       [:input.cp__palette-input.w-full
        {:type          "text"
         :auto-focus    true
@@ -387,10 +389,10 @@
                                             (search-handler/search (state/get-current-repo) value opts)
                                             (search-handler/search (state/get-current-repo) value)))
                                         timeout))))))}]]
-     [:div.search-results-wrap
-      (if (seq search-result)
-        (search-auto-complete search-result search-q false)
-        (recent-search-and-pages in-page-search?))]]))
+      [:div.search-results-wrap
+       (if (seq search-result)
+         (search-auto-complete search-result search-q false)
+         (recent-search-and-pages in-page-search?))]]]))
 
 (rum/defc more < rum/reactive
   [route]

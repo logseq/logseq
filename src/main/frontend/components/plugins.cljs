@@ -261,6 +261,12 @@
                  (js-invoke js/LSPluginCore (if disabled? "enable" "disable") id))
                true)]])
 
+(defn get-open-plugin-readme-handler
+  [url item repo]
+  #(plugin-handler/open-readme!
+    url item (if repo remote-readme-display local-markdown-display))
+  )
+
 (rum/defc plugin-item-card < rum/static
   [t {:keys [id name title version url description author icon iir repo sponsors] :as item}
    disabled? market? *search-key has-other-pending?
@@ -278,8 +284,7 @@
                 :has-new-version new-version}])}
 
      [:div.l.link-block.cursor-pointer
-      {:on-click #(plugin-handler/open-readme!
-                   url item (if repo remote-readme-display local-markdown-display))}
+      {:on-click (get-open-plugin-readme-handler url item repo)}
       (if (and icon (not (string/blank? icon)))
         [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
         svg/folder)
@@ -290,7 +295,9 @@
      [:div.r
       [:h3.head.text-xl.font-bold.pt-1.5
 
-       [:span name]
+       [:span.l.link-block.cursor-pointer
+        {:on-click (get-open-plugin-readme-handler url item repo)}
+        name]
        (when (not market?) [:sup.inline-block.px-1.text-xs.opacity-50 version])]
 
       [:div.desc.text-xs.opacity-70
@@ -957,12 +964,13 @@
       (when nav?
         [:aside.md:w-64 {:style {:min-width "10rem"}}
          (let [plugins (plugin-handler/get-enabled-plugins-if-setting-schema)]
-           [:ul
+           [:ul.settings-plugin-list
             (for [{:keys [id name title icon]} plugins]
               [:li
                {:class (util/classnames [{:active (= id focused)}])}
-               [:a.flex.items-center
-                {:on-click #(do (state/set-state! :plugin/focused-settings id))}
+               [:a.flex.items-center.settings-plugin-item
+                {:data-id id
+                 :on-click #(do (state/set-state! :plugin/focused-settings id))}
                 (if (and icon (not (string/blank? icon)))
                   [:img.icon {:src icon}]
                   svg/folder)
@@ -970,6 +978,7 @@
 
       [:article
        [:div.panel-wrap
+        {:data-id focused}
         (when-let [^js pl (and focused (= @*cache focused)
                                (plugin-handler/get-plugin-inst focused))]
           (ui/catch-error
@@ -986,6 +995,33 @@
        (ui-handler/exec-js-if-exists-&-allowed! t)))
    [current-repo db-restoring? nfs-granted?])
   nil)
+
+(rum/defc perf-tip-content
+  [pid name url]
+  [:div
+   [:span.block.whitespace-normal
+    "This plugin "
+    [:strong.text-red-500 "#" name]
+    " takes too long to load, affecting the application startup time and
+     potentially causing other plugins to fail to load."]
+
+   [:path.opacity-50
+    [:small [:span.pr-1 (ui/icon "folder")] url]]
+
+   [:p
+    (ui/button "Disable now"
+               :small? true
+               :on-click
+               (fn []
+                 (-> (js/LSPluginCore.disable pid)
+                     (p/then #(do
+                                (notification/clear! pid)
+                                (notification/show!
+                                 [:span "The plugin "
+                                  [:strong.text-red-500 "#" name]
+                                  " is disabled."] :success
+                                 true nil 3000)))
+                     (p/catch #(js/console.error %)))))]])
 
 (defn open-plugins-modal!
   []

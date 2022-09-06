@@ -249,6 +249,18 @@
                                                 (editor-handler/escape-editing)
                                                 (route-handler/go-to-search! :global))}
 
+   :go/electron-find-in-page       {:binding "mod+f"
+                                    :inactive (not (util/electron?))
+                                    :fn      #(search-handler/open-find-in-page!)}
+   
+   :go/electron-jump-to-the-next {:binding ["enter" "mod+g"]
+                                  :inactive (not (util/electron?))
+                                  :fn      #(search-handler/loop-find-in-page! false)}
+
+   :go/electron-jump-to-the-previous {:binding ["shift+enter" "mod+shift+g"]
+                                      :inactive (not (util/electron?))
+                                      :fn      #(search-handler/loop-find-in-page! true)}
+
    :go/journals                    {:binding "g j"
                                     :fn      route-handler/go-to-journals!}
 
@@ -280,7 +292,7 @@
    :graph/open                     {:fn      #(do
                                                 (editor-handler/escape-editing)
                                                 (state/set-state! :ui/open-select :graph-open))
-                                    :binding "mod+shift+g"}
+                                    :binding "alt+shift+g"}
 
    :graph/remove                   {:fn      #(do
                                                 (editor-handler/escape-editing)
@@ -313,6 +325,8 @@
    :go/graph-view                  {:binding "g g"
                                     :fn      route-handler/redirect-to-graph-view!}
 
+   :go/all-graphs                  {:binding "g shift+g"
+                                    :fn      route-handler/redirect-to-all-graphs}
 
    :go/keyboard-shortcuts          {:binding "g s"
                                     :fn      #(route-handler/redirect! {:to :shortcut-setting})}
@@ -501,6 +515,9 @@
                           :ui/toggle-brackets
                           :go/search-in-page
                           :go/search
+                          :go/electron-find-in-page
+                          :go/electron-jump-to-the-next
+                          :go/electron-jump-to-the-previous
                           :go/backward
                           :go/forward
                           :search/re-index
@@ -519,6 +536,7 @@
                           :go/all-pages
                           :go/flashcards
                           :go/graph-view
+                          :go/all-graphs
                           :go/keyboard-shortcuts
                           :go/tomorrow
                           :go/next-journal
@@ -553,6 +571,9 @@
     :editor/select-all-blocks
     :go/search
     :go/search-in-page
+    :go/electron-find-in-page
+    :go/electron-jump-to-the-next
+    :go/electron-jump-to-the-previous
     :editor/undo
     :editor/redo
     :editor/copy
@@ -581,6 +602,7 @@
     :go/journals
     :go/all-pages
     :go/graph-view
+    :go/all-graphs
     :go/flashcards
     :go/tomorrow
     :go/next-journal

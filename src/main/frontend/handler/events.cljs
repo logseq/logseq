@@ -2,12 +2,12 @@
   (:refer-clojure :exclude [run!])
   (:require ["@capacitor/filesystem" :refer [Directory Filesystem]]
             [clojure.core.async :as async]
+            [clojure.core.async.interop :refer [p->c]]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.commands :as commands]
             [frontend.components.diff :as diff]
-            [frontend.components.encryption :as encryption]
             [frontend.components.git :as git-component]
             [frontend.components.plugins :as plugin]
             [frontend.components.search :as search]
@@ -35,6 +35,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
@@ -46,6 +47,9 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
+            [frontend.handler.file-sync :as file-sync-handler]
+            [frontend.components.file-sync :as file-sync]
+            [frontend.components.encryption :as encryption]
             [goog.dom :as gdom]
             [logseq.db.schema :as db-schema]
             [promesa.core :as p]
@@ -55,20 +59,50 @@
 
 (defmulti handle first)
 
+(defn- file-sync-restart! []
+  (async/go (async/<! (p->c (persist-var/load-vars)))
+            (async/<! (sync/<sync-stop))
+            (some-> (sync/sync-start) async/<!)))
+
+(defn- file-sync-stop! []
+  (async/go (async/<! (p->c (persist-var/load-vars)))
+            (async/<! (sync/<sync-stop))))
+
+(defmethod handle :user/login [[_]]
+  (state/set-state! [:ui/loading? :login] false)
+  (async/go
+    (let [result (async/<! (sync/<user-info sync/remoteapi))]
+      (when (seq result)
+        (state/set-state! :user/info result)
+
+        (let [status (if (user-handler/alpha-user?) :welcome :unavailable)]
+          (when (= status :welcome)
+            (async/<! (file-sync-handler/load-session-graphs))
+            (p/let [repos (repo-handler/refresh-repos!)]
+              (when-let [repo (state/get-current-repo)]
+                (when (some #(and (= (:url %) repo)
+                                 (vector? (:sync-meta %))
+                                 (util/uuid-string? (first (:sync-meta %)))
+                                 (util/uuid-string? (second (:sync-meta %)))) repos)
+                 (file-sync-restart!)))))
+          (file-sync/maybe-onboarding-show status))))))
+
+(defmethod handle :user/logout [[_]]
+  (file-sync-handler/reset-session-graphs)
+  (sync/remove-all-pwd!)
+  (file-sync-handler/reset-user-state!))
+
 (defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (db/set-key-value repo :ast/version db-schema/ast-version)
   (search-handler/rebuild-indices!)
   (db/persist! repo)
+  (plugin-handler/hook-plugin-app :graph-after-indexed {:repo repo :empty-graph? empty-graph?})
   (when (state/setups-picker?)
     (if empty-graph?
       (route-handler/redirect! {:to :import :query-params {:from "picker"}})
-      (route-handler/redirect-to-home!))))
-
-(defn- file-sync-stop-when-switch-graph []
-  (p/do! (persist-var/load-vars)
-         (sync/sync-stop)
-         (sync/sync-start)
-))
+      (route-handler/redirect-to-home!)))
+  (repo-handler/refresh-repos!)
+  (file-sync-stop!))
 
 (defn- graph-switch
   ([graph]
@@ -87,8 +121,8 @@
          (fs/watch-dir! dir-name))
        (srs/update-cards-due-count!)
        (state/pub-event! [:graph/ready graph])
-
-       (file-sync-stop-when-switch-graph)))))
+       (repo-handler/refresh-repos!)
+       (file-sync-restart!)))))
 
 (def persist-db-noti-m
   {:before     #(notification/show!
@@ -101,22 +135,33 @@
 (defn- graph-switch-on-persisted
   "Logic for keeping db sync when switching graphs
    Only works for electron"
-  [graph]
+  [graph {:keys [persist?]}]
   (let [current-repo (state/get-current-repo)]
     (p/do!
-     (when (util/electron?)
-       (p/do!
-        (repo-handler/persist-db! current-repo persist-db-noti-m)
-        (repo-handler/broadcast-persist-db! graph)))
+     (when persist?
+       (when (util/electron?)
+         (p/do!
+          (repo-handler/persist-db! current-repo persist-db-noti-m)
+          (repo-handler/broadcast-persist-db! graph))))
      (repo-handler/restore-and-setup-repo! graph)
      (graph-switch graph))))
 
-(defmethod handle :graph/switch [[_ graph]]
-  (if (outliner-file/writes-finished?)
-    (graph-switch-on-persisted graph)
+(defmethod handle :graph/switch [[_ graph opts]]
+  (if @outliner-file/*writes-finished?
+    (graph-switch-on-persisted graph opts)
     (notification/show!
      "Please wait seconds until all changes are saved for the current graph."
      :warning)))
+
+(defmethod handle :graph/pick-dest-to-sync [[_ graph]]
+  (state/set-modal!
+   (file-sync/pick-dest-to-sync-panel graph)
+   {:center? true}))
+
+(defmethod handle :graph/pick-page-histories [[_ graph-uuid page-name]]
+  (state/set-modal!
+   (file-sync/pick-page-histories-panel graph-uuid page-name)
+   {:id :page-histories :label "modal-page-histories"}))
 
 (defmethod handle :graph/open-new-window [[ev repo]]
   (p/let [current-repo (state/get-current-repo)
@@ -134,9 +179,11 @@
                             {:before     #(notification/show!
                                            (ui/loading (t :graph/save))
                                            :warning)
-                             :on-success #(notification/show!
-                                           (ui/loading (t :graph/save-success))
-                                           :warning)
+                             :on-success #(do
+                                            (notification/clear-all!)
+                                            (notification/show!
+                                             (t :graph/save-success)
+                                             :success))
                              :on-error   #(notification/show!
                                            (t :graph/save-error)
                                            :error)}))
@@ -324,8 +371,10 @@
         (set! (.. right-sidebar-node -style -paddingBottom) (str (+ 150 keyboard-height) "px")))
       (when-let [card-preview-el (js/document.querySelector ".cards-review")]
         (set! (.. card-preview-el -style -marginBottom) (str keyboard-height "px")))
+      (when-let [card-preview-el (js/document.querySelector ".encryption-password")]
+        (set! (.. card-preview-el -style -marginBottom) (str keyboard-height "px")))
       (js/setTimeout (fn []
-                       (let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
+                       (when-let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
                          (set! (.. toolbar -style -bottom) (str keyboard-height "px"))))
                      100))))
 
@@ -337,6 +386,8 @@
       (state/set-state! :mobile/show-recording-bar? false))
     (when (mobile-util/native-ios?)
       (when-let [card-preview-el (js/document.querySelector ".cards-review")]
+        (set! (.. card-preview-el -style -marginBottom) "0px"))
+      (when-let [card-preview-el (js/document.querySelector ".encryption-password")]
         (set! (.. card-preview-el -style -marginBottom) "0px"))
       (set! (.. main-node -style -marginBottom) "0px")
       (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
@@ -369,9 +420,11 @@
 
 (defmethod handle :validate-appId [[_ graph-switch-f graph]]
   (when-let [deprecated-repo (or graph (state/get-current-repo))]
-    ;; Installation is will not be changed for iCloud
+    ;; Installation is not changed for iCloud
     (if (mobile-util/iCloud-container-path? deprecated-repo)
-      (when graph-switch-f (graph-switch-f graph true))
+      (when graph-switch-f
+        (graph-switch-f graph true)
+        (state/pub-event! [:graph/ready (state/get-current-repo)]))
       (p/let [deprecated-app-id (get-ios-app-id deprecated-repo)
               current-document-url (.getUri Filesystem #js {:path ""
                                                             :directory (.-Documents Directory)})
@@ -380,6 +433,7 @@
         (if (= deprecated-app-id current-app-id)
           (when graph-switch-f (graph-switch-f graph true))
           (do
+            (file-sync-stop!)
             (.unwatch mobile-util/fs-watcher)
             (let [current-repo (string/replace deprecated-repo deprecated-app-id current-app-id)
                   current-repo-dir (config/get-repo-dir current-repo)]
@@ -394,9 +448,11 @@
               (state/set-current-repo! current-repo)
               (db/listen-and-persist! current-repo)
               (db/persist-if-idle! current-repo)
-              (file-handler/restore-config! current-repo false)
+              (file-handler/restore-config! current-repo)
               (.watch mobile-util/fs-watcher #js {:path current-repo-dir})
-              (when graph-switch-f (graph-switch-f current-repo true)))))))))
+              (when graph-switch-f (graph-switch-f current-repo true))
+              (file-sync-restart!))))
+        (state/pub-event! [:graph/ready (state/get-current-repo)])))))
 
 (defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
   (let [downloading? (:plugin/updates-downloading? @state/state)]
@@ -436,6 +492,12 @@
     (plugin-handler/hook-plugin-db :changed payload)
     (plugin-handler/hook-plugin-block-changes payload)))
 
+(defmethod handle :plugin/loader-perf-tip [[_ {:keys [^js o _s _e]}]]
+  (when-let [opts (.-options o)]
+    (notification/show!
+     (plugin/perf-tip-content (.-id o) (.-name opts) (.-url opts))
+     :warning false (.-id o))))
+
 (defmethod handle :backup/broken-config [[_ repo content]]
   (when (and repo content)
     (let [path (config/get-config-path)
@@ -451,13 +513,31 @@
 (defmethod handle :file-watcher/changed [[_ ^js event]]
   (let [type (.-event event)
         payload (-> event
-                    (js->clj :keywordize-keys true)
-                    (update :path js/decodeURI))]
+                    (js->clj :keywordize-keys true))]
     (fs-watcher/handle-changed! type payload)
-    (sync/file-watch-handler type payload)))
+    (when (file-sync-handler/enable-sync?)
+     (sync/file-watch-handler type payload))))
 
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))
+
+(defn- refresh-cb []
+  (page-handler/create-today-journal!)
+  (st/refresh!)
+  (file-sync-restart!))
+
+(defmethod handle :graph/ask-for-re-fresh [_]
+  (handle
+   [:modal/show
+    [:div {:style {:max-width 700}}
+     [:p (t :sync-from-local-changes-detected)]
+     (ui/button
+      (t :yes)
+      :autoFocus "on"
+      :large? true
+      :on-click (fn []
+                  (state/close-modal!)
+                  (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
 
 (defmethod handle :graph/ask-for-re-index [[_ *multiple-windows?]]
   (if (and (util/atom? *multiple-windows?) @*multiple-windows?)
@@ -472,12 +552,15 @@
        (ui/button
          (t :yes)
          :autoFocus "on"
+         :class "ui__modal-enter"
          :large? true
          :on-click (fn []
                      (state/close-modal!)
                      (repo-handler/re-index!
                       nfs-handler/rebuild-index!
-                      page-handler/create-today-journal!)))]])))
+                      #(do
+                         (page-handler/create-today-journal!)
+                         (file-sync-restart!)))))]])))
 
 ;; encryption
 (defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]
@@ -491,6 +574,16 @@
     db-encrypted-secret
     close-fn)))
 
+(defmethod handle :modal/remote-encryption-input-pw-dialog [[_ repo-url remote-graph-info type opts]]
+  (state/set-modal!
+   (encryption/input-password
+    repo-url nil (merge
+                  (assoc remote-graph-info
+                         :type (or type :create-pwd-remote)
+                         :repo repo-url)
+                  opts))
+   {:center? true :close-btn? false :close-backdrop? false}))
+
 (defmethod handle :journal/insert-template [[_ page-name]]
   (let [page-name (util/page-name-sanity-lc page-name)]
     (when-let [page (db/pull [:block/name page-name])]
@@ -501,8 +594,49 @@
            template
            {:target page}))))))
 
+(defmethod handle :file-sync-graph/restore-file [[_ graph page-entity content]]
+  (when (db/get-db graph)
+    (let [file (:block/file page-entity)]
+      (when-let [path (:file/path file)]
+        (when (not= content (:file/content file))
+          (sync/add-new-version-file graph path (:file/content file)))
+        (p/let [_ (file-handler/alter-file graph
+                                           path
+                                           content
+                                           {:re-render-root? true
+                                            :skip-compare? true})]
+          (state/close-modal!)
+          (route-handler/redirect! {:to :page
+                                    :path-params {:name (:block/name page-entity)}}))))))
+
+
+(defmethod handle :file-sync/onboarding-tip [[_ type opts]]
+  (let [type (keyword type)]
+    (state/set-modal!
+     (file-sync/make-onboarding-panel type)
+     (merge {:close-btn?      false
+             :center?         true
+             :close-backdrop? (not= type :welcome)} opts))))
+
+(defmethod handle :file-sync/maybe-onboarding-show [[_ type]]
+  (file-sync/maybe-onboarding-show type))
+
+(defmethod handle :file-sync/storage-exceed-limit [[_]]
+  (notification/show! "file sync storage exceed limit" :warning false)
+  (file-sync-stop!))
+
+(defmethod handle :file-sync/graph-count-exceed-limit [[_]]
+  (notification/show! "file sync graph count exceed limit" :warning false)
+  (file-sync-stop!))
+
+(defmethod handle :file-sync/restart [[_]]
+  (file-sync-restart!))
+
 (defmethod handle :graph/restored [[_ _graph]]
-  (mobile/init!))
+  (mobile/init!)
+  (when-not (mobile-util/native-ios?)
+    (state/pub-event! [:graph/ready (state/get-current-repo)])))
+
 (defmethod handle :graph/dir-gone [[_ dir]]
   (state/pub-event! [:notification/show
                      {:content (str "The directory " dir " has been renamed or deleted, the editor will be disabled for this graph, you can unlink the graph.")
@@ -520,6 +654,10 @@
     (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir))))
   (when (= dir (config/get-repo-dir repo))
     (fs/watch-dir! dir)))
+
+(defmethod handle :file/alter [[_ repo path content]]
+  (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]
+    (ui-handler/re-render-root!)))
 
 (defn run!
   []

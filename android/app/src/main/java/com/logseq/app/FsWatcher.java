@@ -58,7 +58,7 @@ public class FsWatcher extends Plugin {
 
             int mask = FileObserver.CLOSE_WRITE |
                     FileObserver.MOVE_SELF | FileObserver.MOVED_FROM | FileObserver.MOVED_TO |
-                    FileObserver.DELETE | FileObserver.DELETE_SELF;
+                    FileObserver.DELETE | FileObserver.DELETE_SELF | FileObserver.CREATE;
 
             if (observers != null) {
                 call.reject("already watching");
@@ -72,7 +72,7 @@ public class FsWatcher extends Plugin {
             if (files != null) {
                 for (File file : files) {
                     String filename = file.getName();
-                    if (file.isDirectory() && !filename.startsWith(".") && !filename.equals("bak") && !filename.equals("node_modules")) {
+                    if (file.isDirectory() && !filename.startsWith(".") && !filename.equals("bak") && !filename.equals("version-files") && !filename.equals("node_modules")) {
                         observers.add(new SingleFileObserver(file, mask));
                     }
                 }
@@ -90,7 +90,7 @@ public class FsWatcher extends Plugin {
 
     @PluginMethod()
     public void unwatch(PluginCall call) {
-        Log.i("FsWatcher", "unwatching...");
+        Log.i("FsWatcher", "unwatch all...");
 
         if (observers != null) {
             for (int i = 0; i < observers.size(); ++i)
@@ -129,11 +129,9 @@ public class FsWatcher extends Plugin {
     public void onObserverEvent(int event, String path) {
         JSObject obj = new JSObject();
         String content = null;
-        // FIXME: Current repo/path impl requires path to be a URL, dir to be a bare
-        // path.
         File f = new File(path);
         obj.put("path", Uri.fromFile(f));
-        obj.put("dir", mPath);
+        obj.put("dir", Uri.fromFile(new File(mPath)));
 
         switch (event) {
             case FileObserver.CLOSE_WRITE:
@@ -223,7 +221,8 @@ public class FsWatcher extends Plugin {
         @Override
         public void onEvent(int event, String path) {
             if (path != null && !path.equals("graphs-txid.edn") && !path.equals("broken-config.edn")) {
-                Log.d("FsWatcher", "got path=" + path + " event=" + event);
+                Log.d("FsWatcher", "got path=" + mPath + "/" + path + " event=" + event);
+                // TODO: handle newly created directory
                 if (Pattern.matches("(?i)[^.].*?\\.(md|org|css|edn|js|markdown)$", path)) {
                     String fullPath = mPath + "/" + path;
                     if (event == FileObserver.MOVE_SELF || event == FileObserver.MOVED_FROM ||
