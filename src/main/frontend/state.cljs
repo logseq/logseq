@@ -488,6 +488,8 @@ should be done through this fn in order to get global config and config defaults
 ;; State cursor fns for use with rum components
 ;; ============================================
 
+(declare document-mode?)
+
 (defn sub
   "Creates a rum cursor, https://github.com/tonsky/rum#cursors, for use in rum components.
 Similar to re-frame subscriptions"
@@ -605,9 +607,8 @@ Similar to re-frame subscriptions"
 
 (defn doc-mode-enter-for-new-line?
   []
-  (let [config (sub-config)]
-    (and (:document/mode? config)
-         (not (:shortcut/doc-mode-enter-for-new-block? config)))))
+  (and (document-mode?)
+       (not (:shortcut/doc-mode-enter-for-new-block? (get-config)))))
 
 (defn user-groups
   []
