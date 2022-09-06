@@ -173,6 +173,7 @@
 
 (def ws-addr config/WS-URL)
 
+;; Warning: make sure to `persist-var/-load` graphs-txid before using it.
 (def graphs-txid (persist-var/persist-var nil "graphs-txid"))
 
 (declare assert-local-txid<=remote-txid)
@@ -2720,6 +2721,7 @@
 
 (defn <check-remote-graph-exists
   [local-graph-uuid]
+  {:pre [(util/uuid-string? local-graph-uuid)]}
   (go
     (let [result (->> (<! (<list-remote-graphs remoteapi))
                       :Graphs
@@ -2731,27 +2733,25 @@
       result)))
 
 (defn sync-start []
-  (let [[user-uuid graph-uuid txid] @graphs-txid
-        *sync-state                 (atom (sync-state))
+  (let [*sync-state                 (atom (sync-state))
         current-user-uuid           (user/user-uuid)
         repo                        (state/get-current-repo)]
     (go
       ;; stop previous sync
       (<! (<sync-stop))
-      (when (and user-uuid graph-uuid txid
-                 (user/logged-in?)
-                 repo
-                 (not (config/demo-graph? repo)))
-        (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
-                                               (config/get-repo-dir repo) repo
-                                               txid *sync-state)]
-          ;; 1. if remote graph has been deleted, clear graphs-txid.edn
-          ;; 2. if graphs-txid.edn's content isn't [user-uuid graph-uuid txid], clear it
-          (if (not (and user-uuid graph-uuid txid))
-            (do (clear-graphs-txid! repo)
-                (state/set-file-sync-state repo nil))
+
+      (<! (p->c (persist-var/-load graphs-txid)))
+
+      (let [[user-uuid graph-uuid txid] @graphs-txid]
+        (when (and user-uuid graph-uuid txid
+                   (user/logged-in?)
+                   repo
+                   (not (config/demo-graph? repo)))
+          (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
+                                                 (config/get-repo-dir repo) repo
+                                                 txid *sync-state)]
             (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
-              (if-not (<! (<check-remote-graph-exists graph-uuid))
+              (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
                 (clear-graphs-txid! repo)
                 (do
                   (state/set-file-sync-state repo @*sync-state)
