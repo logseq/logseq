@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import cx from 'classnames'
-import { FloatGlassButton, imageS1 } from './common'
+import { FloatGlassButton } from './common'
 import { ArrowSquareOut, FrameCorners, TwitterLogo } from 'phosphor-react'
 import { AnimateInTurnBox } from '../../components/Animations'
 
@@ -13,6 +13,7 @@ const showcases = [
   {
     label: 'Relationships',
     iconUrl: IconImageRelations,
+    descImgUrl: new URL('./assets/benefit-0.png', import.meta.url),
     desc: (
       <p>
         Communicate better. <span className="opacity-60">Stay on top of your <br/>relationships, conversations, and meetings.</span>
@@ -29,6 +30,7 @@ const showcases = [
   {
     label: 'Daily Plan',
     iconUrl: IconImageDailyPlan,
+    descImgUrl: new URL('./assets/benefit-1.png', import.meta.url),
     desc: (
       <p>
         <span>Channel your attention,</span>
@@ -44,6 +46,7 @@ const showcases = [
   {
     label: 'Journaling',
     iconUrl: IconImageJournals,
+    descImgUrl: new URL('./assets/benefit-2.png', import.meta.url),
     desc: (
       <p>
         Understand yourself better.
@@ -57,6 +60,7 @@ const showcases = [
   {
     label: 'Data Control',
     iconUrl: IconImageDataControl,
+    descImgUrl: new URL('./assets/benefit-3.png', import.meta.url),
     desc: (
       <p>
         <span>Do all this without lock-in.</span> <br/>
@@ -73,6 +77,41 @@ const showcases = [
 
 export function DailyShowcase () {
   const [activeShowcase, setActiveShowcase] = useState(showcases[0].label)
+  const [sizeCache, setSizeCache] = useState([0, 0])
+  const [progress, setProgress] = useState(0)
+
+  const nextShowcase = () => {
+    const total = showcases.length
+    const currentIndex = showcases.findIndex((it) => it.label === activeShowcase)
+    let nextIndex = currentIndex + 1
+    if (nextIndex >= total) nextIndex = 0
+    setActiveShowcase(showcases[nextIndex]?.label)
+  }
+
+  useEffect(() => {
+    setProgress(0)
+  }, [activeShowcase])
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setProgress((progress: number) => {
+        let nextProgress = progress + 0.2
+        if (nextProgress > 100) {
+          nextShowcase()
+          nextProgress = 0
+        }
+        return nextProgress
+      })
+    }, 60)
+
+    return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    const handler = () => setSizeCache([])
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
 
   return (
     <div className="app-daily-showcase">
@@ -89,7 +128,7 @@ export function DailyShowcase () {
                 <span> turn this daily <br/>mess into structured information.</span>
               </h2>
 
-              <h1 className={cx("text-6xl py-3 invisible", t[1] && 'ani-slide-in-from-bottom')}>
+              <h1 className={cx('text-6xl py-3 invisible', t[1] && 'ani-slide-in-from-bottom')}>
                 <strong>Gain clarity</strong>
                 <span className="opacity-60"> in your everyday life:</span>
               </h1>
@@ -135,8 +174,18 @@ export function DailyShowcase () {
               </div>
 
               <div className="card flex">
-                <div className="l relative">
-                  <img src={imageS1} alt=""/>
+                <div className="l relative animate-in fade-in"
+                     style={{
+                       width: sizeCache[0] ? (sizeCache[0] + 'px') : 'auto',
+                       height: sizeCache[1] ? (sizeCache[1] + 'px') : 'auto'
+                     }}
+                >
+                  <img src={it.descImgUrl as any} alt="image"
+                       onLoad={(e: any) => {
+                         const { width, height } = e.target
+                         !sizeCache?.[0] && setSizeCache([width, height])
+                       }}
+                  />
 
                   <div className="ft absolute bottom-6 right-6">
                     <FloatGlassButton>
@@ -152,8 +201,14 @@ export function DailyShowcase () {
                 <div className="r">
                   <div className="inner">
                     <div className="t">
-                      <div className="progress flex rounded-full bg-gray-700/50 w-full h-[6px] mt-1 overflow-hidden">
-                        <span className="inner w-2/5 bg-logseq-100 rounded-full"></span>
+                      <div className="progress flex rounded-full bg-gray-700/50 w-full h-[6px] mt-1 overflow-hidden"
+                           onClick={nextShowcase}
+                      >
+                        <span className="inner bg-logseq-100 rounded-full transition-all"
+                              style={{
+                                width: `${progress}%`
+                              }}
+                        ></span>
                       </div>
                     </div>
 

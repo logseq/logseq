@@ -333,7 +333,7 @@
           }
 
           .progress {
-            @apply flex space-x-2 mt-4 mb-2;
+            @apply flex space-x-2 mt-4 mb-2 cursor-pointer;
 
             > i {
               @apply flex-1 h-[4px] bg-gray-500/30 rounded-md overflow-hidden;
@@ -514,6 +514,10 @@
           }
         }
       }
+    }
+
+    .progress {
+      @apply cursor-pointer hover:opacity-80 active:opacity-100;
     }
   }
 }

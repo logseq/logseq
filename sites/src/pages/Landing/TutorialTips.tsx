@@ -79,7 +79,7 @@ export function TipSlideItem (props: {
     const tickHandler = () => {
       // async
       setActiveTip(({ active, progress }) => {
-        let toProgress = progress + 2
+        let toProgress = progress + 0.4
         let toActive = active
 
         if (toProgress > 100) {
@@ -99,7 +99,7 @@ export function TipSlideItem (props: {
 
     function run () {
       clear()
-      const timer = setInterval(tickHandler, 300)
+      const timer = setInterval(tickHandler, 60)
       setProgressTimer(timer as any)
     }
 
