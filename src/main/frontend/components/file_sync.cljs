@@ -1,5 +1,7 @@
 (ns frontend.components.file-sync
   (:require [cljs.core.async :as async]
+            [cljs.core.async.interop :refer [p->c]]
+            [frontend.util.persist-var :as persist-var]
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.components.lazy-editor :as lazy-editor]
@@ -197,6 +199,7 @@
 
                                     (state/set-modal! confirm-fn {:center? true :close-btn? false})))
         turn-on                #(async/go
+                                  (async/<! (p->c (persist-var/-load fs-sync/graphs-txid)))
                                   (cond
                                     @*beta-unavailable?
                                     (state/pub-event! [:file-sync/onboarding-tip :unavailable])
