@@ -169,17 +169,26 @@
                 {:move
                  (fn [^js/MouseEvent e]
                    (let [width js/document.documentElement.clientWidth
-                         offset (.-left (.-rect e))
-                         right-el-ratio (- 1 (.toFixed (/ offset width) 6))
-                         right-el-ratio (cond
-                                          (< right-el-ratio 0.2) 0.2
-                                          (> right-el-ratio 0.7) 0.7
-                                          :else right-el-ratio)
+                         offset-left (.-pageX e)
+                         right-el-ratio (- 1 (.toFixed (/ offset-left width) 6))
                          right-el (js/document.getElementById "right-sidebar")]
-                     (when right-el
-                       (let [width (str (* right-el-ratio 100) "%")]
-                         (.setProperty (.-style right-el) "width" width)
-                         (ui-handler/persist-right-sidebar-width!)))))}}))
+                     (if (= (.getAttribute right-el "data-open") "true")
+                       (cond
+                         (< right-el-ratio 0.1)
+                         (state/hide-right-sidebar!)
+
+                         (< right-el-ratio 0.2)
+                         (.. js/document.documentElement -classList (add "is-resizing-threshold"))
+
+                         (< right-el-ratio 0.7)
+                         (when right-el
+                           (let [width (str (* right-el-ratio 100) "%")]
+                             (.. js/document.documentElement -classList (remove "is-resizing-threshold"))
+                             (.setProperty (.-style right-el) "width" width)
+                             (ui-handler/persist-right-sidebar-width!)))
+                         :else
+                         #(.. js/document.documentElement -classList (remove "is-resizing-threshold")))
+                       (when (> right-el-ratio 0.1) (state/open-right-sidebar!)))))}}))
              (.styleCursor false)
              (.on "dragstart" #(.. js/document.documentElement -classList (add "is-resizing-buf")))
              (.on "dragend" #(.. js/document.documentElement -classList (remove "is-resizing-buf")))))
@@ -196,7 +205,6 @@
   (let [*anim-finished? (get state ::anim-finished?)]
     [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
 
-     (sidebar-resizer)
      [:div.cp__right-sidebar-scrollable
       [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.px-2.h-12
        [:div.cp__right-sidebar-settings.hide-scrollbar.gap-1 {:key "right-sidebar-settings"}
@@ -240,6 +248,8 @@
         sidebar-open? (state/sub :ui/sidebar-open?)
         repo (state/sub :git/current-repo)]
     [:div#right-sidebar.cp__right-sidebar.h-screen
-     {:class (if sidebar-open? "open" "closed")}
+     {:class (if sidebar-open? "open" "closed")
+      :data-open sidebar-open?}
+     (sidebar-resizer)
      (when sidebar-open?
        (sidebar-inner repo t blocks))]))
