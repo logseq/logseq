@@ -171,7 +171,7 @@
 
 (defn ^:private write_assetsdir_file
   [file content sub-root]
-  (if-let [assets-dir (config/get-current-repo-assets-root)]
+  (when-let [assets-dir (config/get-current-repo-assets-root)]
     (write_rootdir_file file content sub-root assets-dir) false))
 
 (defn ^:private read_rootdir_file
