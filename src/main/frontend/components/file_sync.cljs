@@ -367,7 +367,9 @@
                                                        (nil? (second info))
                                                        (not= (second info) (:GraphUUID graph))))
                                           (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
-                                            (p/resolved nil)
+                                            (do
+                                              (state/set-state! :graph/remote-binding? true)
+                                              (p/resolved nil))
                                             (throw (js/Error. nil)))))))
 
                           ;; cancel pick a directory
