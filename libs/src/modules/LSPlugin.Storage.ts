@@ -40,7 +40,7 @@ class LSPluginFileStorage implements IAsyncStorage {
    * @param key A string as file name that support nested directory
    * @param value Storage value
    */
-  setItem(key: string, value: string): Promise<void> {
+  setItem(key: string, value: string | any): Promise<void> {
     return this.ctx.caller.callAsync(`api:call`, {
       method: 'write-plugin-storage-file',
       args: [this.ctxId, key, value, this.opts?.assets],
@@ -50,7 +50,7 @@ class LSPluginFileStorage implements IAsyncStorage {
   /**
    * @param key
    */
-  getItem(key: string): Promise<string | undefined> {
+  getItem(key: string): Promise<string | any> {
     return this.ctx.caller.callAsync(`api:call`, {
       method: 'read-plugin-storage-file',
       args: [this.ctxId, key, this.opts?.assets],
