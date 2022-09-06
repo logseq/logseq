@@ -488,9 +488,6 @@ should be done through this fn in order to get global config and config defaults
 ;; State cursor fns for use with rum components
 ;; ============================================
 
-;; State that some subs are dependent on. Should they use sub too?
-(declare get-edit-input-id document-mode?)
-
 (defn sub
   "Creates a rum cursor, https://github.com/tonsky/rum#cursors, for use in rum components.
 Similar to re-frame subscriptions"
@@ -562,8 +559,8 @@ Similar to re-frame subscriptions"
   (get-in (sub-config) [:default-home :page] ""))
 
 (defn sub-edit-content
-  []
-  (sub [:editor/content (get-edit-input-id)]))
+  [id]
+  (sub [:editor/content id]))
 
 (defn- get-selected-block-ids
   [blocks]
@@ -608,8 +605,9 @@ Similar to re-frame subscriptions"
 
 (defn doc-mode-enter-for-new-line?
   []
-  (and (document-mode?)
-       (not (:shortcut/doc-mode-enter-for-new-block? (sub-config)))))
+  (let [config (sub-config)]
+    (and (:document/mode? config)
+         (not (:shortcut/doc-mode-enter-for-new-block? config)))))
 
 (defn user-groups
   []
