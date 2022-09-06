@@ -1,6 +1,6 @@
 {
   "name": "Logseq",
-  "version": "0.8.4",
+  "version": "0.8.5",
   "main": "electron.js",
   "author": "Logseq",
   "license": "AGPL-3.0",
@@ -13,6 +13,7 @@
     "electron:make-macos-arm64": "electron-forge make --platform=darwin --arch=arm64",
     "electron:publish:github": "electron-forge publish",
     "rebuild:better-sqlite3": "electron-rebuild -v 19.0.12 -f -w better-sqlite3",
+    "rebuild:all": "electron-rebuild -v 19.0.12 -f",
     "postinstall": "install-app-deps"
   },
   "config": {
@@ -36,7 +37,7 @@
     "https-proxy-agent": "5.0.0",
     "@sentry/electron": "2.5.1",
     "posthog-js": "1.10.2",
-    "@logseq/rsapi": "0.0.36",
+    "@logseq/rsapi": "0.0.38",
     "electron-deeplink": "1.0.10",
     "abort-controller": "3.0.0"
   },
