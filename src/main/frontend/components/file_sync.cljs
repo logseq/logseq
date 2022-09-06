@@ -208,6 +208,7 @@
                                     nil
 
                                     (and synced-file-graph?
+                                         (second @fs-sync/graphs-txid)
                                          (async/<! (fs-sync/<check-remote-graph-exists (second @fs-sync/graphs-txid))))
                                     (fs-sync/sync-start)
 
