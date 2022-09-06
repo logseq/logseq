@@ -305,7 +305,7 @@ export const nodePath = Object.assign({}, path, {
     input = toPosixPath(input)
     return path.basename(input)
   },
- 
+
   name (input) {
     input = toPosixPath(input)
     return path.parse(input).name

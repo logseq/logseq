@@ -14,7 +14,6 @@
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.conversion :as conversion-handler]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
             [frontend.search :as search]

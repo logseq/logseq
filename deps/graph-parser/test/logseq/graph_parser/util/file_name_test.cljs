@@ -37,4 +37,7 @@
   (is (= "asldk lakls " (gp-util/path->file-body "asldk lakls .lsad")))
   (is (= "asldk lakls" (gp-util/path->file-body "asldk lakls")))
   (is (= "asldk lakls" (gp-util/path->file-body "/data/app/asldk lakls")))
-  (is (= "lsad" (gp-util/path->file-ext "asldk lakls .lsad"))))
+  (is (= "asldk lakls" (gp-util/path->file-body "file://data/app/asldk lakls.as")))
+  (is (= "中文asldk lakls" (gp-util/path->file-body "file://中文data/app/中文asldk lakls.as")))
+  (is (= "lsad" (gp-util/path->file-ext "asldk lakls .lsad")))
+  (is (= "lsad" (gp-util/path->file-ext "中文asldk lakls .lsad"))))

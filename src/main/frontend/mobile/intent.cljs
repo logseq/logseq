@@ -88,7 +88,7 @@
                         gp-util/page-name-sanity)
           path (path/join (config/get-repo-dir (state/get-current-repo))
                           (config/get-pages-directory)
-                          (str (fs-util/file-name-sanity title) (path/extname url)))
+                          (str (js/encodeURI (fs-util/file-name-sanity title)) (path/extname url)))
           _ (p/catch
                 (.copy Filesystem (clj->js {:from url :to path}))
                 (fn [error]

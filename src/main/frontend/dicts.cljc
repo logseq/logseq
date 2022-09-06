@@ -347,6 +347,9 @@
 
         :file-sync/other-user-graph "Current local graph is bound to other user's remote graph. So can't start syncing."
         :file-sync/graph-deleted "The current remote graph has been deleted"
+
+        :conversion/non-desktop "Graph directory in old versions needs to be converted to the new format. 
+          Please use the desktop app to do the conversion."
         }
 
    :de {:help/about "Über Logseq"

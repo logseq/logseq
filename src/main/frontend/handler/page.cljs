@@ -201,6 +201,9 @@
         file (db/pull (:db/id file))
         old-path (:file/path file)
         new-path (compute-new-file-path old-path new-file-name-body)]
+    ;; update db
+    (db/transact! repo [{:db/id (:db/id file)
+                         :file/path new-path}])
     (->
      (p/let [_ (state/offer-file-rename-event-chan! {:repo repo
                                                      :old-path old-path

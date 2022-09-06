@@ -65,8 +65,9 @@
    [:h1.title
     (t :all-files)]
    ;; Only resolve files on Desktop.
-   (when (not (util/mobile?))
-     (conversion-ui/files-breaking-changed))
+   (if (util/electron?)
+     (conversion-ui/files-breaking-changed)
+     [:p (t :conversion/non-desktop)])
    (files-all)
    ])
 
