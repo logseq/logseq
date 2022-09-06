@@ -374,7 +374,7 @@
 
                           ;; cancel pick a directory
                           (throw (js/Error. nil)))))})
-                  (p/catch (fn [^js e]))))
+                  (p/catch (fn []))))
     [:p.text-xs.opacity-50.px-1 (ui/icon "alert-circle") " An empty directory or an existing remote graph!"]]])
 
 (defn pick-dest-to-sync-panel [graph]
