@@ -1875,10 +1875,7 @@
                  (not= "nil" marker))
         {:class (str (string/lower-case marker))})
       (when bg-color
-        {:style {:background-color bg-color
-                 :padding-left 6
-                 :padding-right 6
-                 :color "#FFFFFF"}
+        {:style {:background-color bg-color}
          :class "with-bg-color"}))
      (remove-nils
       (concat
