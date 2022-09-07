@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import cx from 'classnames'
-import { FloatGlassButton } from './common'
+import { FloatGlassButton, openLightbox } from './common'
 import { ArrowSquareOut, FrameCorners, TwitterLogo } from 'phosphor-react'
 import { AnimateInTurnBox } from '../../components/Animations'
 
@@ -79,6 +79,7 @@ export function DailyShowcase () {
   const [activeShowcase, setActiveShowcase] = useState(showcases[0].label)
   const [sizeCache, setSizeCache] = useState([0, 0])
   const [progress, setProgress] = useState(0)
+  const bdRef = useRef<HTMLDivElement>(null)
 
   const nextShowcase = () => {
     const total = showcases.length
@@ -159,7 +160,7 @@ export function DailyShowcase () {
       </div>
 
       {/* Panels */}
-      <div className="panels">
+      <div className="panels" ref={bdRef}>
         {showcases.map(it => {
           if (it.label !== activeShowcase) {
             return null
@@ -188,7 +189,13 @@ export function DailyShowcase () {
                   />
 
                   <div className="ft absolute bottom-6 right-6">
-                    <FloatGlassButton>
+                    <FloatGlassButton
+                      onClick={() => {
+                        const src = bdRef.current!.querySelector('img')?.getAttribute('src')!
+
+                        openLightbox([{ src, width: 1000, height: 596 }])
+                      }}
+                    >
                       <FrameCorners
                         className={'font-bold cursor-pointer'}
                         size={26}
@@ -236,7 +243,6 @@ export function DailyShowcase () {
             </div>
           )
         })}
-
       </div>
     </div>
   )

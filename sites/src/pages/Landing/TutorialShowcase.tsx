@@ -2,19 +2,47 @@ import { FrameCorners } from 'phosphor-react'
 import { FloatGlassButton, imageS1 } from './common'
 import { AnimateInTurnBox } from '../../components/Animations'
 import cx from 'classnames'
+import { useState } from 'react'
+
+const featuresSlideItems = [
+  {
+    label: 'Students',
+    icon: '🧑‍🎓'
+  },
+  {
+    label: 'Writers',
+    icon: '🖋'
+  },
+  {
+    label: 'Academics',
+    icon: '🎓'
+  },
+  {
+    label: 'Project Managers',
+    icon: '📆'
+  },
+  {
+    label: 'Developers',
+    icon: '💻'
+  }
+]
 
 export function TutorialFeaturesSlide () {
+  const [activeTab, setActiveTab] = useState(featuresSlideItems[0].label)
+
   return (
     <div className="app-tutorial-features-slide">
       <div className="inner px-14">
         {/*  Tabs */}
         <ul className="tabs flex flex space-x-8 justify-around">
-          <li className="active"><span>🧑‍🎓</span><strong>Students</strong>
-          </li>
-          <li><span>🖋</span><strong>Writers</strong></li>
-          <li><span>🎓</span><strong>Academics</strong></li>
-          <li><span>📆</span><strong>Project Managers</strong></li>
-          <li><span>💻</span><strong>Developers</strong></li>
+          {featuresSlideItems.map(it => {
+            return (
+              <li className={cx({ active: (it.label === activeTab) })}
+                  onClick={() => setActiveTab(it.label)}
+              >
+                <span>{it.icon}</span><strong>{it.label}</strong>
+              </li>)
+          })}
         </ul>
 
         {/* Panel */}

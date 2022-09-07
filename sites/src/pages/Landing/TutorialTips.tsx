@@ -1,4 +1,4 @@
-import { AppLogo, FloatGlassButton, imageS1 } from './common'
+import { AppLogo, FloatGlassButton, openLightbox } from './common'
 import {
   ArrowCircleLeft,
   ArrowCircleRight, Brain, DiscordLogo,
@@ -10,27 +10,12 @@ import { AnimateInTurnBox } from '../../components/Animations'
 import cx from 'classnames'
 import Swiper from 'swiper'
 import 'swiper/swiper-bundle.css'
-// @ts-ignore
-import PhotoSwipeLightbox from 'photoswipe/dist/photoswipe-lightbox.esm.js'
+
 import 'photoswipe/dist/photoswipe.css'
 import { ReactNode, useEffect, useRef, useState } from 'react'
 import { useMounted } from '../../hooks'
 import { promiseImages } from './index'
 import { useAppState } from '../../state'
-
-function openLightbox (
-  sources: Array<{ src: string, width: number, height: number }>,
-  index: number = 0,
-) {
-  const lightbox = new PhotoSwipeLightbox({
-    dataSource: sources,
-    wheelToZoom: true,
-    pswpModule: () => import('photoswipe'),
-  })
-
-  lightbox.init()
-  lightbox.loadAndOpen(index)
-}
 
 export function TipSlideItem (props: {
   inActive: boolean,
@@ -58,6 +43,12 @@ export function TipSlideItem (props: {
   const resetState = () => {
     setActiveTip({ active: 0, progress: 0 })
     setProgressTimer(0)
+  }
+
+  const updateActiveNum = (active: number) => {
+    setActiveTip(() => {
+      return { active, progress: 0 }
+    })
   }
 
   useEffect(() => {
@@ -131,10 +122,12 @@ export function TipSlideItem (props: {
       </h2>
 
       <strong className="progress">
-        <i><small style={{
+        <i onClick={() => updateActiveNum(0)}
+        ><small style={{
           width: (!activeTip.active ? activeTip.progress : 100) + '%',
         }}>1</small></i>
-        <i><small
+        <i onClick={() => updateActiveNum(1)}
+        ><small
           style={{
             width: (!activeTip.active ? 0 : activeTip.progress) + '%',
           }}>2</small></i>
@@ -261,7 +254,7 @@ export function TutorialTips () {
                 'Install plugins and customize the app around your workflow needs.',
               ]}
               complete={() => {
-                swiperRef.current?.slideNext()
+                swiperRef.current?.slideTo(0)
               }}
               activeTipChanged={(tag) => {
                 setActiveTipTag?.(`2${tag}`)
@@ -272,7 +265,13 @@ export function TutorialTips () {
 
         <div className="bd-actions flex">
           <span className="prev" title={'Previous'}
-                onClick={() => swiperRef.current?.slidePrev()}
+                onClick={() => {
+                  if (activeIndex == 0) {
+                    return swiperRef.current?.slideTo(2)
+                  }
+
+                  swiperRef.current?.slidePrev()
+                }}
           >
            <ArrowCircleLeft size={26}/>
           </span>
@@ -294,7 +293,13 @@ export function TutorialTips () {
           </div>
 
           <span className="next" title={'Next'}
-                onClick={() => swiperRef.current?.slideNext()}
+                onClick={() => {
+                  if (activeIndex == 2) {
+                    return swiperRef.current?.slideTo(0)
+                  }
+
+                  swiperRef.current?.slideNext()
+                }}
           >
               <ArrowCircleRight size={26}/>
             </span>
@@ -309,8 +314,7 @@ export function TutorialTips () {
           <FloatGlassButton
             className="absolute right-6 bottom-5"
             onClick={() => {
-              const src = bdRef.current!.querySelector('img')?.
-                getAttribute('src')!
+              const src = bdRef.current!.querySelector('img')?.getAttribute('src')!
 
               openLightbox([{ src, width: 900, height: 553 }])
             }}
