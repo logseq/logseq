@@ -8,20 +8,13 @@
             [clojure.string :as string]
             [clojure.set :as set]))
 
-(defn- db-set-file-content!
-  "Modified copy of frontend.db.model/db-set-file-content!"
-  [conn path content]
-  (let [tx-data {:file/path path
-                 :file/content content}]
-    (d/transact! conn [tx-data] {:skip-refresh? true})))
-
 (defn parse-file
   "Parse file and save parsed data to the given db. Main parse fn used by logseq app"
-  [conn file content {:keys [new? delete-blocks-fn extract-options]
+  [conn file content {:keys [new? delete-blocks-fn extract-options skip-db-transact?]
                       :or {new? true
-                           delete-blocks-fn (constantly [])}
+                           delete-blocks-fn (constantly [])
+                           skip-db-transact? false}
                       :as options}]
-  (db-set-file-content! conn file content)
   (let [format (gp-util/get-format file)
         file-content [{:file/path file}]
         {:keys [tx ast]}
@@ -48,12 +41,15 @@
                {:tx (concat file-content pages-index delete-blocks pages block-ids blocks)
                 :ast ast})
              {:tx file-content})
-        tx (concat tx [(cond-> {:file/path file}
+        tx (concat tx [(cond-> {:file/path file
+                                :file/content content}
                                new?
                                ;; TODO: use file system timestamp?
                          (assoc :file/created-at (date-time-util/time-ms)))])
         tx' (gp-util/remove-nils tx)
-        result (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?]))]
+        result (if skip-db-transact?
+                 tx'
+                 (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?])))]
     {:tx result
      :ast ast}))
 
