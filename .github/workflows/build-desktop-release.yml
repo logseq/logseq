@@ -248,29 +248,26 @@ jobs:
         run: yarn run postinstall
         working-directory: ./static/node_modules/dugite/
 
+      - name: Prepare Code Sign
+        if: ${{ github.repository == 'logseq/logseq' }}
+        run: |
+          [IO.File]::WriteAllBytes($(Get-Location).Path + "\codesign.pfx", [Convert]::FromBase64String($env:CERTIFICATE))
+        env:
+          CERTIFICATE: ${{ secrets.CODE_SIGN_CERTIFICATE }}
+
       - name: Build/Release Electron app
         run: yarn electron:make
         working-directory: ./static
         env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CODE_SIGN_CERTIFICATE_FILE: ../codesign.pfx
+          CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
 
       - name: Save Artifact
         run: |
           mkdir builds
-          mv static\out\make\squirrel.windows\x64\*.exe builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
-
-      - name: Code Sign the Installer
-        uses: andelf/code-sign-action@master
-        if: ${{ github.repository == 'logseq/logseq' }}
-        with:
-          certificate: ${{ secrets.CODE_SIGN_CERTIFICATE }}
-          password: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
-          certificatesha1: ${{ secrets.CODE_SIGN_CERTIFICATE_SHA1 }}
-          certificatename: "Logseq, Inc."
-          timestampUrl: http://timestamp.digicert.com
-          folder: "builds"
-          recursive: false
+          mv static\out\make\squirrel.windows\x64\*.exe    builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
+          mv static\out\make\squirrel.windows\x64\*.nupkg  builds\Logseq-win-x64-${{ steps.ref.outputs.version }}-full.nupkg
+          mv static\out\make\squirrel.windows\x64\RELEASES builds\RELEASES
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v2
@@ -546,12 +543,17 @@ jobs:
           pkgver=$(cat VERSION)
           echo ::set-output name=version::$pkgver
 
+      - name: Fix .nupkg name in RELEASES file
+        run: |
+          sed -i "s/Logseq-.*.nupkg/Logseq-win-x64-${{ steps.ref.outputs.version }}-full.nupkg/g" RELEASES
+
       - name: Generate SHA256 checksums
         run: |
           sha256sum *-darwin-* > SHA256SUMS.txt
           sha256sum *-win-* >> SHA256SUMS.txt
           sha256sum *-linux-* >> SHA256SUMS.txt
           sha256sum *.apk >> SHA256SUMS.txt
+          sha256sum RELEASES >> SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Create Release Draft
@@ -570,5 +572,7 @@ jobs:
             ./*.zip
             ./*.dmg
             ./*.exe
+            ./*.nupkg
+            ./RELEASES
             ./*.AppImage
             ./*.apk
