@@ -157,7 +157,7 @@
     (get-page match)))
 
 (rum/defc sidebar-resizer
-  []
+  [sidebar-open? sidebar-id handler-position]
   (let [el-ref (rum/use-ref nil)]
     (rum/use-effect!
      (fn []
@@ -169,32 +169,37 @@
                 {:move
                  (fn [^js/MouseEvent e]
                    (let [width js/document.documentElement.clientWidth
-                         offset-left (.-pageX e)
-                         right-el-ratio (- 1 (.toFixed (/ offset-left width) 6))
-                         right-el (js/document.getElementById "right-sidebar")]
-                     (if (= (.getAttribute right-el "data-open") "true")
+                         offset (.-pageX e)
+                         ratio (.toFixed (/ offset width) 6)
+                         ratio (if (= handler-position :west) (- 1 ratio) ratio)  
+                         min-ration 0.1
+                         max-ration 0.7
+                         cursor-class (str "cursor-" (first (name handler-position)) "-resize")
+                         sidebar-el (js/document.getElementById sidebar-id)]
+                     (if (= (.getAttribute el "aria-expanded") "true")
                        (cond
-                         (< right-el-ratio 0.1)
+                         (< ratio (/ min-ration 2))
                          (state/hide-right-sidebar!)
 
-                         (< right-el-ratio 0.2)
-                         (.. js/document.documentElement -classList (add "is-resizing-threshold"))
+                         (< ratio min-ration)
+                         (.. js/document.documentElement -classList (add cursor-class))
 
-                         (< right-el-ratio 0.7)
-                         (when right-el
-                           (let [width (str (* right-el-ratio 100) "%")]
-                             (.. js/document.documentElement -classList (remove "is-resizing-threshold"))
-                             (.setProperty (.-style right-el) "width" width)
+                         (< ratio max-ration)
+                         (when sidebar-el
+                           (let [width (str (* ratio 100) "%")]
+                             (.. js/document.documentElement -classList (remove cursor-class))
+                             (.setProperty (.-style sidebar-el) "width" width)
                              (ui-handler/persist-right-sidebar-width!)))
                          :else
-                         #(.. js/document.documentElement -classList (remove "is-resizing-threshold")))
-                       (when (> right-el-ratio 0.1) (state/open-right-sidebar!)))))}}))
+                         #(.. js/document.documentElement -classList (remove cursor-class)))
+                       (when (> ratio 0.1) (state/open-right-sidebar!)))))}}))
              (.styleCursor false)
              (.on "dragstart" #(.. js/document.documentElement -classList (add "is-resizing-buf")))
              (.on "dragend" #(.. js/document.documentElement -classList (remove "is-resizing-buf")))))
        #())
      [])
-    [:span.resizer {:ref el-ref}]))
+    [:span.resizer {:ref el-ref
+                    :aria-expanded sidebar-open?}]))
 
 (rum/defcs sidebar-inner <
   (rum/local false ::anim-finished?)
@@ -248,8 +253,7 @@
         sidebar-open? (state/sub :ui/sidebar-open?)
         repo (state/sub :git/current-repo)]
     [:div#right-sidebar.cp__right-sidebar.h-screen
-     {:class (if sidebar-open? "open" "closed")
-      :data-open sidebar-open?}
-     (sidebar-resizer)
+     {:class (if sidebar-open? "open" "closed")}
+     (sidebar-resizer sidebar-open? "right-sidebar" :west)
      (when sidebar-open?
        (sidebar-inner repo t blocks))]))
