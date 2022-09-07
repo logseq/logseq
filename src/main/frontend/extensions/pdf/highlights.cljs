@@ -631,10 +631,9 @@
     [:div.extensions__pdf-highlights-cnt
 
      ;; hl context tip menu
-     (when-let [hl (:highlight tip-state)]
+     (when-let [_hl (:highlight tip-state)]
        (js/ReactDOM.createPortal
-        (pdf-highlights-ctx-menu
-         viewer (assoc tip-state :highlight (if (fn? hl) (hl) hl))
+        (pdf-highlights-ctx-menu viewer tip-state
          {:clear-ctx-tip! clear-ctx-tip!
           :add-hl!        add-hl!
           :del-hl!        del-hl!
