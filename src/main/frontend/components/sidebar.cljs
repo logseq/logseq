@@ -386,14 +386,13 @@
          [:div.mt-20
           [:div.ls-center
            (ui/loading (t :loading))]]
-
+         
          :else
-         [:div {:class (if global-graph-pages? "" (util/hiccup->class "max-w-7xl.mx-auto.pb-24"))
-                :style {:margin-bottom (cond
-                                         global-graph-pages? 0
-                                         onboarding-and-home? -48
-                                         :else 120)
-                        :padding-bottom (when (mobile-util/native-iphone?) "7rem")}}
+         [:div.mx-auto.pb-24 {:style {:margin-bottom (cond
+                                                       global-graph-pages? 0
+                                                       onboarding-and-home? -48
+                                                       :else 120)
+                                      :padding-bottom (when (mobile-util/native-iphone?) "7rem")}}
           main-content])
 
        (when onboarding-and-home?
