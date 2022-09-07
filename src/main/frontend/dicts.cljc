@@ -68,6 +68,7 @@
         :right-side-bar/flashcards "Flashcards"
         :right-side-bar/new-page "New page"
         :right-side-bar/show-journals "Show Journals"
+        :right-side-bar/separator "Right sidebar resize handler"
         :left-side-bar/journals "Journals"
         :left-side-bar/new-page "New page"
         :left-side-bar/nav-favorites "Favorites"
