@@ -29,8 +29,8 @@
       ;; Should only send to one window; then dbsync will do his job
       ;; If no window is on this graph, just ignore
       (let [sent? (some send-fn wins)]
-        (when-not sent? (prn "unhandled file event will cause uncatched file modifications!.
-                          target:" dir))))))
+        (when-not sent? (.warn utils/logger
+                               (str "unhandled file event will cause uncatched file modifications!. target:" dir)))))))
 
 (defn- publish-file-event!
   [dir path event]
@@ -89,8 +89,8 @@
                               500)))
         (.on dir-watcher "error"
              (fn [path]
-               (println "Watch error happened: "
-                        {:path path})))
+               (.warn utils/logger "Watch error happened: "
+                      (str {:path path}))))
 
         ;; electron app extends `EventEmitter`
         ;; TODO check: duplicated with the logic in "window-all-closed" ?

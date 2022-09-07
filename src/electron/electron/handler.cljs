@@ -111,8 +111,7 @@
         (let [backup-path (try
                             (backup-file/backup-file repo :backup-dir path (path/extname path) content)
                             (catch :default e
-                              (println "Backup file failed")
-                              (js/console.dir e)))]
+                              (.error utils/logger (str "Backup file failed: " e))))]
           (utils/send-to-renderer window "notification" {:type "error"
                                                          :payload (str "Write to the file " path
                                                                        " failed, "
@@ -304,7 +303,7 @@
         (try
           (fs-extra/removeSync path)
           (catch js/Error e
-            (js/console.error e)))))
+            (.error utils/logger (str "Clear cache: " e))))))
     (utils/send-to-renderer window "redirect" {:payload {:to :home}})))
 
 (defmethod handle :clearCache [window _]
@@ -564,7 +563,7 @@
   (apply rsapi/decrypt-with-passphrase (rest args)))
 
 (defmethod handle :default [args]
-  (println "Error: no ipc handler for: " (bean/->js args)))
+  (.error utils/logger "Error: no ipc handler for: " (bean/->js args)))
 
 (defn broadcast-persist-graph!
   "Receive graph-name (not graph path)
@@ -605,8 +604,8 @@
                    (bean/->js (handle (or (utils/get-win-from-sender event) window) message)))
                  (catch js/Error e
                    (when-not (contains? #{"mkdir" "stat"} (nth args-js 0))
-                     (println "IPC error: " {:event event
-                                             :args args-js}
+                     (.error utils/logger "IPC error: " (str {:event event
+                                                              :args args-js})
                               e))
                    e))))
     #(.removeHandler ipcMain main-channel)))

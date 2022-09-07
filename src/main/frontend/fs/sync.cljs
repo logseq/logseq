@@ -26,8 +26,7 @@
             [frontend.fs :as fs]
             [frontend.encrypt :as encrypt]
             [medley.core :refer [dedupe-by]]
-            [rum.core :as rum]
-            [goog.object :as gobj]))
+            [rum.core :as rum]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -490,6 +489,7 @@
 (deftype FileMetadata [size etag path encrypted-path last-modified remote? ^:mutable normalized-path]
   Object
   (get-normalized-path [_]
+    (assert (string? path) path)
     (when-not normalized-path
       (set! normalized-path
             (cond-> path
@@ -509,14 +509,21 @@
   (-hash [_] (hash {:etag etag :path path}))
 
   ILookup
-  (-lookup [this k]
-    (gobj/get this (name k)))
-  (-lookup [this k not-found]
-    (or (gobj/get this (name k)) not-found))
+  (-lookup [o k] (-lookup o k nil))
+  (-lookup [_ k not-found]
+    (case k
+      :size size
+      :etag etag
+      :path path
+      :encrypted-path encrypted-path
+      :last-modified last-modified
+      :remote? remote?
+      not-found))
+
 
   IPrintWithWriter
   (-pr-writer [_ w _opts]
-    (write-all w (str {:size size :etag etag :path path :remote? remote?}))))
+    (write-all w (str {:size size :etag etag :path path :remote? remote? :last-modified last-modified}))))
 
 
 
@@ -529,7 +536,7 @@
     "logseq/metadata.edn"})
 
 ;; TODO: use fn some to filter FileMetadata here, it cause too much loop
-(defn- diff-file-metadata-sets
+(defn diff-file-metadata-sets
   "Find the `FileMetadata`s that exists in s1 and does not exist in s2,
   compare by path+checksum+last-modified,
   if s1.path = s2.path & s1.checksum <> s2.checksum & s1.last-modified > s2.last-modified
@@ -813,7 +820,7 @@
                js->clj
                (map (fn [[path metadata]]
                       (->FileMetadata (get metadata "size") (get metadata "md5") path
-                                      (get metadata "encryptedFname") nil false nil)))
+                                      (get metadata "encryptedFname") (get metadata "mtime") false nil)))
                set)))))
 
   (<get-local-files-meta [_ _graph-uuid base-path filepaths]
@@ -826,7 +833,7 @@
              js->clj
              (map (fn [[path metadata]]
                     (->FileMetadata (get metadata "size") (get metadata "md5") path
-                                    (get metadata "encryptedFname") nil false nil)))
+                                    (get metadata "encryptedFname") (get metadata "mtime") false nil)))
              set))))
 
   (<rename-local-file [_ _graph-uuid base-path from to]
@@ -2140,7 +2147,7 @@
   "filter out FileChangeEvents checksum changed,
   compare checksum in FileChangeEvent and checksum calculated now"
   [es]
-  {:pre [(coll? es)
+  {:pre [(or (nil? es) (coll? es))
          (every? #(instance? FileChangeEvent %) es)]}
   (go
     (when (seq es)
@@ -2173,7 +2180,7 @@
 (defn- filter-too-huge-files
   "filter out files > `file-size-limit`"
   [es]
-  {:pre [(coll? es)
+  {:pre [(or (nil? es) (coll? es))
          (every? #(instance? FileChangeEvent %) es)]}
   (filterv filter-too-huge-files-aux es))
 
