@@ -159,13 +159,16 @@
 (rum/defc sidebar-resizer
   [sidebar-open? sidebar-id handler-position]
   (let [el-ref (rum/use-ref nil)
+        sidebar-el (js/document.getElementById sidebar-id)
         min-ratio 0.1
         max-ratio 0.7
         keyboard-step 5
-        set-width! (fn [width]
-                     (when el-ref((.setProperty (.-style (js/document.getElementById sidebar-id)) "width" (str width "%"))
-                                  (.setAttribute (rum/deref el-ref) "aria-valuenow" width)
-                                  (ui-handler/persist-right-sidebar-width!))))]
+        set-width! (fn [ratio element]
+                     (when (and el-ref element)
+                       (let [width (str (* ratio 100) "%")]
+                         (do (.setProperty (.-style element) "width" width)
+                             (.setAttribute (rum/deref el-ref) "aria-valuenow" ratio)
+                             (ui-handler/persist-right-sidebar-width!)))))]
     (rum/use-effect!
      (fn []
        (when-let [el (and (fn? js/window.interact) (rum/deref el-ref))]
@@ -191,8 +194,8 @@
 
                          (< ratio max-ratio)
                          (when sidebar-el
-                           ((.. js/document.documentElement -classList (remove cursor-class))
-                             (set-width! (* ratio 100))))
+                           (do (.. js/document.documentElement -classList (remove cursor-class))
+                               (set-width! ratio sidebar-el)))
                          :else
                          #(.. js/document.documentElement -classList (remove cursor-class)))
                        (when (> ratio 0.1) (state/open-right-sidebar!)))))}}))
@@ -210,18 +213,17 @@
                                                 :else 0))
                                       ratio (.toFixed (/ offset width) 6)
                                       ratio (if (= handler-position :west) (- 1 ratio) ratio)]
-                                  (when  (< ratio max-ratio) (set-width! (* ratio 100)))))))))
+                                  (when (and (> ratio min-ratio) (< ratio max-ratio)) (set-width! ratio sidebar-el))))))))
        #())
      [])
-    [:span.resizer {:ref el-ref
-                    :role "separator" 
-                    :aria-orientation "vertical" 
-                    :aria-label (t :right-side-bar/separator)
-                    :aria-valuemin (* min-ratio 100)
-                    :aria-valuemax (* max-ratio 100)
-                    :aria-valuenow ""
-                    :tabIndex "0"
-                    :data-expanded sidebar-open?}]))
+    [:.resizer {:ref el-ref
+                :role "separator"
+                :aria-orientation "vertical"
+                :aria-label (t :right-side-bar/separator)
+                :aria-valuemin (* min-ratio 100)
+                :aria-valuemax (* max-ratio 100)
+                :tabIndex "0"
+                :data-expanded sidebar-open?}]))
 
 (rum/defcs sidebar-inner <
   (rum/local false ::anim-finished?)
