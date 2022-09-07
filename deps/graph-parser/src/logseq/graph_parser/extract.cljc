@@ -235,7 +235,9 @@
   (let [_ (when verbose (println "Parsing start: " file))
         {:keys [pages blocks]} (gp-util/safe-read-string content)
         page-block (first pages)
-        page-name (filepath->page-name file)
+        page-name (or (:block/original-name page-block)
+                      (:block/name page-block)
+                      (filepath->page-name file))
         page-original-name (-> (:block/original-name page-block)
                                (#(cond (nil? %) page-name
                                        (= (gp-util/page-name-sanity-lc %)
