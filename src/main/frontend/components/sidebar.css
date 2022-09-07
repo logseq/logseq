@@ -451,6 +451,7 @@ html[data-theme='dark'] {
     z-index: 1000;
 
     &:hover,
+    &:focus,
     &:active {
       background-color: var(--ls-active-primary-color);
     }
