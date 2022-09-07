@@ -1,5 +1,7 @@
 (ns frontend.components.file-sync
   (:require [cljs.core.async :as async]
+            [cljs.core.async.interop :refer [p->c]]
+            [frontend.util.persist-var :as persist-var]
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.components.lazy-editor :as lazy-editor]
@@ -197,6 +199,7 @@
 
                                     (state/set-modal! confirm-fn {:center? true :close-btn? false})))
         turn-on                #(async/go
+                                  (async/<! (p->c (persist-var/-load fs-sync/graphs-txid)))
                                   (cond
                                     @*beta-unavailable?
                                     (state/pub-event! [:file-sync/onboarding-tip :unavailable])
@@ -208,6 +211,7 @@
                                     nil
 
                                     (and synced-file-graph?
+                                         (second @fs-sync/graphs-txid)
                                          (async/<! (fs-sync/<check-remote-graph-exists (second @fs-sync/graphs-txid))))
                                     (fs-sync/sync-start)
 
@@ -336,39 +340,41 @@
 
    [:div.-mt-1
     (ui/button
-     (str "Open a local directory")
-     :class "w-full rounded-t-none py-4"
-     :on-click #(-> (page-handler/ls-dir-files!
-                     (fn [{:keys [url]}]
-                       (file-sync-handler/init-remote-graph url)
-                       ;; TODO: wait for switch done
-                       (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
+      (str "Open a local directory")
+      :class "w-full rounded-t-none py-4"
+      :on-click #(->
+                  (page-handler/ls-dir-files!
+                   (fn [{:keys [url]}]
+                     (file-sync-handler/init-remote-graph url)
+                     ;; TODO: wait for switch done
+                     (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
 
-                     {:empty-dir?-or-pred
-                      (fn [ret]
-                        (let [empty-dir? (nil? (second ret))]
-                          (if-let [root (first ret)]
+                   {:empty-dir?-or-pred
+                    (fn [ret]
+                      (let [empty-dir? (nil? (second ret))]
+                        (if-let [root (first ret)]
 
-                            ;; verify directory
-                            (-> (if empty-dir?
-                                  (p/resolved nil)
-                                  (if (util/electron?)
-                                    (ipc/ipc :readGraphTxIdInfo root)
-                                    (fs-util/read-graph-txid-info root)))
+                          ;; verify directory
+                          (-> (if empty-dir?
+                                (p/resolved nil)
+                                (if (util/electron?)
+                                  (ipc/ipc :readGraphTxIdInfo root)
+                                  (fs-util/read-graph-txid-info root)))
 
-                                (p/then (fn [^js info]
-                                          (when (and (not empty-dir?)
-                                                     (or (nil? info)
-                                                         (nil? (second info))
-                                                         (not= (second info) (:GraphUUID graph))))
-                                            (throw (js/Error. "AssertDirectoryError"))))))
+                              (p/then (fn [^js info]
+                                        (when (and (not empty-dir?)
+                                                   (or (nil? info)
+                                                       (nil? (second info))
+                                                       (not= (second info) (:GraphUUID graph))))
+                                          (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
+                                            (do
+                                              (state/set-state! :graph/remote-binding? true)
+                                              (p/resolved nil))
+                                            (throw (js/Error. nil)))))))
 
-                            ;; cancel pick a directory
-                            (throw (js/Error. nil)))))})
-
-                    (p/catch (fn [^js e]
-                               (when (= "AssertDirectoryError" (.-message e))
-                                 (notifications/show! "Please select an empty directory or an existing remote graph!" :error))))))
+                          ;; cancel pick a directory
+                          (throw (js/Error. nil)))))})
+                  (p/catch (fn []))))
     [:p.text-xs.opacity-50.px-1 (ui/icon "alert-circle") " An empty directory or an existing remote graph!"]]])
 
 (defn pick-dest-to-sync-panel [graph]
