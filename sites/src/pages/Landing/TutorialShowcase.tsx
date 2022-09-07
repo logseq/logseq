@@ -33,7 +33,7 @@ export function TutorialFeaturesSlide () {
   return (
     <div className="app-tutorial-features-slide">
       <div className="inner px-14">
-        {/*  Tabs */}
+        {/* Tabs */}
         <ul className="tabs flex flex space-x-8 justify-around">
           {featuresSlideItems.map(it => {
             return (

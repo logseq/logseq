@@ -245,13 +245,59 @@
       flex-1 py-3 px-2 justify-center select-none cursor-pointer
       active:opacity-80 border-2 border-transparent transition-all;
 
-      &.active {
-        @apply border-gradient-br-yellow-purple-red-logseq-900;
+      &:first-child {
+        &.active {
+          @apply border-gradient-br-yellow-purple-red-logseq-900;
+        }
+
+        &:hover {
+          box-shadow: 0 2px 18px rgba(255, 66, 247, 0.3),
+          inset 0 0 7px rgba(255, 179, 66, 0.5);
+        }
       }
 
-      &:hover {
-        box-shadow: 0 2px 18px rgba(255, 66, 247, 0.3),
-        inset 0 0 7px rgba(255, 179, 66, 0.5);
+      &:nth-child(2) {
+        &.active {
+          @apply border-gradient-br-red-purple-blue-logseq-900;
+        }
+
+        &:hover {
+          box-shadow: 0 2px 18px rgba(110, 124, 251, 0.3),
+          inset 0 0 7px rgba(251, 66, 255, 0.5);
+        }
+      }
+
+      &:nth-child(3) {
+        &.active {
+          @apply border-gradient-br-yellow-brown-yellow-logseq-900;
+        }
+
+        &:hover {
+          box-shadow: 0 2px 18px rgba(171, 143, 118, 0.3),
+          inset 0 0 7px rgba(255, 248, 238, 0.5);
+        }
+      }
+
+      &:nth-child(4) {
+        &.active {
+          @apply border-gradient-br-red-black-yellow-logseq-900;
+        }
+
+        &:hover {
+          box-shadow: 0 2px 18px rgba(255, 66, 247, 0.3),
+          inset 0 0 7px rgba(255, 179, 66, 0.5);
+        }
+      }
+
+      &:nth-child(5) {
+        &.active {
+          @apply border-gradient-br-green-black-cyan-logseq-900;
+        }
+
+        &:hover {
+          box-shadow: 0px 2px 18px rgba(53, 113, 99, 0.3),
+          inset 0px 0px 7px rgba(92, 209, 186, 0.5);
+        }
       }
 
       > span {

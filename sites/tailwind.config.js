@@ -35,6 +35,31 @@ module.exports = {
             colors.purple[500],
             colors.red[600]
           ],
+
+          'red-purple-blue': [
+            colors.fuchsia[400],
+            colors.purple[500],
+            colors.blue[600]
+          ],
+
+          'yellow-brown-yellow': [
+            colors.yellow[400],
+            colors.stone[300],
+            colors.yellow[700]
+          ],
+
+          'red-black-yellow': [
+            colors.fuchsia[500],
+            colors.stone[700],
+            colors.yellow[400]
+          ],
+
+          'green-black-cyan': [
+            colors.green[500],
+            colors.stone[500],
+            colors.cyan[600]
+          ],
+
           'purple-white-red': [
             colors.red[300],
             colors.white,
