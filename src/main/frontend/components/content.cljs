@@ -312,7 +312,7 @@
                     block-ref-id
                     :block-ref))}
       "Open in sidebar"
-      ["shift" "click"])
+      ["⇧" "click"])
      (ui/menu-link
       {:key "copy"
        :on-click (fn [] (editor-handler/copy-current-ref block-ref-id))}
