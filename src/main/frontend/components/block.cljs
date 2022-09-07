@@ -2573,7 +2573,7 @@
         block (if ref?
                 (merge block (db/pull-block (:db/id block)))
                 block)
-        {:block/keys [uuid children pre-block? top? refs heading-level level type format content]} block
+        {:block/keys [uuid children pre-block? top? refs heading-level level format content properties]} block
         config (if navigated? (assoc config :id (str navigating-block)) config)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         blocks-container-id (:blocks-container-id config)
@@ -2582,7 +2582,7 @@
         config (if (nil? (:query-result config))
                  (assoc config :query-result (atom nil))
                  config)
-        heading? (or (= type :heading) (and heading-level (<= heading-level 6)))
+        heading? (or (:heading properties) (and heading-level (<= heading-level 6)))
         *control-show? (get state ::control-show?)
         db-collapsed? (util/collapsed? block)
         collapsed? (cond
