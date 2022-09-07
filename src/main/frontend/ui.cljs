@@ -338,11 +338,12 @@
     (when (mobile-util/native-iphone-without-notch?) (.add cl "is-native-iphone-without-notch"))
     (when (mobile-util/native-ipad?) (.add cl "is-native-ipad"))
     (when (util/electron?)
-      (doto js/window.apis
-        (.on "persist-zoom-level" #(storage/set :zoom-level %))
-        (.on "restore-zoom-level" #(when-let [zoom-level (storage/get :zoom-level)]
-                                     (js/window.apis.setZoomLevel zoom-level)))
-        (.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")))
+      (doseq [[event function]
+              [["persist-zoom-level" #(storage/set :zoom-level %)]
+               ["restore-zoom-level" #(when-let [zoom-level (storage/get :zoom-level)] (js/window.apis.setZoomLevel zoom-level))]
+               ["full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")]]]
+        (.on js/window.apis event function))
+
       (p/then (ipc/ipc :getAppBaseInfo) #(let [{:keys [isFullScreen]} (js->clj % :keywordize-keys true)]
                                            (and isFullScreen (.add cl "is-fullscreen")))))))
 
