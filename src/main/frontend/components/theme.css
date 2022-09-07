@@ -99,6 +99,8 @@ html.locked-scroll {
 }
 
 html.is-resizing-buf {
+  user-select: none;
+
   #right-sidebar {
     transition: none;
   }
@@ -107,7 +109,7 @@ html.is-resizing-buf {
     cursor: col-resize !important;
   }
 
-  &.is-resizing-threshold {
+  &.cursor-w-resize {
     * {
       cursor: w-resize !important;
     }
