@@ -7,6 +7,7 @@
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.rum :as r]
             [frontend.state :as state]
+            [frontend.storage :as storage]
             [frontend.ui.date-picker]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
@@ -337,7 +338,11 @@
     (when (mobile-util/native-iphone-without-notch?) (.add cl "is-native-iphone-without-notch"))
     (when (mobile-util/native-ipad?) (.add cl "is-native-ipad"))
     (when (util/electron?)
-      (js/window.apis.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen"))
+      (doto js/window.apis
+        (.on "persist-zoom-level" #(storage/set :zoom-level %))
+        (.on "restore-zoom-level" #(when-let [zoom-level (storage/get :zoom-level)]
+                                     (js/window.apis.setZoomLevel zoom-level)))
+        (.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")))
       (p/then (ipc/ipc :getAppBaseInfo) #(let [{:keys [isFullScreen]} (js->clj % :keywordize-keys true)]
                                            (and isFullScreen (.add cl "is-fullscreen")))))))
 
