@@ -31,7 +31,8 @@
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
             [frontend.encrypt :as encrypt]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [medley.core :as medley]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -174,21 +175,27 @@
         file-paths [path]]
     (load-pages-metadata! repo file-paths files force?)))
 
+(defonce *file-tx (atom nil))
+
 (defn- parse-and-load-file!
-  [repo-url file {:keys [new-graph? verbose]}]
+  [repo-url file {:keys [new-graph? verbose skip-db-transact?]
+                  :or {skip-db-transact? true}}]
   (try
-    (file-handler/alter-file repo-url
-                             (:file/path file)
-                             (:file/content file)
-                             (merge {:new-graph? new-graph?
-                                     :re-render-root? false
-                                     :from-disk? true}
-                                    (when (some? verbose) {:verbose verbose})))
+    (reset! *file-tx
+            (file-handler/alter-file repo-url
+                                     (:file/path file)
+                                     (:file/content file)
+                                     (merge {:new-graph? new-graph?
+                                             :re-render-root? false
+                                             :from-disk? true
+                                             :skip-db-transact? skip-db-transact?}
+                                            (when (some? verbose) {:verbose verbose}))))
     (catch :default e
       (state/set-parsing-state! (fn [m]
                                   (update m :failed-parsing-files conj [(:file/path file) e])))))
   (state/set-parsing-state! (fn [m]
-                              (update m :finished inc))))
+                              (update m :finished inc)))
+  @*file-tx)
 
 (defn- after-parse
   [repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan]
@@ -210,8 +217,11 @@
   (let [supported-files (graph-parser/filter-files files)
         delete-data (->> (concat delete-files delete-blocks)
                          (remove nil?))
-        chan (async/to-chan! supported-files)
-        graph-added-chan (async/promise-chan)]
+        indexed-files (medley/indexed supported-files)
+        chan (async/to-chan! indexed-files)
+        graph-added-chan (async/promise-chan)
+        total (count supported-files)
+        large-graph? (> total 1000)]
     (when (seq delete-data) (db/transact! repo-url delete-data))
     (state/set-current-repo! repo-url)
     (state/set-parsing-state! {:total (count supported-files)})
@@ -220,18 +230,33 @@
       (do
         (doseq [file supported-files]
           (state/set-parsing-state! (fn [m]
-                                      (assoc m :current-parsing-file (:file/path file))))
-          (parse-and-load-file! repo-url file (select-keys opts [:new-graph? :verbose])))
+                                      (assoc m
+                                             :current-parsing-file (:file/path file))))
+          (parse-and-load-file! repo-url file (assoc
+                                               (select-keys opts [:new-graph? :verbose])
+                                               :skip-db-transact? false)))
         (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan))
-      (async/go-loop []
-        (if-let [file (async/<! chan)]
-          (do
+      (async/go-loop [tx []]
+        (if-let [item (async/<! chan)]
+          (let [[idx file] item
+                yield-for-ui? (or (not large-graph?)
+                                  (zero? (rem idx 10))
+                                  (<= (- total idx) 10))]
             (state/set-parsing-state! (fn [m]
                                         (assoc m :current-parsing-file (:file/path file))))
-            (async/<! (async/timeout 10))
-            (parse-and-load-file! repo-url file (select-keys opts [:new-graph? :verbose]))
-            (recur))
-          (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan))))
+
+            (when yield-for-ui? (async/<! (async/timeout 1)))
+
+            (let [result (parse-and-load-file! repo-url file (select-keys opts [:new-graph? :verbose]))
+                  tx' (concat tx result)
+                  tx' (if (zero? (rem (inc idx) 100))
+                        (do (db/transact! repo-url tx' {:from-disk? true})
+                            [])
+                        tx')]
+              (recur tx')))
+          (do
+            (when (seq tx) (db/transact! repo-url tx {:from-disk? true}))
+            (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan)))))
     graph-added-chan))
 
 (defn- parse-files-and-create-default-files!
