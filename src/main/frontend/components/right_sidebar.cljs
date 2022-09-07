@@ -159,16 +159,15 @@
 (rum/defc sidebar-resizer
   [sidebar-open? sidebar-id handler-position]
   (let [el-ref (rum/use-ref nil)
-        sidebar-el (js/document.getElementById sidebar-id)
         min-ratio 0.1
         max-ratio 0.7
         keyboard-step 5
         set-width! (fn [ratio element]
                      (when (and el-ref element)
                        (let [width (str (* ratio 100) "%")]
-                         (do (.setProperty (.-style element) "width" width)
-                             (.setAttribute (rum/deref el-ref) "aria-valuenow" ratio)
-                             (ui-handler/persist-right-sidebar-width!)))))]
+                         (#(.setProperty (.-style element) "width" width)
+                          (.setAttribute (rum/deref el-ref) "aria-valuenow" ratio)
+                          (ui-handler/persist-right-sidebar-width!)))))]
     (rum/use-effect!
      (fn []
        (when-let [el (and (fn? js/window.interact) (rum/deref el-ref))]
@@ -192,10 +191,10 @@
                          (< ratio min-ratio)
                          (.. js/document.documentElement -classList (add cursor-class))
 
-                         (< ratio max-ratio)
+                         (and (< ratio max-ratio) sidebar-el)
                          (when sidebar-el
-                           (do (.. js/document.documentElement -classList (remove cursor-class))
-                               (set-width! ratio sidebar-el)))
+                           (#(.. js/document.documentElement -classList (remove cursor-class))
+                            (set-width! ratio sidebar-el)))
                          :else
                          #(.. js/document.documentElement -classList (remove cursor-class)))
                        (when (> ratio 0.1) (state/open-right-sidebar!)))))}}))
