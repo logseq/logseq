@@ -1235,9 +1235,16 @@
              (sort-by-left-recursive)
              db-utils/group-by-page)))))
 
+(defn- contains-cjk?
+ "Checks if text contains character in unicode range for CJK and returns a boolean"
+ [text]
+  (boolean (re-find (re-pattern "[\\u3040-\\u30ff\\u3400-\\u4dbf\\u4e00-\\u9fff\\uf900-\\ufaff\\uff66-\\uff9f]") text)))
+
 (defn- pattern [name]
   (re-pattern (str "(?i)(^|[^\\[#0-9a-zA-Z]|((^|[^\\[])\\[))"
+                   "^"
                    (util/regex-escape name)
+                   (if (contains-cjk? (util/regex-escape name)) "\\d*" nil)
                    "($|[^0-9a-zA-Z])")))
 
 (defn get-page-unlinked-references
