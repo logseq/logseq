@@ -502,13 +502,33 @@
       bg-logseq-700 rounded-xl cursor-pointer select-none border-2 border-transparent
       transition-all active:opacity-80;
 
-      &.active {
-        @apply border-gradient-b-blue-white-green-logseq-900;
-      }
-
       &:hover {
         box-shadow: 0 2px 18px rgba(23, 23, 23, 0.3),
         inset 0 0 7px rgba(237, 237, 236, 0.5);
+      }
+
+      &:first-child {
+        &.active {
+          @apply border-gradient-b-blue-white-green-logseq-900;
+        }
+      }
+
+      &:nth-child(2) {
+        &.active {
+          @apply border-gradient-b-gray-white-gray-logseq-900;
+        }
+      }
+
+      &:nth-child(3) {
+        &.active {
+          @apply border-gradient-b-brown-white-blue-logseq-900;
+        }
+      }
+
+      &:nth-child(4) {
+        &.active {
+          @apply border-gradient-b-gray-white-blue-logseq-900;
+        }
       }
 
       &.active strong {

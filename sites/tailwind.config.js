@@ -60,6 +60,11 @@ module.exports = {
             colors.cyan[600]
           ],
 
+          'gray-white-gray': [
+            colors.stone[400],
+            colors.white,
+            colors.stone[600]
+          ],
           'purple-white-red': [
             colors.red[300],
             colors.white,
@@ -80,6 +85,17 @@ module.exports = {
             colors.white,
             colors.yellow[100]
           ],
+
+          'brown-white-blue': [
+            colors.yellow[300],
+            colors.white,
+            colors.blue[400]
+          ],
+          'gray-white-blue': [
+            colors.stone[500],
+            colors.white,
+            colors.yellow[900]
+          ]
         },
         background: theme('colors'),
       })

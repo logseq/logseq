@@ -15,30 +15,35 @@
         flex-1 py-5 px-2 justify-center select-none cursor-pointer
         active:opacity-80 border-2 border-transparent transition-all duration-300;
 
-        &:hover, &.active {
+        &.active {
           @apply border-gradient-br-yellow-purple-red-logseq-900;
         }
 
+        &:hover {
+          box-shadow: 0 2px 18px rgba(73, 134, 190, 0.3),
+          inset 0 0 7px rgba(237, 204, 114, 0.5);
+        }
+
         &.is-macos, &.is-ios {
-          &:hover, &.active {
+          &.active {
             @apply border-gradient-br-purple-white-red-logseq-900;
           }
         }
 
         &.is-windows {
-          &:hover, &.active {
+          &.active {
             @apply border-gradient-br-blue-white-green-logseq-900;
           }
         }
 
         &.is-linux {
-          &:hover, &.active {
+          &.active {
             @apply border-gradient-br-yellow-white-orange-logseq-900;
           }
         }
 
         &.is-android {
-          &:hover, &.active {
+          &.active {
             @apply border-gradient-br-green-white-black-logseq-900;
           }
         }
