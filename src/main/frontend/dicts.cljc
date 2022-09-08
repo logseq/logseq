@@ -2701,7 +2701,26 @@
            :tutorial/text "tutorial-en.md"
            :settings-page/edit-export-css "Editar export.css"
            :settings-page/enable-flashcards "Flashcards"
-           :settings-page/export-theme "Exportar Tema"}
+           :settings-page/export-theme "Exportar Tema"
+           
+           :discourse-title "Nosso fórum!"
+           :importing "Importando"
+           :asset/copy "Copiar imagem"
+           :asset/delete "Excluir imagem"
+           :asset/maximize "Expandir imagem"
+
+           :asset/open-in-browser "Abrir imagem no navegador"
+           :asset/show-in-folder "Mostrar imagem na pasta"
+           :graph/all-graphs "Todos os grafos"
+           :graph/local-graphs "Grafos locais"
+           :graph/remote-graphs "Grafos remotos"
+           :help/forum-community "Comunidade do fórum"
+           :linked-references/filter-search "Procurar em páginas vinculadas"
+           :right-side-bar/show-journals "Mostrar registros"
+           :settings-page/custom-global-configuration "Configuração global personalizada"
+           :settings-page/edit-global-config-edn "Editar config.edn global"
+           :settings-page/sync "Sincronizar"
+           :settings-page/tab-features "Recursos"}
 
    :pt-PT {:on-boarding/demo-graph "Isto é um grafo de demonstração, nenhuma mudança será guardada até abrir uma pasta local."
            :on-boarding/add-graph "Adicionar grafo"
@@ -3025,7 +3044,26 @@
         :settings-page/enable-flashcards "Flashcards"
         :settings-page/export-theme "Exportar tema"
         :settings-page/network-proxy "Proxy de rede"
-        :settings-page/plugin-system "Sistema de plugins"}
+        :settings-page/plugin-system "Sistema de plugins"
+        
+        :discourse-title "Nosso fórum!"
+        :importing "Importando"
+        :asset/copy "Copiar imagem"
+        :asset/delete "Excluir imagem"
+        :asset/maximize "Expandir imagem"
+
+        :asset/open-in-browser "Abrir imagem no navegador"
+        :asset/show-in-folder "Mostrar imagem na pasta"
+        :graph/all-graphs "Todos os grafos"
+        :graph/local-graphs "Grafos locais"
+        :graph/remote-graphs "Grafos remotos"
+        :help/forum-community "Comunidade do fórum"
+        :linked-references/filter-search "Procurar em páginas vinculadas"
+        :right-side-bar/show-journals "Mostrar registros"
+        :settings-page/custom-global-configuration "Configuração global personalizada"
+        :settings-page/edit-global-config-edn "Editar config.edn global"
+        :settings-page/sync "Sincronizar"
+        :settings-page/tab-features "Recursos"}
 
    :ru {:on-boarding/demo-graph "Это демонстрационный граф, изменения не будут сохранены, пока вы не откроете локальный файл."
         :on-boarding/add-graph "Добавить новый граф"
