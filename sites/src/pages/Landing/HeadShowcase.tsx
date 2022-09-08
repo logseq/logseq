@@ -1,7 +1,5 @@
 import {
-  AppleLogo,
   ArrowSquareOut,
-  CaretDown,
   CircleWavyQuestion,
   Play,
 } from 'phosphor-react'
@@ -16,12 +14,12 @@ export function HeadShowcase () {
         <div className="item-wrap relative flex-1">
           {/* text layer*/}
           <div
-            className="text-1 z-0 w-full flex flex-col items-center tracking-wide">
-            <span className="text-6xl opacity-70">Connect your notes, </span>
-            <strong className="flex text-6xl">
+            className="text-1 z-0 w-full flex flex-col tracking-wide">
+            <span className="text-4xl sm:text-6xl opacity-70">Connect your notes, </span>
+            <strong className="text-3xl sm:text-6xl flex">
               increase understanding.
               <sup
-                className="translate-y-8 opacity-80 text-logseq-100 hover:opacity-60">
+                className="opacity-80 text-logseq-100 hover:opacity-60 sm:translate-y-6">
                 <CircleWavyQuestion size={28}/>
               </sup>
             </strong>
@@ -59,8 +57,8 @@ export function HeadShowcase () {
                 </div>
               </GlassCard>
             </div>
-            <div className="r2 flex space-x-3">
-              <GlassCard delay={1300} className={'b flex'}>
+            <div className="r2">
+              <GlassCard delay={1300} className={'b flex mb-2.5 sm:mb-1'}>
                 <div className="avatar flex items-center">
                   <span className="avatar-img">Image</span>
                 </div>
@@ -83,7 +81,7 @@ export function HeadShowcase () {
                 </div>
               </GlassCard>
             </div>
-            <div className="r3 pt-3 px-24">
+            <div className="r3 pt-3 sm:px-24">
               <GlassCard delay={2000} className={'d'}>
                 <div className="outliner-list-demo">
                   <div className="outliner-list-item">
@@ -100,7 +98,7 @@ export function HeadShowcase () {
           </div>
 
           {/*  action buttons */}
-          <div className="actions-4 z-30 flex space-x-4">
+          <div className="actions-4 z-30">
             <WrapGlobalDownloadButton
               className="is-super-button"
             >

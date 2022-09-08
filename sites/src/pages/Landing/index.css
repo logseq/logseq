@@ -28,34 +28,46 @@
   -webkit-font-smoothing: antialiased;
 
   > .inner {
-    padding-top: 60px;
+    @apply pt-0 sm:pt-16;
   }
 
   .item-wrap {
   }
 
   .text-1 {
-    padding-top: 75px;
-    line-height: 4.25rem;
+    @apply pt-8 px-4
+    sm:pt-16 sm:items-center;
+
+    line-height: 3rem;
+
+    @screen sm {
+      line-height: 5.75rem;
+    }
   }
 
   .image-2 {
     background-image: url("./assets/header_bg.png");
     background-size: contain;
-    top: 170px;
+    top: 160px;
     left: 50%;
     transform: translateX(-50%);
     width: 600px;
     height: 570px;
     background-position-y: -110px;
     background-position-x: -12px;
+
+    @screen sm {
+      top: 170px;
+    }
   }
 
   .cards-3 {
     @apply absolute;
 
-    width: 500px;
-    top: 300px;
+    width: 86vw;
+    max-width: 500px;
+
+    top: 160px;
     left: 50%;
     transform: translateX(-50%);
 
@@ -64,7 +76,7 @@
       }
 
       &.b, &.c {
-        flex-basis: 220px;
+        width: 260px;
 
         .glass-card-inner {
           @apply flex text-sm;
@@ -83,8 +95,8 @@
           }
         }
 
-        .info {
-
+        @screen sm {
+          flex-basis: 220px;
         }
       }
 
@@ -109,10 +121,25 @@
 
       }
     }
+
+    > .r2 {
+      @apply flex flex-col sm:flex-row sm:space-x-3;
+    }
+
+    > .r3 {
+
+    }
+
+    @screen sm {
+      width: 500px;
+      top: 300px;
+    }
   }
 
   .actions-4 {
-    @apply absolute w-full flex justify-center pt-20 pb-5;
+    @apply flex absolute px-4
+    w-full flex-col justify-center pt-24 pb-5
+    sm:pt-20 sm:flex-row sm:space-x-4;
 
     bottom: 0;
 
@@ -122,8 +149,13 @@
       content: " ";
     }
 
-    > button {
-      position: relative;
+    button {
+      @apply relative w-full mb-2 -translate-y-6
+      sm:w-auto sm:translate-y-0;
+
+      &:last-child {
+        @apply top-2 sm:top-0;
+      }
     }
   }
 }

@@ -34,6 +34,8 @@ export function TipSlideItem (props: {
     content,
     className,
     tips,
+    complete,
+    activeTipChanged,
     ...rest
   } = props
   const [activeTip, setActiveTip] = useState({ active: 0, progress: 0 })
@@ -76,7 +78,7 @@ export function TipSlideItem (props: {
         if (toProgress > 100) {
           if (active) {
             clear()
-            props.complete?.()
+            complete?.()
             toProgress = 100
           } else {
             toProgress = 0
@@ -101,7 +103,7 @@ export function TipSlideItem (props: {
   }, [inActive])
 
   useEffect(() => {
-    inActive && props.activeTipChanged?.(activeTip.active.toString())
+    inActive && activeTipChanged?.(activeTip.active.toString())
   }, [activeTip.active, inActive])
 
   return (

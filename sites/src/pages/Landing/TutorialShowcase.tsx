@@ -37,7 +37,9 @@ export function TutorialFeaturesSlide () {
         <ul className="tabs flex flex space-x-8 justify-around">
           {featuresSlideItems.map(it => {
             return (
-              <li className={cx({ active: (it.label === activeTab) })}
+              <li
+                key={it.label}
+                className={cx({ active: (it.label === activeTab) })}
                   onClick={() => setActiveTab(it.label)}
               >
                 <span>{it.icon}</span><strong>{it.label}</strong>

@@ -24,13 +24,16 @@ export const LSButton = React.forwardRef<HTMLButtonElement, ILSButtonProps>((
     <button
       className={
         cx(
-          'flex items-center text-base space-x-1 bg-logseq-400 rounded-lg py-3 px-4',
+          'flex items-center justify-between text-base space-x-1 bg-logseq-400 rounded-lg py-3 px-4',
           'transition-opacity hover:opacity-80 active:opacity-100 disabled:hover:opacity-100',
           className)
       }
       ref={ref} {...rest}>
-      {leftIcon && <i className={'pr-1'}>{leftIcon}</i>}
-      <span>{children}</span>
+      <div className={'l flex items-center'}>
+        {leftIcon && <i className={'pr-1'}>{leftIcon}</i>}
+        <span>{children}</span>
+      </div>
+
       {rightIcon && <i className={'pl-1'}>{rightIcon}</i>}
     </button>
   )

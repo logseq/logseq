@@ -140,8 +140,10 @@ export function WrapGlobalDownloadButton (
   const rightIconFn = isMacOS ? (
     (props: any = {}) => <CaretDown className={'ml-1 opacity-60'} {...props}/>
   ) : (isIOS ? (
-    (props: any = {}) => <QrCode weight={'duotone'}
-                                 className={'ml-1 opacity-60'} {...props}/>
+    (props: any = {}) => (
+      appState.sm.get() ?
+        <DownloadSimple weight={'duotone'} className={'ml-1 opacity-60'} {...props} /> :
+        <QrCode weight={'duotone'} className={'ml-1 opacity-60'} {...props}/>)
   ) : null)
 
   useEffect(() => {
