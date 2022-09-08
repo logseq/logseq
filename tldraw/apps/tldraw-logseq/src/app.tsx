@@ -28,6 +28,7 @@ import {
   shapes,
   TextTool,
   YouTubeTool,
+  IFrameTool,
   type Shape,
 } from './lib'
 import { LogseqContext, type LogseqContextValue } from './lib/logseq-context'
@@ -47,6 +48,7 @@ const tools: TLReactToolConstructor<Shape>[] = [
   PencilTool,
   TextTool,
   YouTubeTool,
+  IFrameTool,
   HTMLTool,
   LogseqPortalTool,
 ]
