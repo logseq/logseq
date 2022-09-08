@@ -164,7 +164,8 @@
     (rum/use-effect!
      (fn []
        (if (and @*highlight-mode? new?)
-         (action-fn! @*highlight-last-color true)
+         ;; TODO: wait for selection cleared ...
+         (js/setTimeout #(action-fn! @*highlight-last-color true) 300)
          (let [^js el (rum/deref *el)
                {:keys [x y]} (util/calc-delta-rect-offset el (.closest el ".extensions__pdf-viewer"))]
            (set! (.. el -style -transform)
@@ -634,10 +635,10 @@
      (when-let [_hl (:highlight tip-state)]
        (js/ReactDOM.createPortal
         (pdf-highlights-ctx-menu viewer tip-state
-         {:clear-ctx-tip! clear-ctx-tip!
-          :add-hl!        add-hl!
-          :del-hl!        del-hl!
-          :upd-hl!        upd-hl!})
+                                 {:clear-ctx-tip! clear-ctx-tip!
+                                  :add-hl!        add-hl!
+                                  :del-hl!        del-hl!
+                                  :upd-hl!        upd-hl!})
 
         (.querySelector el ".pp-holder")))
 
