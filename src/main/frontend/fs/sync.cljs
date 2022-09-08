@@ -702,7 +702,7 @@
           (recur (dec n)))
         r))))
 
-(deftype RSAPI [^:mutable _graph-uuid ^:mutable _private-key ^:mutable _public-key]
+(deftype RSAPI [^:mutable graph-uuid' ^:mutable private-key' ^:mutable public-key']
   IToken
   (<get-token [this]
     (go
@@ -714,15 +714,15 @@
       (state/get-auth-id-token)))
 
   IRSAPI
-  (rsapi-ready? [_ graph-uuid] (and (= graph-uuid _graph-uuid) _private-key _public-key))
+  (rsapi-ready? [_ graph-uuid] (and (= graph-uuid graph-uuid') private-key' public-key'))
   (<key-gen [_] (go (js->clj (<! (p->c (ipc/ipc "key-gen")))
                              :keywordize-keys true)))
   (<set-env [_ prod? private-key public-key graph-uuid]
     (when (not-empty private-key)
       (print (util/format "[%s] setting sync age-encryption passphrase..." graph-uuid)))
-    (set! _graph-uuid graph-uuid)
-    (set! _private-key private-key)
-    (set! _public-key public-key)
+    (set! graph-uuid' graph-uuid)
+    (set! private-key' private-key)
+    (set! public-key' public-key)
     (p->c (ipc/ipc "set-env" (if prod? "prod" "dev") private-key public-key)))
   (<get-local-all-files-meta [_ graph-uuid base-path]
     (go
@@ -786,7 +786,7 @@
                                     (js->clj r))))))
 
 
-(deftype ^:large-vars/cleanup-todo CapacitorAPI [^:mutable _graph-uuid ^:mutable _private-key ^:mutable _public-key]
+(deftype ^:large-vars/cleanup-todo CapacitorAPI [^:mutable graph-uuid' ^:mutable private-key ^:mutable public-key']
   IToken
   (<get-token [this]
     (go
@@ -798,15 +798,15 @@
       (state/get-auth-id-token)))
 
   IRSAPI
-  (rsapi-ready? [_ graph-uuid] (and (= graph-uuid _graph-uuid) _private-key _public-key))
+  (rsapi-ready? [_ graph-uuid] (and (= graph-uuid graph-uuid') private-key public-key'))
   (<key-gen [_]
     (go (let [r (<! (p->c (.keygen mobile-util/file-sync #js {})))]
           (-> r
               (js->clj :keywordize-keys true)))))
   (<set-env [_ prod? secret-key public-key graph-uuid]
-    (set! _graph-uuid graph-uuid)
-    (set! _private-key secret-key)
-    (set! _public-key public-key)
+    (set! graph-uuid' graph-uuid)
+    (set! private-key secret-key)
+    (set! public-key' public-key)
     (p->c (.setEnv mobile-util/file-sync (clj->js {:env (if prod? "prod" "dev")
                                                    :secretKey secret-key
                                                    :publicKey public-key}))))
@@ -2356,7 +2356,7 @@
  SyncManager [graph-uuid base-path *sync-state
               ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer remoteapi
               ^:mutable ratelimit-local-changes-chan
-              *txid ^:mutable state ^:mutable _remote-change-chan ^:mutable _*ws *stopped? *paused?
+              *txid ^:mutable state ^:mutable remote-change-chan ^:mutable *ws *stopped? *paused?
               ^:mutable ops-chan
               ;; control chans
               private-full-sync-chan private-stop-sync-chan private-remote->local-sync-chan
@@ -2389,8 +2389,8 @@
 
   (start [this]
     (set! ops-chan (chan (async/dropping-buffer 10)))
-    (set! _*ws (atom nil))
-    (set! _remote-change-chan (ws-listen! graph-uuid _*ws))
+    (set! *ws (atom nil))
+    (set! remote-change-chan (ws-listen! graph-uuid *ws))
     (set! ratelimit-local-changes-chan (<ratelimit local->remote-syncer local-changes-revised-chan))
     (setup-local->remote! local->remote-syncer)
     (async/tap full-sync-mult private-full-sync-chan)
@@ -2406,7 +2406,7 @@
               private-remote->local-sync-chan {:remote->local true}
               private-full-sync-chan {:local->remote-full-sync true}
               private-pause-resume-chan ([v] (if v {:resume true} {:pause true}))
-              _remote-change-chan ([v] (println "remote change:" v) {:remote->local v})
+              remote-change-chan ([v] (println "remote change:" v) {:remote->local v})
               ratelimit-local-changes-chan ([v]
                                             (let [rest-v (util/drain-chan ratelimit-local-changes-chan)
                                                   vs     (cons v rest-v)]
@@ -2655,7 +2655,7 @@
     (go
       (when-not @*stopped?
         (vreset! *stopped? true)
-        (ws-stop! _*ws)
+        (ws-stop! *ws)
         (offer! private-stop-sync-chan true)
         (async/untap full-sync-mult private-full-sync-chan)
         (async/untap stop-sync-mult private-stop-sync-chan)

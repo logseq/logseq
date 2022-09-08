@@ -85,14 +85,14 @@
     (textarea props)))
 
 (rum/defc dropdown-content-wrapper
-  < {:did-mount    (fn [_state]
+  < {:did-mount    (fn [state]
                      (let [k    (inc (count (state/sub :modal/dropdowns)))
-                           args (:rum/args _state)]
+                           args (:rum/args state)]
                        (state/set-state! [:modal/dropdowns k] (second args))
-                       (assoc _state ::k k)))
-     :will-unmount (fn [_state]
-                     (state/update-state! :modal/dropdowns #(dissoc % (::k _state)))
-                     _state)}
+                       (assoc state ::k k)))
+     :will-unmount (fn [state]
+                     (state/update-state! :modal/dropdowns #(dissoc % (::k state)))
+                     state)}
   [dropdown-state _close-fn content class]
   (let [class (or class
                   (util/hiccup->class "origin-top-right.absolute.right-0.mt-2"))]
@@ -287,8 +287,8 @@
   (let [time-fn (fn []
                   (try
                     (util/time-ago input)
-                    (catch js/Error _e
-                      (js/console.error _e)
+                    (catch js/Error e
+                      (js/console.error e)
                       input)))
         [time set-time] (rum/use-state (time-fn))]
 

@@ -20,5 +20,5 @@
                       org.clojure/clojurescript {:mvn/version "1.11.54"}}
          :main-opts ["-m" "cljs-test-runner.main"]}
 
-  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.05.31"}}
+  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.09.08"}}
               :main-opts  ["-m" "clj-kondo.main"]}}}

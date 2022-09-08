@@ -852,9 +852,9 @@
 
 (defn ^:export exper_request
   [pid ^js options]
-  (when-let [^js _pl (plugin-handler/get-plugin-inst pid)]
+  (when-let [^js pl (plugin-handler/get-plugin-inst pid)]
     (let [req-id (vreset! *request-k (inc @*request-k))
-          req-cb #(plugin-handler/request-callback _pl req-id %)]
+          req-cb #(plugin-handler/request-callback pl req-id %)]
       (-> (ipc/ipc :httpRequest req-id options)
           (p/then #(req-cb %))
           (p/catch #(req-cb %)))

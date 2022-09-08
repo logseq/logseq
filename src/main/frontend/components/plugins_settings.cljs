@@ -87,18 +87,18 @@
 
 (rum/defc settings-container
   [schema ^js pl]
-  (let [^js _settings (.-settings pl)
+  (let [^js settings (.-settings pl)
         pid (.-id pl)
-        [settings, set-settings] (rum/use-state (bean/->clj (.toJSON _settings)))
-        update-setting! (fn [k v] (.set _settings (name k) (bean/->js v)))]
+        [settings, set-settings] (rum/use-state (bean/->clj (.toJSON settings)))
+        update-setting! (fn [k v] (.set settings (name k) (bean/->js v)))]
 
     (rum/use-effect!
       (fn []
         (let [on-change (fn [^js s]
                           (when-let [s (bean/->clj s)]
                             (set-settings s)))]
-          (.on _settings "change" on-change)
-          #(.off _settings "change" on-change)))
+          (.on settings "change" on-change)
+          #(.off settings "change" on-change)))
       [pid])
 
     (if (seq schema)
