@@ -1,14 +1,23 @@
-import { Link } from 'react-router-dom'
-import { ArrowSquareOut, CaretDown } from 'phosphor-react'
-import { ReactElement } from 'react'
+import { Link, NavLink } from 'react-router-dom'
+import { ArrowSquareOut, List, X } from 'phosphor-react'
+import { ReactElement, useEffect, useState } from 'react'
 import { WrapGlobalDownloadButton } from '../pages/Downloads'
+import cx from 'classnames'
 
 export function LinksGroup (
-  props: { items: Array<{ link: string, label: string | ReactElement, icon?: ReactElement }> },
+  props: {
+    items: Array<{ link: string, label: string | ReactElement, icon?: ReactElement }>,
+
+    [k: string]: any
+  },
 ) {
+  const { items, className, ...rest } = props
+
   return (
-    <ul className="links-group ml-6 h-full">
-      {props.items.map(it => {
+    <ul className={cx('links-group sm:ml-6 h-full', className)}
+        {...rest}
+    >
+      {items.map(it => {
         const inner = (
           <>
             {it.label}
@@ -25,8 +34,12 @@ export function LinksGroup (
               <a href={it.link} target={'_blank'}
                  className={'h-full flex items-center group transition-colors'}>{inner}</a>
               :
-              <Link to={it.link}
-                    className={'h-full flex items-center group transition-colors'}>{inner}</Link>
+              <NavLink
+                to={it.link}
+                className={({ isActive }) => {
+                  return cx('h-full flex items-center group transition-colors',
+                    isActive && 'app-link-active')
+                }}>{inner}</NavLink>
             }
 
           </li>
@@ -37,6 +50,35 @@ export function LinksGroup (
 }
 
 export function Headbar () {
+  const [rightActive, setRightActive] = useState(false)
+
+  useEffect(() => {
+    const outsideHandler = (e: MouseEvent) => {
+      const target = e.target as any
+      const isToggle = !!target.closest('a.nav-toggle')
+
+      if (isToggle) {
+        return setRightActive(!rightActive)
+      }
+
+      rightActive && setRightActive(false)
+    }
+
+    document.body.addEventListener('click', outsideHandler)
+
+    return () => {
+      document.body.removeEventListener('click', outsideHandler)
+    }
+  }, [rightActive])
+
+  useEffect(() => {
+    if (rightActive) {
+      document.body.classList.add('is-nav-open')
+    } else {
+      document.body.classList.remove('is-nav-open')
+    }
+  }, [rightActive])
+
   const leftLinks = [
     { label: 'Home', link: '/' },
     { label: 'Downloads', link: '/downloads' },
@@ -63,32 +105,47 @@ export function Headbar () {
   return (
     <div className={'app-headbar h-14 flex justify-center'}>
       <div className={'flex items-center justify-between w-full'}>
-        <div className={'flex items-center h-full'}>
+        <div className={'flex items-center h-full flex-1'}>
           <Link to={'/'} className={'app-logo-link mr-2'}></Link>
 
-          <LinksGroup items={leftLinks}/>
+          <LinksGroup
+            className={'justify-center sm:justify-start'}
+            items={leftLinks}/>
         </div>
 
-        <div className={'flex items-center h-full'}>
-          <LinksGroup items={rightLinks}/>
+        <div className={cx('right-group flex items-center h-full', {
+          ['is-active']: rightActive
+        })}>
+          <a className={'nav-toggle flex h-full items-center sm:hidden'}>
+            {rightActive ?
+              <X size={24} weight={'bold'}></X> :
+              <List size={22} weight={'bold'}></List>}
+          </a>
 
-          {/*Downloads select*/}
-          <div className="downloads-select ml-8">
-            <WrapGlobalDownloadButton>
-              {({ active, rightIconFn, leftIconFn }: any) => {
+          <div className={'right-group-inner'}>
+            <LinksGroup
+              className={'justify-center space-x-2 py-6 w-full mx-1 border-t border-t-logseq-500 sm:mr-0'}
+              items={rightLinks}
+            />
 
-                return (
-                  <a
-                    className={'flex items-center bg-sky-600 px-2 py-1 rounded text-sm hover:opacity-80 select-none cursor-pointer'}>
-                    {typeof leftIconFn === 'function'
-                      ? leftIconFn({ weight: 'bold' })
-                      : leftIconFn}
-                    <span className={'pl-2'}>Download for {active?.[0]}</span>
-                    {rightIconFn?.()}
-                  </a>
-                )
-              }}
-            </WrapGlobalDownloadButton>
+            {/*Downloads select*/}
+            <div className="downloads-select mt-2 sm:ml-8 sm:mt-0">
+              <WrapGlobalDownloadButton>
+                {({ active, rightIconFn, leftIconFn }: any) => {
+
+                  return (
+                    <a
+                      className={'flex items-center bg-sky-600 px-2 py-1 rounded text-sm hover:opacity-80 select-none cursor-pointer'}>
+                      {typeof leftIconFn === 'function'
+                        ? leftIconFn({ weight: 'bold' })
+                        : leftIconFn}
+                      <span className={'pl-2'}>Download for {active?.[0]}</span>
+                      {rightIconFn?.()}
+                    </a>
+                  )
+                }}
+              </WrapGlobalDownloadButton>
+            </div>
           </div>
         </div>
       </div>

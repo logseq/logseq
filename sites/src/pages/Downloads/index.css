@@ -89,7 +89,7 @@
 }
 
 .global-downloads-wrap {
-  @apply relative;
+  @apply relative whitespace-nowrap;
 
   .sub-items {
     display: none;

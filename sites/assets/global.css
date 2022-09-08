@@ -4,10 +4,14 @@
 
 body {
   @apply text-gray-100 bg-logseq-800;
+
+  &.is-nav-open {
+    overflow: hidden;
+  }
 }
 
 .app-container {
-  @apply flex-1;
+  @apply w-full flex-1 overflow-hidden;
 }
 
 .ani-slide-in-from-bottom {
@@ -21,7 +25,6 @@ body {
 
   visibility: visible !important;
 }
-
 
 .ani-zoom-in {
   @apply animate-in zoom-in duration-1000 fade-in-0;
@@ -62,15 +65,54 @@ body {
 }
 
 .app-headbar {
-  @apply w-full px-6;
+  @apply w-full px-6 relative;
 
   .links-group {
-    @apply flex space-x-8;
+    @apply flex flex-1 space-x-8 whitespace-nowrap;
 
     a {
-      @apply text-gray-300 text-lg hover:text-gray-50;
+      @apply text-logseq-100 sm:text-gray-300 text-base sm:text-lg hover:text-gray-50;
+
+      &.app-link-active {
+        @apply text-gray-300 font-semibold sm:font-normal;
+      }
     }
   }
+
+  .right-group {
+    &-inner {
+      @apply hidden absolute left-0 top-16 w-full z-40 bg-logseq-800
+      flex-col space-x-0 items-center px-2 pb-6
+      sm:flex sm:flex-row sm:top-0 sm:sticky
+      sm:px-0 sm:space-x-6 sm:pb-0;
+    }
+
+    &:before {
+      @apply sm:hidden z-40;
+
+      display: none;
+      content: " ";
+      height: 100vh;
+      width: 100vw;
+      background: rgba(7, 7, 7, 0.43);
+      position: fixed;
+      left: 0;
+      top: 90px;
+    }
+
+    &.is-active {
+      .right-group-inner {
+        @apply flex;
+      }
+
+      &:before {
+        display: block;
+      }
+    }
+  }
+}
+
+.app-link-active {
 }
 
 .app-logo {
