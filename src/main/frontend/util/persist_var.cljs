@@ -55,12 +55,13 @@
 
   ISave
   (-save [_]
-    (when-not (config/demo-graph?)
+    (if (config/demo-graph?)
+      (p/resolved nil)
       (let [path (load-path location)
             repo (state/get-current-repo)
             content (str (get-in @*value [repo :value]))
             dir (config/get-repo-dir repo)]
-        (fs/write-file! repo dir path content nil))))
+        (fs/write-file! repo dir path content {:skip-compare? true}))))
 
   IDeref
   (-deref [_this]
