@@ -195,6 +195,7 @@
   (render)
   (i18n/start)
   (instrument/init)
+  (state/set-online! js/navigator.onLine)
   (set-network-watcher!)
 
   (util/indexeddb-check?
