@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import * as React from 'react'
 import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps } from '@tldraw/react'
 import { action, computed } from 'mobx'
@@ -21,15 +22,19 @@ export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
     url: '',
   }
 
+  canEdit = true
+
   @computed get url() {
     return this.props.url
   }
 
-  @action onIFrameSourceChange = (url: string) => {
+  @action onIFrameSourceChange = (url: string  | null;) => {
     this.update({ url })
   }
 
   ReactComponent = observer(({ events, isErasing, isEditing }: TLComponentProps) => {
+    const ref = React.useRef<HTMLIFrameElement>(null)
+
     return (
       <HTMLContainer
         style={{
@@ -55,11 +60,14 @@ export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
               }}
             >
               <iframe
+                ref={ref}
                 className="absolute inset-0 w-full h-full m-0"
                 width="100%"
                 height="100%"
+                onLoad={() => this.onIFrameSourceChange(ref.current.contentWindow.location.href)}
                 src={`${this.url}`}
                 frameBorder="0"
+                sandbox=""
               />
             </div>
           )}
