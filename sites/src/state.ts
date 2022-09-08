@@ -4,8 +4,15 @@ import { createState, useState } from '@hookstate/core'
 import os from 'platform-detect/os.mjs'
 import { useEffect } from 'react'
 
+export const checkSmBreakPoint = () => {
+  return (
+    visualViewport?.width ||
+    document.documentElement.clientWidth
+  ) <= 640
+}
+
 const appState = createState({
-  os,
+  os, sm: checkSmBreakPoint(),
   releases: {
     fetching: false,
     downloads: {}, // macos -> download url
