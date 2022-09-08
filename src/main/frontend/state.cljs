@@ -294,7 +294,7 @@
    :default-arweave-gateway "https://arweave.net"})
 
 ;; State that most user config is dependent on
-(declare get-current-repo)
+(declare get-current-repo sub set-state!)
 
 (defn merge-configs
   "Merges user configs in given orders. All values are overriden except for maps
