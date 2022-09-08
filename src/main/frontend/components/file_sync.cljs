@@ -359,7 +359,7 @@
                                 (p/resolved nil)
                                 (if (util/electron?)
                                   (ipc/ipc :readGraphTxIdInfo root)
-                                  (fs-util/read-graph-txid-info root)))
+                                  (fs-util/read-graphs-txid-info root)))
 
                               (p/then (fn [^js info]
                                         (when (and (not empty-dir?)
