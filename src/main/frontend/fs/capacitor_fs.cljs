@@ -2,6 +2,7 @@
   (:require ["@capacitor/filesystem" :refer [Encoding Filesystem]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [goog.string :as gstring]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.encrypt :as encrypt]
@@ -126,11 +127,11 @@
 (def backup-dir "logseq/bak")
 (defn- get-backup-dir
   [repo-dir path ext]
-  (let [path (if (string/starts-with? path "file://")
-               (subs path 7)
-               path)
-        relative-path (-> (string/replace path repo-dir "")
-                          (string/replace (str "." ext) ""))]
+  (let [relative-path (-> path
+                          (string/replace (re-pattern (str "^" (gstring/regExpEscape repo-dir)))
+                                          "")
+                          (string/replace (re-pattern (str "(?i)" (gstring/regExpEscape (str "." ext)) "$"))
+                                          ""))]
     (util/safe-path-join repo-dir (str backup-dir "/" relative-path))))
 
 (defn- truncate-old-versioned-files!
