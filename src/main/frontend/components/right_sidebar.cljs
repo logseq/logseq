@@ -197,7 +197,7 @@
                             (set-width! ratio sidebar-el)))
                          :else
                          #(.. js/document.documentElement -classList (remove cursor-class)))
-                       (when (> ratio 0.1) (state/open-right-sidebar!)))))}}))
+                       (when (> ratio (/ min-ratio 2)) (state/open-right-sidebar!)))))}}))
              (.styleCursor false)
              (.on "dragstart" #(.. js/document.documentElement -classList (add "is-resizing-buf")))
              (.on "dragend" #(.. js/document.documentElement -classList (remove "is-resizing-buf")))
