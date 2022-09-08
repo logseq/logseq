@@ -1243,7 +1243,7 @@
 (defn- pattern [name]
   (re-pattern (str "(?i)(^|[^\\[#0-9a-zA-Z]|((^|[^\\[])\\[))"
                    (util/regex-escape name)
-                   (if (contains-cjk? name) "\\d*" nil)
+                   (if (contains-cjk? (util/regex-escape name)) "\\d*" nil)
                    "($|[^0-9a-zA-Z])")))
 
 (defn get-page-unlinked-references
