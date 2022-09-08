@@ -32,6 +32,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
@@ -113,7 +114,7 @@
      (do
        (state/set-current-repo! graph)
        ;; load config
-       (common-handler/reset-config! graph nil)
+       (repo-config-handler/restore-repo-config! graph)
        (st/refresh!)
        (when-not (= :draw (state/get-current-route))
          (route-handler/redirect-to-home!))
@@ -451,7 +452,7 @@
               (state/set-current-repo! current-repo)
               (db/listen-and-persist! current-repo)
               (db/persist-if-idle! current-repo)
-              (file-handler/restore-config! current-repo)
+              (repo-config-handler/restore-repo-config! current-repo)
               (.watch mobile-util/fs-watcher #js {:path current-repo-dir})
               (when graph-switch-f (graph-switch-f current-repo true))
               (file-sync-restart!))))
@@ -503,7 +504,7 @@
 
 (defmethod handle :backup/broken-config [[_ repo content]]
   (when (and repo content)
-    (let [path (config/get-config-path)
+    (let [path (config/get-repo-config-path)
           broken-path (string/replace path "/config.edn" "/broken-config.edn")]
       (p/let [_ (fs/write-file! repo (config/get-repo-dir repo) broken-path content {})
               _ (file-handler/alter-file repo path config/config-default-content {:skip-compare? true})]
@@ -523,6 +524,9 @@
 
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))
+
+(defmethod handle :shortcut/refresh [[_]]
+  (st/refresh!))
 
 (defn- refresh-cb []
   (page-handler/create-today-journal!)

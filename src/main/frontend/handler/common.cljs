@@ -2,16 +2,13 @@
   (:require [cljs-bean.core :as bean]
             [cljs.reader :as reader]
             [clojure.string :as string]
-            [frontend.config :as config]
             [frontend.date :as date]
-            [frontend.db :as db]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.property :as property]
             [goog.object :as gobj]
             ["ignore" :as Ignore]
-            [lambdaisland.glogi :as log]
-            [borkdude.rewrite-edn :as rewrite]))
+            [lambdaisland.glogi :as log]))
 
 (defn copy-to-clipboard-without-id-property!
   [format raw-text html]
@@ -50,10 +47,6 @@
                 (hidden? path patterns))) files)
     files))
 
-(defn get-config
-  [repo-url]
-  (db/get-file repo-url (config/get-config-path)))
-
 (defn safe-read-string
   [content error-message-or-handler]
   (try
@@ -64,20 +57,6 @@
         (error-message-or-handler e)
         (println error-message-or-handler))
       {})))
-
-(defn read-config
-  [content]
-  (safe-read-string content
-                    (fn [_e]
-                      (state/pub-event! [:backup/broken-config (state/get-current-repo) content])
-                      (reader/read-string config/config-default-content))))
-
-(defn reset-config!
-  [repo-url content]
-  (when-let [content (or content (get-config repo-url))]
-    (let [config (read-config content)]
-      (state/set-config! repo-url config)
-      config)))
 
 (defn read-metadata!
   [content]
@@ -117,16 +96,6 @@
   (util/stop e)
   (let [position [(gobj/get e "clientX") (gobj/get e "clientY")]]
     (state/show-custom-context-menu! context-menu-content position)))
-
-(defn parse-config
-  "Parse configuration from file `content` such as from config.edn."
-  [content]
-  (try
-    (rewrite/parse-string content)
-    (catch :default e
-      (log/error :parse/config-failed e)
-      (state/pub-event! [:backup/broken-config (state/get-current-repo) content])
-      (rewrite/parse-string config/config-default-content))))
 
 (defn listen-to-scroll!
   [element]

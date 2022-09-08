@@ -925,6 +925,7 @@
               (dissoc opts :class :extension?))]))
 
 (rum/defc with-shortcut < rum/reactive
+  < {:key-fn (fn [key pos] (str "shortcut-" key pos))}
   [shortcut-key position content]
   (let [tooltip? (state/sub :ui/shortcut-tooltip?)]
     (if tooltip?

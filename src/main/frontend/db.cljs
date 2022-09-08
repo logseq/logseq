@@ -179,12 +179,9 @@
     (restore-graph-from-text! repo stored)))
 
 (defn restore!
-  [{:keys [repos]} _old-db-schema restore-config-handler]
-  (let [repo (or (state/get-current-repo) (:url (first repos)))]
-    (when repo
-      (p/let [_ (restore-graph! repo)]
-        (restore-config-handler repo)
-        (listen-and-persist! repo)))))
+  [repo]
+  (p/let [_ (restore-graph! repo)]
+    (listen-and-persist! repo)))
 
 (defn run-batch-txs!
   []

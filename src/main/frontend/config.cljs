@@ -283,6 +283,10 @@
 
 (def config-default-content (rc/inline "config.edn"))
 
+;; Desktop only as other platforms requires better understanding of their
+;; multi-graph workflows and optimal place for a "global" dir
+(def global-config-enabled? util/electron?)
+
 (defonce idb-db-prefix "logseq-db/")
 (defonce local-db-prefix "logseq_local_")
 (defonce local-handle "handle")
@@ -392,9 +396,9 @@
                         page-name)]
     (get-file-path repo-url (str sub-dir "/" page-basename "." ext))))
 
-(defn get-config-path
+(defn get-repo-config-path
   ([]
-   (get-config-path (state/get-current-repo)))
+   (get-repo-config-path (state/get-current-repo)))
   ([repo]
    (when repo
      (get-file-path repo (str app-name "/" config-file)))))
@@ -449,4 +453,4 @@
 
 (defn get-block-hidden-properties
   []
-  (get-in @state/state [:config (state/get-current-repo) :block-hidden-properties]))
+  (:block-hidden-properties (state/get-config)))

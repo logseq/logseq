@@ -1,12 +1,39 @@
 (ns frontend.handler.config
+  "Fns for setting repo config"
   (:require [frontend.state :as state]
             [frontend.handler.file :as file-handler]
-            [frontend.config :as config]))
+            [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.config :as config]
+            [frontend.db :as db]
+            [borkdude.rewrite-edn :as rewrite]
+            [lambdaisland.glogi :as log]))
+
+(defn parse-repo-config
+  "Parse repo configuration file content"
+  [content]
+  (try
+    (rewrite/parse-string content)
+    (catch :default e
+      (log/error :parse/config-failed e)
+      (state/pub-event! [:backup/broken-config (state/get-current-repo) content])
+      (rewrite/parse-string config/config-default-content))))
+
+(defn- repo-config-set-key-value
+  [path k v]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [content (db/get-file path)]
+      (repo-config-handler/read-repo-config repo content)
+      (let [result (parse-repo-config content)
+            ks (if (vector? k) k [k])
+            new-result (rewrite/assoc-in result ks v)
+            new-content (str new-result)]
+        (file-handler/set-file-content! repo path new-content)))))
 
 (defn set-config!
+  "Sets config state for repo-specific config"
   [k v]
-  (let [path (config/get-config-path)]
-    (file-handler/edn-file-set-key-value path k v)))
+  (let [path (config/get-repo-config-path)]
+    (repo-config-set-key-value path k v)))
 
 (defn toggle-ui-show-brackets! []
   (let [show-brackets? (state/show-brackets?)]

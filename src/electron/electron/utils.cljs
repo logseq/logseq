@@ -99,7 +99,7 @@
     (when (fs/existsSync path)
       (.toString (fs/readFileSync path)))
     (catch js/Error e
-      (js/console.error e))))
+      (.error logger (str "Read file: " e)))))
 
 (defn get-focused-window
   []

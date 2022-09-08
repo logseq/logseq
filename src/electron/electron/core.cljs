@@ -107,8 +107,10 @@
                              (-> (. fs copy (path/join assets-from-dir filename) (path/join assets-to-dir filename))
                                  (p/catch
                                   (fn [e]
-                                    (println (str "Failed to copy " (path/join assets-from-dir filename) " to " (path/join assets-to-dir filename)))
-                                    (js/console.error e)))))
+                                    (.error logger "Failed to copy"
+                                            (str {:from (path/join assets-from-dir filename)
+                                                  :to (path/join assets-to-dir filename)})
+                                            e)))))
                            asset-filenames)
 
                           (map
@@ -166,7 +168,7 @@
                  (try
                    (js-invoke app type args)
                    (catch js/Error e
-                     (js/console.error e)))))
+                     (.error logger (str call-app-channel " " e))))))
 
       (.handle call-win-channel
                (fn [^js e type & args]
@@ -174,7 +176,7 @@
                    (try
                      (js-invoke win type args)
                      (catch js/Error e
-                       (js/console.error e)))))))
+                       (.error logger (str call-win-channel " " e))))))))
 
     #(do (clear-win-effects!)
          (.removeHandler ipcMain toggle-win-channel)
@@ -273,11 +275,12 @@
                (win/switch-to-window! window))))
 
       (.on app "window-all-closed" (fn []
+                                     (.debug logger "window-all-closed" "Quiting...")
                                      (try
                                        (fs-watcher/close-watcher!)
                                        (search/close!)
                                        (catch js/Error e
-                                         (js/console.error e)))
+                                         (.error logger "window-all-closed" e)))
                                      (.quit app)))
       (.on app "ready"
            (fn []
@@ -343,9 +346,9 @@
                (.on app "activate" #(when @*win (.show win)))))))))
 
 (defn start []
-  (js/console.log "Main - start")
+  (.debug logger "Main - start")
   (when @*setup-fn (@*setup-fn)))
 
 (defn stop []
-  (js/console.log "Main - stop")
+  (.debug logger "Main - stop")
   (when @*teardown-fn (@*teardown-fn)))

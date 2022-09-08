@@ -255,7 +255,7 @@
    :go/electron-find-in-page       {:binding "mod+f"
                                     :inactive (not (util/electron?))
                                     :fn      #(search-handler/open-find-in-page!)}
-   
+
    :go/electron-jump-to-the-next {:binding ["enter" "mod+g"]
                                   :inactive (not (util/electron?))
                                   :fn      #(search-handler/loop-find-in-page! false)}
