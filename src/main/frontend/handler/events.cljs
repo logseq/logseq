@@ -32,7 +32,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
@@ -121,7 +120,6 @@
          (route-handler/redirect-to-home!))
        (when-let [dir-name (config/get-repo-dir graph)]
          (fs/watch-dir! dir-name))
-       (global-config-handler/re-watch-dir! graph)
        (srs/update-cards-due-count!)
        (state/pub-event! [:graph/ready graph])
        (repo-handler/refresh-repos!)

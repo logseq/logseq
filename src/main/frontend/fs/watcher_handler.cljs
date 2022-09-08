@@ -45,10 +45,12 @@
     (db/set-file-last-modified-at! repo path mtime)))
 
 (defn handle-changed!
-  [type {:keys [dir path content stat current-repo-dir] :as payload}]
+  [type {:keys [dir path content stat global-dir] :as payload}]
   (when dir
     (let [path (gp-util/path-normalize path)
-          repo (config/get-local-repo (or current-repo-dir dir))
+          ;; Global directory events don't know their originating repo so we rely
+          ;; on the client to correctly identify it
+          repo (if global-dir (state/get-current-repo) (config/get-local-repo dir))
           pages-metadata-path (config/get-pages-metadata-path)
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
