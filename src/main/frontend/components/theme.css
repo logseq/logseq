@@ -99,14 +99,13 @@ html.locked-scroll {
 }
 
 html.is-resizing-buf {
-  user-select: none;
-
   #right-sidebar {
     transition: none;
   }
 
   * {
     cursor: col-resize !important;
+    user-select: none;
   }
 
   &.cursor-w-resize {
