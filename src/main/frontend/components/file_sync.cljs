@@ -414,7 +414,7 @@
        [:div.p-4 (ui/loading "Loading...")]
        (for [version version-files]
          (let [version-uuid (get-version-key version)
-               _local?      (some? (:relative-path version))]
+               local?      (some? (:relative-path version))]
            [:div.version-list-item {:key version-uuid}
             [:a.item-link.block.fade-link.flex.justify-between
              {:title    version-uuid
@@ -427,7 +427,7 @@
                (or (:CreateTime version)
                    (:create-time version)) nil)]
              [:small.opacity-50.translate-y-1
-              (if _local?
+              (if local?
                 [:<> (ui/icon "git-commit") " local"]
                 [:<> (ui/icon "cloud") " remote"])]]])))]))
 

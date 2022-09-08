@@ -221,8 +221,8 @@
         (when-let [sync-meta (and (not (string/blank? root))
                                   (.toString (.readFileSync fs txid-path)))]
           (reader/read-string sync-meta))))
-    (catch js/Error _e
-      (js/console.debug "[read txid meta] #" root (.-message _e)))))
+    (catch js/Error e
+      (js/console.debug "[read txid meta] #" root (.-message e)))))
 
 (defmethod handle :inflateGraphsInfo [_win [_ graphs]]
   (if (seq graphs)
@@ -408,7 +408,7 @@
 
 (def *request-abort-signals (atom {}))
 
-(defmethod handle :httpRequest [_ [_ _req-id opts]]
+(defmethod handle :httpRequest [_ [_ req-id opts]]
   (let [{:keys [url abortable method data returnType headers]} opts]
     (when-let [[method type] (and (not (string/blank? url))
                                   [(keyword (string/upper-case (or method "GET")))
@@ -421,7 +421,7 @@
                                     {:body (js/JSON.stringify (bean/->js data))})
 
                                   (when-let [^js controller (and abortable (AbortController.))]
-                                    (swap! *request-abort-signals assoc _req-id controller)
+                                    (swap! *request-abort-signals assoc req-id controller)
                                     {:signal (.-signal controller)}))))
           (p/then (fn [^js res]
                     (case type
@@ -443,10 +443,10 @@
              (throw e)))
           (p/finally
            (fn []
-             (swap! *request-abort-signals dissoc _req-id)))))))
+             (swap! *request-abort-signals dissoc req-id)))))))
 
-(defmethod handle :httpRequestAbort [_ [_ _req-id]]
-  (when-let [^js controller (get @*request-abort-signals _req-id)]
+(defmethod handle :httpRequestAbort [_ [_ req-id]]
+  (when-let [^js controller (get @*request-abort-signals req-id)]
     (.abort controller)))
 
 (defmethod handle :quitAndInstall []

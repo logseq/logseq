@@ -207,9 +207,9 @@
                         *exist? (::exist? state)]
                     (when (and sync-on? asset-file? (false? @*exist?))
                       (let [sync-state (state/sub [:file-sync/sync-state (state/get-current-repo)])
-                            _downloading-files (:current-remote->local-files sync-state)
-                            contain-url? (and (seq _downloading-files)
-                                              (some #(string/ends-with? src %) _downloading-files))]
+                            downloading-files (:current-remote->local-files sync-state)
+                            contain-url? (and (seq downloading-files)
+                                              (some #(string/ends-with? src %) downloading-files))]
                         (cond
                           (and (not @*loading?) contain-url?)
                           (reset! *loading? true)
@@ -247,8 +247,8 @@
   (let [images (js/document.querySelectorAll ".asset-container img")
         images (to-array images)
         images (if-not (= (count images) 1)
-                 (let [^js _image (.closest (.-target e) ".asset-container")
-                       image (. _image querySelector "img")]
+                 (let [^js image (.closest (.-target e) ".asset-container")
+                       image (. image querySelector "img")]
                    (->> images
                         (sort-by (juxt #(.-y %) #(.-x %)))
                         (split-with (complement #{image}))
