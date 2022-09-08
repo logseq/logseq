@@ -2871,8 +2871,7 @@
 
 (defn built-in-custom-query?
   [title]
-  (let [repo (state/get-current-repo)
-        queries (state/sub [:config repo :default-queries :journals])]
+  (let [queries (get-in (state/sub-config) [:default-queries :journals])]
     (when (seq queries)
       (boolean (some #(= % title) (map :title queries))))))
 
@@ -2948,10 +2947,9 @@
   [state config {:keys [title query view collapsed? children? breadcrumb-show? table-view?] :as q}]
   (let [dsl-query? (:dsl-query? config)
         query-atom (:query-atom state)
-        repo (state/get-current-repo)
         query-time (or (react/get-query-time query)
                        (react/get-query-time q))
-        view-fn (if (keyword? view) (state/sub [:config repo :query/views view]) view)
+        view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
         current-block (db/entity [:block/uuid current-block-uuid])

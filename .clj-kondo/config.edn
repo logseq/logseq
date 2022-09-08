@@ -25,6 +25,13 @@
              frontend.format.mldoc mldoc
              frontend.format.block block
              frontend.handler.extract extract
+             frontend.handler.common common-handler
+             frontend.handler.common.file file-common-handler
+             frontend.handler.config config-handler
+             frontend.handler.global-config global-config-handler
+             frontend.handler.repo-config repo-config-handler
+             frontend.mobile.util mobile-util
+             frontend.state state
              logseq.graph-parser graph-parser
              logseq.graph-parser.text text
              logseq.graph-parser.block gp-block

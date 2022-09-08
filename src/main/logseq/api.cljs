@@ -113,7 +113,7 @@
 
 (def ^:export get_current_graph_configs
   (fn []
-    (some-> (get (:config @state/state) (state/get-current-repo))
+    (some-> (state/get-config)
             (normalize-keyword-for-json)
             (bean/->js))))
 

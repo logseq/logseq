@@ -1423,7 +1423,7 @@
               r)))))))
 
 (defn apply-filetxns-partitions
-  "won't call update-graph-txid! when *txid is nil"
+  "won't call update-graphs-txid! when *txid is nil"
   [*sync-state user-uuid graph-uuid base-path filetxns-partitions repo *txid *stopped *paused]
   (assert (some? *sync-state))
 

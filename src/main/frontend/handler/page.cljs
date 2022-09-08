@@ -246,10 +246,10 @@
         new-tag (if (re-find #"[\s\t]+" new-name)
                   (util/format "#[[%s]]" new-name)
                   (str "#" new-name))]
-    ;; hash tag parsing rules https://github.com/logseq/mldoc/blob/701243eaf9b4157348f235670718f6ad19ebe7f8/test/test_markdown.ml#L631 
+    ;; hash tag parsing rules https://github.com/logseq/mldoc/blob/701243eaf9b4157348f235670718f6ad19ebe7f8/test/test_markdown.ml#L631
     ;; Safari doesn't support look behind, don't use
     ;; TODO: parse via mldoc
-    (string/replace content 
+    (string/replace content
                     (re-pattern (str "(?i)(^|\\s)(" (util/escape-regex-chars old-tag) ")(?=[,\\.]*($|\\s))"))
                     ;;    case_insense^    ^lhs   ^_grp2                       look_ahead^         ^_grp3
                     (fn [[_match lhs _grp2 _grp3]]
@@ -327,7 +327,7 @@
 (defn toggle-favorite! []
   ;; NOTE: in journals or settings, current-page is nil
   (when-let [page-name (state/get-current-page)]
-   (let [favorites  (:favorites (state/sub-graph-config))
+   (let [favorites  (:favorites (state/sub-config))
          favorited? (contains? (set (map string/lower-case favorites))
                                (string/lower-case page-name))]
     (if favorited?

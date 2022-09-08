@@ -15,6 +15,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.file-sync :as file-sync-handler]
+            [frontend.handler.global-config :as global-config-handler]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.state :as state]
@@ -140,9 +141,17 @@
   (row-with-button-action
     {:left-label   (t :settings-page/custom-configuration)
      :button-label (t :settings-page/edit-config-edn)
-     :href         (rfe/href :file {:path (config/get-config-path)})
+     :href         (rfe/href :file {:path (config/get-repo-config-path)})
      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
      :-for         "config_edn"}))
+
+(defn edit-global-config-edn []
+  (row-with-button-action
+    {:left-label   (t :settings-page/custom-global-configuration)
+     :button-label (t :settings-page/edit-global-config-edn)
+     :href         (rfe/href :file {:path (global-config-handler/global-config-path)})
+     :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
+     :-for         "global_config_edn"}))
 
 (defn edit-custom-css []
   (row-with-button-action
@@ -538,6 +547,7 @@
      (version-row t version)
      (language-row t preferred-language)
      (theme-modes-row t switch-theme system-theme? dark?)
+     (when (config/global-config-enabled?) (edit-global-config-edn))
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))
      (when current-repo (edit-export-css))

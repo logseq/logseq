@@ -239,5 +239,5 @@
     (utils/getFiles path-or-handle true ok-handler))
 
   ;; TODO:
-  (watch-dir! [_this _dir]
+  (watch-dir! [_this _dir _options]
     nil))

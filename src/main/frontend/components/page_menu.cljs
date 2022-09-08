@@ -67,7 +67,7 @@
           contents? (= page-name "contents")
           properties (:block/properties page)
           public? (true? (:public properties))
-          favorites (:favorites (state/sub-graph-config))
+          favorites (:favorites (state/sub-config))
           favorited? (contains? (set (map util/page-name-sanity-lc favorites))
                                 page-name)
           developer-mode? (state/sub [:ui/developer-mode?])
