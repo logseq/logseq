@@ -21,7 +21,9 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
-(rum/defc home-button []
+(rum/defc home-button
+  < {:key-fn #(identity "home-button")}
+  []
   (ui/with-shortcut :go/home "left"
     [:button.button.icon.inline
      {:title "Home"
@@ -32,6 +34,7 @@
      (ui/icon "home" {:style {:fontSize ui/icon-size}})]))
 
 (rum/defc login < rum/reactive
+  < {:key-fn #(identity "login-button")}
   []
   (let [_ (state/sub :auth/id-token)
         loading? (state/sub [:ui/loading? :login])
@@ -46,14 +49,16 @@
          [:span.ml-2 (ui/loading "")])])))
 
 (rum/defc left-menu-button < rum/reactive
+  < {:key-fn #(identity "left-menu-toggle-button")}
   [{:keys [on-click]}]
   (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
     [:button.#left-menu.cp__header-left-menu.button.icon
      {:title "Toggle left menu"
       :on-click on-click}
-      (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]))
+     (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]))
 
 (rum/defc dropdown-menu < rum/reactive
+  < {:key-fn #(identity "repos-dropdown-menu")}
   [{:keys [current-repo t]}]
   (let [page-menu (page-menu/page-menu nil)
         page-menu-and-hr (when (seq page-menu)
@@ -106,6 +111,7 @@
      {})))
 
 (rum/defc back-and-forward
+  < {:key-fn #(identity "nav-history-buttons")}
   []
   [:div.flex.flex-row
 
@@ -205,8 +211,6 @@
 
       (when plugin-handler/lsp-enabled?
         (plugins/hook-ui-items :toolbar))
-
-
 
       (when (util/electron?)
         (back-and-forward))
