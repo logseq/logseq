@@ -24,18 +24,10 @@ env:
   BABASHKA_VERSION: '0.8.1'
 
 jobs:
-
-  e2e-test-repeat:
+  e2e-test-build:
+    name: Build Test Artifact
     runs-on: ubuntu-latest
-    continue-on-error: true # Don't block other runs in matrix for fast debugging
-    strategy:
-      matrix:
-        repeat: [1, 2, 3, 4] # Test 4 times for E2E robustness
-
     steps:
-      - name: Repeat message
-        run: echo running E2E test with repeat id ${{ matrix.repeat }}
-
       - name: Checkout
         uses: actions/checkout@v2
 
@@ -88,21 +80,71 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
 
-      # NOTE: require the app to be build in debug mode(compile instead of build).
+      # NOTE: require the app to be build in debug mode
       - name: Prepare E2E test build
         run: |
-          yarn gulp:build && clojure -M:cljs compile app publishing electron
-          (cd static && yarn install && yarn rebuild:better-sqlite3)
+          yarn gulp:build && clojure -M:cljs release app electron --debug
 
-      # Exits with 0 if yarn.lock is up to date or 1 if we forgot to update it
+      # NOTE: should include .shadow-cljs if in dev mode(compile)
+      - name: Create Archive for build
+        run: tar czf static.tar.gz static
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: logseq-e2e-artifact
+          path: static.tar.gz
+          retention-days: 1
+
+  e2e-test-run:
+    needs: [ e2e-test-build ]
+    name: Test Shard ${{ matrix.shard }} Repeat ${{ matrix.repeat }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        repeat: [1, 2]
+        shard: [1, 2, 3]
+
+    steps:
+      - name: Repeat message
+        run: echo ::info title=StartUp::E2E testing shard ${{ matrix.shard}}/3 repeat ${{ matrix.repeat }}
+
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Download test build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: logseq-e2e-artifact
+
+      - name: Extract test Artifact
+        run: tar xzf static.tar.gz
+
+      - name: Set up Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+          cache-dependency-path: |
+            yarn.lock
+            static/yarn.lock
+
+      - name: Fetch yarn deps for E2E test
+        run: |
+          yarn install
+          (cd static && yarn install && yarn rebuild:all)
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
+
       - name: Ensure static yarn.lock is up to date
         run: git diff --exit-code static/yarn.lock
 
       - name: Run Playwright test
-        run: xvfb-run -- yarn e2e-test
+        run: xvfb-run -- npx playwright test --reporter github --shard=${{ matrix.shard }}/3
         env:
           CI: true
           DEBUG: "pw:api"
+          RELEASE: true # skip dev only test
 
       # - name: Save test artifacts
       #   if: ${{ failure() }}

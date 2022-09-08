@@ -147,8 +147,11 @@
      (graph-switch graph))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (if @outliner-file/*writes-finished?
-    (graph-switch-on-persisted graph opts)
+  (if (or @outliner-file/*writes-finished?
+          (:graph/remote-binding? @state/state))
+    (do
+      (state/set-state! :graph/remote-binding? false)
+      (graph-switch-on-persisted graph opts))
     (notification/show!
      "Please wait seconds until all changes are saved for the current graph."
      :warning)))
