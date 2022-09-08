@@ -2730,54 +2730,64 @@
   [local-graph-uuid]
   {:pre [(util/uuid-string? local-graph-uuid)]}
   (go
-    (let [result (->> (<! (<list-remote-graphs remoteapi))
-                      :Graphs
-                      (mapv :GraphUUID)
-                      set
-                      (#(contains? % local-graph-uuid)))]
+    (let [r (<! (<list-remote-graphs remoteapi))
+          result
+          (or
+           ;; if api call failed, assume this remote graph still exists
+           (instance? ExceptionInfo r)
+           (and
+            (contains? r :Graphs)
+            (->> (:Graphs r)
+                 (mapv :GraphUUID)
+                 set
+                 (#(contains? % local-graph-uuid)))))]
+
       (when-not result
         (notification/show! (t :file-sync/graph-deleted) :warning false))
       result)))
+
+(declare network-online-cursor)
 
 (defn sync-start []
   (let [*sync-state                 (atom (sync-state))
         current-user-uuid           (user/user-uuid)
         repo                        (state/get-current-repo)]
     (go
-      ;; stop previous sync
-      (<! (<sync-stop))
+      (when @network-online-cursor
+        ;; stop previous sync
+        (<! (<sync-stop))
 
-      (<! (p->c (persist-var/-load graphs-txid)))
+        (<! (p->c (persist-var/-load graphs-txid)))
 
-      (let [[user-uuid graph-uuid txid] @graphs-txid]
-        (when (and user-uuid graph-uuid txid
-                   (user/logged-in?)
-                   repo
-                   (not (config/demo-graph? repo)))
-          (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
-                                                 (config/get-repo-dir repo) repo
-                                                 txid *sync-state)]
-            (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
-              (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
-                (clear-graphs-txid! repo)
-                (do
-                  (state/set-file-sync-state repo @*sync-state)
-                  (state/set-file-sync-manager sm)
+        (let [[user-uuid graph-uuid txid] @graphs-txid]
+          (when (and user-uuid graph-uuid txid
+                     (user/logged-in?)
+                     repo
+                     (not (config/demo-graph? repo)))
+            (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
+                                                   (config/get-repo-dir repo) repo
+                                                   txid *sync-state)]
+              (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
+                (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
+                  (clear-graphs-txid! repo)
+                  (do
+                    (state/set-file-sync-state repo @*sync-state)
+                    (state/set-file-sync-manager sm)
 
-                  ;; update global state when *sync-state changes
-                  (add-watch *sync-state ::update-global-state
-                             (fn [_ _ _ n]
-                               (state/set-file-sync-state repo n)))
+                    ;; update global state when *sync-state changes
+                    (add-watch *sync-state ::update-global-state
+                               (fn [_ _ _ n]
+                                 (state/set-file-sync-state repo n)))
 
-                  (.start sm)
+                    (.start sm)
 
-                  (offer! remote->local-full-sync-chan true)
-                  (offer! full-sync-chan true))))))))))
+                    (offer! remote->local-full-sync-chan true)
+                    (offer! full-sync-chan true)))))))))))
 
 ;;; ### some add-watches
 
 ;; TOOD: replace this logic by pause/resume state
-(def network-online-cursor (rum/cursor state/state :network/online?))
+(defonce network-online-cursor (rum/cursor state/state :network/online?))
 (add-watch network-online-cursor "sync-manage"
            (fn [_k _r o n]
              (cond
@@ -2790,7 +2800,7 @@
                :else
                nil)))
 
-(def auth-id-token-cursor (rum/cursor state/state :auth/id-token))
+(defonce auth-id-token-cursor (rum/cursor state/state :auth/id-token))
 (add-watch auth-id-token-cursor "sync-manage"
            (fn [_k _r _o n]
              (when (nil? n)

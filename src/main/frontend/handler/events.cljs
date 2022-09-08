@@ -73,20 +73,23 @@
   (state/set-state! [:ui/loading? :login] false)
   (async/go
     (let [result (async/<! (sync/<user-info sync/remoteapi))]
-      (when (seq result)
-        (state/set-state! :user/info result)
-
-        (let [status (if (user-handler/alpha-user?) :welcome :unavailable)]
-          (when (= status :welcome)
-            (async/<! (file-sync-handler/load-session-graphs))
-            (p/let [repos (repo-handler/refresh-repos!)]
-              (when-let [repo (state/get-current-repo)]
-                (when (some #(and (= (:url %) repo)
-                                 (vector? (:sync-meta %))
-                                 (util/uuid-string? (first (:sync-meta %)))
-                                 (util/uuid-string? (second (:sync-meta %)))) repos)
-                 (file-sync-restart!)))))
-          (file-sync/maybe-onboarding-show status))))))
+      (cond
+        (instance? ExceptionInfo result)
+        nil
+        (map? result)
+        (do
+          (state/set-state! :user/info result)
+          (let [status (if (user-handler/alpha-user?) :welcome :unavailable)]
+            (when (= status :welcome)
+              (async/<! (file-sync-handler/load-session-graphs))
+              (p/let [repos (repo-handler/refresh-repos!)]
+                (when-let [repo (state/get-current-repo)]
+                  (when (some #(and (= (:url %) repo)
+                                    (vector? (:sync-meta %))
+                                    (util/uuid-string? (first (:sync-meta %)))
+                                    (util/uuid-string? (second (:sync-meta %)))) repos)
+                    (file-sync-restart!)))))
+            (file-sync/maybe-onboarding-show status)))))))
 
 (defmethod handle :user/logout [[_]]
   (file-sync-handler/reset-session-graphs)

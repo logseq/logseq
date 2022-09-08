@@ -105,18 +105,20 @@
     (when-let [refresh-token (state/get-auth-refresh-token)]
       (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_refresh_token?refresh_token=" refresh-token)
                                {:with-credentials? false}))]
-        (if (= 400 (:status resp))
-          ;; invalid refresh_token
-          (do
-            (clear-tokens)
-            false)
-          (do
-            (->
-             resp
-             (as-> $ (and (http/unexceptional-status? (:status $)) $))
-             :body
-             (as-> $ (set-tokens! (:id_token $) (:access_token $))))
-            true))))))
+
+        (cond
+          ;; e.g. api return 500, server internal error
+          ;; we shouldn't clear tokens if they aren't expired yet
+          ;; the `refresh-tokens-loop` will retry soon
+          (and (not (http/unexceptional-status? (:status resp)))
+               (not (-> (state/get-auth-id-token) parse-jwt expired?)))
+          nil                           ; do nothing
+
+          (not (http/unexceptional-status? (:status resp)))
+          (clear-tokens)
+
+          :else                         ; ok
+          (set-tokens! (:id_token (:body resp)) (:access_token (:body resp))))))))
 
 (defn restore-tokens-from-localstorage
   "restore id-token, access-token, refresh-token from localstorage,
