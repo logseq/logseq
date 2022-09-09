@@ -19,6 +19,7 @@ import {
   LogseqPortalShape,
   VideoShape,
   ImageShape,
+  IFrameShape,
 } from '../lib'
 import type { LogseqContextValue } from '../lib/logseq-context'
 
@@ -243,7 +244,13 @@ export function usePaste(context: LogseqContextValue) {
           ) {
             return true
           }
-          // ??? deal with normal URLs?
+
+          shapesToCreate.push({
+            ...IFrameShape.defaultProps,
+            url: rawText,
+            point: [point[0], point[1]],
+          })
+          return true
         }
         return false
       }

@@ -26,8 +26,8 @@ export class PinchingState<
 
     // Normalize the value of deltaZ from raw WheelEvent
     const deltaZ = normalizeWheel(event)[2] * 0.01
-    if (deltaZ === 0) return;
-    const zoom = camera.zoom - deltaZ * camera.zoom;
+    if (deltaZ === 0) return
+    const zoom = camera.zoom - deltaZ * camera.zoom
     this.app.viewport.pinchCamera(info.point, [0, 0], zoom)
   }
 

@@ -84,7 +84,7 @@ export class TLViewport {
 
   pinchCamera = (point: number[], delta: number[], zoom: number): this => {
     const { camera } = this
-    zoom = Math.max(TLViewport.minZoom, Math.min(TLViewport.maxZoom, zoom));
+    zoom = Math.max(TLViewport.minZoom, Math.min(TLViewport.maxZoom, zoom))
     const nextPoint = Vec.sub(camera.point, Vec.div(delta, camera.zoom))
     const p0 = Vec.sub(Vec.div(point, camera.zoom), nextPoint)
     const p1 = Vec.sub(Vec.div(point, zoom), nextPoint)
@@ -105,7 +105,6 @@ export class TLViewport {
   zoomOut = () => {
     const { camera, bounds } = this
     this.setZoom(camera.zoom * ZOOM_UPDATE_FACTOR)
-
   }
 
   resetZoom = (): this => {

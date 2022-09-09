@@ -719,7 +719,6 @@ export class TLApp<
       inputs: { ctrlKey },
     } = this
     return (
-      !ctrlKey &&
       this.isInAny('select.idle', 'select.hoveringSelectionHandle') &&
       !this.isIn('select.contextMenu') &&
       selectedShapesArray.length > 0 &&

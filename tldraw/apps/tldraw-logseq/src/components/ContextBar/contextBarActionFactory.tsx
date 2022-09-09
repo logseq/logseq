@@ -7,6 +7,7 @@ import type {
   LogseqPortalShape,
   TextShape,
   HTMLShape,
+  IFrameShape,
   YouTubeShape,
   BoxShape,
   PolygonShape,
@@ -36,13 +37,19 @@ export const contextBarActionTypes = [
   'ScaleLevel',
   'TextStyle',
   'YoutubeLink',
+  'IFrameSource',
   'LogseqPortalViewMode',
   'ArrowMode',
   'OpenPage',
 ] as const
 
 type ContextBarActionType = typeof contextBarActionTypes[number]
-const singleShapeActions: ContextBarActionType[] = ['Edit', 'YoutubeLink', 'OpenPage']
+const singleShapeActions: ContextBarActionType[] = [
+  'Edit',
+  'YoutubeLink',
+  'IFrameSource',
+  'OpenPage',
+]
 
 const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 
@@ -51,6 +58,7 @@ type ShapeType = Shape['props']['type']
 export const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
   'logseq-portal': ['Edit', 'LogseqPortalViewMode', 'ScaleLevel', 'OpenPage', 'AutoResizing'],
   youtube: ['YoutubeLink'],
+  iframe: ['IFrameSource'],
   box: ['Swatch', 'NoFill', 'StrokeType'],
   ellipse: ['Swatch', 'NoFill', 'StrokeType'],
   polygon: ['Swatch', 'NoFill', 'StrokeType'],
@@ -232,6 +240,42 @@ const OpenPageAction = observer(() => {
         className="tl-contextbar-button"
         type="button"
         onClick={() => handlers?.redirectToPage(pageId)}
+      >
+        <TablerIcon name="external-link" />
+      </button>
+    </span>
+  )
+})
+
+const IFrameSourceAction = observer(() => {
+  const app = useApp<Shape>()
+  const shape = filterShapeByAction<IFrameShape>(app.selectedShapesArray, 'IFrameSource')[0]
+
+  const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    shape.onIFrameSourceChange(e.target.value.trim().toLowerCase())
+    app.persist()
+  }, [])
+
+  const handleReload = React.useCallback(() => {
+    shape.reload()
+  }, [])
+
+  return (
+    <span className="flex gap-3">
+      <button title="Reload" className="tl-contextbar-button" type="button" onClick={handleReload}>
+        <TablerIcon name="refresh" />
+      </button>
+      <TextInput
+        title="Website Url"
+        className="tl-iframe-src"
+        value={`${shape.props.url}`}
+        onChange={handleChange}
+      />
+      <button
+        title="Open website url"
+        className="tl-contextbar-button"
+        type="button"
+        onClick={() => window.open(shape.props.url)}
       >
         <TablerIcon name="external-link" />
       </button>
@@ -450,6 +494,7 @@ contextBarActionMapping.set('LogseqPortalViewMode', LogseqPortalViewModeAction)
 contextBarActionMapping.set('ScaleLevel', ScaleLevelAction)
 contextBarActionMapping.set('OpenPage', OpenPageAction)
 contextBarActionMapping.set('YoutubeLink', YoutubeLinkAction)
+contextBarActionMapping.set('IFrameSource', IFrameSourceAction)
 contextBarActionMapping.set('NoFill', NoFillAction)
 contextBarActionMapping.set('Swatch', SwatchAction)
 contextBarActionMapping.set('StrokeType', StrokeTypeAction)
