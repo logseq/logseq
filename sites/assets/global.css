@@ -93,10 +93,12 @@ body {
 
   .right-group {
     &-inner {
-      @apply hidden absolute left-0 top-16 w-full z-40 bg-logseq-800
-      flex-col space-x-0 items-center px-2 pb-6
-      sm:flex sm:flex-row sm:top-0 sm:sticky
-      sm:px-0 sm:space-x-6 sm:pb-0;
+      @apply invisible absolute left-0 top-16 w-full bg-logseq-800
+      flex-col space-x-0 items-center px-2 pb-6 opacity-0 transition-opacity duration-300
+      sm:flex sm:flex-row sm:top-0 sm:sticky sm:opacity-100
+      sm:px-0 sm:space-x-6 sm:pb-0 sm:translate-y-0;
+
+      z-index: -1;
     }
 
     &:before {
@@ -114,7 +116,7 @@ body {
 
     &.is-active {
       .right-group-inner {
-        @apply flex;
+        @apply visible flex opacity-100 z-40;
       }
 
       &:before {

@@ -119,7 +119,7 @@ export function Headbar () {
           <a className={'nav-toggle flex h-full items-center sm:hidden'}>
             {rightActive ?
               <X size={24} weight={'bold'}></X> :
-              <List size={22} weight={'bold'}></List>}
+              <List size={24} weight={'bold'}></List>}
           </a>
 
           <div className={'right-group-inner'}>
