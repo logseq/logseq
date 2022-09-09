@@ -407,7 +407,6 @@
          [:div
           {:class (if margin-less-pages? "" (util/hiccup->class "mx-auto.pb-24"))
            :style {:margin-bottom (cond
-                                    global-graph-pages? 0
                                     margin-less-pages? 0
                                     onboarding-and-home? -48
                                     :else 120)

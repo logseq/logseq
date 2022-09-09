@@ -45,14 +45,13 @@
               block-ids (set/union (set block-ids) (set block-refs-ids))
               pages (extract/with-ref-pages pages blocks)
               pages-index (map #(select-keys % [:block/name]) pages)]
-               ;; does order matter?
-               {:tx (concat file-content pages-index delete-blocks pages block-ids blocks)
-                :ast ast})
-             {:tx file-content})
+              ;; does order matter?
+          {:tx (concat file-content pages-index delete-blocks pages block-ids blocks)
+           :ast ast})
         tx (concat tx [(cond-> {:file/path file
                                 :file/content content}
-                               new?
-                               ;; TODO: use file system timestamp?
+                         new?
+                         ;; TODO: use file system timestamp?
                          (assoc :file/created-at (date-time-util/time-ms)))])
         tx' (gp-util/remove-nils tx)
         result (if skip-db-transact?

@@ -542,6 +542,14 @@ Similar to re-frame subscriptions"
   []
   (sub :feature/enable-sync?))
 
+(defn enable-whiteboards?
+  ([]
+   (enable-whiteboards? (get-current-repo)))
+  ([repo]
+   (and
+    (util/electron?)
+    (not (false? (:feature/enable-whiteboards? (sub-config repo)))))))
+
 (defn export-heading-to-list?
   []
   (not (false? (:export/heading-to-list? (sub-config)))))
