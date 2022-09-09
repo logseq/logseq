@@ -42,7 +42,6 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
         shapes: toJS(this.shapes.map(shape => toJS(shape.props))),
         bindings: toJS(this.bindings),
         nonce: this.nonce,
-        editingShape: toJS(this.app.editingShape),
       }),
       (curr, prev) => {
         if (this.app.isInAny('creating')) return
