@@ -208,9 +208,9 @@
                         *exist? (::exist? state)]
                     (when (and sync-on? asset-file? (false? @*exist?))
                       (let [sync-state (state/sub [:file-sync/sync-state (state/get-current-repo)])
-                            _downloading-files (:current-remote->local-files sync-state)
-                            contain-url? (and (seq _downloading-files)
-                                              (some #(string/ends-with? src %) _downloading-files))]
+                            downloading-files (:current-remote->local-files sync-state)
+                            contain-url? (and (seq downloading-files)
+                                              (some #(string/ends-with? src %) downloading-files))]
                         (cond
                           (and (not @*loading?) contain-url?)
                           (reset! *loading? true)
@@ -248,8 +248,8 @@
   (let [images (js/document.querySelectorAll ".asset-container img")
         images (to-array images)
         images (if-not (= (count images) 1)
-                 (let [^js _image (.closest (.-target e) ".asset-container")
-                       image (. _image querySelector "img")]
+                 (let [^js image (.closest (.-target e) ".asset-container")
+                       image (. image querySelector "img")]
                    (->> images
                         (sort-by (juxt #(.-y %) #(.-x %)))
                         (split-with (complement #{image}))
@@ -1872,10 +1872,7 @@
                  (not= "nil" marker))
         {:class (str (string/lower-case marker))})
       (when bg-color
-        {:style {:background-color bg-color
-                 :padding-left 6
-                 :padding-right 6
-                 :color "#FFFFFF"}
+        {:style {:background-color bg-color}
          :class "with-bg-color"}))
      (remove-nils
       (concat
@@ -2585,7 +2582,7 @@
         block (if ref?
                 (merge block (db/pull-block (:db/id block)))
                 block)
-        {:block/keys [uuid children pre-block? top? refs heading-level level type format content]} block
+        {:block/keys [uuid children pre-block? top? refs heading-level level format content properties]} block
         config (if navigated? (assoc config :id (str navigating-block)) config)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         blocks-container-id (:blocks-container-id config)
@@ -2594,7 +2591,7 @@
         config (if (nil? (:query-result config))
                  (assoc config :query-result (atom nil))
                  config)
-        heading? (or (= type :heading) (and heading-level (<= heading-level 6)))
+        heading? (or (:heading properties) (and heading-level (<= heading-level 6)))
         *control-show? (get state ::control-show?)
         db-collapsed? (util/collapsed? block)
         collapsed? (cond

@@ -438,9 +438,31 @@ html[data-theme='dark'] {
   z-index: var(--ls-z-index-level-1);
   transition: width 0.3s;
   background-color: var(--ls-secondary-background-color, #d8e1e8);
+  position: relative;
+
+  .resizer {
+    @apply absolute top-0 bottom-0;
+    left: 0;
+    width: 4px;
+    user-select: none;
+    cursor: col-resize !important;
+    transition: background-color 300ms;
+    transition-delay: 300ms;
+    z-index: 1000;
+
+    &:hover,
+    &:focus,
+    &:active {
+      background-color: var(--ls-active-primary-color);
+    }
+  }
 
   &.closed {
     width: 0 !important;
+
+    .resizer {
+      left: -4px;
+    }
   }
 
   &.open {
@@ -455,17 +477,6 @@ html[data-theme='dark'] {
 
   &-inner {
     padding-top: 0;
-    position: relative;
-
-    .resizer {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      left: 0;
-      width: 4px;
-      user-select: none;
-      cursor: col-resize !important;
-    }
   }
 
   &-settings {

@@ -62,22 +62,18 @@
                   :else
                   file)
            file (gp-util/path-normalize file)
-           new? (nil? (db/entity [:file/path file]))]
-       (:tx
-        (graph-parser/parse-file
-         (db/get-db repo-url false)
-         file
-         content
-         (merge (dissoc options :verbose)
-                {:new? new?
-                 :delete-blocks-fn (partial get-delete-blocks repo-url)
-                 :extract-options (merge
-                                   {:user-config (state/get-config)
-                                    :date-formatter (state/get-date-formatter)
-                                    :page-name-order (state/page-name-order)
-                                    :block-pattern (config/get-block-pattern (gp-util/get-format file))
-                                    :supported-formats (gp-config/supported-formats)}
-                                   (when (some? verbose) {:verbose verbose}))}))))
+           new? (nil? (db/entity [:file/path file]))
+           options (merge (dissoc options :verbose)
+                          {:new? new?
+                           :delete-blocks-fn (partial get-delete-blocks repo-url)
+                           :extract-options (merge
+                                             {:user-config (state/get-config)
+                                              :date-formatter (state/get-date-formatter)
+                                              :page-name-order (state/page-name-order)
+                                              :block-pattern (config/get-block-pattern (gp-util/get-format file))
+                                              :supported-formats (gp-config/supported-formats)}
+                                             (when (some? verbose) {:verbose verbose}))})]
+       (:tx (graph-parser/parse-file (db/get-db repo-url false) file content options)))
      (catch :default e
        (prn "Reset file failed " {:file file})
        (log/error :exception e)))))

@@ -164,5 +164,9 @@ contextBridge.exposeInMainWorld('apis', {
     webFrame.setZoomFactor(factor)
   },
 
+  setZoomLevel (level) {
+    webFrame.setZoomLevel(level)
+  },
+
   isAbsolutePath: path.isAbsolute.bind(path)
 })

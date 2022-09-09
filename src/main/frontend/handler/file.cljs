@@ -86,7 +86,8 @@
 
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
-  [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose]
+  [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose
+                             skip-db-transact?]
                       :or {reset? true
                            re-render-root? false
                            from-disk? false
@@ -101,17 +102,19 @@
                                         (assoc (when original-content {:old-content original-content})
                                                :skip-compare? skip-compare?))))
         opts {:new-graph? new-graph?
-              :from-disk? from-disk?}]
-    (if reset?
-      (do
-        (when-let [page-id (db/get-file-page-id path)]
-          (db/transact! repo
-                        [[:db/retract page-id :block/alias]
-                         [:db/retract page-id :block/tags]]
-                        opts))
-        (file-common-handler/reset-file! repo path content (merge opts
-                                                                  (when (some? verbose) {:verbose verbose}))))
-      (db/set-file-content! repo path content opts))
+              :from-disk? from-disk?
+              :skip-db-transact? skip-db-transact?}
+        result (if reset?
+                 (do
+                   (when-not skip-db-transact?
+                     (when-let [page-id (db/get-file-page-id path)]
+                       (db/transact! repo
+                         [[:db/retract page-id :block/alias]
+                          [:db/retract page-id :block/tags]]
+                         opts)))
+                   (file-common-handler/reset-file! repo path content (merge opts
+                                                         (when (some? verbose) {:verbose verbose}))))
+                 (db/set-file-content! repo path content opts))]
     (util/p-handle (write-file!)
                    (fn [_]
                      (cond
@@ -134,7 +137,8 @@
                                           :status :error}]))
 
                      (println "Write file failed, path: " path ", content: " content)
-                     (log/error :write/failed error)))))
+                     (log/error :write/failed error)))
+    result))
 
 (defn set-file-content!
   [repo path new-content]
