@@ -299,7 +299,7 @@
   top: var(--ls-headbar-inner-top-padding);
   left: 0;
   z-index: var(--ls-z-index-level-5);
-  transition: width .5s;
+  transition: width .3s;
 
   a {
     color: var(--ls-primary-text-color);
