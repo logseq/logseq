@@ -124,11 +124,11 @@
 
       (is (= {:block/alias [{:block/name "233"}]
               :block/tags [{:block/name "fun"} {:block/name "facts"}]
-              :block/properties {:alias ["233"] :tags ["fun" "facts"]}}
+              :block/properties {:alias #{"233"} :tags #{"fun" "facts"}}}
              block))
 
-      (is (every? vector? (vals (:block/properties block)))
-          "Linked built-in property values as vectors provides for easier transforms"))))
+      (is (every? set? (vals (:block/properties block)))
+          "Linked built-in property values as sets provides for easier transforms"))))
 
 (defn- property-relationships-test
   "Runs tests on page properties and block properties. file-properties is what is
@@ -191,8 +191,8 @@
        properties
        {:single-link #{"bar"}
         :multi-link #{"Logseq" "triples" "text editor"}
-        :desc #{"This is a multiple sentence description. It has one" "link"}
-        :comma-prop #{"one" "two" "three"}}
+        :desc #{"link"}
+        :comma-prop "one, two,three"}
        {}))))
 
 (deftest invalid-properties

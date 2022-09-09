@@ -501,7 +501,7 @@
      ast)
     (mapv macro->block @*result)))
 
-(defn- with-pre-block-if-exists
+(defn with-pre-block-if-exists
   [blocks body pre-block-properties encoded-content {:keys [supported-formats db date-formatter user-config]}]
   (let [first-block (first blocks)
         first-block-start-pos (get-in first-block [:block/meta :start_pos])
