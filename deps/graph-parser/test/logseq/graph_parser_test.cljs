@@ -190,7 +190,7 @@
       (property-relationships-test
        properties
        {:single-link #{"bar"}
-        :multi-link #{"Logseq" "is the fastest" "triples" "text editor"}
+        :multi-link #{"Logseq" "triples" "text editor"}
         :desc #{"This is a multiple sentence description. It has one" "link"}
         :comma-prop #{"one" "two" "three"}}
        {}))))

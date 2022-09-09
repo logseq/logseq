@@ -70,7 +70,7 @@
 (deftest test-parse-property
   (testing "parse-property"
     (are [k v y] (= (parse-property k v) y)
-      :tags "foo" "foo"
+      :tags "foo" ["foo"]
       :tags "[[foo]], [[bar]]" #{"foo" "bar"}
       :tags "[[foo]],[[bar]]" #{"foo" "bar"}
       :tags "[[foo]]" #{"foo"}

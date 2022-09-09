@@ -9,7 +9,7 @@
        [["alias" "[[name/with space]]"]] {:alias #{"name/with space"}}
        [["tags" "[[foo]], [[bar]]"]] {:tags #{"foo" "bar"}}
        [["tags" "[[foo]] [[bar]]"]] {:tags #{"foo" "bar"}}
-       [["tags" "bar"]] {:tags "bar"}
+       [["tags" "bar"]] {:tags #{"bar"}}
        [["file-path" "file:///home/x, y.pdf"]] {:file-path "file:///home/x, y.pdf"}
 
        ;; User properties

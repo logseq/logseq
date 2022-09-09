@@ -84,8 +84,7 @@
   (let [[*valid-properties *invalid-properties]
         ((juxt filter remove)
          (fn [[k _v]] (gp-property/valid-property-name? (str k))) properties)
-        valid-properties (-> (into {} *valid-properties)
-                             (dissoc :tags :alias))
+        valid-properties (into {} *valid-properties)
         invalid-properties (set (map (comp name first) *invalid-properties))
         page-m (->
                 (gp-util/remove-nils
