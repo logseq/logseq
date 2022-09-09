@@ -95,7 +95,7 @@ body {
     &-inner {
       @apply invisible absolute left-0 top-16 w-full bg-logseq-800
       flex-col space-x-0 items-center px-2 pb-6 opacity-0 transition-opacity duration-300
-      sm:flex sm:flex-row sm:top-0 sm:sticky sm:opacity-100
+      sm:flex sm:flex-row sm:top-0 sm:sticky sm:opacity-100 sm:visible
       sm:px-0 sm:space-x-6 sm:pb-0 sm:translate-y-0;
 
       z-index: -1;
