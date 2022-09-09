@@ -4,13 +4,13 @@ import cx from 'classnames'
 export const GlassCard = React.forwardRef<HTMLDivElement, any>((
   props, ref,
 ) => {
-  const { children, className, delay, ...rest } = props
+  const { children, className, delay, animation, ...rest } = props
 
   const [animateClass, setAnimateClass] = useState('')
 
   useEffect(() => {
     setTimeout(() => {
-      setAnimateClass('ani-slide-in-from-bottom')
+      setAnimateClass(`ani-${animation || 'slide-in-from-bottom'}`)
     }, delay || 1000)
   }, [])
 

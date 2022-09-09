@@ -123,7 +123,14 @@
     }
 
     > .r2 {
-      @apply flex flex-col sm:flex-row sm:space-x-3;
+      @apply flex flex-row sm:space-x-3;
+
+      &.is-single {
+        @apply justify-end;
+        .c {
+          flex: unset;
+        }
+      }
     }
 
     > .r3 {

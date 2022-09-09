@@ -26,6 +26,18 @@ body {
   visibility: visible !important;
 }
 
+.ani-slide-in-from-left {
+  @apply animate-in fade-in-0 duration-1000 slide-in-from-left-14;
+
+  visibility: visible !important;
+}
+
+.ani-slide-in-from-right {
+  @apply animate-in fade-in-0 duration-1000 slide-in-from-right-14;
+
+  visibility: visible !important;
+}
+
 .ani-zoom-in {
   @apply animate-in zoom-in duration-1000 fade-in-0;
 
