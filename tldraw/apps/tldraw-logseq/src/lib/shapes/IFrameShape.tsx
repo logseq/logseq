@@ -14,7 +14,6 @@ export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
   static id = 'iframe'
   frameRef = React.createRef<HTMLIFrameElement>()
 
-
   static defaultProps: IFrameShapeProps = {
     id: 'iframe',
     type: 'iframe',

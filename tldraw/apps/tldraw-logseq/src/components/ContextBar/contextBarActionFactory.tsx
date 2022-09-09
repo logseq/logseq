@@ -44,7 +44,12 @@ export const contextBarActionTypes = [
 ] as const
 
 type ContextBarActionType = typeof contextBarActionTypes[number]
-const singleShapeActions: ContextBarActionType[] = ['Edit', 'YoutubeLink', 'IFrameSource', 'OpenPage']
+const singleShapeActions: ContextBarActionType[] = [
+  'Edit',
+  'YoutubeLink',
+  'IFrameSource',
+  'OpenPage',
+]
 
 const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 
@@ -257,12 +262,7 @@ const IFrameSourceAction = observer(() => {
 
   return (
     <span className="flex gap-3">
-      <button
-        title="Reload"
-        className="tl-contextbar-button"
-        type="button"
-        onClick={handleReload}
-      >
+      <button title="Reload" className="tl-contextbar-button" type="button" onClick={handleReload}>
         <TablerIcon name="refresh" />
       </button>
       <TextInput
