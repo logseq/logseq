@@ -67,7 +67,7 @@ export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
                 height="100%"
                 src={`${this.props.url}`}
                 frameBorder="0"
-                sandbox=""
+                sandbox="allow-scripts"
               />
             </div>
           )}
