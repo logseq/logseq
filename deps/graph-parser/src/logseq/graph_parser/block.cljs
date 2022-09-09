@@ -170,7 +170,12 @@
                               (keyword k))))
                    ;; get links ast
                    (map last)
-                   (mapcat (or (:extract-refs-from-property-value-fn user-config) text/extract-refs-from-mldoc-ast)))
+                   (mapcat (or (:extract-refs-from-property-value-fn user-config)
+                               text/extract-refs-from-mldoc-ast))
+                   ;; comma separated collections
+                   (concat (->> (map second properties)
+                                (filter coll?)
+                                (apply concat))))
         page-refs-from-property-names (get-page-refs-from-property-names properties user-config)]
     (->> (concat page-refs page-refs-from-property-names)
          (remove string/blank?)
@@ -189,7 +194,6 @@
                              [k v mldoc-ast]))
                          properties)
                        properties)
-          page-refs (get-page-ref-names-from-properties properties user-config)
           *invalid-properties (atom #{})
           properties (->> properties
                           (map (fn [[k v mldoc-ast]]
@@ -209,10 +213,12 @@
                                                (text/parse-property k v mldoc-ast user-config))
                                            k (keyword k)
                                            v (if (coll? v) (set v) v)]
-                                       [k v])
+                                       [k v mldoc-ast])
                                      (do (swap! *invalid-properties conj k)
                                          nil)))))
                           (remove #(nil? (second %))))
+          page-refs (get-page-ref-names-from-properties properties user-config)
+          properties (map (fn [[k v _]] [k v]) properties)
           properties' (into {} properties)]
       {:properties properties'
        :properties-order (map first properties)

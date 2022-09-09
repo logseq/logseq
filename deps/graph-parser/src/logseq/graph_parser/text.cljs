@@ -136,7 +136,8 @@
   [config-state k]
   (let [k' (if (keyword? k) k (keyword k))]
     (contains? (set/union #{:alias :tags}
-                          (set (get config-state :property/separated-by-commas)))
+                          (set (get config-state :property/separated-by-commas))
+                          (set (:property/separated-by-commas config-state)))
                k')))
 
 (defn parse-property
