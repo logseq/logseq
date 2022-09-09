@@ -818,11 +818,11 @@ html[data-theme='dark'] {
   width: 1px;
 }
 
-.tl-youtube-link {
-  border-radius: 8px;
+.tl-youtube-link,
+.tl-iframe-src {
+  @apply rounded-lg px-2 py-1;
   color: var(--ls-primary-text-color);
   box-shadow: 0 0 0 1px var(--ls-secondary-border-color);
-  padding: 4px 14px;
 }
 
 .tl-hitarea-stroke {

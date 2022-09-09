@@ -6,6 +6,7 @@ import { HighlighterShape } from './HighlighterShape'
 import { HTMLShape } from './HTMLShape'
 import { ImageShape } from './ImageShape'
 import { VideoShape } from './VideoShape'
+import { IFrameShape } from './IFrameShape'
 import { LineShape } from './LineShape'
 import { LogseqPortalShape } from './LogseqPortalShape'
 import { PencilShape } from './PencilShape'
@@ -27,6 +28,7 @@ export type Shape =
   | PolygonShape
   | TextShape
   | YouTubeShape
+  | IFrameShape
   | HTMLShape
   | LogseqPortalShape
 
@@ -37,6 +39,7 @@ export * from './HighlighterShape'
 export * from './HTMLShape'
 export * from './ImageShape'
 export * from './VideoShape'
+export * from './IFrameShape'
 export * from './LineShape'
 export * from './LogseqPortalShape'
 export * from './PencilShape'
@@ -56,6 +59,7 @@ export const shapes: TLReactShapeConstructor<Shape>[] = [
   PolygonShape,
   TextShape,
   YouTubeShape,
+  IFrameShape,
   HTMLShape,
   LogseqPortalShape,
 ]
