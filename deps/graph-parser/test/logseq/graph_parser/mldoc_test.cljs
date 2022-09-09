@@ -1,6 +1,6 @@
 (ns logseq.graph-parser.mldoc-test
   (:require [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.text :as gp-text]
+            [logseq.graph-parser.text :as text]
             [clojure.string :as string]
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [logseq.graph-parser.cli :as gp-cli]
@@ -73,7 +73,7 @@
   (->> (gp-mldoc/->edn x md-config)
        ffirst second
        (map (fn [[k v ast]]
-              [(keyword k) (gp-text/parse-property k v ast {})]))
+              [(keyword k) (text/parse-property k v ast {})]))
        (into {})))
 
 (deftest md-properties-test
