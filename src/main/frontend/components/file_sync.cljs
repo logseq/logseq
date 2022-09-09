@@ -174,6 +174,7 @@
         current-repo           (state/get-current-repo)
         creating-remote-graph? (state/sub [:ui/loading? :graph/create-remote?])
         sync-state             (state/sub [:file-sync/sync-state current-repo])
+        sync-progress          (state/sub [:file-sync/progress])
         _                      (rum/react file-sync-handler/refresh-file-sync-component)
         synced-file-graph?     (file-sync-handler/synced-file-graph? current-repo)
         uploading-files        (:current-local->remote-files sync-state)
@@ -273,7 +274,9 @@
 
              (map (fn [f] {:title [:div.file-item
                                    {:key (str "downloading-" f)}
-                                   (js/decodeURIComponent f)]
+                                   (js/decodeURIComponent f)
+                                   (when-let [progress (get sync-progress f)]
+                                     (str "[" (:percent progress) "%]"))]
                            :key   (str "downloading-" f)
                            :icon  (ui/icon "arrow-narrow-down")}) downloading-files)
              (map (fn [e] (let [icon (case (.-type e)
@@ -288,7 +291,9 @@
                              :icon  (ui/icon icon)})) (take 10 queuing-files))
              (map (fn [f] {:title [:div.file-item
                                    {:key (str "uploading-" f)}
-                                   (js/decodeURIComponent f)]
+                                   (js/decodeURIComponent f)
+                                   (when-let [progress (get sync-progress f)]
+                                     (str "[" (:percent progress) "%]"))]
                            :key   (str "uploading-" f)
                            :icon  (ui/icon "arrow-up")}) uploading-files)
 

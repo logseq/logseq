@@ -244,6 +244,7 @@
 
      :ui/loading?                           {}
      :file-sync/set-remote-graph-password-result {}
+     :file-sync/progress                    {}
      :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
 
      :file/rename-event-chan                (async/chan 100)

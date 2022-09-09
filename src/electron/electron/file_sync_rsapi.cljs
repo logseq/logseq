@@ -1,10 +1,15 @@
 (ns electron.file-sync-rsapi
-  (:require ["@logseq/rsapi" :as rsapi]))
+  (:require ["@logseq/rsapi" :as rsapi]
+            [electron.utils :refer [logger]]
+            [electron.window :as window]))
 
 (defn key-gen [] (rsapi/keygen))
 
 (defn set-env [env private-key public-key]
   (rsapi/setEnv env private-key public-key))
+
+(defn set-progress-callback [callback]
+  (rsapi/setProgressCallback callback))
 
 (defn get-local-files-meta [graph-uuid base-path file-paths]
   (rsapi/getLocalFilesMeta graph-uuid base-path (clj->js file-paths)))
@@ -44,3 +49,16 @@
 
 (defn decrypt-with-passphrase [passphrase data]
   (rsapi/ageDecryptWithPassphrase passphrase data))
+
+(defonce progress-notify-chan "file-sync-progress")
+(set-progress-callback (fn [error fname type progress total]
+                         (when-not error
+                           (doseq [^js win (window/get-all-windows)]
+                             (when-not (.isDestroyed win)
+                               (.. win -webContents
+                                   (send progress-notify-chan
+                                         (clj->js {:file fname :type type
+                                                   :progress progress :total total
+                                                   :percent (Math/floor (/ (* progress 100) total))})))))
+
+                           (.info logger "sync progess" fname type progress total))))
