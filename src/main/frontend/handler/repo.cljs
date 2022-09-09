@@ -9,9 +9,12 @@
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.handler.common.file :as file-common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.metadata :as metadata-handler]
+            [frontend.handler.global-config :as global-config-handler]
             [frontend.idb :as idb]
             [frontend.search :as search]
             [frontend.spec :as spec]
@@ -28,25 +31,12 @@
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
             [frontend.encrypt :as encrypt]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [medley.core :as medley]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
 ;; 2. Git pulls the new change (fn: load-files)
-
-(defn create-config-file-if-not-exists
-  [repo-url]
-  (spec/validate :repos/url repo-url)
-  (let [repo-dir (config/get-repo-dir repo-url)
-        app-dir config/app-name
-        dir (str repo-dir "/" app-dir)]
-    (p/let [_ (fs/mkdir-if-not-exists dir)]
-      (let [default-content config/config-default-content
-            path (str app-dir "/" config/config-file)]
-        (p/let [file-exists? (fs/create-if-not-exists repo-url repo-dir (str app-dir "/" config/config-file) default-content)]
-          (when-not file-exists?
-            (file-handler/reset-file! repo-url path default-content)
-            (common-handler/reset-config! repo-url default-content)))))))
 
 (defn create-contents-file
   [repo-url]
@@ -67,7 +57,7 @@
         (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir pages-dir))
                 file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
           (when-not file-exists?
-            (file-handler/reset-file! repo-url path default-content)))))))
+            (file-common-handler/reset-file! repo-url path default-content)))))))
 
 (defn create-custom-theme
   [repo-url]
@@ -79,7 +69,7 @@
     (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
-        (file-handler/reset-file! repo-url path default-content)))))
+        (file-common-handler/reset-file! repo-url path default-content)))))
 
 (defn create-dummy-notes-page
   [repo-url content]
@@ -89,7 +79,7 @@
         file-path (str "/" path)]
     (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-pages-directory)))
             _file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
-      (file-handler/reset-file! repo-url path content))))
+      (file-common-handler/reset-file! repo-url path content))))
 
 (defn- create-today-journal-if-not-exists
   [repo-url {:keys [content]}]
@@ -123,7 +113,7 @@
                 _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-journals-directory)))
                 file-exists? (fs/file-exists? repo-dir file-path)]
           (when-not file-exists?
-            (p/let [_ (file-handler/reset-file! repo-url path content)]
+            (p/let [_ (file-common-handler/reset-file! repo-url path content)]
               (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-path content)]
                 (when-not (state/editing?)
                   (ui-handler/re-render-root!)))))
@@ -140,7 +130,7 @@
              _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (str config/app-name "/" config/recycle-dir)))
              _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-journals-directory)))
              _ (file-handler/create-metadata-file repo-url encrypted?)
-             _ (create-config-file-if-not-exists repo-url)
+             _ (repo-config-handler/create-config-file-if-not-exists repo-url)
              _ (create-contents-file repo-url)
              _ (create-custom-theme repo-url)]
        (state/pub-event! [:page/create-today-journal repo-url])))))
@@ -185,21 +175,27 @@
         file-paths [path]]
     (load-pages-metadata! repo file-paths files force?)))
 
+(defonce *file-tx (atom nil))
+
 (defn- parse-and-load-file!
-  [repo-url file {:keys [new-graph? verbose]}]
+  [repo-url file {:keys [new-graph? verbose skip-db-transact?]
+                  :or {skip-db-transact? true}}]
   (try
-    (file-handler/alter-file repo-url
-                             (:file/path file)
-                             (:file/content file)
-                             (merge {:new-graph? new-graph?
-                                     :re-render-root? false
-                                     :from-disk? true}
-                                    (when (some? verbose) {:verbose verbose})))
+    (reset! *file-tx
+            (file-handler/alter-file repo-url
+                                     (:file/path file)
+                                     (:file/content file)
+                                     (merge {:new-graph? new-graph?
+                                             :re-render-root? false
+                                             :from-disk? true
+                                             :skip-db-transact? skip-db-transact?}
+                                            (when (some? verbose) {:verbose verbose}))))
     (catch :default e
       (state/set-parsing-state! (fn [m]
                                   (update m :failed-parsing-files conj [(:file/path file) e])))))
   (state/set-parsing-state! (fn [m]
-                              (update m :finished inc))))
+                              (update m :finished inc)))
+  @*file-tx)
 
 (defn- after-parse
   [repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan]
@@ -221,8 +217,11 @@
   (let [supported-files (graph-parser/filter-files files)
         delete-data (->> (concat delete-files delete-blocks)
                          (remove nil?))
-        chan (async/to-chan! supported-files)
-        graph-added-chan (async/promise-chan)]
+        indexed-files (medley/indexed supported-files)
+        chan (async/to-chan! indexed-files)
+        graph-added-chan (async/promise-chan)
+        total (count supported-files)
+        large-graph? (> total 1000)]
     (when (seq delete-data) (db/transact! repo-url delete-data))
     (state/set-current-repo! repo-url)
     (state/set-parsing-state! {:total (count supported-files)})
@@ -231,18 +230,33 @@
       (do
         (doseq [file supported-files]
           (state/set-parsing-state! (fn [m]
-                                      (assoc m :current-parsing-file (:file/path file))))
-          (parse-and-load-file! repo-url file (select-keys opts [:new-graph? :verbose])))
+                                      (assoc m
+                                             :current-parsing-file (:file/path file))))
+          (parse-and-load-file! repo-url file (assoc
+                                               (select-keys opts [:new-graph? :verbose])
+                                               :skip-db-transact? false)))
         (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan))
-      (async/go-loop []
-        (if-let [file (async/<! chan)]
-          (do
+      (async/go-loop [tx []]
+        (if-let [item (async/<! chan)]
+          (let [[idx file] item
+                yield-for-ui? (or (not large-graph?)
+                                  (zero? (rem idx 10))
+                                  (<= (- total idx) 10))]
             (state/set-parsing-state! (fn [m]
                                         (assoc m :current-parsing-file (:file/path file))))
-            (async/<! (async/timeout 10))
-            (parse-and-load-file! repo-url file (select-keys opts [:new-graph? :verbose]))
-            (recur))
-          (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan))))
+
+            (when yield-for-ui? (async/<! (async/timeout 1)))
+
+            (let [result (parse-and-load-file! repo-url file (select-keys opts [:new-graph? :verbose]))
+                  tx' (concat tx result)
+                  tx' (if (zero? (rem (inc idx) 100))
+                        (do (db/transact! repo-url tx' {:from-disk? true})
+                            [])
+                        tx')]
+              (recur tx')))
+          (do
+            (when (seq tx) (db/transact! repo-url tx {:from-disk? true}))
+            (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan)))))
     graph-added-chan))
 
 (defn- parse-files-and-create-default-files!
@@ -280,9 +294,9 @@
   (spec/validate :repos/url repo-url)
   (route-handler/redirect-to-home!)
   (state/set-parsing-state! {:graph-loading? true})
-  (let [config (or (when-let [content (some-> (first (filter #(= (config/get-config-path repo-url) (:file/path %)) nfs-files))
+  (let [config (or (when-let [content (some-> (first (filter #(= (config/get-repo-config-path repo-url) (:file/path %)) nfs-files))
                                               :file/content)]
-                     (common-handler/read-config content))
+                     (repo-config-handler/read-repo-config repo-url content))
                    (state/get-config repo-url))
         ;; NOTE: Use config while parsing. Make sure it's the corrent journal title format
         _ (state/set-config! repo-url config)
@@ -368,7 +382,7 @@
                (let [tutorial (t :tutorial/text)
                      tutorial (string/replace-first tutorial "$today" (date/today))]
                  (create-today-journal-if-not-exists repo {:content tutorial})))
-             (create-config-file-if-not-exists repo)
+             (repo-config-handler/create-config-file-if-not-exists repo)
              (create-contents-file repo)
              (create-custom-theme repo)
              (state/set-db-restoring! false)
@@ -390,12 +404,14 @@
   conn, or replace the conn in state with a new one."
   [repo]
   (p/let [_ (state/set-db-restoring! true)
-          _ (db/restore-graph! repo)]
-         (file-handler/restore-config! repo)
-         ;; Don't have to unlisten the old listerner, as it will be destroyed with the conn
-         (db/listen-and-persist! repo)
-         (ui-handler/add-style-if-exists!)
-         (state/set-db-restoring! false)))
+          _ (db/restore-graph! repo)
+          _ (repo-config-handler/restore-repo-config! repo)
+          _ (global-config-handler/restore-global-config!)]
+    ;; Don't have to unlisten the old listener, as it will be destroyed with the conn
+    (db/listen-and-persist! repo)
+    (state/pub-event! [:shortcut/refresh])
+    (ui-handler/add-style-if-exists!)
+    (state/set-db-restoring! false)))
 
 (defn rebuild-index!
   [url]

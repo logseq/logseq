@@ -266,11 +266,11 @@
 (defn input-password
   ([repo-url close-fn] (input-password repo-url close-fn {:type :local}))
   ([repo-url close-fn opts]
-   (fn [_close-fn]
+   (fn [close-fn']
      (let [close-fn' (if (fn? close-fn)
                        #(do (close-fn %)
-                            (_close-fn))
-                       _close-fn)]
+                            (close-fn'))
+                       close-fn')]
        (input-password-inner repo-url close-fn' opts)))))
 
 (rum/defcs encryption-setup-dialog-inner

@@ -9,7 +9,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [frontend.handler.common :as common-handler])
+            [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.handler.config :as config-handler])
   (:import [goog.ui KeyboardShortcutHandler]))
 
 (defn get-bindings
@@ -138,15 +139,15 @@
 
 (defn remove-shortcut [k]
   (let [repo (state/get-current-repo)
-        path (config/get-config-path)]
+        path (config/get-repo-config-path)]
     (when-let [content (db/get-file path)]
-      (let [result (common-handler/parse-config content)
+      (let [result (config-handler/parse-repo-config content)
             new-result (rewrite/update
                         result
                         :shortcuts
                         #(dissoc (rewrite/sexpr %) k))
             new-content (str new-result)]
-        (common-handler/reset-config! repo new-content)
+        (repo-config-handler/set-repo-config-state! repo new-content)
         (file/set-file-content! repo path new-content)))))
 
 (defn get-group

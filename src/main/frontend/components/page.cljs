@@ -163,7 +163,7 @@
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
   (when (and today? (not sidebar?))
-    (let [queries (state/sub [:config repo :default-queries :journals])]
+    (let [queries (get-in (state/sub-config repo) [:default-queries :journals])]
       (when (seq queries)
         [:div#today-queries.mt-10
          (for [query queries]
@@ -683,7 +683,7 @@
                    (state/set-search-mode! :global)
                    state)}
   [state]
-  (let [settings (state/sub-graph-config-settings)
+  (let [settings (state/graph-settings)
         theme (state/sub :ui/theme)
         graph (graph-handler/build-global-graph theme settings)
         search-graph-filters (state/sub :search/graph-filters)

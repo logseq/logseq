@@ -161,8 +161,8 @@
       (ui/button "Cancel" :background "gray" :class "opacity-50" :on-click close-fn)
       (ui/button "Create remote graph" :on-click on-confirm)]]))
 
-(rum/defcs ^:large-vars/cleanup-todo indicator <
-  rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo indicator < rum/reactive
+  < {:key-fn #(identity "file-sync-indicator")}
   {:will-mount   (fn [state]
                    (let [unsub-fn (file-sync-handler/setup-file-sync-event-listeners)]
                      (assoc state ::unsub-events unsub-fn)))
@@ -308,9 +308,9 @@
             (when (and synced-file-graph? queuing?)
               [:div.head-ctls
                (ui/button "Sync now"
-                 :class "block cursor-pointer"
-                 :small? true
-                 :on-click #(async/offer! fs-sync/immediately-local->remote-chan true))])
+                          :class "block cursor-pointer"
+                          :small? true
+                          :on-click #(async/offer! fs-sync/immediately-local->remote-chan true))])
 
                                         ;(when config/dev?
                                         ;  [:strong.debug-status (str status)])
@@ -359,7 +359,7 @@
                                 (p/resolved nil)
                                 (if (util/electron?)
                                   (ipc/ipc :readGraphTxIdInfo root)
-                                  (fs-util/read-graph-txid-info root)))
+                                  (fs-util/read-graphs-txid-info root)))
 
                               (p/then (fn [^js info]
                                         (when (and (not empty-dir?)
@@ -414,7 +414,7 @@
        [:div.p-4 (ui/loading "Loading...")]
        (for [version version-files]
          (let [version-uuid (get-version-key version)
-               _local?      (some? (:relative-path version))]
+               local?      (some? (:relative-path version))]
            [:div.version-list-item {:key version-uuid}
             [:a.item-link.block.fade-link.flex.justify-between
              {:title    version-uuid
@@ -427,7 +427,7 @@
                (or (:CreateTime version)
                    (:create-time version)) nil)]
              [:small.opacity-50.translate-y-1
-              (if _local?
+              (if local?
                 [:<> (ui/icon "git-commit") " local"]
                 [:<> (ui/icon "cloud") " remote"])]]])))]))
 

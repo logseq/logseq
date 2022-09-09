@@ -17,7 +17,7 @@
     (show-error-tip "[Main Exception]" msg stack))
 
   ;; for debug log
-  (js/console.error uncaughtExceptionChan e))
+  (.error utils/logger uncaughtExceptionChan (str e)))
 
 (defn setup-exception-listeners!
   []

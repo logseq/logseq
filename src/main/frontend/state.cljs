@@ -16,6 +16,7 @@
             [logseq.graph-parser.config :as gp-config]
             [frontend.mobile.util :as mobile-util]))
 
+;; Stores main application state
 (defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
         current-graph  (let [graph (storage/get :git/current-repo)]
@@ -251,6 +252,9 @@
      :graph/importing-state                 {}
      })))
 
+;; Block ast state
+;; ===============
+
 ;; block uuid -> {content(String) -> ast}
 (def blocks-ast-cache (atom {}))
 (defn add-block-ast-cache!
@@ -267,68 +271,53 @@
   (when (and block-uuid content)
     (get-in @blocks-ast-cache [block-uuid content])))
 
-(defn sub
-  [ks]
-  (if (coll? ks)
-    (util/react (rum/cursor-in state ks))
-    (util/react (rum/cursor state ks))))
-
-(defn get-route-match
-  []
-  (:route-match @state))
-
-(defn get-current-route
-  []
-  (get-in (get-route-match) [:data :name]))
-
-(defn home?
-  []
-  (= :home (get-current-route)))
-
-(defn setups-picker?
-  []
-  (= :repo-add (get-current-route)))
-
-(defn get-current-page
-  []
-  (when (= :page (get-current-route))
-    (get-in (get-route-match)
-            [:path-params :name])))
-
-(defn route-has-p?
-  []
-  (get-in (get-route-match) [:query-params :p]))
-
-(defn set-state!
-  [path value]
-  (if (vector? path)
-    (swap! state assoc-in path value)
-    (swap! state assoc path value)))
-
-(defn update-state!
-  [path f]
-  (if (vector? path)
-    (swap! state update-in path f)
-    (swap! state update path f)))
-
-(defn get-current-repo
-  []
-  (or (:git/current-repo @state)
-      (when-not (mobile-util/native-platform?)
-        "local")))
+;; User configuration getters under :config (and sometimes :me)
+;; ========================================
+;; TODO: Refactor default config values to be data driven. Currently they are all
+;;  buried in getters
+;; TODO: Refactor our access to be more data driven. Currently each getter
+;;  (re-)fetches get-current-repo needlessly
+;; TODO: Add consistent validation. Only a few config options validate at get time
 
 (def default-config
   "Default config for a repo-specific, user config"
   {:feature/enable-search-remove-accents? true
    :default-arweave-gateway "https://arweave.net"})
 
+;; State that most user config is dependent on
+(declare get-current-repo)
+
+(defn merge-configs
+  "Merges user configs in given orders. All values are overriden except for maps
+  which are merged."
+  [& configs]
+  (apply merge-with
+    (fn merge-config [current new]
+      (if (and (map? current) (map? new))
+        (merge current new)
+        new))
+    configs))
+
 (defn get-config
-  "User config for the given repo or current repo if none given"
+  "User config for the given repo or current repo if none given. All config fetching
+should be done through this fn in order to get global config and config defaults"
   ([]
    (get-config (get-current-repo)))
   ([repo-url]
-   (merge default-config
-          (get-in @state [:config repo-url]))))
+   (merge-configs
+    default-config
+    (get-in @state [:config ::global-config])
+    (get-in @state [:config repo-url]))))
+
+(defonce publishing? (atom nil))
+
+(defn publishing-enable-editing?
+  []
+  (and @publishing? (:publishing/enable-editing? (get-config))))
+
+(defn enable-editing?
+  []
+  (or (not @publishing?) (:publishing/enable-editing? (get-config))))
 
 (defn get-arweave-gateway
   []
@@ -342,10 +331,6 @@
   (merge
     built-in-macros
     (:macros (get-config))))
-
-(defn sub-config
-  []
-  (sub :config))
 
 (defn get-custom-css-link
   []
@@ -367,92 +352,9 @@
         value (if (some? value) value (:all-pages-public? (get-config)))]
     (true? value)))
 
-(defn enable-grammarly?
-  []
-  (true? (:feature/enable-grammarly?
-           (get (sub-config) (get-current-repo)))))
-
-;; (defn store-block-id-in-file?
-;;   []
-;;   (true? (:block/store-id-in-file? (get-config))))
-
-(defn scheduled-deadlines-disabled?
-  []
-  (true? (:feature/disable-scheduled-and-deadline-query?
-           (get (sub-config) (get-current-repo)))))
-
-(defn enable-timetracking?
-  []
-  (not (false? (:feature/enable-timetracking?
-                 (get (sub-config) (get-current-repo))))))
-
-(defn enable-journals?
-  ([]
-   (enable-journals? (get-current-repo)))
-  ([repo]
-   (not (false? (:feature/enable-journals?
-                 (get (sub-config) repo))))))
-
-(defn enable-flashcards?
-  ([]
-   (enable-flashcards? (get-current-repo)))
-  ([repo]
-   (not (false? (:feature/enable-flashcards?
-                 (get (sub-config) repo))))))
-
-(defn user-groups
-  []
-  (set (sub [:user/info :UserGroups])))
-
-(defn enable-sync?
-  []
-  (sub :feature/enable-sync?))
-
-(defn export-heading-to-list?
-  []
-  (not (false? (:export/heading-to-list?
-                 (get (sub-config) (get-current-repo))))))
-
-(defn enable-git-auto-push?
-  [repo]
-  (not (false? (:git-auto-push
-                 (get (sub-config) repo)))))
-
-(defn enable-block-timestamps?
-  []
-  (true? (:feature/enable-block-timestamps?
-           (get (sub-config) (get-current-repo)))))
-
-(defn enable-whiteboards?
-  ([]
-   (enable-whiteboards? (get-current-repo)))
-  ([repo]
-   (and
-    (util/electron?)
-    (true? (:feature/enable-whiteboards?
-            (get (sub-config) repo))))))
-
-(defn sub-graph-config
-  []
-  (get (sub-config) (get-current-repo)))
-
-(defn sub-graph-config-settings
-  []
-  (:graph/settings (sub-graph-config)))
-
-;; Enable by default
-(defn show-brackets?
-  []
-  (not (false? (:ui/show-brackets?
-                 (get (sub-config) (get-current-repo))))))
-
 (defn get-default-home
   []
   (:default-home (get-config)))
-
-(defn sub-default-home-page
-  []
-  (get-in (sub-config) [(get-current-repo) :default-home :page] ""))
 
 (defn custom-home-page?
   []
@@ -535,6 +437,241 @@
   name unless it is missing."
   []
   (:page-name-order (get-config)))
+
+(defn get-date-formatter
+  []
+  (gp-config/get-date-formatter (get-config)))
+
+(defn shortcuts []
+  (:shortcuts (get-config)))
+
+(defn get-commands
+  []
+  (:commands (get-config)))
+
+(defn get-scheduled-future-days
+  []
+  (let [days (:scheduled/future-days (get-config))]
+    (or (when (int? days) days) 0)))
+
+(defn get-start-of-week
+  []
+  (or (:start-of-week (get-config))
+      (get-in @state [:me :settings :start-of-week])
+      6))
+
+(defn get-ref-open-blocks-level
+  []
+  (or
+    (when-let [value (:ref/default-open-blocks-level (get-config))]
+      (when (integer? value)
+        value))
+    2))
+
+(defn get-linked-references-collapsed-threshold
+  []
+  (or
+    (when-let [value (:ref/linked-references-collapsed-threshold (get-config))]
+      (when (integer? value)
+        value))
+    100))
+
+(defn get-export-bullet-indentation
+  []
+  (case (get (get-config) :export/bullet-indentation :tab)
+    :eight-spaces
+    "        "
+    :four-spaces
+    "    "
+    :two-spaces
+    "  "
+    :tab
+    "\t"))
+
+(defn enable-search-remove-accents?
+  []
+  (:feature/enable-search-remove-accents? (get-config)))
+
+;; State cursor fns for use with rum components
+;; ============================================
+
+(declare document-mode?)
+
+(defn sub
+  "Creates a rum cursor, https://github.com/tonsky/rum#cursors, for use in rum components.
+Similar to re-frame subscriptions"
+  [ks]
+  (if (coll? ks)
+    (util/react (rum/cursor-in state ks))
+    (util/react (rum/cursor state ks))))
+
+(defn sub-config
+  "Sub equivalent to get-config which should handle all sub user-config access"
+  ([] (sub-config (get-current-repo)))
+  ([repo]
+   (let [config (sub :config)]
+     (merge-configs default-config
+                    (get config ::global-config)
+                    (get config repo)))))
+
+(defn enable-grammarly?
+  []
+  (true? (:feature/enable-grammarly? (sub-config))))
+
+(defn scheduled-deadlines-disabled?
+  []
+  (true? (:feature/disable-scheduled-and-deadline-query? (sub-config))))
+
+(defn enable-timetracking?
+  []
+  (not (false? (:feature/enable-timetracking? (sub-config)))))
+
+(defn enable-journals?
+  ([]
+   (enable-journals? (get-current-repo)))
+  ([repo]
+   (not (false? (:feature/enable-journals? (sub-config repo))))))
+
+(defn enable-flashcards?
+  ([]
+   (enable-flashcards? (get-current-repo)))
+  ([repo]
+   (not (false? (:feature/enable-flashcards? (sub-config repo))))))
+
+(defn enable-sync?
+  []
+  (sub :feature/enable-sync?))
+
+(defn export-heading-to-list?
+  []
+  (not (false? (:export/heading-to-list? (sub-config)))))
+
+(defn enable-git-auto-push?
+  [repo]
+  (not (false? (:git-auto-push (sub-config repo)))))
+
+(defn enable-block-timestamps?
+  []
+  (true? (:feature/enable-block-timestamps? (sub-config))))
+
+(defn graph-settings
+  []
+  (:graph/settings (sub-config)))
+
+;; Enable by default
+(defn show-brackets?
+  []
+  (not (false? (:ui/show-brackets? (sub-config)))))
+
+(defn sub-default-home-page
+  []
+  (get-in (sub-config) [:default-home :page] ""))
+
+(defn sub-edit-content
+  [id]
+  (sub [:editor/content id]))
+
+(defn- get-selected-block-ids
+  [blocks]
+  (->> blocks
+       (keep #(when-let [id (dom/attr % "blockid")]
+                (uuid id)))
+       (distinct)))
+
+(defn sub-block-selected?
+  [block-uuid]
+  (rum/react
+   (rum/derived-atom [state] [::select-block block-uuid]
+     (fn [state]
+       (contains? (set (get-selected-block-ids (:selection/blocks state)))
+                  block-uuid)))))
+
+(defn block-content-max-length
+  [repo]
+  (or (:block/content-max-length (sub-config repo)) 5000))
+
+(defn mobile?
+  []
+  (or (util/mobile?) (mobile-util/native-platform?)))
+
+(defn enable-tooltip?
+  []
+  (if (mobile?)
+    false
+    (get (sub-config) :ui/enable-tooltip? true)))
+
+(defn show-command-doc?
+  []
+  (get (sub-config) :ui/show-command-doc? true))
+
+(defn logical-outdenting?
+  []
+  (:editor/logical-outdenting? (sub-config)))
+
+(defn enable-encryption?
+  [repo]
+  (:feature/enable-encryption? (sub-config repo)))
+
+(defn doc-mode-enter-for-new-line?
+  []
+  (and (document-mode?)
+       (not (:shortcut/doc-mode-enter-for-new-block? (get-config)))))
+
+(defn user-groups
+  []
+  (set (sub [:user/info :UserGroups])))
+
+;; State mutation helpers
+;; ======================
+
+(defn set-state!
+  [path value]
+  (if (vector? path)
+    (swap! state assoc-in path value)
+    (swap! state assoc path value)))
+
+(defn update-state!
+  [path f]
+  (if (vector? path)
+    (swap! state update-in path f)
+    (swap! state update path f)))
+
+;; State getters and setters
+;; =========================
+;; These fns handle any key except :config.
+;; Some state is also stored in local storage and/or sent to electron's main process
+
+(defn get-route-match
+  []
+  (:route-match @state))
+
+(defn get-current-route
+  []
+  (get-in (get-route-match) [:data :name]))
+
+(defn home?
+  []
+  (= :home (get-current-route)))
+
+(defn setups-picker?
+  []
+  (= :repo-add (get-current-route)))
+
+(defn get-current-page
+  []
+  (when (= :page (get-current-route))
+    (get-in (get-route-match)
+            [:path-params :name])))
+
+(defn route-has-p?
+  []
+  (get-in (get-route-match) [:query-params :p]))
+
+(defn get-current-repo
+  []
+  (or (:git/current-repo @state)
+      (when-not (mobile-util/native-platform?)
+        "local")))
 
 (defn get-remote-repos
   []
@@ -627,10 +764,6 @@
   []
   (get (:editor/content @state) (get-edit-input-id)))
 
-(defn sub-edit-content
-  []
-  (sub [:editor/content (get-edit-input-id)]))
-
 (defn get-cursor-range
   []
   (:cursor-range @state))
@@ -684,13 +817,16 @@
     (do
       (set-editor-action! nil)
       (set-editor-action-data! nil))))
+
 (defn get-editor-show-input
   []
   (when (= (get-editor-action) :input)
     (get @state :editor/action-data)))
+
 (defn set-editor-show-commands!
   []
   (when-not (get-editor-action) (set-editor-action! :commands)))
+
 (defn set-editor-show-block-commands!
   []
   (when-not (get-editor-action) (set-editor-action! :block-commands)))
@@ -745,24 +881,9 @@
   []
   (:selection/blocks @state))
 
-(defn- get-selected-block-ids
-  [blocks]
-  (->> blocks
-       (keep #(when-let [id (dom/attr % "blockid")]
-                (uuid id)))
-       (distinct)))
-
 (defn get-selection-block-ids
   []
   (get-selected-block-ids (get-selection-blocks)))
-
-(defn sub-block-selected?
-  [block-uuid]
-  (rum/react
-   (rum/derived-atom [state] [::select-block block-uuid]
-     (fn [state]
-       (contains? (set (get-selected-block-ids (:selection/blocks state)))
-                  block-uuid)))))
 
 (defn get-selection-start-block-or-first
   []
@@ -893,20 +1014,6 @@
       {:last-edit-block edit-block
        :container       (gobj/get container "id")
        :pos             (cursor/pos (gdom/getElement edit-input-id))})))
-
-(defonce publishing? (atom nil))
-
-(defn publishing-enable-editing?
-  []
-  (and @publishing? (:publishing/enable-editing? (get-config))))
-
-(defn enable-editing?
-  []
-  (or (not @publishing?) (:publishing/enable-editing? (get-config))))
-
-(defn block-content-max-length
-  [repo]
-  (or (:block/content-max-length (get (sub-config) repo)) 5000))
 
 (defn clear-edit!
   []
@@ -1060,13 +1167,6 @@
   [value]
   (set-state! :today value))
 
-(defn get-date-formatter
-  []
-  (gp-config/get-date-formatter (get-config)))
-
-(defn shortcuts []
-  (get-in @state [:config (get-current-repo) :shortcuts]))
-
 (defn get-me
   []
   (:me @state))
@@ -1200,11 +1300,6 @@
   []
   (get @state :document/mode?))
 
-(defn doc-mode-enter-for-new-line?
-  []
-  (and (document-mode?)
-       (not (:shortcut/doc-mode-enter-for-new-block? (sub-graph-config)))))
-
 (defn toggle-document-mode!
   []
   (let [mode (document-mode?)]
@@ -1221,27 +1316,14 @@
     (set-state! :ui/shortcut-tooltip? (not mode))
     (storage/set :ui/shortcut-tooltip? (not mode))))
 
-(defn mobile?
-  []
-  (or (util/mobile?) (mobile-util/native-platform?)))
-
-(defn enable-tooltip?
-  []
-  (if (mobile?)
-    false
-    (get (get (sub-config) (get-current-repo))
-         :ui/enable-tooltip?
-         true)))
-
-(defn show-command-doc?
-  []
-  (get (get (sub-config) (get-current-repo))
-       :ui/show-command-doc?
-       true))
-
 (defn set-config!
   [repo-url value]
   (set-state! [:config repo-url] value))
+
+(defn set-global-config!
+  [value]
+  ;; Placed under :config so cursors can work seamlessly
+  (set-config! ::global-config value))
 
 (defn get-wide-mode?
   []
@@ -1254,10 +1336,6 @@
 (defn set-online!
   [value]
   (set-state! :network/online? value))
-
-(defn get-commands
-  []
-  (:commands (get-config)))
 
 (defn get-plugins-commands
   []
@@ -1309,11 +1387,6 @@
         (set-state! [:plugin/installed-hooks hook-or-all] (disj coll pid))))
     true))
 
-
-(defn get-scheduled-future-days
-  []
-  (let [days (:scheduled/future-days (get-config))]
-    (or (when (int? days) days) 0)))
 
 (defn set-graph-syncing?
   [value]
@@ -1437,30 +1510,6 @@
   []
   @editor-op)
 
-(defn get-start-of-week
-  []
-  (or
-    (when-let [repo (get-current-repo)]
-      (get-in @state [:config repo :start-of-week]))
-    (get-in @state [:me :settings :start-of-week])
-    6))
-
-(defn get-ref-open-blocks-level
-  []
-  (or
-    (when-let [value (:ref/default-open-blocks-level (get-config))]
-      (when (integer? value)
-        value))
-    2))
-
-(defn get-linked-references-collapsed-threshold
-  []
-  (or
-    (when-let [value (:ref/linked-references-collapsed-threshold (get-config))]
-      (when (integer? value)
-        value))
-    100))
-
 (defn get-events-chan
   []
   (:system/events @state))
@@ -1511,26 +1560,9 @@
   [value]
   (set-state! :block/component-editing-mode? value))
 
-(defn logical-outdenting?
-  []
-  (:editor/logical-outdenting?
-    (get (sub-config) (get-current-repo))))
-
 (defn get-editor-args
   []
   (:editor/args @state))
-
-(defn get-export-bullet-indentation
-  []
-  (case (get (get-config) :export/bullet-indentation :tab)
-    :eight-spaces
-    "        "
-    :four-spaces
-    "    "
-    :two-spaces
-    "  "
-    :tab
-    "\t"))
 
 (defn set-page-blocks-cp!
   [value]
@@ -1757,11 +1789,6 @@
     (when (every? not-empty (vals agent-opts))
       (str (:protocol agent-opts) "://" (:host agent-opts) ":" (:port agent-opts)))))
 
-(defn enable-encryption?
-  [repo]
-  (:feature/enable-encryption?
-   (get (sub-config) repo)))
-
 (defn set-mobile-app-state-change
   [is-active?]
   (set-state! :mobile/app-state-change
@@ -1781,10 +1808,6 @@
 (defn unlinked-dir?
   [dir]
   (contains? (:file/unlinked-dirs @state) dir))
-
-(defn enable-search-remove-accents?
-  []
-  (:feature/enable-search-remove-accents? (get-config)))
 
 (defn get-file-rename-event-chan
   []

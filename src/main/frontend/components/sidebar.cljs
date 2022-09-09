@@ -140,7 +140,7 @@
       (rfe/push-state :page {:name "Favorites"})
       (util/stop e))}
 
-   (let [favorites (->> (:favorites (state/sub-graph-config))
+   (let [favorites (->> (:favorites (state/sub-config))
                         (remove string/blank?)
                         (filter string?))]
      (when (seq favorites)
@@ -402,14 +402,16 @@
          [:div.mt-20
           [:div.ls-center
            (ui/loading (t :loading))]]
-
+         
          :else
-         [:div {:class (if margin-less-pages? "" (util/hiccup->class "max-w-7xl.mx-auto.pb-24"))
-                :style {:margin-bottom (cond
-                                         margin-less-pages? 0
-                                         onboarding-and-home? -48
-                                         :else 120)
-                        :padding-bottom (when (mobile-util/native-iphone?) "7rem")}}
+         [:div
+          {:class (if margin-less-pages? "" (util/hiccup->class "mx-auto.pb-24"))
+           :style {:margin-bottom (cond
+                                    global-graph-pages? 0
+                                    margin-less-pages? 0
+                                    onboarding-and-home? -48
+                                    :else 120)
+                   :padding-bottom (when (mobile-util/native-iphone?) "7rem")}}
           main-content])
 
        (when onboarding-and-home?

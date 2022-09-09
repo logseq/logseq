@@ -1,5 +1,5 @@
 (ns electron.updater
-  (:require [electron.utils :refer [mac? prod? open fetch logger *win]]
+  (:require [electron.utils :refer [mac? win32? prod? open fetch logger *win]]
             [frontend.version :refer [version]]
             [clojure.string :as string]
             [promesa.core :as p]
@@ -13,7 +13,7 @@
 
 (def *update-ready-to-install (atom nil))
 (def *update-pending (atom nil))
-(def debug (partial (.-warn logger) "[updater]"))
+(def debug (partial (.-debug logger) "[updater]"))
 
 ;Event: 'error'
 ;Event: 'checking-for-update'
@@ -30,8 +30,7 @@
 
 (defn get-latest-artifact-info
   [repo]
-  (let [;endpoint "https://update.electronjs.org/xyhp915/cljs-todo/darwin-x64/0.0.4"
-        endpoint (str "https://update.electronjs.org/" repo "/" js/process.platform "-" js/process.arch "/" electron-version)]
+  (let [endpoint (str "https://update.electronjs.org/" repo "/" js/process.platform "-" js/process.arch "/" electron-version)]
     (debug "checking" endpoint)
     (p/catch
      (p/let [res (fetch endpoint)
@@ -42,7 +41,7 @@
            (bean/->clj info))
          (throw (js/Error. (str "[" status "] " text)))))
      (fn [e]
-       (js/console.warn "[update server error] " e)
+       (.warn logger "[update server error]" e)
        (throw e)))))
 
 (defn check-for-updates
@@ -128,9 +127,11 @@
            ;; start auto updater
           (do
             (debug "Found remote version" remote-version)
-            (when mac?
+            (when (or mac? win32?)
+              (debug "forward update to autoUpdater")
+              ;; FIXME: It seems that update-electron-app doesn't work on linux
               (when-let [f (js/require "update-electron-app")]
-                (f #js{:notifyUser false})
+                (f #js{:notifyUser false :logger logger})
                 (.once autoUpdater "update-downloaded"
                        new-version-downloaded-cb))))
 

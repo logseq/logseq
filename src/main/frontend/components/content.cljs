@@ -186,7 +186,7 @@
            :on-click (fn [_e]
                        (editor-handler/open-block-in-sidebar! block-id))}
           "Open in sidebar"
-          ["shift" "click"])
+          ["⇧" "click"])
 
          [:hr.menu-separator]
 
@@ -312,7 +312,7 @@
                     block-ref-id
                     :block-ref))}
       "Open in sidebar"
-      ["shift" "click"])
+      ["⇧" "click"])
      (ui/menu-link
       {:key "copy"
        :on-click (fn [] (editor-handler/copy-current-ref block-ref-id))}

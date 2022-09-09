@@ -298,9 +298,9 @@
 (defn open-new-window!
   "Open a new Electron window.
    No db cache persisting ensured. Should be handled by the caller."
-  ([_e]
-   (open-new-window! _e nil))
-  ([_e repo]
+  ([]
+   (open-new-window! nil))
+  ([repo]
    ;; TODO: find out a better way to open a new window with a different repo path. Using local storage for now
    ;; TODO: also write local storage with the current repo state, to make behavior consistent
    ;; then we can remove the `openNewWindowOfGraph` ipcMain call
