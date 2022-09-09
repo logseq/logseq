@@ -99,6 +99,10 @@ body {
       sm:px-0 sm:space-x-6 sm:pb-0 sm:translate-y-0;
 
       z-index: -1;
+
+      @screen sm {
+        z-index: 1;
+      }
     }
 
     &:before {
