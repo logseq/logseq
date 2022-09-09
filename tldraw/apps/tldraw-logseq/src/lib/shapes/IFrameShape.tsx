@@ -12,6 +12,8 @@ export interface IFrameShapeProps extends TLBoxShapeProps {
 
 export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
   static id = 'iframe'
+  frameRef = React.createRef<HTMLIFrameElement>()
+
 
   static defaultProps: IFrameShapeProps = {
     id: 'iframe',
@@ -24,12 +26,12 @@ export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
 
   canEdit = true
 
-  @computed get url() {
-    return this.props.url
+  @action onIFrameSourceChange = (url: string) => {
+    this.update({ url })
   }
 
-  @action onIFrameSourceChange = (url: string  | null;) => {
-    this.update({ url })
+  @action reload = () => {
+    this.frameRef.current.src = this.frameRef?.current?.src
   }
 
   ReactComponent = observer(({ events, isErasing, isEditing }: TLComponentProps) => {
@@ -51,7 +53,7 @@ export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
             userSelect: 'none',
           }}
         >
-          {this.url && (
+          {this.props.url && (
             <div
               style={{
                 overflow: 'hidden',
@@ -60,12 +62,11 @@ export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
               }}
             >
               <iframe
-                ref={ref}
+                ref={this.frameRef}
                 className="absolute inset-0 w-full h-full m-0"
                 width="100%"
                 height="100%"
-                onLoad={() => this.onIFrameSourceChange(ref.current.contentWindow.location.href)}
-                src={`${this.url}`}
+                src={`${this.props.url}`}
                 frameBorder="0"
                 sandbox=""
               />

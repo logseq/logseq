@@ -245,13 +245,26 @@ const OpenPageAction = observer(() => {
 const IFrameSourceAction = observer(() => {
   const app = useApp<Shape>()
   const shape = filterShapeByAction<IFrameShape>(app.selectedShapesArray, 'IFrameSource')[0]
+
   const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    shape.onIFrameSourceChange(e.target.value)
+    shape.onIFrameSourceChange(e.target.value.trim().toLowerCase())
     app.persist()
+  }, [])
+
+  const handleReload = React.useCallback(() => {
+    shape.reload()
   }, [])
 
   return (
     <span className="flex gap-3">
+      <button
+        title="Reload"
+        className="tl-contextbar-button"
+        type="button"
+        onClick={handleReload}
+      >
+        <TablerIcon name="refresh" />
+      </button>
       <TextInput
         title="Website Url"
         className="tl-iframe-src"
@@ -262,7 +275,7 @@ const IFrameSourceAction = observer(() => {
         title="Open website url"
         className="tl-contextbar-button"
         type="button"
-        onClick={() => window.logseq?.api?.open_external_link?.(shape.props.url)}
+        onClick={() => window.open(shape.props.url)}
       >
         <TablerIcon name="external-link" />
       </button>
