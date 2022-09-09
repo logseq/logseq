@@ -9,7 +9,7 @@ import {
   PuzzlePiece,
   Swatches, TwitterLogo
 } from 'phosphor-react'
-import { LSButton } from '../../components/Buttons'
+import { Button } from '../../components/Buttons'
 import { AppLogo, FloatGlassButton, imageProductHuntLogo } from './common'
 import { WrapGlobalDownloadButton } from '../Downloads'
 
@@ -94,23 +94,23 @@ export function LandingFooterDesc () {
               const rightIcon = rightIconFn?.({ size: 18 })
 
               return (
-                <LSButton
+                <Button
                   leftIcon={leftIcon}
                   rightIcon={rightIcon}
                 >
                   Download for {active?.[0]}
-                </LSButton>
+                </Button>
               )
             }}
           </WrapGlobalDownloadButton>
 
-          <LSButton
+          <Button
             leftIcon={<Play size={18} weight={'duotone'}/>}
             rightIcon={<ArrowSquareOut size={18} className={'opacity-70'}/>}
             className={'bg-logseq-600'}
           >
             Live Demo
-          </LSButton>
+          </Button>
         </div>
       </div>
     </div>
@@ -150,7 +150,7 @@ export function LandingFooterNav () {
           <TwitterLogo size={26} weight={'duotone'}/>
         </FloatGlassButton>
 
-        <LSButton
+        <Button
           leftIcon={<img className="w-10" src={imageProductHuntLogo} alt="image"/>}
           rightIcon={<ArrowSquareOut className="opacity-50"/>}
           className="py-1 px-2 bg-transparent border-2 border-logseq-400"
@@ -159,7 +159,7 @@ export function LandingFooterNav () {
           <span className="opacity-90">
             Review us on ProductHunt
           </span>
-        </LSButton>
+        </Button>
       </div>
     </div>
   )

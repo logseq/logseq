@@ -5,7 +5,7 @@ import {
 } from 'phosphor-react'
 import { useEffect, useRef, useState } from 'react'
 import cx from 'classnames'
-import { LSButton } from '../../components/Buttons'
+import { Button } from '../../components/Buttons'
 import { LandingFooterDesc, LandingFooterNav } from '../Landing'
 import { useAppState } from '../../state'
 
@@ -276,14 +276,14 @@ export function HeadDownloadLinks () {
       case 'iOS':
         return (
           <div className="flex flex-col items-center is-ios cursor-crosshair">
-            <LSButton
+            <Button
               className={'bg-logseq-400 px-6 py-4'}
               leftIcon={icon}
               disabled={true}
               rightIcon={<QrCode className="opacity-50"/>}
             >
               Download on the App Store
-            </LSButton>
+            </Button>
 
             <span
               className="absolute top-16 z-10 flex justify-center translate-x-4 transition-opacity qr opacity-0">
@@ -295,7 +295,7 @@ export function HeadDownloadLinks () {
         return (
           <div className="flex space-x-6">
             <div className="flex flex-col items-center">
-              <LSButton
+              <Button
                 className={'bg-logseq-400 px-6 py-4'}
                 leftIcon={<IntelIcon className={'w-8 h-8 bg-white'}
                                      color={'white'}/>}
@@ -303,14 +303,14 @@ export function HeadDownloadLinks () {
                 onClick={() => downloadHandler('macos-x64')}
               >
                 Download for Intel chip
-              </LSButton>
+              </Button>
               <span className="text-xs opacity-60 py-2">
                Most common in Macs
              </span>
             </div>
 
             <div className="flex flex-col items-center">
-              <LSButton
+              <Button
                 className={'bg-logseq-600 px-6 py-4'}
                 leftIcon={<M1Icon className={'w-8 h-8 bg-gray-500'}
                                   color={'white'}/>}
@@ -318,7 +318,7 @@ export function HeadDownloadLinks () {
                 onClick={() => downloadHandler('macos-arm64')}
               >
                 Download for Apple silicon
-              </LSButton>
+              </Button>
               <span className="text-xs opacity-60 py-2">
                 Macs from November 2020 and later
              </span>
@@ -328,14 +328,14 @@ export function HeadDownloadLinks () {
       default:
         return (
           <div>
-            <LSButton
+            <Button
               leftIcon={icon}
               rightIcon={<DownloadSimple className="opacity-50"/>}
               className="bg-logseq-600 px-6 py-4"
               onClick={() => downloadHandler(label.toString().toLowerCase())}
             >
               Download {label} release
-            </LSButton>
+            </Button>
           </div>
         )
     }

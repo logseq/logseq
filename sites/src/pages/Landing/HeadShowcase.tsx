@@ -3,7 +3,7 @@ import {
   CircleWavyQuestion,
   Play,
 } from 'phosphor-react'
-import { LSButton } from '../../components/Buttons'
+import { Button } from '../../components/Buttons'
 import { GlassCard } from '../../components/Cards'
 import { WrapGlobalDownloadButton } from '../Downloads'
 import { useAppState } from '../../state'
@@ -152,23 +152,23 @@ export function HeadShowcase () {
                 const rightIcon = rightIconFn?.({ size: 18 })
 
                 return (
-                  <LSButton
+                  <Button
                     leftIcon={leftIcon}
                     rightIcon={rightIcon}
                   >
                     Download for {active?.[0]}
-                  </LSButton>
+                  </Button>
                 )
               }}
             </WrapGlobalDownloadButton>
 
-            <LSButton
+            <Button
               leftIcon={<Play size={18} weight={'duotone'}/>}
               rightIcon={<ArrowSquareOut size={18} className={'opacity-70'}/>}
               className={'bg-logseq-600'}
             >
               Live Demo
-            </LSButton>
+            </Button>
           </div>
         </div>
       </div>

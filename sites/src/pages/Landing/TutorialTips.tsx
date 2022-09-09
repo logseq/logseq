@@ -5,7 +5,7 @@ import {
   FrameCorners, MonitorPlay, Notebook, SignOut, Sparkle,
   StarFour,
 } from 'phosphor-react'
-import { LSButton } from '../../components/Buttons'
+import { Button } from '../../components/Buttons'
 import { AnimateInTurnBox } from '../../components/Animations'
 import cx from 'classnames'
 import Swiper from 'swiper'
@@ -111,12 +111,12 @@ export function TipSlideItem (props: {
       {/*  Beginner */}
       <h1 className="flex">
         <strong className="text-3xl pr-4">{headEmoji}</strong>
-        <LSButton
+        <Button
           className={'text-sm cursor-text'}
           leftIcon={<StarFour size={16}/>}
         >
           {headTitle}
-        </LSButton>
+        </Button>
       </h1>
 
       <h2 className="pt-2 text-3xl text-gray-300">
@@ -336,12 +336,12 @@ export function TutorialTips () {
           <h2 className="text-2xl">More Resources</h2>
           <div className="flex space-x-6 py-5">
             <div>
-              <LSButton
+              <Button
                 leftIcon={<MonitorPlay size={24}/>}
                 href={`https://discuss.logseq.com/`}
               >
                 Community Hub
-              </LSButton>
+              </Button>
               <span
                 className="text-[11px] inline-block pt-2 text-center w-full text-gray-400/80">
                 Accessible content for new users
@@ -349,13 +349,13 @@ export function TutorialTips () {
             </div>
 
             <div>
-              <LSButton
+              <Button
                 className="bg-logseq-700"
                 leftIcon={<Notebook size={24}/>}
                 href={`https://docs.logseq.com/#/page/Contents`}
               >
                 Documentation
-              </LSButton>
+              </Button>
               <span
                 className="text-[11px] inline-block pt-2 text-center w-full text-gray-400/80">
                 Feature details
@@ -368,14 +368,14 @@ export function TutorialTips () {
           className="flex-1 flex flex-col justify-center items-center border-l border-l-logseq-500">
           <h2 className="text-2xl tracking-wide">A helpful community</h2>
           <div className="flex flex-col space-x-2 pt-10 -translate-y-6">
-            <LSButton
+            <Button
               className="bg-[#7289da] px-6"
               leftIcon={<DiscordLogo size={20}/>}
               rightIcon={<SignOut className="opacity-40" size={20}/>}
               href={`https://discord.gg/VNfUaTtdFb`}
             >
               Join our Discord
-            </LSButton>
+            </Button>
 
             <span
               className="text-[12px] flex items-center pt-2 justify-center text-gray-400/80">

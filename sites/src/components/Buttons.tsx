@@ -7,7 +7,7 @@ export interface ILSButtonProps extends Omit<React.ComponentPropsWithRef<'button
   href?: string
 }
 
-export const LSButton = React.forwardRef<HTMLButtonElement, ILSButtonProps>((
+export const Button = React.forwardRef<HTMLButtonElement, ILSButtonProps>((
   props, ref
 ) => {
   const { href, leftIcon, rightIcon, children, className, ...rest } = props
