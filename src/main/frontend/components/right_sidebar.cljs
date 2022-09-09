@@ -26,6 +26,7 @@
     (ui/with-shortcut :ui/toggle-right-sidebar "left"
       [:button.button.icon.fade-link.toggle-right-sidebar
        {:title "Toggle right sidebar"
+        :tabIndex -1
         :on-click ui-handler/toggle-right-sidebar!}
        (ui/icon "layout-sidebar-right" {:style {:fontSize "20px"}})])))
 
@@ -221,7 +222,7 @@
                 :aria-label (t :right-side-bar/separator)
                 :aria-valuemin (* min-ratio 100)
                 :aria-valuemax (* max-ratio 100)
-                :tabIndex "0"
+                :tabIndex -1
                 :data-expanded sidebar-open?}]))
 
 (rum/defcs sidebar-inner <

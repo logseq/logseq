@@ -27,6 +27,7 @@
   (ui/with-shortcut :go/home "left"
     [:button.button.icon.inline
      {:title "Home"
+      :tabIndex -1
       :on-click #(do
                    (when (mobile-util/native-iphone?)
                      (state/set-left-sidebar-open! false))
@@ -54,6 +55,7 @@
   (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
     [:button.#left-menu.cp__header-left-menu.button.icon
      {:title "Toggle left menu"
+      :tabIndex -1
       :on-click on-click}
      (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]))
 
@@ -67,6 +69,7 @@
      (fn [{:keys [toggle-fn]}]
        [:button.button.icon.toolbar-dots-btn
         {:on-click toggle-fn
+         :tabIndex -1
          :title "More"}
         (ui/icon "dots" {:style {:fontSize ui/icon-size}})])
      (->>
@@ -117,12 +120,16 @@
 
    (ui/with-shortcut :go/backward "bottom"
      [:button.it.navigation.nav-left.button.icon
-      {:title "Go back" :on-click #(js/window.history.back)}
+      {:title "Go back"
+       :tabIndex -1
+       :on-click #(js/window.history.back)}
       (ui/icon "arrow-left" {:style {:fontSize ui/icon-size}})])
 
    (ui/with-shortcut :go/forward "bottom"
      [:button.it.navigation.nav-right.button.icon
-      {:title "Go forward" :on-click #(js/window.history.forward)}
+      {:title "Go forward"
+       :tabIndex -1
+       :on-click #(js/window.history.forward)}
       (ui/icon "arrow-right" {:style {:fontSize ui/icon-size}})])])
 
 (rum/defc updater-tips-new-version
@@ -182,6 +189,7 @@
            (ui/with-shortcut :go/search "right"
              [:button.button.icon#search-button
               {:title "Search"
+               :tabIndex -1
                :on-click #(do (when (or (mobile-util/native-android?)
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))

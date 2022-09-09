@@ -211,6 +211,7 @@
    [:a.item.group.flex.items-center.text-sm.font-medium.rounded-md
     {:on-click on-click-handler
      :class (when active "active")
+     :tabIndex -1
      :href href}
     (ui/icon (str icon))
     [:span.flex-1 title]]])
@@ -605,7 +606,8 @@
                                  :ls-right-sidebar-open sidebar-open?
                                  :ls-wide-mode wide-mode?}])}
       [:button#skip-to-main
-       {:on-key-up (fn [e]
+       {:tabIndex -1
+        :on-key-up (fn [e]
                         (when (= (.-key e) "Enter")
                           (ui/focus-element (ui/main-node))))}
        "Skip to main content"]
