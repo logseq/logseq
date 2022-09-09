@@ -28,7 +28,8 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.handler.user :as user]))
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
@@ -511,14 +512,6 @@
                  (config-handler/set-config! :feature/enable-flashcards? value)))
              true))
 
-(rum/defc whiteboards-enabled-switcher
-  [enable-whiteboards?]
-  (ui/toggle enable-whiteboards?
-             (fn []
-               (let [value (not enable-whiteboards?)]
-                 (config-handler/set-config! :feature/enable-whiteboards? value)))
-             true))
-
 (rum/defc user-proxy-settings
   [{:keys [protocol host port] :as agent-opts}]
   (ui/button [:span
@@ -538,11 +531,6 @@
   (row-with-button-action
    {:left-label (t :settings-page/enable-flashcards)
     :action (flashcards-enabled-switcher enable-flashcards?)}))
-
-(defn whiteboards-switcher-row [enable-whiteboards?]
-  (row-with-button-action
-   {:left-label (t :settings-page/enable-whiteboards)
-    :action (whiteboards-enabled-switcher enable-whiteboards?)}))
 
 (defn https-user-agent-row [agent-opts]
   (row-with-button-action
@@ -645,6 +633,19 @@
    {:left-label (str (t :settings-page/sync) " 🔐")
     :action (sync-enabled-switcher enabled?)}))
 
+(rum/defc whiteboards-enabled-switcher
+  [enabled?]
+  (ui/toggle enabled?
+             (fn []
+               (let [value (not enabled?)]
+                 (config-handler/set-config! :feature/enable-whiteboards? value)))
+             true))
+
+(defn whiteboards-switcher-row [enabled?]
+  (row-with-button-action
+   {:left-label (t :settings-page/enable-whiteboards)
+    :action (whiteboards-enabled-switcher enabled?)}))
+
 (rum/defc settings-features < rum/reactive
   []
   (let [current-repo (state/get-current-repo)
@@ -672,13 +673,14 @@
      (flashcards-switcher-row enable-flashcards?)
      (zotero-settings-row)
      (encryption-row enable-encryption?)
-     (when (util/electron?) (whiteboards-switcher-row enable-whiteboards?))
 
      (when-not web-platform?
        [:div
         [:hr]
         [:h2.mb-4 "Alpha test (sponsors only)"]
-        (sync-switcher-row enable-sync?)])]))
+        [:div.flex.flex-col.gap-4
+         (sync-switcher-row enable-sync?)
+         (whiteboards-switcher-row enable-whiteboards?)]])]))
 
 (rum/defcs settings
   < (rum/local [:general :general] ::active)

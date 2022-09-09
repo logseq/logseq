@@ -6,6 +6,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db.model :as model]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -149,35 +150,37 @@
 
 (rum/defc whiteboard-dashboard
   []
-  (let [whiteboards (->> (model/get-all-whiteboards (state/get-current-repo))
-                         (sort-by :block/updated-at)
-                         reverse)
-        whiteboard-names (map :block/name whiteboards)
-        ref (rum/use-ref nil)
-        rect (use-component-size ref)
-        [container-width] (when rect [(.-width rect) (.-height rect)])
-        cols (cond (< container-width 600) 1
-                   (< container-width 900) 2
-                   (< container-width 1200) 3
-                   :else 4)
-        total-whiteboards (count whiteboards)
-        empty-cards (- (max (* (math/ceil (/ (inc total-whiteboards) cols)) cols) (* 2 cols))
-                       (inc total-whiteboards))]
-    [:<>
-     [:h1.title.select-none
-      "All whiteboards"
-      [:span.opacity-50
-       (str " · " total-whiteboards)]]
-     [:div
-      {:ref ref}
-      [:div.gap-8.grid.grid-rows-auto
-       {:style {:visibility (when (nil? container-width) "hidden")
-                :grid-template-columns (str "repeat(" cols ", minmax(0, 1fr))")}}
-       (dashboard-create-card)
-       (for [whiteboard-name whiteboard-names]
-         [:<> {:key whiteboard-name} (dashboard-preview-card whiteboard-name)])
-       (for [n (range empty-cards)]
-         [:div.dashboard-card.dashboard-bg-card {:key n}])]]]))
+  (if (user-handler/alpha-user?)
+    (let [whiteboards (->> (model/get-all-whiteboards (state/get-current-repo))
+                           (sort-by :block/updated-at)
+                           reverse)
+          whiteboard-names (map :block/name whiteboards)
+          ref (rum/use-ref nil)
+          rect (use-component-size ref)
+          [container-width] (when rect [(.-width rect) (.-height rect)])
+          cols (cond (< container-width 600) 1
+                     (< container-width 900) 2
+                     (< container-width 1200) 3
+                     :else 4)
+          total-whiteboards (count whiteboards)
+          empty-cards (- (max (* (math/ceil (/ (inc total-whiteboards) cols)) cols) (* 2 cols))
+                         (inc total-whiteboards))]
+      [:<>
+       [:h1.title.select-none
+        "All whiteboards"
+        [:span.opacity-50
+         (str " · " total-whiteboards)]]
+       [:div
+        {:ref ref}
+        [:div.gap-8.grid.grid-rows-auto
+         {:style {:visibility (when (nil? container-width) "hidden")
+                  :grid-template-columns (str "repeat(" cols ", minmax(0, 1fr))")}}
+         (dashboard-create-card)
+         (for [whiteboard-name whiteboard-names]
+           [:<> {:key whiteboard-name} (dashboard-preview-card whiteboard-name)])
+         (for [n (range empty-cards)]
+           [:div.dashboard-card.dashboard-bg-card {:key n}])]]])
+    [:div "This feature is not public available yet."]))
 
 (rum/defc whiteboard-page
   [name block-id]
@@ -209,6 +212,7 @@
 
 (rum/defc whiteboard-route
   [route-match]
-  (let [name (get-in route-match [:parameters :path :name])
-        {:keys [block-id]} (get-in route-match [:parameters :query])]
-    (whiteboard-page name block-id)))
+  (when (user-handler/alpha-user?)
+    (let [name (get-in route-match [:parameters :path :name])
+          {:keys [block-id]} (get-in route-match [:parameters :query])]
+      (whiteboard-page name block-id))))

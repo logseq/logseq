@@ -548,6 +548,7 @@ Similar to re-frame subscriptions"
   ([repo]
    (and
     (util/electron?)
+    ((resolve 'frontend.handler.user/alpha-user?)) ;; using resolve to avoid circular dependency
     (not (false? (:feature/enable-whiteboards? (sub-config repo)))))))
 
 (defn export-heading-to-list?
