@@ -119,7 +119,7 @@ public struct SyncMetadata: CustomStringConvertible, Equatable {
 @objc(FileSync)
 public class FileSync: CAPPlugin, SyncDebugDelegate {
     override public func load() {
-        print("debug File sync iOS plugin loaded!")
+        print("debug FileSync iOS plugin loaded!")
 
         AWSMobileClient.default().initialize { (userState, error) in
             guard error == nil else {
