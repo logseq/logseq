@@ -5,27 +5,6 @@ import { observer } from 'mobx-react-lite'
 import { useApp } from '@tldraw/react'
 import type { Shape } from '../../lib'
 
-const HistoryStack = observer(function HistoryStack() {
-  const app = useApp<Shape>()
-
-  return (
-    <div className="fixed left-4 top-4 flex gap-4">
-      {app.history.stack.map((item, i) => (
-        <div
-          style={{
-            background: app.history.pointer === i ? 'pink' : 'grey',
-          }}
-          key={i}
-          onClick={() => app.history.setPointer(i)}
-          className="flex items-center rounded-lg p-4"
-        >
-          {item.pages[0].nonce}
-        </div>
-      ))}
-    </div>
-  )
-})
-
 export const StatusBar = observer(function StatusBar() {
   const app = useApp<Shape>()
   React.useEffect(() => {
@@ -51,7 +30,6 @@ export const StatusBar = observer(function StatusBar() {
   })
   return (
     <div className="tl-statusbar">
-      <HistoryStack />
       {app.selectedTool.id} | {app.selectedTool.currentState.id}
       <div style={{ flex: 1 }} />
       <div id="tl-statusbar-anchor" style={{ display: 'flex' }} />
