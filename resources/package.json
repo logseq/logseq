@@ -28,7 +28,7 @@
     "electron-squirrel-startup": "1.0.0",
     "electron-window-state": "5.0.3",
     "fs-extra": "9.1.0",
-    "node-fetch": "2.6.1",
+    "node-fetch": "2.6.7",
     "open": "7.3.1",
     "semver": "7.3.5",
     "update-electron-app": "2.0.1",
