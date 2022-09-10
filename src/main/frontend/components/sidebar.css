@@ -324,7 +324,6 @@
 
     .left-sidebar-inner {
       transform: translate3d(0, 0, 0);
-      overflow: visible;
     }
 
     > .shade-mask {
