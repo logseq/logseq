@@ -25,7 +25,6 @@
 
 (deftest test-random-values
   (testing "random values should not be processed"
-    
     (are [x y] (= (block/normalize-block x) y)
          "anreanre"
          "anreanre"
