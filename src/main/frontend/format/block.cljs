@@ -38,15 +38,10 @@ and handles unexpected failure."
   ([original-page-name with-id? with-timestamp?]
    (gp-block/page-name->map original-page-name with-id? (db/get-db (state/get-current-repo)) with-timestamp? (state/get-date-formatter))))
 
-(defn- block->string
-  "Convert block to string handling edge cases such as a, b, c being parsed as a set"
-  ([block]
-   (if (set? block) (string/join ", " block) (str block))))
-
 (defn- normalize-as-percentage
   ([block]
    (some->> block
-            block->string
+            str
             (re-matches #"(-?\d+\.?\d*)%")
             second
             (#(/ % 100)))))
@@ -54,7 +49,7 @@ and handles unexpected failure."
 (defn- normalize-as-date
   ([block]
    (some->> block
-            block->string
+            str
             date/valid?
             (tf/unparse date/custom-formatter))))
 
