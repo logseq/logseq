@@ -54,7 +54,7 @@
 
 (defn- <readdir [path]
   (-> (p/chain (.readdir Filesystem (clj->js {:path path}))
-               js->clj
+               #(js->clj % :keywordize-keys true)
                #(get % "files" nil))
       (p/catch (fn [error]
                  (js/console.error "readdir Error: " path ": " error)
@@ -83,26 +83,25 @@
                              files (<readdir d)
                              files (->> files
                                         (remove (fn [file]
-                                                  (or (string/starts-with? file ".")
-                                                      (and (mobile-util/native-android?)
-                                                           (or (string/includes? file "#")
-                                                               (string/includes? file "%")))
-                                                      (= file "bak")))))
-                             files (->> files
-                                        (map (fn [file]
-                                               ;; TODO: use uri-join
-                                               (str (string/replace d #"/+$" "")
-                                                    "/"
-                                                    (if (mobile-util/native-ios?)
-                                                      (js/encodeURI file)
-                                                      file)))))
-                             files-with-stats (p/all (mapv <stat files))
-                             files-dir (->> files-with-stats
+                                                  (let [uri (:uri file)]
+                                                    (or (string/starts-with? uri ".")
+                                                        (= file "bak"))))))
+                             files (map (fn [file]
+                                          ;; TODO: use uri-join
+                                          (update file :uri
+                                                  (fn [uri]
+                                                    (str (string/replace d #"/+$" "")
+                                                        "/"
+                                                        (if (mobile-util/native-ios?)
+                                                          (js/encodeURI uri)
+                                                          uri)))))
+                                     files)
+                             files-dir (->> files
                                             (filterv #(= (:type %) "directory"))
                                             (mapv :uri))
                              files-result
                              (p/all
-                              (->> files-with-stats
+                              (->> files
                                    (filter #(= (:type %) "file"))
                                    (filter
                                     (fn [{:keys [uri]}]
