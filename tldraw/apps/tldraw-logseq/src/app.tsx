@@ -12,7 +12,7 @@ import * as React from 'react'
 import { AppUI } from './components/AppUI'
 import { ContextBar } from './components/ContextBar'
 import { ContextMenu } from './components/ContextMenu'
-import { useFileDrop } from './hooks/useFileDrop'
+import { useDrop } from './hooks/useDrop'
 import { usePaste } from './hooks/usePaste'
 import { useQuickAdd } from './hooks/useQuickAdd'
 import {
@@ -80,7 +80,7 @@ export const App = function App({
     handlers: handlers,
   }
 
-  const onFileDrop = useFileDrop(contextValue)
+  const onDrop = useDrop(contextValue)
   const onPaste = usePaste(contextValue)
   const onQuickAdd = useQuickAdd()
   const ref = React.useRef<HTMLDivElement>(null)
@@ -99,7 +99,7 @@ export const App = function App({
       <AppProvider
         Shapes={shapes}
         Tools={tools}
-        onFileDrop={onFileDrop}
+        onDrop={onDrop}
         onPaste={onPaste}
         onCanvasDBClick={onQuickAdd}
         onPersist={onPersistOnDiff}

@@ -436,11 +436,10 @@ export class TLApp<
 
   paste = (e?: ClipboardEvent, shiftKey?: boolean) => {
     if (!this.editingShape) {
-      const fileList = e?.clipboardData?.files
       this.notify('paste', {
         point: this.inputs.currentPoint,
         shiftKey: !!shiftKey,
-        files: fileList ? Array.from(fileList) : undefined,
+        dataTransfer: e?.clipboardData,
       })
     }
   }
@@ -450,9 +449,9 @@ export class TLApp<
     this.api.deleteShapes()
   }
 
-  dropFiles = (files: FileList, point?: number[]) => {
-    this.notify('drop-files', {
-      files: Array.from(files),
+  drop = (dataTransfer: DataTransfer, point?: number[]) => {
+    this.notify('drop', {
+      dataTransfer,
       point: point
         ? this.viewport.getPagePoint(point)
         : BoundsUtils.getBoundsCenter(this.viewport.currentView),

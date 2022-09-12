@@ -1,3 +1,4 @@
+import { Label } from '@radix-ui/react-select'
 import {
   BoundsUtils,
   getSizeFromSrc,
@@ -18,6 +19,7 @@ import {
   YouTubeShape,
   LogseqPortalShape,
   VideoShape,
+  LineShape,
   ImageShape,
   IFrameShape,
 } from '../lib'
@@ -48,7 +50,7 @@ export function usePaste(context: LogseqContextValue) {
   const { handlers } = context
 
   return React.useCallback<TLReactCallbacks<Shape>['onPaste']>(
-    async (app, { point, shiftKey, files }) => {
+    async (app, { point, shiftKey, dataTransfer }) => {
       interface VideoImageAsset extends TLAsset {
         size: number[]
       }
@@ -115,6 +117,35 @@ export function usePaste(context: LogseqContextValue) {
         return added
       }
 
+      async function handleItems(items: any) {
+        for (const item of items) {
+          if (await handleText(item.text)) {
+            // const lineId = uniqueId()
+            // shapesToCreate.push({
+            //   ...LineShape.defaultProps,
+            //   id: lineId,
+            //   handles: {
+            //     start: { id: 'start', canBind: true, point: app.selectedShapesArray[0].getCenter() },
+            //     end: { id: 'end', canBind: true, point: [point[0], point[1]] },
+            //   }
+            // })
+            return true
+          }
+        }
+        return false
+      }
+
+      async function handleTransfer(dataTransfer: DataTransfer) {
+        let added = false
+
+        if ((dataTransfer.files?.length && await handleFiles(Array.from(dataTransfer.files))) ||
+            (dataTransfer.items?.length && await handleItems(Array.from(dataTransfer.items).map((item: any) => ({type: item.type, text: dataTransfer.getData(item.type)}))))  ) {
+          added = true
+        }
+
+        return added
+      }
+
       async function handleHTML(item: ClipboardItem) {
         if (item.types.includes('text/html')) {
           const blob = await item.getType('text/html')
@@ -130,25 +161,32 @@ export function usePaste(context: LogseqContextValue) {
         return false
       }
 
+      async function handleText(text: string ) {
+          if (await handleURL(text)) {
+            return true
+          }
+
+          if (handleIframe(text)) {
+            return true
+          }
+
+          if (handleTldrawShapes(text)) {
+            return true
+          }
+
+          if (await handleLogseqPortalShapes(text)) {
+            return true
+          }
+
+          return false
+      }
+
       async function handleTextPlain(item: ClipboardItem) {
         if (item.types.includes('text/plain')) {
           const blob = await item.getType('text/plain')
           const rawText = (await blob.text()).trim()
 
-          if (await handleURL(rawText)) {
-            return true
-          }
-
-          if (handleIframe(rawText)) {
-            return true
-          }
-
-          if (handleTldrawShapes(rawText)) {
-            return true
-          }
-          if (await handleLogseqPortalShapes(rawText)) {
-            return true
-          }
+          return handleText(rawText)
         }
 
         return false
@@ -313,8 +351,8 @@ export function usePaste(context: LogseqContextValue) {
       app.cursors.setCursor(TLCursor.Progress)
 
       try {
-        if (files && files.length > 0) {
-          await handleFiles(files)
+        if (dataTransfer) {
+          await handleTransfer(dataTransfer)
         } else {
           for (const item of await navigator.clipboard.read()) {
             let handled = !shiftKey ? await handleHTML(item) : false
