@@ -119,19 +119,19 @@
                  (db/set-file-content! repo path content opts))]
     (util/p-handle (write-file!)
                    (fn [_]
+                     (when re-render-root? (ui-handler/re-render-root!))
+
                      (cond
+                       (= path (config/get-custom-css-path repo))
+                       (ui-handler/add-style-if-exists!)
+
                        (= path (config/get-repo-config-path repo))
                        (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
                          (state/pub-event! [:shortcut/refresh]))
 
                        (and (config/global-config-enabled?) (= path (global-config-handler/global-config-path)))
                        (p/let [_ (global-config-handler/restore-global-config!)]
-                         (state/pub-event! [:shortcut/refresh]))
-
-                       (= path (config/get-custom-css-path repo))
-                       (ui-handler/add-style-if-exists!))
-
-                     (when re-render-root? (ui-handler/re-render-root!)))
+                         (state/pub-event! [:shortcut/refresh]))))
                    (fn [error]
                      (when (and (config/global-config-enabled?)
                                 (= path (global-config-handler/global-config-path)))
