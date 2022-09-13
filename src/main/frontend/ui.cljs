@@ -7,6 +7,7 @@
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.rum :as r]
             [frontend.state :as state]
+            [frontend.storage :as storage]
             [frontend.ui.date-picker]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
@@ -85,14 +86,14 @@
     (textarea props)))
 
 (rum/defc dropdown-content-wrapper
-  < {:did-mount    (fn [_state]
+  < {:did-mount    (fn [state]
                      (let [k    (inc (count (state/sub :modal/dropdowns)))
-                           args (:rum/args _state)]
+                           args (:rum/args state)]
                        (state/set-state! [:modal/dropdowns k] (second args))
-                       (assoc _state ::k k)))
-     :will-unmount (fn [_state]
-                     (state/update-state! :modal/dropdowns #(dissoc % (::k _state)))
-                     _state)}
+                       (assoc state ::k k)))
+     :will-unmount (fn [state]
+                     (state/update-state! :modal/dropdowns #(dissoc % (::k state)))
+                     state)}
   [dropdown-state _close-fn content class]
   (let [class (or class
                   (util/hiccup->class "origin-top-right.absolute.right-0.mt-2"))]
@@ -287,8 +288,8 @@
   (let [time-fn (fn []
                   (try
                     (util/time-ago input)
-                    (catch js/Error _e
-                      (js/console.error _e)
+                    (catch js/Error e
+                      (js/console.error e)
                       input)))
         [time set-time] (rum/use-state (time-fn))]
 
@@ -337,7 +338,12 @@
     (when (mobile-util/native-iphone-without-notch?) (.add cl "is-native-iphone-without-notch"))
     (when (mobile-util/native-ipad?) (.add cl "is-native-ipad"))
     (when (util/electron?)
-      (js/window.apis.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen"))
+      (doseq [[event function]
+              [["persist-zoom-level" #(storage/set :zoom-level %)]
+               ["restore-zoom-level" #(when-let [zoom-level (storage/get :zoom-level)] (js/window.apis.setZoomLevel zoom-level))]
+               ["full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")]]]
+        (.on js/window.apis event function))
+
       (p/then (ipc/ipc :getAppBaseInfo) #(let [{:keys [isFullScreen]} (js->clj % :keywordize-keys true)]
                                            (and isFullScreen (.add cl "is-fullscreen")))))))
 
@@ -925,6 +931,7 @@
               (dissoc opts :class :extension?))]))
 
 (rum/defc with-shortcut < rum/reactive
+  < {:key-fn (fn [key pos] (str "shortcut-" key pos))}
   [shortcut-key position content]
   (let [tooltip? (state/sub :ui/shortcut-tooltip?)]
     (if tooltip?

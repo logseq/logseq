@@ -1,13 +1,13 @@
 (ns frontend.handler.file
   (:refer-clojure :exclude [load-file])
-  (:require ["/frontend/utils" :as utils]
-            [borkdude.rewrite-edn :as rewrite]
-            [frontend.config :as config]
+  (:require [frontend.config :as config]
             [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
-            [frontend.handler.common :as common-handler]
+            [frontend.handler.common.file :as file-common-handler]
+            [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -15,9 +15,9 @@
             [electron.ipc :as ipc]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.mobile.util :as mobile]
+            [frontend.mobile.util :as mobile-util]
             [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser :as graph-parser]))
+            ["path" :as path]))
 
 ;; TODO: extract all git ops using a channel
 
@@ -52,15 +52,6 @@
   [files]
   (keep-formats files (gp-config/img-formats)))
 
-(defn restore-config!
-  ([repo-url]
-   (restore-config! repo-url nil))
-  ([repo-url config-content]
-   (let [config-content (if config-content config-content
-                            (common-handler/get-config repo-url))]
-     (when config-content
-       (common-handler/reset-config! repo-url config-content)))))
-
 (defn load-files-contents!
   [repo-url files ok-handler]
   (let [images (only-image-formats files)
@@ -87,85 +78,16 @@
     (util/electron?)
     (ipc/ipc "backupDbFile" repo-url path db-content content)
 
-    (mobile/native-platform?)
+    (mobile-util/native-platform?)
     (capacitor-fs/backup-file-handle-changed! repo-url path db-content)
 
     :else
     nil))
 
-(defn- page-exists-in-another-file
-  "Conflict of files towards same page"
-  [repo-url page file]
-  (when-let [page-name (:block/name page)]
-    (let [current-file (:file/path (db/get-page-file repo-url page-name))]
-      (when (not= file current-file)
-        current-file))))
-
-(defn- get-delete-blocks [repo-url first-page file]
-  (let [delete-blocks (->
-                       (concat
-                        (db/delete-file-blocks! repo-url file)
-                        (when first-page (db/delete-page-blocks repo-url (:block/name first-page))))
-                       (distinct))]
-    (when-let [current-file (page-exists-in-another-file repo-url first-page file)]
-      (when (not= file current-file)
-        (let [error (str "Page already exists with another file: " current-file ", current file: " file)]
-          (state/pub-event! [:notification/show
-                             {:content error
-                              :status :error
-                              :clear? false}]))))
-    delete-blocks))
-
-(defn reset-file!
-  ([repo-url file content]
-   (reset-file! repo-url file content {}))
-  ([repo-url file content {:keys [verbose] :as options}]
-   (try
-     (let [electron-local-repo? (and (util/electron?)
-                                    (config/local-db? repo-url))
-          file (cond
-                 (and electron-local-repo?
-                      util/win32?
-                      (utils/win32 file))
-                 file
-
-                 (and electron-local-repo? (or
-                                            util/win32?
-                                            (not= "/" (first file))))
-                 (str (config/get-repo-dir repo-url) "/" file)
-
-                 (and (mobile/native-android?) (not= "/" (first file)))
-                 file
-
-                 (and (mobile/native-ios?) (not= "/" (first file)))
-                 file
-
-                 :else
-                 file)
-          file (gp-util/path-normalize file)
-          new? (nil? (db/entity [:file/path file]))]
-      (:tx
-       (graph-parser/parse-file
-        (db/get-db repo-url false)
-        file
-        content
-        (merge (dissoc options :verbose)
-               {:new? new?
-                :delete-blocks-fn (partial get-delete-blocks repo-url)
-                :extract-options (merge
-                                  {:user-config (state/get-config)
-                                   :date-formatter (state/get-date-formatter)
-                                   :page-name-order (state/page-name-order)
-                                   :block-pattern (config/get-block-pattern (gp-util/get-format file))
-                                   :supported-formats (gp-config/supported-formats)}
-                                  (when (some? verbose) {:verbose verbose}))}))))
-     (catch :default e
-       (prn "Reset file failed " {:file file})
-       (log/error :exception e)))))
-
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
-  [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose]
+  [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose
+                             skip-db-transact?]
                       :or {reset? true
                            re-render-root? false
                            from-disk? false
@@ -173,31 +95,50 @@
   (let [original-content (db/get-file repo path)
         write-file! (if from-disk?
                       #(p/resolved nil)
-                      #(fs/write-file! repo (config/get-repo-dir repo) path content
-                                       (assoc (when original-content {:old-content original-content})
-                                              :skip-compare? skip-compare?)))
+                      #(let [path-dir (if (= (path/dirname path) (global-config-handler/global-config-dir))
+                                        (global-config-handler/global-config-dir)
+                                        (config/get-repo-dir repo))]
+                         (fs/write-file! repo path-dir path content
+                                        (assoc (when original-content {:old-content original-content})
+                                               :skip-compare? skip-compare?))))
         opts {:new-graph? new-graph?
-              :from-disk? from-disk?}]
-    (if reset?
-      (do
-        (when-let [page-id (db/get-file-page-id path)]
-          (db/transact! repo
-            [[:db/retract page-id :block/alias]
-             [:db/retract page-id :block/tags]]
-            opts))
-        (reset-file! repo path content (merge opts
-                                              (when (some? verbose) {:verbose verbose}))))
-      (db/set-file-content! repo path content opts))
+              :from-disk? from-disk?
+              :skip-db-transact? skip-db-transact?}
+        result (if reset?
+                 (do
+                   (when-not skip-db-transact?
+                     (when-let [page-id (db/get-file-page-id path)]
+                       (db/transact! repo
+                         [[:db/retract page-id :block/alias]
+                          [:db/retract page-id :block/tags]]
+                         opts)))
+                   (file-common-handler/reset-file! repo path content (merge opts
+                                                         (when (some? verbose) {:verbose verbose}))))
+                 (db/set-file-content! repo path content opts))]
     (util/p-handle (write-file!)
                    (fn [_]
-                     (when (= path (config/get-config-path repo))
-                       (restore-config! repo))
-                     (when (= path (config/get-custom-css-path repo))
+                     (cond
+                       (= path (config/get-repo-config-path repo))
+                       (p/let [_ (repo-config-handler/restore-repo-config! repo)]
+                         (state/pub-event! [:shortcut/refresh]))
+
+                       (= path (global-config-handler/global-config-path))
+                       (p/let [_ (global-config-handler/restore-global-config!)]
+                         (state/pub-event! [:shortcut/refresh]))
+
+                       (= path (config/get-custom-css-path repo))
                        (ui-handler/add-style-if-exists!))
+
                      (when re-render-root? (ui-handler/re-render-root!)))
                    (fn [error]
+                     (when (= path (global-config-handler/global-config-path))
+                       (state/pub-event! [:notification/show
+                                         {:content (str "Failed to write to file " path)
+                                          :status :error}]))
+
                      (println "Write file failed, path: " path ", content: " content)
-                     (log/error :write/failed error)))))
+                     (log/error :write/failed error)))
+    result))
 
 (defn set-file-content!
   [repo path new-content]
@@ -251,7 +192,7 @@
     (when update-db?
       (doseq [[path content] files]
         (if reset?
-          (reset-file! repo path content)
+          (file-common-handler/reset-file! repo path content)
           (db/set-file-content! repo path content))))
     (alter-files-handler! repo files opts file->content)))
 
@@ -259,6 +200,8 @@
   []
   (when-let [repo (state/get-current-repo)]
     (when-let [dir (config/get-repo-dir repo)]
+      ;; An unwatch shouldn't be needed on startup. However not having this
+      ;; after an app refresh can cause stale page data to load
       (fs/unwatch-dir! dir)
       (fs/watch-dir! dir))))
 
@@ -271,7 +214,7 @@
     (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
-        (reset-file! repo-url path default-content)))))
+        (file-common-handler/reset-file! repo-url path default-content)))))
 
 (defn create-pages-metadata-file
   [repo-url]
@@ -282,15 +225,4 @@
     (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
-        (reset-file! repo-url path default-content)))))
-
-(defn edn-file-set-key-value
-  [path k v]
-  (when-let [repo (state/get-current-repo)]
-    (when-let [content (db/get-file path)]
-      (common-handler/read-config content)
-      (let [result (common-handler/parse-config content)
-            ks (if (vector? k) k [k])
-            new-result (rewrite/assoc-in result ks v)
-            new-content (str new-result)]
-        (set-file-content! repo path new-content)))))
+        (file-common-handler/reset-file! repo-url path default-content)))))

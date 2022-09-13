@@ -1,15 +1,15 @@
-import { injectAxe, checkA11y } from 'axe-playwright'
 import { test } from './fixtures'
 import { createRandomPage } from './utils'
+import { expect } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
 
-
-test('check a11y for the whole page', async ({ page }) => {
-    await page.waitForTimeout(2000) // wait for everything be ready
-    await injectAxe(page)
-    await page.waitForTimeout(2000) // wait for everything be ready
+test('should not have any automatically detectable accessibility issues', async ({ page }) => {
     await createRandomPage(page)
-    await page.waitForTimeout(2000) // wait for everything be ready
-    await checkA11y(page, null, {
-        detailedReport: true,
-    })
+    await page.waitForTimeout(2000)
+    const accessibilityScanResults = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+        .setLegacyMode()
+        .analyze()
+
+    expect(accessibilityScanResults.violations).toEqual([]);
 })

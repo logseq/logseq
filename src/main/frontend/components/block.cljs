@@ -207,9 +207,9 @@
                         *exist? (::exist? state)]
                     (when (and sync-on? asset-file? (false? @*exist?))
                       (let [sync-state (state/sub [:file-sync/sync-state (state/get-current-repo)])
-                            _downloading-files (:current-remote->local-files sync-state)
-                            contain-url? (and (seq _downloading-files)
-                                              (some #(string/ends-with? src %) _downloading-files))]
+                            downloading-files (:current-remote->local-files sync-state)
+                            contain-url? (and (seq downloading-files)
+                                              (some #(string/ends-with? src %) downloading-files))]
                         (cond
                           (and (not @*loading?) contain-url?)
                           (reset! *loading? true)
@@ -247,8 +247,8 @@
   (let [images (js/document.querySelectorAll ".asset-container img")
         images (to-array images)
         images (if-not (= (count images) 1)
-                 (let [^js _image (.closest (.-target e) ".asset-container")
-                       image (. _image querySelector "img")]
+                 (let [^js image (.closest (.-target e) ".asset-container")
+                       image (. image querySelector "img")]
                    (->> images
                         (sort-by (juxt #(.-y %) #(.-x %)))
                         (split-with (complement #{image}))
@@ -1875,10 +1875,7 @@
                  (not= "nil" marker))
         {:class (str (string/lower-case marker))})
       (when bg-color
-        {:style {:background-color bg-color
-                 :padding-left 6
-                 :padding-right 6
-                 :color "#FFFFFF"}
+        {:style {:background-color bg-color}
          :class "with-bg-color"}))
      (remove-nils
       (concat
@@ -2576,7 +2573,7 @@
         block (if ref?
                 (merge block (db/pull-block (:db/id block)))
                 block)
-        {:block/keys [uuid children pre-block? top? refs heading-level level type format content]} block
+        {:block/keys [uuid children pre-block? top? refs heading-level level format content properties]} block
         config (if navigated? (assoc config :id (str navigating-block)) config)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         blocks-container-id (:blocks-container-id config)
@@ -2585,7 +2582,7 @@
         config (if (nil? (:query-result config))
                  (assoc config :query-result (atom nil))
                  config)
-        heading? (or (= type :heading) (and heading-level (<= heading-level 6)))
+        heading? (or (:heading properties) (and heading-level (<= heading-level 6)))
         *control-show? (get state ::control-show?)
         db-collapsed? (util/collapsed? block)
         collapsed? (cond
@@ -2874,8 +2871,7 @@
 
 (defn built-in-custom-query?
   [title]
-  (let [repo (state/get-current-repo)
-        queries (state/sub [:config repo :default-queries :journals])]
+  (let [queries (get-in (state/sub-config) [:default-queries :journals])]
     (when (seq queries)
       (boolean (some #(= % title) (map :title queries))))))
 
@@ -2951,10 +2947,9 @@
   [state config {:keys [title query view collapsed? children? breadcrumb-show? table-view?] :as q}]
   (let [dsl-query? (:dsl-query? config)
         query-atom (:query-atom state)
-        repo (state/get-current-repo)
         query-time (or (react/get-query-time query)
                        (react/get-query-time q))
-        view-fn (if (keyword? view) (state/sub [:config repo :query/views view]) view)
+        view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
         current-block (db/entity [:block/uuid current-block-uuid])

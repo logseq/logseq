@@ -18,10 +18,12 @@
   [state]
   (let [[id s display?] (:rum/args state)]
     (try
-      (js/katex.render s (gdom/getElement id)
-                      #js {:displayMode display?
-                           :throwOnError false
-                           :strict false})
+      (when-let [elem (gdom/getElement id)]
+        (js/katex.render s elem
+                         #js {:displayMode display?
+                              :throwOnError false
+                              :strict false}))
+
       (catch js/Error e
         (js/console.error e)))))
 

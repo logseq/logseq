@@ -506,11 +506,6 @@
          [:span {:id (str "mock-text_" idx)
                  :key idx} c])))])
 
-(rum/defc mock-textarea-wrapper < rum/reactive
-  []
-  (let [content (state/sub-edit-content)]
-    (mock-textarea content)))
-
 (rum/defc animated-modal < rum/reactive
   [modal-name component set-default-width?]
   (when-let [pos (:pos (state/get-editor-action-data))]
@@ -582,7 +577,7 @@
   (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
   [state {:keys [format block]} id _config]
-  (let [content (state/sub-edit-content)
+  (let [content (state/sub-edit-content id)
         heading-class (get-editor-style-class content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
 
@@ -597,7 +592,7 @@
        :auto-focus        false
        :class             heading-class})
 
-     (mock-textarea-wrapper)
+     (mock-textarea content)
      (modals id format)
 
      (when format

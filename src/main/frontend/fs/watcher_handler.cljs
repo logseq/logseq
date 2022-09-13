@@ -45,10 +45,12 @@
     (db/set-file-last-modified-at! repo path mtime)))
 
 (defn handle-changed!
-  [type {:keys [dir path content stat] :as payload}]
+  [type {:keys [dir path content stat global-dir] :as payload}]
   (when dir
     (let [path (gp-util/path-normalize path)
-          repo (config/get-local-repo dir)
+          ;; Global directory events don't know their originating repo so we rely
+          ;; on the client to correctly identify it
+          repo (if global-dir (state/get-current-repo) (config/get-local-repo dir))
           pages-metadata-path (config/get-pages-metadata-path)
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
@@ -90,10 +92,10 @@
           (and (= "unlink" type)
                (db/file-exists? repo path))
           (p/let [dir-exists? (fs/file-exists? dir "")]
-            (when dir-exists?
-              (when-let [page-name (db/get-file-page path)]
-                (println "Delete page: " page-name ", file path: " path ".")
-                (page-handler/delete! page-name #() :delete-file? false))))
+                 (when dir-exists?
+                   (when-let [page-name (db/get-file-page path)]
+                     (println "Delete page: " page-name ", file path: " path ".")
+                     (page-handler/delete! page-name #() :delete-file? false))))
 
           (and (contains? #{"add" "change" "unlink"} type)
                (string/ends-with? path "logseq/custom.css"))

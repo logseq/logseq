@@ -1,4 +1,6 @@
 (ns electron.handler
+  "This ns starts the event handling for the electron main process and defines
+  all the application-specific event types"
   (:require ["electron" :refer [ipcMain dialog app autoUpdater shell]]
             [cljs-bean.core :as bean]
             ["fs" :as fs]
@@ -219,8 +221,8 @@
         (when-let [sync-meta (and (not (string/blank? root))
                                   (.toString (.readFileSync fs txid-path)))]
           (reader/read-string sync-meta))))
-    (catch js/Error _e
-      (js/console.debug "[read txid meta] #" root (.-message _e)))))
+    (catch js/Error e
+      (js/console.debug "[read txid meta] #" root (.-message e)))))
 
 (defmethod handle :inflateGraphsInfo [_win [_ graphs]]
   (if (seq graphs)
@@ -406,7 +408,7 @@
 
 (def *request-abort-signals (atom {}))
 
-(defmethod handle :httpRequest [_ [_ _req-id opts]]
+(defmethod handle :httpRequest [_ [_ req-id opts]]
   (let [{:keys [url abortable method data returnType headers]} opts]
     (when-let [[method type] (and (not (string/blank? url))
                                   [(keyword (string/upper-case (or method "GET")))
@@ -419,7 +421,7 @@
                                     {:body (js/JSON.stringify (bean/->js data))})
 
                                   (when-let [^js controller (and abortable (AbortController.))]
-                                    (swap! *request-abort-signals assoc _req-id controller)
+                                    (swap! *request-abort-signals assoc req-id controller)
                                     {:signal (.-signal controller)}))))
           (p/then (fn [^js res]
                     (case type
@@ -441,10 +443,10 @@
              (throw e)))
           (p/finally
            (fn []
-             (swap! *request-abort-signals dissoc _req-id)))))))
+             (swap! *request-abort-signals dissoc req-id)))))))
 
-(defmethod handle :httpRequestAbort [_ [_ _req-id]]
-  (when-let [^js controller (get @*request-abort-signals _req-id)]
+(defmethod handle :httpRequestAbort [_ [_ req-id]]
+  (when-let [^js controller (get @*request-abort-signals req-id)]
     (.abort controller)))
 
 (defmethod handle :quitAndInstall []
@@ -470,18 +472,20 @@
         windows (win/get-graph-all-windows dir)]
     (> (count windows) 1)))
 
-(defmethod handle :addDirWatcher [^js _window [_ dir]]
+(defmethod handle :addDirWatcher [^js _window [_ dir options]]
   ;; receive dir path (not repo / graph) from frontend
   ;; Windows on same dir share the same watcher
   ;; Only close file watcher when:
   ;;    1. there is no one window on the same dir
   ;;    2. reset file watcher to resend `add` event on window refreshing
   (when dir
-    (watcher/watch-dir! dir)))
+    (watcher/watch-dir! dir options)
+    nil))
 
 (defmethod handle :unwatchDir [^js _window [_ dir]]
   (when dir
-    (watcher/close-watcher! dir)))
+    (watcher/close-watcher! dir)
+    nil))
 
 (defn open-new-window!
   "Persist db first before calling! Or may break db persistency"
@@ -601,6 +605,10 @@
              (fn [^js event args-js]
                (try
                  (let [message (bean/->clj args-js)]
+                   ;; Be careful with the return values of `handle` defmethods.
+                   ;; Values that are not non-JS objects will cause this
+                   ;; exception -
+                   ;; https://www.electronjs.org/docs/latest/breaking-changes#behavior-changed-sending-non-js-objects-over-ipc-now-throws-an-exception
                    (bean/->js (handle (or (utils/get-win-from-sender event) window) message)))
                  (catch js/Error e
                    (when-not (contains? #{"mkdir" "stat"} (nth args-js 0))
