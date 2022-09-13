@@ -218,6 +218,47 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
         }
         call.resolve(["value": fnames])
     }
+    
+    @objc func encryptWithPassphrase(_ call: CAPPluginCall) {
+        guard let passphrase = call.getString("passphrase"),
+              let content = call.getString("content") else {
+                  call.reject("required parameters: passphrase, content")
+                  return
+              }
+        guard let ciphertext = content.data(using: .utf8) else {
+            call.reject("cannot decode ciphertext with utf8")
+            return
+        }
+        call.keepAlive = true
+        DispatchQueue.global(qos: .background).async {
+            if let encrypted = AgeEncryption.encryptWithPassphrase(ciphertext, passphrase, armor: true) {
+                call.resolve(["data": String(data: encrypted, encoding: .utf8) as Any])
+            } else {
+                call.reject("cannot encrypt with passphrase")
+            }
+        }
+    }
+    
+    
+    @objc func decryptWithPassphrase(_ call: CAPPluginCall) {
+        guard let passphrase = call.getString("passphrase"),
+              let content = call.getString("content") else {
+                  call.reject("required parameters: passphrase, content")
+                  return
+              }
+        guard let ciphertext = content.data(using: .utf8) else {
+            call.reject("cannot decode ciphertext with utf8")
+            return
+        }
+        call.keepAlive = true
+        DispatchQueue.global(qos: .background).async {
+            if let decrypted = AgeEncryption.decryptWithPassphrase(ciphertext, passphrase) {
+                call.resolve(["data": String(data: decrypted, encoding: .utf8) as Any])
+            } else {
+                call.reject("cannot decrypt with passphrase")
+            }
+        }
+    }
 
     @objc func getLocalFilesMeta(_ call: CAPPluginCall) {
         // filePaths are url encoded
