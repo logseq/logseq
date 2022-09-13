@@ -72,10 +72,10 @@
     transform: translateX(-50%);
 
     .glass-card {
-      &.a {
+      &.is-card-todo {
       }
 
-      &.b, &.c {
+      &.is-card-profile, &.is-card-book {
         width: 260px;
 
         .glass-card-inner {
@@ -100,7 +100,7 @@
         }
       }
 
-      &.c {
+      &.is-card-book {
         flex: 1;
 
         .glass-card-inner {
@@ -118,7 +118,6 @@
             text-indent: -999px;
           }
         }
-
       }
     }
 
@@ -127,6 +126,7 @@
 
       &.is-single {
         @apply justify-end;
+
         .c {
           flex: unset;
         }
@@ -165,6 +165,22 @@
       }
     }
   }
+
+  &.active-ref {
+    &-profile {
+      .is-card-profile {
+        transition: 300ms;
+        transform: scale(1.05);
+      }
+    }
+
+    &-book {
+      .is-card-book {
+        transition: 300ms;
+        transform: scale(1.05);
+      }
+    }
+  }
 }
 
 .outliner-list {
@@ -188,7 +204,7 @@
     }
 
     > .content {
-      @apply flex items-center text-logseq-50/90 py-0.5;
+      @apply flex items-center text-logseq-50/90 py-0.5 select-none;
 
       .marker {
         @apply font-bold text-gray-500 text-xs inline-block pr-1 opacity-80;
@@ -218,6 +234,9 @@
     }
 
     .ref {
+      @apply bg-logseq-600/0 hover:bg-logseq-600/50 rounded
+      transition-all duration-500;
+
       &:before {
         @apply text-gray-200 opacity-20 inline-block pr-0.5;
         content: "[[";

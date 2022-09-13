@@ -8,18 +8,22 @@ import { GlassCard } from '../../components/Cards'
 import { WrapGlobalDownloadButton } from '../Downloads'
 import { useAppState } from '../../state'
 import cx from 'classnames'
+import { useCallback, useState } from 'react'
 
-function GlassCardRefs (props: any) {
-  const { className, ...rest } = props
+export function GlassCardRefs (props: any) {
+  const { className, onRefMouseEnter, onRefMouseLeave, ...rest } = props
   return (
     <GlassCard delay={2000} className={cx('d', className)} {...rest}>
       <div className="outliner-list-demo">
         <div className="outliner-list-item">
           <div className="content">
-                      <span>
-                        My notes on <a
-                        className="ref">📖Book / Intertwingled</a>:
-                      </span>
+            <span>
+              My notes on <a
+              data-ref={'book'}
+              onMouseEnter={onRefMouseEnter}
+              onMouseLeave={onRefMouseLeave}
+              className="ref">📖Book / Intertwingled</a>:
+            </span>
           </div>
         </div>
       </div>
@@ -27,11 +31,11 @@ function GlassCardRefs (props: any) {
   )
 }
 
-function GlassCardProfile (props: any) {
-  const { className, ...rest } = props
+export function GlassCardProfile (props: any) {
+  const { className, onRefMouseEnter, onRefMouseLeave, ...rest } = props
   return (
     <GlassCard
-      className={cx('b flex mb-2.5 sm:mb-1', className)}
+      className={cx('is-card-profile flex mb-2.5 sm:mb-1', className)}
       {...rest}
     >
       <div className="avatar flex items-center">
@@ -47,10 +51,10 @@ function GlassCardProfile (props: any) {
   )
 }
 
-function GlassCardBook (props: any) {
-  const { className, ...rest } = props
+export function GlassCardBook (props: any) {
+  const { className, onRefMouseEnter, onRefMouseLeave, ...rest } = props
   return (
-    <GlassCard className={cx('c', className)} {...rest}>
+    <GlassCard className={cx('is-card-book', className)} {...rest}>
       <div className="avatar flex items-center">
         <span className="avatar-img">Image</span>
       </div>
@@ -65,16 +69,21 @@ function GlassCardBook (props: any) {
 }
 
 export function GlassCardTodo (props: any) {
-  const { className, ...rest } = props
+  const { className, onRefMouseEnter, onRefMouseLeave, ...rest } = props
   return (
-    <GlassCard delay={500} className={cx('a', className)} {...rest}>
+    <GlassCard delay={500} className={cx('is-card-todo', className)} {...rest}>
       <div className="outliner-list-demo">
         <div className="outliner-list-item">
           <div className="content is-todo">
             <span className="marker">NOW</span>
             <span>
-                        Meeting with <a className={'ref'}>👥 Jessica</a>
-                      </span>
+              Meeting with <a
+              className={'ref'}
+              data-ref={'profile'}
+              onMouseLeave={onRefMouseLeave}
+              onMouseEnter={onRefMouseEnter}
+            >👥 Jessica</a>
+            </span>
           </div>
 
           {/* children */}
@@ -83,7 +92,11 @@ export function GlassCardTodo (props: any) {
               <div className="content">
                 <span>
                   She mentioned her current read: <a
-                  className={'ref'}>📖 Book/Intertwingled</a>
+                  data-ref={'book'}
+                  className={'ref'}
+                  onMouseLeave={onRefMouseLeave}
+                  onMouseEnter={onRefMouseEnter}
+                >📖 Book/Intertwingled</a>
                 </span>
               </div>
             </div>
@@ -96,9 +109,20 @@ export function GlassCardTodo (props: any) {
 
 export function HeadShowcase () {
   const appState = useAppState()
+  const [activeRef, setActiveRef] = useState('')
+
+  const refMouseEnterHandler = useCallback((e: MouseEvent) => {
+    const target = e.target as HTMLAnchorElement
+    setActiveRef(target.dataset.ref || '')
+  }, [])
+
+  const refMouseLeaveHandler = useCallback((e: MouseEvent) => {
+    setActiveRef('')
+  }, [])
 
   return (
-    <div className={'app-head-showcase'}>
+    <div className={cx('app-head-showcase',
+      activeRef && 'active-ref-' + activeRef)}>
       <div className="inner flex h-full">
         <div className="item-wrap relative flex-1">
           {/* text layer*/}
@@ -120,7 +144,10 @@ export function HeadShowcase () {
           {/* cards layer */}
           <div className="cards-3 z-20">
             <div className="r1 mb-3">
-              <GlassCardTodo/>
+              <GlassCardTodo
+                onRefMouseEnter={refMouseEnterHandler}
+                onRefMouseLeave={refMouseLeaveHandler}
+              />
             </div>
 
             <div className="r2">
@@ -138,7 +165,10 @@ export function HeadShowcase () {
             }
 
             <div className="r3 pt-3 sm:px-24">
-              <GlassCardRefs/>
+              <GlassCardRefs
+                onRefMouseEnter={refMouseEnterHandler}
+                onRefMouseLeave={refMouseLeaveHandler}
+              />
             </div>
           </div>
 
