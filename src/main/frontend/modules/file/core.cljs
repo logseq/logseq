@@ -137,7 +137,7 @@
         file-db-id (-> page-block :block/file :db/id)
         file-path (-> (db-utils/entity file-db-id) :file/path)]
     (if (and (string? file-path) (not-empty file-path))
-      (let [new-content (if whiteboard?
+      (let [new-content (if (:block/whiteboard? page-block)
                           (util/pp-str {:blocks (map remove-transit-ids tree)
                                         :pages (list (remove-transit-ids page-block))})
                           (tree->file-content tree {:init-level init-level}))
