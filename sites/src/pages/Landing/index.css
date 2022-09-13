@@ -251,8 +251,20 @@
 }
 
 .app-form-select {
-  @apply p-2 bg-transparent  border-2 border-transparent rounded-lg
-  appearance-none;
+  @apply px-2.5 py-3 bg-transparent  border-2 border-transparent rounded-xl
+  appearance-none pl-10 font-semibold;
+
+  &-wrap {
+    @apply flex relative items-center active:opacity-70;
+
+    > .icon {
+      @apply absolute pl-3 text-xl;
+    }
+
+    > .arrow {
+      @apply -ml-7 opacity-40;
+    }
+  }
 }
 
 .app-tutorial-showcase {
@@ -382,27 +394,27 @@
       }
     }
   }
+}
 
-  article.panels {
-    @apply border mt-8 rounded-2xl border-logseq-500 bg-logseq-700/90 overflow-hidden;
+.app-tutorial-features-panel {
+  @apply border mt-8 rounded-2xl border-logseq-500 bg-logseq-700/90 overflow-hidden;
 
-    min-height: 300px;
+  min-height: 300px;
 
-    > .hd {
-      > strong {
-        @apply flex space-x-2 px-3 py-2;
+  > .hd {
+    > strong {
+      @apply flex space-x-2 px-3 py-2;
 
-        > i {
-          @apply flex-1 bg-logseq-100/10 rounded-md h-[6px] overflow-hidden;
-        }
+      > i {
+        @apply flex-1 bg-logseq-100/10 rounded-md h-[6px] overflow-hidden;
       }
-
-      > h1 {
-        @apply mt-4 my-2;
-      }
-
-      @apply flex flex-col px-2 py-4;
     }
+
+    > h1 {
+      @apply mt-2 sm:mt-4 my-0 sm:my-2;
+    }
+
+    @apply flex flex-col px-2 pt-2 pb-3 sm:py-4;
   }
 }
 
@@ -411,6 +423,26 @@
 
   .app-form-select {
     @apply border-gradient-br-red-purple-blue-logseq-900 outline-0;
+  }
+
+  &.index-of-0 .app-form-select {
+    @apply border-gradient-br-yellow-purple-red-logseq-900;
+  }
+
+  &.index-of-1 .app-form-select {
+    @apply border-gradient-br-red-purple-blue-logseq-900;
+  }
+
+  &.index-of-2 .app-form-select {
+    @apply border-gradient-br-yellow-brown-yellow-logseq-900;
+  }
+
+  &.index-of-3 .app-form-select {
+    @apply border-gradient-br-red-black-yellow-logseq-900;
+  }
+
+  &.index-of-4 .app-form-select {
+    @apply border-gradient-br-green-black-cyan-logseq-900;
   }
 }
 
