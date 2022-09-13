@@ -1,5 +1,5 @@
 (ns frontend.format.block-test 
-  (:require [cljs.test :refer [deftest is testing are]]
+  (:require [cljs.test :refer [deftest testing are]]
             [frontend.format.block :as block]))
 
 (deftest test-normalize-date
