@@ -13,7 +13,8 @@
             [goog.object :as gobj]
             [clojure.string :as string]
             [rum.core :as rum]
-            [electron.ipc :as ipc]))
+            [electron.ipc :as ipc]
+            [promesa.core :as p]))
 
 (defn- get-css-var-value
   [var-name]
@@ -154,16 +155,19 @@
           (when (or (not should-ask?)
                     (ask-allow))
             (load href #(do (js/console.log "[custom js]" href) (execed))))
-          (util/p-handle
-           (fs/read-file (if (util/electron?) "" (config/get-repo-dir (state/get-current-repo))) href)
-           #(when-let [scripts (and % (string/trim %))]
-              (when-not (string/blank? scripts)
-                (when (or (not should-ask?) (ask-allow))
-                  (try
-                    (js/eval scripts)
-                    (execed)
-                    (catch js/Error e
-                      (js/console.error "[custom js]" e))))))))))))
+          (let [dir (if (util/electron?) "" (config/get-repo-dir (state/get-current-repo)))]
+            (p/let [exists? (fs/file-exists? dir href)]
+              (when exists?
+                (util/p-handle
+                 (fs/read-file dir href)
+                 #(when-let [scripts (and % (string/trim %))]
+                    (when-not (string/blank? scripts)
+                      (when (or (not should-ask?) (ask-allow))
+                        (try
+                          (js/eval scripts)
+                          (execed)
+                          (catch js/Error e
+                            (js/console.error "[custom js]" e)))))))))))))))
 
 (defn toggle-wide-mode!
   []
