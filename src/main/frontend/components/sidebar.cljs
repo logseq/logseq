@@ -36,6 +36,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
+            [frontend.components.whiteboard :as whiteboard]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [react-draggable]
@@ -307,15 +308,32 @@
        (when (and left-sidebar-open? (not config/publishing?))
          (recent-pages t))]
 
-      [:footer.px-2 {:class "new-page"}
+      [:footer.px-2 {:class "create"}
        (when-not config/publishing?
-         [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
-          {:on-click (fn []
-                       (and (util/sm-breakpoint?)
-                            (state/toggle-left-sidebar!))
-                       (state/pub-event! [:go/search]))}
-          (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
-          [:span.flex-1 (t :right-side-bar/new-page)]])]]]))
+         (ui/dropdown-with-links
+          (fn [{:keys [toggle-fn]}]
+            [:button#create-button
+             {:on-click toggle-fn}
+            [:<> 
+             (ui/icon "plus") 
+             [:span.mx-1 (t :left-side-bar/create)]]])
+          (->>
+           [{:title (t :left-side-bar/new-page)
+             :class "new-page-link"
+             :options {:on-click (fn []
+                                   (and (util/sm-breakpoint?)
+                                        (state/toggle-left-sidebar!))
+                                   (state/pub-event! [:go/search]))}
+             :icon (ui/icon "page" {:extension? "tie"})}
+            {:title (t :left-side-bar/new-whiteboard)
+             :class "new-whiteboard-link"
+             :options {:on-click (fn []
+                                   (and (util/sm-breakpoint?)
+                                        (state/toggle-left-sidebar!))
+                                   (whiteboard/create-new-whiteboard!))}
+             
+             :icon (ui/icon "whiteboard" {:extension? "tie"})}])
+          {}))]]]))
 
 (rum/defc left-sidebar < rum/reactive
   [{:keys [left-sidebar-open? route-match]}]

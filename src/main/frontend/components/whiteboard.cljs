@@ -119,15 +119,19 @@
    [:div.p-4.h-64.flex.justify-center
     (tldraw-preview page-name)]])
 
+(defn create-new-whiteboard!
+  []
+  (let [name (str (d/squuid))]
+    (whiteboard-handler/create-new-whiteboard-page! name)
+    (route-handler/redirect-to-whiteboard! name)))
+
 (rum/defc dashboard-create-card
   []
   [:div.dashboard-card.dashboard-create-card.cursor-pointer#tl-create-whiteboard
    {:on-click
     (fn [e]
       (util/stop e)
-      (let [name (str (d/squuid))]
-        (whiteboard-handler/create-new-whiteboard-page! name)
-        (route-handler/redirect-to-whiteboard! name)))}
+      (create-new-whiteboard!))}
    (ui/icon "plus")
    [:span.dashboard-create-card-caption.select-none
     "New whiteboard"]])
