@@ -53,7 +53,7 @@
 (defn start
   "This component has four responsibilities on start:
 - Fetch root-dir for later use with config paths
-- Manage ui state of global config
+- Set ui state of global config by reading its file
 - Create a global config dir and file if it doesn't exist
 - Start a file watcher for global config dir if it's not already started.
   Watcher ensures client db is seeded with correct file data."

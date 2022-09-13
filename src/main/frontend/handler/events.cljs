@@ -114,7 +114,7 @@
   ([graph skip-ios-check?]
    (if (and (mobile-util/native-ios?) (not skip-ios-check?))
      (state/pub-event! [:validate-appId graph-switch graph])
-     (do
+     (p/do!
        (state/set-current-repo! graph)
        ;; load config
        (repo-config-handler/restore-repo-config! graph)

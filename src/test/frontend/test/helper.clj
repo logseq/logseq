@@ -5,4 +5,4 @@
   `(let [repo# (frontend.state/get-current-repo)]
      (frontend.state/set-config! repo# ~config)
      ~@body
-     (frontend.state/set-config! repo# nil)))
+     (frontend.state/set-config! repo# {})))

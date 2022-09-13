@@ -126,7 +126,7 @@
                        (ui-handler/add-style-if-exists!)
 
                        (= path (config/get-repo-config-path repo))
-                       (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
+                       (p/let [_ (repo-config-handler/restore-repo-config! repo)]
                          (state/pub-event! [:shortcut/refresh]))
 
                        (and (config/global-config-enabled?) (= path (global-config-handler/global-config-path)))
