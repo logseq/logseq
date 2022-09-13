@@ -4,7 +4,7 @@
             ["better-sqlite3" :as sqlite3]
             [clojure.string :as string]
             ["electron" :refer [app]]
-            [electron.utils :refer [logger]]))
+            [electron.logger :as logger]))
 
 ;; version of the search cache
 ;; ver. 0.0.1: initial version
@@ -128,7 +128,7 @@
              (add-triggers! db)
              (swap! databases assoc db-sanitized-name db))
            (catch :default e
-             (.error logger (str e ": " db-name))
+             (logger/error (str e ": " db-name))
              (fs/unlinkSync db-full-path)))))
 
 (defn open-dbs!
@@ -225,7 +225,7 @@
   (when-let [database (get-db repo)]
     (.close database)
     (let [[db-name db-full-path db-ver-path] (get-db-version-path repo)]
-      (.info logger "Delete search indice" (str {:path db-full-path}))
+      (logger/info "Delete search indice" {:path db-full-path})
       (fs/unlinkSync db-full-path)
       (fs/unlinkSync db-ver-path)
       (swap! databases dissoc db-name))))

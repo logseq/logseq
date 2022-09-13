@@ -125,7 +125,6 @@ jobs:
         run: |
           cp -r static public/
           rm -rvf public/static/js/publishing
-          rm -rvf public/workspaces
           rm -rvf public/static/js/*.js.map || true
           rm -rvf public/static/*.*
           rm -rvf public/static/ios

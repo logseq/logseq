@@ -1,5 +1,6 @@
 (ns electron.exceptions
-  (:require [electron.utils :as utils]
+  (:require [electron.logger :as logger]
+            [electron.utils :as utils]
             [clojure.string :as string]))
 
 (defonce uncaughtExceptionChan "uncaughtException")
@@ -17,7 +18,7 @@
     (show-error-tip "[Main Exception]" msg stack))
 
   ;; for debug log
-  (.error utils/logger uncaughtExceptionChan (str e)))
+  (logger/error uncaughtExceptionChan (str e)))
 
 (defn setup-exception-listeners!
   []

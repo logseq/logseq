@@ -36,8 +36,6 @@
 
   (mobile-util/check-ios-zoomed-display)
 
-  (.removeAllListeners mobile-util/file-sync)
-
   (.addListener mobile-util/file-sync "debug"
                 (fn [event]
                   (js/console.log "🔄" event))))

@@ -3,8 +3,7 @@
  :nrepl {:port 8701}
 
  ;; "." for /static
- :dev-http {3001 ["static" "."]
-            3002 ["public/workspaces" "."]}
+ :dev-http {3001 ["static" "."]}
 
  :builds
  {:app {:target        :browser
@@ -95,16 +94,4 @@
                :devtools         {:before-load frontend.core/stop
                                   :after-load  frontend.core/start
                                   :preloads    [devtools.preload]}}
-
-  :cards {:target     nubank.workspaces.shadow-cljs.target
-          :ns-regexp  "(test|cards)$"
-          :output-dir "./public/workspaces/static/js/workspaces"
-          :asset-path "/static/js/workspaces"
-          :preloads   [] ;; optional, list namespaces to be pre loaded
-          :devtools   {:after-load  nubank.workspaces.core/after-load
-                       :loader-mode :eval
-                       :watch-path  "/static"
-                       :watch-dir   "static"
-                       :preloads    [devtools.preload
-                                     shadow.remote.runtime.cljs.browser]}
-          :modules    {:main {:entries [workspaces.main]}}}}}
+  }}
