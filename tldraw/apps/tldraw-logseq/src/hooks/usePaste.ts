@@ -1,4 +1,4 @@
-import { Label } from '@radix-ui/react-select'
+import { Item, Label } from '@radix-ui/react-select'
 import {
   BoundsUtils,
   getSizeFromSrc,
@@ -19,6 +19,7 @@ import {
   YouTubeShape,
   LogseqPortalShape,
   VideoShape,
+  TextShape,
   LineShape,
   ImageShape,
   IFrameShape,
@@ -119,16 +120,38 @@ export function usePaste(context: LogseqContextValue) {
 
       async function handleItems(items: any) {
         for (const item of items) {
-          if (await handleText(item.text)) {
-            // const lineId = uniqueId()
-            // shapesToCreate.push({
-            //   ...LineShape.defaultProps,
-            //   id: lineId,
-            //   handles: {
-            //     start: { id: 'start', canBind: true, point: app.selectedShapesArray[0].getCenter() },
-            //     end: { id: 'end', canBind: true, point: [point[0], point[1]] },
-            //   }
-            // })
+          if (await handleDroppedItem(item)) {
+            const lineId = uniqueId()
+
+            const startBinding: TLBinding = {
+              id: uniqueId(),
+              distance: 200,
+              handleId: 'start',
+              fromId: lineId,
+              toId: app.selectedShapesArray[app.selectedShapesArray.length - 1].id,
+              point: [point[0], point[1]],
+            }
+            bindingsToCreate.push(startBinding)
+
+            const endBinding: TLBinding = {
+              id: uniqueId(),
+              distance: 200,
+              handleId: 'end',
+              fromId: lineId,
+              toId: shapesToCreate[shapesToCreate.length - 1].id,
+              point: [point[0], point[1]],
+            }
+            bindingsToCreate.push(endBinding)
+
+            shapesToCreate.push({
+              ...LineShape.defaultProps,
+              id: lineId,
+              handles: {
+                start: { id: 'start', canBind: true, point: app.selectedShapesArray[0].getCenter(), bindingId: startBinding.id },
+                end: { id: 'end', canBind: true, point: [point[0], point[1]], bindingId: endBinding.id },
+              }
+            })
+
             return true
           }
         }
@@ -161,24 +184,29 @@ export function usePaste(context: LogseqContextValue) {
         return false
       }
 
-      async function handleText(text: string ) {
-          if (await handleURL(text)) {
+      async function handleDroppedItem(item: any) {
+        switch(item.type) {
+          case 'text/html':
+            shapesToCreate.push({
+              ...HTMLShape.defaultProps,
+              html: item.text,
+              point: [point[0], point[1]],
+            })
             return true
-          }
+          case 'text/plain':
+            if (await handleURL(item.text)) {
+              return true
+            }
 
-          if (handleIframe(text)) {
+            shapesToCreate.push({
+              ...TextShape.defaultProps,
+              text: item.text,
+              point: [point[0], point[1]],
+            })
             return true
-          }
-
-          if (handleTldrawShapes(text)) {
-            return true
-          }
-
-          if (await handleLogseqPortalShapes(text)) {
-            return true
-          }
-
-          return false
+          default:
+            return false
+        }
       }
 
       async function handleTextPlain(item: ClipboardItem) {
@@ -186,7 +214,20 @@ export function usePaste(context: LogseqContextValue) {
           const blob = await item.getType('text/plain')
           const rawText = (await blob.text()).trim()
 
-          return handleText(rawText)
+          if (await handleURL(rawText)) {
+            return true
+          }
+
+          if (handleIframe(rawText)) {
+            return true
+          }
+
+          if (handleTldrawShapes(rawText)) {
+            return true
+          }
+          if (await handleLogseqPortalShapes(rawText)) {
+            return true
+          }
         }
 
         return false
