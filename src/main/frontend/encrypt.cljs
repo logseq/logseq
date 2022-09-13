@@ -9,7 +9,8 @@
             [promesa.core :as p]
             [electron.ipc :as ipc]
             [shadow.loader :as loader]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.mobile.util :as mobile-util]))
 
 (defonce age-pem-header-line "-----BEGIN AGE ENCRYPTED FILE-----")
 (defonce age-version-line "age-encryption.org/v1")
@@ -96,6 +97,12 @@
             encrypted (ipc/ipc "encrypt-with-passphrase" passphrase raw-content)]
       (utf8/decode encrypted))
 
+    (mobile-util/native-ios?)
+    (p/chain (.encryptWithPassphrase mobile-util/file-sync
+                                     (clj->js {:passphrase passphrase :content content}))
+             #(js->clj % :keywordize-keys true)
+             :data)
+
     :else
     (p/let [lazy-encrypt-with-user-passphrase (resolve 'frontend.extensions.age-encryption/encrypt-with-user-passphrase)
             content (utf8/encode content)
@@ -110,6 +117,12 @@
             decrypted (ipc/ipc "decrypt-with-passphrase" passphrase raw-content)]
       (utf8/decode decrypted))
 
+    (mobile-util/native-ios?)
+    (p/chain (.decryptWithPassphrase mobile-util/file-sync
+                                     (clj->js {:passphrase passphrase :content content}))
+             #(js->clj % :keywordize-keys true)
+             :data)
+    
     :else
     (p/let [_ (loader/load :age-encryption)
             lazy-decrypt-with-user-passphrase (resolve 'frontend.extensions.age-encryption/decrypt-with-user-passphrase)

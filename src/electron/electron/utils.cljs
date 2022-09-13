@@ -3,22 +3,24 @@
             ["fs-extra" :as fs]
             ["path" :as path]
             [electron.configs :as cfgs]
+            [electron.logger :as logger]
             [cljs-bean.core :as bean]
             ["electron" :refer [app BrowserWindow]]))
 
 (defonce *win (atom nil)) ;; The main window
+
 (defonce mac? (= (.-platform js/process) "darwin"))
 (defonce win32? (= (.-platform js/process) "win32"))
 (defonce linux? (= (.-platform js/process) "linux"))
 
 (defonce prod? (= js/process.env.NODE_ENV "production"))
 
+;; Under e2e testing?
 (defonce ci? (let [v js/process.env.CI]
                (or (true? v)
                    (= v "true"))))
 
 (defonce dev? (not prod?))
-(defonce logger (js/require "electron-log"))
 (defonce *fetchAgent (atom nil))
 
 (defonce open (js/require "open"))
@@ -97,7 +99,7 @@
     (when (fs/existsSync path)
       (.toString (fs/readFileSync path)))
     (catch js/Error e
-      (.error logger (str "Read file: " e)))))
+      (logger/error "Read file:" e))))
 
 (defn get-focused-window
   []

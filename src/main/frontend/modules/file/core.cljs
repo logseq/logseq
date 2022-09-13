@@ -133,18 +133,19 @@
 
 (defn save-tree-aux!
   [page-block tree]
-  (let [page-block (db/pull '[* {:block/file [:file/path]}] (:db/id page-block))
-        file-path (get-in page-block [:block/file :file/path])
-        whiteboard? (:block/whiteboard? page-block)
-        new-content (if whiteboard?
-                      (util/pp-str {:blocks (map remove-transit-ids tree)
-                                    :pages (list (remove-transit-ids page-block))})
-                      (tree->file-content tree {:init-level init-level}))
-        _ (assert (string? file-path) "File path should satisfy string?")
-        ;; FIXME: name conflicts between multiple graphs
-        files [[file-path new-content]]
-        repo (state/get-current-repo)]
-    (file-handler/alter-files-handler! repo files {} {})))
+  (let [page-block (db/pull (:db/id page-block))
+        file-db-id (-> page-block :block/file :db/id)
+        file-path (-> (db-utils/entity file-db-id) :file/path)]
+    (if (and (string? file-path) (not-empty file-path))
+      (let [new-content (if whiteboard?
+                          (util/pp-str {:blocks (map remove-transit-ids tree)
+                                        :pages (list (remove-transit-ids page-block))})
+                          (tree->file-content tree {:init-level init-level}))
+            files [[file-path new-content]]
+            repo (state/get-current-repo)]
+        (file-handler/alter-files-handler! repo files {} {}))
+      ;; In e2e tests, "card" page in db has no :file/path
+      (js/console.error "File path from page-block is not valid" page-block tree))))
 
 (defn save-tree!
   [page-block tree]
