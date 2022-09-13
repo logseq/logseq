@@ -6,7 +6,7 @@ import {
   StarFour,
 } from 'phosphor-react'
 import { Button } from '../../components/Buttons'
-import { AnimateInTurnBox } from '../../components/Animations'
+import { AnimateInTurnStage } from '../../components/Animations'
 import cx from 'classnames'
 import Swiper from 'swiper'
 import 'swiper/swiper-bundle.css'
@@ -179,7 +179,7 @@ export function TutorialTips () {
 
   return (
     <div className="app-tutorial-tips">
-      <AnimateInTurnBox
+      <AnimateInTurnStage
         ticks={[500, 1, 300, 1]}
         className="hd flex flex-col justify-center items-center">
         {(t: Array<any>) => (<>
@@ -216,7 +216,7 @@ export function TutorialTips () {
           </h4>
         </>)
         }
-      </AnimateInTurnBox>
+      </AnimateInTurnStage>
 
       <div className="bd sm:flex">
         <div ref={swiperElRef} className="bd-slides swiper">

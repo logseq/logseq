@@ -642,7 +642,7 @@
 }
 
 .app-daily-showcase {
-  @apply -mt-2 relative mb-10;
+  @apply -mt-2 relative mb-10 px-4 sm:px-0;
 
   z-index: 3;
 
@@ -745,6 +745,33 @@
 
     .progress {
       @apply cursor-pointer hover:opacity-80 active:opacity-100;
+    }
+  }
+
+  > .selects {
+    .icon img {
+      width: 25px;
+      height: 25px;
+    }
+
+    .app-form-select {
+      @apply outline-0;
+    }
+
+    &.index-of-0 .app-form-select {
+      @apply border-gradient-b-blue-white-green-logseq-900;
+    }
+
+    &.index-of-1 .app-form-select {
+      @apply border-gradient-b-gray-white-gray-logseq-900;
+    }
+
+    &.index-of-2 .app-form-select {
+      @apply border-gradient-b-brown-white-blue-logseq-900;
+    }
+
+    &.index-of-3 .app-form-select {
+      @apply border-gradient-b-gray-white-blue-logseq-900;
     }
   }
 }

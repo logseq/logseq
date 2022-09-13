@@ -1,6 +1,6 @@
 import { FrameCorners, CaretLeft, CaretDown } from 'phosphor-react'
 import { FloatGlassButton, imageS1 } from './common'
-import { AnimateInTurnBox } from '../../components/Animations'
+import { AnimateInTurnStage } from '../../components/Animations'
 import cx from 'classnames'
 import { useEffect, useState } from 'react'
 import { useAppState } from '../../state'
@@ -135,7 +135,7 @@ export function TutorialShowcase (
   return (
     <div className="app-tutorial-showcase">
       {/* Head Slogan */}
-      <AnimateInTurnBox
+      <AnimateInTurnStage
         ticks={[100, 500, 1200]}
         className="flex flex-col py-10 px-4 sm:justify-center sm:items-center sm:py-20 hd">
         {(t: Array<string>) => {
@@ -160,7 +160,7 @@ export function TutorialShowcase (
             </>
           )
         }}
-      </AnimateInTurnBox>
+      </AnimateInTurnStage>
 
       {/* Head icons */}
       <ul className="hidden sub-hd sm:flex justify-center space-x-10">

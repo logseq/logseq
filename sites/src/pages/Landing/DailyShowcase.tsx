@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import cx from 'classnames'
 import { FloatGlassButton, openLightbox } from './common'
-import { ArrowSquareOut, FrameCorners, TwitterLogo } from 'phosphor-react'
-import { AnimateInTurnBox } from '../../components/Animations'
+import { ArrowSquareOut, CaretDown, FrameCorners, TwitterLogo } from 'phosphor-react'
+import { AnimateInTurnStage } from '../../components/Animations'
+import { useAppState } from '../../state'
 
 const IconImageRelations = new URL('assets/icon_relations.png', import.meta.url)
 const IconImageDailyPlan = new URL('assets/icon_daily_plan.png', import.meta.url)
@@ -75,7 +76,75 @@ const showcases = [
   }
 ]
 
+export function DailyShowcaseTabs (
+  props: { activeShowcase: string, setActiveShowcase: any }
+) {
+  const { activeShowcase, setActiveShowcase } = props
+
+  return (<div className="tabs flex justify-between space-x-8 px-6">
+    {showcases.map(it => {
+      return (
+        <div className={cx('it flex flex-col flex-1', { active: it.label === activeShowcase })}
+             key={it.label}
+             onClick={() => {
+               setActiveShowcase(it.label)
+             }}
+        >
+              <span className="icon">
+                <img src={it.iconUrl as any} alt={it.label}/>
+              </span>
+          <strong className="pt-2.5 font-normal text-[20px] opacity-60 tracking-wide">
+            {it.label}
+          </strong>
+        </div>
+      )
+    })}
+  </div>)
+}
+
+export function DailyShowcaseSelect (
+  props: { activeShowcase: string, setActiveShowcase: any }
+) {
+  const { activeShowcase, setActiveShowcase } = props
+  const activeIndex: number = showcases.findIndex(it => it.label === activeShowcase)
+  const activeItem: any = showcases[activeIndex]
+
+  return (
+    <div className={cx('selects', `index-of-${activeIndex}`)}>
+      <div className={'app-form-select-wrap'}>
+        <span className="icon">
+          <img alt={activeItem.label} src={activeItem.iconUrl}/>
+        </span>
+
+        <select className={'app-form-select w-full'}
+                onChange={(e) => {
+                  setActiveShowcase(
+                    e.target.value
+                  )
+                }}
+                value={activeShowcase}
+        >
+          {showcases.map(it => {
+            return (
+              <option
+                key={it.label}
+                value={it.label}>
+                {it.label}
+              </option>
+            )
+          })}
+        </select>
+
+        <span className="arrow">
+          <CaretDown weight={'bold'}/>
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export function DailyShowcase () {
+  const appState = useAppState()
   const [activeShowcase, setActiveShowcase] = useState(showcases[0].label)
   const [sizeCache, setSizeCache] = useState([0, 0])
   const [progress, setProgress] = useState(0)
@@ -116,48 +185,38 @@ export function DailyShowcase () {
 
   return (
     <div className="app-daily-showcase">
-      <AnimateInTurnBox
+      <AnimateInTurnStage
         ticks={[500, 500]}
-        className="flex flex-col justify-center items-center pb-8">
+        className="flex flex-col sm:justify-center sm:items-center pb-8">
         {(t: Array<string>) => {
           return (
             <>
               <h2
-                className={cx('text-[36px] leading-10 tracking-wide invisible', t[0] && 'ani-fade-in')}
+                className={cx('text-2xl sm:text-[36px] sm:leading-10 tracking-wide invisible', t[0] && 'ani-fade-in')}
               >
                 <span className="opacity-60">Logseq helps you</span>
                 <span> turn this daily <br/>mess into structured information.</span>
               </h2>
 
-              <h1 className={cx('text-6xl py-3 invisible', t[1] && 'ani-slide-in-from-bottom')}>
+              <h1
+                className={cx('text-4xl leading-10 sm:py-10 sm:text-6xl py-3 invisible', t[1] && 'ani-slide-in-from-bottom')}>
                 <strong>Gain clarity</strong>
                 <span className="opacity-60"> in your everyday life:</span>
               </h1>
             </>
           )
         }}
-      </AnimateInTurnBox>
+      </AnimateInTurnStage>
 
       {/* Tabs */}
-      <div className="tabs flex justify-between space-x-8 px-6">
-        {showcases.map(it => {
-          return (
-            <div className={cx('it flex flex-col flex-1', { active: it.label === activeShowcase })}
-                 key={it.label}
-                 onClick={() => {
-                   setActiveShowcase(it.label)
-                 }}
-            >
-              <span className="icon">
-                <img src={it.iconUrl as any} alt={it.label}/>
-              </span>
-              <strong className="pt-2.5 font-normal text-[20px] opacity-60 tracking-wide">
-                {it.label}
-              </strong>
-            </div>
-          )
-        })}
-      </div>
+      {appState.sm.get() ?
+        <DailyShowcaseSelect
+          activeShowcase={activeShowcase}
+          setActiveShowcase={setActiveShowcase}/> :
+        <DailyShowcaseTabs
+          activeShowcase={activeShowcase}
+          setActiveShowcase={setActiveShowcase}/>}
+
 
       {/* Panels */}
       <div className="panels" ref={bdRef}>

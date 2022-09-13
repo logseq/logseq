@@ -7,7 +7,7 @@ export function delay (ms = 1000) {
   })
 }
 
-export function AnimateInTurnBox (
+export function AnimateInTurnStage (
   props: any
 ) {
   let { ani, ticks, children, ...rest } = props

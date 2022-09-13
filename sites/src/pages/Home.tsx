@@ -5,7 +5,7 @@ import {
   TutorialShowcase,
   TutorialTips,
 } from './Landing'
-import { AnimateInTurnBox } from '../components/Animations'
+import { AnimateInTurnStage } from '../components/Animations'
 import cx from 'classnames'
 import { DailyShowcase } from './Landing/DailyShowcase'
 import { useAppState } from '../state'
@@ -37,7 +37,7 @@ export function HomePage () {
           }
 
           {/* text slogan  */}
-          <AnimateInTurnBox
+          <AnimateInTurnStage
             ticks={[500, 600]}
             className="text-slogan">
             {(t: Array<any>) => {
@@ -70,7 +70,7 @@ export function HomePage () {
               )
             }}
 
-          </AnimateInTurnBox>
+          </AnimateInTurnStage>
         </div>
       </div>
 
