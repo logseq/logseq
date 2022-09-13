@@ -121,7 +121,7 @@
                    (fn [_]
                      (cond
                        (= path (config/get-repo-config-path repo))
-                       (p/let [_ (repo-config-handler/restore-repo-config! repo)]
+                       (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
                          (state/pub-event! [:shortcut/refresh]))
 
                        (and (config/global-config-enabled?) (= path (global-config-handler/global-config-path)))
