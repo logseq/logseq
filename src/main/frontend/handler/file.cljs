@@ -95,7 +95,9 @@
   (let [original-content (db/get-file repo path)
         write-file! (if from-disk?
                       #(p/resolved nil)
-                      #(let [path-dir (if (= (path/dirname path) (global-config-handler/global-config-dir))
+                      #(let [path-dir (if (and
+                                            (config/global-config-enabled?)
+                                            (= (path/dirname path) (global-config-handler/global-config-dir)))
                                         (global-config-handler/global-config-dir)
                                         (config/get-repo-dir repo))]
                          (fs/write-file! repo path-dir path content
@@ -122,7 +124,7 @@
                        (p/let [_ (repo-config-handler/restore-repo-config! repo)]
                          (state/pub-event! [:shortcut/refresh]))
 
-                       (= path (global-config-handler/global-config-path))
+                       (and (config/global-config-enabled?) (= path (global-config-handler/global-config-path)))
                        (p/let [_ (global-config-handler/restore-global-config!)]
                          (state/pub-event! [:shortcut/refresh]))
 
@@ -131,7 +133,8 @@
 
                      (when re-render-root? (ui-handler/re-render-root!)))
                    (fn [error]
-                     (when (= path (global-config-handler/global-config-path))
+                     (when (and (config/global-config-enabled?)
+                                (= path (global-config-handler/global-config-path)))
                        (state/pub-event! [:notification/show
                                          {:content (str "Failed to write to file " path)
                                           :status :error}]))

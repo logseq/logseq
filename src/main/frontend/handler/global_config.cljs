@@ -34,24 +34,21 @@
 
 (defn- create-global-config-file-if-not-exists
   [repo-url]
-  (when (not-empty @root-dir)
-   (let [config-dir (global-config-dir)
+  (let [config-dir (global-config-dir)
         config-path (global-config-path)]
     (p/let [_ (fs/mkdir-if-not-exists config-dir)
             file-exists? (fs/create-if-not-exists repo-url config-dir config-path default-content)]
            (when-not file-exists?
              (file-common-handler/reset-file! repo-url config-path default-content)
-             (set-global-config-state! default-content))))))
+             (set-global-config-state! default-content)))))
 
 (defn restore-global-config!
   "Sets global config state from config file"
   []
-  (if (not-empty @root-dir)
-    (let [config-dir (global-config-dir)
-          config-path (global-config-path)]
-      (p/let [config-content (fs/read-file config-dir config-path)]
-        (set-global-config-state! config-content)))
-    (set-global-config-state! default-content)))
+  (let [config-dir (global-config-dir)
+        config-path (global-config-path)]
+    (p/let [config-content (fs/read-file config-dir config-path)]
+      (set-global-config-state! config-content))))
 
 (defn start
   "This component has four responsibilities on start:

@@ -408,7 +408,8 @@
    (state/set-db-restoring! true)
    (db/restore-graph! repo)
    (repo-config-handler/restore-repo-config! repo)
-   (global-config-handler/restore-global-config!)
+   (when (config/global-config-enabled?)
+     (global-config-handler/restore-global-config!))
     ;; Don't have to unlisten the old listener, as it will be destroyed with the conn
    (db/listen-and-persist! repo)
    (state/pub-event! [:shortcut/refresh])
