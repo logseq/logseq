@@ -80,7 +80,7 @@
         (do
           (state/set-state! :user/info result)
           (let [status (if (user-handler/alpha-user?) :welcome :unavailable)]
-            (when (= status :welcome)
+            (when (and (= status :welcome) (user-handler/logged-in?))
               (async/<! (file-sync-handler/load-session-graphs))
               (p/let [repos (repo-handler/refresh-repos!)]
                 (when-let [repo (state/get-current-repo)]
