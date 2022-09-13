@@ -33,9 +33,9 @@ export function AppLogo (
   const { className, ...rest } = props
 
   return (
-    <div className={cx('app-logo', className)} {...rest}>
+    <span className={cx('app-logo', className)} {...rest}>
       <img src={imageLogo} alt="Logseq"/>
-    </div>
+    </span>
   )
 }
 

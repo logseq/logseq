@@ -268,8 +268,6 @@
 }
 
 .app-tutorial-showcase {
-  min-height: 100vh;
-
   > .hd {
     letter-spacing: 1px;
 
@@ -447,11 +445,12 @@
 }
 
 .app-tutorial-tips {
-  @apply mx-16 my-8;
+  @apply mx-4 mt-16 mb-4 sm:mx-16 sm:my-8;
 
   > .hd {
     h1, h2 {
-      font-size: 60px;
+      @apply text-4xl;
+
       line-height: 1.2em;
     }
 
@@ -460,25 +459,42 @@
     }
 
     h2 {
-      @apply font-bold mb-6;
+      @apply font-bold mb-6 inline sm:block;
     }
 
     h3, h4 {
-      font-size: 38px;
-      line-height: 1.2em;
+      font-size: 26px;
+      line-height: 1.4em;
+    }
+
+    .app-logo {
+      display: inline-flex;
+      border-radius: 10px;
+      padding: 8px;
+    }
+
+    @screen sm {
+      h1, h2 {
+        font-size: 60px;
+        line-height: 1.2em;
+      }
+
+      h3, h4 {
+        font-size: 38px;
+        line-height: 1.2em;
+      }
     }
   }
 
   > .bd {
-    @apply my-16 -mx-10 relative;
+    @apply mt-8 mb-10 sm:my-16 sm:-mx-10 relative;
 
     > .bd-slides {
-      @apply flex flex-col items-center justify-center px-6
-      border bg-logseq-500 border-gray-400/50 rounded-3xl relative;
+      @apply w-full flex-col items-center justify-center px-0
+      border bg-logseq-500 border-gray-400/50 rounded-3xl relative h-[210px]
+      sm:flex sm:h-[256px]  sm:w-0 sm:px-6;
 
       flex-basis: 486px;
-      width: 0;
-      height: 256px;
 
       .items {
         @apply w-full;
@@ -512,10 +528,8 @@
     }
 
     > .bd-actions {
-      @apply justify-between px-2 py-2 mt-3 absolute;
-
-      width: 482px;
-      top: 258px;
+      @apply justify-between px-2 py-2 mt-3
+      sm:absolute sm:w-[482px] sm:top-[258px];
 
       .prev, .next {
         @apply opacity-80 cursor-pointer select-none hover:opacity-90 active:opacity-90;
@@ -523,8 +537,14 @@
     }
 
     > .bd-info {
-      @apply border flex-1 border-logseq-400 rounded-2xl overflow-hidden ml-4 relative;
+      @apply border flex-1 border-logseq-400 rounded-2xl
+      relative overflow-hidden mt-6
+      sm:ml-4 sm:mt-0;
     }
+  }
+
+  > .ft {
+
   }
 }
 
@@ -566,12 +586,12 @@
       min-height: 220px;
       background-image: url("./assets/full-bg-a.png");
       background-size: contain;
-      background-position-y: -60px;
       background-repeat: no-repeat;
       padding-top: 160px;
 
       .page-inner {
         z-index: 2;
+        margin-top: -768px;
 
         @screen lg {
           max-width: 1440px;
@@ -579,21 +599,39 @@
       }
 
       .text-slogan {
-        @apply absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -mt-16 tracking-wide;
-
-        > h1 {
-          line-height: 1.2em;
-        }
+        @apply px-4 pt-8 pb-32;
       }
 
       &:before {
-        @apply absolute bottom-0 left-0 w-full;
+        @apply sm:absolute bottom-0 left-0 w-full;
+
         content: " ";
-        height: 525px;
         background-image: url("./assets/full-bg-c-gradient.png");
         background-repeat: repeat-x;
         z-index: 1;
         background-position: bottom;
+        height: 655px;
+      }
+
+      @screen sm {
+        background-position-y: -60px;
+
+        .page-inner {
+          margin-top: unset;
+        }
+
+        &:before {
+          height: 525px;
+        }
+
+        .text-slogan {
+          @apply absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -mt-16
+          tracking-wide p-0;
+
+          > h1 {
+            line-height: 1.2em;
+          }
+        }
       }
     }
 

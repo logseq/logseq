@@ -1,16 +1,18 @@
 import {
-  fullBgImageB,
+  fullBgImageB, fullBgImageBMobile,
   HeadShowcase, LandingFooterDesc,
   LandingFooterNav, promiseImages,
   TutorialShowcase,
   TutorialTips,
 } from './Landing'
-import { useEffect, useState } from 'react'
 import { AnimateInTurnBox } from '../components/Animations'
 import cx from 'classnames'
 import { DailyShowcase } from './Landing/DailyShowcase'
+import { useAppState } from '../state'
 
 export function HomePage () {
+  const appState = useAppState()
+
   // useEffect(() => {
   //   setTimeout(() => {
   //     // @ts-ignore
@@ -29,7 +31,10 @@ export function HomePage () {
 
       <div className="page-inner-full-wrap a">
         <div className="page-inner">
-          <img src={fullBgImageB} className="w-full" alt="image"/>
+          {appState.sm.get() ?
+            <img src={fullBgImageBMobile} className="w-full" alt="image"/> :
+            <img src={fullBgImageB} className="w-full" alt="image"/>
+          }
 
           {/* text slogan  */}
           <AnimateInTurnBox
@@ -40,7 +45,7 @@ export function HomePage () {
                 <>
                   <h1
                     className={cx(
-                      'text-[60px] flex flex-col justify-center text-center pb-6 invisible',
+                      'text-4xl sm:text-[60px] sm:flex sm:flex-col justify-center sm:text-center pb-6 invisible',
                       t[0] && 'ani-slide-in-from-bottom')}
                   >
                     <span
@@ -52,7 +57,7 @@ export function HomePage () {
                   <h2
                     className={
                       cx(
-                        'flex flex-col justify-center text-center text-2xl tracking-wide invisible',
+                        'sm:flex flex-col justify-center sm:text-center text-2xl tracking-wide invisible',
                         t[1] && 'ani-fade-in')}>
                     <span className="opacity-60">Everyday you’re bombarded with information.</span>
                     <span className="opacity-60">Your non-connected notes lead to missing context when</span>

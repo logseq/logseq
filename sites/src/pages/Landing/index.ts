@@ -6,6 +6,7 @@ import { TutorialTips } from './TutorialTips'
 import { LandingFooterDesc, LandingFooterNav } from './LandingFooterNav'
 
 const fullBgImageB: any = new URL('./assets/full-bg-text.png', import.meta.url)
+const fullBgImageBMobile: any = new URL('./assets/full-bg-text_mobile.png', import.meta.url)
 
 const promiseImages: any = {
   '00': new URL('./assets/promise-0-0.png', import.meta.url),
@@ -23,5 +24,6 @@ export {
   LandingFooterNav,
   LandingFooterDesc,
   fullBgImageB,
+  fullBgImageBMobile,
   promiseImages,
 }

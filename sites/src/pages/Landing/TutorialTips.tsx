@@ -18,6 +18,7 @@ import { promiseImages } from './index'
 import { useAppState } from '../../state'
 
 export function TipSlideItem (props: {
+  isSm: boolean,
   inActive: boolean,
   headEmoji: string,
   headTitle: string,
@@ -119,7 +120,7 @@ export function TipSlideItem (props: {
         </Button>
       </h1>
 
-      <h2 className="pt-2 text-3xl text-gray-300">
+      <h2 className="pt-2 text-[20px] sm:text-3xl text-gray-300">
         {content}
       </h2>
 
@@ -135,7 +136,7 @@ export function TipSlideItem (props: {
           }}>2</small></i>
       </strong>
 
-      <h3 className="flex text-lg space-x-2 px-1 py-2 tracking-wide">
+      <h3 className="flex text-sm sm:text-lg space-x-2 px-1 py-2 tracking-wide">
         {tips.map((it, idx) => {
           if (activeTip.active !== idx) return
 
@@ -159,6 +160,7 @@ export function TutorialTips () {
   const [activeIndex, setActiveIndex] = useState(0)
   const [activeTipTag, setActiveTipTag] = useState('00')
   const sidesLen = 3
+  const isSm = appState.sm.get()
 
   useEffect(() => {
     if (swiperRef.current) return
@@ -181,39 +183,51 @@ export function TutorialTips () {
         ticks={[500, 1, 300, 1]}
         className="hd flex flex-col justify-center items-center">
         {(t: Array<any>) => (<>
-          <h1 className={cx('invisible flex items-center',
+          <h1 className={cx('invisible pb-4 sm:pb-0 sm:flex items-center',
             t[0] && 'ani-slide-in-from-bottom')}>
             <span className="pr-5 opacity-60">
               Braindump everything into
             </span>
-            <AppLogo className="w-16 h-16"/>
+            <AppLogo className="w-10 h-10 sm:w-16 sm:h-16"/>
             <span className="pl-2 opacity-60">.</span>
+
+            <h2 className={'inline-block pl-2 sm:!hidden'}>
+              New ideas will pop up with time.
+            </h2>
           </h1>
-          <h2 className={cx('invisible', t[1] && 'ani-slide-in-from-bottom')}>
-            New ideas will pop up with time.
-          </h2>
+
+          {appState.sm.get() ?
+            null :
+            <h2 className={cx('invisible', t[1] && 'ani-slide-in-from-bottom')}>
+              New ideas will pop up with time.
+            </h2>
+          }
+
 
           <h3 className={cx('invisible', t[2] && 'ani-fade-in')}>
             Using Logseq helps you organize your thoughts and ideas
           </h3>
+
           <h4 className={cx('invisible', t[3] && 'ani-fade-in')}>
             <span className="opacity-60">so that you can</span>
             <span className="opacity-100 pl-1">
-          come up with new outputs more easily.
-          </span>
+              come up with new outputs more easily.
+            </span>
           </h4>
         </>)
         }
       </AnimateInTurnBox>
-      <div className="bd flex">
+
+      <div className="bd sm:flex">
         <div ref={swiperElRef} className="bd-slides swiper">
           <div className="items swiper-wrapper">
             {/* 1 */}
             <TipSlideItem
+              isSm={isSm}
               inActive={activeIndex === 0}
               headEmoji={'✍️'}
               headTitle={'Beginner'}
-              content={<span>Get in the habit of writing <br/>thoughts down every day.</span>}
+              content={<span>Get in the habit of writing {isSm ? null : <br/>}thoughts down every day.</span>}
               tips={[
                 'Think in sections, use indentation.',
                 'Use links & hashtags.',
@@ -229,13 +243,14 @@ export function TutorialTips () {
 
             {/* 2 */}
             <TipSlideItem
+              isSm={isSm}
               inActive={activeIndex === 1}
               headEmoji={'🔍️'}
               headTitle={'Intermediate'}
-              content={<span>Always find what you’re <br/> looking for.</span>}
+              content={<span>Always find what you’re {isSm ? null : <br/>} looking for.</span>}
               tips={[
                 'Use CMD-K to search with ease.',
-                <span className={'text-lg'}>Go through linked references to find valuable information nuggets from the past.</span>,
+                <span className={'sm:text-lg'}>Go through linked references to find valuable information nuggets from the past.</span>,
               ]}
               complete={() => {
                 swiperRef.current?.slideNext()
@@ -247,12 +262,13 @@ export function TutorialTips () {
 
             {/*  3 */}
             <TipSlideItem
+              isSm={isSm}
               inActive={activeIndex === 2}
               headEmoji={'💼️'}
               headTitle={'Expert'}
               content={<span>Create your own processes.</span>}
               tips={[
-                <span>Use queries to generate tables of <br/> relevant information.</span>,
+                <span>Use queries to generate tables of {isSm ? null : <br/>} relevant information.</span>,
                 'Install plugins and customize the app around your workflow needs.',
               ]}
               complete={() => {
@@ -331,33 +347,34 @@ export function TutorialTips () {
       </div>
 
       {/*  more resources */}
-      <div className="ft flex h-28 mt-28">
-        <div className="flex-1 flex flex-col justify-center items-center">
-          <h2 className="text-2xl">More Resources</h2>
-          <div className="flex space-x-6 py-5">
+      <div className="ft mt-14 sm:flex sm:h-28 sm:mt-28">
+        <div className="flex-1 sm:flex flex-col justify-center items-center">
+          <h2 className="text-xl sm:text-2xl">More Resources</h2>
+          <div className="sm:flex sm:space-x-6 py-5">
             <div>
               <Button
                 leftIcon={<MonitorPlay size={24}/>}
                 href={`https://discuss.logseq.com/`}
+                className={'w-full sm:w-auto'}
               >
                 Community Hub
               </Button>
               <span
-                className="text-[11px] inline-block pt-2 text-center w-full text-gray-400/80">
+                className="hidden sm:inline-block text-[11px] pt-2 text-center w-full text-gray-400/80">
                 Accessible content for new users
               </span>
             </div>
 
-            <div>
+            <div className={'mt-3.5 border-b pb-8 border-b-logseq-300 sm:border-0 sm:mt-0'}>
               <Button
-                className="bg-logseq-700"
+                className="bg-logseq-700 w-full sm:w-auto"
                 leftIcon={<Notebook size={24}/>}
                 href={`https://docs.logseq.com/#/page/Contents`}
               >
                 Documentation
               </Button>
               <span
-                className="text-[11px] inline-block pt-2 text-center w-full text-gray-400/80">
+                className="hidden sm:inline-block text-[11px]  pt-2 text-center w-full text-gray-400/80">
                 Feature details
               </span>
             </div>
@@ -365,11 +382,11 @@ export function TutorialTips () {
         </div>
 
         <div
-          className="flex-1 flex flex-col justify-center items-center border-l border-l-logseq-500">
-          <h2 className="text-2xl tracking-wide">A helpful community</h2>
+          className="flex-1 sm:flex flex-col justify-center items-center sm:border-l sm:border-l-logseq-500">
+          <h2 className="text-xl sm:text-2xl tracking-wide">A helpful community</h2>
           <div className="flex flex-col space-x-2 pt-10 -translate-y-6">
             <Button
-              className="bg-[#7289da] px-6"
+              className="bg-[#7289da] px-4 sm:px-8"
               leftIcon={<DiscordLogo size={20}/>}
               rightIcon={<SignOut className="opacity-40" size={20}/>}
               href={`https://discord.gg/VNfUaTtdFb`}
@@ -378,7 +395,7 @@ export function TutorialTips () {
             </Button>
 
             <span
-              className="text-[12px] flex items-center pt-2 justify-center text-gray-400/80">
+              className="text-[12px] flex items-center pt-2 sm:justify-center text-gray-400/80">
               <strong className="h-2 w-2 bg-green-600 rounded"></strong>
               <strong className="pl-2 pr-1">{appState.discord?.approximate_presence_count.get() || '-'}</strong>
               users online currently
