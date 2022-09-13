@@ -127,7 +127,7 @@
       &.is-single {
         @apply justify-end;
 
-        .c {
+        .glass-card {
           flex: unset;
         }
       }
@@ -235,7 +235,7 @@
 
     .ref {
       @apply bg-logseq-600/0 hover:bg-logseq-600/50 rounded
-      transition-all duration-500;
+      transition-all duration-500 break-all;
 
       &:before {
         @apply text-gray-200 opacity-20 inline-block pr-0.5;
@@ -250,6 +250,11 @@
   }
 }
 
+.app-form-select {
+  @apply p-2 bg-transparent  border-2 border-transparent rounded-lg
+  appearance-none;
+}
+
 .app-tutorial-showcase {
   min-height: 100vh;
 
@@ -257,11 +262,21 @@
     letter-spacing: 1px;
 
     h1, h2 {
-      line-height: 3.8rem;
+      line-height: 2.2rem;
     }
 
     h3, h4 {
       line-height: 2rem;
+    }
+
+    @screen sm {
+      h1, h2 {
+        line-height: 3.8rem;
+      }
+
+      h3, h4 {
+        line-height: 2rem;
+      }
     }
   }
 
@@ -388,6 +403,14 @@
 
       @apply flex flex-col px-2 py-4;
     }
+  }
+}
+
+.app-tutorial-features-select {
+  @apply px-4;
+
+  .app-form-select {
+    @apply border-gradient-br-red-purple-blue-logseq-900 outline-0;
   }
 }
 

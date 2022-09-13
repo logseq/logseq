@@ -3,6 +3,7 @@ import { FloatGlassButton, imageS1 } from './common'
 import { AnimateInTurnBox } from '../../components/Animations'
 import cx from 'classnames'
 import { useState } from 'react'
+import { useAppState } from '../../state'
 
 const featuresSlideItems = [
   {
@@ -40,7 +41,7 @@ export function TutorialFeaturesSlide () {
               <li
                 key={it.label}
                 className={cx({ active: (it.label === activeTab) })}
-                  onClick={() => setActiveTab(it.label)}
+                onClick={() => setActiveTab(it.label)}
               >
                 <span>{it.icon}</span><strong>{it.label}</strong>
               </li>)
@@ -79,30 +80,45 @@ export function TutorialFeaturesSlide () {
   )
 }
 
+export function TutorialFeaturesSelect () {
+  const [activeTab, setActiveTab] = useState(featuresSlideItems[0].label)
+
+  return (
+    <div className="app-tutorial-features-select">
+      <select className={'app-form-select w-full'}>
+        <option>{activeTab}</option>
+      </select>
+    </div>
+  )
+}
+
 export function TutorialShowcase (
   props: {},
 ) {
+  const appState = useAppState()
 
   return (
     <div className="app-tutorial-showcase">
       {/* Head Slogan */}
       <AnimateInTurnBox
         ticks={[100, 500, 1200]}
-        className="flex flex-col justify-center items-center py-20 hd">
+        className="flex flex-col py-10 px-4 sm:justify-center sm:items-center sm:py-20 hd">
         {(t: Array<string>) => {
           return (
             <>
-              <h1 className={cx('text-6xl opacity-70 invisible', t[0] && 'ani-slide-in-from-bottom')}>Today, everyone is
+              <h1 className={cx('text-4xl sm:text-6xl opacity-70 invisible', t[0] && 'ani-slide-in-from-bottom')}>Today,
+                everyone is
                 a</h1>
               <h2
-                className={cx('text-6xl font-semibold pt-1 opacity-94 invisible', t[1] && 'ani-slide-in-from-bottom')}>knowledge
+                className={cx('text-4xl sm:text-6xl font-semibold pt-1 opacity-94 invisible', t[1] && 'ani-slide-in-from-bottom')}>knowledge
                 worker.</h2>
 
-              <div className={cx('flex justify-center flex-col items-center invisible', t[2] && 'ani-fade-in')}>
-                <h3 className="text-4xl font-normal pt-8 opacity-60">Logseq is the
+              <div
+                className={cx('pt-2 sm:pt-0 sm:flex justify-center sm:flex-col items-center invisible', t[2] && 'ani-fade-in')}>
+                <h3 className="inline text-2xl sm:text-4xl font-normal pt-8 opacity-60">Logseq is the
                   all-in-one tool
                   for </h3>
-                <h4 className="text-4xl pt-2 opacity-94">
+                <h4 className="inline text-2xl sm:text-4xl pt-2 opacity-94">
                   workflows that deal with lots of information:
                 </h4>
               </div>
@@ -112,14 +128,17 @@ export function TutorialShowcase (
       </AnimateInTurnBox>
 
       {/* Head icons */}
-      <ul className="sub-hd flex justify-center space-x-10">
+      <ul className="hidden sub-hd sm:flex justify-center space-x-10">
         <li>Task Management</li>
         <li>PDF Annotations</li>
         <li>Flashcards</li>
       </ul>
 
-      {/* Tutorial Features Slide */}
-      <TutorialFeaturesSlide/>
+      {/* Tutorial Features Slide/Select */}
+      {appState.sm.get() ?
+        <TutorialFeaturesSelect/> :
+        <TutorialFeaturesSlide/>
+      }
     </div>
   )
 }
