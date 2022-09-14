@@ -225,13 +225,13 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
                   call.reject("required parameters: passphrase, content")
                   return
               }
-        guard let ciphertext = content.data(using: .utf8) else {
+        guard let plaintext = content.data(using: .utf8) else {
             call.reject("cannot decode ciphertext with utf8")
             return
         }
         call.keepAlive = true
-        DispatchQueue.global(qos: .background).async {
-            if let encrypted = AgeEncryption.encryptWithPassphrase(ciphertext, passphrase, armor: true) {
+        DispatchQueue.global(qos: .default).async {
+            if let encrypted = AgeEncryption.encryptWithPassphrase(plaintext, passphrase, armor: true) {
                 call.resolve(["data": String(data: encrypted, encoding: .utf8) as Any])
             } else {
                 call.reject("cannot encrypt with passphrase")
@@ -251,7 +251,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             return
         }
         call.keepAlive = true
-        DispatchQueue.global(qos: .background).async {
+        DispatchQueue.global(qos: .default).async {
             if let decrypted = AgeEncryption.decryptWithPassphrase(ciphertext, passphrase) {
                 call.resolve(["data": String(data: decrypted, encoding: .utf8) as Any])
             } else {
