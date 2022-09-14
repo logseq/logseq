@@ -771,23 +771,30 @@
     (.stopPropagation e)
     (editor-handler/edit-block! config :max (:block/uuid config))))
 
+(declare breadcrumb-with-container)
 (rum/defc block-embed < rum/reactive db-mixins/query
-  [config uuid]
-  (when-let [block (db/entity [:block/uuid uuid])]
-    (let [blocks (db/get-paginated-blocks (state/get-current-repo) (:db/id block)
-                                          {:scoped-block-id (:db/id block)})]
+  [config uuid arguments]
+  (when-let [block (db/pull [:block/uuid uuid])]
+    (let [no-children? (contains? arguments "no-children")
+          path? (contains? arguments "path")
+          config' (cond->
+                    (assoc config
+                          :db/id (:db/id block)
+                          :id (str uuid)
+                          :embed-id uuid
+                          :embed? true
+                          :embed-parent (:block config)
+                          :ref? false
+                          :no-children? no-children?
+                          :breadcrumb-show? path?)
+                    path?
+                    (assoc :show-page? true))]
       [:div.color-level.embed-block.bg-base-2
        {:style {:z-index 2}
-        :on-double-click #(edit-parent-block % config)
+        :on-double-click #(edit-parent-block % config')
         :on-mouse-down (fn [e] (.stopPropagation e))}
        [:div.px-3.pt-1.pb-2
-        (blocks-container blocks (assoc config
-                                        :db/id (:db/id block)
-                                        :id (str uuid)
-                                        :embed-id uuid
-                                        :embed? true
-                                        :embed-parent (:block config)
-                                        :ref? false))]])))
+        (breadcrumb-with-container block config')]])))
 
 (rum/defc page-embed < rum/reactive db-mixins/query
   [config page-name]
@@ -1234,7 +1241,7 @@
       (block-ref/string-block-ref? a)
       (when-let [s (-> a block-ref/get-string-block-ref-id string/trim)]
         (when-let [id (some-> s parse-uuid)]
-          (block-embed (assoc config :link-depth (inc link-depth)) id)))
+          (block-embed (assoc config :link-depth (inc link-depth)) id (set (rest arguments)))))
 
       :else                         ;TODO: maybe collections?
       nil)))
@@ -2669,7 +2676,8 @@
       (when @*show-right-menu?
         (block-right-menu config block edit?))]
 
-     (block-children config block children collapsed?)
+     (when-not (:no-children? config)
+       (block-children config block children collapsed?))
 
      (dnd-separator-wrapper block block-id slide? false false)]))
 
@@ -3429,15 +3437,22 @@
                     navigating-block
                     (not= (:db/id (:block/parent (::initial-block state)))
                           (:db/id (:block/parent navigating-block-entity))))
-        blocks (if navigated?
+        blocks (cond
+                 navigated?
                  (let [block navigating-block-entity]
                    (db/get-paginated-blocks repo (:db/id block)
                                             {:scoped-block-id (:db/id block)}))
+
+                 (:embed? config)
+                 (db/get-paginated-blocks repo (:db/id block)
+                                          {:scoped-block-id (:db/id block)})
+
+                 :else
                  [block])]
     [:div
      (when (:breadcrumb-show? config)
        (breadcrumb config (state/get-current-repo) (or navigating-block (:block/uuid block))
-                   {:show-page? false
+                   {:show-page? (or (:show-page? config) false)
                     :navigating-block *navigating-block}))
      (blocks-container blocks (assoc config
                                      :breadcrumb-show? false
