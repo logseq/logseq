@@ -800,7 +800,8 @@ export interface IAssetsProxy {
   }>
 
   /**
-   * @added 0.0.8
+   * @example https://github.com/logseq/logseq/pull/6488
+   * @added 0.0.10
    */
   makeSandboxStorage(): IAsyncStorage
 }
