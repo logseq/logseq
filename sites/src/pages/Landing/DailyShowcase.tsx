@@ -227,13 +227,13 @@ export function DailyShowcase () {
 
           return (
             <div className={'panel'} key={it.label}>
-              <div className="desc flex justify-center text-center pt-12 text-4xl leading-10 tracking-wide">
+              <div className="desc">
                 <div className="animate-in fade-in">
                   {it.desc}
                 </div>
               </div>
 
-              <div className="card flex">
+              <div className="card sm:flex">
                 <div className="l relative animate-in fade-in"
                      style={{
                        width: sizeCache[0] ? (sizeCache[0] + 'px') : 'auto',

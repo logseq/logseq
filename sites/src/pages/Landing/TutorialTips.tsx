@@ -37,6 +37,7 @@ export function TipSlideItem (props: {
     tips,
     complete,
     activeTipChanged,
+    isSm,
     ...rest
   } = props
   const [activeTip, setActiveTip] = useState({ active: 0, progress: 0 })

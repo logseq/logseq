@@ -689,11 +689,12 @@
   }
 
   > .panels {
-    @apply px-5;
+    @apply sm:px-5;
 
     .desc {
-      opacity: .8;
-      height: 140px;
+      @apply flex text-xl pt-6 px-1 pb-1 tracking-wide opacity-80
+      sm:text-4xl sm:text-center sm:justify-center sm:pt-12
+      sm:px-0 sm:leading-10 sm:h-[140px];
 
       > span {
         @apply opacity-60;
@@ -701,16 +702,14 @@
     }
 
     .card {
-      @apply pt-10 pb-20;
+      @apply pt-6 pb-10 sm:pb-20 sm:pt-10;
 
       > .l {
-        @apply flex flex-1 border rounded-xl border-logseq-500 overflow-hidden;
+        @apply w-full flex flex-1 border rounded-xl border-logseq-500 overflow-hidden;
       }
 
       > .r {
-        @apply pl-6 flex;
-
-        width: 500px;
+        @apply flex w-full mt-6 sm:mt-0 sm:pl-6 sm:w-[500px];
 
         > .inner {
           @apply border p-6 w-full rounded-xl border-gray-700/80 bg-logseq-800/10
@@ -720,13 +719,13 @@
           }
 
           > .b {
-            font-size: 26px;
+            @apply text-xl sm:text-[26px];
 
             -webkit-font-smoothing: antialiased;
 
             > .fd {
-              line-height: 35px;
-              padding-bottom: 12px;
+              @apply leading-7 pt-6 pb-2
+              sm:leading-[35px] sm:pt-0 sm:pb-[12px];
 
               span {
                 @apply opacity-60;
@@ -734,9 +733,8 @@
             }
 
             > .ft {
-              @apply flex justify-between pt-3 pb-2;
-
-              font-size: 18px;
+              @apply flex justify-between pt-2 translate-y-1.5
+              text-base sm:text-[18px] sm:pb-2 sm:pt-2 sm:translate-y-0;
             }
           }
         }
