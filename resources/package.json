@@ -1,6 +1,6 @@
 {
   "name": "Logseq",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "main": "electron.js",
   "author": "Logseq",
   "license": "AGPL-3.0",
@@ -28,7 +28,7 @@
     "electron-squirrel-startup": "1.0.0",
     "electron-window-state": "5.0.3",
     "fs-extra": "9.1.0",
-    "node-fetch": "2.6.1",
+    "node-fetch": "2.6.7",
     "open": "7.3.1",
     "semver": "7.3.5",
     "update-electron-app": "2.0.1",

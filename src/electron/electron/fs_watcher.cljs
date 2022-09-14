@@ -6,6 +6,7 @@
             ["fs" :as fs]
             ["chokidar" :as watcher]
             [electron.utils :as utils]
+            [electron.logger :as logger]
             ["electron" :refer [app]]
             [electron.window :as window]))
 
@@ -38,8 +39,8 @@
       ;; Should only send to one window; then dbsync will do his job
       ;; If no window is on this graph, just ignore
       (let [sent? (some send-fn wins)]
-        (when-not sent? (.warn utils/logger
-                               (str "unhandled file event will cause uncatched file modifications!. target:" dir)))))))
+        (when-not sent? (logger/warn ::send
+                                     "unhandled file event will cause uncatched file modifications!. target:" dir))))))
 
 (defn- publish-file-event!
   [dir path event options]
@@ -73,6 +74,7 @@
     ;; TODO: batch sender
     (.on dir-watcher "unlinkDir"
          (fn [path]
+           (logger/warn ::on-unlink-dir {:path path})
            (when (= dir path)
              (publish-file-event! dir dir "unlinkDir" options))))
     (.on dir-watcher "addDir"
@@ -88,12 +90,13 @@
     (.on dir-watcher "unlink"
          ;; delay 500ms for syncing disks
          (fn [path]
+           (logger/debug ::on-unlink {:path path})
            (js/setTimeout #(when (not (fs/existsSync path))
                              (publish-file-event! dir path "unlink" options))
                           500)))
     (.on dir-watcher "error"
          (fn [path]
-           (.warn utils/logger "Watch error happened: " (str {:path path}))))
+           (logger/warn ::on-error "Watch error happened:" {:path path})))
 
     dir-watcher))
 

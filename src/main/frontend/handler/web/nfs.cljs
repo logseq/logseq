@@ -339,14 +339,16 @@
                                        (fn [path handle]
                                          (when nfs?
                                            (swap! path-handles assoc path handle))))
-                         global-dir (global-config-handler/global-config-dir)
-                         global-files-result (if (config/global-config-enabled?)
-                                               (fs/get-files global-dir (constantly nil))
-                                               [])
                          new-local-files (-> (->db-files mobile-native? electron? dir-name local-files-result)
                                              (remove-ignore-files dir-name nfs?))
-                         new-global-files (-> (->db-files mobile-native? electron? global-dir global-files-result)
-                                              (remove-ignore-files global-dir nfs?))
+                         new-global-files (if (config/global-config-enabled?)
+                                            (p/let [global-files-result (fs/get-files
+                                                                          (global-config-handler/global-config-dir)
+                                                                          (constantly nil))
+                                                    global-files (-> (->db-files mobile-native? electron? (global-config-handler/global-config-dir) global-files-result)
+                                                  (remove-ignore-files (global-config-handler/global-config-dir) nfs?))]
+                                              global-files)
+                                            (p/resolved []))
                          new-files (concat new-local-files new-global-files)
 
                          _ (when nfs?

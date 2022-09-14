@@ -54,8 +54,8 @@
 
 (defn- <readdir [path]
   (-> (p/chain (.readdir Filesystem (clj->js {:path path}))
-               js->clj
-               #(get % "files" nil))
+               #(js->clj % :keywordize-keys true)
+               :files)
       (p/catch (fn [error]
                  (js/console.error "readdir Error: " path ": " error)
                  nil))))
