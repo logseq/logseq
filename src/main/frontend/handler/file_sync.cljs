@@ -205,11 +205,3 @@
 (defn reset-user-state! []
   (vreset! *beta-unavailable? false)
   (state/set-state! :file-sync/onboarding-state nil))
-
-(defn sync-off?
-  [sync-state]
-  (or (nil? sync-state) (sync/sync-state--stopped? sync-state)))
-
-(defn graph-sync-off?
-  [graph]
-  (sync-off? (state/get-file-sync-state graph)))

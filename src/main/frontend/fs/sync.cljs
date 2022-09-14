@@ -71,8 +71,9 @@
                  ::local->remote-full-sync
                  ;; remote->local full sync
                  ::remote->local-full-sync
-                 ::stop
-                 ::pause})
+                 ;; snapshot state when switching between apps on iOS
+                 ::pause
+                 ::stop})
 (s/def ::path string?)
 (s/def ::time t/date?)
 (s/def ::remote->local-type #{:delete :update
@@ -1679,6 +1680,10 @@
   [graph-uuid]
   (js/localStorage.removeItem (local-storage-pwd-path graph-uuid)))
 
+(defn get-pwd
+  [graph-uuid]
+  (js/localStorage.getItem (local-storage-pwd-path graph-uuid)))
+
 (defn remove-all-pwd!
   []
   (doseq [k (filter #(string/starts-with? % "encrypted-pwd/") (js->clj (js-keys js/localStorage)))]
@@ -1706,7 +1711,7 @@
   "restore pwd from persisted encrypted-pwd, update `pwd-map`"
   [graph-uuid]
   (go
-    (let [encrypted-pwd (js/localStorage.getItem (local-storage-pwd-path graph-uuid))]
+    (let [encrypted-pwd (get-pwd graph-uuid)]
       (if (nil? encrypted-pwd)
         {:restore-pwd-failed true}
         (let [[salt-value _expired-at gone?]
@@ -2713,6 +2718,11 @@
       (state/set-file-sync-manager nil))
     (reset! current-sm-graph-uuid nil)))
 
+(defn sync-need-password!
+  []
+  (when-let [sm ^SyncManager (state/get-file-sync-manager)]
+    (.need-password sm)))
+
 (defn check-graph-belong-to-current-user
   [current-user-uuid graph-user-uuid]
   (cond
@@ -2746,43 +2756,55 @@
         (notification/show! (t :file-sync/graph-deleted) :warning false))
       result)))
 
+(defn sync-off?
+  [sync-state]
+  (or (nil? sync-state) (sync-state--stopped? sync-state)))
+
+(defn graph-sync-off?
+  "Is sync not running for this `graph`?"
+  [graph]
+  (sync-off? (state/get-file-sync-state graph)))
+
+(defn graph-encrypted?
+  []
+  (when-let [graph-uuid (second @graphs-txid)]
+    (get-pwd graph-uuid)))
+
 (declare network-online-cursor)
 
 (defn sync-start []
   (let [*sync-state                 (atom (sync-state))
         current-user-uuid           (user/user-uuid)
         repo                        (state/get-current-repo)]
-    (go
-      (when @network-online-cursor
-        ;; stop previous sync
-        (<! (<sync-stop))
+    (when (graph-sync-off? repo)
+      (go
+        (when @network-online-cursor
+          (<! (p->c (persist-var/-load graphs-txid)))
 
-        (<! (p->c (persist-var/-load graphs-txid)))
+          (let [[user-uuid graph-uuid txid] @graphs-txid]
+            (when (and user-uuid graph-uuid txid
+                       (user/logged-in?)
+                       repo
+                       (not (config/demo-graph? repo)))
+              (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
+                                                     (config/get-repo-dir repo) repo
+                                                     txid *sync-state)]
+                (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
+                  (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
+                    (clear-graphs-txid! repo)
+                    (do
+                      (state/set-file-sync-state repo @*sync-state)
+                      (state/set-file-sync-manager sm)
 
-        (let [[user-uuid graph-uuid txid] @graphs-txid]
-          (when (and user-uuid graph-uuid txid
-                     (user/logged-in?)
-                     repo
-                     (not (config/demo-graph? repo)))
-            (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
-                                                   (config/get-repo-dir repo) repo
-                                                   txid *sync-state)]
-              (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
-                (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
-                  (clear-graphs-txid! repo)
-                  (do
-                    (state/set-file-sync-state repo @*sync-state)
-                    (state/set-file-sync-manager sm)
+                      ;; update global state when *sync-state changes
+                      (add-watch *sync-state ::update-global-state
+                                 (fn [_ _ _ n]
+                                   (state/set-file-sync-state repo n)))
 
-                    ;; update global state when *sync-state changes
-                    (add-watch *sync-state ::update-global-state
-                               (fn [_ _ _ n]
-                                 (state/set-file-sync-state repo n)))
+                      (.start sm)
 
-                    (.start sm)
-
-                    (offer! remote->local-full-sync-chan true)
-                    (offer! full-sync-chan true)))))))))))
+                      (offer! remote->local-full-sync-chan true)
+                      (offer! full-sync-chan true))))))))))))
 
 ;;; ### some add-watches
 
