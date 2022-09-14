@@ -2,6 +2,7 @@
   (:require ["@capacitor/filesystem" :refer [Encoding Filesystem]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [goog.string :as gstring]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.encrypt :as encrypt]
@@ -53,8 +54,8 @@
 
 (defn- <readdir [path]
   (-> (p/chain (.readdir Filesystem (clj->js {:path path}))
-               js->clj
-               #(get % "files" nil))
+               #(js->clj % :keywordize-keys true)
+               :files)
       (p/catch (fn [error]
                  (js/console.error "readdir Error: " path ": " error)
                  nil))))
@@ -126,11 +127,11 @@
 (def backup-dir "logseq/bak")
 (defn- get-backup-dir
   [repo-dir path ext]
-  (let [path (if (string/starts-with? path "file://")
-               (subs path 7)
-               path)
-        relative-path (-> (string/replace path repo-dir "")
-                          (string/replace (str "." ext) ""))]
+  (let [relative-path (-> path
+                          (string/replace (re-pattern (str "^" (gstring/regExpEscape repo-dir)))
+                                          "")
+                          (string/replace (re-pattern (str "(?i)" (gstring/regExpEscape (str "." ext)) "$"))
+                                          ""))]
     (util/safe-path-join repo-dir (str backup-dir "/" relative-path))))
 
 (defn- truncate-old-versioned-files!
@@ -351,7 +352,7 @@
       (into [] (concat [{:path path}] files))))
   (get-files [_this path-or-handle _ok-handler]
     (readdir path-or-handle))
-  (watch-dir! [_this dir]
+  (watch-dir! [_this dir _options]
     (p/do!
      (.unwatch mobile-util/fs-watcher)
      (.watch mobile-util/fs-watcher (clj->js {:path dir}))))

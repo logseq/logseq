@@ -26,8 +26,7 @@
             [frontend.fs :as fs]
             [frontend.encrypt :as encrypt]
             [medley.core :refer [dedupe-by]]
-            [rum.core :as rum]
-            [goog.object :as gobj]))
+            [rum.core :as rum]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -173,6 +172,7 @@
 
 (def ws-addr config/WS-URL)
 
+;; Warning: make sure to `persist-var/-load` graphs-txid before using it.
 (def graphs-txid (persist-var/persist-var nil "graphs-txid"))
 
 (declare assert-local-txid<=remote-txid)
@@ -489,6 +489,7 @@
 (deftype FileMetadata [size etag path encrypted-path last-modified remote? ^:mutable normalized-path]
   Object
   (get-normalized-path [_]
+    (assert (string? path) path)
     (when-not normalized-path
       (set! normalized-path
             (cond-> path
@@ -508,14 +509,21 @@
   (-hash [_] (hash {:etag etag :path path}))
 
   ILookup
-  (-lookup [this k]
-    (gobj/get this (name k)))
-  (-lookup [this k not-found]
-    (or (gobj/get this (name k)) not-found))
+  (-lookup [o k] (-lookup o k nil))
+  (-lookup [_ k not-found]
+    (case k
+      :size size
+      :etag etag
+      :path path
+      :encrypted-path encrypted-path
+      :last-modified last-modified
+      :remote? remote?
+      not-found))
+
 
   IPrintWithWriter
   (-pr-writer [_ w _opts]
-    (write-all w (str {:size size :etag etag :path path :remote? remote?}))))
+    (write-all w (str {:size size :etag etag :path path :remote? remote? :last-modified last-modified}))))
 
 
 
@@ -528,7 +536,7 @@
     "logseq/metadata.edn"})
 
 ;; TODO: use fn some to filter FileMetadata here, it cause too much loop
-(defn- diff-file-metadata-sets
+(defn diff-file-metadata-sets
   "Find the `FileMetadata`s that exists in s1 and does not exist in s2,
   compare by path+checksum+last-modified,
   if s1.path = s2.path & s1.checksum <> s2.checksum & s1.last-modified > s2.last-modified
@@ -694,7 +702,7 @@
           (recur (dec n)))
         r))))
 
-(deftype RSAPI [^:mutable _graph-uuid ^:mutable _private-key ^:mutable _public-key]
+(deftype RSAPI [^:mutable graph-uuid' ^:mutable private-key' ^:mutable public-key']
   IToken
   (<get-token [this]
     (go
@@ -706,15 +714,15 @@
       (state/get-auth-id-token)))
 
   IRSAPI
-  (rsapi-ready? [_ graph-uuid] (and (= graph-uuid _graph-uuid) _private-key _public-key))
+  (rsapi-ready? [_ graph-uuid] (and (= graph-uuid graph-uuid') private-key' public-key'))
   (<key-gen [_] (go (js->clj (<! (p->c (ipc/ipc "key-gen")))
                              :keywordize-keys true)))
   (<set-env [_ prod? private-key public-key graph-uuid]
     (when (not-empty private-key)
       (print (util/format "[%s] setting sync age-encryption passphrase..." graph-uuid)))
-    (set! _graph-uuid graph-uuid)
-    (set! _private-key private-key)
-    (set! _public-key public-key)
+    (set! graph-uuid' graph-uuid)
+    (set! private-key' private-key)
+    (set! public-key' public-key)
     (p->c (ipc/ipc "set-env" (if prod? "prod" "dev") private-key public-key)))
   (<get-local-all-files-meta [_ graph-uuid base-path]
     (go
@@ -778,7 +786,7 @@
                                     (js->clj r))))))
 
 
-(deftype ^:large-vars/cleanup-todo CapacitorAPI [^:mutable _graph-uuid ^:mutable _private-key ^:mutable _public-key]
+(deftype ^:large-vars/cleanup-todo CapacitorAPI [^:mutable graph-uuid' ^:mutable private-key ^:mutable public-key']
   IToken
   (<get-token [this]
     (go
@@ -790,15 +798,15 @@
       (state/get-auth-id-token)))
 
   IRSAPI
-  (rsapi-ready? [_ graph-uuid] (and (= graph-uuid _graph-uuid) _private-key _public-key))
+  (rsapi-ready? [_ graph-uuid] (and (= graph-uuid graph-uuid') private-key public-key'))
   (<key-gen [_]
     (go (let [r (<! (p->c (.keygen mobile-util/file-sync #js {})))]
           (-> r
               (js->clj :keywordize-keys true)))))
   (<set-env [_ prod? secret-key public-key graph-uuid]
-    (set! _graph-uuid graph-uuid)
-    (set! _private-key secret-key)
-    (set! _public-key public-key)
+    (set! graph-uuid' graph-uuid)
+    (set! private-key secret-key)
+    (set! public-key' public-key)
     (p->c (.setEnv mobile-util/file-sync (clj->js {:env (if prod? "prod" "dev")
                                                    :secretKey secret-key
                                                    :publicKey public-key}))))
@@ -812,7 +820,7 @@
                js->clj
                (map (fn [[path metadata]]
                       (->FileMetadata (get metadata "size") (get metadata "md5") path
-                                      (get metadata "encryptedFname") nil false nil)))
+                                      (get metadata "encryptedFname") (get metadata "mtime") false nil)))
                set)))))
 
   (<get-local-files-meta [_ _graph-uuid base-path filepaths]
@@ -825,7 +833,7 @@
              js->clj
              (map (fn [[path metadata]]
                     (->FileMetadata (get metadata "size") (get metadata "md5") path
-                                    (get metadata "encryptedFname") nil false nil)))
+                                    (get metadata "encryptedFname") (get metadata "mtime") false nil)))
              set))))
 
   (<rename-local-file [_ _graph-uuid base-path from to]
@@ -1415,7 +1423,7 @@
               r)))))))
 
 (defn apply-filetxns-partitions
-  "won't call update-graph-txid! when *txid is nil"
+  "won't call update-graphs-txid! when *txid is nil"
   [*sync-state user-uuid graph-uuid base-path filetxns-partitions repo *txid *stopped *paused]
   (assert (some? *sync-state))
 
@@ -2139,7 +2147,7 @@
   "filter out FileChangeEvents checksum changed,
   compare checksum in FileChangeEvent and checksum calculated now"
   [es]
-  {:pre [(coll? es)
+  {:pre [(or (nil? es) (coll? es))
          (every? #(instance? FileChangeEvent %) es)]}
   (go
     (when (seq es)
@@ -2172,7 +2180,7 @@
 (defn- filter-too-huge-files
   "filter out files > `file-size-limit`"
   [es]
-  {:pre [(coll? es)
+  {:pre [(or (nil? es) (coll? es))
          (every? #(instance? FileChangeEvent %) es)]}
   (filterv filter-too-huge-files-aux es))
 
@@ -2348,7 +2356,7 @@
  SyncManager [graph-uuid base-path *sync-state
               ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer remoteapi
               ^:mutable ratelimit-local-changes-chan
-              *txid ^:mutable state ^:mutable _remote-change-chan ^:mutable _*ws *stopped? *paused?
+              *txid ^:mutable state ^:mutable remote-change-chan ^:mutable *ws *stopped? *paused?
               ^:mutable ops-chan
               ;; control chans
               private-full-sync-chan private-stop-sync-chan private-remote->local-sync-chan
@@ -2381,8 +2389,8 @@
 
   (start [this]
     (set! ops-chan (chan (async/dropping-buffer 10)))
-    (set! _*ws (atom nil))
-    (set! _remote-change-chan (ws-listen! graph-uuid _*ws))
+    (set! *ws (atom nil))
+    (set! remote-change-chan (ws-listen! graph-uuid *ws))
     (set! ratelimit-local-changes-chan (<ratelimit local->remote-syncer local-changes-revised-chan))
     (setup-local->remote! local->remote-syncer)
     (async/tap full-sync-mult private-full-sync-chan)
@@ -2398,7 +2406,7 @@
               private-remote->local-sync-chan {:remote->local true}
               private-full-sync-chan {:local->remote-full-sync true}
               private-pause-resume-chan ([v] (if v {:resume true} {:pause true}))
-              _remote-change-chan ([v] (println "remote change:" v) {:remote->local v})
+              remote-change-chan ([v] (println "remote change:" v) {:remote->local v})
               ratelimit-local-changes-chan ([v]
                                             (let [rest-v (util/drain-chan ratelimit-local-changes-chan)
                                                   vs     (cons v rest-v)]
@@ -2647,7 +2655,7 @@
     (go
       (when-not @*stopped?
         (vreset! *stopped? true)
-        (ws-stop! _*ws)
+        (ws-stop! *ws)
         (offer! private-stop-sync-chan true)
         (async/untap full-sync-mult private-full-sync-chan)
         (async/untap stop-sync-mult private-stop-sync-chan)
@@ -2720,52 +2728,66 @@
 
 (defn <check-remote-graph-exists
   [local-graph-uuid]
+  {:pre [(util/uuid-string? local-graph-uuid)]}
   (go
-    (let [result (->> (<! (<list-remote-graphs remoteapi))
-                      :Graphs
-                      (mapv :GraphUUID)
-                      set
-                      (#(contains? % local-graph-uuid)))]
+    (let [r (<! (<list-remote-graphs remoteapi))
+          result
+          (or
+           ;; if api call failed, assume this remote graph still exists
+           (instance? ExceptionInfo r)
+           (and
+            (contains? r :Graphs)
+            (->> (:Graphs r)
+                 (mapv :GraphUUID)
+                 set
+                 (#(contains? % local-graph-uuid)))))]
+
       (when-not result
         (notification/show! (t :file-sync/graph-deleted) :warning false))
       result)))
 
+(declare network-online-cursor)
+
 (defn sync-start []
-  (let [[user-uuid graph-uuid txid] @graphs-txid
-        *sync-state                 (atom (sync-state))
+  (let [*sync-state                 (atom (sync-state))
         current-user-uuid           (user/user-uuid)
         repo                        (state/get-current-repo)]
     (go
-      ;; stop previous sync
-      (<! (<sync-stop))
-      (when (and user-uuid graph-uuid txid
-                 (user/logged-in?)
-                 repo
-                 (not (config/demo-graph? repo)))
-        (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
-                                               (config/get-repo-dir repo) repo
-                                               txid *sync-state)]
-          (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
-            (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
-              (clear-graphs-txid! repo)
-              (do
-                (state/set-file-sync-state repo @*sync-state)
-                (state/set-file-sync-manager sm)
+      (when @network-online-cursor
+        ;; stop previous sync
+        (<! (<sync-stop))
 
-                ;; update global state when *sync-state changes
-                (add-watch *sync-state ::update-global-state
-                           (fn [_ _ _ n]
-                             (state/set-file-sync-state repo n)))
+        (<! (p->c (persist-var/-load graphs-txid)))
 
-                (.start sm)
+        (let [[user-uuid graph-uuid txid] @graphs-txid]
+          (when (and user-uuid graph-uuid txid
+                     (user/logged-in?)
+                     repo
+                     (not (config/demo-graph? repo)))
+            (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
+                                                   (config/get-repo-dir repo) repo
+                                                   txid *sync-state)]
+              (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
+                (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
+                  (clear-graphs-txid! repo)
+                  (do
+                    (state/set-file-sync-state repo @*sync-state)
+                    (state/set-file-sync-manager sm)
 
-                (offer! remote->local-full-sync-chan true)
-                (offer! full-sync-chan true)))))))))
+                    ;; update global state when *sync-state changes
+                    (add-watch *sync-state ::update-global-state
+                               (fn [_ _ _ n]
+                                 (state/set-file-sync-state repo n)))
+
+                    (.start sm)
+
+                    (offer! remote->local-full-sync-chan true)
+                    (offer! full-sync-chan true)))))))))))
 
 ;;; ### some add-watches
 
 ;; TOOD: replace this logic by pause/resume state
-(def network-online-cursor (rum/cursor state/state :network/online?))
+(defonce network-online-cursor (rum/cursor state/state :network/online?))
 (add-watch network-online-cursor "sync-manage"
            (fn [_k _r o n]
              (cond
@@ -2778,7 +2800,7 @@
                :else
                nil)))
 
-(def auth-id-token-cursor (rum/cursor state/state :auth/id-token))
+(defonce auth-id-token-cursor (rum/cursor state/state :auth/id-token))
 (add-watch auth-id-token-cursor "sync-manage"
            (fn [_k _r _o n]
              (when (nil? n)

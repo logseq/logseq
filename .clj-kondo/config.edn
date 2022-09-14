@@ -1,4 +1,13 @@
-{:linters
+{:ns-groups [{:pattern "frontend.components.*" :name all-components}]
+
+ :config-in-ns
+ ;; :used-underscored-binding is turned off for components because of false positive
+ ;; for rum/defcs and _state.
+ {all-components {:linters {:used-underscored-binding {:level :off}}}
+  ;; false positive with match/match and _
+  frontend.handler.paste {:linters {:used-underscored-binding {:level :off}}}}
+
+ :linters
  {:unresolved-symbol {:exclude [goog.DEBUG
                                 goog.string.unescapeEntities
                                 ;; TODO:lint: Fix when fixing all type hints
@@ -25,6 +34,13 @@
              frontend.format.mldoc mldoc
              frontend.format.block block
              frontend.handler.extract extract
+             frontend.handler.common common-handler
+             frontend.handler.common.file file-common-handler
+             frontend.handler.config config-handler
+             frontend.handler.global-config global-config-handler
+             frontend.handler.repo-config repo-config-handler
+             frontend.mobile.util mobile-util
+             frontend.state state
              logseq.graph-parser graph-parser
              logseq.graph-parser.text text
              logseq.graph-parser.block gp-block
@@ -32,12 +48,15 @@
              logseq.graph-parser.util gp-util
              logseq.graph-parser.property gp-property
              logseq.graph-parser.config gp-config
-             logseq.graph-parser.date-time-util date-time-util
              logseq.graph-parser.util.page-ref page-ref
-             logseq.graph-parser.util.block-ref block-ref}}}
+             logseq.graph-parser.util.block-ref block-ref
+             logseq.graph-parser.date-time-util date-time-util}}
+
+  :namespace-name-mismatch {:level :warning}
+  :used-underscored-binding {:level :warning}}
 
  :hooks {:analyze-call {rum.core/defc hooks.rum/defc
-                        rum.core/defcs hooks.rum/defcs}}
+                         rum.core/defcs hooks.rum/defcs}}
  :lint-as {promesa.core/let clojure.core/let
            promesa.core/loop clojure.core/loop
            promesa.core/recur clojure.core/recur
@@ -45,7 +64,6 @@
            rum.core/defcontext clojure.core/def
            clojure.test.check.clojure-test/defspec clojure.core/def
            clojure.test.check.properties/for-all clojure.core/for
-           nubank.workspaces.core/defcard clojure.core/def
            ;; src/main
            frontend.modules.outliner.datascript/auto-transact! clojure.core/let
            frontend.namespaces/import-vars potemkin/import-vars

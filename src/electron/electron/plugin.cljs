@@ -6,13 +6,14 @@
             ["fs-extra" :as fs]
             ["path" :as path]
             [clojure.string :as string]
-            [electron.utils :refer [logger fetch extract-zip] :as utils]
+            [electron.utils :refer [fetch extract-zip] :as utils]
+            [electron.logger :as logger]
             [electron.configs :as cfgs]
             [electron.window :refer [get-all-windows]]))
 
 ;; update & install
 ;;(def *installing-or-updating (atom nil))
-(def debug (fn [& args] (apply (.-info logger) (conj args "[Marketplace]"))))
+(def debug (partial logger/debug "[Marketplace]"))
 (def emit (fn [type payload]
             (doseq [^js win (get-all-windows)]
               (.. win -webContents
@@ -165,7 +166,7 @@
 
                           dest (.join path cfgs/dot-root "plugins" (:id item))
                           _ (when-not only-check (download-asset-zip item dl-url latest-version dest))
-                          _ (debug "[" (if only-check "Checked" "Updated") "DONE] " latest-version)]
+                          _ (debug (str "[" (if only-check "Checked" "Updated") "DONE]") latest-version)]
 
                     (emit :lsp-installed
                           {:status     :completed

@@ -32,6 +32,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
@@ -72,20 +73,23 @@
   (state/set-state! [:ui/loading? :login] false)
   (async/go
     (let [result (async/<! (sync/<user-info sync/remoteapi))]
-      (when (seq result)
-        (state/set-state! :user/info result)
-
-        (let [status (if (user-handler/alpha-user?) :welcome :unavailable)]
-          (when (= status :welcome)
-            (async/<! (file-sync-handler/load-session-graphs))
-            (p/let [repos (repo-handler/refresh-repos!)]
-              (when-let [repo (state/get-current-repo)]
-                (when (some #(and (= (:url %) repo)
-                                 (vector? (:sync-meta %))
-                                 (util/uuid-string? (first (:sync-meta %)))
-                                 (util/uuid-string? (second (:sync-meta %)))) repos)
-                 (file-sync-restart!)))))
-          (file-sync/maybe-onboarding-show status))))))
+      (cond
+        (instance? ExceptionInfo result)
+        nil
+        (map? result)
+        (do
+          (state/set-state! :user/info result)
+          (let [status (if (user-handler/alpha-user?) :welcome :unavailable)]
+            (when (and (= status :welcome) (user-handler/logged-in?))
+              (async/<! (file-sync-handler/load-session-graphs))
+              (p/let [repos (repo-handler/refresh-repos!)]
+                (when-let [repo (state/get-current-repo)]
+                  (when (some #(and (= (:url %) repo)
+                                    (vector? (:sync-meta %))
+                                    (util/uuid-string? (first (:sync-meta %)))
+                                    (util/uuid-string? (second (:sync-meta %)))) repos)
+                    (file-sync-restart!)))))
+            (file-sync/maybe-onboarding-show status)))))))
 
 (defmethod handle :user/logout [[_]]
   (file-sync-handler/reset-session-graphs)
@@ -113,7 +117,7 @@
      (do
        (state/set-current-repo! graph)
        ;; load config
-       (common-handler/reset-config! graph nil)
+       (repo-config-handler/restore-repo-config! graph)
        (st/refresh!)
        (when-not (= :draw (state/get-current-route))
          (route-handler/redirect-to-home!))
@@ -147,8 +151,11 @@
      (graph-switch graph))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (if @outliner-file/*writes-finished?
-    (graph-switch-on-persisted graph opts)
+  (if (or @outliner-file/*writes-finished?
+          (:graph/remote-binding? @state/state))
+    (do
+      (state/set-state! :graph/remote-binding? false)
+      (graph-switch-on-persisted graph opts))
     (notification/show!
      "Please wait seconds until all changes are saved for the current graph."
      :warning)))
@@ -163,13 +170,13 @@
    (file-sync/pick-page-histories-panel graph-uuid page-name)
    {:id :page-histories :label "modal-page-histories"}))
 
-(defmethod handle :graph/open-new-window [[ev repo]]
+(defmethod handle :graph/open-new-window [[_ev repo]]
   (p/let [current-repo (state/get-current-repo)
           target-repo (or repo current-repo)
           _ (repo-handler/persist-db! current-repo persist-db-noti-m) ;; FIXME: redundant when opening non-current-graph window
           _ (when-not (= current-repo target-repo)
               (repo-handler/broadcast-persist-db! repo))]
-    (ui-handler/open-new-window! ev repo)))
+    (ui-handler/open-new-window! repo)))
 
 (defmethod handle :graph/migrated [[_ _repo]]
   (js/alert "Graph migrated."))
@@ -448,7 +455,7 @@
               (state/set-current-repo! current-repo)
               (db/listen-and-persist! current-repo)
               (db/persist-if-idle! current-repo)
-              (file-handler/restore-config! current-repo)
+              (repo-config-handler/restore-repo-config! current-repo)
               (.watch mobile-util/fs-watcher #js {:path current-repo-dir})
               (when graph-switch-f (graph-switch-f current-repo true))
               (file-sync-restart!))))
@@ -500,7 +507,7 @@
 
 (defmethod handle :backup/broken-config [[_ repo content]]
   (when (and repo content)
-    (let [path (config/get-config-path)
+    (let [path (config/get-repo-config-path)
           broken-path (string/replace path "/config.edn" "/broken-config.edn")]
       (p/let [_ (fs/write-file! repo (config/get-repo-dir repo) broken-path content {})
               _ (file-handler/alter-file repo path config/config-default-content {:skip-compare? true})]
@@ -520,6 +527,9 @@
 
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))
+
+(defmethod handle :shortcut/refresh [[_]]
+  (st/refresh!))
 
 (defn- refresh-cb []
   (page-handler/create-today-journal!)

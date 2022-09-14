@@ -1,4 +1,4 @@
-{:paths ["src/main" "src/electron" "src/workspaces" "templates"]
+{:paths ["src/main" "src/electron" "templates"]
  :deps
  {org.clojure/clojure                   {:mvn/version "1.10.0"}
   rum/rum                               {:mvn/version "0.12.9"}
@@ -28,7 +28,6 @@
   binaryage/devtools                    {:mvn/version "1.0.5"}
   camel-snake-kebab/camel-snake-kebab   {:mvn/version "0.4.2"}
   instaparse/instaparse                 {:mvn/version "1.4.10"}
-  nubank/workspaces                     {:mvn/version "1.1.1"}
   org.clojars.mmb90/cljs-cache          {:mvn/version "0.1.4"}
   logseq/graph-parser                   {:local/root "deps/graph-parser"}}
 
@@ -47,5 +46,5 @@
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
 
            ;; Use :replace-deps for tools. See https://github.com/clj-kondo/clj-kondo/issues/1536#issuecomment-1013006889
-           :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.05.31"}}
+           :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.09.08"}}
                        :main-opts  ["-m" "clj-kondo.main"]}}}

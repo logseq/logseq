@@ -2,8 +2,9 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater] :as updater]
-            [electron.utils :refer [*win mac? linux? dev? logger get-win-from-sender restore-user-fetch-agent get-graph-name]]
+            [electron.utils :refer [*win mac? linux? dev? get-win-from-sender restore-user-fetch-agent get-graph-name]]
             [electron.url :refer [logseq-url-handler]]
+            [electron.logger :as logger]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -39,14 +40,13 @@
   ;; manual/auto updater
   (when-not linux?
     (init-updater {:repo   "logseq/logseq"
-                   :logger logger
                    :win    win})))
 
 (defn open-url-handler
   "win - the main window instance (first renderer process)
    url - the input URL"
   [win url]
-  (.info logger "open-url" (str {:url url}))
+  (logger/info "open-url" {:url url})
 
   (let [parsed-url (js/URL. url)
         url-protocol (.-protocol parsed-url)]
@@ -106,8 +106,10 @@
                              (-> (. fs copy (path/join assets-from-dir filename) (path/join assets-to-dir filename))
                                  (p/catch
                                   (fn [e]
-                                    (println (str "Failed to copy " (path/join assets-from-dir filename) " to " (path/join assets-to-dir filename)))
-                                    (js/console.error e)))))
+                                    (logger/error "Failed to copy"
+                                            (str {:from (path/join assets-from-dir filename)
+                                                  :to (path/join assets-to-dir filename)})
+                                            e)))))
                            asset-filenames)
 
                           (map
@@ -165,7 +167,7 @@
                  (try
                    (js-invoke app type args)
                    (catch js/Error e
-                     (js/console.error e)))))
+                     (logger/error (str call-app-channel " " e))))))
 
       (.handle call-win-channel
                (fn [^js e type & args]
@@ -173,7 +175,7 @@
                    (try
                      (js-invoke win type args)
                      (catch js/Error e
-                       (js/console.error e)))))))
+                       (logger/error (str call-win-channel " " e))))))))
 
     #(do (clear-win-effects!)
          (.removeHandler ipcMain toggle-win-channel)
@@ -270,18 +272,19 @@
                (win/switch-to-window! window))))
 
       (.on app "window-all-closed" (fn []
+                                     (logger/debug "window-all-closed" "Quiting...")
                                      (try
                                        (fs-watcher/close-watcher!)
                                        (search/close!)
                                        (catch js/Error e
-                                         (js/console.error e)))
+                                         (logger/error "window-all-closed" e)))
                                      (.quit app)))
       (.on app "ready"
            (fn []
              (let [t0 (setup-interceptor! app)
                    ^js win (win/create-main-window)
                    _ (reset! *win win)]
-               (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
+               (logger/info (str "Logseq App(" (.getVersion app) ") Starting... "))
 
                (restore-user-fetch-agent)
 
@@ -340,9 +343,9 @@
                (.on app "activate" #(when @*win (.show win)))))))))
 
 (defn start []
-  (js/console.log "Main - start")
+  (logger/debug "Main - start")
   (when @*setup-fn (@*setup-fn)))
 
 (defn stop []
-  (js/console.log "Main - stop")
+  (logger/debug "Main - stop")
   (when @*teardown-fn (@*teardown-fn)))

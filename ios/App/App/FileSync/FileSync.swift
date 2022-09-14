@@ -72,15 +72,18 @@ public struct SyncMetadata: CustomStringConvertible, Equatable {
     var md5: String
     var size: Int
     var ctime: Int64
+    var mtime: Int64
 
     public init?(of fileURL: URL) {
         do {
-            let fileAttributes = try fileURL.resourceValues(forKeys:[.isRegularFileKey, .fileSizeKey, .contentModificationDateKey])
+            let fileAttributes = try fileURL.resourceValues(forKeys:[.isRegularFileKey, .fileSizeKey, .contentModificationDateKey,
+                                                                     .creationDateKey])
             guard fileAttributes.isRegularFile! else {
                 return nil
             }
             size = fileAttributes.fileSize ?? 0
-            ctime = Int64((fileAttributes.contentModificationDate?.timeIntervalSince1970 ?? 0.0) * 1000)
+            mtime = Int64((fileAttributes.contentModificationDate?.timeIntervalSince1970 ?? 0.0) * 1000)
+            ctime = Int64((fileAttributes.creationDate?.timeIntervalSince1970 ?? 0.0) * 1000)
 
             // incremental MD5 checksum
             let bufferSize = 512 * 1024
@@ -107,7 +110,7 @@ public struct SyncMetadata: CustomStringConvertible, Equatable {
     }
 
     public var description: String {
-        return "SyncMetadata(md5=\(md5), size=\(size))"
+        return "SyncMetadata(md5=\(md5), size=\(size), mtime=\(mtime))"
     }
 }
 
@@ -116,7 +119,7 @@ public struct SyncMetadata: CustomStringConvertible, Equatable {
 @objc(FileSync)
 public class FileSync: CAPPlugin, SyncDebugDelegate {
     override public func load() {
-        print("debug File sync iOS plugin loaded!")
+        print("debug FileSync iOS plugin loaded!")
 
         AWSMobileClient.default().initialize { (userState, error) in
             guard error == nil else {
@@ -215,6 +218,47 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
         }
         call.resolve(["value": fnames])
     }
+    
+    @objc func encryptWithPassphrase(_ call: CAPPluginCall) {
+        guard let passphrase = call.getString("passphrase"),
+              let content = call.getString("content") else {
+                  call.reject("required parameters: passphrase, content")
+                  return
+              }
+        guard let ciphertext = content.data(using: .utf8) else {
+            call.reject("cannot decode ciphertext with utf8")
+            return
+        }
+        call.keepAlive = true
+        DispatchQueue.global(qos: .background).async {
+            if let encrypted = AgeEncryption.encryptWithPassphrase(ciphertext, passphrase, armor: true) {
+                call.resolve(["data": String(data: encrypted, encoding: .utf8) as Any])
+            } else {
+                call.reject("cannot encrypt with passphrase")
+            }
+        }
+    }
+    
+    
+    @objc func decryptWithPassphrase(_ call: CAPPluginCall) {
+        guard let passphrase = call.getString("passphrase"),
+              let content = call.getString("content") else {
+                  call.reject("required parameters: passphrase, content")
+                  return
+              }
+        guard let ciphertext = content.data(using: .utf8) else {
+            call.reject("cannot decode ciphertext with utf8")
+            return
+        }
+        call.keepAlive = true
+        DispatchQueue.global(qos: .background).async {
+            if let decrypted = AgeEncryption.decryptWithPassphrase(ciphertext, passphrase) {
+                call.resolve(["data": String(data: decrypted, encoding: .utf8) as Any])
+            } else {
+                call.reject("cannot decrypt with passphrase")
+            }
+        }
+    }
 
     @objc func getLocalFilesMeta(_ call: CAPPluginCall) {
         // filePaths are url encoded
@@ -235,7 +279,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             if let meta = SyncMetadata(of: url) {
                 var metaObj: [String: Any] = ["md5": meta.md5,
                                               "size": meta.size,
-                                              "ctime": meta.ctime]
+                                              "mtime": meta.mtime]
                 if fnameEncryptionEnabled() {
                     metaObj["encryptedFname"] = filePath.fnameEncrypt(rawKey: FNAME_ENCRYPTION_KEY!)
                 }
@@ -263,7 +307,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
                         let filePath = fileURL.relativePath(from: baseURL)!
                         var metaObj: [String: Any] = ["md5": meta.md5,
                                                       "size": meta.size,
-                                                      "ctime": meta.ctime]
+                                                      "mtime": meta.mtime]
                         if fnameEncryptionEnabled() {
                             metaObj["encryptedFname"] = filePath.fnameEncrypt(rawKey: FNAME_ENCRYPTION_KEY!)
                         }

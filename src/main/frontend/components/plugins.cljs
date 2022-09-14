@@ -872,8 +872,8 @@
                             false)}})
    {:trigger-class "toolbar-plugins-manager-trigger"}))
 
-(rum/defcs hook-ui-items <
-  rum/reactive
+(rum/defcs hook-ui-items < rum/reactive
+  < {:key-fn #(identity "plugin-hook-items")}
   "type of :toolbar, :pagebar"
   [_state type]
   (when (state/sub [:plugin/installed-ui-items])

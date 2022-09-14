@@ -11,6 +11,7 @@
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.idb :as idb]
@@ -38,10 +39,10 @@
                                   %) files)]
       (if-let [file (:file/file ignore-file)]
         (p/let [content (.text file)]
-          (when content
-            (let [paths (set (common-handler/ignore-files content (map :file/path files)))]
-              (when (seq paths)
-                (filter (fn [f] (contains? paths (:file/path f))) files)))))
+               (when content
+                 (let [paths (set (common-handler/ignore-files content (map :file/path files)))]
+                   (when (seq paths)
+                     (filter (fn [f] (contains? paths (:file/path f))) files)))))
         (p/resolved files))
       (p/resolved files))))
 
@@ -185,8 +186,8 @@
                                 (assoc file :file/content content))) markup-files))
                 (p/then (fn [result]
                           (p/let [files (map #(dissoc % :file/file) result)
-                                  graph-txid-meta (util-fs/read-graph-txid-info dir-name)
-                                  graph-uuid (and (vector? graph-txid-meta) (second graph-txid-meta))]
+                                  graphs-txid-meta (util-fs/read-graphs-txid-info dir-name)
+                                  graph-uuid (and (vector? graphs-txid-meta) (second graphs-txid-meta))]
                             (if-let [exists-graph (state/get-sync-graph-by-uuid graph-uuid)]
                               (state/pub-event!
                                [:notification/show
@@ -329,25 +330,36 @@
          (state/set-graph-syncing? true))
        (->
         (p/let [handle (when-not electron? (idb/get-item handle-path))]
-          (when (or handle electron? mobile-native?)   ; electron doesn't store the file handle
-            (p/let [_ (when handle (nfs/verify-permission repo handle true))
-                    files-result (fs/get-files (if nfs? handle
-                                                   (config/get-local-dir repo))
-                                               (fn [path handle]
-                                                 (when nfs?
-                                                   (swap! path-handles assoc path handle))))
-                    new-files (-> (->db-files mobile-native? electron? dir-name files-result)
-                                  (remove-ignore-files dir-name nfs?))
-                    _ (when nfs?
-                        (let [file-paths (set (map :file/path new-files))]
-                          (swap! path-handles (fn [handles]
-                                                (->> handles
-                                                     (filter (fn [[path _handle]]
-                                                               (contains? file-paths
-                                                                          (string/replace-first path (str dir-name "/") ""))))
-                                                     (into {})))))
-                        (set-files! @path-handles))]
-              (handle-diffs! repo nfs? old-files new-files handle-path path-handles re-index?))))
+               (when (or handle electron? mobile-native?)   ; electron doesn't store the file handle
+                 (p/let [_ (when handle (nfs/verify-permission repo handle true))
+                         local-files-result
+                         (fs/get-files (if nfs? handle
+                                         (config/get-local-dir repo))
+                                       (fn [path handle]
+                                         (when nfs?
+                                           (swap! path-handles assoc path handle))))
+                         new-local-files (-> (->db-files mobile-native? electron? dir-name local-files-result)
+                                             (remove-ignore-files dir-name nfs?))
+                         new-global-files (if (config/global-config-enabled?)
+                                            (p/let [global-files-result (fs/get-files
+                                                                          (global-config-handler/global-config-dir)
+                                                                          (constantly nil))
+                                                    global-files (-> (->db-files mobile-native? electron? (global-config-handler/global-config-dir) global-files-result)
+                                                  (remove-ignore-files (global-config-handler/global-config-dir) nfs?))]
+                                              global-files)
+                                            (p/resolved []))
+                         new-files (concat new-local-files new-global-files)
+
+                         _ (when nfs?
+                             (let [file-paths (set (map :file/path new-files))]
+                               (swap! path-handles (fn [handles]
+                                                     (->> handles
+                                                          (filter (fn [[path _handle]]
+                                                                    (contains? file-paths
+                                                                               (string/replace-first path (str dir-name "/") ""))))
+                                                          (into {})))))
+                             (set-files! @path-handles))]
+                        (handle-diffs! repo nfs? old-files new-files handle-path path-handles re-index?))))
         (p/catch (fn [error]
                    (log/error :nfs/load-files-error repo)
                    (log/error :exception error)))
