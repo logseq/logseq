@@ -81,12 +81,13 @@
     (update result :block/properties #(dissoc % :tags :alias))))
 
 (defn- build-page-map
-  [properties file page page-name {:keys [date-formatter db from-page]}]
+  [properties invalid-properties file page page-name {:keys [date-formatter db from-page]}]
   (let [[*valid-properties *invalid-properties]
         ((juxt filter remove)
          (fn [[k _v]] (gp-property/valid-property-name? (str k))) properties)
         valid-properties (into {} *valid-properties)
-        invalid-properties (set (map (comp name first) *invalid-properties))
+        invalid-properties (set (->> (map (comp name first) *invalid-properties)
+                                     (concat invalid-properties)))
         page-m (->
                 (gp-util/remove-nils
                  (assoc
@@ -133,10 +134,11 @@
                                        :block/refs block-ref-pages
                                        :block/path-refs block-path-ref-pages)))))
                    blocks)
-          properties (if (:block/pre-block? (first blocks))
-                       (:block/properties (first blocks))
-                       properties)
-          page-map (build-page-map properties file page page-name (assoc options' :from-page page))
+          [properties invalid-properties] (if (:block/pre-block? (first blocks))
+                                            [(:block/properties (first blocks))
+                                             (:block/invalid-properties (first blocks))]
+                                            [properties []])
+          page-map (build-page-map properties invalid-properties file page page-name (assoc options' :from-page page))
           namespace-pages (let [page (:block/original-name page-map)]
                             (when (text/namespace-page? page)
                               (->> (gp-util/split-namespace-pages page)
