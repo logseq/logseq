@@ -139,11 +139,7 @@
     }
 
     &:hover {
-      opacity: .8;
-
-      .ti {
-        opacity: .8;
-      }
+      color: var(--ls-secondary-text-color);
     }
   }
 
