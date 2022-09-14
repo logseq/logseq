@@ -217,7 +217,8 @@
                 (map #(select-keys % [:block/properties :block/invalid-properties]))))
         "Has correct (in)valid block properties")
 
-    (is (= [{:block/properties {:foo "valid"}}]
+    (is (= [{:block/properties {:foo "valid"}
+             :block/invalid-properties #{"[[foo]]" "some,prop"}}]
            (->> (d/q '[:find (pull ?b [*])
                        :in $
                        :where [?b :block/properties] [?b :block/name]]
