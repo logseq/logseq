@@ -209,7 +209,7 @@
                                               (case (.-code e)
                                                 "ArrowLeft" (- keyboard-step)
                                                 "ArrowRight" keyboard-step
-                                                :else 0))
+                                                0))
                                       ratio (.toFixed (/ offset width) 6)
                                       ratio (if (= handler-position :west) (- 1 ratio) ratio)]
                                   (when (and (> ratio min-ratio) (< ratio max-ratio)) (set-width! ratio sidebar-el))))))))
