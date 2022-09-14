@@ -182,7 +182,7 @@
 
         status                 (:state sync-state)
         status                 (or (nil? status) (keyword (name status)))
-        off?                   (or (nil? sync-state) (fs-sync/sync-state--stopped? sync-state))
+        off?                   (file-sync-handler/sync-off? sync-state)
         full-syncing?          (contains? #{:local->remote-full-sync :remote->local-full-sync} status)
         syncing?               (or full-syncing? (contains? #{:local->remote :remote->local} status))
         idle?                  (contains? #{:idle} status)
@@ -211,6 +211,7 @@
                                     nil
 
                                     (and synced-file-graph?
+                                         (file-sync-handler/graph-sync-off? current-repo)
                                          (second @fs-sync/graphs-txid)
                                          (async/<! (fs-sync/<check-remote-graph-exists (second @fs-sync/graphs-txid))))
                                     (fs-sync/sync-start)
