@@ -222,10 +222,39 @@
     (ui/icon (str icon) {:extension? icon-extention?})
     [:span.flex-1 title]]])
 
+(defn close-sidebar-on-mobile!
+  []
+  (when (util/sm-breakpoint?)
+    (state/toggle-left-sidebar!)))
+
+(defn create-dropdown
+  []
+  (ui/dropdown-with-links
+   (fn [{:keys [toggle-fn]}]
+     [:button#create-button
+      {:on-click toggle-fn}
+      [:<>
+       (ui/icon "plus")
+       [:span.mx-1 (t :left-side-bar/create)]]])
+   (->>
+    [{:title (t :left-side-bar/new-page)
+      :class "new-page-link"
+      :options {:on-click #((close-sidebar-on-mobile!)
+                            (state/pub-event! [:go/search]))}
+      :icon (ui/icon "page" {:extension? true})}
+     {:title (t :left-side-bar/new-whiteboard)
+      :class "new-whiteboard-link"
+      :options {:on-click #((close-sidebar-on-mobile!)
+                            (whiteboard/create-new-whiteboard!))}
+
+      :icon (ui/icon "whiteboard" {:extension? true})}])
+   {}))
+
 (rum/defc sidebar-nav
   [route-match close-modal-fn left-sidebar-open? srs-open?]
   (let [default-home (get-default-home-if-valid)
         route-name (get-in route-match [:data :name])
+        enable-whiteboards? (state/enable-whiteboards?)
         on-contents-scroll #(when-let [^js el (.-target %)]
                               (let [top (.-scrollTop el)
                                     cls (.-classList el)
@@ -291,7 +320,7 @@
           :active (and (not srs-open?) (= route-name :all-pages))
           :icon   "files"})
 
-        (when (state/enable-whiteboards?)
+        (when enable-whiteboards?
           (sidebar-item
            {:class "whiteboard"
             :title (t :right-side-bar/whiteboards)
@@ -310,30 +339,13 @@
 
       [:footer.px-2 {:class "create"}
        (when-not config/publishing?
-         (ui/dropdown-with-links
-          (fn [{:keys [toggle-fn]}]
-            [:button#create-button
-             {:on-click toggle-fn}
-            [:<> 
-             (ui/icon "plus") 
-             [:span.mx-1 (t :left-side-bar/create)]]])
-          (->>
-           [{:title (t :left-side-bar/new-page)
-             :class "new-page-link"
-             :options {:on-click (fn []
-                                   (and (util/sm-breakpoint?)
-                                        (state/toggle-left-sidebar!))
-                                   (state/pub-event! [:go/search]))}
-             :icon (ui/icon "page" {:extension? "tie"})}
-            {:title (t :left-side-bar/new-whiteboard)
-             :class "new-whiteboard-link"
-             :options {:on-click (fn []
-                                   (and (util/sm-breakpoint?)
-                                        (state/toggle-left-sidebar!))
-                                   (whiteboard/create-new-whiteboard!))}
-             
-             :icon (ui/icon "whiteboard" {:extension? "tie"})}])
-          {}))]]]))
+         (if enable-whiteboards?
+           (create-dropdown)
+           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
+            {:on-click #((close-sidebar-on-mobile!)
+                         (state/pub-event! [:go/search]))}
+            (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
+            [:span.flex-1 (t :right-side-bar/new-page)]]))]]]))
 
 (rum/defc left-sidebar < rum/reactive
   [{:keys [left-sidebar-open? route-match]}]
