@@ -192,9 +192,9 @@
   (state/close-modal!))
 
 (defn- create-item-render
-  [type label name]
+  [icon label name]
   (search-result-item
-   {:icon type
+   {:icon icon
     :class "highlight"
     :content [:div.text.font-bold (str label ": ")
               [:span.ml-1 name]]}))
