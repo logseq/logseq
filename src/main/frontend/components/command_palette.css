@@ -17,10 +17,12 @@
       transition: none;
       border: none;
       border-radius: unset !important;
+      background: none;
     }
 
     .chosen {
       background-color: var(--ls-quaternary-background-color);
+      color: var(--ls-secondary-text-color);
     }
 
     .command-results-wrap,
@@ -33,6 +35,42 @@
 
     .input-wrap {
       height: var(--palettle-input-height);
+    }
+
+    .cp__palette-input {
+      color: var(--ls-secondary-text-color);
+    }
+
+    .search-result {
+      @apply text-sm font-medium flex items-baseline;
+
+
+      &.highlight .search-result-icon {
+        color: var(--ls-selection-text-color);
+        border-color: var(--ls-selection-background-color);
+
+        &:before {
+          opacity: 0.5;
+          background: var(--ls-selection-background-color);
+        }
+      }
+    }
+
+    .search-result-icon {
+      @apply text-xs text-center flex items-center justify-center rounded border mr-2 relative;
+
+      width: 1.5rem;
+      height: 1.5rem;
+      flex-shrink: 0;
+      border-color: transparent;
+      overflow: hidden;
+      color: var(--ls-secondary-text-color);
+
+      &:before {
+        @apply block absolute inset-0 ;
+        background: var(--ls-primary-background-color);
+        content: "";
+      }
     }
   }
 
