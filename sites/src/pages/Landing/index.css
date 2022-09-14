@@ -8,14 +8,18 @@
   &.footer-desc {
     max-width: 1440px;
 
-    background-image: url("./assets/light_spots_full_bg.png");
+    background-image: none;
     background-repeat: no-repeat;
     background-size: 100%;
     background-position-y: bottom;
+
+    @screen sm {
+      background-image: url("./assets/light_spots_full_bg.png");
+    }
   }
 
   &.footer-nav {
-    @apply flex justify-center pt-16;
+    @apply pt-4 flex justify-center sm:pt-16;
 
     max-width: unset !important;
     width: 100%;
@@ -550,13 +554,14 @@
 
 .app-landing-footer {
   &-desc {
-    @apply -translate-y-6;
+    @apply pt-16 px-4 -translate-y-6
+    sm:pt-0 sm:px-0;
 
     > .cards {
-      @apply flex-wrap mx-[5.5rem] my-12 translate-y-5;
+      @apply mt-6 sm:flex flex-wrap sm:mx-[5.5rem] sm:my-12 translate-y-5;
 
       > .item {
-        @apply basis-1/4;
+        @apply sm:basis-1/4;
 
         > .inner {
           @apply bg-logseq-600/90 p-4 rounded-lg;
@@ -565,12 +570,18 @@
     }
 
     > .actions {
-      @apply rounded-3xl mx-10 mt-24 flex flex-col items-center py-16;
+      @apply flex flex-col py-6 rounded-3xl
+      mt-12 px-4 bg-logseq-500 sm:items-center
+      sm:mx-10 sm:mt-24 sm:py-16 sm:px-0 sm:bg-transparent;
     }
   }
 
   &-navs {
-    @apply flex justify-between pt-6 pb-14 pl-5 pr-12 items-center;
+    @apply pb-8 sm:flex sm:justify-between sm:pt-6 sm:pb-14 pl-4 pr-4 sm:pr-12 items-center;
+
+    > .links {
+      @apply pt-6 px-1;
+    }
   }
 }
 
@@ -636,6 +647,8 @@
     }
 
     &.b {
+      @apply mt-[180px] sm:mt-0;
+
       background-image: url("./assets/light_spots_bg.png");
     }
   }
