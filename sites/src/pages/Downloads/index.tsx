@@ -106,6 +106,30 @@ const releases = [
   ['Android', (props = {}) => <GooglePlayLogo {...props} weight={'duotone'}/>],
 ]
 
+const downloadHandler = (
+  appState: any,
+  item: typeof releases[number],
+  isIOS: boolean,
+  platform: string = ''
+) => {
+  const rollback =
+    isIOS ? 'https://apps.apple.com/us/app/logseq/id1601013908' :
+      `https://github.com/logseq/logseq/releases`
+
+  const downloads: any = appState.releases.downloads.get()
+
+  platform = platform || item?.[0].toString().toLowerCase()
+
+  if (!downloads?.[platform]) {
+    return window?.open(rollback, '_blank')
+  }
+
+  window?.open(
+    downloads[platform]?.browser_download_url,
+    '_blank',
+  )
+}
+
 export function WrapGlobalDownloadButton (
   props: any = {},
 ) {
@@ -117,25 +141,6 @@ export function WrapGlobalDownloadButton (
 
   const isIOS = active?.[0] === 'iOS'
   const isMacOS = active?.[0] === 'MacOS'
-
-  const downloadHandler = (e: any, platform?: string) => {
-    const rollback =
-      isIOS ? 'https://apps.apple.com/us/app/logseq/id1601013908' :
-        `https://github.com/logseq/logseq/releases`
-
-    const downloads: any = appState.releases.downloads.get()
-
-    platform = platform || active?.[0].toString().toLowerCase()
-
-    if (!downloads?.[platform]) {
-      return window?.open(rollback, '_blank')
-    }
-
-    window?.open(
-      downloads[platform]?.browser_download_url,
-      '_blank',
-    )
-  }
 
   const rightIconFn = isMacOS ? (
     (props: any = {}) => <CaretDown className={'ml-1 opacity-60'} {...props}/>
@@ -167,7 +172,9 @@ export function WrapGlobalDownloadButton (
 
           <div
             className={'w-full flex flex-col opacity-80'}
-            onClick={(e) => downloadHandler(e, 'macos-x64')}
+            onClick={(e) => {
+              downloadHandler(appState, active, isIOS, 'macos-x64')
+            }}
           >
             <span className="text-sm">
               Intel chip
@@ -185,7 +192,9 @@ export function WrapGlobalDownloadButton (
 
           <div
             className={'w-full flex flex-col opacity-80'}
-            onClick={(e) => downloadHandler(e, 'macos-x64')}
+            onClick={(e) => {
+              downloadHandler(appState, active, isIOS, 'macos-x64')
+            }}
           >
             <span className="text-sm">
               Apple silicon
@@ -210,7 +219,7 @@ export function WrapGlobalDownloadButton (
 
   return (
     <div className={cx('global-downloads-wrap', className)}
-         onClick={downloadHandler}
+         onClick={() => downloadHandler(appState, active, isIOS)}
          ref={wrapElRef}
     >
       {children({
@@ -226,9 +235,91 @@ export function WrapGlobalDownloadButton (
   )
 }
 
+export function HeadDownloadLinksSelect (
+  props: { activeRelease: any, setActiveRelease: any }
+) {
+  const { activeRelease, setActiveRelease } = props
+  const activeLabel = activeRelease?.[0]
+
+  let activeIcon = activeRelease?.[1]
+
+  if (typeof activeIcon === 'function') {
+    activeIcon = activeIcon()
+  }
+
+  return (
+    <div className={cx('selects', `active-of-${activeLabel?.toLowerCase()}`)}>
+      <div className="app-form-select-wrap">
+        <span className="icon">
+          {activeIcon}
+        </span>
+
+        <select className={'app-form-select w-full'}
+                onChange={(e) => {
+                  const item = releases.find(it => {
+                    return it[0] === e.target.value
+                  })
+
+                  setActiveRelease(item)
+                }}
+                value={activeLabel}
+        >
+          {releases.map(([label]: any) => {
+            return (
+              <option
+                key={label}
+                value={label}>
+                {label}
+              </option>
+            )
+          })}
+        </select>
+
+        <span className="arrow">
+          <CaretDown weight={'bold'}/>
+        </span>
+      </div>
+    </div>
+  )
+}
+
+export function HeadDownloadLinksTabs (
+  props: { activeRelease: any, setActiveRelease: any }
+) {
+  const { activeRelease, setActiveRelease } = props
+
+  return (
+    <ul className="tabs flex flex space-x-8 justify-around">
+      {releases.map(([label, icon]: any) => {
+        if (typeof icon === 'function') {
+          icon = icon()
+        }
+
+        return (
+          <li className={cx({ active: activeRelease[0] === label },
+            `is-${(label as string).toLowerCase()}`)}
+              onClick={() => {
+                setActiveRelease([label, icon])
+              }}
+              key={label}
+          >
+                <span className="opacity-60">
+                {icon}
+                </span>
+            <strong>
+              {label}
+            </strong>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
 export function HeadDownloadLinks () {
   const appState = useAppState()
   const os = appState.get().os
+  const isSm = appState.sm.get()
 
   let active = releases[0]
 
@@ -243,17 +334,13 @@ export function HeadDownloadLinks () {
 
   const [activeRelease, setActiveRelease] = useState(active)
 
-  const downloadHandler = (platform: string) => {
-    const rollback = `https://github.com/logseq/logseq/releases`
-    const downloads: any = appState.releases.downloads.get()
-    if (!downloads?.[platform]) {
-      return window?.open(rollback, '_blank')
-    }
+  const _downloadHandler = (platform: string) => {
+    const isIOS = platform === 'ios'
+    const item: any = releases.find(it => {
+      return (it[0] as string).toLowerCase() === platform
+    })
 
-    window?.open(
-      downloads[platform]?.browser_download_url,
-      '_blank',
-    )
+    downloadHandler(appState, item, isIOS, platform)
   }
 
   const resolvePanel = function ([label, icon]: [string, any]) {
@@ -263,24 +350,25 @@ export function HeadDownloadLinks () {
     const isIOS = label.toLowerCase() === 'ios'
 
     icon = isWindows ? (
-      <Windows64Icon className="bg-black/50 w-8 h-8"/>
+      <Windows64Icon className="bg-black/50 w-6 h-6 sm:w-8 sm:h-8"/>
     ) : (isAndroid ?
-      <GooglePlayIcon className="bg-black/50 w-8 h-8"/>
+      <GooglePlayIcon className="bg-black/50 w-6 h-6 sm:w-8 sm:h-8"/>
       : (isLinux ?
-        <LinuxIcon className="bg-black/50 w-8 h-8"/> :
+        <LinuxIcon className="bg-black/50 w-6 h-6 sm:w-8 sm:h-8"/> :
         (isIOS ? (
-          <AppleIcon className="bg-black/50 w-8 h-8"/>
+          <AppleIcon className="bg-black/50 w-6 h-6 sm:w-8 sm:h-8"/>
         ) : icon)))
 
     switch (label) {
       case 'iOS':
         return (
-          <div className="flex flex-col items-center is-ios cursor-crosshair">
+          <div className="w-full sm:w-auto flex flex-col items-center is-ios cursor-crosshair">
             <Button
-              className={'bg-logseq-400 px-6 py-4'}
+              className={'w-full bg-logseq-400 px-3 py-3 sm:px-6 sm:py-4'}
               leftIcon={icon}
-              disabled={true}
-              rightIcon={<QrCode className="opacity-50"/>}
+              disabled={!isSm}
+              rightIcon={isSm ? <DownloadSimple className="opacity-50"/> : <QrCode className="opacity-50"/>}
+              onClick={() => _downloadHandler('ios')}
             >
               Download on the App Store
             </Button>
@@ -293,14 +381,14 @@ export function HeadDownloadLinks () {
         )
       case 'MacOS':
         return (
-          <div className="flex space-x-6">
+          <div className="w-full sm:w-auto sm:flex sm:space-x-6">
             <div className="flex flex-col items-center">
               <Button
-                className={'bg-logseq-400 px-6 py-4'}
-                leftIcon={<IntelIcon className={'w-8 h-8 bg-white'}
+                className={'w-full bg-logseq-400 px-3 py-3 sm:px-6 sm:py-4'}
+                leftIcon={<IntelIcon className={'w-6 h-6 sm:w-8 sm:h-8 bg-white'}
                                      color={'white'}/>}
                 rightIcon={<DownloadSimple className="opacity-50"/>}
-                onClick={() => downloadHandler('macos-x64')}
+                onClick={() => _downloadHandler('macos-x64')}
               >
                 Download for Intel chip
               </Button>
@@ -311,11 +399,11 @@ export function HeadDownloadLinks () {
 
             <div className="flex flex-col items-center">
               <Button
-                className={'bg-logseq-600 px-6 py-4'}
-                leftIcon={<M1Icon className={'w-8 h-8 bg-gray-500'}
+                className={'w-full bg-logseq-600 px-3 py-3 sm:px-6 sm:py-4'}
+                leftIcon={<M1Icon className={'w-6 h-6 sm:w-8 sm:h-8 bg-gray-500'}
                                   color={'white'}/>}
                 rightIcon={<DownloadSimple className="opacity-50"/>}
-                onClick={() => downloadHandler('macos-arm64')}
+                onClick={() => _downloadHandler('macos-arm64')}
               >
                 Download for Apple silicon
               </Button>
@@ -327,12 +415,12 @@ export function HeadDownloadLinks () {
         )
       default:
         return (
-          <div>
+          <div className={'w-full sm:w-auto'}>
             <Button
               leftIcon={icon}
               rightIcon={<DownloadSimple className="opacity-50"/>}
-              className="bg-logseq-600 px-6 py-4"
-              onClick={() => downloadHandler(label.toString().toLowerCase())}
+              className="w-full bg-logseq-600 px-3 py-3 sm:px-6 sm:py-4"
+              onClick={() => _downloadHandler(label.toString().toLowerCase())}
             >
               Download {label} release
             </Button>
@@ -343,13 +431,14 @@ export function HeadDownloadLinks () {
 
   return (
     <div className="app-head-downloads">
-      <div className="flex flex-col items-center pt-20 pb-12 text-slogan">
-        <h1 className="text-6xl">
+      <div className="flex flex-col pt-10 sm:items-center sm:pt-20 pb-12 text-slogan">
+        <h1 className="text-3xl sm:text-6xl">
           <strong className="font-semibold tracking-wide">Download </strong>
           <span className="opacity-60">the apps.</span>
         </h1>
+
         <h2
-          className="flex flex-col justify-center items-center pt-2 tracking-wide">
+          className="text-xl flex flex-col justify-center sm:items-center pt-2 tracking-wide">
           <span className="opacity-60">
             Collect your thoughts and get inspired.
           </span>
@@ -360,41 +449,29 @@ export function HeadDownloadLinks () {
       </div>
 
       <div className="dl-items">
-        <ul className="tabs flex flex space-x-8 justify-around">
-          {releases.map(([label, icon]: any) => {
-            if (typeof icon === 'function') {
-              icon = icon()
-            }
+        {/* Tabs/Select */}
+        {appState.sm.get() ?
+          <HeadDownloadLinksSelect
+            activeRelease={activeRelease}
+            setActiveRelease={setActiveRelease}
+          /> :
+          <HeadDownloadLinksTabs
+            activeRelease={activeRelease}
+            setActiveRelease={setActiveRelease}
+          />
+        }
 
-            return (
-              <li className={cx({ active: activeRelease[0] === label },
-                `is-${(label as string).toLowerCase()}`)}
-                  onClick={() => {
-                    setActiveRelease([label, icon])
-                  }}
-                  key={label}
-              >
-                <span className="opacity-60">
-                {icon}
-                </span>
-                <strong>
-                  {label}
-                </strong>
-              </li>
-            )
-          })}
-        </ul>
-
-        <div className="panels flex py-10 justify-center">
+        {/* Panels */}
+        <div className="panels flex sm:justify-center pt-6 pb-0 sm:pb-10 sm:pt-10">
           {resolvePanel(activeRelease as any)}
         </div>
       </div>
 
-      <div className="screen-shot -mt-10">
-        <div className="img-wrap mx-24 relative overflow-hidden">
+      <div className="screen-shot sm:-mt-10">
+        <div className="pt-4 -m-5 sm:m-0 sm:pt-0 sm:mx-24 relative overflow-hidden">
           <img alt="Image"
                src={releaseImages[activeRelease[0].toString().toLowerCase()]}
-               className="opacity-90 translate-y-28 rounded-md overflow-hidden -mt-24 img-bg"
+               className="sm:opacity-90 sm:translate-y-28 rounded-md overflow-hidden sm:-mt-24 img-bg"
           />
         </div>
       </div>

@@ -1,15 +1,16 @@
 .app-head-downloads {
+  @apply px-4 sm:px-0;
+
   .text-slogan {
     h2 {
-      font-size: 38px;
-      line-height: 1.1em;
+      @apply sm:pt-10 sm:text-[38px] sm:leading-[46px];
     }
   }
 
   .dl-items {
-    @apply px-10;
+    @apply sm:px-10;
 
-    ul.tabs {
+    > .tabs {
       li {
         @apply flex flex-col items-center bg-logseq-600/90 rounded-xl
         flex-1 py-5 px-2 justify-center select-none cursor-pointer
@@ -58,15 +59,41 @@
       }
     }
 
+    > .selects {
+      .app-form-select {
+        outline: none;
+      }
+
+      &.active-of-macos, &.active-of-ios {
+        .app-form-select {
+          @apply border-gradient-br-purple-white-red-logseq-900;
+        }
+      }
+
+      &.active-of-linux .app-form-select {
+        @apply border-gradient-br-yellow-white-orange-logseq-900;
+      }
+
+      &.active-of-windows .app-form-select {
+        @apply border-gradient-br-blue-white-green-logseq-900;
+      }
+
+      &.active-of-android .app-form-select {
+        @apply border-gradient-br-green-white-black-logseq-900;
+      }
+    }
+
     .panels {
-      height: 170px;
+      @apply sm:h-[170px];
 
-      > .is-ios {
-        @apply relative;
+      @screen sm {
+        > .is-ios {
+          @apply relative;
 
-        &:hover {
-          .qr {
-            @apply opacity-100;
+          &:hover {
+            .qr {
+              @apply opacity-100;
+            }
           }
         }
       }
