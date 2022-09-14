@@ -1,13 +1,15 @@
 (ns frontend.format.block
   "Block code needed by app but not graph-parser"
-  (:require [clojure.string :as string]
-            [logseq.graph-parser.block :as gp-block]
+  (:require ["@sentry/react" :as Sentry]
+            [cljs-time.format :as tf]
+            [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.format :as format]
-            [frontend.state :as state]
             [frontend.handler.notification :as notification]
-            ["@sentry/react" :as Sentry]
+            [frontend.state :as state]
+            [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -37,6 +39,29 @@ and handles unexpected failure."
    (page-name->map original-page-name with-id? true))
   ([original-page-name with-id? with-timestamp?]
    (gp-block/page-name->map original-page-name with-id? (db/get-db (state/get-current-repo)) with-timestamp? (state/get-date-formatter))))
+
+(defn- normalize-as-percentage
+  ([block]
+   (some->> block
+            str
+            (re-matches #"(-?\d+\.?\d*)%")
+            second
+            (#(/ % 100)))))
+
+(defn- normalize-as-date
+  ([block]
+   (some->> block
+            str
+            date/valid?
+            (tf/unparse date/custom-formatter))))
+
+(defn normalize-block
+  "Normalizes supported formats such as dates and percentages."
+  ([block]
+   (->> [normalize-as-percentage normalize-as-date identity]
+        (map #(% block))
+        (remove nil?)
+        (first))))
 
 (defn parse-block
   ([block]
