@@ -206,15 +206,14 @@
              (.on "keydown" (fn [e]
                               (when-let [sidebar-el (js/document.getElementById sidebar-id)]
                                 (let [width js/document.documentElement.clientWidth
-                                      offset (+
-                                              (.-x (.getBoundingClientRect sidebar-el))
-                                              (case (.-code e)
-                                                "ArrowLeft" (- keyboard-step)
-                                                "ArrowRight" keyboard-step
-                                                0))
+                                      keyboard-step (case (.-code e)
+                                                      "ArrowLeft" (- keyboard-step)
+                                                      "ArrowRight" keyboard-step
+                                                      0)
+                                      offset (+ (.-x (.getBoundingClientRect sidebar-el)) keyboard-step)
                                       ratio (.toFixed (/ offset width) 6)
                                       ratio (if (= handler-position :west) (- 1 ratio) ratio)]
-                                  (when (and (> ratio min-ratio) (< ratio max-ratio)) 
+                                  (when (and (> ratio min-ratio) (< ratio max-ratio) (not (zero? keyboard-step)))
                                     ((add-resizing-class)
                                      (set-width! ratio sidebar-el)))))))
              (.on "keyup" remove-resizing-class)))
