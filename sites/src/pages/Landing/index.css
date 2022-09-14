@@ -8,12 +8,14 @@
   &.footer-desc {
     max-width: 1440px;
 
-    background-image: none;
-    background-repeat: no-repeat;
-    background-size: 100%;
-    background-position-y: bottom;
+    background-image: url("./assets/footer-gradients-bg.png");
+    background-repeat: repeat-x;
+    background-position: bottom;
 
     @screen sm {
+      background-repeat: no-repeat;
+      background-size: 100%;
+      background-position-y: bottom;
       background-image: url("./assets/light_spots_full_bg.png");
     }
   }
