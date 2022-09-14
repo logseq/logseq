@@ -77,8 +77,8 @@
     #_:clj-kondo/ignore
     (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
       (when-let [block (db/entity repo lookup)]
-        [(t :right-side-bar/block-ref)
-         (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
+       [(t :right-side-bar/block-ref)
+        (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
 
     :block
     #_:clj-kondo/ignore
@@ -206,14 +206,15 @@
              (.on "keydown" (fn [e]
                               (when-let [sidebar-el (js/document.getElementById sidebar-id)]
                                 (let [width js/document.documentElement.clientWidth
-                                      keyboard-step (case (.-code e)
-                                                      "ArrowLeft" (- keyboard-step)
-                                                      "ArrowRight" keyboard-step
-                                                      0)
-                                      offset (+ (.-x (.getBoundingClientRect sidebar-el)) keyboard-step)
+                                      offset (+
+                                              (.-x (.getBoundingClientRect sidebar-el))
+                                              (case (.-code e)
+                                                "ArrowLeft" (- keyboard-step)
+                                                "ArrowRight" keyboard-step
+                                                0))
                                       ratio (.toFixed (/ offset width) 6)
                                       ratio (if (= handler-position :west) (- 1 ratio) ratio)]
-                                  (when (and (> ratio min-ratio) (< ratio max-ratio) (not (zero? keyboard-step)))
+                                  (when (and (> ratio min-ratio) (< ratio max-ratio)) 
                                     ((add-resizing-class)
                                      (set-width! ratio sidebar-el)))))))
              (.on "keyup" remove-resizing-class)))
@@ -242,21 +243,21 @@
        [:div.cp__right-sidebar-settings.hide-scrollbar.gap-1 {:key "right-sidebar-settings"}
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                                     (state/sidebar-add-block! repo "contents" :contents))}
+                                                         (state/sidebar-add-block! repo "contents" :contents))}
           (t :right-side-bar/contents)]]
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn []
-                                                                     (when-let [page (get-current-page)]
-                                                                       (state/sidebar-add-block!
-                                                                        repo
-                                                                        page
-                                                                        :page-graph)))}
+                                                         (when-let [page (get-current-page)]
+                                                           (state/sidebar-add-block!
+                                                            repo
+                                                            page
+                                                            :page-graph)))}
           (t :right-side-bar/page-graph)]]
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                                     (state/sidebar-add-block! repo "help" :help))}
+                                                         (state/sidebar-add-block! repo "help" :help))}
           (t :right-side-bar/help)]]]
 
        [:div
