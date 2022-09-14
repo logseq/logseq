@@ -22,9 +22,10 @@
     (if (string/includes? file "pages/contents.")
       "Contents"
       (let [first-block (last (first (filter gp-block/heading-block? ast)))
-            property-name (when (and (contains? #{"Properties" "Property_Drawer"} (ffirst ast))
-                                     (not (string/blank? (:title (last (first ast))))))
-                            (:title (last (first ast))))
+            property-name (when (contains? #{"Properties" "Property_Drawer"} (ffirst ast))
+                            (let [properties-ast (second (first ast))
+                                  properties (zipmap (map (comp keyword first) properties-ast) (map second properties-ast))]
+                              (:title properties)))
             first-block-name (let [title (last (first (:title first-block)))]
                                (and first-block
                                     (string? title)

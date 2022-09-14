@@ -1921,8 +1921,6 @@
             (gp-property/property-value-from-content (name k) (:block/content block))
             value)
         property-pages-enabled? (contains? #{true nil} (:property-pages/enabled? user-config))]
-    (prn {:k k
-          :property-separated-by-commas? property-separated-by-commas?})
     [:div
      (if property-pages-enabled?
        (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})

@@ -14,6 +14,7 @@
         "del": "^6.0.0",
         "gulp": "^4.0.2",
         "gulp-clean-css": "^4.3.0",
+        "ip": "1.1.8",
         "npm-run-all": "^4.1.5",
         "playwright": "^1.24.2",
         "postcss": "8.4.16",
@@ -26,8 +27,7 @@
         "stylelint": "^13.8.0",
         "stylelint-config-standard": "^20.0.0",
         "tailwindcss": "2.2.16",
-        "typescript": "^4.4.3",
-        "ip": "1.1.8"
+        "typescript": "^4.4.3"
     },
     "scripts": {
         "watch": "run-p gulp:watch cljs:watch",
@@ -109,7 +109,7 @@
         "ignore": "5.1.8",
         "is-svg": "4.3.0",
         "jszip": "3.7.0",
-        "mldoc": "1.4.9",
+        "mldoc": "^1.4.9",
         "path": "0.12.7",
         "pixi-graph-fork": "0.2.0",
         "pixi.js": "6.2.0",
