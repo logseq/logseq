@@ -10,44 +10,44 @@ import CryptoKit
 
 // via https://github.com/krzyzanowskim/CryptoSwift
 extension Array where Element == UInt8 {
-  public init(hex: String) {
-      self = Array.init()
-      self.reserveCapacity(hex.unicodeScalars.lazy.underestimatedCount)
-      var buffer: UInt8?
-      var skip = hex.hasPrefix("0x") ? 2 : 0
-      for char in hex.unicodeScalars.lazy {
-          guard skip == 0 else {
-              skip -= 1
-              continue
-          }
-          guard char.value >= 48 && char.value <= 102 else {
-              removeAll()
-              return
-          }
-          let v: UInt8
-          let c: UInt8 = UInt8(char.value)
-          switch c {
-          case let c where c <= 57:
-              v = c - 48
-          case let c where c >= 65 && c <= 70:
-              v = c - 55
-          case let c where c >= 97:
-              v = c - 87
-          default:
-              removeAll()
-              return
-          }
-          if let b = buffer {
-              append(b << 4 | v)
-              buffer = nil
-          } else {
-              buffer = v
-          }
-      }
-      if let b = buffer {
-          append(b)
-      }
-  }
+    public init(hex: String) {
+        self = Array.init()
+        self.reserveCapacity(hex.unicodeScalars.lazy.underestimatedCount)
+        var buffer: UInt8?
+        var skip = hex.hasPrefix("0x") ? 2 : 0
+        for char in hex.unicodeScalars.lazy {
+            guard skip == 0 else {
+                skip -= 1
+                continue
+            }
+            guard char.value >= 48 && char.value <= 102 else {
+                removeAll()
+                return
+            }
+            let v: UInt8
+            let c: UInt8 = UInt8(char.value)
+            switch c {
+            case let c where c <= 57:
+                v = c - 48
+            case let c where c >= 65 && c <= 70:
+                v = c - 55
+            case let c where c >= 97:
+                v = c - 87
+            default:
+                removeAll()
+                return
+            }
+            if let b = buffer {
+                append(b << 4 | v)
+                buffer = nil
+            } else {
+                buffer = v
+            }
+        }
+        if let b = buffer {
+            append(b)
+        }
+    }
 }
 
 extension Data {
@@ -90,7 +90,7 @@ extension String {
         
         // strip nonce here, since it's all zero
         return "e." + (sealed.ciphertext + sealed.tag).hexDescription
-
+        
     }
     
     func fnameDecrypt(rawKey: Data) -> String? {
@@ -107,7 +107,7 @@ extension String {
         
         let key = SymmetricKey(data: rawKey)
         let nonce = Data(repeating: 0, count: 12)
-
+        
         guard let sealed = try? ChaChaPoly.SealedBox(combined: nonce + encryptedRaw) else {
             return nil
         }
@@ -142,56 +142,17 @@ extension URL {
         return relComponents.joined(separator: "/")
     }
     
-    // Download a remote URL to a file
-    func download(toFile file: URL, completion: @escaping (Error?) -> Void) {
-        let task = URLSession.shared.downloadTask(with: self) {
-            (tempURL, response, error) in
-            // Early exit on error
-            guard let tempURL = tempURL else {
-                completion(error)
-                return
-            }
-            
-            if let response = response! as? HTTPURLResponse {
-                if response.statusCode == 404 {
-                    completion(NSError(domain: "",
-                                       code: response.statusCode,
-                                       userInfo: [NSLocalizedDescriptionKey: "remote file not found"]))
-                    return
-                }
-                if response.statusCode != 200 {
-                    completion(NSError(domain: "",
-                                       code: response.statusCode,
-                                       userInfo: [NSLocalizedDescriptionKey: "invalid http status code"]))
-                    return
-                }
-            }
-            
-            do {
-                // Remove any existing document at file
-                if FileManager.default.fileExists(atPath: file.path) {
-                    try FileManager.default.removeItem(at: file)
-                } else {
-                    let baseURL = file.deletingLastPathComponent()
-                    try FileManager.default.createDirectory(at: baseURL, withIntermediateDirectories: true, attributes: nil)
-                }
-                let rawData = try Data(contentsOf: tempURL)
-                guard let decryptedRawData = maybeDecrypt(rawData) else {
-                    throw NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: "can not decrypt remote file"])
-                }
-                try decryptedRawData.write(to: file, options: .atomic)
-
-                completion(nil)
-            }
-            
-            // Handle potential file system errors
-            catch {
-                completion(error)
-            }
+    func ensureParentDir() {
+        let dirURL = self.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true, attributes: nil)
+    }
+    
+    func writeData(data: Data) throws {
+        self.ensureParentDir()
+        if FileManager.default.fileExists(atPath: self.path) {
+            try FileManager.default.removeItem(at: self)
         }
-        
-        // Start the download
-        task.resume()
+        try data.write(to: self, options: .atomic)
     }
 }
 
