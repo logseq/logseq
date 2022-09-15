@@ -290,8 +290,15 @@
     }
 
     #create-button {
-      @apply p-2 text-sm font-medium rounded-md w-full;
+      @apply p-2 text-sm font-medium rounded-md w-full border;
       background-color: var(--ls-secondary-background-color) !important;
+      border-color: transparent;
+
+      &:hover,
+      &:focus {
+        border-color: var(--ls-border-color);
+        background-color: transparent !important;
+      }
 
       @screen sm {
         background-color: var(--ls-primary-background-color) !important;
