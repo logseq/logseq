@@ -26,7 +26,8 @@
             [frontend.fs :as fs]
             [frontend.encrypt :as encrypt]
             [medley.core :refer [dedupe-by]]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [promesa.core :as p]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -181,8 +182,8 @@
   [latest-txid graph-uuid user-uuid repo]
   {:pre [(int? latest-txid) (>= latest-txid 0)]}
   (persist-var/-reset-value! graphs-txid [user-uuid graph-uuid latest-txid] repo)
-  (some-> (persist-var/persist-save graphs-txid)
-          p->c)
+  (p/let [_ (persist-var/persist-save graphs-txid)]
+    (state/pub-event! [:graph/refresh]))
   (when (state/developer-mode?) (assert-local-txid<=remote-txid)))
 
 (defn clear-graphs-txid! [repo]
