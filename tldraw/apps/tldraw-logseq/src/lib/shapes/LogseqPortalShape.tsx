@@ -800,6 +800,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
   ReactIndicator = observer(() => {
     const bounds = this.getBounds()
+    const app = useApp<Shape>()
+    if (app.selectedShapesArray.length === 1) {
+      return null
+    }
     return <rect width={bounds.width} height={bounds.height} fill="transparent" rx={8} ry={8} />
   })
 
