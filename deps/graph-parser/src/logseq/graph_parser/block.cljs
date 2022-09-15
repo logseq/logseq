@@ -182,18 +182,9 @@
          distinct)))
 
 (defn extract-properties
-  [properties user-config & {:keys [format]
-                             :or {format :markdown}}]
+  [properties user-config]
   (when (seq properties)
     (let [properties (seq properties)
-          properties (if (= 2 (count (first properties))) ; property value not parsed yet
-                       (map
-                         (fn [[k v]]
-                           (let [mldoc-ast (-> (gp-mldoc/get-references v (gp-mldoc/default-config format))
-                                               gp-util/json->clj)]
-                             [k v mldoc-ast]))
-                         properties)
-                       properties)
           *invalid-properties (atom #{})
           properties (->> properties
                           (map (fn [[k v mldoc-ast]]
@@ -205,15 +196,12 @@
                                              (string/replace "_" "-")
                                              (string/replace #"[\"|^|(|)|{|}]+" ""))]
                                    (if (gp-property/valid-property-name? (str ":" k))
-                                     (let [k (if (contains? #{"custom_id" "custom-id"} k)
-                                               "id"
-                                               k)
-                                           v (if (coll? v)
-                                               (remove string/blank? v)
-                                               (text/parse-property k v mldoc-ast user-config))
-                                           k (keyword k)
-                                           v (if (coll? v) (set v) v)]
-                                       [k v mldoc-ast])
+                                     (let [k' (keyword
+                                               (if (contains? #{"custom_id" "custom-id"} k)
+                                                 "id"
+                                                 k))
+                                           v' (text/parse-property k v mldoc-ast user-config)]
+                                       [k' v' mldoc-ast])
                                      (do (swap! *invalid-properties conj k)
                                          nil)))))
                           (remove #(nil? (second %))))
@@ -627,7 +615,7 @@
                   (recur headings (rest blocks) timestamps' properties body))
 
                 (gp-property/properties-ast? block)
-                (let [properties (extract-properties (second block) user-config :format format)]
+                (let [properties (extract-properties (second block) user-config)]
                   (recur headings (rest blocks) timestamps properties body))
 
                 (heading-block? block)

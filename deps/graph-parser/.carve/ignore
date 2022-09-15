@@ -25,8 +25,6 @@ logseq.graph-parser.config/remove-asset-protocol
 ;; API
 logseq.graph-parser.util/unquote-string
 ;; API
-logseq.graph-parser.util/wrapped-by-quotes?
-;; API
 logseq.graph-parser.util.page-ref/page-ref-re
 ;; API
 logseq.graph-parser.property/->block-content

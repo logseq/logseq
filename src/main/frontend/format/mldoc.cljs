@@ -50,7 +50,8 @@
       [])))
 
 (defn ->edn
-  "Wrapper around gp-mldoc/->edn which provides config state"
+  "Alias to gp-mldoc/->edn but could serve as a wrapper e.g. handle
+  gp-mldoc/default-config"
   [content config]
   (gp-mldoc/->edn content config))
 

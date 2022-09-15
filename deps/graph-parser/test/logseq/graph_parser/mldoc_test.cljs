@@ -79,21 +79,13 @@
 (deftest md-properties-test
   (are [x y] (= y (get-properties x))
 
-    ;; comma separates values
+    ;; reference values
     "property:: [[foo]], [[bar]]"
     {:property #{"foo" "bar"}}
 
-    ;; alias property
-    "alias:: [[foo]], #bar"
-    {:alias #{"foo" "bar"}}
-
-    ;; tags property
-    "tags:: #foo,#bar,#foo"
-    {:tags #{"foo" "bar"}}
-
-    ;; title property
-    "title:: comma, is ok"
-    {:title "comma, is ok"}))
+    ;; comma separated
+    "tags:: foo, bar, foo"
+    {:tags #{"foo" "bar"}}))
 
 (deftest name-definition-test
   (is (= [["List"

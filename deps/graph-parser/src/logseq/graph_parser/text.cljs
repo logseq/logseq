@@ -92,7 +92,7 @@
     (re-find #"^\d+$" v)
     (parse-long v)))
 
-(defn get-ref-from-ast
+(defn- get-ref-from-ast
   [[typ data]]
   (case typ
     "Link"
@@ -147,9 +147,10 @@
         property-separated-by-commas? (and (separated-by-commas? config-state k)
                                            (empty? refs))
         refs' (if property-separated-by-commas?
-                (if (string/includes? v ",")
-                  (distinct (sep-by-comma v))
-                  [(string/trim v)])
+                (set
+                 (if (string/includes? v ",")
+                   (distinct (sep-by-comma v))
+                   [(string/trim v)]))
                 refs)
         k (if (or (symbol? k) (keyword? k)) (subs (str k) 1) k)
         v (if (or (symbol? v) (keyword? v))

@@ -43,7 +43,7 @@
 (defn get-references
   [text config]
   (when-not (string/blank? text)
-    (getReferences text config)))
+    (gp-util/json->clj (getReferences text config))))
 
 (defn ast-export-markdown
   [ast config references]
@@ -110,7 +110,7 @@
           properties (map (fn [[_directive k v]]
                             (let [kname (string/lower-case k)
                                   k (keyword kname)
-                                  mldoc-ast (-> (get-references v config) gp-util/json->clj)]
+                                  mldoc-ast (get-references v config)]
                               [k v mldoc-ast]))
                        properties-ast)]
       (if (seq properties)
