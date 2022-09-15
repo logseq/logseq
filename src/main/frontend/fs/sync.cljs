@@ -152,6 +152,8 @@
 
 (s/def ::sync-event (s/keys :req-un [::event ::data]))
 
+(defonce download-batch-size 10)
+(defonce upload-batch-size 20)
 ;;; ### configs in config.edn
 ;; - :file-sync/ignore-files
 
@@ -1098,6 +1100,7 @@
                             (map
                              #(hash-map :checksum (:checksum %)
                                         :encrypted-path (remove-user-graph-uuid-prefix (:Key %))
+                                        :size (:Size %)
                                         :last-modified (:LastModified %))
                              objs))
                      (when-not (empty? next-continuation-token)
@@ -1112,7 +1115,7 @@
               (let [encrypted-path->path-map (zipmap encrypted-path-list* path-list-or-exp)]
                 (set
                  (mapv
-                  #(->FileMetadata nil
+                  #(->FileMetadata (:size %)
                                    (:checksum %)
                                    (get encrypted-path->path-map (:encrypted-path %))
                                    (:encrypted-path %)
@@ -2054,10 +2057,9 @@
   (sync-files-remote->local!
     [_ relative-filepath+checksum-coll latest-txid]
     (go
-      (let [_ (swap! *sync-state #(sync-state-reset-full-remote->local-files % relative-filepath+checksum-coll))
-            partitioned-filetxns
+      (let [partitioned-filetxns
             (sequence (filepath+checksum-coll->partitioned-filetxns
-                       10 graph-uuid user-uuid)
+                       download-batch-size graph-uuid user-uuid)
                       relative-filepath+checksum-coll)
             r
             (if (empty? (flatten partitioned-filetxns))
@@ -2095,7 +2097,7 @@
 
                     (when (pos-int? latest-txid)
                       (let [_ (swap! *sync-state #(sync-state-reset-full-remote->local-files % diff-txns))
-                            partitioned-filetxns (transduce (diffs->partitioned-filetxns 10)
+                            partitioned-filetxns (transduce (diffs->partitioned-filetxns download-batch-size)
                                                             (completing (fn [r i] (conj r (reverse i)))) ;reverse
                                                             '()
                                                             (reverse diff-txns))]
@@ -2140,6 +2142,7 @@
                  (sort-file-metatdata-fn :recent-days-range recent-10-days-range) > diff-remote-files)
                 latest-txid           (:TXId (<! (<get-remote-graph remoteapi nil graph-uuid)))]
             (println "[full-sync(remote->local)]" (count sorted-diff-remote-files) "files need to sync")
+            (swap! *sync-state #(sync-state-reset-full-remote->local-files % sorted-diff-remote-files))
             (<! (.sync-files-remote->local!
                  this (map (juxt relative-path -checksum)
                            sorted-diff-remote-files)
@@ -2366,7 +2369,7 @@
                   change-events-partitions
                   (sequence
                    ;; partition FileChangeEvents
-                   (partition-file-change-events 10)
+                   (partition-file-change-events upload-batch-size)
                    distinct-change-events)]
               (println "[full-sync(local->remote)]"
                        (count (flatten change-events-partitions)) "files need to sync")
@@ -2645,7 +2648,7 @@
       (let [distincted-local-changes (distinct-file-change-events local-changes)
             _ (swap! *sync-state #(sync-state-reset-full-local->remote-files % distincted-local-changes))
             change-events-partitions
-            (sequence (partition-file-change-events 10) distincted-local-changes)
+            (sequence (partition-file-change-events upload-batch-size) distincted-local-changes)
             _ (put-sync-event! {:event :start
                                 :data  {:type       :local->remote
                                         :graph-uuid graph-uuid

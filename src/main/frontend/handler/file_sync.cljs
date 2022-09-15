@@ -226,9 +226,11 @@
         now (tc/to-epoch (t/now))
         diff-seconds (- now start-time)
         finished (reduce + (map (comp :progress second) progressing))
-        all-files (or (:full-local->remote-files sync-state)
-                      (:full-remote->local-files sync-state))
-        total (reduce + (map #(:size (.-stat %)) all-files))
+        local->remote-files (:full-local->remote-files sync-state)
+        remote->local-files (:full-remote->local-files sync-state)
+        total (if (seq remote->local-files)
+                (reduce + (map (fn [m] (or (:size m) 0)) remote->local-files))
+                (reduce + (map #(:size (.-stat %)) local->remote-files)))
         mins (int (/ (* (/ total finished) diff-seconds) 60))]
     (if (or (zero? total) (zero? finished))
       "waiting"

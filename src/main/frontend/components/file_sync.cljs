@@ -167,7 +167,7 @@
 
 (rum/defc indicator-progress-pane
   [sync-state sync-progress
-   {:keys [idle? syncing? no-active-files? online?]}]
+   {:keys [idle? syncing? no-active-files? online? need-password?]}]
 
   (rum/use-effect!
    (fn []
@@ -223,6 +223,7 @@
            (not online?) "Currently having connection issues..."
            idle-&-no-active? "Everything is synced!"
            syncing? "Currently syncing your graph..."
+           (not need-password?) "Waiting..."
            :else (str "#" status))]])
 
      [:div.b.dark:text-gray-200
