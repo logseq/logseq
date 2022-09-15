@@ -1764,8 +1764,11 @@ Similar to re-frame subscriptions"
 (defn get-file-sync-manager []
   (:file-sync/sync-manager @state))
 
-(defn get-file-sync-state [repo]
-  (get-in @state [:file-sync/sync-state repo]))
+(defn get-file-sync-state
+  ([]
+   (get-file-sync-state (get-current-repo)))
+  ([repo]
+   (get-in @state [:file-sync/sync-state repo])))
 
 (defn reset-parsing-state!
   []
