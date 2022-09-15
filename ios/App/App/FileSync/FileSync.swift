@@ -228,13 +228,14 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             call.reject("cannot decode ciphertext with utf8")
             return
         }
-        call.keepAlive = true
+        self.bridge?.saveCall(call)
         DispatchQueue.global(qos: .default).async {
             if let encrypted = AgeEncryption.encryptWithPassphrase(plaintext, passphrase, armor: true) {
                 call.resolve(["data": String(data: encrypted, encoding: .utf8) as Any])
             } else {
                 call.reject("cannot encrypt with passphrase")
             }
+            self.bridge?.releaseCall(call)
         }
     }
     
@@ -249,13 +250,14 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             call.reject("cannot decode ciphertext with utf8")
             return
         }
-        call.keepAlive = true
+        self.bridge?.saveCall(call)
         DispatchQueue.global(qos: .default).async {
             if let decrypted = AgeEncryption.decryptWithPassphrase(ciphertext, passphrase) {
                 call.resolve(["data": String(data: decrypted, encoding: .utf8) as Any])
             } else {
                 call.reject("cannot decrypt with passphrase")
             }
+            self.bridge?.releaseCall(call)
         }
     }
     
