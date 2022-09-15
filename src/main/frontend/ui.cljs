@@ -142,11 +142,14 @@
 
 (rum/defc menu-link
   [options child shortcut]
-  [:a.flex.justify-between.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
-   options
-   [:span child]
-   (when shortcut
-     [:span.ml-1 (render-keyboard-shortcut shortcut)])])
+  (if (:only-child? options)
+    [:div.menu-link
+     (dissoc options :only-child?) child]
+    [:a.flex.justify-between.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
+     options
+     [:span child]
+     (when shortcut
+       [:span.ml-1 (render-keyboard-shortcut shortcut)])]))
 
 (rum/defc dropdown-with-links
   [content-fn links {:keys [links-header links-footer] :as opts}]
@@ -156,29 +159,31 @@
      [:.menu-links-wrapper
       (when links-header links-header)
 
-      (for [{:keys [options title icon key hr hover-detail item _as-link?]} (if (fn? links) (links) links)]
-        (let [new-options
-              (merge options
-                     (cond->
-                       {:title    hover-detail
-                        :on-click (fn [e]
-                                    (when-not (false? (when-let [on-click-fn (:on-click options)]
-                                                        (on-click-fn e)))
-                                      (close-fn)))}
-                       key
-                       (assoc :key key)))
-              child (if hr
-                      nil
-                      (or item
-                          [:div.flex.items-center
-                           (when icon icon)
-                           [:div {:style {:margin-right "8px"
-                                          :margin-left  "4px"}} title]]))]
-          (if hr
-            [:hr.menu-separator {:key "dropdown-hr"}]
-            (rum/with-key
-              (menu-link new-options child nil)
-              title))))
+      (let [links (if (fn? links) (links) links)
+            links (remove nil? links)]
+        (for [{:keys [options title icon key hr hover-detail item _as-link?]} links]
+          (let [new-options
+                      (merge options
+                             (cond->
+                               {:title    hover-detail
+                                :on-click (fn [e]
+                                            (when-not (false? (when-let [on-click-fn (:on-click options)]
+                                                                (on-click-fn e)))
+                                              (close-fn)))}
+                               key
+                               (assoc :key key)))
+                child (if hr
+                        nil
+                        (or item
+                            [:div.flex.items-center
+                             (when icon icon)
+                             [:div {:style {:margin-right "8px"
+                                            :margin-left  "4px"}} title]]))]
+            (if hr
+              [:hr.menu-separator {:key "dropdown-hr"}]
+              (rum/with-key
+               (menu-link new-options child nil)
+               title)))))
       (when links-footer links-footer)])
    opts))
 

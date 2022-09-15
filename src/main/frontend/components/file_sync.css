@@ -68,8 +68,16 @@
 
       .head-ctls {
         position: absolute;
-        top: 2px;
-        right: 5px;
+        right: 10px;
+        transform: translateY(8px);
+      }
+
+      .cp__file-sync-indicator-progress-pane {
+        transform: translateY(-4px);
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        margin-bottom: -8px;
       }
 
       @screen md {
@@ -97,20 +105,21 @@
           padding: 0 !important;
           user-select: none;
           pointer-events: none;
+          margin-top: 10px;
 
           &:hover {
             background-color: unset !important;
           }
         }
-      }
 
-      i.ti {
-        transform: translate(0);
-        margin-right: 5px;
+        i.ti {
+          transform: translate(0);
+          margin-right: 5px;
+        }
       }
 
       .files-history.is-first, .file-item.is-first {
-        margin-top: 30px;
+        margin-top: 40px;
         position: relative;
 
         &:before {
@@ -146,8 +155,9 @@
   }
 
   &-indicator-progress-pane {
-    @apply border m-5 px-4 pt-5 pb-3 rounded-xl;
+    @apply px-4 pt-4 pb-3 w-full overflow-hidden;
 
+    -webkit-font-smoothing: antialiased;
     background-color: var(--ls-quaternary-background-color);
 
     .ti {
@@ -162,8 +172,16 @@
 
         background-color: var(--ls-color-file-sync-pending);
         border-radius: 4px;
-        height: 20px;
-        width: 20px;
+        height: 24px;
+        width: 24px;
+
+        &.is-no-active {
+          background-color: var(--ls-color-file-sync-idle);
+        }
+      }
+
+      > span {
+        @apply w-full overflow-hidden overflow-ellipsis;
       }
     }
 
@@ -176,26 +194,30 @@
     }
 
     > .c {
-      @apply flex items-center;
+      @apply flex items-center text-gray-200;
+
+      .cl {
+        @apply text-sm leading-6 flex flex-1 items-center overflow-hidden;
+      }
 
       .progress-bar {
         @apply flex flex-1 items-center overflow-hidden;
 
-        height: 6px;
+        height: 7px;
         border-radius: 4px;
         background-color: var(--ls-secondary-background-color);
 
         i {
           transition: width .5s;
           height: 100%;
-          width: 40%;
+          width: 0;
           border-radius: 4px;
           background-color: var(--ls-link-text-color);
         }
       }
 
       .actions {
-        @apply pl-2;
+        @apply pl-2 py-2 text-sm leading-none;
 
         .ti {
           font-size: 14px;
@@ -522,7 +544,7 @@ html[data-theme='light'] {
     &-indicator-progress-pane {
       background-color: var(--ls-tertiary-background-color);
 
-      > .a {
+      > .a, > .c {
         @apply text-gray-700;
       }
 

@@ -163,39 +163,99 @@
       (ui/button "Cancel" :background "gray" :class "opacity-50" :on-click close-fn)
       (ui/button "Create remote graph" :on-click on-confirm)]]))
 
+(def *last-calculated-time (atom nil))
+
 (rum/defc indicator-progress-pane
-  []
+  [sync-state sync-progress
+   {:keys [idle? syncing? full-syncing? no-active-files?]}]
 
-  [:div.cp__file-sync-indicator-progress-pane
-   [:div.a
-    [:strong (ui/icon "thumb-up")]
-    [:span "Currently syncing your graph..."]]
-   
-   [:div.b.dark:text-gray-200
-    [:div.bl
-     [:span.flex.items-center
-      (ui/icon "file-upload")
-      [:span.opacity-60.px-1 "Processed"]]
-     [:span (util/format "%s of %s files" 1 2)]]
-    [:div.br
-     [:small.opacity-50 "- : -"]]]
+  (rum/use-effect!
+   (fn []
+     #(reset! *last-calculated-time nil))
+   [])
 
-   [:div.c
-    [:div.progress-bar
-     [:i]]
-    [:div.actions
-     [:a (ui/icon "chevron-up")]]]])
+  (let [status                 (:state sync-state)
+        status                 (or (nil? status) (keyword (name status)))
 
-(rum/defcs ^:large-vars/cleanup-todo indicator < rum/reactive
-  < {:key-fn #(identity "file-sync-indicator")}
-  (rum/local nil ::last-calculated-time)
+        uploading-files        (:current-local->remote-files sync-state)
+        downloading-files      (:current-remote->local-files sync-state)
+        uploading?             (seq uploading-files)
+        downloading?           (seq downloading-files)
+
+        calc-progress-total    #(cond
+                                  uploading? (count (:full-local->remote-files sync-state))
+                                  downloading? (count (:full-remote->local-files sync-state))
+                                  :else 0)
+        calc-progress-finished (fn [] (count (filter #(= (:percent (second %)) 100) sync-progress)))
+        calc-time-left         (fn [] (let [last-calculated-at (:calculated-at @*last-calculated-time)
+                                            now                (tc/to-epoch (t/now))]
+                                        (if (and last-calculated-at (< (- now last-calculated-at) 10))
+                                          (:result @*last-calculated-time)
+                                          (let [result (file-sync-handler/calculate-time-left sync-state sync-progress)]
+                                            (reset! *last-calculated-time {:calculated-at now
+                                                                           :result        result})
+                                            result))))
+
+        p-total                (if syncing? (calc-progress-total) 0)
+        p-finished             (if syncing? (calc-progress-finished) 0)
+
+        tip-b&p                (if-not syncing?
+                                 [[:span "all file edits"]
+                                  [:div.cl (ui/icon "history")
+                                   [:span.pl-1.opacity-60 "Last change was"]
+                                   [:span.pl-1 "just now"]]]
+                                 [[:span (util/format "%s of %s files" p-finished p-total)]
+                                  [:div.progress-bar [:i {:style
+                                                          {:width (str (if (> p-total 0)
+                                                                         (* (/ p-finished p-total) 100) 0) "%")}}]]])
+        ]
+
+    [:div.cp__file-sync-indicator-progress-pane
+     (let [idle-&-no-active? (and idle? no-active-files?)]
+       [:div.a
+        [:strong
+         {:class (when idle-&-no-active? "is-no-active")}
+         (ui/icon "thumb-up")]
+        [:span
+         (cond
+           idle-&-no-active? "Everything is synced!"
+           syncing? "Currently syncing your graph ..."
+           :else (str "#" status))]])
+
+     [:div.b.dark:text-gray-200
+      [:div.bl
+       [:span.flex.items-center
+        (cond
+          uploading? (ui/icon "file-upload")
+          downloading? (ui/icon "file-download")
+          :else (ui/icon "file-check"))
+
+        (if no-active-files?
+          [:span.opacity-100.px-1 "Successfully processed"]
+          [:span.opacity-60.px-1 "Processed"])]
+
+       (first tip-b&p)]
+
+      [:div.br
+       [:small.opacity-50
+        (when syncing?
+          (calc-time-left))]]]
+
+     [:div.c
+      (second tip-b&p)
+      [:div.actions
+       [:a (ui/icon "chevron-up")]]]]))
+
+(rum/defcs ^:large-vars/cleanup-todo indicator <
+  rum/reactive
+  {:key-fn #(identity "file-sync-indicator")}
   {:will-mount   (fn [state]
                    (let [unsub-fn (file-sync-handler/setup-file-sync-event-listeners)]
                      (assoc state ::unsub-events unsub-fn)))
    :will-unmount (fn [state]
                    (apply (::unsub-events state) nil)
                    state)}
-  [state]
+  [_state]
   (let [_                      (state/sub :auth/id-token)
         current-repo           (state/get-current-repo)
         creating-remote-graph? (state/sub [:ui/loading? :graph/create-remote?])
@@ -206,7 +266,6 @@
         uploading-files        (:current-local->remote-files sync-state)
         downloading-files      (:current-remote->local-files sync-state)
         queuing-files          (:queued-local->remote-files sync-state)
-
         status                    (:state sync-state)
         status                    (or (nil? status) (keyword (name status)))
         off?                      (fs-sync/sync-off? sync-state)
@@ -260,20 +319,7 @@
                                           nil
 
                                           :else
-                                          (create-remote-graph-fn)))))
-
-        full-upload-files-total   (count (:full-local->remote-files sync-state))
-        full-download-files-total (count (:full-remote->local-files sync-state))
-        finished (count (filter #(= (:percent (second %)) 100) sync-progress))
-        *last-calculated-time (::last-calculated-time state)
-        now (tc/to-epoch (t/now))
-        last-calculated-at (:calculated-at @*last-calculated-time)
-        time-left (if (and last-calculated-at (< (- now last-calculated-at) 10))
-                    (:result @*last-calculated-time)
-                    (let [result (file-sync-handler/calculate-time-left sync-state sync-progress)]
-                      (reset! *last-calculated-time {:calculated-at now
-                                                     :result result})
-                      result))]
+                                          (create-remote-graph-fn)))))]
     (if creating-remote-graph?
       (ui/loading "")
       [:div.cp__file-sync-indicator
@@ -299,28 +345,12 @@
           (cond-> []
             synced-file-graph?
             (concat
-             (when (seq uploading-files)
-               [{:item [:div
-                        [:p "Uploading"]
-                        [:p "processing: "
-                         [:span finished]
-                         [:span "/"]
-                         [:span full-upload-files-total]]
-                        [:p "time left: " time-left]]
-                 :as-link? false}])
-             (when (seq downloading-files)
-               [{:item [:div
-                        [:p "Downloading"]
-                        [:p "processing: "
-                         [:span finished]
-                         [:span "/"]
-                         [:span full-download-files-total]]
-                        [:p "time left: " time-left]]
-                 :as-link? false}])
              (if (and no-active-files? idle?)
-               [{:item     [:div.flex.justify-center.w-full.py-2
-                            [:span.opacity-60 "Everything is synced!"]]
-                 :as-link? false}]
+               [(when-not (util/electron?)
+                  {:item     [:div.flex.justify-center.w-full.py-2
+                              [:span.opacity-60 "Everything is synced!"]]
+                   :as-link? false})]
+
                (if need-password?
                  [{:title   [:div.file-item
                              (ui/icon "lock") "Password is required"]
@@ -372,6 +402,15 @@
 
           {:links-header
            [:<>
+            (when (util/electron?)
+              (indicator-progress-pane
+               sync-state sync-progress
+               {:idle?            idle?
+                :syncing?         syncing?
+                :need-password?   need-password?
+                :full-sync?       full-syncing?
+                :no-active-files? no-active-files?}))
+
             (when (and synced-file-graph? queuing?)
               [:div.head-ctls
                (ui/button "Sync now"
