@@ -323,12 +323,6 @@
             ]}))])))
 
 (rum/defc pick-local-graph-for-sync [graph]
-  (rum/use-effect!
-   (fn []
-     (file-sync-handler/set-wait-syncing-graph graph)
-     #(file-sync-handler/set-wait-syncing-graph nil))
-   [graph])
-
   [:div.cp__file-sync-related-normal-modal
    [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "cloud-download")]]
 
@@ -354,8 +348,7 @@
                    (->
                     (page-handler/ls-dir-files!
                      (fn [{:keys [url]}]
-                       (file-sync-handler/init-remote-graph url)
-                       ;; TODO: wait for switch done
+                       (file-sync-handler/init-remote-graph url graph)
                        (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
 
                      {:empty-dir?-or-pred

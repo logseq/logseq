@@ -1788,10 +1788,13 @@ Similar to re-frame subscriptions"
               {:is-active? is-active?
                :timestamp (inst-ms (js/Date.))}))
 
-(defn get-sync-graph-by-uuid
+(defn get-sync-graph-by-id
   [graph-uuid]
   (when graph-uuid
-    (first (filter #(= graph-uuid (:GraphUUID %))(get-repos)))))
+    (let [graph (first (filter #(= graph-uuid (:GraphUUID %))
+                               (get-repos)))]
+      (when (:url graph)
+        graph))))
 
 (defn unlinked-dir?
   [dir]
