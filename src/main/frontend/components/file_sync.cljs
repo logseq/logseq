@@ -167,7 +167,7 @@
 
 (rum/defc indicator-progress-pane
   [sync-state sync-progress
-   {:keys [idle? syncing? full-syncing? no-active-files?]}]
+   {:keys [idle? syncing? no-active-files? online?]}]
 
   (rum/use-effect!
    (fn []
@@ -215,11 +215,14 @@
        [:div.a
         [:strong
          {:class (when idle-&-no-active? "is-no-active")}
-         (ui/icon "thumb-up")]
+         (cond
+           (not online?) (ui/icon "wifi-off")
+           :else (ui/icon "thumb-up"))]
         [:span
          (cond
+           (not online?) "Currently having connection issues..."
            idle-&-no-active? "Everything is synced!"
-           syncing? "Currently syncing your graph ..."
+           syncing? "Currently syncing your graph..."
            :else (str "#" status))]])
 
      [:div.b.dark:text-gray-200
@@ -257,6 +260,7 @@
                    state)}
   [_state]
   (let [_                      (state/sub :auth/id-token)
+        online?                (state/sub :network/online?)
         current-repo           (state/get-current-repo)
         creating-remote-graph? (state/sub [:ui/loading? :graph/create-remote?])
         sync-state             (state/sub [:file-sync/sync-state current-repo])
@@ -409,6 +413,7 @@
                 :syncing?         syncing?
                 :need-password?   need-password?
                 :full-sync?       full-syncing?
+                :online?          online?
                 :no-active-files? no-active-files?}))
 
             (when (and synced-file-graph? queuing?)
