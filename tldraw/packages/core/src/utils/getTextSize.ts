@@ -61,7 +61,11 @@ const saveCached = (text: string, font: string, padding: number, size: [number, 
   cache.set(key, size)
 }
 
-export function getTextLabelSize(text: string, fontOrStyles: string | TLTextMeasureStyles, padding = 0) {
+export function getTextLabelSize(
+  text: string,
+  fontOrStyles: string | TLTextMeasureStyles,
+  padding = 0
+) {
   if (!text) {
     return [16, 32]
   }
