@@ -69,7 +69,7 @@ html[data-theme='dark'] {
   --ls-block-bullet-color: #608e91;
   --ls-block-highlight-color: #0a3d4b;
   --ls-selection-background-color: #338fff;
-  --ls-selection-text-color: var(--ls-secondary-text-color);
+  --ls-selection-text-color: #fff;
   --ls-page-checkbox-color: #6093a0;
   --ls-page-checkbox-border-color: var(--ls-primary-background-color);
   --ls-page-blockquote-color: var(--ls-primary-text-color);
