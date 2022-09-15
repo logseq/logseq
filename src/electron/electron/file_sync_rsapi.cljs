@@ -1,6 +1,6 @@
 (ns electron.file-sync-rsapi
   (:require ["@logseq/rsapi" :as rsapi]
-            [electron.utils :refer [logger]]
+            [electron.logger :as logger]
             [electron.window :as window]))
 
 (defn key-gen [] (rsapi/keygen))
@@ -61,4 +61,4 @@
                                                    :progress progress :total total
                                                    :percent (Math/floor (/ (* progress 100) total))})))))
 
-                           (.info logger "sync progess" fname type progress total))))
+                           (logger/info "sync progess" fname type progress total))))
