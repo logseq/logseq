@@ -6,7 +6,7 @@
  *  - update the tie-xxx css rules
  */
 
- @font-face {
+@font-face {
   font-family: 'tabler-icons-extension';
   src: url('../fonts/tabler-icons-extension.woff2?mxgthk') format('woff2');
   font-style: normal;
@@ -29,73 +29,73 @@
 }
 
 .tie-app-feature::before {
-  content: "\ea01";
+  content: '\ea01';
 }
 
 .tie-block::before {
-  content: "\ea02";
+  content: '\ea02';
 }
 
 .tie-block-search::before {
-  content: "\ea03";
+  content: '\ea03';
 }
 
 .tie-connector::before {
-  content: "\ea04";
+  content: '\ea04';
 }
 
 .tie-new-block::before {
-  content: "\ea05";
+  content: '\ea05';
 }
 
 .tie-new-page::before {
-  content: "\ea06";
+  content: '\ea06';
 }
 
 .tie-new-whiteboard::before {
-  content: "\ea07";
+  content: '\ea07';
 }
 
 .tie-new-whiteboard-element::before {
-  content: "\ea08";
+  content: '\ea08';
 }
 
 .tie-object-compact::before {
-  content: "\ea09";
+  content: '\ea09';
 }
 
 .tie-object-expanded::before {
-  content: "\ea0a";
+  content: '\ea0a';
 }
 
 .tie-page::before {
-  content: "\ea0b";
+  content: '\ea0b';
 }
 
 .tie-page-search::before {
-  content: "\ea0c";
+  content: '\ea0c';
 }
 
 .tie-references-hide::before {
-  content: "\ea0d";
+  content: '\ea0d';
 }
 
 .tie-references-show::before {
-  content: "\ea0e";
+  content: '\ea0e';
 }
 
 .tie-select-cursor::before {
-  content: "\ea0f";
+  content: '\ea0f';
 }
 
 .tie-text::before {
-  content: "\ea10";
+  content: '\ea10';
 }
 
 .tie-whiteboard::before {
-  content: "\ea11";
+  content: '\ea11';
 }
 
 .tie-whiteboard-element::before {
-  content: "\ea12";
+  content: '\ea12';
 }
