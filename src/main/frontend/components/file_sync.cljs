@@ -26,7 +26,9 @@
             [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]))
 
 (declare maybe-onboarding-show)
 (declare open-icloud-graph-clone-picker)
@@ -163,13 +165,14 @@
 
 (rum/defcs ^:large-vars/cleanup-todo indicator < rum/reactive
   < {:key-fn #(identity "file-sync-indicator")}
+  (rum/local nil ::last-calculated-time)
   {:will-mount   (fn [state]
                    (let [unsub-fn (file-sync-handler/setup-file-sync-event-listeners)]
                      (assoc state ::unsub-events unsub-fn)))
    :will-unmount (fn [state]
                    (apply (::unsub-events state) nil)
                    state)}
-  [_state]
+  [state]
   (let [_                      (state/sub :auth/id-token)
         current-repo           (state/get-current-repo)
         creating-remote-graph? (state/sub [:ui/loading? :graph/create-remote?])
@@ -238,7 +241,16 @@
 
         full-upload-files-total (count (:full-local->remote-files sync-state))
         full-download-files-total (count (:full-remote->local-files sync-state))
-        finished (count (filter #(= (:percent (second %)) 100) sync-progress))]
+        finished (count (filter #(= (:percent (second %)) 100) sync-progress))
+        *last-calculated-time (::last-calculated-time state)
+        now (tc/to-epoch (t/now))
+        last-calculated-at (:calculated-at @*last-calculated-time)
+        time-left (if (and last-calculated-at (< (- now last-calculated-at) 10))
+                    (:result @*last-calculated-time)
+                    (let [result (file-sync-handler/calculate-time-left sync-state sync-progress)]
+                      (reset! *last-calculated-time {:calculated-at now
+                                                     :result result})
+                      result))]
     (if creating-remote-graph?
       (ui/loading "")
       [:div.cp__file-sync-indicator
@@ -270,7 +282,8 @@
                         [:p "processing: "
                          [:span finished]
                          [:span "/"]
-                         [:span full-upload-files-total]]]
+                         [:span full-upload-files-total]]
+                        [:p "time left: " time-left]]
                  :as-link? false}])
              (when (seq downloading-files)
                [{:item [:div
@@ -278,7 +291,8 @@
                         [:p "processing: "
                          [:span finished]
                          [:span "/"]
-                         [:span full-download-files-total]]]
+                         [:span full-download-files-total]]
+                        [:p "time left: " time-left]]
                  :as-link? false}])
              (if (and no-active-files? idle?)
                [{:item [:div.flex.justify-center.w-full.py-2

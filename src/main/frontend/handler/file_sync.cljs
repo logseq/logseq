@@ -10,7 +10,9 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.handler.user :as user]
-            [frontend.fs :as fs]))
+            [frontend.fs :as fs]
+            [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]))
 
 (def *beta-unavailable? (volatile! false))
 
@@ -188,22 +190,49 @@
   []
   (let [c     (async/chan 1)
         p     sync/sync-events-publication
-        topic :finished-local->remote]
-
-    (async/sub p topic c)
+        topics [:finished-local->remote :finished-remote->local :start]]
+    (doseq [topic topics]
+      (async/sub p topic c))
 
     (async/go-loop []
       (let [{:keys [event data]} (async/<! c)]
-        (when (contains? #{:finished-local->remote :finished-remote->local} event)
-          (state/set-state! :file-sync/progress {}))
+        (case event
+          (list :finished-local->remote :finished-remote->local)
+          (do
+            (state/set-state! :file-sync/progress {})
+            (state/set-state! :file-sync/start {}))
+
+          :start
+          (state/set-state! :file-sync/start data)
+
+          nil)
 
         (when (and (:file-change-events data)
                    (= :page (state/get-current-route)))
           (state/pub-event! [:file-sync/maybe-onboarding-show :sync-history])))
       (recur))
 
-    #(async/unsub p topic c)))
+    #(doseq [topic topics]
+       (async/unsub p topic c))))
 
 (defn reset-user-state! []
   (vreset! *beta-unavailable? false)
   (state/set-state! :file-sync/onboarding-state nil))
+
+(defn calculate-time-left
+  "This assumes that the network speed is stable which could be wrong sometimes."
+  [sync-state progressing]
+  (let [start-time (get-in @state/state [:file-sync/start :epoch])
+        now (tc/to-epoch (t/now))
+        diff-seconds (- now start-time)
+        finished (reduce + (map (comp :progress second) progressing))
+        all-files (or (:full-local->remote-files sync-state)
+                      (:full-remote->local-files sync-state))
+        total (reduce + (map #(:size (.-stat %)) all-files))
+        mins (int (/ (* (/ total finished) diff-seconds) 60))]
+    (if (or (zero? total) (zero? finished))
+      "waiting"
+      (case mins
+       0 "soon"
+       1 "1 min left"
+       (str mins " mins left")))))

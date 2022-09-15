@@ -142,6 +142,7 @@
 (s/def ::event #{:created-local-version-file
                  :finished-local->remote
                  :finished-remote->local
+                 :start
                  :pause
                  :resume
                  :exception-decrypt-failed
@@ -2061,9 +2062,15 @@
             r
             (if (empty? (flatten partitioned-filetxns))
               {:succ true}
-              (<! (apply-filetxns-partitions
-                   *sync-state user-uuid graph-uuid base-path partitioned-filetxns repo
-                   nil *stopped *paused)))]
+              (do
+                (put-sync-event! {:event :start
+                                  :data  {:type :full-remote->local
+                                          :graph-uuid graph-uuid
+                                          :full-sync? true
+                                          :epoch      (tc/to-epoch (t/now))}})
+                (<! (apply-filetxns-partitions
+                    *sync-state user-uuid graph-uuid base-path partitioned-filetxns repo
+                    nil *stopped *paused))))]
         (cond
           (instance? ExceptionInfo r) {:unknown r}
           @*stopped                   {:stop true}
@@ -2092,6 +2099,11 @@
                                                             (completing (fn [r i] (conj r (reverse i)))) ;reverse
                                                             '()
                                                             (reverse diff-txns))]
+                        (put-sync-event! {:event :start
+                                          :data  {:type :remote->local
+                                                  :graph-uuid graph-uuid
+                                                  :full-sync? false
+                                                  :epoch      (tc/to-epoch (t/now))}})
                         (if (empty? (flatten partitioned-filetxns))
                           (do (update-graphs-txid! latest-txid graph-uuid user-uuid repo)
                               (reset! *txid latest-txid)
@@ -2358,6 +2370,11 @@
                    distinct-change-events)]
               (println "[full-sync(local->remote)]"
                        (count (flatten change-events-partitions)) "files need to sync")
+              (put-sync-event! {:event :start
+                                :data  {:type :full-local->remote
+                                        :graph-uuid graph-uuid
+                                        :full-sync? true
+                                        :epoch      (tc/to-epoch (t/now))}})
               (loop [es-partitions change-events-partitions]
                 (if @*stopped
                   {:stop true}
@@ -2629,6 +2646,11 @@
             _ (swap! *sync-state #(sync-state-reset-full-local->remote-files % distincted-local-changes))
             change-events-partitions
             (sequence (partition-file-change-events 10) distincted-local-changes)
+            _ (put-sync-event! {:event :start
+                                :data  {:type       :local->remote
+                                        :graph-uuid graph-uuid
+                                        :full-sync? false
+                                        :epoch      (tc/to-epoch (t/now))}})
             {:keys [succ need-sync-remote graph-has-been-deleted unknown stop pause]}
             (loop [es-partitions change-events-partitions]
               (cond
