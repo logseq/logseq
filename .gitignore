@@ -45,3 +45,5 @@ startup.png
 
 /src/test/docs
 ~*~
+
+ios/App/App/capacitor.config.json

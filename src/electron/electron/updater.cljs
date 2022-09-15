@@ -1,5 +1,6 @@
 (ns electron.updater
-  (:require [electron.utils :refer [mac? win32? prod? open fetch logger *win]]
+  (:require [electron.utils :refer [mac? win32? prod? open fetch *win]]
+            [electron.logger :as logger]
             [frontend.version :refer [version]]
             [clojure.string :as string]
             [promesa.core :as p]
@@ -13,7 +14,7 @@
 
 (def *update-ready-to-install (atom nil))
 (def *update-pending (atom nil))
-(def debug (partial (.-debug logger) "[updater]"))
+(def debug (partial logger/debug "[updater]"))
 
 ;Event: 'error'
 ;Event: 'checking-for-update'
@@ -41,7 +42,7 @@
            (bean/->clj info))
          (throw (js/Error. (str "[" status "] " text)))))
      (fn [e]
-       (.warn logger "[update server error]" e)
+       (logger/warn "[update server error]" e)
        (throw e)))))
 
 (defn check-for-updates
@@ -111,7 +112,7 @@
 
 (defn- new-version-downloaded-cb
   [_ notes name date url]
-  (.info logger "[update-downloaded]" name notes date url)
+  (logger/info "[update-downloaded]" name notes date url)
   (when-let [web-contents (and @*win (. ^js @*win -webContents))]
     (.send web-contents "auto-updater-downloaded"
            (bean/->js {:notes notes :name name :date date :url url}))))
@@ -131,14 +132,14 @@
               (debug "forward update to autoUpdater")
               ;; FIXME: It seems that update-electron-app doesn't work on linux
               (when-let [f (js/require "update-electron-app")]
-                (f #js{:notifyUser false :logger logger})
+                (f #js{:notifyUser false})
                 (.once autoUpdater "update-downloaded"
                        new-version-downloaded-cb))))
 
           (debug "Skip remote version [ahead of pre-release]" remote-version))))))
 
 (defn init-updater
-  [{:keys [repo _logger ^js _win] :as opts}]
+  [{:keys [repo ^js _win] :as opts}]
   (and prod? (not= false (cfgs/get-item :auto-update)) (init-auto-updater repo))
   (let [check-channel "check-for-updates"
         install-channel "install-updates"

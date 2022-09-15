@@ -38,12 +38,14 @@
 (defn read-graphs-txid-info
   [root]
   (when (string? root)
-    (-> (p/let [txid-str (fs/read-file root "logseq/graphs-txid.edn")
-                txid-meta (and txid-str (reader/read-string txid-str))]
-          txid-meta)
-        (p/catch
-         (fn [^js e]
-           (js/console.error "[fs read txid data error]" e))))))
+    (p/let [exists? (fs/file-exists? root "logseq/graphs-txid.edn")]
+      (when exists?
+        (-> (p/let [txid-str (fs/read-file root "logseq/graphs-txid.edn")
+                    txid-meta (and txid-str (reader/read-string txid-str))]
+              txid-meta)
+            (p/catch
+                (fn [^js e]
+                  (js/console.error "[fs read txid data error]" e))))))))
 
 (defn inflate-graphs-info
   [graphs]

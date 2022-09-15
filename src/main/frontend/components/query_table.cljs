@@ -110,7 +110,7 @@
                   keys))
           desc? (desc? *desc? p-desc?)
           result (sort-result-by (fn [item]
-                                   (sort-by-fn sort-by-item item))
+                                   (block/normalize-block (sort-by-fn sort-by-item item)))
                                  desc?
                                  result)]
       [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))

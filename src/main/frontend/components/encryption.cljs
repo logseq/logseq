@@ -51,10 +51,20 @@
   (fn [close-fn]
     (encryption-dialog-inner repo-url close-fn)))
 
+(rum/defc show-password-cp
+  [*show-password?]
+  [:div.flex.flex-row.items-center
+   [:label {:for "show-password"}
+    (ui/checkbox {:checked? @*show-password?
+                  :on-change (fn [e]
+                               (reset! *show-password? (util/echecked? e)))})]
+   [:span.text-sm.ml-1.opacity-80 "Show password"]])
+
 (rum/defcs ^:large-vars/cleanup-todo input-password-inner < rum/reactive
   (rum/local "" ::password)
   (rum/local "" ::pw-confirm)
   (rum/local false ::pw-confirm-focused?)
+  (rum/local false ::show-password?)
   {:will-mount (fn [state]
                  ;; try to close tour tips
                  (some->> (state/sub :file-sync/jstour-inst)
@@ -64,6 +74,7 @@
   (let [*password (get state ::password)
         *pw-confirm (get state ::pw-confirm)
         *pw-confirm-focused? (get state ::pw-confirm-focused?)
+        *show-password? (get state ::show-password?)
         *input-ref-0 (rum/create-ref)
         *input-ref-1 (rum/create-ref)
         remote-pw? (= type :input-pwd-remote)
@@ -213,7 +224,7 @@
                        :class (when (>= (int (:id pw-strength)) i) "active")} i])]]])]))
 
       [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-       {:type        "password"
+       {:type        (if @*show-password? "text" "password")
         :ref         *input-ref-0
         :placeholder "Password"
         :auto-focus  true
@@ -226,7 +237,7 @@
 
       (when init-graph-keys
         [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-         {:type        "password"
+         {:type        (if @*show-password? "text" "password")
           :ref         *input-ref-1
           :placeholder "Re-enter the password"
           :on-focus    #(reset! *pw-confirm-focused? true)
@@ -235,6 +246,8 @@
           :on-key-up   enter-handler
           :on-change   (fn [^js e]
                          (reset! *pw-confirm (util/evalue e)))}])
+
+      (show-password-cp *show-password?)
 
       (when init-graph-keys
         [:div.init-remote-pw-tips.space-x-4.pt-2.hidden.sm:flex
@@ -307,9 +320,11 @@
 (rum/defcs encryption-input-secret-inner <
   (rum/local "" ::secret)
   (rum/local false ::loading)
+  (rum/local false ::show-password?)
   [state _repo-url db-encrypted-secret close-fn]
   (let [secret (::secret state)
         loading (::loading state)
+        *show-password? (::show-password? state)
         on-click-fn (fn []
                       (reset! loading true)
                       (let [value @secret]
@@ -330,13 +345,15 @@
         "Enter your password"]]]
 
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-      {:type "password"
+      {:type (if @*show-password? "text" "password")
        :auto-focus true
        :on-change (fn [e]
                     (reset! secret (util/evalue e)))
        :on-key-down (fn [e]
                       (when (= (.-key e) "Enter")
                         (on-click-fn)))}]
+
+     (show-password-cp *show-password?)
 
      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
       [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
