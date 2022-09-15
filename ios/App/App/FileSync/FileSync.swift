@@ -7,7 +7,6 @@
 
 import Capacitor
 import Foundation
-import AWSMobileClient
 import CryptoKit
 
 
@@ -119,13 +118,6 @@ public struct SyncMetadata: CustomStringConvertible, Equatable {
 public class FileSync: CAPPlugin, SyncDebugDelegate {
     override public func load() {
         print("debug FileSync iOS plugin loaded!")
-        
-        AWSMobileClient.default().initialize { (userState, error) in
-            guard error == nil else {
-                print("error initializing AWSMobileClient. Error: \(error!.localizedDescription)")
-                return
-            }
-        }
     }
     
     // NOTE: for debug, or an activity indicator

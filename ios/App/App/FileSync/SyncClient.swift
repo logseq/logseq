@@ -7,7 +7,6 @@
 
 import os
 import Foundation
-import AWSMobileClient
 import AWSS3
 
 public protocol SyncDebugDelegate {
