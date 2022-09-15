@@ -7,7 +7,7 @@ import * as React from 'react'
 import { Arrow } from './arrow/Arrow'
 import { getArrowPath } from './arrow/arrowHelpers'
 import { CustomStyleProps, withClampedStyles } from './style-props'
-import { getTextLabelSize } from './text/getTextSize'
+import { getTextLabelSize } from '@tldraw/core'
 import { LabelMask } from './text/LabelMask'
 import { TextLabel } from './text/TextLabel'
 
@@ -53,8 +53,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       label,
       id,
     } = this.props
-    const app = useApp()
-    const labelSize = label || isEditing ? getTextLabelSize(label, font) : [0, 0]
+    const labelSize = label || isEditing ? getTextLabelSize(label, font, 4) : [0, 0]
     const midPoint = Vec.med(start.point, end.point)
     const dist = Vec.dist(start.point, end.point)
     const scale = Math.max(
@@ -69,7 +68,6 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     const handleLabelChange = React.useCallback(
       (label: string) => {
         this.update?.({ label })
-        app.persist()
       },
       [label]
     )
@@ -105,7 +103,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       handles: { start, end },
     } = this.props
     const bounds = this.getBounds()
-    const labelSize = label ? getTextLabelSize(label, font) : [0, 0]
+    const labelSize = label ? getTextLabelSize(label, font, 4) : [0, 0]
     const midPoint = Vec.med(start.point, end.point)
     const dist = Vec.dist(start.point, end.point)
     const scale = Math.max(

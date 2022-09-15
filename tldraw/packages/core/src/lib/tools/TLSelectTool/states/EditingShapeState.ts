@@ -22,7 +22,7 @@ export class EditingShapeState<
 
   onExit = () => {
     // cleanup text shapes
-    if ('text' in this.editingShape.props) {
+    if (this.editingShape && 'text' in this.editingShape.props) {
       // @ts-expect-error better typing
       const newText = this.editingShape.props['text'].trim()
 

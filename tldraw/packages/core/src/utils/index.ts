@@ -7,6 +7,7 @@ export * from './PolygonUtils'
 export * from './SvgPathUtils'
 export * from './DataUtils'
 export * from './TextUtils'
+export * from './getTextSize'
 
 export function uniqueId() {
   return uuid.v1()
