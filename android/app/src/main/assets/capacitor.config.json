@@ -17,5 +17,9 @@
 	},
 	"ios": {
 		"scheme": "Logseq"
+	},
+	"server": {
+		"url": "http://192.168.199.241:3001",
+		"cleartext": true
 	}
 }
