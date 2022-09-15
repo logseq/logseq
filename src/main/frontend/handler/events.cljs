@@ -106,7 +106,7 @@
       (route-handler/redirect! {:to :import :query-params {:from "picker"}})
       (route-handler/redirect-to-home!)))
   (repo-handler/refresh-repos!)
-  (file-sync-stop!))
+  (file-sync-restart!))
 
 (defn- graph-switch
   ([graph]
