@@ -193,11 +193,13 @@
     (async/sub p topic c)
 
     (async/go-loop []
-      (let [{:keys [data]} (async/<! c)]
+      (let [{:keys [event data]} (async/<! c)]
+        (when (contains? #{:finished-local->remote :finished-remote->local} event)
+          (state/set-state! :file-sync/progress {}))
+
         (when (and (:file-change-events data)
                    (= :page (state/get-current-route)))
-          (state/pub-event!
-           [:file-sync/maybe-onboarding-show :sync-history])))
+          (state/pub-event! [:file-sync/maybe-onboarding-show :sync-history])))
       (recur))
 
     #(async/unsub p topic c)))

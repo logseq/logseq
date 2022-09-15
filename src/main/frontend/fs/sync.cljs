@@ -1925,7 +1925,9 @@
   {:post [(s/valid? ::sync-state %)]}
   {:current-syncing-graph-uuid  nil
    :state                       ::starting
+   :full-local->remote-files    #{}
    :current-local->remote-files #{}
+   :full-remote->local-files    #{}
    :current-remote->local-files #{}
    :queued-local->remote-files  #{}
    :recent-remote->local-files  #{}
@@ -1984,6 +1986,16 @@
   {:post [(s/valid? ::sync-state %)]}
   (update sync-state :recent-remote->local-files set/difference items))
 
+(defn sync-state-reset-full-local->remote-files
+  [sync-state events]
+  {:post [(s/valid? ::sync-state %)]}
+  (assoc sync-state :full-local->remote-files events))
+
+(defn sync-state-reset-full-remote->local-files
+  [sync-state events]
+  {:post [(s/valid? ::sync-state %)]}
+  (assoc sync-state :full-remote->local-files events))
+
 (defn- add-history-items
   [history paths now]
   (sequence
@@ -2041,7 +2053,8 @@
   (sync-files-remote->local!
     [_ relative-filepath+checksum-coll latest-txid]
     (go
-      (let [partitioned-filetxns
+      (let [_ (swap! *sync-state #(sync-state-reset-full-remote->local-files % relative-filepath+checksum-coll))
+            partitioned-filetxns
             (sequence (filepath+checksum-coll->partitioned-filetxns
                        10 graph-uuid user-uuid)
                       relative-filepath+checksum-coll)
@@ -2074,7 +2087,8 @@
                         {:need-remote->local-full-sync true})
 
                     (when (pos-int? latest-txid)
-                      (let [partitioned-filetxns (transduce (diffs->partitioned-filetxns 10)
+                      (let [_ (swap! *sync-state #(sync-state-reset-full-remote->local-files % diff-txns))
+                            partitioned-filetxns (transduce (diffs->partitioned-filetxns 10)
                                                             (completing (fn [r i] (conj r (reverse i)))) ;reverse
                                                             '()
                                                             (reverse diff-txns))]
@@ -2335,11 +2349,13 @@
                                              {:size (:size %)} (:etag %)))
                     (remove ignored?))
                    diff-local-files)
+                  distinct-change-events (distinct-file-change-events change-events)
+                  _ (swap! *sync-state #(sync-state-reset-full-local->remote-files % distinct-change-events))
                   change-events-partitions
                   (sequence
                    ;; partition FileChangeEvents
                    (partition-file-change-events 10)
-                   (distinct-file-change-events change-events))]
+                   distinct-change-events)]
               (println "[full-sync(local->remote)]"
                        (count (flatten change-events-partitions)) "files need to sync")
               (loop [es-partitions change-events-partitions]
@@ -2610,6 +2626,7 @@
     (assert (some? local-changes) local-changes)
     (go
       (let [distincted-local-changes (distinct-file-change-events local-changes)
+            _ (swap! *sync-state #(sync-state-reset-full-local->remote-files % distincted-local-changes))
             change-events-partitions
             (sequence (partition-file-change-events 10) distincted-local-changes)
             {:keys [succ need-sync-remote graph-has-been-deleted unknown stop pause]}
@@ -2860,6 +2877,16 @@
   (<get-local-all-files-meta rsapi graph-uuid
                              (config/get-repo-dir (state/get-current-repo)))
   (def base-path (config/get-repo-dir (state/get-current-repo)))
+
+  ;; upload
+  (def full-upload-files (:full-local->remote-files (state/sub [:file-sync/sync-state (state/get-current-repo)])))
+  (def finished-uploaded-files (state/sub :file-sync/progress))
+
+  ;; queued
+  (:queued-local->remote-files (state/sub [:file-sync/sync-state (state/get-current-repo)]))
+
+  ;; download
+  (:current-remote->local-files (state/sub [:file-sync/sync-state (state/get-current-repo)]))
   )
 
 

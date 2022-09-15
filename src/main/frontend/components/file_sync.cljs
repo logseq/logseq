@@ -234,8 +234,11 @@
                                        nil
 
                                        :else
-                                       (create-remote-graph-fn)))))]
+                                       (create-remote-graph-fn)))))
 
+        full-upload-files-total (count (:full-local->remote-files sync-state))
+        full-download-files-total (count (:full-remote->local-files sync-state))
+        finished (count (filter #(= (:percent (second %)) 100) sync-progress))]
     (if creating-remote-graph?
       (ui/loading "")
       [:div.cp__file-sync-indicator
@@ -261,6 +264,22 @@
           (cond-> []
             synced-file-graph?
             (concat
+             (when (seq uploading-files)
+               [{:item [:div
+                        [:p "Uploading"]
+                        [:p "processing: "
+                         [:span finished]
+                         [:span "/"]
+                         [:span full-upload-files-total]]]
+                 :as-link? false}])
+             (when (seq downloading-files)
+               [{:item [:div
+                        [:p "Downloading"]
+                        [:p "processing: "
+                         [:span finished]
+                         [:span "/"]
+                         [:span full-download-files-total]]]
+                 :as-link? false}])
              (if (and no-active-files? idle?)
                [{:item [:div.flex.justify-center.w-full.py-2
                         [:span.opacity-60 "Everything is synced!"]]
