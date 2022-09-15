@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [logseq.graph-parser :as graph-parser]
             [logseq.db :as ldb]
+            [logseq.db.default :as default-db]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
             [datascript.core :as d]))
@@ -235,3 +236,20 @@
                 (map first)
                 (map #(select-keys % [:block/properties :block/invalid-properties]))))
         "Has correct (in)valid page properties")))
+
+(deftest correct-page-names-created
+  (testing "from title"
+    (let [conn (ldb/start-conn)
+          built-in-pages (set (map string/lower-case default-db/built-in-pages-names))]
+      (graph-parser/parse-file conn
+                               "foo.md"
+                               "title:: core.async"
+                               {})
+      (is (= #{"core.async"}
+             (->> (d/q '[:find (pull ?b [*])
+                         :in $
+                         :where [?b :block/name]]
+                       @conn)
+                  (map (comp :block/name first))
+                  (remove built-in-pages)
+                  set))))))

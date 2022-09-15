@@ -3,6 +3,7 @@
             [goog.string :as gstring]
             [clojure.string :as string]
             [clojure.set :as set]
+            [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.page-ref :as page-ref]))
@@ -135,9 +136,8 @@
 (defn separated-by-commas?
   [config-state k]
   (let [k' (if (keyword? k) k (keyword k))]
-    (contains? (set/union #{:alias :tags}
-                          (set (get config-state :property/separated-by-commas))
-                          (set (:property/separated-by-commas config-state)))
+    (contains? (set/union gp-property/editable-linkable-built-in-properties
+                          (set (get config-state :property/separated-by-commas)))
                k')))
 
 (defn parse-property

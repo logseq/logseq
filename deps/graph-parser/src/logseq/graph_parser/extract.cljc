@@ -78,7 +78,7 @@
                                       (map (fn [tag] {:block/name (gp-util/page-name-sanity-lc tag)
                                                       :block/original-name tag})
                                         tags))))]
-    (update result :block/properties #(dissoc % :tags :alias))))
+    (update result :block/properties #(apply dissoc % gp-property/editable-linkable-built-in-properties))))
 
 (defn- build-page-map
   [properties invalid-properties file page page-name {:keys [date-formatter db from-page]}]
