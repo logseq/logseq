@@ -108,6 +108,9 @@
   (repo-handler/refresh-repos!)
   (file-sync-restart!))
 
+(defmethod handle :graph/refresh [_]
+  (repo-handler/refresh-repos!))
+
 (defn- graph-switch
   ([graph]
    (graph-switch graph false))
