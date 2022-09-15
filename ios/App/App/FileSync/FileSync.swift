@@ -413,7 +413,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
                 
                 let progressHandler = {(fraction: Double) in
                     self.debugNotification(["event": "download:progress",
-                                            "data": ["filePath": filePath,
+                                            "data": ["file": filePath,
                                                      "fraction": fraction]])
                 }
                 
@@ -424,21 +424,14 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
                         print("debug download \(error) in \(filePath)")
                     case .success(let tempURL):
                         do {
-                            // Remove any existing document at file
-                            if FileManager.default.fileExists(atPath: localFileURL.path) {
-                                try FileManager.default.removeItem(at: localFileURL)
-                            } else {
-                                let parentURL = localFileURL.deletingLastPathComponent()
-                                try FileManager.default.createDirectory(at: parentURL, withIntermediateDirectories: true, attributes: nil)
-                            }
                             let rawData = try Data(contentsOf: tempURL!)
                             guard let decryptedRawData = maybeDecrypt(rawData) else {
-                                throw NSError(domain: FileSyncErrorDomain, code: 0, userInfo: [NSLocalizedDescriptionKey: "can not decrypt downloaded file"])
+                                throw NSError(domain: FileSyncErrorDomain,
+                                              code: 0,
+                                              userInfo: [NSLocalizedDescriptionKey: "can not decrypt downloaded file"])
                             }
-                            try decryptedRawData.write(to: localFileURL, options: .atomic)
-                            
+                            try localFileURL.writeData(data: decryptedRawData)
                             self.debugNotification(["event": "download:file", "data": ["file": filePath]])
-                            
                             downloaded.append(filePath)
                         } catch {
                             // Handle potential file system errors
@@ -471,32 +464,43 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
         client.getVersionFiles(at: filePaths) {  (fileURLDict, error) in
             if let error = error {
                 print("debug getVersionFiles error \(error)")
-                self.debugNotification(["event": "version-download:error", "data": ["message": "error while getting version files \(filePaths)"]])
                 call.reject(error.localizedDescription)
             } else {
                 // handle multiple completionHandlers
                 let group = DispatchGroup()
                 
                 var downloaded: [String] = []
-                
                 for (filePath, remoteFileURL) in fileURLDict {
                     group.enter()
                     
                     // NOTE: fileURLs from getFiles API is percent-encoded
                     let localFileURL = baseURL.appendingPathComponent("logseq/version-files/").appendingPathComponent(filePath.removingPercentEncoding!)
-                    remoteFileURL.download(toFile: localFileURL) {error in
-                        if let error = error {
-                            self.debugNotification(["event": "version-download:error", "data": ["message": "error while downloading \(filePath): \(error)"]])
+                    // empty progress handler
+                    let progressHandler = {(fraction: Double) in
+                    }
+                    
+                    client.download(url: remoteFileURL, progressHandler: progressHandler) {result in
+                        switch result {
+                        case .failure(let error):
                             print("debug download \(error) in \(filePath)")
-                        } else {
-                            self.debugNotification(["event": "version-download:file", "data": ["file": filePath]])
-                            downloaded.append(filePath)
+                        case .success(let tempURL):
+                            do {
+                                let rawData = try Data(contentsOf: tempURL!)
+                                guard let decryptedRawData = maybeDecrypt(rawData) else {
+                                    throw NSError(domain: FileSyncErrorDomain,
+                                                  code: 0,
+                                                  userInfo: [NSLocalizedDescriptionKey: "can not decrypt remote file"])
+                                }
+                                try localFileURL.writeData(data: decryptedRawData)
+                                downloaded.append(filePath)
+                            } catch {
+                                print(error)
+                            }
                         }
                         group.leave()
                     }
                 }
                 group.notify(queue: .main) {
-                    self.debugNotification(["event": "version-download:done"])
                     call.resolve(["ok": true, "data": downloaded])
                 }
                 
@@ -577,7 +581,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             // 2. upload_temp_file
             let progressHandler = {(filePath: String, fraction: Double) in
                 self.debugNotification(["event": "upload:progress",
-                                        "data": ["filePath": filePath,
+                                        "data": ["file": filePath,
                                                  "fraction": fraction]])
             }
             client.uploadTempFiles(files, credentials: credentials!, progressHandler: progressHandler) { (uploadedFileKeyDict, fileMd5Dict, error) in
