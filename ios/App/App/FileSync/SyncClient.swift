@@ -5,6 +5,7 @@
 //  Created by Mono Wang on 4/8/R4.
 //
 
+import os
 import Foundation
 import AWSMobileClient
 import AWSS3
@@ -12,7 +13,6 @@ import AWSS3
 public protocol SyncDebugDelegate {
     func debugNotification(_ message: [String: Any])
 }
-
 
 public class SyncClient {
     private var token: String
@@ -36,7 +36,7 @@ public class SyncClient {
         self.graphUUID = graphUUID
         self.txid = txid
     }
-
+    
     // get_files
     // => file_path, file_url
     public func getFiles(at filePaths: [String], completionHandler: @escaping ([String: URL], Error?) -> Void) {
@@ -66,7 +66,7 @@ public class SyncClient {
             
             if (response as? HTTPURLResponse)?.statusCode != 200 {
                 let body = String(data: data!, encoding: .utf8) ?? "";
-                completionHandler([:], NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "http error \(body)"]))
+                completionHandler([:], NSError(domain: FileSyncErrorDomain, code: 400, userInfo: [NSLocalizedDescriptionKey: "http error \(body)"]))
                 return
             }
             
@@ -77,7 +77,7 @@ public class SyncClient {
                 completionHandler(files.mapValues({ url in URL(string: url)!}), nil)
             } else {
                 // Handle unexpected error
-                completionHandler([:], NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "unexpected error"]))
+                completionHandler([:], NSError(domain: FileSyncErrorDomain, code: 400, userInfo: [NSLocalizedDescriptionKey: "unexpected error"]))
             }
         }
         task.resume()
@@ -110,7 +110,7 @@ public class SyncClient {
             
             if (response as? HTTPURLResponse)?.statusCode != 200 {
                 let body = String(data: data!, encoding: .utf8) ?? "";
-                completionHandler([:], NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "http error \(body)"]))
+                completionHandler([:], NSError(domain: FileSyncErrorDomain, code: 400, userInfo: [NSLocalizedDescriptionKey: "http error \(body)"]))
                 return
             }
             
@@ -121,7 +121,7 @@ public class SyncClient {
                 completionHandler(files.mapValues({ url in URL(string: url)!}), nil)
             } else {
                 // Handle unexpected error
-                completionHandler([:], NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "unexpected error"]))
+                completionHandler([:], NSError(domain: FileSyncErrorDomain, code: 400, userInfo: [NSLocalizedDescriptionKey: "unexpected error"]))
             }
         }
         task.resume()
@@ -159,7 +159,7 @@ public class SyncClient {
                 
                 if response.statusCode == 409 {
                     if body.contains("txid_to_validate") {
-                        completionHandler(nil, NSError(domain: "",
+                        completionHandler(nil, NSError(domain: FileSyncErrorDomain,
                                                        code: 409,
                                                        userInfo: [NSLocalizedDescriptionKey: "invalid txid: \(body)"]))
                         return
@@ -167,7 +167,7 @@ public class SyncClient {
                     // fallthrough
                 }
                 if response.statusCode != 200 {
-                    completionHandler(nil, NSError(domain: "",
+                    completionHandler(nil, NSError(domain: FileSyncErrorDomain,
                                                    code: response.statusCode,
                                                    userInfo: [NSLocalizedDescriptionKey: "invalid http status \(response.statusCode): \(body)"]))
                     return
@@ -185,7 +185,7 @@ public class SyncClient {
                 }
             } else {
                 // Handle unexpected error
-                completionHandler(nil, NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "unexpected error"]))
+                completionHandler(nil, NSError(domain: FileSyncErrorDomain, code: 400, userInfo: [NSLocalizedDescriptionKey: "unexpected error"]))
             }
         }
         task.resume()
@@ -224,7 +224,7 @@ public class SyncClient {
                 
                 if response.statusCode == 409 {
                     if body.contains("txid_to_validate") {
-                        completionHandler(nil, NSError(domain: "",
+                        completionHandler(nil, NSError(domain: FileSyncErrorDomain,
                                                        code: 409,
                                                        userInfo: [NSLocalizedDescriptionKey: "invalid txid: \(body)"]))
                         return
@@ -232,7 +232,7 @@ public class SyncClient {
                     // fallthrough
                 }
                 if response.statusCode != 200 {
-                    completionHandler(nil, NSError(domain: "",
+                    completionHandler(nil, NSError(domain: FileSyncErrorDomain,
                                                    code: response.statusCode,
                                                    userInfo: [NSLocalizedDescriptionKey: "invalid http status \(response.statusCode): \(body)"]))
                     return
@@ -244,11 +244,11 @@ public class SyncClient {
                 if resp?.UpdateFailedFiles.isEmpty ?? true {
                     completionHandler(resp?.TXId, nil)
                 } else {
-                    completionHandler(nil, NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "update fail for some files: \(resp?.UpdateFailedFiles.debugDescription)"]))
+                    completionHandler(nil, NSError(domain: FileSyncErrorDomain, code: 400, userInfo: [NSLocalizedDescriptionKey: "update fail for some files: \(resp?.UpdateFailedFiles.debugDescription)"]))
                 }
             } else {
                 // Handle unexpected error
-                completionHandler(nil, NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "unexpected error"]))
+                completionHandler(nil, NSError(domain: FileSyncErrorDomain, code: 400, userInfo: [NSLocalizedDescriptionKey: "unexpected error"]))
             }
         }
         task.resume()
@@ -272,11 +272,11 @@ public class SyncClient {
             if let response = response as? HTTPURLResponse {
                 let body = String(data: data!, encoding: .utf8) ?? ""
                 if response.statusCode == 401 {
-                    completionHandler(nil, NSError(domain: "", code: 401, userInfo: [NSLocalizedDescriptionKey: "unauthorized"]))
+                    completionHandler(nil, NSError(domain: FileSyncErrorDomain, code: 401, userInfo: [NSLocalizedDescriptionKey: "unauthorized"]))
                     return
                 }
                 if response.statusCode != 200 {
-                    completionHandler(nil, NSError(domain: "",
+                    completionHandler(nil, NSError(domain: FileSyncErrorDomain,
                                                    code: response.statusCode,
                                                    userInfo: [NSLocalizedDescriptionKey: "invalid http status \(response.statusCode): \(body)"]))
                     return
@@ -290,16 +290,22 @@ public class SyncClient {
                 completionHandler(resp?.Credentials, nil)
             } else {
                 // Handle unexpected error
-                completionHandler(nil, NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "unexpected error"]))
+                completionHandler(nil, NSError(domain: FileSyncErrorDomain, code: 400, userInfo: [NSLocalizedDescriptionKey: "unexpected error"]))
             }
         }
         task.resume()
     }
     
     // [filePath, Key]
-    public func uploadTempFiles(_ files: [String: URL], credentials: S3Credential, completionHandler: @escaping ([String: String], [String: String], Error?) -> Void) {
+    public func uploadTempFiles(_ files: [String: URL],
+                                credentials: S3Credential,
+                                // key, fraction
+                                progressHandler: @escaping ((String, Double) -> Void),
+                                completionHandler: @escaping ([String: String], [String: String], Error?) -> Void)
+    {
         let credentialsProvider = AWSBasicSessionCredentialsProvider(
             accessKey: credentials.AccessKeyId, secretKey: credentials.SecretKey, sessionToken: credentials.SessionToken)
+        
         var region = AWSRegionType.USEast2
         if REGION == "us-east-2" {
             region = .USEast2
@@ -311,71 +317,145 @@ public class SyncClient {
         configuration?.timeoutIntervalForRequest = 5.0
         configuration?.timeoutIntervalForResource = 5.0
         
-        let tuConf = AWSS3TransferUtilityConfiguration()
-        tuConf.bucket = BUCKET
-        //x tuConf.isAccelerateModeEnabled = true
-        
-        let transferKey = String.random(length: 10)
-        AWSS3TransferUtility.register(
-            with: configuration!,
-            transferUtilityConfiguration: tuConf,
-            forKey: transferKey
-        ) { (error) in
-            if let error = error {
-                print("error while register tu \(error)")
-            }
-        }
-        
-        let transferUtility = AWSS3TransferUtility.s3TransferUtility(forKey: transferKey)
-        let uploadExpression = AWSS3TransferUtilityUploadExpression()
-        
         let group = DispatchGroup()
         var keyFileDict: [String: String] = [:]
         var fileKeyDict: [String: String] = [:]
         var fileMd5Dict: [String: String] = [:]
         
-        let uploadCompletionHandler = { (task: AWSS3TransferUtilityUploadTask, error: Error?) -> Void in
-            // ignore any errors in first level of handler
-            if let error = error {
-                self.delegate?.debugNotification(["event": "upload:error", "data": ["key": task.key, "error": error.localizedDescription]])
-            }
-            if let HTTPResponse = task.response {
-                if HTTPResponse.statusCode != 200 || task.status != .completed {
-                    print("debug uploading error \(HTTPResponse)")
-                }
-            }
-            
-            // only save successful keys
-            let filePath = keyFileDict[task.key]!
-            fileKeyDict[filePath] = task.key
-            keyFileDict.removeValue(forKey: task.key)
-            self.delegate?.debugNotification(["event": "upload:file", "data": ["file": filePath, "key": task.key]])
-            group.leave() // notify finish upload
-        }
         
         for (filePath, fileLocalURL) in files {
-            print("debug, upload temp \(fileLocalURL) \(filePath)")
             guard let rawData = try? Data(contentsOf: fileLocalURL) else { continue }
-            guard let encryptedRawDat = maybeEncrypt(rawData) else { continue }
+            guard let encryptedRawData = maybeEncrypt(rawData) else { continue }
             group.enter()
             
             let randFileName = String.random(length: 15).appending(".").appending(fileLocalURL.pathExtension)
             let key = "\(self.s3prefix!)/ios\(randFileName)"
-
+            
             keyFileDict[key] = filePath
             fileMd5Dict[filePath] = rawData.MD5
-            transferUtility?.uploadData(encryptedRawDat, key: key, contentType: "application/octet-stream", expression: uploadExpression, completionHandler: uploadCompletionHandler)
-                .continueWith(block: { (task) in
-                    if let error = task.error {
-                        completionHandler([:], [:], error)
-                    }
-                    return nil
-                })
+            
+            guard let presignURL = getPresignedPutURL(configration: configuration!, key: key) else {
+                completionHandler([:], [:], NSError(domain: FileSyncErrorDomain,
+                                                    code: 0,
+                                                    userInfo: [NSLocalizedDescriptionKey: "cannot get presigned url"]))
+                return
+            }
+            
+            let progressHandler = {(fraction: Double) in
+                progressHandler(filePath, fraction)
+            }
+            putContent(url: presignURL, content: encryptedRawData, progressHandler: progressHandler) { error in
+                guard error == nil else {
+                    print("debug put error \(error!)")
+                    completionHandler([:], [:], error!)
+                    return
+                }
+                // only save successful keys
+                fileKeyDict[filePath] = key
+                keyFileDict.removeValue(forKey: key)
+                group.leave()
+            }
         }
         
         group.notify(queue: .main) {
-            AWSS3TransferUtility.remove(forKey: transferKey)
             completionHandler(fileKeyDict, fileMd5Dict, nil)
+        }
+    }
+    
+    public func putContent(url: URL, content: Data,
+                           progressHandler: @escaping ((Double) -> Void),
+                           completion: @escaping (Error?) -> Void) {
+        var observation: NSKeyValueObservation! = nil
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.httpBody = content
+        
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            observation?.invalidate()
+            
+            guard error == nil else {
+                completion(error!)
+                return
+            }
+            if let response = response as? HTTPURLResponse {
+                guard (200 ..< 299) ~= response.statusCode else {
+                    NSLog("debug error put content \(String(data: data!, encoding: .utf8))")
+                    completion(NSError(domain: FileSyncErrorDomain,
+                                       code: response.statusCode,
+                                       userInfo: [NSLocalizedDescriptionKey: "http put request failed"]))
+                    return
+                }
+            }
+            completion(nil)
+        }
+        
+        observation = task.progress.observe(\.fractionCompleted) { progress, _ in
+            progressHandler(progress.fractionCompleted)
+        }
+        
+        task.resume()
+        
+    }
+    
+    public func download(url: URL,
+                         progressHandler: @escaping ((Double) -> Void), // FIXME: cannot get total bytes
+                         completion: @escaping (Result<URL?, Error>) -> Void) {
+        var observation: NSKeyValueObservation! = nil
+        
+        let task = URLSession.shared.downloadTask(with: url) {(tempURL, response, error) in
+            observation?.invalidate()
+            
+            guard let tempURL = tempURL else {
+                completion(.failure(error!))
+                return
+            }
+            guard let response = response as? HTTPURLResponse, response.statusCode == 200 else {
+                completion(.failure(NSError(domain: FileSyncErrorDomain,
+                                            code: 0,
+                                            userInfo: [NSLocalizedDescriptionKey: "http get request failed"])))
+                return
+            }
+            completion(.success(tempURL))
+        }
+        
+        observation = task.progress.observe(\.fractionCompleted) { progress, _ in
+            progressHandler(progress.fractionCompleted)
+        }
+        
+        task.resume()
+    }
+    
+    public func download(url: URL, progressHandler: @escaping ((Double) -> Void)) async -> Result<URL?, Error> {
+        return await withCheckedContinuation { continuation in
+            download(url: url, progressHandler: progressHandler) { result in
+                continuation.resume(returning: result)
+            }
+        }
+    }
+    
+    private func getPresignedPutURL(configration: AWSServiceConfiguration, key: String) -> URL? {
+        let req = AWSS3GetPreSignedURLRequest()
+        
+        req.key = key
+        req.bucket = BUCKET
+        req.httpMethod = .PUT
+        req.expires = Date(timeIntervalSinceNow: 600) // 10min
+        
+        var presignedURLString: String? = nil
+        AWSS3PreSignedURLBuilder(configuration: configration).getPreSignedURL(req).continueWith { task -> Any? in
+            if let error = task.error as NSError? {
+                NSLog("error generating presigend url \(error)")
+                return nil
+            }
+            presignedURLString = task.result?.absoluteString
+            return nil
+        }
+        if let presignedURLString = presignedURLString {
+            return URL(string: presignedURLString)
+        } else {
+            return nil
         }
     }
 }
