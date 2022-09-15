@@ -930,6 +930,12 @@
                        (if extension? "tie tie" "ti ti"))}
               (dissoc opts :class :extension?))]))
 
+(rum/defc type-icon
+  [{:keys [name class title extension?]}]
+  [:.type-icon {:class class
+                :title title}
+   (icon name {:extension? extension?})])
+
 (rum/defc with-shortcut < rum/reactive
   < {:key-fn (fn [key pos] (str "shortcut-" key pos))}
   [shortcut-key position content]

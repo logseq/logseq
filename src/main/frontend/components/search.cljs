@@ -62,10 +62,9 @@
             [:p {:class "m-0"} elements]))))))
 
 (rum/defc search-result-item
-  [{:keys [icon content class]}]
-  [:.search-result {:class class}
-   [:.search-result-icon {:title icon}
-    (ui/icon icon {:extension? (not= icon "file")})]
+  [icon content]
+  [:.search-result
+   (ui/type-icon icon)
    [:.self-center content]])
 
 (rum/defc block-search-result-item
@@ -194,10 +193,11 @@
 (defn- create-item-render
   [icon label name]
   (search-result-item
-   {:icon icon
+   {:name icon
     :class "highlight"
-    :content [:div.text.font-bold (str label ": ")
-              [:span.ml-1 name]]}))
+    :extension? true}
+   [:div.text.font-bold (str label ": ")
+    [:span.ml-1 name]]))
 
 (defn- search-item-render
   [search-q {:keys [type data alias]}]
@@ -219,12 +219,15 @@
         (when alias
           (let [target-original-name (model/get-page-original-name alias)]
             [:span.mr-2.text-sm.font-medium.mb-2 (str "Alias -> " target-original-name)]))
-        (search-result-item {:icon (if (model/whiteboard-page? data) "whiteboard" "page")
-                             :content (highlight-exact-query data search-q)})]
+        (search-result-item {:name (if (model/whiteboard-page? data) "whiteboard" "page")
+                             :extension? true
+                             :title (t (if (model/whiteboard-page? data) :search-item/whiteboard :search-item/page))}
+                            (highlight-exact-query data search-q))]
 
        :file
-       (search-result-item {:icon "file"
-                            :content (highlight-exact-query data search-q)})
+       (search-result-item {:name "file"
+                            :title (t :search-item/file)}
+                           (highlight-exact-query data search-q))
 
        :block
        (let [{:block/keys [page uuid]} data  ;; content here is normalized
@@ -234,11 +237,13 @@
              block (model/query-block-by-uuid uuid)
              content (:block/content block)]
          [:span {:data-block-ref uuid}
-          (search-result-item {:icon "block"
-                               :content (if block
-                                          (block-search-result-item repo uuid format content search-q search-mode)
-                                          (do (log/error "search result with non-existing uuid: " data)
-                                              (str "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu.")))})])
+          (search-result-item {:name "block"
+                               :title (t :search-item/block)
+                               :extension? true}
+                              (if block
+                                (block-search-result-item repo uuid format content search-q search-mode)
+                                (do (log/error "search result with non-existing uuid: " data)
+                                    (str "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."))))])
 
        nil)]))
 
@@ -369,8 +374,9 @@
                                  svg/search
                                  [:span.ml-2 data]]
                         :page (when-let [original-name (model/get-page-original-name data)] ;; might be block reference
-                                (search-result-item {:icon "page" 
-                                                     :content original-name}))
+                                (search-result-item {:name "page"
+                                                     :extension? true}
+                                                    original-name))
                         nil))}))])
 
 (defn default-placeholder

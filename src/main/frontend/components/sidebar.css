@@ -287,10 +287,6 @@
         bottom: 0;
         left: calc(100% + 6px);
       }
-
-      i {
-        @apply text-xs rounded border mr-2 w-5 h-5 text-center;
-      }
     }
 
     #create-button {

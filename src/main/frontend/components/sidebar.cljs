@@ -241,13 +241,16 @@
       :class "new-page-link"
       :options {:on-click #((close-sidebar-on-mobile!)
                             (state/pub-event! [:go/search]))}
-      :icon (ui/icon "page" {:extension? true})}
+      :icon (ui/type-icon {:name "new-page"
+                           :class "highlight"
+                           :extension? true})}
      {:title (t :left-side-bar/new-whiteboard)
       :class "new-whiteboard-link"
       :options {:on-click #((close-sidebar-on-mobile!)
                             (whiteboard/create-new-whiteboard!))}
-
-      :icon (ui/icon "whiteboard" {:extension? true})}])
+      :icon (ui/type-icon {:name "new-whiteboard"
+                           :class "highlight"
+                           :extension? true})}])
    {}))
 
 (rum/defc sidebar-nav
