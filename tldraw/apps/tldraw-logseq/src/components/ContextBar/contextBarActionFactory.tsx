@@ -102,7 +102,7 @@ const EditAction = observer(() => {
         }
       }}
     >
-      <TablerIcon name="text" />
+      <TablerIcon name="forms" />
     </button>
   )
 })
