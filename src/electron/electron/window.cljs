@@ -146,7 +146,7 @@
         (.on "new-window" new-win-handler)
         (.on "will-navigate" will-navigate-handler)
         (.on "did-start-navigation" #(.send web-contents "persist-zoom-level" (.getZoomLevel web-contents)))
-        (.on "did-navigate-in-page" #(.send web-contents "restore-zoom-level")))
+        (.on "page-title-updated" #(.send web-contents "restore-zoom-level")))
 
       (doto win
         (.on "enter-full-screen" #(.send web-contents "full-screen" "enter"))
