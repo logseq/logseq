@@ -1,7 +1,8 @@
 (ns electron.file-sync-rsapi
   (:require ["@logseq/rsapi" :as rsapi]
             [electron.logger :as logger]
-            [electron.window :as window]))
+            [electron.window :as window]
+            [cljs-bean.core :as bean]))
 
 (defn key-gen [] (rsapi/keygen))
 
@@ -57,8 +58,8 @@
                              (when-not (.isDestroyed win)
                                (.. win -webContents
                                    (send progress-notify-chan
-                                         (clj->js {:file fname :type type
-                                                   :progress progress :total total
-                                                   :percent (Math/floor (/ (* progress 100) total))})))))
+                                         (bean/->js {:file fname :type type
+                                                     :progress progress :total total
+                                                     :percent (Math/floor (/ (* progress 100) total))})))))
 
                            (logger/info "sync progess" fname type progress total))))

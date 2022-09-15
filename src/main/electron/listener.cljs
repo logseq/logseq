@@ -50,9 +50,10 @@
                            (sync/file-watch-handler type payload)))))
 
   (js/window.apis.on "file-sync-progress"
-                     (fn [payload]
-                       (let [payload (js->clj payload :keywordize-keys true)]
-                         (state/set-state! [:file-sync/progress (:file payload)] payload))))
+                     (fn [data]
+                       (let [payload (bean/->clj data)]
+                         (state/set-state! [:file-sync/progress (:file payload)] payload)
+                         nil)))
 
   (js/window.apis.on "notification"
                      (fn [data]
