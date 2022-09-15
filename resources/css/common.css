@@ -14,6 +14,9 @@
   --ls-left-sidebar-width: 246px;
   --ls-left-sidebar-sm-width: 70%;
   --ls-left-sidebar-nav-btn-size: 38px;
+  --ls-color-file-sync-error: #ff0000;
+  --ls-color-file-sync-pending: #ffbb4d;
+  --ls-color-file-sync-idle: #04b404;
 }
 
 @media (prefers-color-scheme: dark) {

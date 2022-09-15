@@ -1,9 +1,5 @@
 .cp__file-sync {
   &-indicator {
-    --ls-color-file-sync-error: #ff0000;
-    --ls-color-file-sync-pending: #ffbb4d;
-    --ls-color-file-sync-idle: #04b404;
-
     a.cloud {
       position: relative;
       opacity: 1 !important;
@@ -146,6 +142,65 @@
       padding: 4px 0;
       max-height: 60vh !important;
       overflow-y: auto;
+    }
+  }
+
+  &-indicator-progress-pane {
+    @apply border m-5 px-4 pt-5 pb-3 rounded-xl;
+
+    background-color: var(--ls-quaternary-background-color);
+
+    .ti {
+      @apply translate-y-0;
+    }
+
+    > .a {
+      @apply flex text-base items-center space-x-2 font-semibold text-gray-200;
+
+      > strong {
+        @apply flex items-center justify-center font-extralight text-gray-800;
+
+        background-color: var(--ls-color-file-sync-pending);
+        border-radius: 4px;
+        height: 20px;
+        width: 20px;
+      }
+    }
+
+    > .b {
+      @apply flex items-center justify-between py-2 text-sm;
+
+      .bl {
+        @apply flex items-center leading-none pt-2;
+      }
+    }
+
+    > .c {
+      @apply flex items-center;
+
+      .progress-bar {
+        @apply flex flex-1 items-center overflow-hidden;
+
+        height: 6px;
+        border-radius: 4px;
+        background-color: var(--ls-secondary-background-color);
+
+        i {
+          transition: width .5s;
+          height: 100%;
+          width: 40%;
+          border-radius: 4px;
+          background-color: var(--ls-link-text-color);
+        }
+      }
+
+      .actions {
+        @apply pl-2;
+
+        .ti {
+          font-size: 14px;
+        }
+      }
     }
   }
 
@@ -461,6 +516,18 @@ html[data-theme='light'] {
 
       > .input-hints {
         background-color: #e1e1e1;
+      }
+    }
+
+    &-indicator-progress-pane {
+      background-color: var(--ls-tertiary-background-color);
+
+      > .a {
+        @apply text-gray-700;
+      }
+
+      .progress-bar {
+        background-color: var(--ls-quaternary-background-color);
       }
     }
   }
