@@ -93,8 +93,7 @@
   (let [repo (state/get-current-repo)
         user-uuid (user/user-uuid)]
     (sync/update-graphs-txid! 0 graph-uuid user-uuid repo)
-    (swap! refresh-file-sync-component not)
-    (state/pub-event! [:graph/switch repo {:persist? false}])))
+    (swap! refresh-file-sync-component not)))
 
 (defn download-version-file
   ([graph-uuid file-uuid version-uuid]
@@ -165,15 +164,9 @@
             all-version-list))))))
 
 
-(def *wait-syncing-graph (atom nil))
-
-(defn set-wait-syncing-graph
-  [graph]
-  (reset! *wait-syncing-graph graph))
-
 (defn init-remote-graph
-  [local]
-  (when-let [graph (and local @*wait-syncing-graph)]
+  [local graph]
+  (when (and local graph)
     (notification/show!
      (str "Start syncing the remote graph "
           (:GraphName graph)

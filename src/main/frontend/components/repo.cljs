@@ -97,7 +97,8 @@
                                      (state/set-modal! (confirm-fn)))
                                    (do
                                      (repo-handler/remove-repo! repo)
-                                     (file-sync/load-session-graphs))))}
+                                     (file-sync/load-session-graphs)
+                                     (state/pub-event! [:graph/unlinked]))))}
                     (if only-cloud? "Remove" "Unlink")])])]]))
 
 (rum/defc repos < rum/reactive
