@@ -575,9 +575,7 @@
                      (state/close-modal!)
                      (repo-handler/re-index!
                       nfs-handler/rebuild-index!
-                      #(do
-                         (page-handler/create-today-journal!)
-                         (file-sync-restart!)))))]])))
+                      page-handler/create-today-journal!)))]])))
 
 ;; encryption
 (defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]
