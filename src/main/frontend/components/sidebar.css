@@ -144,11 +144,7 @@
     }
 
     &:hover {
-      opacity: .8;
-
-      .ti, .tie {
-        opacity: .8;
-      }
+      color: var(--ls-secondary-text-color);
     }
   }
 

@@ -368,7 +368,7 @@
      (left-sidebar {:left-sidebar-open? left-sidebar-open?
                     :route-match route-match})
 
-     [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
+     [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row.outline-none
 
       {:tabIndex "-1"
        :data-is-margin-less-pages margin-less-pages?}
