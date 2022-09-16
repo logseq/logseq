@@ -152,7 +152,7 @@
 
 (s/def ::sync-event (s/keys :req-un [::event ::data]))
 
-(defonce download-batch-size 10)
+(defonce download-batch-size 100)
 (defonce upload-batch-size 20)
 ;;; ### configs in config.edn
 ;; - :file-sync/ignore-files
@@ -2096,8 +2096,7 @@
                         {:need-remote->local-full-sync true})
 
                     (when (pos-int? latest-txid)
-                      (let [_ (swap! *sync-state #(sync-state-reset-full-remote->local-files % diff-txns))
-                            partitioned-filetxns (transduce (diffs->partitioned-filetxns download-batch-size)
+                      (let [partitioned-filetxns (transduce (diffs->partitioned-filetxns download-batch-size)
                                                             (completing (fn [r i] (conj r (reverse i)))) ;reverse
                                                             '()
                                                             (reverse diff-txns))]
