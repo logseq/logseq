@@ -64,7 +64,6 @@
       width: 90vw;
       position: fixed;
       right: 5vw;
-      border-radius: 4px;
 
       .head-ctls {
         position: absolute;
@@ -73,11 +72,6 @@
       }
 
       .cp__file-sync-indicator-progress-pane {
-        transform: translateY(-4px);
-        position: sticky;
-        top: 0;
-        z-index: 1;
-        margin-bottom: -8px;
       }
 
       @screen md {
@@ -105,7 +99,7 @@
           padding: 0 !important;
           user-select: none;
           pointer-events: none;
-          margin-top: 10px;
+          margin-top: 5px;
 
           &:hover {
             background-color: unset !important;
@@ -147,10 +141,35 @@
       }
     }
 
+    .menu-links-outer {
+      @apply py-0;
+
+      .head-ctls {
+        display: none;
+      }
+
+      &.is-list-active {
+        .menu-links-wrapper, .head-ctls {
+          display: block !important;
+        }
+      }
+    }
+
     .menu-links-wrapper {
       padding: 4px 0;
-      max-height: 60vh !important;
+      max-height: calc(70vh - 120px) !important;
       overflow-y: auto;
+    }
+
+    &.is-enabled-progress-pane {
+      .menu-links-wrapper {
+        padding: 0;
+        display: none;
+
+        > .menu-link:last-child {
+          padding-bottom: 16px;
+        }
+      }
     }
   }
 
@@ -186,7 +205,7 @@
     }
 
     > .b {
-      @apply flex items-center justify-between py-2 text-sm;
+      @apply flex items-center justify-between pt-2 pb-3 text-sm;
 
       .bl {
         @apply flex items-center leading-none pt-2;
@@ -194,16 +213,19 @@
     }
 
     > .c {
-      @apply flex items-center text-gray-200;
+      @apply flex items-center text-gray-200 relative;
+
+      top: -3px;
 
       .cl {
         @apply text-sm leading-6 flex flex-1 items-center overflow-hidden;
       }
 
       .progress-bar {
-        @apply flex flex-1 items-center overflow-hidden;
+        @apply flex flex-1 items-center overflow-hidden relative;
 
         height: 7px;
+        top: 5px;
         border-radius: 4px;
         background-color: var(--ls-secondary-background-color);
 
@@ -217,10 +239,23 @@
       }
 
       .actions {
-        @apply pl-2 py-2 text-sm leading-none;
+        @apply flex;
 
         .ti {
-          font-size: 14px;
+          font-size: 15px;
+          position: relative;
+          top: 5px;
+        }
+
+        a {
+          @apply pl-2 py-2 text-sm leading-none cursor-pointer opacity-50
+          hover:opacity-100 active:opacity-50;
+        }
+
+        &:hover {
+          a {
+            color: var(--ls-secondary-text-color);
+          }
         }
       }
     }
