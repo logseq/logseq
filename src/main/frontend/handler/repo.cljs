@@ -525,9 +525,12 @@
 
 (defn refresh-repos!
   []
-  (p/let [repos (get-repos)]
-    (state/set-repos! repos)
-    repos))
+  (p/let [repos (get-repos)
+          repos' (combine-local-&-remote-graphs
+                  repos
+                  (state/get-remote-repos))]
+    (state/set-repos! repos')
+    repos'))
 
 (defn graph-ready!
   "Call electron that the graph is loaded."
