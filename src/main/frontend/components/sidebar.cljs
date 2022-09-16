@@ -26,6 +26,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
@@ -36,7 +37,6 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [frontend.components.whiteboard :as whiteboard]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [react-draggable]
@@ -239,6 +239,7 @@
    (->>
     [{:title (t :left-side-bar/new-page)
       :class "new-page-link"
+      :shortcut (ui/keyboard-shortcut-from-config :go/search)
       :options {:on-click #((close-sidebar-on-mobile!)
                             (state/pub-event! [:go/search]))}
       :icon (ui/type-icon {:name "new-page"
@@ -246,8 +247,9 @@
                            :extension? true})}
      {:title (t :left-side-bar/new-whiteboard)
       :class "new-whiteboard-link"
+      :shortcut (ui/keyboard-shortcut-from-config :editor/new-whiteboard)
       :options {:on-click #((close-sidebar-on-mobile!)
-                            (whiteboard/create-new-whiteboard!))}
+                            (whiteboard-handler/create-new-whiteboard!))}
       :icon (ui/type-icon {:name "new-whiteboard"
                            :class "highlight"
                            :extension? true})}])

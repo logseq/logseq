@@ -281,7 +281,7 @@
       right: initial;
       bottom: calc(100% + 6px);
       left: 0;
-      width: 100%;
+      width: max-content;
 
       @screen sm {
         bottom: 0;

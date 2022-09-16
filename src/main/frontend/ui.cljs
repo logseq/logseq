@@ -156,7 +156,7 @@
      [:.menu-links-wrapper
       (when links-header links-header)
 
-      (for [{:keys [options title icon key hr hover-detail item _as-link?]} (if (fn? links) (links) links)]
+      (for [{:keys [options title icon shortcut key hr hover-detail item _as-link?]} (if (fn? links) (links) links)]
         (let [new-options
               (merge options
                      (cond->
@@ -177,7 +177,7 @@
           (if hr
             [:hr.menu-separator {:key "dropdown-hr"}]
             (rum/with-key
-              (menu-link new-options child nil)
+              (menu-link new-options child shortcut)
               title))))
       (when links-footer links-footer)])
    opts))
