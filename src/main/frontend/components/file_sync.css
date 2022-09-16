@@ -159,6 +159,10 @@
       padding: 4px 0;
       max-height: calc(70vh - 120px) !important;
       overflow-y: auto;
+
+      .title-wrap {
+        flex: 1;
+      }
     }
 
     &.is-enabled-progress-pane {
@@ -259,6 +263,15 @@
         }
       }
     }
+  }
+
+  &-indicator-progress-pie {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 2px;
+    margin-bottom: -1px;
   }
 
   &-page-histories {

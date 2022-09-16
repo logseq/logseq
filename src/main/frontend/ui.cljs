@@ -177,8 +177,8 @@
                              (or item
                                  [:div.flex.items-center
                                   (when icon icon)
-                                  [:div {:style {:margin-right "8px"
-                                                 :margin-left  "4px"}} title]]))]
+                                  [:div.title-wrap {:style {:margin-right "8px"
+                                                            :margin-left  "4px"}} title]]))]
                  (if hr
                    [:hr.menu-separator {:key "dropdown-hr"}]
                    (rum/with-key
