@@ -51,9 +51,10 @@
 
 (defn restore-repo-config!
   "Sets repo config state from db"
-  [repo-url]
-  (let [config-content (get-repo-config-content repo-url)]
-    (set-repo-config-state! repo-url config-content)))
+  ([repo-url]
+   (restore-repo-config! repo-url (get-repo-config-content repo-url)))
+  ([repo-url config-content]
+   (set-repo-config-state! repo-url config-content)))
 
 (defn start
   "This component only has one reponsibility on start, to manage db and ui state

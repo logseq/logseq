@@ -119,7 +119,7 @@ public struct SyncMetadata: CustomStringConvertible, Equatable {
 @objc(FileSync)
 public class FileSync: CAPPlugin, SyncDebugDelegate {
     override public func load() {
-        print("debug File sync iOS plugin loaded!")
+        print("debug FileSync iOS plugin loaded!")
 
         AWSMobileClient.default().initialize { (userState, error) in
             guard error == nil else {
@@ -217,6 +217,47 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             call.reject("cannot decrypt \(nFiles - fnames.count) file names")
         }
         call.resolve(["value": fnames])
+    }
+    
+    @objc func encryptWithPassphrase(_ call: CAPPluginCall) {
+        guard let passphrase = call.getString("passphrase"),
+              let content = call.getString("content") else {
+                  call.reject("required parameters: passphrase, content")
+                  return
+              }
+        guard let plaintext = content.data(using: .utf8) else {
+            call.reject("cannot decode ciphertext with utf8")
+            return
+        }
+        call.keepAlive = true
+        DispatchQueue.global(qos: .default).async {
+            if let encrypted = AgeEncryption.encryptWithPassphrase(plaintext, passphrase, armor: true) {
+                call.resolve(["data": String(data: encrypted, encoding: .utf8) as Any])
+            } else {
+                call.reject("cannot encrypt with passphrase")
+            }
+        }
+    }
+    
+    
+    @objc func decryptWithPassphrase(_ call: CAPPluginCall) {
+        guard let passphrase = call.getString("passphrase"),
+              let content = call.getString("content") else {
+                  call.reject("required parameters: passphrase, content")
+                  return
+              }
+        guard let ciphertext = content.data(using: .utf8) else {
+            call.reject("cannot decode ciphertext with utf8")
+            return
+        }
+        call.keepAlive = true
+        DispatchQueue.global(qos: .default).async {
+            if let decrypted = AgeEncryption.decryptWithPassphrase(ciphertext, passphrase) {
+                call.resolve(["data": String(data: decrypted, encoding: .utf8) as Any])
+            } else {
+                call.reject("cannot decrypt with passphrase")
+            }
+        }
     }
 
     @objc func getLocalFilesMeta(_ call: CAPPluginCall) {

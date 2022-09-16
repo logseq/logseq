@@ -80,7 +80,7 @@
         (do
           (state/set-state! :user/info result)
           (let [status (if (user-handler/alpha-user?) :welcome :unavailable)]
-            (when (= status :welcome)
+            (when (and (= status :welcome) (user-handler/logged-in?))
               (async/<! (file-sync-handler/load-session-graphs))
               (p/let [repos (repo-handler/refresh-repos!)]
                 (when-let [repo (state/get-current-repo)]
@@ -88,7 +88,7 @@
                                     (vector? (:sync-meta %))
                                     (util/uuid-string? (first (:sync-meta %)))
                                     (util/uuid-string? (second (:sync-meta %)))) repos)
-                    (file-sync-restart!)))))
+                    (sync/sync-start)))))
             (file-sync/maybe-onboarding-show status)))))))
 
 (defmethod handle :user/logout [[_]]
@@ -638,9 +638,6 @@
 (defmethod handle :file-sync/graph-count-exceed-limit [[_]]
   (notification/show! "file sync graph count exceed limit" :warning false)
   (file-sync-stop!))
-
-(defmethod handle :file-sync/restart [[_]]
-  (file-sync-restart!))
 
 (defmethod handle :graph/restored [[_ _graph]]
   (mobile/init!)

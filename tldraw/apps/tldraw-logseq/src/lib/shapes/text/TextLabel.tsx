@@ -1,7 +1,6 @@
 import { TextUtils } from '@tldraw/core'
 import * as React from 'react'
-import { LETTER_SPACING } from './constants'
-import { getTextLabelSize } from './getTextSize'
+import { getTextLabelSize } from '@tldraw/core'
 import { TextAreaUtils } from './TextAreaUtils'
 
 const stopPropagation = (e: KeyboardEvent | React.SyntheticEvent<any, Event>) => e.stopPropagation()
@@ -122,7 +121,7 @@ export const TextLabel = React.memo(function TextLabel({
   React.useLayoutEffect(() => {
     const elm = rInnerWrapper.current
     if (!elm) return
-    const size = getTextLabelSize(text, font)
+    const size = getTextLabelSize(text, font, 4)
     elm.style.transform = `scale(${scale}, ${scale}) translate(${offsetX}px, ${offsetY}px)`
     elm.style.width = size[0] + 1 + 'px'
     elm.style.height = size[1] + 1 + 'px'
@@ -136,7 +135,6 @@ export const TextLabel = React.memo(function TextLabel({
         style={{
           font,
           color,
-          letterSpacing: LETTER_SPACING,
           pointerEvents: text ? 'all' : 'none',
           userSelect: isEditing ? 'text' : 'none',
         }}

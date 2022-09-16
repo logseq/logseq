@@ -396,22 +396,25 @@
   (-> (setup-local-repo-if-not-exists-impl!)
       (p/timeout 3000)
       (p/catch (fn []
-                 (state/set-db-restoring! false)
-                 (prn "setup-local-repo failed! timeout 3000ms")))))
+                 (prn "setup-local-repo failed! timeout 3000ms")))
+      (p/finally (fn []
+                   (state/set-db-restoring! false)))))
 
 (defn restore-and-setup-repo!
   "Restore the db of a graph from the persisted data, and setup. Create a new
   conn, or replace the conn in state with a new one."
   [repo]
-  (p/let [_ (state/set-db-restoring! true)
-          _ (db/restore-graph! repo)
-          _ (repo-config-handler/restore-repo-config! repo)
-          _ (global-config-handler/restore-global-config!)]
+  (p/do!
+   (state/set-db-restoring! true)
+   (db/restore-graph! repo)
+   (repo-config-handler/restore-repo-config! repo)
+   (when (config/global-config-enabled?)
+     (global-config-handler/restore-global-config!))
     ;; Don't have to unlisten the old listener, as it will be destroyed with the conn
-    (db/listen-and-persist! repo)
-    (state/pub-event! [:shortcut/refresh])
-    (ui-handler/add-style-if-exists!)
-    (state/set-db-restoring! false)))
+   (db/listen-and-persist! repo)
+   (state/pub-event! [:shortcut/refresh])
+   (ui-handler/add-style-if-exists!)
+   (state/set-db-restoring! false)))
 
 (defn rebuild-index!
   [url]

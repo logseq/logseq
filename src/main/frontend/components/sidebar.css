@@ -144,11 +144,7 @@
     }
 
     &:hover {
-      opacity: .8;
-
-      .ti, .tie {
-        opacity: .8;
-      }
+      color: var(--ls-secondary-text-color);
     }
   }
 
@@ -329,7 +325,7 @@
 
     .left-sidebar-inner {
       transform: translate3d(0, 0, 0);
-      overflow: visible;
+      overflow: hidden;
     }
 
     > .shade-mask {
@@ -361,6 +357,10 @@
 
     &.is-open {
       width: var(--ls-left-sidebar-width);
+
+      .left-sidebar-inner {
+        overflow: visible;
+      }
     }
 
     > .shade-mask {

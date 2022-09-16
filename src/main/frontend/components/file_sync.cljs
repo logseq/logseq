@@ -182,11 +182,12 @@
 
         status                 (:state sync-state)
         status                 (or (nil? status) (keyword (name status)))
-        off?                   (or (nil? sync-state) (fs-sync/sync-state--stopped? sync-state))
+        off?                   (fs-sync/sync-off? sync-state)
         full-syncing?          (contains? #{:local->remote-full-sync :remote->local-full-sync} status)
         syncing?               (or full-syncing? (contains? #{:local->remote :remote->local} status))
         idle?                  (contains? #{:idle} status)
-        need-password?         (contains? #{:need-password} status)
+        need-password?         (and (contains? #{:need-password} status)
+                                    (not (fs-sync/graph-encrypted?)))
         queuing?               (and idle? (boolean (seq queuing-files)))
         no-active-files?       (empty? (concat downloading-files queuing-files uploading-files))
         create-remote-graph-fn #(when (and current-repo (not (config/demo-graph? current-repo)))
@@ -198,36 +199,41 @@
                                           (create-remote-graph-panel current-repo graph-name close-fn))]
 
                                     (state/set-modal! confirm-fn {:center? true :close-btn? false})))
-        turn-on                #(async/go
-                                  (async/<! (p->c (persist-var/-load fs-sync/graphs-txid)))
-                                  (cond
-                                    @*beta-unavailable?
-                                    (state/pub-event! [:file-sync/onboarding-tip :unavailable])
+        turn-on                (fn []
+                                 (when-not (file-sync-handler/current-graph-sync-on?)
+                                   (async/go
+                                     (async/<! (p->c (persist-var/-load fs-sync/graphs-txid)))
+                                     (cond
+                                       @*beta-unavailable?
+                                       (state/pub-event! [:file-sync/onboarding-tip :unavailable])
 
-                                    ;; current graph belong to other user, do nothing
-                                    (and (first @fs-sync/graphs-txid)
-                                         (not (fs-sync/check-graph-belong-to-current-user (user-handler/user-uuid)
-                                                                                          (first @fs-sync/graphs-txid))))
-                                    nil
+                                       ;; current graph belong to other user, do nothing
+                                       (and (first @fs-sync/graphs-txid)
+                                            (not (fs-sync/check-graph-belong-to-current-user (user-handler/user-uuid)
+                                                                                             (first @fs-sync/graphs-txid))))
+                                       nil
 
-                                    (and synced-file-graph?
-                                         (second @fs-sync/graphs-txid)
-                                         (async/<! (fs-sync/<check-remote-graph-exists (second @fs-sync/graphs-txid))))
-                                    (fs-sync/sync-start)
+                                       (and synced-file-graph?
+                                            (fs-sync/graph-sync-off? current-repo)
+                                            (second @fs-sync/graphs-txid)
+                                            (async/<! (fs-sync/<check-remote-graph-exists (second @fs-sync/graphs-txid))))
+                                       (fs-sync/sync-start)
 
-
-                                    ;; remote graph already has been deleted, clear repos first, then create-remote-graph
-                                    synced-file-graph?      ; <check-remote-graph-exists -> false
-                                    (do (state/set-repos!
-                                         (map (fn [r]
-                                                (if (= (:url r) current-repo)
-                                                  (dissoc r :GraphUUID :GraphName :remote?)
-                                                  r))
+                                       ;; remote graph already has been deleted, clear repos first, then create-remote-graph
+                                       synced-file-graph?      ; <check-remote-graph-exists -> false
+                                       (do (state/set-repos!
+                                            (map (fn [r]
+                                                   (if (= (:url r) current-repo)
+                                                     (dissoc r :GraphUUID :GraphName :remote?)
+                                                     r))
                                               (state/get-repos)))
-                                        (create-remote-graph-fn))
+                                           (create-remote-graph-fn))
 
-                                    :else
-                                    (create-remote-graph-fn)))]
+                                       (second @fs-sync/graphs-txid) ; sync not started yet
+                                       nil
+
+                                       :else
+                                       (create-remote-graph-fn)))))]
 
     (if creating-remote-graph?
       (ui/loading "")
@@ -261,7 +267,7 @@
                (if need-password?
                  [{:title   [:div.file-item
                              (ui/icon "lock") "Password is required"]
-                   :options {:on-click #(state/pub-event! [:file-sync/restart])}}]
+                   :options {:on-click fs-sync/sync-need-password!}}]
                  [{:title   [:div.file-item.is-first ""]
                    :options {:class "is-first-placeholder"}}]))
 

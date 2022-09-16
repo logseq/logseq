@@ -58,8 +58,12 @@
 - Start a file watcher for global config dir if it's not already started.
   Watcher ensures client db is seeded with correct file data."
   [{:keys [repo]}]
-  (p/let [root-dir' (ipc/ipc "getLogseqDotDirRoot")
-          _ (reset! root-dir root-dir')
-          _ (restore-global-config!)
-          _ (create-global-config-file-if-not-exists repo)
-          _ (fs/watch-dir! (global-config-dir) {:global-dir true})]))
+  (-> (p/do!
+       (p/let [root-dir' (ipc/ipc "getLogseqDotDirRoot")]
+         (reset! root-dir root-dir'))
+       (restore-global-config!)
+       (create-global-config-file-if-not-exists repo)
+       (fs/watch-dir! (global-config-dir) {:global-dir true}))
+      (p/timeout 6000)
+      (p/catch (fn [e]
+                 (js/console.error "cannot start global-config" e)))))
