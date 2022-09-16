@@ -1,6 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { TextUtils, TLBounds, TLResizeStartInfo, TLTextShape, TLTextShapeProps } from '@tldraw/core'
-import { HTMLContainer, TLComponentProps, TLTextMeasure } from '@tldraw/react'
+import {
+  getTextLabelSize,
+  TextUtils,
+  TLBounds,
+  TLResizeStartInfo,
+  TLTextShape,
+  TLTextShapeProps,
+} from '@tldraw/core'
+import { HTMLContainer, TLComponentProps } from '@tldraw/react'
 import { action, computed } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
@@ -163,7 +170,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
 
     React.useLayoutEffect(() => {
       const { fontFamily, fontSize, fontWeight, lineHeight, padding } = this.props
-      const { width, height } = this.measure.measureText(
+      const [width, height] = getTextLabelSize(
         text,
         { fontFamily, fontSize, fontWeight, lineHeight },
         padding
@@ -255,10 +262,6 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     return withClampedStyles(this, props)
   }
 
-  // Custom
-
-  private measure = new TLTextMeasure()
-
   getAutoSizedBoundingBox(props = {} as Partial<TextShapeProps>) {
     const {
       text = this.props.text,
@@ -268,7 +271,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
       lineHeight = this.props.lineHeight,
       padding = this.props.padding,
     } = props
-    const { width, height } = this.measure.measureText(
+    const [width, height] = getTextLabelSize(
       text,
       { fontFamily, fontSize, lineHeight, fontWeight },
       padding
