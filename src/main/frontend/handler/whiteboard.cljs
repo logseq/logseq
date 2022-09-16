@@ -3,6 +3,7 @@
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
@@ -152,6 +153,12 @@
          (when (and page-entity (nil? (:block/file page-entity)))
            (outliner-file/sync-to-file page-entity))))
      tldr)))
+
+(defn create-new-whiteboard!
+  []
+  (let [name (str (d/squuid))]
+    (create-new-whiteboard-page! name)
+    (route-handler/redirect-to-whiteboard! name)))
 
 (defn page-name->tldr!
   ([page-name]

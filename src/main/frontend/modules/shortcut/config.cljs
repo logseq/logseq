@@ -12,6 +12,7 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.modules.shortcut.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
@@ -100,6 +101,9 @@
 
    :editor/new-line              {:binding "shift+enter"
                                   :fn      editor-handler/keydown-new-line-handler}
+
+   :editor/new-whiteboard        {:binding "mod+shift+w"
+                                  :fn      whiteboard-handler/create-new-whiteboard!}
 
    :editor/follow-link           {:binding "mod+o"
                                   :fn      editor-handler/follow-link-under-cursor!}
@@ -307,7 +311,7 @@
 
    :graph/re-index                 {:fn (fn []
                                           (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
-                                                 (state/pub-event! [:graph/ask-for-re-index multiple-windows?])))
+                                            (state/pub-event! [:graph/ask-for-re-index multiple-windows?])))
                                     :binding false}
 
    :command/run                    {:binding "mod+shift+1"
@@ -551,6 +555,7 @@
                           :editor/open-file-in-default-app
                           :editor/open-file-in-directory
                           :editor/copy-current-file
+                          :editor/new-whiteboard
                           :ui/toggle-wide-mode
                           :ui/select-theme-color
                           :ui/goto-plugins
@@ -680,6 +685,7 @@
     :editor/insert-youtube-timestamp
     :editor/open-file-in-default-app
     :editor/open-file-in-directory
+    :editor/new-whiteboard
     :auto-complete/prev
     :auto-complete/next
     :auto-complete/complete
