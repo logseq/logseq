@@ -36,4 +36,4 @@ export interface LogseqContextValue {
   }
 }
 
-export const LogseqContext = React.createContext<Partial<LogseqContextValue>>({})
+export const LogseqContext = React.createContext<LogseqContextValue>({} as LogseqContextValue)

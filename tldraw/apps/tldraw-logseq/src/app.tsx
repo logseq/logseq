@@ -61,27 +61,13 @@ interface LogseqTldrawProps {
   onPersist?: TLReactCallbacks<Shape>['onPersist']
 }
 
-export const App = function App({
+const AppInner = ({
   onPersist,
-  handlers,
-  renderers,
   model,
   ...rest
-}: LogseqTldrawProps): JSX.Element {
-  const memoRenders: any = React.useMemo(() => {
-    return Object.fromEntries(
-      Object.entries(renderers).map(([key, comp]) => {
-        return [key, React.memo(comp)]
-      })
-    )
-  }, [])
-  const contextValue = {
-    renderers: memoRenders,
-    handlers: handlers,
-  }
-
-  const onDrop = useDrop(contextValue)
-  const onPaste = usePaste(contextValue)
+}: Omit<LogseqTldrawProps, 'renderers' | 'handlers'>) => {
+  const onDrop = useDrop()
+  const onPaste = usePaste()
   const onQuickAdd = useQuickAdd()
   const ref = React.useRef<HTMLDivElement>(null)
 
@@ -95,25 +81,43 @@ export const App = function App({
   )
 
   return (
+    <AppProvider
+      Shapes={shapes}
+      Tools={tools}
+      onDrop={onDrop}
+      onPaste={onPaste}
+      onCanvasDBClick={onQuickAdd}
+      onPersist={onPersistOnDiff}
+      model={model}
+      {...rest}
+    >
+      <ContextMenu collisionRef={ref}>
+        <div ref={ref} className="logseq-tldraw logseq-tldraw-wrapper">
+          <AppCanvas components={components}>
+            <AppUI />
+          </AppCanvas>
+        </div>
+      </ContextMenu>
+    </AppProvider>
+  )
+}
+
+export const App = function App({ renderers, handlers, ...rest }: LogseqTldrawProps): JSX.Element {
+  const memoRenders: any = React.useMemo(() => {
+    return Object.fromEntries(
+      Object.entries(renderers).map(([key, comp]) => {
+        return [key, React.memo(comp)]
+      })
+    )
+  }, [])
+  const contextValue = {
+    renderers: memoRenders,
+    handlers: handlers,
+  }
+
+  return (
     <LogseqContext.Provider value={contextValue}>
-      <AppProvider
-        Shapes={shapes}
-        Tools={tools}
-        onDrop={onDrop}
-        onPaste={onPaste}
-        onCanvasDBClick={onQuickAdd}
-        onPersist={onPersistOnDiff}
-        model={model}
-        {...rest}
-      >
-        <ContextMenu collisionRef={ref}>
-          <div ref={ref} className="logseq-tldraw logseq-tldraw-wrapper">
-            <AppCanvas components={components}>
-              <AppUI />
-            </AppCanvas>
-          </div>
-        </ContextMenu>
-      </AppProvider>
+      <AppInner {...rest} />
     </LogseqContext.Provider>
   )
 }

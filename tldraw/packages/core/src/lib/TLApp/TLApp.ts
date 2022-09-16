@@ -439,7 +439,7 @@ export class TLApp<
       this.notify('paste', {
         point: this.inputs.currentPoint,
         shiftKey: !!shiftKey,
-        dataTransfer: e?.clipboardData,
+        dataTransfer: e?.clipboardData ?? undefined,
       })
     }
   }

@@ -105,8 +105,7 @@ const useSearch = (q: string, searchFilter: 'B' | 'P' | null) => {
 
   React.useEffect(() => {
     let canceled = false
-    const searchHandler = handlers?.search
-    if (q.length > 0 && searchHandler) {
+    if (q.length > 0) {
       const filter = { 'pages?': true, 'blocks?': true, 'files?': false }
       if (searchFilter === 'B') {
         filter['pages?'] = false
