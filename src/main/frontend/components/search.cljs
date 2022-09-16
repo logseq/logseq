@@ -12,6 +12,7 @@
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.search :as search-handler]
+            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.ui :as ui]
             [frontend.state :as state]
@@ -122,7 +123,7 @@
     (page-handler/create! search-q {:redirect? true})
 
     :new-whiteboard
-    (route/redirect-to-whiteboard! search-q)
+    (whiteboard-handler/create-new-whiteboard! search-q)
 
     :page
     (let [data (or alias data)]

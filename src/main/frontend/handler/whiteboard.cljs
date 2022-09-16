@@ -155,10 +155,11 @@
      tldr)))
 
 (defn create-new-whiteboard!
-  []
-  (let [name (str (d/squuid))]
-    (create-new-whiteboard-page! name)
-    (route-handler/redirect-to-whiteboard! name)))
+  ([name]
+   (create-new-whiteboard-page! name)
+   (route-handler/redirect-to-whiteboard! name))
+  ([]
+   (create-new-whiteboard! (str (d/squuid)))))
 
 (defn page-name->tldr!
   ([page-name]

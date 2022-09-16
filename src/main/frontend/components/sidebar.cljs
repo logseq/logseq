@@ -224,7 +224,7 @@
 
 (defn close-sidebar-on-mobile!
   []
-  (when (util/sm-breakpoint?)
+  (and (util/sm-breakpoint?)
     (state/toggle-left-sidebar!)))
 
 (defn create-dropdown
