@@ -297,11 +297,16 @@
       &:hover,
       &:focus {
         border-color: var(--ls-border-color);
-        background-color: transparent !important;
+        background-color: var(--ls-primary-background-color) !important;
       }
 
       @screen sm {
         background-color: var(--ls-primary-background-color) !important;
+
+        &:hover,
+        &:focus {
+          background-color: var(--ls-secondary-background-color) !important;
+        }
       }
     }
   }
