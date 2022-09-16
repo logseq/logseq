@@ -270,6 +270,11 @@
     left: 0;
     width: 100%;
     padding: 14px;
+    background-image: linear-gradient(transparent, var(--ls-primary-background-color));
+
+    @screen sm {
+      background-image: linear-gradient(transparent, var(--ls-secondary-background-color));
+    }
 
     &-link {
       background-color: var(--ls-primary-background-color);
