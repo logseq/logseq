@@ -430,8 +430,8 @@
                                    (js/decodeURIComponent f)]
                            :key   (str "uploading-" f)
                            :icon  (if enabled-progress-panel?
-                                    (when-let [progress (get sync-progress f)]
-                                      (let [percent (:percent progress)]
+                                    (let [progress (get sync-progress f)]
+                                      (let [percent (or (:percent progress) 0)]
                                         (if (and (number? percent)
                                                  (< percent 100))
                                           (indicator-progress-pie percent)
