@@ -102,7 +102,7 @@
    :editor/new-line              {:binding "shift+enter"
                                   :fn      editor-handler/keydown-new-line-handler}
 
-   :editor/new-whiteboard        {:binding "mod+shift+w"
+   :editor/new-whiteboard        {:binding "n w"
                                   :fn      whiteboard-handler/create-new-whiteboard!}
 
    :editor/follow-link           {:binding "mod+o"
