@@ -22,7 +22,7 @@ h1.title.whiteboard-dashboard-title {
   height: 300px;
 
   .dashboard-card-checkbox {
-    @apply flex items-center justify-center rounded;
+    @apply flex items-center justify-center rounded flex-shrink-0;
     border: 2px solid var(--ls-border-color);
     visibility: hidden;
     width: 24px;

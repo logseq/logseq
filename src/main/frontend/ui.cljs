@@ -1010,15 +1010,15 @@
 
 (rum/defc portal
   ([children]
-   (portal children #(js/document.createElement "div")))
-  ([children append-to]
+   (portal children #(js/document.createElement "div") false))
+  ([children attach-to prepend?]
    (let [[portal-anchor set-portal-anchor] (rum/use-state nil)]
      (rum/use-effect!
       (fn []
-        (let [div (or (if (fn? append-to) (append-to) append-to)
-                      (js/document.createElement "div"))]
+        (let [div (js/document.createElement "div")
+              attached (or (if (fn? attach-to) (attach-to) attach-to) js/document.body)]
           (.setAttribute div "data-logseq-portal" (str (d/squuid)))
-          (.append js/document.body div)
+          (if prepend? (.prepend attached div) (.append attached div))
           (set-portal-anchor div)
           #(.remove div)))
       [])
