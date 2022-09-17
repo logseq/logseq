@@ -979,7 +979,7 @@
   [state visible? content-fn ref]
   [:div.lazy-visibility
    {:ref ref
-    :style {:min-height 24}}
+    :style {:min-height 0}}
    (if visible?
      (when (fn? content-fn)
        [:div.fade-enter
