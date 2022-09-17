@@ -6,6 +6,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db.model :as model]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.route :as route]
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.state :as state]
@@ -115,19 +116,25 @@
          (util/time-ago (js/Date. updated-at)))))
 
 (rum/defc dashboard-preview-card
-  [page-name]
+  [page-name {:keys [checked on-checked-change show-checked?]}]
   [:div.dashboard-card.dashboard-preview-card.cursor-pointer.hover:shadow-lg
-   {:on-click
+   {:data-checked checked
+    :on-click
     (fn [e]
       (util/stop e)
       (route-handler/redirect-to-whiteboard! page-name))}
    [:div.dashboard-card-title
-    [:div.flex.w-full
+    [:div.flex.w-full.items-center
      [:div.dashboard-card-title-name.font-bold
       (if (parse-uuid page-name)
         [:span.opacity-50 (t :untitled)]
         (get-page-display-name page-name))]
-     [:div.flex-1]]
+     [:div.flex-1]
+     [:div.dashboard-card-checkbox
+      {:style {:visibility (when show-checked? "visible")}
+       :on-click util/stop-propagation}
+      (ui/checkbox {:checked checked
+                    :on-change (fn [] (on-checked-change (not checked)))})]]
     [:div.flex.w-full.opacity-50
      [:div (get-page-human-update-time page-name)]
      [:div.flex-1]
@@ -164,12 +171,29 @@
                      :else 4)
           total-whiteboards (count whiteboards)
           empty-cards (- (max (* (math/ceil (/ (inc total-whiteboards) cols)) cols) (* 2 cols))
-                         (inc total-whiteboards))]
+                         (inc total-whiteboards))
+          [checked-page-names set-checked-page-names] (rum/use-state #{})
+          has-checked? (not-empty checked-page-names)]
       [:<>
-       [:h1.title.select-none
+       [:h1.select-none.flex.items-center.whiteboard-dashboard-title.title
         "All whiteboards"
         [:span.opacity-50
-         (str " · " total-whiteboards)]]
+         (str " · " total-whiteboards)]
+        [:div.flex-1]
+        (when has-checked?
+          [:button.ui__button.m-0.inline-flex.items-center.bg-red-800
+           {:on-click
+            (fn []
+              (state/set-modal! (page/batch-delete-dialog
+                                 (map (fn [name]
+                                        (some (fn [w] (when (= (:block/name w) name) w)) whiteboards))
+                                      checked-page-names)
+                                 false route/redirect-to-whiteboard-dashboard!)))}
+           [:span.flex.gap-2.items-center
+            [:span.opacity-50 (ui/icon "trash" {:style {:font-size 15}})]
+            (t :delete)
+            [:span.opacity-50
+             (str " · " (count checked-page-names))]]])]
        [:div
         {:ref ref}
         [:div.gap-8.grid.grid-rows-auto
@@ -177,7 +201,14 @@
                   :grid-template-columns (str "repeat(" cols ", minmax(0, 1fr))")}}
          (dashboard-create-card)
          (for [whiteboard-name whiteboard-names]
-           [:<> {:key whiteboard-name} (dashboard-preview-card whiteboard-name)])
+           [:<> {:key whiteboard-name}
+            (dashboard-preview-card whiteboard-name
+                                    {:show-checked? has-checked?
+                                     :checked (boolean (checked-page-names whiteboard-name))
+                                     :on-checked-change (fn [checked]
+                                                          (set-checked-page-names (if checked
+                                                                               (conj checked-page-names whiteboard-name)
+                                                                               (disj checked-page-names whiteboard-name))))})])
          (for [n (range empty-cards)]
            [:div.dashboard-card.dashboard-bg-card {:key n}])]]])
     [:div "This feature is not public available yet."]))
