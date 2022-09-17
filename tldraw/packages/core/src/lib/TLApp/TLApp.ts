@@ -17,7 +17,7 @@ import type {
   TLEvents,
   TLHandle,
 } from '../../types'
-import { KeyUtils, BoundsUtils, isNonNullable } from '../../utils'
+import { KeyUtils, BoundsUtils, isNonNullable, createNewLineBinding } from '../../utils'
 import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
 import { TLApi } from '../TLApi'
 import { TLCursors } from '../TLCursors'
@@ -602,6 +602,20 @@ export class TLApp<
 
   readonly clearBindingShape = (): this => {
     return this.setBindingShapes()
+  }
+
+  @action createNewLineBinding = (source: TLShape, target: TLShape) => {
+    if (source.canBind && target.canBind) {
+      const result = createNewLineBinding(source, target)
+      if (result) {
+        const [newLine, newBindings] = result
+        this.createShapes([newLine])
+        this.currentPage.updateBindings(Object.fromEntries(newBindings.map(b => [b.id, b])))
+        this.persist()
+        return true
+      }
+    }
+    return false
   }
 
   /* ---------------------- Brush --------------------- */

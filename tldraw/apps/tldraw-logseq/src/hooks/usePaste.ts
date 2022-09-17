@@ -8,6 +8,7 @@ import {
   TLShapeModel,
   uniqueId,
   validUUID,
+  createNewLineBinding,
 } from '@tldraw/core'
 import type { TLReactCallbacks } from '@tldraw/react'
 import Vec from '@tldraw/vec'
@@ -146,61 +147,12 @@ export function usePaste() {
         }
       }
 
-      // async function handleItems(items: any) {
-      //   for (const item of items) {
-      //     if (await handleDroppedItem(item)) {
-      //       const lineId = uniqueId()
-
-      //       const startBinding: TLBinding = {
-      //         id: uniqueId(),
-      //         distance: 200,
-      //         handleId: 'start',
-      //         fromId: lineId,
-      //         toId: app.selectedShapesArray[app.selectedShapesArray.length - 1].id,
-      //         point: [point[0], point[1]],
-      //       }
-      //       bindingsToCreate.push(startBinding)
-
-      //       const endBinding: TLBinding = {
-      //         id: uniqueId(),
-      //         distance: 200,
-      //         handleId: 'end',
-      //         fromId: lineId,
-      //         toId: shapesToCreate[shapesToCreate.length - 1].id,
-      //         point: [point[0], point[1]],
-      //       }
-      //       bindingsToCreate.push(endBinding)
-
-      //       shapesToCreate.push({
-      //         ...LineShape.defaultProps,
-      //         id: lineId,
-      //         handles: {
-      //           start: {
-      //             id: 'start',
-      //             canBind: true,
-      //             point: app.selectedShapesArray[0].getCenter(),
-      //             bindingId: startBinding.id,
-      //           },
-      //           end: {
-      //             id: 'end',
-      //             canBind: true,
-      //             point: [point[0], point[1]],
-      //             bindingId: endBinding.id,
-      //           },
-      //         },
-      //       })
-
-      //       return true
-      //     }
-      //   }
-      //   return false
-      // }
-
       async function tryCreateShapesFromDataTransfer(dataTransfer: DataTransfer) {
         return tryCreateShapeHelper(
           tryCreateShapeFromFiles,
           tryCreateShapeFromTextHTML,
-          tryCreateShapeFromTextPlain
+          tryCreateShapeFromTextPlain,
+          tryCreateShapeFromBlockUUID
         )(dataTransfer)
       }
 
@@ -257,6 +209,16 @@ export function usePaste() {
         const rawText = await getDataFromType(item, 'text/html')
         if (rawText) {
           return [createHTMLShape(rawText)]
+        }
+        return null
+      }
+
+      async function tryCreateShapeFromBlockUUID(dataTransfer: DataTransfer) {
+        // This is a Logseq custom data type defined in frontend.components.block
+        const rawText = dataTransfer.getData('block-uuid')
+        if (rawText) {
+          const text = rawText.trim()
+          return tryCreateShapeHelper(tryCreateLogseqPortalShapesFromString)(`((${text}))`)
         }
         return null
       }
@@ -464,6 +426,13 @@ export function usePaste() {
         if (allShapesToAdd.length > 0) {
           app.createShapes(allShapesToAdd)
         }
+
+        if (app.selectedShapesArray.length === 1 && allShapesToAdd.length === 1) {
+          const source = app.selectedShapesArray[0]
+          const target = app.getShapeById(allShapesToAdd[0].id!)!
+          app.createNewLineBinding(source, target)
+        }
+
         app.currentPage.updateBindings(Object.fromEntries(bindingsToCreate.map(b => [b.id, b])))
         app.setSelectedShapes(allShapesToAdd.map(s => s.id))
       })
