@@ -103,10 +103,6 @@
 ;; TODO:
 ;; add `key`
 
-(defn get-dragging-block
-  []
-  @*dragging-block)
-
 (defn- remove-nils
   [col]
   (remove nil? col))

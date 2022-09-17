@@ -6,7 +6,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db.model :as model]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.route :as route]
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.state :as state]
@@ -188,7 +187,7 @@
                                  (map (fn [name]
                                         (some (fn [w] (when (= (:block/name w) name) w)) whiteboards))
                                       checked-page-names)
-                                 false route/redirect-to-whiteboard-dashboard!)))}
+                                 false route-handler/redirect-to-whiteboard-dashboard!)))}
            [:span.flex.gap-2.items-center
             [:span.opacity-50 (ui/icon "trash" {:style {:font-size 15}})]
             (t :delete)

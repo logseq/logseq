@@ -28,8 +28,7 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
-            [frontend.db :as db]
-            [frontend.handler.user :as user]))
+            [frontend.db :as db]))
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]

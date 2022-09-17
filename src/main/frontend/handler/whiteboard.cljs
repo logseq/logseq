@@ -2,7 +2,6 @@
   (:require [datascript.core :as d]
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
-            [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
@@ -32,10 +31,6 @@
 (defn get-tldr-app
   []
   js/window.tln)
-
-(defn get-tldr-api
-  []
-  (when (get-tldr-app) js/tln.api))
 
 (defn tldraw-idle?
   "return true when tldraw is active and idle. nil when tldraw is 
@@ -163,24 +158,24 @@
        (create-new-whiteboard-page! page-name))
      (create-new-whiteboard-page! nil))))
 
-(defn ->logseq-portal-shape
-  [block-id point]
-  {:blockType "B"
-   :id (str (d/squuid))
-   :compact true
-   :pageId (str block-id)
-   :point point
-   :size [400, 0]
-   :type "logseq-portal"})
+;; (defn ->logseq-portal-shape
+;;   [block-id point]
+;;   {:blockType "B"
+;;    :id (str (d/squuid))
+;;    :compact true
+;;    :pageId (str block-id)
+;;    :point point
+;;    :size [400, 0]
+;;    :type "logseq-portal"})
 
-(defn add-new-block-portal-shape!
-  "Given the block uuid and the point, add a new shape to the referenced block."
-  [block-uuid client-x client-y]
-  (let [api (get-tldr-api)
-        point (js->clj (.. (get-tldr-app) -viewport (getPagePoint #js[client-x client-y])))
-        shape (->logseq-portal-shape block-uuid point)]
-    (editor-handler/set-blocks-id! [block-uuid])
-    (.createShapes api (clj->js shape))))
+;; (defn add-new-block-portal-shape!
+;;   "Given the block uuid and the point, add a new shape to the referenced block."
+;;   [block-uuid client-x client-y]
+;;   (let [api (get-tldr-api)
+;;         point (js->clj (.. (get-tldr-app) -viewport (getPagePoint #js[client-x client-y])))
+;;         shape (->logseq-portal-shape block-uuid point)]
+;;     (editor-handler/set-blocks-id! [block-uuid])
+;;     (.createShapes api (clj->js shape))))
 
 (defn- get-whiteboard-blocks
   "Given a page, return all the logseq blocks (exlude all shapes)"
