@@ -72,14 +72,28 @@ type CreateShapeFN<Args extends any[]> = (...args: Args) => Promise<MaybeShapes>
  * Try create a shape from a list of create shape functions. If one of the functions returns a
  * shape, return it, otherwise try again for the next one until all have been tried.
  */
-async function tryCreateShapeHelper<Args extends any[]>(fns: CreateShapeFN<Args>[], ...args: Args) {
-  for (const fn of fns) {
-    const result = await fn(...(args as any))
-    if (result && result.length > 0) {
-      return result
+function tryCreateShapeHelper<Args extends any[]>(...fns: CreateShapeFN<Args>[]) {
+  return async (...args: Args) => {
+    for (const fn of fns) {
+      const result = await fn(...(args as any))
+      if (result && result.length > 0) {
+        return result
+      }
     }
+    return null
   }
-  return null
+}
+
+// TODO: support file types
+async function getDataFromType(item: DataTransfer | ClipboardItem, type: `text/${string}`) {
+  if (!item.types.includes(type)) {
+    return null
+  }
+  if (item instanceof DataTransfer) {
+    return item.getData(type)
+  }
+  const blob = await item.getType(type)
+  return await blob.text()
 }
 
 // FIXME: for assets, we should prompt the user a loading spinner
@@ -90,7 +104,6 @@ export function usePaste() {
     async (app, { point, shiftKey, dataTransfer }) => {
       let imageAssetsToCreate: VideoImageAsset[] = []
       let assetsToClone: TLAsset[] = []
-      const shapesToCreate: Shape['props'][] = []
       const bindingsToCreate: TLBinding[] = []
 
       async function createAssetsFromURL(url: string, isVideo: boolean): Promise<VideoImageAsset> {
@@ -185,13 +198,27 @@ export function usePaste() {
 
       async function tryCreateShapesFromDataTransfer(dataTransfer: DataTransfer) {
         return tryCreateShapeHelper(
-          [tryCreateShapeFromFiles, tryCreateShapeFromTextHTML, tryCreateShapeFromTextPlain],
-          dataTransfer
-        )
+          tryCreateShapeFromFiles,
+          tryCreateShapeFromTextHTML,
+          tryCreateShapeFromTextPlain
+        )(dataTransfer)
       }
 
-      async function tryCreateShapeFromFiles(dataTransfer: DataTransfer) {
-        const files = Array.from(dataTransfer.files)
+      async function tryCreateShapesFromClipboard() {
+        const items = await navigator.clipboard.read()
+        const createShapesFn = tryCreateShapeHelper(
+          tryCreateShapeFromTextHTML,
+          tryCreateShapeFromTextPlain
+        )
+        const allShapes = (await Promise.all(items.map(item => createShapesFn(item))))
+          .flat()
+          .filter(isNonNullable)
+
+        return allShapes
+      }
+
+      async function tryCreateShapeFromFiles(item: DataTransfer) {
+        const files = Array.from(item.files)
         if (files.length > 0) {
           const assets = await createAssetsFromFiles(files)
           // ? could we get rid of this side effect?
@@ -223,30 +250,27 @@ export function usePaste() {
         return null
       }
 
-      function tryCreateShapeFromTextHTML(dataTransfer: DataTransfer) {
-        if (dataTransfer.types.includes('text/html') && !shiftKey) {
-          const html = dataTransfer.getData('text/html')
-
-          if (html) {
-            return [createHTMLShape(html)]
-          }
+      async function tryCreateShapeFromTextHTML(item: DataTransfer | ClipboardItem) {
+        if (shiftKey) {
+          return null
+        }
+        const rawText = await getDataFromType(item, 'text/html')
+        if (rawText) {
+          return [createHTMLShape(rawText)]
         }
         return null
       }
 
-      async function tryCreateShapeFromTextPlain(dataTransfer: DataTransfer) {
-        if (dataTransfer.types.includes('text/plain')) {
-          const text = dataTransfer.getData('text/plain').trim()
-
+      async function tryCreateShapeFromTextPlain(item: DataTransfer | ClipboardItem) {
+        const rawText = await getDataFromType(item, 'text/plain')
+        if (rawText) {
+          const text = rawText.trim()
           return tryCreateShapeHelper(
-            [
-              tryCreateShapeFromURL,
-              tryCreateShapeFromIframeString,
-              tryCreateClonedShapesFromJSON,
-              tryCreateLogseqPortalShapesFromString,
-            ],
-            text
-          )
+            tryCreateShapeFromURL,
+            tryCreateShapeFromIframeString,
+            tryCreateClonedShapesFromJSON,
+            tryCreateLogseqPortalShapesFromString
+          )(text)
         }
 
         return null
@@ -411,25 +435,24 @@ export function usePaste() {
 
       app.cursors.setCursor(TLCursor.Progress)
 
+      let newShapes: Shape['props'][] = []
       try {
-        const shapesFromDataTransfer = dataTransfer
-          ? await tryCreateShapesFromDataTransfer(dataTransfer)
-          : null
-        if (shapesFromDataTransfer) {
-          shapesToCreate.push(...shapesFromDataTransfer)
+        if (dataTransfer) {
+          newShapes.push(...((await tryCreateShapesFromDataTransfer(dataTransfer)) ?? []))
         } else {
           // from Clipboard app or Shift copy etc
           // in this case, we do not have the dataTransfer object
+          newShapes.push(...((await tryCreateShapesFromClipboard()) ?? []))
         }
       } catch (error) {
         console.error(error)
       }
 
-      const allShapesToAdd: TLShapeModel[] = shapesToCreate.map(shape => {
+      const allShapesToAdd: TLShapeModel[] = newShapes.map(shape => {
         return {
           ...shape,
           parentId: app.currentPageId,
-          id: shape.id ?? uniqueId(),
+          id: validUUID(shape.id) ? shape.id : uniqueId(),
         }
       })
 
