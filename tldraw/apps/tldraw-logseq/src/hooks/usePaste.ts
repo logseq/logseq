@@ -218,7 +218,21 @@ export function usePaste() {
         const rawText = dataTransfer.getData('block-uuid')
         if (rawText) {
           const text = rawText.trim()
-          return tryCreateShapeHelper(tryCreateLogseqPortalShapesFromString)(`((${text}))`)
+          const allSelectedBlocks = window.logseq?.api?.get_selected_blocks?.()
+          const blockUUIDs =
+            allSelectedBlocks && allSelectedBlocks?.length > 1
+              ? allSelectedBlocks.map(b => b.uuid)
+              : [text]
+          const tasks = blockUUIDs.map(uuid => tryCreateLogseqPortalShapesFromString(`((${uuid}))`))
+          const newShapes = (await Promise.all(tasks)).flat().filter(isNonNullable)
+          return newShapes.map((s, idx) => {
+            // if there are multiple shapes, shift them to the right
+            return {
+              ...s,
+              // TODO: use better alignment?
+              point: [point[0] + (LogseqPortalShape.defaultProps.size[0] + 16) * idx, point[1]],
+            }
+          })
         }
         return null
       }
