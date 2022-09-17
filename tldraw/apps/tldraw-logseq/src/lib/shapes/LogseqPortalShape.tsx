@@ -147,8 +147,8 @@ const CircleButton = ({
   return (
     <div data-active={active} style={style} className="tl-circle-button" onMouseDown={onClick}>
       <div className="tl-circle-button-icons-wrapper" data-icons-count={otherIcon ? 2 : 1}>
-        <TablerIcon name={icon} />
         {otherIcon && <TablerIcon name={otherIcon} />}
+        <TablerIcon name={icon} />
       </div>
     </div>
   )

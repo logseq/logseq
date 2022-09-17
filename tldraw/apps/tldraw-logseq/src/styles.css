@@ -510,11 +510,15 @@ button.tl-select-input-trigger {
   border: 2px solid var(--ls-secondary-background-color);
   top: 2px;
 
+  .tie {
+    transform: translateY(-100%); 
+  }
+
   &[data-active='false']:hover {
     .tie {
-      transform: translateY(-100%);
+      transform: translateY(0);
 
-      &:last-of-type {
+      &:first-of-type {
         opacity: 0.6;
       }
     }
@@ -526,9 +530,9 @@ button.tl-select-input-trigger {
     border: 2px solid var(--ls-active-primary-color);
 
     .tie {
-      transform: translateY(-100%);
+      transform: translateY(0);
 
-      &:first-of-type {
+      &:last-of-type {
         opacity: 0.6;
       }
     }
@@ -538,7 +542,7 @@ button.tl-select-input-trigger {
       background-color: var(--ls-secondary-background-color);
 
       .tie {
-        transform: translateY(0);
+        transform: translateY(-100%);
       }
     }
   }
