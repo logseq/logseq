@@ -1006,3 +1006,17 @@
                                                        (set-visible! in-view?))))})
            ref (.-ref inViewState)]
        (lazy-visible-inner visible? content-fn ref)))))
+
+(rum/defc portal
+  [children]
+  (let [[portal-anchor set-portal-anchor] (rum/use-state nil)]
+    (rum/use-effect!
+     (fn []
+       (let [div (js/document.createElement "div")]
+         (.setAttribute div "data-logseq-portal" "1")
+         (.append js/document.body div)
+         (set-portal-anchor div)
+         #(.remove div)))
+     [])
+    (when portal-anchor
+      (rum/portal (rum/fragment children) portal-anchor))))
