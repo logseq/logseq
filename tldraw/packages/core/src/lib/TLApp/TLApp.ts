@@ -577,15 +577,18 @@ export class TLApp<
   @observable bindingIds?: string[]
 
   @computed get bindingShapes(): S[] | undefined {
-    const activeBindings = this.selectedShapesArray
-      .flatMap(s => Object.values(s.props.handles ?? {}))
-      .flatMap(h => h.bindingId)
-      .filter(isNonNullable)
-      .flatMap(binding => [
-        this.currentPage.bindings[binding]?.fromId,
-        this.currentPage.bindings[binding]?.toId,
-      ])
-      .filter(isNonNullable)
+    const activeBindings =
+      this.selectedShapesArray.length === 1
+        ? this.selectedShapesArray
+            .flatMap(s => Object.values(s.props.handles ?? {}))
+            .flatMap(h => h.bindingId)
+            .filter(isNonNullable)
+            .flatMap(binding => [
+              this.currentPage.bindings[binding]?.fromId,
+              this.currentPage.bindings[binding]?.toId,
+            ])
+            .filter(isNonNullable)
+        : []
     const bindingIds = [...(this.bindingIds ?? []), ...activeBindings]
     return bindingIds
       ? this.currentPage.shapes.filter(shape => bindingIds?.includes(shape.id))

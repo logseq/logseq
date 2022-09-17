@@ -271,6 +271,7 @@ export function usePaste() {
             const shapesToCreate = shapes.map(shape => {
               return {
                 ...shape,
+                id: uniqueId(),
                 point: [
                   point[0] + shape.point![0] - commonBounds.minX,
                   point[1] + shape.point![1] - commonBounds.minY,
@@ -396,7 +397,6 @@ export function usePaste() {
           return [
             {
               ...LogseqPortalShape.defaultProps,
-              id: uniqueId(),
               size: [400, 0], // use 0 here to enable auto-resize
               point: [point[0], point[1]],
               pageId: uuid,
@@ -425,13 +425,11 @@ export function usePaste() {
         console.error(error)
       }
 
-      console.log(bindingsToCreate)
-
       const allShapesToAdd: TLShapeModel[] = shapesToCreate.map(shape => {
         return {
           ...shape,
           parentId: app.currentPageId,
-          id: uniqueId(),
+          id: shape.id ?? uniqueId(),
         }
       })
 
