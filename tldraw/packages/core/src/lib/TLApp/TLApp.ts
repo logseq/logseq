@@ -15,8 +15,9 @@ import type {
   TLSubscriptionEventInfo,
   TLStateEvents,
   TLEvents,
+  TLHandle,
 } from '../../types'
-import { KeyUtils, BoundsUtils } from '../../utils'
+import { KeyUtils, BoundsUtils, isNonNullable } from '../../utils'
 import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
 import { TLApi } from '../TLApi'
 import { TLCursors } from '../TLCursors'
@@ -576,9 +577,18 @@ export class TLApp<
   @observable bindingIds?: string[]
 
   @computed get bindingShapes(): S[] | undefined {
-    const { bindingIds, currentPage } = this
+    const activeBindings = this.selectedShapesArray
+      .flatMap(s => Object.values(s.props.handles ?? {}))
+      .flatMap(h => h.bindingId)
+      .filter(isNonNullable)
+      .flatMap(binding => [
+        this.currentPage.bindings[binding]?.fromId,
+        this.currentPage.bindings[binding]?.toId,
+      ])
+      .filter(isNonNullable)
+    const bindingIds = [...(this.bindingIds ?? []), ...activeBindings]
     return bindingIds
-      ? currentPage.shapes.filter(shape => bindingIds?.includes(shape.id))
+      ? this.currentPage.shapes.filter(shape => bindingIds?.includes(shape.id))
       : undefined
   }
 

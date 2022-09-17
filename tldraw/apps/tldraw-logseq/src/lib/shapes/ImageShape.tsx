@@ -4,6 +4,7 @@ import { HTMLContainer, TLComponentProps } from '@tldraw/react'
 import { TLAsset, TLImageShape, TLImageShapeProps } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import { LogseqContext } from '../logseq-context'
+import { BindingIndicator } from './BindingIndicator'
 
 export interface ImageShapeProps extends TLImageShapeProps {
   type: 'image'
@@ -27,7 +28,7 @@ export class ImageShape extends TLImageShape<ImageShapeProps> {
     isAspectRatioLocked: true,
   }
 
-  ReactComponent = observer(({ events, isErasing, asset }: TLComponentProps) => {
+  ReactComponent = observer(({ events, isErasing, isBinding, asset }: TLComponentProps) => {
     const {
       props: {
         opacity,
@@ -45,6 +46,8 @@ export class ImageShape extends TLImageShape<ImageShapeProps> {
 
     return (
       <HTMLContainer {...events} opacity={isErasing ? 0.2 : opacity}>
+        {isBinding && <BindingIndicator mode="html" strokeWidth={4} size={[w, h]} />}
+
         <div style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
           {asset && (
             <img
