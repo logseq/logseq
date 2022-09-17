@@ -34,14 +34,6 @@
   [props]
   (block/page-cp {:preview? true} {:block/name (gobj/get props "pageName")}))
 
-(defn create-block-shape-by-id
-  [e]
-  (when-let [block (block/get-dragging-block)]
-    (let [uuid (:block/uuid block)
-          client-x (gobj/get e "clientX")
-          client-y (gobj/get e "clientY")]
-      (whiteboard-handler/add-new-block-portal-shape! uuid client-x client-y))))
-
 (defn search-handler
   [q filters]
   (let [{:keys [pages? blocks? files?]} (js->clj filters {:keywordize-keys true})
@@ -101,7 +93,6 @@
         :on-blur (fn [e] 
                    (when (#{"INPUT" "TEXTAREA"} (.-tagName (gobj/get e "target")))
                      (state/clear-edit!)))
-        :on-drop create-block-shape-by-id
         ;; wheel -> overscroll may cause browser navigation
         :on-wheel util/stop-propagation}
 

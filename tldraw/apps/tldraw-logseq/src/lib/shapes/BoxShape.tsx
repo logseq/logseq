@@ -44,7 +44,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
 
     return (
       <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
-        {isBinding && <BindingIndicator strokeWidth={strokeWidth} size={[w, h]} />}
+        {isBinding && <BindingIndicator mode="svg" strokeWidth={strokeWidth} size={[w, h]} />}
         <rect
           className={isSelected || !noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
           x={strokeWidth / 2}

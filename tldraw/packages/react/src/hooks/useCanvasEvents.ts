@@ -53,9 +53,8 @@ export function useCanvasEvents() {
     const onDrop = async (e: React.DragEvent<Element>) => {
       e.preventDefault()
 
-      if (!e.dataTransfer.files?.length) return
       const point = [e.clientX, e.clientY]
-      app.dropFiles(e.dataTransfer.files, point)
+      app.drop(e.dataTransfer, point)
     }
 
     const onDragOver = (e: React.DragEvent<Element>) => {

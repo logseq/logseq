@@ -8,6 +8,7 @@ import {
   validUUID,
 } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
+import { useDebouncedValue } from '@tldraw/react'
 import Vec from '@tldraw/vec'
 import { action, computed, makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
@@ -17,6 +18,7 @@ import { TablerIcon } from '../../components/icons'
 import { TextInput } from '../../components/inputs/TextInput'
 import { useCameraMovingRef } from '../../hooks/useCameraMoving'
 import { LogseqContext, type SearchResult } from '../logseq-context'
+import { BindingIndicator } from './BindingIndicator'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
 const HEADER_HEIGHT = 40
@@ -102,18 +104,18 @@ const highlightedJSX = (input: string, keyword: string) => {
 const useSearch = (q: string, searchFilter: 'B' | 'P' | null) => {
   const { handlers } = React.useContext(LogseqContext)
   const [results, setResults] = React.useState<SearchResult | null>(null)
+  const dq = useDebouncedValue(q, 200)
 
   React.useEffect(() => {
     let canceled = false
-    const searchHandler = handlers?.search
-    if (q.length > 0 && searchHandler) {
+    if (dq.length > 0) {
       const filter = { 'pages?': true, 'blocks?': true, 'files?': false }
       if (searchFilter === 'B') {
         filter['pages?'] = false
       } else if (searchFilter === 'P') {
         filter['blocks?'] = false
       }
-      handlers.search(q, filter).then(_results => {
+      handlers.search(dq, filter).then(_results => {
         if (!canceled) {
           setResults(_results)
         }
@@ -124,7 +126,7 @@ const useSearch = (q: string, searchFilter: 'B' | 'P' | null) => {
     return () => {
       canceled = true
     }
-  }, [q, handlers?.search])
+  }, [dq, handlers?.search])
 
   return results
 }
@@ -653,7 +655,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   ReactComponent = observer((componentProps: TLComponentProps) => {
     const { events, isErasing, isEditing, isBinding } = componentProps
     const {
-      props: { opacity, pageId, stroke, fill, scaleLevel },
+      props: { opacity, pageId, stroke, fill, scaleLevel, strokeWidth, size },
     } = this
 
     const app = useApp<Shape>()
@@ -747,6 +749,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         }}
         {...events}
       >
+        {isBinding && <BindingIndicator mode="html" strokeWidth={strokeWidth} size={size} />}
         <div
           onWheelCapture={stop}
           onPointerDown={stop}
@@ -767,9 +770,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               data-portal-selected={portalSelected}
               style={{
                 background: this.props.compact ? 'transparent' : fill,
-                boxShadow: isBinding
-                  ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
-                  : 'none',
                 color: stroke,
                 width: `calc(100% / ${scaleRatio})`,
                 height: `calc(100% / ${scaleRatio})`,

@@ -1,27 +1,29 @@
 import {
   BoundsUtils,
   getSizeFromSrc,
+  isNonNullable,
   TLAsset,
   TLBinding,
   TLCursor,
   TLShapeModel,
   uniqueId,
   validUUID,
+  createNewLineBinding,
 } from '@tldraw/core'
 import type { TLReactCallbacks } from '@tldraw/react'
 import Vec from '@tldraw/vec'
 import * as React from 'react'
 import { NIL as NIL_UUID } from 'uuid'
 import {
-  type Shape,
   HTMLShape,
-  YouTubeShape,
+  IFrameShape,
+  ImageShape,
   LogseqPortalShape,
   VideoShape,
-  ImageShape,
-  IFrameShape,
+  YouTubeShape,
+  type Shape,
 } from '../lib'
-import type { LogseqContextValue } from '../lib/logseq-context'
+import { LogseqContext } from '../lib/logseq-context'
 
 const isValidURL = (url: string) => {
   try {
@@ -40,121 +42,203 @@ const safeParseJson = (json: string) => {
   }
 }
 
+interface VideoImageAsset extends TLAsset {
+  size?: number[]
+}
+
 const IMAGE_EXTENSIONS = ['.png', '.svg', '.jpg', '.jpeg', '.gif']
 const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogg']
 
+function getFileType(filename: string) {
+  // Get extension, verify that it's an image
+  const extensionMatch = filename.match(/\.[0-9a-z]+$/i)
+  if (!extensionMatch) {
+    return 'unknown'
+  }
+  const extension = extensionMatch[0].toLowerCase()
+  if (IMAGE_EXTENSIONS.includes(extension)) {
+    return 'image'
+  }
+  if (VIDEO_EXTENSIONS.includes(extension)) {
+    return 'video'
+  }
+  return 'unknown'
+}
+
+type MaybeShapes = Shape['props'][] | null | undefined
+
+type CreateShapeFN<Args extends any[]> = (...args: Args) => Promise<MaybeShapes> | MaybeShapes
+
+/**
+ * Try create a shape from a list of create shape functions. If one of the functions returns a
+ * shape, return it, otherwise try again for the next one until all have been tried.
+ */
+function tryCreateShapeHelper<Args extends any[]>(...fns: CreateShapeFN<Args>[]) {
+  return async (...args: Args) => {
+    for (const fn of fns) {
+      const result = await fn(...(args as any))
+      if (result && result.length > 0) {
+        return result
+      }
+    }
+    return null
+  }
+}
+
+// TODO: support file types
+async function getDataFromType(item: DataTransfer | ClipboardItem, type: `text/${string}`) {
+  if (!item.types.includes(type)) {
+    return null
+  }
+  if (item instanceof DataTransfer) {
+    return item.getData(type)
+  }
+  const blob = await item.getType(type)
+  return await blob.text()
+}
+
 // FIXME: for assets, we should prompt the user a loading spinner
-export function usePaste(context: LogseqContextValue) {
-  const { handlers } = context
+export function usePaste() {
+  const { handlers } = React.useContext(LogseqContext)
 
   return React.useCallback<TLReactCallbacks<Shape>['onPaste']>(
-    async (app, { point, shiftKey, files }) => {
-      interface VideoImageAsset extends TLAsset {
-        size: number[]
-      }
-
-      const imageAssetsToCreate: VideoImageAsset[] = []
+    async (app, { point, shiftKey, dataTransfer }) => {
+      let imageAssetsToCreate: VideoImageAsset[] = []
       let assetsToClone: TLAsset[] = []
-      const shapesToCreate: Shape['props'][] = []
       const bindingsToCreate: TLBinding[] = []
 
-      async function createAsset(file: File): Promise<string | null> {
-        return await handlers.saveAsset(file)
-      }
-
-      async function handleAssetUrl(url: string, isVideo: boolean) {
+      async function createAssetsFromURL(url: string, isVideo: boolean): Promise<VideoImageAsset> {
         // Do we already have an asset for this image?
         const existingAsset = Object.values(app.assets).find(asset => asset.src === url)
         if (existingAsset) {
-          imageAssetsToCreate.push(existingAsset as VideoImageAsset)
-          return true
+          return existingAsset as VideoImageAsset
         } else {
-          try {
-            // Create a new asset for this image
-            const asset: VideoImageAsset = {
-              id: uniqueId(),
-              type: isVideo ? 'video' : 'image',
-              src: url,
-              size: await getSizeFromSrc(handlers.makeAssetUrl(url), isVideo),
-            }
-            imageAssetsToCreate.push(asset)
-            return true
-          } catch {
-            return false
+          // Create a new asset for this image
+          const asset: VideoImageAsset = {
+            id: uniqueId(),
+            type: isVideo ? 'video' : 'image',
+            src: url,
+            size: await getSizeFromSrc(handlers.makeAssetUrl(url), isVideo),
           }
+          return asset
         }
       }
 
-      // TODO: handle PDF?
-      async function handleFiles(files: File[]) {
-        let added = false
-        for (const file of files) {
-          // Get extension, verify that it's an image
-          const extensionMatch = file.name.match(/\.[0-9a-z]+$/i)
-          if (!extensionMatch) {
-            continue
-          }
-          const extension = extensionMatch[0].toLowerCase()
-          if (![...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS].includes(extension)) {
-            continue
-          }
-          const isVideo = VIDEO_EXTENSIONS.includes(extension)
-          try {
-            // Turn the image into a base64 dataurl
-            const dataurl = await createAsset(file)
-            if (!dataurl) {
-              continue
+      async function createAssetsFromFiles(files: File[]) {
+        const tasks = files
+          .filter(file => getFileType(file.name) !== 'unknown')
+          .map(async file => {
+            try {
+              const dataurl = await handlers.saveAsset(file)
+              return await createAssetsFromURL(dataurl, getFileType(file.name) === 'video')
+            } catch (err) {
+              console.error(err)
             }
-            if (await handleAssetUrl(dataurl, isVideo)) {
-              added = true
-            }
-          } catch (error) {
-            console.error(error)
-          }
-        }
-        return added
-      }
-
-      async function handleHTML(item: ClipboardItem) {
-        if (item.types.includes('text/html')) {
-          const blob = await item.getType('text/html')
-          const rawText = (await blob.text()).trim()
-
-          shapesToCreate.push({
-            ...HTMLShape.defaultProps,
-            html: rawText,
-            point: [point[0], point[1]],
+            return null
           })
-          return true
-        }
-        return false
+        return (await Promise.all(tasks)).filter(isNonNullable)
       }
 
-      async function handleTextPlain(item: ClipboardItem) {
-        if (item.types.includes('text/plain')) {
-          const blob = await item.getType('text/plain')
-          const rawText = (await blob.text()).trim()
-
-          if (await handleURL(rawText)) {
-            return true
-          }
-
-          if (handleIframe(rawText)) {
-            return true
-          }
-
-          if (handleTldrawShapes(rawText)) {
-            return true
-          }
-          if (await handleLogseqPortalShapes(rawText)) {
-            return true
-          }
+      function createHTMLShape(text: string) {
+        return {
+          ...HTMLShape.defaultProps,
+          html: text,
+          point: [point[0], point[1]],
         }
-
-        return false
       }
 
-      function handleTldrawShapes(rawText: string) {
+      async function tryCreateShapesFromDataTransfer(dataTransfer: DataTransfer) {
+        return tryCreateShapeHelper(
+          tryCreateShapeFromFiles,
+          tryCreateShapeFromTextHTML,
+          tryCreateShapeFromTextPlain,
+          tryCreateShapeFromBlockUUID
+        )(dataTransfer)
+      }
+
+      async function tryCreateShapesFromClipboard() {
+        const items = await navigator.clipboard.read()
+        const createShapesFn = tryCreateShapeHelper(
+          tryCreateShapeFromTextHTML,
+          tryCreateShapeFromTextPlain
+        )
+        const allShapes = (await Promise.all(items.map(item => createShapesFn(item))))
+          .flat()
+          .filter(isNonNullable)
+
+        return allShapes
+      }
+
+      async function tryCreateShapeFromFiles(item: DataTransfer) {
+        const files = Array.from(item.files)
+        if (files.length > 0) {
+          const assets = await createAssetsFromFiles(files)
+          // ? could we get rid of this side effect?
+          imageAssetsToCreate = assets
+
+          return assets.map((asset, i) => {
+            const defaultProps =
+              asset.type === 'video' ? VideoShape.defaultProps : ImageShape.defaultProps
+            const newShape = {
+              ...defaultProps,
+              // TODO: Should be place near the last edited shape
+              assetId: asset.id,
+              opacity: 1,
+            }
+
+            if (asset.size) {
+              Object.assign(newShape, {
+                point: [
+                  point[0] - asset.size[0] / 4 + i * 16,
+                  point[1] - asset.size[1] / 4 + i * 16,
+                ],
+                size: Vec.div(asset.size, 2),
+              })
+            }
+
+            return newShape
+          })
+        }
+        return null
+      }
+
+      async function tryCreateShapeFromTextHTML(item: DataTransfer | ClipboardItem) {
+        if (shiftKey) {
+          return null
+        }
+        const rawText = await getDataFromType(item, 'text/html')
+        if (rawText) {
+          return [createHTMLShape(rawText)]
+        }
+        return null
+      }
+
+      async function tryCreateShapeFromBlockUUID(dataTransfer: DataTransfer) {
+        // This is a Logseq custom data type defined in frontend.components.block
+        const rawText = dataTransfer.getData('block-uuid')
+        if (rawText) {
+          const text = rawText.trim()
+          return tryCreateShapeHelper(tryCreateLogseqPortalShapesFromString)(`((${text}))`)
+        }
+        return null
+      }
+
+      async function tryCreateShapeFromTextPlain(item: DataTransfer | ClipboardItem) {
+        const rawText = await getDataFromType(item, 'text/plain')
+        if (rawText) {
+          const text = rawText.trim()
+          return tryCreateShapeHelper(
+            tryCreateShapeFromURL,
+            tryCreateShapeFromIframeString,
+            tryCreateClonedShapesFromJSON,
+            tryCreateLogseqPortalShapesFromString
+          )(text)
+        }
+
+        return null
+      }
+
+      function tryCreateClonedShapesFromJSON(rawText: string) {
         const data = safeParseJson(rawText)
         try {
           if (data?.type === 'logseq/whiteboard-shapes') {
@@ -170,58 +254,58 @@ export function usePaste(context: LogseqContextValue) {
                 maxY: (shape.point?.[1] ?? point[1]) + (shape.size?.[1] ?? 4),
               }))
             )
-            const clonedShapes = shapes.map(shape => {
+            const shapesToCreate = shapes.map(shape => {
               return {
                 ...shape,
+                id: uniqueId(),
                 point: [
                   point[0] + shape.point![0] - commonBounds.minX,
                   point[1] + shape.point![1] - commonBounds.minY,
                 ],
               }
             })
-            // @ts-expect-error - This is a valid shape
-            shapesToCreate.push(...clonedShapes)
 
             // Try to rebinding the shapes to the new assets
-            shapesToCreate.forEach((s, idx) => {
-              if (s.handles) {
-                Object.values(s.handles).forEach(h => {
-                  if (h.bindingId) {
-                    // try to bind the new shape
-                    const binding = app.currentPage.bindings[h.bindingId]
-                    // FIXME: if copy from a different whiteboard, the binding info
-                    // will not be available
-                    if (binding) {
-                      // if the copied binding from/to is in the source
-                      const oldFromIdx = shapes.findIndex(s => s.id === binding.fromId)
-                      const oldToIdx = shapes.findIndex(s => s.id === binding.toId)
-                      if (binding && oldFromIdx !== -1 && oldToIdx !== -1) {
-                        const newBinding: TLBinding = {
-                          ...binding,
-                          id: uniqueId(),
-                          fromId: shapesToCreate[oldFromIdx].id,
-                          toId: shapesToCreate[oldToIdx].id,
-                        }
-                        bindingsToCreate.push(newBinding)
-                        h.bindingId = newBinding.id
-                      } else {
-                        h.bindingId = undefined
-                      }
+            shapesToCreate
+              .flatMap(s => Object.values(s.handles ?? {}))
+              .forEach(h => {
+                if (!h.bindingId) {
+                  return
+                }
+                // try to bind the new shape
+                const binding = app.currentPage.bindings[h.bindingId]
+                // FIXME: if copy from a different whiteboard, the binding info
+                // will not be available
+                if (binding) {
+                  // if the copied binding from/to is in the source
+                  const oldFromIdx = shapes.findIndex(s => s.id === binding.fromId)
+                  const oldToIdx = shapes.findIndex(s => s.id === binding.toId)
+                  if (binding && oldFromIdx !== -1 && oldToIdx !== -1) {
+                    const newBinding: TLBinding = {
+                      ...binding,
+                      id: uniqueId(),
+                      fromId: shapesToCreate[oldFromIdx].id,
+                      toId: shapesToCreate[oldToIdx].id,
                     }
+                    bindingsToCreate.push(newBinding)
+                    h.bindingId = newBinding.id
+                  } else {
+                    h.bindingId = undefined
                   }
-                })
-              }
-            })
+                } else {
+                  console.warn('binding not found', h.bindingId)
+                }
+              })
 
-            return true
+            return shapesToCreate as Shape['props'][]
           }
         } catch (err) {
           console.error(err)
         }
-        return false
+        return null
       }
 
-      async function handleURL(rawText: string) {
+      async function tryCreateShapeFromURL(rawText: string) {
         if (isValidURL(rawText)) {
           const isYoutubeUrl = (url: string) => {
             const youtubeRegex =
@@ -229,120 +313,108 @@ export function usePaste(context: LogseqContextValue) {
             return youtubeRegex.test(url)
           }
           if (isYoutubeUrl(rawText)) {
-            shapesToCreate.push({
-              ...YouTubeShape.defaultProps,
+            return [
+              {
+                ...YouTubeShape.defaultProps,
+                url: rawText,
+                point: [point[0], point[1]],
+              },
+            ]
+          }
+
+          return [
+            {
+              ...IFrameShape.defaultProps,
               url: rawText,
               point: [point[0], point[1]],
-            })
-            return true
-          }
-          const extension = rawText.match(/\.[0-9a-z]+$/i)?.[0].toLowerCase()
-          if (
-            extension &&
-            [...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS].includes(extension) &&
-            (await handleAssetUrl(rawText, VIDEO_EXTENSIONS.includes(extension)))
-          ) {
-            return true
-          }
-
-          shapesToCreate.push({
-            ...IFrameShape.defaultProps,
-            url: rawText,
-            point: [point[0], point[1]],
-          })
-          return true
+            },
+          ]
         }
-        return false
+        return null
       }
 
-      function handleIframe(rawText: string) {
+      function tryCreateShapeFromIframeString(rawText: string) {
         // if rawText is iframe text
         if (rawText.startsWith('<iframe')) {
-          shapesToCreate.push({
-            ...HTMLShape.defaultProps,
-            html: rawText,
-            point: [point[0], point[1]],
-          })
-          return true
+          return [
+            {
+              ...HTMLShape.defaultProps,
+              html: rawText,
+              point: [point[0], point[1]],
+            },
+          ]
         }
-        return false
+        return null
       }
 
-      async function handleLogseqPortalShapes(rawText: string) {
+      async function tryCreateLogseqPortalShapesFromString(rawText: string) {
         if (/^\(\(.*\)\)$/.test(rawText) && rawText.length === NIL_UUID.length + 4) {
           const blockRef = rawText.slice(2, -2)
           if (validUUID(blockRef)) {
-            shapesToCreate.push({
+            return [
+              {
+                ...LogseqPortalShape.defaultProps,
+                point: [point[0], point[1]],
+                size: [400, 0], // use 0 here to enable auto-resize
+                pageId: blockRef,
+                blockType: 'B' as 'B',
+              },
+            ]
+          }
+        }
+        // [[page name]] ?
+        else if (/^\[\[.*\]\]$/.test(rawText)) {
+          const pageName = rawText.slice(2, -2)
+          return [
+            {
               ...LogseqPortalShape.defaultProps,
               point: [point[0], point[1]],
               size: [400, 0], // use 0 here to enable auto-resize
-              pageId: blockRef,
-              blockType: 'B',
-            })
-            return true
-          }
-        } else if (/^\[\[.*\]\]$/.test(rawText)) {
-          const pageName = rawText.slice(2, -2)
-          shapesToCreate.push({
-            ...LogseqPortalShape.defaultProps,
-            point: [point[0], point[1]],
-            size: [400, 0], // use 0 here to enable auto-resize
-            pageId: pageName,
-            blockType: 'P',
-          })
-          return true
+              pageId: pageName,
+              blockType: 'P' as 'P',
+            },
+          ]
         }
 
+        // Otherwise, creating a new block that belongs to the current whiteboard
         const uuid = handlers?.addNewBlock(rawText)
         if (uuid) {
           // create text shape
-          shapesToCreate.push({
-            ...LogseqPortalShape.defaultProps,
-            id: uniqueId(),
-            size: [400, 0], // use 0 here to enable auto-resize
-            point: [point[0], point[1]],
-            pageId: uuid,
-            blockType: 'B',
-            compact: true,
-          })
-          return true
+          return [
+            {
+              ...LogseqPortalShape.defaultProps,
+              size: [400, 0], // use 0 here to enable auto-resize
+              point: [point[0], point[1]],
+              pageId: uuid,
+              blockType: 'B' as 'B',
+              compact: true,
+            },
+          ]
         }
-        return false
+
+        return null
       }
 
       app.cursors.setCursor(TLCursor.Progress)
 
+      let newShapes: Shape['props'][] = []
       try {
-        if (files && files.length > 0) {
-          await handleFiles(files)
+        if (dataTransfer) {
+          newShapes.push(...((await tryCreateShapesFromDataTransfer(dataTransfer)) ?? []))
         } else {
-          for (const item of await navigator.clipboard.read()) {
-            let handled = !shiftKey ? await handleHTML(item) : false
-            if (!handled) {
-              await handleTextPlain(item)
-            }
-          }
+          // from Clipboard app or Shift copy etc
+          // in this case, we do not have the dataTransfer object
+          newShapes.push(...((await tryCreateShapesFromClipboard()) ?? []))
         }
       } catch (error) {
         console.error(error)
       }
 
-      const allShapesToAdd: TLShapeModel[] = [
-        // assets to images
-        ...imageAssetsToCreate.map((asset, i) => ({
-          ...(asset.type === 'video' ? VideoShape : ImageShape).defaultProps,
-          // TODO: Should be place near the last edited shape
-          point: [point[0] - asset.size[0] / 4 + i * 16, point[1] - asset.size[1] / 4 + i * 16],
-          size: Vec.div(asset.size, 2),
-          assetId: asset.id,
-          opacity: 1,
-        })),
-        ...shapesToCreate,
-      ].map(shape => {
+      const allShapesToAdd: TLShapeModel[] = newShapes.map(shape => {
         return {
           ...shape,
           parentId: app.currentPageId,
-          id: uniqueId(),
+          id: validUUID(shape.id) ? shape.id : uniqueId(),
         }
       })
 
@@ -354,6 +426,13 @@ export function usePaste(context: LogseqContextValue) {
         if (allShapesToAdd.length > 0) {
           app.createShapes(allShapesToAdd)
         }
+
+        if (app.selectedShapesArray.length === 1 && allShapesToAdd.length === 1) {
+          const source = app.selectedShapesArray[0]
+          const target = app.getShapeById(allShapesToAdd[0].id!)!
+          app.createNewLineBinding(source, target)
+        }
+
         app.currentPage.updateBindings(Object.fromEntries(bindingsToCreate.map(b => [b.id, b])))
         app.setSelectedShapes(allShapesToAdd.map(s => s.id))
       })
