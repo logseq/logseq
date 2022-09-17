@@ -216,42 +216,20 @@
     "@babel/helper-validator-identifier" "^7.18.6"
     to-fast-properties "^2.0.0"
 
-"@capacitor/android@3.2.2":
-  version "3.2.2"
-  resolved "https://registry.yarnpkg.com/@capacitor/android/-/android-3.2.2.tgz#0847d62d21c4e7007cf0b34fd95965afa22ba619"
-  integrity sha512-+/qbSZIHPP1VndRUe5c6dgheLV0MgX9CXeUo7el8ODHgVrC2DXKhczgvs+EpTAmvS2VZFxzDeld7AMUmHybTcg==
+"@capacitor/android@^4.0.0":
+  version "4.2.0"
+  resolved "https://registry.yarnpkg.com/@capacitor/android/-/android-4.2.0.tgz#f06539694adbaf189cf38cb039f079bde4f7422b"
+  integrity sha512-LWZhM31DoQuNSW8ZGslJ8gZfOAZS2A5TLq30HP1bn0OQTJGvOFIizQysraVRSOOq5FRptykf2nZWu6WEwoKMlA==
 
-"@capacitor/app@1.0.6":
-  version "1.0.6"
-  resolved "https://registry.yarnpkg.com/@capacitor/app/-/app-1.0.6.tgz#8ae8271c7ee0cb8ff7578d1135846759adff153f"
-  integrity sha512-NjHIs6f4WJQuhabnCkcE6YLyIIn+t4Al5etB/SJGZJwUYRe1yJYtZ4T/KobDIzwwZn9I9de7QbEA5947lGttBQ==
+"@capacitor/app@^4.0.0":
+  version "4.0.1"
+  resolved "https://registry.yarnpkg.com/@capacitor/app/-/app-4.0.1.tgz#05c60541c427ef30f4762d8f786e70d0ed32fe01"
+  integrity sha512-frPft9TMJL70jWq5jmxwGSBddZVvsWxX5Agj2i19WJerk37aTgljB05HRr/YLg6mF1G/NIXmmFJZDY8MEgirDg==
 
-"@capacitor/camera@1.2.1":
-  version "1.2.1"
-  resolved "https://registry.yarnpkg.com/@capacitor/camera/-/camera-1.2.1.tgz#dda900210242ed7eb732c10da482ee8ec127d1ce"
-  integrity sha512-CVT4ITwCK4AeTpNNlYFb0vuqWVD6490PWHqdaPV977clySbspDbrwPeWFKkx8emBnoNHW5urKN7tz737PD7jcg==
-
-"@capacitor/cli@3.2.2":
-  version "3.2.2"
-  resolved "https://registry.yarnpkg.com/@capacitor/cli/-/cli-3.2.2.tgz#791c04a562584820b1bf76b9b6bc4d8bcdbd6c01"
-  integrity sha512-/yradyGNGxO+Dj1ppzty3ReK+/Ukmnz0GdAE5nX3zySGSQg0ebZs81gKYDKJaXknQhx1ZZJGlT9D9ORiN3sbhw==
-  dependencies:
-    "@ionic/cli-framework-output" "^2.2.1"
-    "@ionic/utils-fs" "^3.1.5"
-    "@ionic/utils-subprocess" "^2.1.6"
-    "@ionic/utils-terminal" "^2.3.0"
-    commander "^6.0.0"
-    debug "^4.2.0"
-    env-paths "^2.2.0"
-    kleur "^4.1.1"
-    native-run "^1.4.0"
-    open "^7.1.0"
-    plist "^3.0.2"
-    prompts "^2.3.2"
-    semver "^7.3.2"
-    tar "^6.0.5"
-    tslib "^2.1.0"
-    xml2js "^0.4.23"
+"@capacitor/camera@^4.0.0":
+  version "4.1.1"
+  resolved "https://registry.yarnpkg.com/@capacitor/camera/-/camera-4.1.1.tgz#a361b3595c378666614e3bd3384d158b85e4d7c3"
+  integrity sha512-L/1KLg4IRCAUmwhmu5jIic4U2OLAHFSW5GoExFU9yR8iCJo1SBGSiay2TpU3PpgmJHRtazO6pxKUCyAmDExkhw==
 
 "@capacitor/cli@>= 3 < 4":
   version "3.8.0"
@@ -275,17 +253,33 @@
     tslib "^2.1.0"
     xml2js "^0.4.23"
 
-"@capacitor/clipboard@^1.0.8":
-  version "1.0.8"
-  resolved "https://registry.yarnpkg.com/@capacitor/clipboard/-/clipboard-1.0.8.tgz#5799cad4518618d45501509348a5c20d3ed32647"
-  integrity sha512-q8Fb5imJHQtYA+1sGqqigCrXmf0R1ZGXf/XMRtTznQqm0jhiayUusQN63Rv1YtKIPTJeeVJqy/i6rv72d4GH0Q==
-
-"@capacitor/core@3.2.2":
-  version "3.2.2"
-  resolved "https://registry.yarnpkg.com/@capacitor/core/-/core-3.2.2.tgz#5926788920ba9117aa735d2941f5b2bdc4a6889a"
-  integrity sha512-xY3VyLbF0vSxQmQto6cI1PqP8idbwmfEAeaj248uuSrIYHeMc1L3RS6UN/yNBDPYPeAfNUwBhVqSTCtuZkEIcg==
+"@capacitor/cli@^4.0.0":
+  version "4.2.0"
+  resolved "https://registry.yarnpkg.com/@capacitor/cli/-/cli-4.2.0.tgz#626b8ea447a210d38d77eedf3d0dc629bf19beaa"
+  integrity sha512-34L/BoDe3BmWBdrXRoF7lszT27ho6ikMdCeMePohU+cEn4ceqiURN7tnPZRyUlpc/1TO+d8d+qb1QQQSTq2oPA==
   dependencies:
-    tslib "^2.1.0"
+    "@ionic/cli-framework-output" "^2.2.5"
+    "@ionic/utils-fs" "^3.1.6"
+    "@ionic/utils-subprocess" "^2.1.11"
+    "@ionic/utils-terminal" "^2.3.3"
+    commander "^9.3.0"
+    debug "^4.3.4"
+    env-paths "^2.2.0"
+    kleur "^4.1.4"
+    native-run "^1.6.0"
+    open "^8.4.0"
+    plist "^3.0.5"
+    prompts "^2.4.2"
+    rimraf "^3.0.2"
+    semver "^7.3.7"
+    tar "^6.1.11"
+    tslib "^2.4.0"
+    xml2js "^0.4.23"
+
+"@capacitor/clipboard@^4.0.0":
+  version "4.0.1"
+  resolved "https://registry.yarnpkg.com/@capacitor/clipboard/-/clipboard-4.0.1.tgz#b96ae5563583d12e510745fff03aa23050284948"
+  integrity sha512-DO5fC6ax5Tm/4K77NjxRLu/bdyvO6FDCK38w05CE4LHvi3RF4LTM8EgnmIrEGKxwwbH5VloTeca9Cu6bsMXPiA==
 
 "@capacitor/core@>= 3 < 4":
   version "3.8.0"
@@ -294,40 +288,47 @@
   dependencies:
     tslib "^2.1.0"
 
-"@capacitor/filesystem@1.0.6":
-  version "1.0.6"
-  resolved "https://registry.yarnpkg.com/@capacitor/filesystem/-/filesystem-1.0.6.tgz#b837585e6b5d48dc705ee89e49cc7c6aeb8874ec"
-  integrity sha512-8xqUbDZFGBMhgqoBSn9wEd9OBPdHIRegQ9zCCZcpHNf3FFAIby1ck+aDFnoq+Da49xhD6ks1SKCBSxz/26qWTw==
+"@capacitor/core@^4.0.0":
+  version "4.2.0"
+  resolved "https://registry.yarnpkg.com/@capacitor/core/-/core-4.2.0.tgz#608285d4d8d60388940fc8f25dc1576aa99187e4"
+  integrity sha512-kHKn6693Yt9TWfuJ0Q+fyxYCpYAvVMKdu3t500seMEfdgNlF6BGaX5GbOnXkU4cnM9p+sIhRiwXv8Iqwm0E+NA==
+  dependencies:
+    tslib "^2.1.0"
 
-"@capacitor/haptics@^1.1.4":
-  version "1.1.4"
-  resolved "https://registry.yarnpkg.com/@capacitor/haptics/-/haptics-1.1.4.tgz#80d5bc4776740a227a8cb83c85fac4db1316db8e"
-  integrity sha512-+pJIb5X7xAcbrWj6rJaV+cwBlv8aFwB1/Ob6EV4atydThuuVSSsAL4hI4ZYlPNOxM6H5s+ZDLj7Pa2os4eFmtg==
+"@capacitor/filesystem@^4.0.0":
+  version "4.1.1"
+  resolved "https://registry.yarnpkg.com/@capacitor/filesystem/-/filesystem-4.1.1.tgz#8a0b4d543d131cc8a421af2d22a21f4577f09fbe"
+  integrity sha512-qpXIR4kxW2age91EiDFOh5KpZ5SUFs1rgWmNrO60wo+AT3Ok0Dzfol2aLSqvNAenDGUilA44ThJPeE+ArRPVzg==
 
-"@capacitor/ios@3.2.2":
-  version "3.2.2"
-  resolved "https://registry.yarnpkg.com/@capacitor/ios/-/ios-3.2.2.tgz#0417cf89df23f651c6a1e20a8fb98294a918ce1f"
-  integrity sha512-Eq17Y+UDHFmYGaZcObvxHAcHw0fF9TCBAg1f5f6qdV8ab3cKKEUB9xMvoCSZAueBfxFARrD18TsZJKoxh2YsLA==
+"@capacitor/haptics@^4.0.0":
+  version "4.0.1"
+  resolved "https://registry.yarnpkg.com/@capacitor/haptics/-/haptics-4.0.1.tgz#8113c757f9bce3cd6618f6aadda47e7aa7a92069"
+  integrity sha512-ZLVoLdK1Md/xIRRrDOnrLCKGRg8UENY1ShpKcysPN1z1MgcpvB/9Nbqczm3RH24zyo3MP/7homkqMzUGxPBlwQ==
 
-"@capacitor/keyboard@^1.2.0":
-  version "1.2.3"
-  resolved "https://registry.yarnpkg.com/@capacitor/keyboard/-/keyboard-1.2.3.tgz#8046d8256e1c72ed3a2dad6ff01dc37a0c415077"
-  integrity sha512-KTSzJkMa6CrmDIDhWfswNPqS7gvYlL25E1gqXbY7w/EhyBjJhEdF0bc6QUFufS+ZVMlcPafc0/E5P+pTfLnKiA==
+"@capacitor/ios@^4.0.0":
+  version "4.2.0"
+  resolved "https://registry.yarnpkg.com/@capacitor/ios/-/ios-4.2.0.tgz#718aef107044af35f574a32c17230cb638399ed6"
+  integrity sha512-YOncOJHMB1QhgmWBk3Ml8IT+KoN131zlmtCBtx9Szzc6/LvzG/NMojVqfl996k37gRw9sYHrvNP01sn22IijSA==
 
-"@capacitor/share@^1.1.2":
-  version "1.1.2"
-  resolved "https://registry.yarnpkg.com/@capacitor/share/-/share-1.1.2.tgz#7e35c2c3bccc9955e852d3dd401afe7bd5a69b7e"
-  integrity sha512-FUTdjA7MAiD1tkGVZ+C3gs7a4fyEhXojDO2HkZ954oupG1cQ51dEJ1xTNnR9BAmCwUJO4sa91cxy7SMyCDPuGg==
+"@capacitor/keyboard@^4.0.0":
+  version "4.0.1"
+  resolved "https://registry.yarnpkg.com/@capacitor/keyboard/-/keyboard-4.0.1.tgz#36cd5f8aa2ef87a722f318e525d1bda12e7811d1"
+  integrity sha512-JZVci2v9jAKH0sIoNNZzmw/cWGXWf+KneLt0yDr/6YSs/2/tfuH10yOrUOhgrKFkR+fFj/rddTClQXUQ8Rqcrg==
 
-"@capacitor/splash-screen@1.1.3":
-  version "1.1.3"
-  resolved "https://registry.yarnpkg.com/@capacitor/splash-screen/-/splash-screen-1.1.3.tgz#024bc91b2b521b9f1d5e86f16a114f294bf326fa"
-  integrity sha512-DJh1w9872UofZWAxPLgd5yWi09W0IoWPVBdVd8Ku1mrPfFvtcMeguZHGLEIo+A6DkdCTWzMrh26TLCIympws2g==
+"@capacitor/share@^4.0.0":
+  version "4.0.1"
+  resolved "https://registry.yarnpkg.com/@capacitor/share/-/share-4.0.1.tgz#71471eba1f193e1d73c5a507cd8f4b836999f68f"
+  integrity sha512-czqYavgW+rMrlcgZkLHJ4Xwr+7E/T2YxxZ5tVtdqxANlKCw/qUL2tpNx3wphiC8lWj9wLUWFjgrBBDeZSlPYdQ==
 
-"@capacitor/status-bar@1.0.6":
-  version "1.0.6"
-  resolved "https://registry.yarnpkg.com/@capacitor/status-bar/-/status-bar-1.0.6.tgz#d58c9087cfc7c7377e8009bea86152e4fdd2939e"
-  integrity sha512-5MGWFq76iiKvHpbZ/Xc0Zig3WZyzWZ62wvC4qxak8OuVHBNG4fA1p/XXY9teQPaU3SupEJHnLkw6Gn1LuDp+ew==
+"@capacitor/splash-screen@^4.0.0":
+  version "4.0.1"
+  resolved "https://registry.yarnpkg.com/@capacitor/splash-screen/-/splash-screen-4.0.1.tgz#5017a33bade5509e075f010c6381190e6ca6c5ba"
+  integrity sha512-7hklUx69aZDonuLP1R5X4ZTGgZLwX8RTj9/3U1905Kz/XflcT7Rhighbad+uZBaOU+L/8Vm6Y3RlR3rFj4ELVA==
+
+"@capacitor/status-bar@^4.0.0":
+  version "4.0.1"
+  resolved "https://registry.yarnpkg.com/@capacitor/status-bar/-/status-bar-4.0.1.tgz#d1320add5f4ef383394b94beae45a0c5af7250e1"
+  integrity sha512-BmEyOf3m/hAf8bO4hCX0m5gpQPSgd05mGYl+9E841WUZeJjcYlmiG/EBshAUb2uGCVtyNaG36yPXB0r0Ypg+rw==
 
 "@electron/get@^1.14.1":
   version "1.14.1"
@@ -350,7 +351,7 @@
   resolved "https://registry.yarnpkg.com/@excalidraw/excalidraw/-/excalidraw-0.10.0.tgz#5329d6fb1b0cca068e2cd34da6d648dd6d0d3fec"
   integrity sha512-0fHc/oX394dHAT7LEacwZ0vh8aeI179plYnfaeLeRHBtHARgmtlmvxcnxd2pxJ0Z1Uj/Cy76oK9MVw/y8P1HhQ==
 
-"@ionic/cli-framework-output@^2.2.1":
+"@ionic/cli-framework-output@^2.2.1", "@ionic/cli-framework-output@^2.2.5":
   version "2.2.5"
   resolved "https://registry.yarnpkg.com/@ionic/cli-framework-output/-/cli-framework-output-2.2.5.tgz#0db9fba7efe0c27bb5085b12ee01f22053e44152"
   integrity sha512-YeDLTnTaE6V4IDUxT8GDIep0GuRIFaR7YZDLANMuuWJZDmnTku6DP+MmQoltBeLmVvz1BAAZgk41xzxdq6H2FQ==
@@ -405,7 +406,7 @@
     debug "^4.0.0"
     tslib "^2.0.1"
 
-"@ionic/utils-subprocess@^2.1.6":
+"@ionic/utils-subprocess@^2.1.11", "@ionic/utils-subprocess@^2.1.6":
   version "2.1.11"
   resolved "https://registry.yarnpkg.com/@ionic/utils-subprocess/-/utils-subprocess-2.1.11.tgz#805b86c066fe3a50f6739551ca228d52f25ffeb2"
   integrity sha512-6zCDixNmZCbMCy5np8klSxOZF85kuDyzZSTTQKQP90ZtYNCcPYmuFSzaqDwApJT4r5L3MY3JrqK1gLkc6xiUPw==
@@ -478,6 +479,11 @@
   version "0.2.1"
   resolved "https://registry.yarnpkg.com/@kanru/rage-wasm/-/rage-wasm-0.2.1.tgz#dd8fdd3133992c42bf68c0086d8cad40a13bc329"
   integrity sha512-sYi4F2mL6Mpcz7zbS4myasw11xLBEbgZkDMRVg9jNxTKt6Ct/LT7/vCHDmEzAFcPcPqixD5De6Ql3bJijAX0/w==
+
+"@logseq/capacitor-file-sync@0.0.5":
+  version "0.0.5"
+  resolved "https://registry.yarnpkg.com/@logseq/capacitor-file-sync/-/capacitor-file-sync-0.0.5.tgz#e391d3ec9eb65d200fa5af18738913d19a223f39"
+  integrity sha512-3cdpwt5lsEE7occQwJKaalaKGXxgucSDzFNeRkRQMylRehlZskAQtCjgDFR7Wt3tBQZdLZmjpgj7ioYQesWbTA==
 
 "@logseq/react-tweet-embed@1.3.1-1":
   version "1.3.1-1"
@@ -1915,6 +1921,11 @@ commander@^8.0.0:
   resolved "https://registry.yarnpkg.com/commander/-/commander-8.3.0.tgz#4837ea1b2da67b9c616a67afbb0fafee567bca66"
   integrity sha512-OkTL9umf+He2DZkUq8f8J9of7yL6RJKI24dVITBmNfZBmri9zYZQrKkuXiKhyfPSu8tUhnVBB1iKXevvnlR4Ww==
 
+commander@^9.3.0:
+  version "9.4.0"
+  resolved "https://registry.yarnpkg.com/commander/-/commander-9.4.0.tgz#bc4a40918fefe52e22450c111ecd6b7acce6f11c"
+  integrity sha512-sRPT+umqkz90UA8M1yqYfnHlZA7fF6nSphDtxeywPZ49ysjxDQybzk13CL+mXekDRG92skbcqCLVovuCusNmFw==
+
 component-emitter@^1.2.1:
   version "1.3.0"
   resolved "https://registry.yarnpkg.com/component-emitter/-/component-emitter-1.3.0.tgz#16e4070fba8ae29b679f2215853ee181ab2eabc0"
@@ -2266,6 +2277,11 @@ defer-to-connect@^1.0.1:
   version "1.1.3"
   resolved "https://registry.yarnpkg.com/defer-to-connect/-/defer-to-connect-1.1.3.tgz#331ae050c08dcf789f8c83a7b81f0ed94f4ac591"
   integrity sha512-0ISdNousHvZT2EiFlZeZAHBUvSxmKswVCEf8hW7KWgG4a8MVEu/3Vb6uWYozkjylyCxe0JBIiRB1jV45S70WVQ==
+
+define-lazy-prop@^2.0.0:
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/define-lazy-prop/-/define-lazy-prop-2.0.0.tgz#3f7ae421129bcaaac9bc74905c98a0009ec9ee7f"
+  integrity sha512-Ds09qNh8yw3khSjiJjiUInaGX9xlqZDY7JVryGxdxV7NPeuqQfplOpQ66yJFZut3jLa5zOwkXw1g9EI2uKh4Og==
 
 define-properties@^1.1.3, define-properties@^1.1.4:
   version "1.1.4"
@@ -3863,7 +3879,7 @@ is-descriptor@^1.0.0, is-descriptor@^1.0.2:
     is-data-descriptor "^1.0.0"
     kind-of "^6.0.2"
 
-is-docker@^2.0.0:
+is-docker@^2.0.0, is-docker@^2.1.1:
   version "2.2.1"
   resolved "https://registry.yarnpkg.com/is-docker/-/is-docker-2.2.1.tgz#33eeabe23cfe86f14bde4408a02c0cfb853acdaa"
   integrity sha512-F+i2BKsFrH66iaUFc0woD8sLy8getkwTwtOBjvs56Cx4CgJDeKQeqfz8wAYiSb8JOprWhHH5p77PbmYCvvUuXQ==
@@ -4084,7 +4100,7 @@ is-windows@^1.0.1, is-windows@^1.0.2:
   resolved "https://registry.yarnpkg.com/is-windows/-/is-windows-1.0.2.tgz#d1850eb9791ecd18e6182ce12a30f396634bb19d"
   integrity sha512-eXK1UInq2bPmjyX6e3VHIzMLobc4J94i4AWn+Hpq3OU5KkrRC96OAcR3PRJ/pGu6m8TRnBHP9dkXQVsT/COVIA==
 
-is-wsl@^2.1.1:
+is-wsl@^2.1.1, is-wsl@^2.2.0:
   version "2.2.0"
   resolved "https://registry.yarnpkg.com/is-wsl/-/is-wsl-2.2.0.tgz#74a4c76e77ca9fd3f932f290c17ea326cd157271"
   integrity sha512-fKzAra0rGJUUBwGBgNkHZuToZcn+TtXHpeCgmkMJMMYx1sQDYaCSyjJBSCa2nH1DGm7s3n1oBnohoVTBaN7Lww==
@@ -4230,7 +4246,7 @@ kleur@^3.0.3:
   resolved "https://registry.yarnpkg.com/kleur/-/kleur-3.0.3.tgz#a79c9ecc86ee1ce3fa6206d1216c501f147fc07e"
   integrity sha512-eTIzlVOSUR+JxdDFepEYcBMtZ9Qqdef+rnzWdRZuMbOywu5tO2w2N7rqjoANZ5k9vywhL6Br1VRjUIgTQx4E8w==
 
-kleur@^4.1.1:
+kleur@^4.1.1, kleur@^4.1.4:
   version "4.1.5"
   resolved "https://registry.yarnpkg.com/kleur/-/kleur-4.1.5.tgz#95106101795f7050c6c650f350c683febddb1780"
   integrity sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ==
@@ -4750,7 +4766,7 @@ nanomatch@^1.2.9:
     snapdragon "^0.8.1"
     to-regex "^3.0.1"
 
-native-run@^1.4.0, native-run@^1.5.0:
+native-run@^1.5.0, native-run@^1.6.0:
   version "1.7.0"
   resolved "https://registry.yarnpkg.com/native-run/-/native-run-1.7.0.tgz#01a975e0b8cdd55bc82d5c21a28f0ea8972283a8"
   integrity sha512-tkd0E9hwJcxd9xbpC1Z4KED3bK+bavQJ7p4BRMHtlikrvJX+OwHm7/qwDLzQ4emDEMQUG9rskRdJfo1UoGditA==
@@ -5020,13 +5036,22 @@ once@^1.3.0, once@^1.3.1, once@^1.3.2, once@^1.4.0:
   dependencies:
     wrappy "1"
 
-open@^7.1.0, open@^7.4.2:
+open@^7.4.2:
   version "7.4.2"
   resolved "https://registry.yarnpkg.com/open/-/open-7.4.2.tgz#b8147e26dcf3e426316c730089fd71edd29c2321"
   integrity sha512-MVHddDVweXZF3awtlAS+6pgKLlm/JgxZ90+/NBurBoQctVOOB/zDdVjcyPzQ+0laDGbsWgrRkflI65sQeOgT9Q==
   dependencies:
     is-docker "^2.0.0"
     is-wsl "^2.1.1"
+
+open@^8.4.0:
+  version "8.4.0"
+  resolved "https://registry.yarnpkg.com/open/-/open-8.4.0.tgz#345321ae18f8138f82565a910fdc6b39e8c244f8"
+  integrity sha512-XgFPPM+B28FtCCgSb9I+s9szOC1vZRSwgWsRUA5ylIxRTgKozqjOCrVOqGsYABPYK5qnfqClxZTFBa8PKt2v6Q==
+  dependencies:
+    define-lazy-prop "^2.0.0"
+    is-docker "^2.1.1"
+    is-wsl "^2.2.0"
 
 ordered-read-streams@^1.0.0:
   version "1.0.1"
@@ -5424,7 +5449,7 @@ playwright-core@1.25.2:
   dependencies:
     playwright-core "1.25.2"
 
-plist@^3.0.2, plist@^3.0.6:
+plist@^3.0.2, plist@^3.0.5, plist@^3.0.6:
   version "3.0.6"
   resolved "https://registry.yarnpkg.com/plist/-/plist-3.0.6.tgz#7cfb68a856a7834bca6dbfe3218eb9c7740145d3"
   integrity sha512-WiIVYyrp8TD4w8yCvyeIr+lkmrGRd5u0VbRnU+tP/aRLxP/YadJUYOMZJ/6hIa3oUyVCsycXvtNRgd5XBJIbiA==
@@ -5847,7 +5872,7 @@ promise-polyfill@^8.2.0:
   resolved "https://registry.yarnpkg.com/promise-polyfill/-/promise-polyfill-8.2.3.tgz#2edc7e4b81aff781c88a0d577e5fe9da822107c6"
   integrity sha512-Og0+jCRQetV84U8wVjMNccfGCnMQ9mGs9Hv78QFe+pSDD3gWTpz0y+1QCuxy5d/vBFuZ3iwP2eycAkvqIMPmWg==
 
-prompts@^2.3.2:
+prompts@^2.3.2, prompts@^2.4.2:
   version "2.4.2"
   resolved "https://registry.yarnpkg.com/prompts/-/prompts-2.4.2.tgz#7b57e73b3a48029ad10ebd44f74b01722a4cb069"
   integrity sha512-NxNv/kLguCA7p3jE8oL2aEBsrJWgAakBpgmgK6lpPWV+WuOmY6r2/zbAVnP+T8bQlA0nzHXSJSJW0Hq7ylaD2Q==
@@ -6531,7 +6556,7 @@ semver@^6.2.0, semver@^6.3.0:
   resolved "https://registry.yarnpkg.com/semver/-/semver-6.3.0.tgz#ee0a64c8af5e8ceea67687b133761e1becbd1d3d"
   integrity sha512-b39TBaTSfV6yBrapU89p5fKekE2m/NwnDocOVruQFS1/veMgdzuPcnOM34M6CwxW8jH/lxEa5rBoDeUwu5HHTw==
 
-semver@^7.3.2, semver@^7.3.4:
+semver@^7.3.2, semver@^7.3.4, semver@^7.3.7:
   version "7.3.7"
   resolved "https://registry.yarnpkg.com/semver/-/semver-7.3.7.tgz#12c5b649afdbf9049707796e22a4028814ce523f"
   integrity sha512-QlYTucUYOews+WeEujDoEGziz4K6c47V/Bd+LjSSYcA94p+DmINdf7ncaUinThfvZyu13lN9OY1XDxt8C0Tw0g==
@@ -7174,7 +7199,7 @@ tailwindcss@2.2.16:
     resolve "^1.20.0"
     tmp "^0.2.1"
 
-tar@^6.0.5, tar@^6.1.11:
+tar@^6.1.11:
   version "6.1.11"
   resolved "https://registry.yarnpkg.com/tar/-/tar-6.1.11.tgz#6760a38f003afa1b2ffd0ffe9e9abbd0eab3d621"
   integrity sha512-an/KZQzQUkZCkuoAA64hM92X0Urb6VpRhAFllDzz44U2mcD5scmT3zBc4VgVpkugF580+DQn8eAFSyoQt0tznA==

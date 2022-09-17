@@ -1780,8 +1780,11 @@ Similar to re-frame subscriptions"
 (defn get-file-sync-manager []
   (:file-sync/sync-manager @state))
 
-(defn get-file-sync-state [repo]
-  (get-in @state [:file-sync/sync-state repo]))
+(defn get-file-sync-state
+  ([]
+   (get-file-sync-state (get-current-repo)))
+  ([repo]
+   (get-in @state [:file-sync/sync-state repo])))
 
 (defn reset-parsing-state!
   []
@@ -1804,10 +1807,13 @@ Similar to re-frame subscriptions"
               {:is-active? is-active?
                :timestamp (inst-ms (js/Date.))}))
 
-(defn get-sync-graph-by-uuid
+(defn get-sync-graph-by-id
   [graph-uuid]
   (when graph-uuid
-    (first (filter #(= graph-uuid (:GraphUUID %))(get-repos)))))
+    (let [graph (first (filter #(= graph-uuid (:GraphUUID %))
+                               (get-repos)))]
+      (when (:url graph)
+        graph))))
 
 ;; (defn get-tldraw-api
 ;;   []

@@ -189,7 +189,7 @@
                           (p/let [files (map #(dissoc % :file/file) result)
                                   graphs-txid-meta (util-fs/read-graphs-txid-info dir-name)
                                   graph-uuid (and (vector? graphs-txid-meta) (second graphs-txid-meta))]
-                            (if-let [exists-graph (state/get-sync-graph-by-uuid graph-uuid)]
+                            (if-let [exists-graph (state/get-sync-graph-by-id graph-uuid)]
                               (state/pub-event!
                                [:notification/show
                                 {:content (str "This graph already exists in \"" (:root exists-graph) "\"")

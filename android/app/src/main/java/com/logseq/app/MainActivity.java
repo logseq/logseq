@@ -12,10 +12,9 @@ import java.util.TimerTask;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
         registerPlugin(FolderPicker.class);
         registerPlugin(FsWatcher.class);
-        registerPlugin(FileSync.class);
+        super.onCreate(savedInstanceState);
 
         new Timer().schedule(new TimerTask() {
             @Override
