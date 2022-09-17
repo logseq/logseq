@@ -126,6 +126,8 @@ export class IdleState<
     const selectedShape = this.app.selectedShapesArray[0]
     if (!selectedShape.canEdit) return
 
+    if (!PointUtils.pointInBounds(this.app.inputs.currentPoint, selectedShape.bounds)) return
+
     switch (info.type) {
       case TLTargetType.Shape: {
         this.tool.transition('editingShape', info)
