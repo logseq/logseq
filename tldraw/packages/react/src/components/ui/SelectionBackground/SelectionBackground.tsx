@@ -16,6 +16,8 @@ export const SelectionBackground = observer(function SelectionBackground<S exten
         width={Math.max(1, bounds.width)}
         height={Math.max(1, bounds.height)}
         pointerEvents="all"
+        rx={8}
+        ry={8}
       />
     </SVGContainer>
   )

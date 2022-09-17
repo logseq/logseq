@@ -94,6 +94,10 @@ h1.title.whiteboard-dashboard-title {
   padding: 12px;
 }
 
+.tl-logseq-cp-container > .ls-block {
+  padding: 0;
+}
+
 /**
  * ???
  */

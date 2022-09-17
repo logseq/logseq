@@ -131,6 +131,29 @@ const useSearch = (q: string, searchFilter: 'B' | 'P' | null) => {
   return results
 }
 
+const CircleButton = ({
+  active,
+  style,
+  icon,
+  otherIcon,
+  onClick,
+}: {
+  active?: boolean
+  style?: React.CSSProperties
+  icon: string
+  otherIcon?: string
+  onClick: () => void
+}) => {
+  return (
+    <div data-active={active} style={style} className="tl-circle-button" onMouseDown={onClick}>
+      <div className="tl-circle-button-icons-wrapper" data-icons-count={otherIcon ? 2 : 1}>
+        <TablerIcon name={icon} />
+        {otherIcon && <TablerIcon name={otherIcon} />}
+      </div>
+    </div>
+  )
+}
+
 export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   static id = 'logseq-portal'
   static defaultSearchQuery = ''
@@ -547,9 +570,12 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     return (
       <div className="tl-quick-search">
-        <div className="tl-quick-search-indicator">
-          <TablerIcon name={prefixIcon} className="tl-quick-search-icon" />
-        </div>
+        <CircleButton
+          icon={prefixIcon}
+          onClick={() => {
+            options[focusedOptionIdx]?.onChosen()
+          }}
+        />
         <div className="tl-quick-search-input-container">
           {searchFilter && (
             <div className="tl-quick-search-input-filter">
@@ -804,6 +830,13 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                   )}
                 </LogseqPortalShapeHeader>
               )}
+              <CircleButton
+                active={!!this.collapsed}
+                style={{ opacity: isSelected ? 1 : 0 }}
+                icon={this.props.blockType === 'B' ? 'block' : 'page'}
+                onClick={() => this.setCollapsed(!this.collapsed)}
+                otherIcon={'whiteboard-element'}
+              />
               {targetNotFound && <div className="tl-target-not-found">Target not found</div>}
               {showingPortal && <PortalComponent {...componentProps} />}
             </div>
