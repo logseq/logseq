@@ -671,7 +671,6 @@ button.tl-select-input-trigger {
 
   top: 0;
   left: 0;
-  transform: translate(1px, 1px);
   overscroll-behavior: none;
   opacity: 1;
   user-select: text;

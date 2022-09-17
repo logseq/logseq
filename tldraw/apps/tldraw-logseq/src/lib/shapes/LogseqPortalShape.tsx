@@ -226,7 +226,14 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     } else {
       const originalHeight = this.props.size[1]
       this.canResize[1] = !collapsed
+      console.log(
+        collapsed,
+        collapsed ? this.getHeaderHeight() : this.props.collapsedHeight,
+        this.getHeaderHeight(),
+        this.props.collapsedHeight
+      )
       this.update({
+        isAutoResizing: !collapsed,
         collapsed: collapsed,
         size: [this.props.size[0], collapsed ? this.getHeaderHeight() : this.props.collapsedHeight],
         collapsedHeight: collapsed ? originalHeight : this.props.collapsedHeight,
@@ -804,32 +811,36 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           {isCreating ? (
             <LogseqQuickSearch onChange={onPageNameChanged} />
           ) : (
-            <div
-              className="tl-logseq-portal-container"
-              data-collapsed={this.props.collapsed}
-              data-page-id={pageId}
-              data-portal-selected={portalSelected}
-              style={{
-                background: this.props.compact ? 'transparent' : fill,
-                color: stroke,
-                width: `calc(100% / ${scaleRatio})`,
-                height: `calc(100% / ${scaleRatio})`,
-                transform: `scale(${scaleRatio})`,
-                // @ts-expect-error ???
-                '--ls-primary-background-color': !fill?.startsWith('var') ? fill : undefined,
-                '--ls-primary-text-color': !stroke?.startsWith('var') ? stroke : undefined,
-                '--ls-title-text-color': !stroke?.startsWith('var') ? stroke : undefined,
-              }}
-            >
-              {!this.props.compact && !targetNotFound && (
-                <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'}>
-                  {this.props.blockType === 'P' ? (
-                    <PageNameLink pageName={pageId} />
-                  ) : (
-                    <Breadcrumb blockId={pageId} />
-                  )}
-                </LogseqPortalShapeHeader>
-              )}
+            <>
+              <div
+                className="tl-logseq-portal-container"
+                data-collapsed={this.collapsed}
+                data-page-id={pageId}
+                data-portal-selected={portalSelected}
+                style={{
+                  background: this.props.compact ? 'transparent' : fill,
+                  color: stroke,
+                  width: `calc(100% / ${scaleRatio})`,
+                  height: `calc(100% / ${scaleRatio})`,
+                  transform: `scale(${scaleRatio})`,
+                  // @ts-expect-error ???
+                  '--ls-primary-background-color': !fill?.startsWith('var') ? fill : undefined,
+                  '--ls-primary-text-color': !stroke?.startsWith('var') ? stroke : undefined,
+                  '--ls-title-text-color': !stroke?.startsWith('var') ? stroke : undefined,
+                }}
+              >
+                {!this.props.compact && !targetNotFound && (
+                  <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'}>
+                    {this.props.blockType === 'P' ? (
+                      <PageNameLink pageName={pageId} />
+                    ) : (
+                      <Breadcrumb blockId={pageId} />
+                    )}
+                  </LogseqPortalShapeHeader>
+                )}
+                {targetNotFound && <div className="tl-target-not-found">Target not found</div>}
+                {showingPortal && <PortalComponent {...componentProps} />}
+              </div>
               <CircleButton
                 active={!!this.collapsed}
                 style={{ opacity: isSelected ? 1 : 0 }}
@@ -837,9 +848,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 onClick={() => this.setCollapsed(!this.collapsed)}
                 otherIcon={'whiteboard-element'}
               />
-              {targetNotFound && <div className="tl-target-not-found">Target not found</div>}
-              {showingPortal && <PortalComponent {...componentProps} />}
-            </div>
+            </>
           )}
         </div>
       </HTMLContainer>

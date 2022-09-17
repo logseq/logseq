@@ -1,18 +1,13 @@
 import { Vec } from '@tldraw/vec'
-import {
-  type TLEventMap,
-  type TLEventShapeInfo,
-  type TLEvents,
-  TLTargetType,
-} from '../../../../types'
-import { type TLShape, TLBoxShape } from '../../../shapes'
+import type * as types from '../../../../types'
+import type * as shapes from '../../../shapes'
 import type { TLApp } from '../../../TLApp'
 import { TLToolState } from '../../../TLToolState'
 import type { TLSelectTool } from '../TLSelectTool'
 
 export class PointingSelectedShapeState<
-  S extends TLShape,
-  K extends TLEventMap,
+  S extends shapes.TLShape,
+  K extends types.TLEventMap,
   R extends TLApp<S, K>,
   P extends TLSelectTool<S, K, R>
 > extends TLToolState<S, K, R, P> {
@@ -20,7 +15,7 @@ export class PointingSelectedShapeState<
 
   private pointedSelectedShape?: S
 
-  onEnter = (info: TLEventShapeInfo<S>) => {
+  onEnter = (info: types.TLEventShapeInfo<S>) => {
     this.pointedSelectedShape = info.shape
   }
 
@@ -28,44 +23,32 @@ export class PointingSelectedShapeState<
     this.pointedSelectedShape = undefined
   }
 
-  onWheel: TLEvents<S>['wheel'] = (info, e) => {
+  onWheel: types.TLEvents<S>['wheel'] = (info, e) => {
     this.onPointerMove(info, e)
   }
 
-  onPointerMove: TLEvents<S>['pointer'] = () => {
+  onPointerMove: types.TLEvents<S>['pointer'] = () => {
     const { currentPoint, originPoint } = this.app.inputs
     if (Vec.dist(currentPoint, originPoint) > 5) {
       this.tool.transition('translating')
     }
   }
 
-  onPointerUp: TLEvents<S>['pointer'] = () => {
+  onPointerUp: types.TLEvents<S>['pointer'] = () => {
     const { shiftKey } = this.app.inputs
-    const { selectedShapesArray } = this.app
     if (!this.pointedSelectedShape) throw Error('Expected a pointed selected shape')
     if (shiftKey) {
       const { selectedIds } = this.app
       const next = Array.from(selectedIds.values())
       next.splice(next.indexOf(this.pointedSelectedShape.id), 1)
       this.app.setSelectedShapes(next)
-    } else if (
-      selectedShapesArray.length === 1 &&
-      this.pointedSelectedShape.canEdit &&
-      this.pointedSelectedShape instanceof TLBoxShape
-    ) {
-      this.tool.transition('editingShape', {
-        shape: this.pointedSelectedShape,
-        order: 0,
-        type: TLTargetType.Shape,
-      })
-      return
     } else {
       this.app.setSelectedShapes([this.pointedSelectedShape.id])
     }
     this.tool.transition('idle')
   }
 
-  onPinchStart: TLEvents<S>['pinch'] = (info, event) => {
+  onPinchStart: types.TLEvents<S>['pinch'] = (info, event) => {
     this.tool.transition('pinching', { info, event })
   }
 }
