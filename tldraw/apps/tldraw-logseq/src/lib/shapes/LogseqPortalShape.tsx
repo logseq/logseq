@@ -133,6 +133,8 @@ const useSearch = (q: string, searchFilter: 'B' | 'P' | null) => {
 
 export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   static id = 'logseq-portal'
+  static defaultSearchQuery = ''
+  static defaultSearchFilter: 'B' | 'P' | null = null
 
   static defaultProps: LogseqPortalShapeProps = {
     id: 'logseq-portal',
@@ -305,7 +307,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   }
 
   LogseqQuickSearch = observer(({ onChange }: LogseqQuickSearchProps) => {
-    const [q, setQ] = React.useState('')
+    const [q, setQ] = React.useState(LogseqPortalShape.defaultSearchQuery)
+    const [searchFilter, setSearchFilter] = React.useState<'B' | 'P' | null>(
+      LogseqPortalShape.defaultSearchFilter
+    )
     const rInput = React.useRef<HTMLInputElement>(null)
     const { handlers, renderers } = React.useContext(LogseqContext)
     const app = useApp<Shape>()
@@ -313,6 +318,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const finishCreating = React.useCallback((id: string) => {
       onChange(id)
       rInput.current?.blur()
+      if (id) {
+        LogseqPortalShape.defaultSearchQuery = ''
+        LogseqPortalShape.defaultSearchFilter = null
+      }
     }, [])
 
     const onAddBlock = React.useCallback((content: string) => {
@@ -332,7 +341,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     const [focusedOptionIdx, setFocusedOptionIdx] = React.useState<number>(0)
 
-    const [searchFilter, setSearchFilter] = React.useState<'B' | 'P' | null>(null)
     const searchResult = useSearch(q, searchFilter)
 
     const [prefixIcon, setPrefixIcon] = React.useState<string>('circle-plus')
@@ -343,6 +351,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         rInput.current?.focus()
       })
     }, [searchFilter])
+
+    React.useEffect(() => {
+      LogseqPortalShape.defaultSearchQuery = q
+      LogseqPortalShape.defaultSearchFilter = searchFilter
+    }, [q, searchFilter])
 
     type Option = {
       actionIcon: 'search' | 'circle-plus'
@@ -507,6 +520,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           e.preventDefault()
         } else if (e.key === 'Backspace' && q.length === 0) {
           setSearchFilter(null)
+        } else if (e.key === 'Escape') {
+          finishCreating('')
         }
 
         if (newIndex !== focusedOptionIdx) {
