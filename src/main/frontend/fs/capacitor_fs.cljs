@@ -325,7 +325,8 @@
          (log/error :copy-file-failed error)))))
   (stat [_this dir path]
     (let [path (get-file-path dir path)]
-      (<stat path)))
+      (p/chain (.stat Filesystem (clj->js {:path path}))
+               #(js->clj % :keywordize-keys true))))
   (open-dir [_this _ok-handler]
     (p/let [_ (when (mobile-util/native-android?) (android-check-permission))
             {:keys [path localDocumentsPath]} (-> (.pickFolder mobile-util/folder-picker)
