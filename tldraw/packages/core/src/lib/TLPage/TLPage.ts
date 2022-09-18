@@ -35,6 +35,8 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     this.addShapes(...shapes)
     makeObservable(this)
 
+    // Performance bottleneck!! Optimize me :/
+    // Instead of watch for every shape change, we should only watch for the changed ones
     reaction(
       () => ({
         id: this.id,
