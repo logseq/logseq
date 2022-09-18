@@ -200,7 +200,9 @@
           (list :finished-local->remote :finished-remote->local)
           (do
             (state/set-state! :file-sync/progress {})
-            (state/set-state! :file-sync/start {}))
+            (state/set-state! :file-sync/start {})
+            (state/set-state! [:file-sync/last-synced-at (state/get-current-repo)]
+                              (:epoch data)))
 
           :start
           (state/set-state! :file-sync/start data)

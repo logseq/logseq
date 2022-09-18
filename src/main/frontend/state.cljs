@@ -246,6 +246,8 @@
      :file-sync/set-remote-graph-password-result {}
      :file-sync/progress                    {}
      :file-sync/start                       {}
+     ;; graph -> epoch
+     :file-sync/last-synced-at              {}
      :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
 
      :file/rename-event-chan                (async/chan 100)

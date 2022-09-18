@@ -174,6 +174,16 @@
      [percentage])
     [:span.cp__file-sync-indicator-progress-pie {:ref *el}]))
 
+(rum/defc last-synced-cp < rum/reactive
+  []
+  (let [last-synced-at (state/sub [:file-sync/last-synced-at (state/get-current-repo)])
+        last-synced-at (if last-synced-at
+                         (util/time-ago (tc/from-long (* last-synced-at 1000)))
+                         "just now")]
+    [:div.cl (ui/icon "history")
+     [:span.pl-1.opacity-60 "Last change was"]
+     [:span.pl-1 last-synced-at]]))
+
 (def *last-calculated-time (atom nil))
 
 (rum/defc indicator-progress-pane
@@ -218,9 +228,7 @@
                                                           {:width (str (if (> p-total 0)
                                                                          (* (/ p-finished p-total) 100) 0) "%")}}]]]
                                  [[:span.opacity-60 "all file edits"]
-                                  [:div.cl (ui/icon "history")
-                                   [:span.pl-1.opacity-60 "Last change was"]
-                                   [:span.pl-1 "just now"]]])
+                                  (last-synced-cp)])
         *el-ref                (rum/use-ref nil)
         [list-active?, set-list-active?] (rum/use-state true)]
 
