@@ -461,7 +461,7 @@ html[data-theme='dark'] {
     width: 0 !important;
 
     .resizer {
-      left: -4px;
+      width: 4px !important;
     }
   }
 

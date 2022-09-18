@@ -221,6 +221,7 @@
 
         p-total                (if syncing? (calc-progress-total) 0)
         p-finished             (if syncing? (calc-progress-finished) 0)
+        p-total                (max p-total p-finished)
 
         tip-b&p                (if (and syncing? progressing?)
                                  [[:span (util/format "%s of %s files" p-finished p-total)]
