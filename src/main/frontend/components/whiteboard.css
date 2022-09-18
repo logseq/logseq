@@ -23,11 +23,15 @@ h1.title.whiteboard-dashboard-title {
 
   .dashboard-card-checkbox {
     @apply flex items-center justify-center rounded flex-shrink-0;
-    border: 2px solid var(--ls-border-color);
+    border: 2px solid transparent;
     visibility: hidden;
     width: 24px;
     height: 24px;
     transform: translateX(4px);
+
+    &:focus-within {
+      border-color: var(--ls-border-color);
+    }
 
     .form-checkbox {
       top: 0;
@@ -40,6 +44,7 @@ h1.title.whiteboard-dashboard-title {
 }
 
 .dashboard-preview-card {
+  @apply transition;
   border: 1px solid var(--ls-border-color);
 }
 

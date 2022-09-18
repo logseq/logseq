@@ -118,10 +118,13 @@
   [page-name {:keys [checked on-checked-change show-checked?]}]
   [:div.dashboard-card.dashboard-preview-card.cursor-pointer.hover:shadow-lg
    {:data-checked checked
+    :style {:filter (if (and show-checked? (not checked)) "opacity(0.5)" "none")}
     :on-click
     (fn [e]
       (util/stop e)
-      (route-handler/redirect-to-whiteboard! page-name))}
+      (if show-checked?
+        (on-checked-change (not checked))
+        (route-handler/redirect-to-whiteboard! page-name)))}
    [:div.dashboard-card-title
     [:div.flex.w-full.items-center
      [:div.dashboard-card-title-name.font-bold
@@ -130,7 +133,8 @@
         (get-page-display-name page-name))]
      [:div.flex-1]
      [:div.dashboard-card-checkbox
-      {:style {:visibility (when show-checked? "visible")}
+      {:tab-index -1
+       :style {:visibility (when show-checked? "visible")}
        :on-click util/stop-propagation}
       (ui/checkbox {:checked checked
                     :on-change (fn [] (on-checked-change (not checked)))})]]
@@ -180,7 +184,7 @@
          (str " · " total-whiteboards)]
         [:div.flex-1]
         (when has-checked?
-          [:button.ui__button.m-0.inline-flex.items-center.bg-red-800
+          [:button.ui__button.m-0.py-1.inline-flex.items-center.bg-red-800
            {:on-click
             (fn []
               (state/set-modal! (page/batch-delete-dialog
