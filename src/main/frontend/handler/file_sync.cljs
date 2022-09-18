@@ -236,7 +236,8 @@
         mins (int (/ (* (/ total finished) diff-seconds) 60))]
     (if (or (zero? total) (zero? finished))
       "waiting"
-      (case mins
-       0 "soon"
-       1 "1 min left"
-       (str mins " mins left")))))
+      (cond
+        (zero? mins) "soon"
+        (= mins 1) "1 min left"
+        (> mins 30) "calculating..."
+        :else (str mins " mins left")))))
