@@ -410,11 +410,18 @@
 
              (map (fn [f] {:title [:div.file-item
                                    {:key (str "downloading-" f)}
-                                   (js/decodeURIComponent f)
-                                   (when-let [progress (get sync-progress f)]
-                                     (str "[" (:percent progress) "%]"))]
+                                   (js/decodeURIComponent f)]
                            :key   (str "downloading-" f)
-                           :icon  (ui/icon "arrow-narrow-down")}) downloading-files)
+                           :icon  (if enabled-progress-panel?
+                                    (let [progress (get sync-progress f)]
+                                      (let [percent (or (:percent progress) 0)]
+                                        (if (and (number? percent)
+                                                 (< percent 100))
+                                          (indicator-progress-pie percent)
+                                          (ui/icon "circle-check"))))
+                                    (ui/icon "arrow-narrow-down"))
+                           }) downloading-files)
+
              (map (fn [e] (let [icon (case (.-type e)
                                        "add" "plus"
                                        "unlink" "minus"
@@ -425,6 +432,7 @@
                                      (js/decodeURIComponent path)]
                              :key   (str "queue-" path)
                              :icon  (ui/icon icon)})) (take 10 queuing-files))
+
              (map (fn [f] {:title [:div.file-item
                                    {:key (str "uploading-" f)}
                                    (js/decodeURIComponent f)]
