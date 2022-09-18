@@ -9,6 +9,7 @@ export * from './BindingUtils'
 export * from './DataUtils'
 export * from './TextUtils'
 export * from './getTextSize'
+export * from './cache'
 
 export function uniqueId() {
   return uuid.v1()

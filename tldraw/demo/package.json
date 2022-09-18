@@ -7,13 +7,13 @@
     "autoprefixer": "^10.4.7",
     "postcss": "^8.4.13",
     "tailwindcss": "^3.0.24",
-    "vite": "^3.0.9"
+    "vite": "^3.1.2"
   },
   "scripts": {
     "dev": "vite"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^2.0.0",
+    "@vitejs/plugin-react": "^2.1.0",
     "react": "^17",
     "react-dom": "^17"
   }
