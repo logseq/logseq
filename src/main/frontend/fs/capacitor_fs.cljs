@@ -82,36 +82,26 @@
                      (p/let [d (first dirs)
                              files (<readdir d)
                              files (->> files
-                                        (remove (fn [file]
-                                                  (or (string/starts-with? file ".")
-                                                      (and (mobile-util/native-android?)
-                                                           (or (string/includes? file "#")
-                                                               (string/includes? file "%")))
-                                                      (= file "bak")))))
-                             files (->> files
-                                        (map (fn [file]
-                                               ;; TODO: use uri-join
-                                               (str (string/replace d #"/+$" "")
-                                                    "/"
-                                                    (if (mobile-util/native-ios?)
-                                                      (js/encodeURI file)
-                                                      file)))))
-                             files-with-stats (p/all (mapv <stat files))
-                             files-dir (->> files-with-stats
+                                        (remove (fn [{:keys [name  type] :as file-info}]
+                                                  (or (string/starts-with? name ".")
+                                                      (and (= type "directory")
+                                                           (or (= name "bak")
+                                                               (= name "version-files")))))))
+                             files-dir (->> files
                                             (filterv #(= (:type %) "directory"))
                                             (mapv :uri))
                              files-result
                              (p/all
-                              (->> files-with-stats
+                              (->> files
                                    (filter #(= (:type %) "file"))
                                    (filter
                                     (fn [{:keys [uri]}]
                                       (some #(string/ends-with? uri %)
                                             [".md" ".markdown" ".org" ".edn" ".css"])))
                                    (mapv
-                                    (fn [{:keys [uri] :as file-result}]
+                                    (fn [{:keys [uri] :as file-info}]
                                       (p/chain (<read-file-with-utf8 uri)
-                                               #(assoc file-result :content %))))))]
+                                               #(assoc file-info :content %))))))]
                        (p/recur (concat result files-result)
                                 (concat (rest dirs) files-dir)))))]
     (js->clj result :keywordize-keys true)))
