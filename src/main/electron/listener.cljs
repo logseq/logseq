@@ -49,6 +49,13 @@
                          (when (file-sync-handler/enable-sync?)
                            (sync/file-watch-handler type payload)))))
 
+  (js/window.apis.on "file-sync-progress"
+                     (fn [data]
+                       (let [payload (bean/->clj data)]
+                         (prn "updated progress:" payload)
+                         (state/set-state! [:file-sync/progress (:file payload)] payload)
+                         nil)))
+
   (js/window.apis.on "notification"
                      (fn [data]
                        (let [{:keys [type payload]} (bean/->clj data)

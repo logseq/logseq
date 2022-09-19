@@ -54,11 +54,12 @@
 (rum/defc show-password-cp
   [*show-password?]
   [:div.flex.flex-row.items-center
-   [:label {:for "show-password"}
-    (ui/checkbox {:checked? @*show-password?
+   [:label.px-1 {:for "show-password"}
+    (ui/checkbox {:checked?  @*show-password?
                   :on-change (fn [e]
-                               (reset! *show-password? (util/echecked? e)))})]
-   [:span.text-sm.ml-1.opacity-80 "Show password"]])
+                               (reset! *show-password? (util/echecked? e)))
+                  :id        "show-password"})
+    [:span.text-sm.ml-1.opacity-80.select-none.px-1 "Show password"]]])
 
 (rum/defcs ^:large-vars/cleanup-todo input-password-inner < rum/reactive
   (rum/local "" ::password)
