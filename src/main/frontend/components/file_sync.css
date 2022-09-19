@@ -229,7 +229,7 @@
         @apply flex flex-1 items-center overflow-hidden relative;
 
         height: 7px;
-        top: 5px;
+        top: 1px;
         border-radius: 4px;
         background-color: var(--ls-secondary-background-color);
 
@@ -241,26 +241,6 @@
           background-color: var(--ls-link-text-color);
         }
       }
-
-      .actions {
-        @apply flex;
-
-        .ti {
-          font-size: 15px;
-          position: relative;
-          top: 5px;
-        }
-
-        a {
-          @apply pl-2 py-2 text-sm leading-none cursor-pointer opacity-50
-          hover:opacity-100 active:opacity-50;
-        }
-
-        &:hover {
-          a {
-            color: var(--ls-secondary-text-color);
-          }
-        }
       }
     }
   }

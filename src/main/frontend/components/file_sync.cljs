@@ -284,13 +284,12 @@
 
      [:div.c
       (second tip-b&p)
-      [:div.actions
-       [:a
-        {:class    (when list-active? "is-active")
-         :on-click #(set-list-active? (not list-active?))}
-        (if list-active?
-          (ui/icon "chevron-up")
-          (ui/icon "chevron-left"))]]]]))
+      (when-not no-active-files?
+        [:a.inline-flex.ml-1
+         {:on-click #(set-list-active? (not list-active?))}
+         (if list-active?
+           (ui/icon "chevron-up" {:style {:font-size 24}})
+           (ui/icon "chevron-left" {:style {:font-size 24}}))])]]))
 
 (defn- sort-files
   [progress files]
