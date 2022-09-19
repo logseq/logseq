@@ -596,10 +596,7 @@
   FileTxn
   (-checksum [this] (.-checksum this)))
 
-
-
-
-(defn- sort-file-metatdata-fn
+(defn- sort-file-metadata-fn
   ":recent-days-range > :favorite-pages > small-size pages > ...
   :recent-days-range : [<min-inst-ms> <max-inst-ms>]
 "
@@ -609,7 +606,8 @@
   (let [favorite-pages* (set favorite-pages)]
     (fn [^FileMetadata item]
       (let [path (relative-path item)
-            journal? (string/starts-with? path "journals/")
+            journal? (string/starts-with? path
+                                          (str (config/get-journals-directory) "/"))
             journal-day
             (when journal?
               (try
@@ -627,11 +625,18 @@
                    (second recent-days-range)))
           journal-day
 
+          (string/includes? path "logseq/")
+          9999
+
+          (string/includes? path "content.")
+          10000
+
           (contains? favorite-pages* path)
           (count path)
 
           :else
           (- (.-size item)))))))
+
 ;;; ### APIs
 ;; `RSAPI` call apis through rsapi package, supports operations on files
 
@@ -2158,7 +2163,7 @@
                 recent-10-days-range  ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %)) (t/today))
                 sorted-diff-remote-files
                 (sort-by
-                 (sort-file-metatdata-fn :recent-days-range recent-10-days-range) > diff-remote-files)
+                 (sort-file-metadata-fn :recent-days-range recent-10-days-range) > diff-remote-files)
                 latest-txid           (:TXId (<! (<get-remote-graph remoteapi nil graph-uuid)))]
             (println "[full-sync(remote->local)]" (count sorted-diff-remote-files) "files need to sync")
             (swap! *sync-state #(sync-state-reset-full-remote->local-files % sorted-diff-remote-files))
@@ -2393,7 +2398,9 @@
                 local-all-files-meta  (<! local-all-files-meta-c)
                 {local-all-files-meta :keep delete-local-files :delete}
                 (filter-local-files-in-deletion-logs local-all-files-meta deletion-logs)
-                diff-local-files      (diff-file-metadata-sets local-all-files-meta remote-all-files-meta)
+                recent-10-days-range  ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %)) (t/today))
+                diff-local-files      (->> (diff-file-metadata-sets local-all-files-meta remote-all-files-meta)
+                                           (sort-by (sort-file-metadata-fn :recent-days-range recent-10-days-range) >))
                 change-events
                 (sequence
                  (comp
