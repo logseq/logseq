@@ -182,8 +182,8 @@
         last-synced-at (if last-synced-at
                          (util/time-ago (tc/from-long (* last-synced-at 1000)))
                          "just now")]
-    [:div.cl (ui/icon "history")
-     [:span.pl-1.opacity-60 "Last change was"]
+    [:div.cl
+     [:span.opacity-60 "Last change was"]
      [:span.pl-1 last-synced-at]]))
 
 (rum/defc sync-now
@@ -267,6 +267,8 @@
           {:class (when idle-&-no-active? "is-no-active")}
           (cond
             (not online?) (ui/icon "wifi-off")
+            uploading? (ui/icon "arrows-transfer-down")
+            downloading? (ui/icon "arrows-transfer-up")
             :else (ui/icon "thumb-up"))]
          [:span
           (cond
@@ -281,14 +283,9 @@
      [:div.b.dark:text-gray-200
       [:div.bl
        [:span.flex.items-center
-        (cond
-          uploading? (ui/icon "file-upload")
-          downloading? (ui/icon "file-download")
-          :else (ui/icon "file-check"))
-
         (if no-active-files?
-          [:span.opacity-100.px-1 "Successfully processed"]
-          [:span.opacity-60.px-1 "Processed"])]
+          [:span.opacity-100.pr-1 "Successfully processed"]
+          [:span.opacity-60.pr-1 "Processed"])]
 
        (first tip-b&p)]
 
