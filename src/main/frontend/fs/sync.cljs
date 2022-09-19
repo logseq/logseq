@@ -2882,6 +2882,8 @@
                      (user/logged-in?)
                      repo
                      (not (config/demo-graph? repo)))
+            (when (not= @current-sm-graph-uuid graph-uuid)
+              (<! (<sync-stop)))
             (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
                                                    (config/get-repo-dir repo) repo
                                                    txid *sync-state)]
