@@ -82,36 +82,26 @@
                      (p/let [d (first dirs)
                              files (<readdir d)
                              files (->> files
-                                        (remove (fn [file]
-                                                  (or (string/starts-with? file ".")
-                                                      (and (mobile-util/native-android?)
-                                                           (or (string/includes? file "#")
-                                                               (string/includes? file "%")))
-                                                      (= file "bak")))))
-                             files (->> files
-                                        (map (fn [file]
-                                               ;; TODO: use uri-join
-                                               (str (string/replace d #"/+$" "")
-                                                    "/"
-                                                    (if (mobile-util/native-ios?)
-                                                      (js/encodeURI file)
-                                                      file)))))
-                             files-with-stats (p/all (mapv <stat files))
-                             files-dir (->> files-with-stats
+                                        (remove (fn [{:keys [name  type]}]
+                                                  (or (string/starts-with? name ".")
+                                                      (and (= type "directory")
+                                                           (or (= name "bak")
+                                                               (= name "version-files")))))))
+                             files-dir (->> files
                                             (filterv #(= (:type %) "directory"))
                                             (mapv :uri))
                              files-result
                              (p/all
-                              (->> files-with-stats
+                              (->> files
                                    (filter #(= (:type %) "file"))
                                    (filter
                                     (fn [{:keys [uri]}]
                                       (some #(string/ends-with? uri %)
                                             [".md" ".markdown" ".org" ".edn" ".css"])))
                                    (mapv
-                                    (fn [{:keys [uri] :as file-result}]
+                                    (fn [{:keys [uri] :as file-info}]
                                       (p/chain (<read-file-with-utf8 uri)
-                                               #(assoc file-result :content %))))))]
+                                               #(assoc file-info :content %))))))]
                        (p/recur (concat result files-result)
                                 (concat (rest dirs) files-dir)))))]
     (js->clj result :keywordize-keys true)))
@@ -221,7 +211,7 @@
 
 (defn get-file-path [dir path]
   (let [dir (some-> dir (string/replace #"/+$" ""))
-        dir (if (string/starts-with? dir "/")
+        dir (if (and (not-empty dir) (string/starts-with? dir "/"))
               (do
                 (js/console.trace "WARN: detect absolute path, use URL instead")
                 (str "file://" (js/encodeURI dir)))
@@ -271,13 +261,18 @@
                    (log/error :mkdir! {:path dir
                                        :error error})))))
   (mkdir-recur! [_this dir]
-    (p/let [result (.mkdir Filesystem
-                           (clj->js
-                            {:path dir
-                             ;; :directory (.-ExternalStorage Directory)
-                             :recursive true}))]
-      (js/console.log result)
-      result))
+    (p/let
+     [_ (-> (.mkdir Filesystem
+                    (clj->js
+                     {:path dir
+                      :recursive true}))
+            (p/catch (fn [error]
+                       (log/error :mkdir-recur! {:path dir
+                                                 :error error}))))
+      stat (<stat dir)]
+      (if (= (:type stat) "directory")
+        (p/resolved true)
+        (p/rejected (js/Error. "mkdir-recur! failed")))))
   (readdir [_this dir]                  ; recursive
     (let [dir (if-not (string/starts-with? dir "file://")
                 (str "file://" dir)
@@ -286,13 +281,13 @@
   (unlink! [this repo path _opts]
     (p/let [path (get-file-path nil path)
             repo-url (config/get-local-dir repo)
-            recycle-dir (str repo-url config/app-name "/.recycle") ;; logseq/.recycle
+            recycle-dir (util/safe-path-join repo-url config/app-name ".recycle") ;; logseq/.recycle
             ;; convert url to pure path
             file-name (-> (string/replace path repo-url "")
                           (string/replace "/" "_")
                           (string/replace "\\" "_"))
-            new-path (str recycle-dir "/" file-name)]
-      (protocol/mkdir! this recycle-dir)
+            new-path (str recycle-dir "/" file-name)
+            _ (protocol/mkdir-recur! this recycle-dir)]
       (protocol/rename! this repo path new-path)))
   (rmdir! [_this _dir]
     ;; Too dangerous!!! We'll never implement this.
@@ -330,11 +325,8 @@
          (log/error :copy-file-failed error)))))
   (stat [_this dir path]
     (let [path (get-file-path dir path)]
-      (p/let [result (.stat Filesystem (clj->js
-                                        {:path path
-                                         ;; :directory (.-ExternalStorage Directory)
-                                         }))]
-        result)))
+      (p/chain (.stat Filesystem (clj->js {:path path}))
+               #(js->clj % :keywordize-keys true))))
   (open-dir [_this _ok-handler]
     (p/let [_ (when (mobile-util/native-android?) (android-check-permission))
             {:keys [path localDocumentsPath]} (-> (.pickFolder mobile-util/folder-picker)
