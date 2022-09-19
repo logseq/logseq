@@ -504,8 +504,8 @@ html[data-theme='dark'] {
   &.closed {
     width: 0 !important;
 
-    .resizer {
-      left: -4px;
+    @screen lg {
+      width: 4px !important;
     }
   }
 
