@@ -20,6 +20,11 @@ const config: CapacitorConfig = {
   },
   ios: {
     scheme: 'Logseq'
+  },
+  cordova: {
+    staticPlugins: [
+      '@logseq/capacitor-file-sync', // AgeEncryption requires static link
+    ]
   }
 }
 

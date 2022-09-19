@@ -18,6 +18,7 @@ dependencies {
     implementation project(':capacitor-share')
     implementation project(':capacitor-splash-screen')
     implementation project(':capacitor-status-bar')
+    implementation project(':logseq-capacitor-file-sync')
     implementation project(':capacitor-voice-recorder')
     implementation project(':send-intent')
 

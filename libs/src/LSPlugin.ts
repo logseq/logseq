@@ -386,7 +386,7 @@ export interface IAppProxy {
   queryElementRect: (selector: string) => Promise<DOMRectReadOnly | null>
 
   /**
-   * @deprecated
+   * @deprecated Use `logseq.UI.showMsg` instead
    * @param content
    * @param status
    */
