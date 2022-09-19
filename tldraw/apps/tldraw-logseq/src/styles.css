@@ -509,6 +509,7 @@ button.tl-select-input-trigger {
   border-radius: 50%;
   border: 2px solid var(--ls-secondary-background-color);
   top: 2px;
+  transition-delay: 0;
 
   .tie {
     transform: translateY(-100%); 
@@ -549,9 +550,17 @@ button.tl-select-input-trigger {
 
   .tl-circle-button-icons-wrapper {
     @apply flex flex-col;
+  }
 
-    > i.tie {
-      transition: transform 0.2s ease-in-out;
+  i.tie {
+    transition: transform 0.2s ease-in-out;
+    transition-delay: 0;
+  }
+
+  &[data-recently-changed=true] {
+    transition-delay: 0.5s;
+    i.tie {
+      transition-delay: 0.5s;
     }
   }
 
