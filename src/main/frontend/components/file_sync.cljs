@@ -23,6 +23,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
+            [frontend.storage :as storage]
             [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -188,7 +189,7 @@
 
 (rum/defc indicator-progress-pane
   [sync-state sync-progress
-   {:keys [idle? syncing? no-active-files? online? need-password?]}]
+   {:keys [idle? syncing? no-active-files? online? need-password? history-files?]}]
 
   (rum/use-effect!
    (fn []
@@ -231,7 +232,9 @@
                                  [[:span.opacity-60 "all file edits"]
                                   (last-synced-cp)])
         *el-ref                (rum/use-ref nil)
-        [list-active?, set-list-active?] (rum/use-state true)]
+        [list-active?, set-list-active?] (rum/use-state
+                                          (-> (storage/get :ui/file-sync-active-file-list?)
+                                              (#(if (nil? %) true %))))]
 
     (rum/use-effect!
      (fn []
@@ -242,7 +245,8 @@
          (->> "is-list-active"
               (#(if list-active?
                   (.add outer-class-list %)
-                  (.remove outer-class-list %))))))
+                  (.remove outer-class-list %))))
+         (storage/set :ui/file-sync-active-file-list? list-active?)))
      [list-active?])
 
     [:div.cp__file-sync-indicator-progress-pane
@@ -284,7 +288,7 @@
 
      [:div.c
       (second tip-b&p)
-      (when-not no-active-files?
+      (when (or history-files? (not no-active-files?))
         [:a.inline-flex.ml-1
          {:on-click #(set-list-active? (not list-active?))}
          (if list-active?
@@ -320,6 +324,7 @@
         uploading-files         (sort-files sync-progress (:current-local->remote-files sync-state))
         downloading-files       (sort-files sync-progress (:current-remote->local-files sync-state))
         queuing-files           (:queued-local->remote-files sync-state)
+        history-files           (:history sync-state)
         status                  (:state sync-state)
         status                  (or (nil? status) (keyword (name status)))
         off?                    (fs-sync/sync-off? sync-state)
@@ -462,7 +467,7 @@
                                     (ui/icon "arrow-up"))
                            }) uploading-files)
 
-             (when sync-state
+             (when (seq history-files)
                (map-indexed (fn [i f] (:time f)
                               (let [path        (:path f)
                                     ext         (string/lower-case (util/get-file-ext path))
@@ -477,7 +482,7 @@
                                                         (rfe/push-state :file {:path full-path})))}
                                          [:span.file-sync-item (js/decodeURIComponent (:path f))]
                                          [:div.opacity-50 (ui/humanity-time-ago (:time f) nil)]]}))
-                            (take 10 (:history sync-state))))))
+                            (take 10 history-files)))))
 
           ;; options
           {:outer-header
@@ -490,7 +495,8 @@
                 :need-password?   need-password?
                 :full-sync?       full-syncing?
                 :online?          online?
-                :no-active-files? no-active-files?}))
+                :no-active-files? no-active-files?
+                :history-files?   (seq history-files)}))
 
             (when (and synced-file-graph? queuing?)
               [:div.head-ctls
