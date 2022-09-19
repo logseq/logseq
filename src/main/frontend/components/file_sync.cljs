@@ -186,11 +186,18 @@
      [:span.pl-1.opacity-60 "Last change was"]
      [:span.pl-1 last-synced-at]]))
 
+(rum/defc sync-now
+  []
+  (ui/button "Sync now"
+             :class "block cursor-pointer"
+             :small? true
+             :on-click #(async/offer! fs-sync/immediately-local->remote-chan true)))
+
 (def *last-calculated-time (atom nil))
 
 (rum/defc indicator-progress-pane
   [sync-state sync-progress
-   {:keys [idle? syncing? no-active-files? online? need-password? history-files?]}]
+   {:keys [idle? syncing? no-active-files? online? need-password? history-files? queuing?]}]
 
   (rum/use-effect!
    (fn []
@@ -255,18 +262,21 @@
       :class (when (and syncing? progressing?) "is-progress-active")}
      (let [idle-&-no-active? (and idle? no-active-files?)]
        [:div.a
-        [:strong
-         {:class (when idle-&-no-active? "is-no-active")}
-         (cond
-           (not online?) (ui/icon "wifi-off")
-           :else (ui/icon "thumb-up"))]
-        [:span
-         (cond
-           (not online?) "Currently having connection issues..."
-           idle-&-no-active? "Everything is synced!"
-           syncing? "Currently syncing your graph..."
-           (not need-password?) "Waiting..."
-           :else (str "#" status))]])
+        [:div.al
+         [:strong
+          {:class (when idle-&-no-active? "is-no-active")}
+          (cond
+            (not online?) (ui/icon "wifi-off")
+            :else (ui/icon "thumb-up"))]
+         [:span
+          (cond
+            (not online?) "Currently having connection issues..."
+            idle-&-no-active? "Everything is synced!"
+            syncing? "Currently syncing your graph..."
+            (not need-password?) "Waiting..."
+            :else (str "#" status))]]
+        [:div.ar
+         (when queuing? (sync-now))]])
 
      [:div.b.dark:text-gray-200
       [:div.bl
@@ -290,7 +300,7 @@
      [:div.c
       (second tip-b&p)
       (when (or history-files? (not no-active-files?))
-        [:a.inline-flex.ml-1
+        [:span.inline-flex.ml-1.active:opacity-50
          {:on-click #(set-list-active? (not list-active?))}
          (if list-active?
            (ui/icon "chevron-up" {:style {:font-size 24}})
@@ -500,15 +510,14 @@
                 :need-password?   need-password?
                 :full-sync?       full-syncing?
                 :online?          online?
+                :queuing?         queuing?
                 :no-active-files? no-active-files?
                 :history-files?   (seq history-files)}))
 
-            (when (and synced-file-graph? queuing?)
-              [:div.head-ctls
-               (ui/button "Sync now"
-                          :class "block cursor-pointer"
-                          :small? true
-                          :on-click #(async/offer! fs-sync/immediately-local->remote-chan true))])
+            (when (and
+                   (not enabled-progress-panel?)
+                   synced-file-graph? queuing?)
+              [:div.head-ctls (sync-now)])
 
             ;(when config/dev?
             ;  [:strong.debug-status (str status)])
