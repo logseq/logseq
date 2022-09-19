@@ -2816,13 +2816,19 @@
     (reset! current-sm-graph-uuid graph-uuid)
     (sync-manager user-uuid graph-uuid base-path repo txid *sync-state)))
 
+(defn clear-graph-progress!
+  [graph-uuid]
+  (state/set-state! [:file-sync/progress graph-uuid] {}))
+
 (defn <sync-stop []
   (go
     (when-let [sm ^SyncManager (state/get-file-sync-manager)]
       (println "[SyncManager" (:graph-uuid sm) "]" "stopping")
       (<! (-stop! sm))
+
       (println "[SyncManager" (:graph-uuid sm) "]" "stopped")
-      (state/set-file-sync-manager nil))
+      (state/set-file-sync-manager nil)
+      (clear-graph-progress! (:graph-uuid sm)))
     (reset! current-sm-graph-uuid nil)))
 
 (defn sync-need-password!
@@ -2884,6 +2890,7 @@
         current-user-uuid           (user/user-uuid)
         repo                        (state/get-current-repo)]
     (go
+      (<! (<sync-stop))
       (when (and (graph-sync-off? repo) @network-online-cursor)
         (<! (p->c (persist-var/-load graphs-txid)))
         (let [[user-uuid graph-uuid txid] @graphs-txid]
@@ -2891,8 +2898,8 @@
                      (user/logged-in?)
                      repo
                      (not (config/demo-graph? repo)))
-            (when (not= @current-sm-graph-uuid graph-uuid)
-              (<! (<sync-stop)))
+            (not= @current-sm-graph-uuid graph-uuid)
+            (clear-graph-progress! graph-uuid)
             (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
                                                    (config/get-repo-dir repo) repo
                                                    txid *sync-state)]
@@ -2971,7 +2978,6 @@
 
   ;; upload
   (def full-upload-files (:full-local->remote-files (state/sub [:file-sync/sync-state (state/get-current-repo)])))
-  (def finished-uploaded-files (state/sub :file-sync/progress))
 
   ;; queued
   (:queued-local->remote-files (state/sub [:file-sync/sync-state (state/get-current-repo)]))

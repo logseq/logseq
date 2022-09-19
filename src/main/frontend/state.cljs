@@ -244,6 +244,7 @@
 
      :ui/loading?                           {}
      :file-sync/set-remote-graph-password-result {}
+     ;; graph-uuid -> {file-path -> payload}
      :file-sync/progress                    {}
      :file-sync/start                       {}
      ;; graph -> epoch

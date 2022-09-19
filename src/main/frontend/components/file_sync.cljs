@@ -326,7 +326,7 @@
         current-repo            (state/get-current-repo)
         creating-remote-graph?  (state/sub [:ui/loading? :graph/create-remote?])
         sync-state              (state/sub [:file-sync/sync-state current-repo])
-        sync-progress           (state/sub [:file-sync/progress])
+        sync-progress           (state/sub [:file-sync/progress (second @fs-sync/graphs-txid)])
         _                       (rum/react file-sync-handler/refresh-file-sync-component)
         synced-file-graph?      (file-sync-handler/synced-file-graph? current-repo)
         uploading-files         (sort-files sync-progress (:current-local->remote-files sync-state))

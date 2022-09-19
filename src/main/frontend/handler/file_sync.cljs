@@ -194,7 +194,7 @@
         (case event
           (list :finished-local->remote :finished-remote->local)
           (do
-            (state/set-state! :file-sync/progress {})
+            (sync/clear-graph-progress! (second @sync/graphs-txid))
             (state/set-state! :file-sync/start {})
             (state/set-state! [:file-sync/last-synced-at (state/get-current-repo)]
                               (:epoch data)))
