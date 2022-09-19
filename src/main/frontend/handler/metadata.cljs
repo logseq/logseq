@@ -84,3 +84,12 @@
 (defn update-properties!
   [properties-tx]
   (set-metadata! :block/properties #(handler-properties! % properties-tx)))
+
+(defn run-set-page-metadata-job!
+  []
+  (js/setInterval
+   (fn []
+     (when-let [repo (state/get-current-repo)]
+       (when (state/input-idle? repo :diff 3000)
+         (set-pages-metadata! repo))))
+   (* 1000 60 10)))
