@@ -2,6 +2,7 @@ import Vec from '@tldraw/vec'
 import { transaction } from 'mobx'
 import type { TLBinding, TLEventMap, TLHandle, TLStateEvents } from '../types'
 import { deepMerge, GeomUtils } from '../utils'
+import { findBindingPoint } from '../utils/BindingUtils'
 import type { TLLineShape, TLLineShapeProps, TLShape } from './shapes'
 import type { TLApp } from './TLApp'
 import type { TLTool } from './TLTool'
@@ -109,7 +110,7 @@ export class TLBaseLineBindingState<
 
         // Don't bind the start handle if both handles are inside of the target shape.
         if (!modKey && !startTarget.hitTestPoint(Vec.add(next.shape.point, endHandle.point))) {
-          nextStartBinding = this.findBindingPoint(
+          nextStartBinding = findBindingPoint(
             shape.props,
             startTarget,
             'start',
@@ -151,7 +152,7 @@ export class TLBaseLineBindingState<
         })
 
       for (const target of targets) {
-        draggedBinding = this.findBindingPoint(
+        draggedBinding = findBindingPoint(
           shape.props,
           target,
           this.handleId,
@@ -238,37 +239,6 @@ export class TLBaseLineBindingState<
         this.tool.transition('idle')
         break
       }
-    }
-  }
-
-  private findBindingPoint = (
-    shape: TLLineShapeProps,
-    target: TLShape,
-    handleId: 'start' | 'end',
-    bindingId: string,
-    point: number[],
-    origin: number[],
-    direction: number[],
-    bindAnywhere: boolean
-  ) => {
-    const bindingPoint = target.getBindingPoint(
-      point, // fix dead center bug
-      origin,
-      direction,
-      bindAnywhere
-    )
-
-    // Not all shapes will produce a binding point
-    if (!bindingPoint) return
-
-    return {
-      id: bindingId,
-      type: 'line',
-      fromId: shape.id,
-      toId: target.id,
-      handleId: handleId,
-      point: Vec.toFixed(bindingPoint.point),
-      distance: bindingPoint.distance,
     }
   }
 }

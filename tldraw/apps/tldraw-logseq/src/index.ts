@@ -10,6 +10,7 @@ declare global {
         edit_block?: (uuid: string) => void
         set_blocks_id?: (uuids: string[]) => void
         open_external_link?: (url: string) => void
+        get_selected_blocks?: () => { uuid: string }[]
       }
     }
   }

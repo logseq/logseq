@@ -18,7 +18,7 @@ export function useSetup<
     onCreateShapes,
     onDeleteAssets,
     onDeleteShapes,
-    onFileDrop,
+    onDrop,
     onPaste,
     onCanvasDBClick,
   } = props
@@ -45,7 +45,7 @@ export function useSetup<
     if (onCreateAssets) unsubs.push(app.subscribe('create-assets', onCreateAssets))
     if (onDeleteShapes) unsubs.push(app.subscribe('delete-shapes', onDeleteShapes))
     if (onDeleteAssets) unsubs.push(app.subscribe('delete-assets', onDeleteAssets))
-    if (onFileDrop) unsubs.push(app.subscribe('drop-files', onFileDrop))
+    if (onDrop) unsubs.push(app.subscribe('drop', onDrop))
     if (onPaste) unsubs.push(app.subscribe('paste', onPaste))
     if (onCanvasDBClick) unsubs.push(app.subscribe('canvas-dbclick', onCanvasDBClick))
     // Kind of unusual, is this the right pattern?

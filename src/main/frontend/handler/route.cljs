@@ -39,6 +39,10 @@
   []
   (redirect! {:to :repos}))
 
+(defn redirect-to-whiteboard-dashboard!
+  []
+  (redirect! {:to :whiteboards}))
+
 (defn redirect-to-page!
   "Must ensure `page-name` is dereferenced (not an alias), or it will create a wrong new page with that name (#3511)."
   ([page-name]

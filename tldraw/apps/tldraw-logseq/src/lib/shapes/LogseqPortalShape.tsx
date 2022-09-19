@@ -8,6 +8,7 @@ import {
   validUUID,
 } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
+import { useDebouncedValue } from '@tldraw/react'
 import Vec from '@tldraw/vec'
 import { action, computed, makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
@@ -17,6 +18,7 @@ import { TablerIcon } from '../../components/icons'
 import { TextInput } from '../../components/inputs/TextInput'
 import { useCameraMovingRef } from '../../hooks/useCameraMoving'
 import { LogseqContext, type SearchResult } from '../logseq-context'
+import { BindingIndicator } from './BindingIndicator'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
 const HEADER_HEIGHT = 40
@@ -102,18 +104,18 @@ const highlightedJSX = (input: string, keyword: string) => {
 const useSearch = (q: string, searchFilter: 'B' | 'P' | null) => {
   const { handlers } = React.useContext(LogseqContext)
   const [results, setResults] = React.useState<SearchResult | null>(null)
+  const dq = useDebouncedValue(q, 200)
 
   React.useEffect(() => {
     let canceled = false
-    const searchHandler = handlers?.search
-    if (q.length > 0 && searchHandler) {
+    if (dq.length > 0) {
       const filter = { 'pages?': true, 'blocks?': true, 'files?': false }
       if (searchFilter === 'B') {
         filter['pages?'] = false
       } else if (searchFilter === 'P') {
         filter['blocks?'] = false
       }
-      handlers.search(q, filter).then(_results => {
+      handlers.search(dq, filter).then(_results => {
         if (!canceled) {
           setResults(_results)
         }
@@ -124,13 +126,38 @@ const useSearch = (q: string, searchFilter: 'B' | 'P' | null) => {
     return () => {
       canceled = true
     }
-  }, [q, handlers?.search])
+  }, [dq, handlers?.search])
 
   return results
 }
 
+const CircleButton = ({
+  active,
+  style,
+  icon,
+  otherIcon,
+  onClick,
+}: {
+  active?: boolean
+  style?: React.CSSProperties
+  icon: string
+  otherIcon?: string
+  onClick: () => void
+}) => {
+  return (
+    <div data-active={active} style={style} className="tl-circle-button" onMouseDown={onClick}>
+      <div className="tl-circle-button-icons-wrapper" data-icons-count={otherIcon ? 2 : 1}>
+        {otherIcon && <TablerIcon name={otherIcon} />}
+        <TablerIcon name={icon} />
+      </div>
+    </div>
+  )
+}
+
 export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   static id = 'logseq-portal'
+  static defaultSearchQuery = ''
+  static defaultSearchFilter: 'B' | 'P' | null = null
 
   static defaultProps: LogseqPortalShapeProps = {
     id: 'logseq-portal',
@@ -199,7 +226,14 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     } else {
       const originalHeight = this.props.size[1]
       this.canResize[1] = !collapsed
+      console.log(
+        collapsed,
+        collapsed ? this.getHeaderHeight() : this.props.collapsedHeight,
+        this.getHeaderHeight(),
+        this.props.collapsedHeight
+      )
       this.update({
+        isAutoResizing: !collapsed,
         collapsed: collapsed,
         size: [this.props.size[0], collapsed ? this.getHeaderHeight() : this.props.collapsedHeight],
         collapsedHeight: collapsed ? originalHeight : this.props.collapsedHeight,
@@ -303,7 +337,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   }
 
   LogseqQuickSearch = observer(({ onChange }: LogseqQuickSearchProps) => {
-    const [q, setQ] = React.useState('')
+    const [q, setQ] = React.useState(LogseqPortalShape.defaultSearchQuery)
+    const [searchFilter, setSearchFilter] = React.useState<'B' | 'P' | null>(
+      LogseqPortalShape.defaultSearchFilter
+    )
     const rInput = React.useRef<HTMLInputElement>(null)
     const { handlers, renderers } = React.useContext(LogseqContext)
     const app = useApp<Shape>()
@@ -311,6 +348,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const finishCreating = React.useCallback((id: string) => {
       onChange(id)
       rInput.current?.blur()
+      if (id) {
+        LogseqPortalShape.defaultSearchQuery = ''
+        LogseqPortalShape.defaultSearchFilter = null
+      }
     }, [])
 
     const onAddBlock = React.useCallback((content: string) => {
@@ -330,7 +371,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     const [focusedOptionIdx, setFocusedOptionIdx] = React.useState<number>(0)
 
-    const [searchFilter, setSearchFilter] = React.useState<'B' | 'P' | null>(null)
     const searchResult = useSearch(q, searchFilter)
 
     const [prefixIcon, setPrefixIcon] = React.useState<string>('circle-plus')
@@ -341,6 +381,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         rInput.current?.focus()
       })
     }, [searchFilter])
+
+    React.useEffect(() => {
+      LogseqPortalShape.defaultSearchQuery = q
+      LogseqPortalShape.defaultSearchFilter = searchFilter
+    }, [q, searchFilter])
 
     type Option = {
       actionIcon: 'search' | 'circle-plus'
@@ -505,6 +550,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           e.preventDefault()
         } else if (e.key === 'Backspace' && q.length === 0) {
           setSearchFilter(null)
+        } else if (e.key === 'Escape') {
+          finishCreating('')
         }
 
         if (newIndex !== focusedOptionIdx) {
@@ -530,9 +577,12 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     return (
       <div className="tl-quick-search">
-        <div className="tl-quick-search-indicator">
-          <TablerIcon name={prefixIcon} className="tl-quick-search-icon" />
-        </div>
+        <CircleButton
+          icon={prefixIcon}
+          onClick={() => {
+            options[focusedOptionIdx]?.onChosen()
+          }}
+        />
         <div className="tl-quick-search-input-container">
           {searchFilter && (
             <div className="tl-quick-search-input-filter">
@@ -653,7 +703,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   ReactComponent = observer((componentProps: TLComponentProps) => {
     const { events, isErasing, isEditing, isBinding } = componentProps
     const {
-      props: { opacity, pageId, stroke, fill, scaleLevel },
+      props: { opacity, pageId, stroke, fill, scaleLevel, strokeWidth, size },
     } = this
 
     const app = useApp<Shape>()
@@ -747,6 +797,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         }}
         {...events}
       >
+        {isBinding && <BindingIndicator mode="html" strokeWidth={strokeWidth} size={size} />}
         <div
           onWheelCapture={stop}
           onPointerDown={stop}
@@ -760,38 +811,44 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           {isCreating ? (
             <LogseqQuickSearch onChange={onPageNameChanged} />
           ) : (
-            <div
-              className="tl-logseq-portal-container"
-              data-collapsed={this.props.collapsed}
-              data-page-id={pageId}
-              data-portal-selected={portalSelected}
-              style={{
-                background: this.props.compact ? 'transparent' : fill,
-                boxShadow: isBinding
-                  ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
-                  : 'none',
-                color: stroke,
-                width: `calc(100% / ${scaleRatio})`,
-                height: `calc(100% / ${scaleRatio})`,
-                transform: `scale(${scaleRatio})`,
-                // @ts-expect-error ???
-                '--ls-primary-background-color': !fill?.startsWith('var') ? fill : undefined,
-                '--ls-primary-text-color': !stroke?.startsWith('var') ? stroke : undefined,
-                '--ls-title-text-color': !stroke?.startsWith('var') ? stroke : undefined,
-              }}
-            >
-              {!this.props.compact && !targetNotFound && (
-                <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'}>
-                  {this.props.blockType === 'P' ? (
-                    <PageNameLink pageName={pageId} />
-                  ) : (
-                    <Breadcrumb blockId={pageId} />
-                  )}
-                </LogseqPortalShapeHeader>
-              )}
-              {targetNotFound && <div className="tl-target-not-found">Target not found</div>}
-              {showingPortal && <PortalComponent {...componentProps} />}
-            </div>
+            <>
+              <div
+                className="tl-logseq-portal-container"
+                data-collapsed={this.collapsed}
+                data-page-id={pageId}
+                data-portal-selected={portalSelected}
+                style={{
+                  background: this.props.compact ? 'transparent' : fill,
+                  color: stroke,
+                  width: `calc(100% / ${scaleRatio})`,
+                  height: `calc(100% / ${scaleRatio})`,
+                  transform: `scale(${scaleRatio})`,
+                  // @ts-expect-error ???
+                  '--ls-primary-background-color': !fill?.startsWith('var') ? fill : undefined,
+                  '--ls-primary-text-color': !stroke?.startsWith('var') ? stroke : undefined,
+                  '--ls-title-text-color': !stroke?.startsWith('var') ? stroke : undefined,
+                }}
+              >
+                {!this.props.compact && !targetNotFound && (
+                  <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'}>
+                    {this.props.blockType === 'P' ? (
+                      <PageNameLink pageName={pageId} />
+                    ) : (
+                      <Breadcrumb blockId={pageId} />
+                    )}
+                  </LogseqPortalShapeHeader>
+                )}
+                {targetNotFound && <div className="tl-target-not-found">Target not found</div>}
+                {showingPortal && <PortalComponent {...componentProps} />}
+              </div>
+              <CircleButton
+                active={!!this.collapsed}
+                style={{ opacity: isSelected ? 1 : 0 }}
+                icon={this.props.blockType === 'B' ? 'block' : 'page'}
+                onClick={() => this.setCollapsed(!this.collapsed)}
+                otherIcon={'whiteboard-element'}
+              />
+            </>
           )}
         </div>
       </HTMLContainer>

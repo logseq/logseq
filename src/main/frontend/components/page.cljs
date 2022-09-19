@@ -309,12 +309,15 @@
                               :old-name old-name
                               :untitled? untitled?
                               :whiteboard-page? whiteboard-page?}))
-        [:span.title.inline-block
+        [:span.title.block
          {:data-value (rum/react *input-value)
           :data-ref page-name
           :style {:opacity (when @*edit? 0)
                   :pointer-events "none"
                   :font-weight "inherit"
+                  :white-space "nowrap"
+                  :overflow "hidden"
+                  :text-overflow "ellipsis"
                   :min-width "80px"}}
          (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
                untitled? [:span.opacity-50 (t :untitled)]

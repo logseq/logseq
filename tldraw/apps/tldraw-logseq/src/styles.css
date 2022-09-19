@@ -497,20 +497,70 @@ button.tl-select-input-trigger {
   position: relative;
 }
 
-.tl-quick-search-icon {
-  flex-shrink: 0;
-}
+.tl-circle-button {
+  @apply absolute flex items-center	justify-center transition-all;
 
-.tl-quick-search-indicator {
-  @apply absolute flex items-center	justify-center;
-
+  color: var(--ls-primary-text-color);
   background-color: var(--ls-secondary-background-color);
   font-size: 22px;
   right: calc(100% + 12px);
   height: 34px;
   width: 34px;
   border-radius: 50%;
-  top: calc(50% - 17px);
+  border: 2px solid var(--ls-secondary-background-color);
+  top: 2px;
+
+  .tie {
+    transform: translateY(-100%); 
+  }
+
+  &[data-active='false']:hover {
+    .tie {
+      transform: translateY(0);
+
+      &:first-of-type {
+        opacity: 0.6;
+      }
+    }
+  }
+
+  &[data-active='true'] {
+    background-color: var(--ls-active-primary-color);
+    color: var(--ls-block-highlight-color);
+    border: 2px solid var(--ls-active-primary-color);
+
+    .tie {
+      transform: translateY(0);
+
+      &:last-of-type {
+        opacity: 0.6;
+      }
+    }
+
+    &:hover {
+      color: var(--ls-primary-text-color);
+      background-color: var(--ls-secondary-background-color);
+
+      .tie {
+        transform: translateY(-100%);
+      }
+    }
+  }
+
+  .tl-circle-button-icons-wrapper {
+    @apply flex flex-col;
+
+    > i.tie {
+      transition: transform 0.2s ease-in-out;
+    }
+  }
+
+  .tl-circle-button-icons-wrapper[data-icons-count='2'] {
+    position: relative;
+    width: 22px;
+    height: 22px;
+    overflow: hidden;
+  }
 }
 
 .tl-quick-search-input-container {
@@ -624,7 +674,6 @@ button.tl-select-input-trigger {
 
   top: 0;
   left: 0;
-  transform: translate(1px, 1px);
   overscroll-behavior: none;
   opacity: 1;
   user-select: text;
@@ -829,12 +878,12 @@ html[data-theme='dark'] {
   fill: none;
   stroke: transparent;
   pointer-events: stroke;
-  stroke-width: min(100px, calc(24px * var(--tl-scale)));
+  stroke-width: min(100px, calc(12px * var(--tl-scale)));
 }
 
 .tl-hitarea-fill {
   fill: transparent;
   stroke: transparent;
   pointer-events: all;
-  stroke-width: min(100px, calc(24px * var(--tl-scale)));
+  stroke-width: min(100px, calc(12px * var(--tl-scale)));
 }

@@ -41,6 +41,27 @@
     (when generate-preview
       (generate-preview tldr))))
 
+(rum/defc dropdown
+  [label children show? outside-click-hander]
+  (let [anchor-ref (rum/use-ref nil)
+        content-ref (rum/use-ref nil)
+        rect (util/use-component-size (when show? anchor-ref))
+        _ (util/use-click-outside content-ref outside-click-hander)
+        [d-open set-d-open] (rum/use-state false)
+        _ (rum/use-effect! (fn [] (js/setTimeout #(set-d-open show?) 100))
+                           [show?])]
+    [:div.dropdown-anchor {:ref anchor-ref}
+     label
+     (when (and rect show? (> (.-y rect) 0))
+       (ui/portal
+        [:div.fixed.shadow-lg.color-level.px-2.rounded-lg.transition
+         {:ref content-ref
+          :style {:opacity (if d-open 1 0)
+                  :width "240px"
+                  :min-height "40px"
+                  :left (+ (* 0.5 (.-width rect)) (.-x rect) -120)
+                  :top (+ (.-y rect) (.-height rect) 8)}} children]))]))
+
 (rum/defc page-refs-count < rum/static
   ([page-name classname]
    (page-refs-count page-name classname nil))
@@ -62,24 +83,19 @@
         #(.removeEventListener js/document.body "mousedown" listener))
       [ref])
      (when (> refs-count 0)
-       (ui/tippy {:in-editor?      false
-                  :html            (fn [] [:div.mx-2 {:ref ref} (reference/block-linked-references block-uuid)])
-                  :interactive     true
-                  :position        "bottom"
-                  :distance        10
-                  :open?           open?
-                  :popperOptions   {:modifiers {:preventOverflow
-                                                {:enabled           true
-                                                 :boundariesElement "viewport"}}}}
-                 [:div.flex.items-center.gap-2.whiteboard-page-refs-count
-                  {:class (str classname (when open? " open"))
-                   :on-mouse-enter (fn [] (d-open-flag #(if (= % 0) 1 %)))
-                   :on-mouse-leave (fn [] (d-open-flag #(if (= % 2) % 0)))
-                   :on-click (fn [e]
-                               (util/stop e)
-                               (d-open-flag (fn [o] (if (not= o 2) 2 0))))}
-                  [:div.open-page-ref-link refs-count]
-                  (when render-fn (render-fn open?))])))))
+       (dropdown
+        [:div.flex.items-center.gap-2.whiteboard-page-refs-count
+         {:class (str classname (when open? " open"))
+          :on-mouse-enter (fn [] (d-open-flag #(if (= % 0) 1 %)))
+          :on-mouse-leave (fn [] (d-open-flag #(if (= % 2) % 0)))
+          :on-click (fn [e]
+                      (util/stop e)
+                      (d-open-flag (fn [o] (if (not= o 2) 2 0))))}
+         [:div.open-page-ref-link refs-count]
+         (when render-fn (render-fn open?))]
+        (reference/block-linked-references block-uuid)
+        open?
+        #(set-open-flag 0))))))
 
 (defn- get-page-display-name
   [page-name]
@@ -98,19 +114,29 @@
          (util/time-ago (js/Date. updated-at)))))
 
 (rum/defc dashboard-preview-card
-  [page-name]
+  [page-name {:keys [checked on-checked-change show-checked?]}]
   [:div.dashboard-card.dashboard-preview-card.cursor-pointer.hover:shadow-lg
-   {:on-click
+   {:data-checked checked
+    :style {:filter (if (and show-checked? (not checked)) "opacity(0.5)" "none")}
+    :on-click
     (fn [e]
       (util/stop e)
-      (route-handler/redirect-to-whiteboard! page-name))}
+      (if show-checked?
+        (on-checked-change (not checked))
+        (route-handler/redirect-to-whiteboard! page-name)))}
    [:div.dashboard-card-title
-    [:div.flex.w-full
+    [:div.flex.w-full.items-center
      [:div.dashboard-card-title-name.font-bold
       (if (parse-uuid page-name)
         [:span.opacity-50 (t :untitled)]
         (get-page-display-name page-name))]
-     [:div.flex-1]]
+     [:div.flex-1]
+     [:div.dashboard-card-checkbox
+      {:tab-index -1
+       :style {:visibility (when show-checked? "visible")}
+       :on-click util/stop-propagation}
+      (ui/checkbox {:checked checked
+                    :on-change (fn [] (on-checked-change (not checked)))})]]
     [:div.flex.w-full.opacity-50
      [:div (get-page-human-update-time page-name)]
      [:div.flex-1]
@@ -129,22 +155,6 @@
    [:span.dashboard-create-card-caption.select-none
     "New whiteboard"]])
 
-;; TODO: move it to util?
-(defn- use-component-size
-  [ref]
-  (let [[rect set-rect] (rum/use-state nil)]
-    (rum/use-effect!
-     (fn []
-       (let [update-rect #(set-rect (when (.-current ref) (.. ref -current getBoundingClientRect)))
-             updator (fn [entries]
-                       (when (.-contentRect (first (js->clj entries))) (update-rect)))
-             observer (js/ResizeObserver. updator)]
-         (update-rect)
-         (.observe observer (.-current ref))
-         #(.disconnect observer)))
-     [])
-    rect))
-
 (rum/defc whiteboard-dashboard
   []
   (if (user-handler/alpha-user?)
@@ -153,7 +163,7 @@
                            reverse)
           whiteboard-names (map :block/name whiteboards)
           ref (rum/use-ref nil)
-          rect (use-component-size ref)
+          rect (util/use-component-size ref)
           [container-width] (when rect [(.-width rect) (.-height rect)])
           cols (cond (< container-width 600) 1
                      (< container-width 900) 2
@@ -161,12 +171,29 @@
                      :else 4)
           total-whiteboards (count whiteboards)
           empty-cards (- (max (* (math/ceil (/ (inc total-whiteboards) cols)) cols) (* 2 cols))
-                         (inc total-whiteboards))]
+                         (inc total-whiteboards))
+          [checked-page-names set-checked-page-names] (rum/use-state #{})
+          has-checked? (not-empty checked-page-names)]
       [:<>
-       [:h1.title.select-none
+       [:h1.select-none.flex.items-center.whiteboard-dashboard-title.title
         "All whiteboards"
         [:span.opacity-50
-         (str " · " total-whiteboards)]]
+         (str " · " total-whiteboards)]
+        [:div.flex-1]
+        (when has-checked?
+          [:button.ui__button.m-0.py-1.inline-flex.items-center.bg-red-800
+           {:on-click
+            (fn []
+              (state/set-modal! (page/batch-delete-dialog
+                                 (map (fn [name]
+                                        (some (fn [w] (when (= (:block/name w) name) w)) whiteboards))
+                                      checked-page-names)
+                                 false route-handler/redirect-to-whiteboard-dashboard!)))}
+           [:span.flex.gap-2.items-center
+            [:span.opacity-50 (ui/icon "trash" {:style {:font-size 15}})]
+            (t :delete)
+            [:span.opacity-50
+             (str " · " (count checked-page-names))]]])]
        [:div
         {:ref ref}
         [:div.gap-8.grid.grid-rows-auto
@@ -174,7 +201,14 @@
                   :grid-template-columns (str "repeat(" cols ", minmax(0, 1fr))")}}
          (dashboard-create-card)
          (for [whiteboard-name whiteboard-names]
-           [:<> {:key whiteboard-name} (dashboard-preview-card whiteboard-name)])
+           [:<> {:key whiteboard-name}
+            (dashboard-preview-card whiteboard-name
+                                    {:show-checked? has-checked?
+                                     :checked (boolean (checked-page-names whiteboard-name))
+                                     :on-checked-change (fn [checked]
+                                                          (set-checked-page-names (if checked
+                                                                               (conj checked-page-names whiteboard-name)
+                                                                               (disj checked-page-names whiteboard-name))))})])
          (for [n (range empty-cards)]
            [:div.dashboard-card.dashboard-bg-card {:key n}])]]])
     [:div "This feature is not public available yet."]))

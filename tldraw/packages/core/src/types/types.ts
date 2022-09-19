@@ -153,12 +153,12 @@ export type TLSubscriptionEvent =
       info: TLShape[]
     }
   | {
-      event: 'drop-files'
-      info: { files: File[]; point: number[] }
+      event: 'drop'
+      info: { dataTransfer: DataTransfer; point: number[] }
     }
   | {
       event: 'paste'
-      info: { point: number[]; shiftKey: boolean; files?: File[] }
+      info: { point: number[]; shiftKey: boolean; dataTransfer?: DataTransfer }
     }
   | {
       event: 'create-assets'

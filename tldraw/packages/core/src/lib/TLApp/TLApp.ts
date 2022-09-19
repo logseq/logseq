@@ -15,8 +15,9 @@ import type {
   TLSubscriptionEventInfo,
   TLStateEvents,
   TLEvents,
+  TLHandle,
 } from '../../types'
-import { KeyUtils, BoundsUtils } from '../../utils'
+import { KeyUtils, BoundsUtils, isNonNullable, createNewLineBinding } from '../../utils'
 import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
 import { TLApi } from '../TLApi'
 import { TLCursors } from '../TLCursors'
@@ -436,11 +437,10 @@ export class TLApp<
 
   paste = (e?: ClipboardEvent, shiftKey?: boolean) => {
     if (!this.editingShape) {
-      const fileList = e?.clipboardData?.files
       this.notify('paste', {
         point: this.inputs.currentPoint,
         shiftKey: !!shiftKey,
-        files: fileList ? Array.from(fileList) : undefined,
+        dataTransfer: e?.clipboardData ?? undefined,
       })
     }
   }
@@ -450,9 +450,9 @@ export class TLApp<
     this.api.deleteShapes()
   }
 
-  dropFiles = (files: FileList, point?: number[]) => {
-    this.notify('drop-files', {
-      files: Array.from(files),
+  drop = (dataTransfer: DataTransfer, point?: number[]) => {
+    this.notify('drop', {
+      dataTransfer,
       point: point
         ? this.viewport.getPagePoint(point)
         : BoundsUtils.getBoundsCenter(this.viewport.currentView),
@@ -577,9 +577,21 @@ export class TLApp<
   @observable bindingIds?: string[]
 
   @computed get bindingShapes(): S[] | undefined {
-    const { bindingIds, currentPage } = this
+    const activeBindings =
+      this.selectedShapesArray.length === 1
+        ? this.selectedShapesArray
+            .flatMap(s => Object.values(s.props.handles ?? {}))
+            .flatMap(h => h.bindingId)
+            .filter(isNonNullable)
+            .flatMap(binding => [
+              this.currentPage.bindings[binding]?.fromId,
+              this.currentPage.bindings[binding]?.toId,
+            ])
+            .filter(isNonNullable)
+        : []
+    const bindingIds = [...(this.bindingIds ?? []), ...activeBindings]
     return bindingIds
-      ? currentPage.shapes.filter(shape => bindingIds?.includes(shape.id))
+      ? this.currentPage.shapes.filter(shape => bindingIds?.includes(shape.id))
       : undefined
   }
 
@@ -590,6 +602,20 @@ export class TLApp<
 
   readonly clearBindingShape = (): this => {
     return this.setBindingShapes()
+  }
+
+  @action createNewLineBinding = (source: TLShape, target: TLShape) => {
+    if (source.canBind && target.canBind) {
+      const result = createNewLineBinding(source, target)
+      if (result) {
+        const [newLine, newBindings] = result
+        this.createShapes([newLine])
+        this.currentPage.updateBindings(Object.fromEntries(newBindings.map(b => [b.id, b])))
+        this.persist()
+        return true
+      }
+    }
+    return false
   }
 
   /* ---------------------- Brush --------------------- */

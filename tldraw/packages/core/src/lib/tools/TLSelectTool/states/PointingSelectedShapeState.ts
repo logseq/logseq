@@ -5,6 +5,7 @@ import {
   type TLEvents,
   TLTargetType,
 } from '../../../../types'
+import { PointUtils } from '../../../../utils'
 import { type TLShape, TLBoxShape } from '../../../shapes'
 import type { TLApp } from '../../../TLApp'
 import { TLToolState } from '../../../TLToolState'
@@ -40,7 +41,7 @@ export class PointingSelectedShapeState<
   }
 
   onPointerUp: TLEvents<S>['pointer'] = () => {
-    const { shiftKey } = this.app.inputs
+    const { shiftKey, currentPoint } = this.app.inputs
     const { selectedShapesArray } = this.app
     if (!this.pointedSelectedShape) throw Error('Expected a pointed selected shape')
     if (shiftKey) {
@@ -51,7 +52,8 @@ export class PointingSelectedShapeState<
     } else if (
       selectedShapesArray.length === 1 &&
       this.pointedSelectedShape.canEdit &&
-      this.pointedSelectedShape instanceof TLBoxShape
+      this.pointedSelectedShape instanceof TLBoxShape &&
+      PointUtils.pointInBounds(currentPoint, this.pointedSelectedShape.bounds)
     ) {
       this.tool.transition('editingShape', {
         shape: this.pointedSelectedShape,

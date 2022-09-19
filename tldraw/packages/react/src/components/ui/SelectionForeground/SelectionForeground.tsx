@@ -24,12 +24,8 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
 
   const editing = !!app.editingShape
 
-  // when editing, make the selection a bit larger
-  width = editing ? width + 2 : width
-  height = editing ? height + 2 : height
-
   return (
-    <SVGContainer style={{ transform: editing ? 'translate(-1px, -1px)' : 'none' }}>
+    <SVGContainer>
       <rect
         className="tl-bounds-fg"
         width={Math.max(width, 1)}

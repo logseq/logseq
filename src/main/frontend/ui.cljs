@@ -1,36 +1,37 @@
 (ns frontend.ui
-  (:require [clojure.string :as string]
+  (:require ["@logseq/react-tweet-embed" :as react-tweet-embed]
+            ["react-intersection-observer" :as react-intersection-observer]
+            ["react-resize-context" :as Resize]
+            ["react-textarea-autosize" :as TextareaAutosize]
+            ["react-tippy" :as react-tippy]
+            ["react-transition-group" :refer [CSSTransition TransitionGroup]]
+            [cljs-bean.core :as bean]
+            [clojure.string :as string]
+            [datascript.core :as d]
+            [electron.ipc :as ipc]
             [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
+            [frontend.db-mixins :as db-mixins]
             [frontend.handler.notification :as notification-handler]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.mixins :as mixins]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.core :as shortcut]
+            [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.rum :as r]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui.date-picker]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [frontend.handler.plugin :as plugin-handler]
-            [cljs-bean.core :as bean]
             [goog.dom :as gdom]
-            [frontend.modules.shortcut.config :as shortcut-config]
-            [frontend.modules.shortcut.data-helper :as shortcut-helper]
-            [promesa.core :as p]
+            [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
-            [electron.ipc :as ipc]
-            ["react-resize-context" :as Resize]
-            ["react-textarea-autosize" :as TextareaAutosize]
-            ["react-tippy" :as react-tippy]
-            ["react-transition-group" :refer [CSSTransition TransitionGroup]]
-            ["@logseq/react-tweet-embed" :as react-tweet-embed]
-            ["react-intersection-observer" :as react-intersection-observer]
-            [rum.core :as rum]
-            [frontend.db-mixins :as db-mixins]
-            [frontend.mobile.util :as mobile-util]
-            [goog.functions :refer [debounce]]))
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -1012,3 +1013,20 @@
                                                        (set-visible! in-view?))))})
            ref (.-ref inViewState)]
        (lazy-visible-inner visible? content-fn ref)))))
+
+(rum/defc portal
+  ([children]
+   (portal children #(js/document.createElement "div") false))
+  ([children attach-to prepend?]
+   (let [[portal-anchor set-portal-anchor] (rum/use-state nil)]
+     (rum/use-effect!
+      (fn []
+        (let [div (js/document.createElement "div")
+              attached (or (if (fn? attach-to) (attach-to) attach-to) js/document.body)]
+          (.setAttribute div "data-logseq-portal" (str (d/squuid)))
+          (if prepend? (.prepend attached div) (.append attached div))
+          (set-portal-anchor div)
+          #(.remove div)))
+      [])
+     (when portal-anchor
+       (rum/portal (rum/fragment children) portal-anchor)))))

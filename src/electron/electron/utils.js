@@ -5,21 +5,31 @@ import fs from 'fs';
 // We set an intercept on incoming requests to disable x-frame-options
 // headers.
 
+// Should we do this? Does this make evil sites doing danagerous things?
 export const disableXFrameOptions = (win) => {
-  win.webContents.session.webRequest.onHeadersReceived({ urls: ['*://*/*'] },
+  win.webContents.session.webRequest.onHeadersReceived(
     (d, c) => {
       if (d.responseHeaders['X-Frame-Options']) {
         delete d.responseHeaders['X-Frame-Options']
       } else if (d.responseHeaders['x-frame-options']) {
         delete d.responseHeaders['x-frame-options']
       }
+      
+      if (d.responseHeaders['Content-Security-Policy']) {
+        delete d.responseHeaders['Content-Security-Policy']
+      }
+
+      if (d.responseHeaders['content-security-policy']) {
+        delete d.responseHeaders['content-security-policy']
+      }
+
 
       c({ cancel: false, responseHeaders: d.responseHeaders })
     }
   )
 }
 
-export async function getAllFiles (dir, exts) {
+export async function getAllFiles(dir, exts) {
   const dirents = await readdir(dir, { withFileTypes: true })
 
   if (exts) {
