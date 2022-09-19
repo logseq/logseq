@@ -159,7 +159,7 @@
      state/set-state! :sync-graph/init? false)))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (if (or (get @outliner-file/*writes-finished? graph)
+  (if (or (not (false? (get @outliner-file/*writes-finished? graph)))
           (:sync-graph/init? @state/state))
     (graph-switch-on-persisted graph opts)
     (notification/show!
