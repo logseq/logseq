@@ -292,6 +292,13 @@
           (ui/icon "chevron-up")
           (ui/icon "chevron-left"))]]]]))
 
+(defn- sort-files
+  [progress files]
+  (sort-by (fn [f]
+             (let [percent (or (:percent (get progress f)) 0)]
+               (if (= percent 100) -1 percent)))
+           > files))
+
 (rum/defcs ^:large-vars/cleanup-todo indicator <
   rum/reactive
   {:key-fn #(identity "file-sync-indicator")}
@@ -311,8 +318,8 @@
         sync-progress           (state/sub [:file-sync/progress])
         _                       (rum/react file-sync-handler/refresh-file-sync-component)
         synced-file-graph?      (file-sync-handler/synced-file-graph? current-repo)
-        uploading-files         (:current-local->remote-files sync-state)
-        downloading-files       (:current-remote->local-files sync-state)
+        uploading-files         (sort-files sync-progress (:current-local->remote-files sync-state))
+        downloading-files       (sort-files sync-progress (:current-remote->local-files sync-state))
         queuing-files           (:queued-local->remote-files sync-state)
         status                  (:state sync-state)
         status                  (or (nil? status) (keyword (name status)))
