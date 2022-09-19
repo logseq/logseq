@@ -91,3 +91,6 @@ jobs:
 
       - name: Lint datalog rules
         run: bb lint:rules
+
+      - name: Lint for namespaces that aren't documented
+        run: bb lint:ns-docstrings

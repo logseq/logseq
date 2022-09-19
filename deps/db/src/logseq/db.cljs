@@ -1,4 +1,5 @@
 (ns logseq.db
+  "Main namespace for public db fns"
   (:require [logseq.db.default :as default-db]
             [logseq.db.schema :as db-schema]
             [datascript.core :as d]))

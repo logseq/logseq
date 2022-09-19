@@ -1,5 +1,5 @@
 (ns logseq.graph-parser.util.block-ref
-  "General purpose vars and util fns for block-refs"
+  "Core vars and util fns for block-refs"
   (:require [clojure.string :as string]))
 
 (def left-parens "Opening characters for block-ref" "((")

@@ -1,4 +1,5 @@
-(ns logseq.db.schema)
+(ns logseq.db.schema
+  "Main db schema for the Logseq app")
 
 (defonce version 1)
 (defonce ast-version 1)
