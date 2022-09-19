@@ -144,10 +144,6 @@
     .menu-links-outer {
       @apply py-0;
 
-      .head-ctls {
-        display: none;
-      }
-
       &.is-list-active {
         .menu-links-wrapper, .head-ctls {
           display: block !important;
@@ -166,6 +162,10 @@
     }
 
     &.is-enabled-progress-pane {
+      .head-ctls {
+        display: none;
+      }
+
       .menu-links-wrapper {
         padding: 0;
         display: none;
