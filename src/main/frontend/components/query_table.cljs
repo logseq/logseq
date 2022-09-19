@@ -2,6 +2,7 @@
   (:require [frontend.components.svg :as svg]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.query-dsl :as query-dsl]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
@@ -13,38 +14,9 @@
             [rum.core :as rum]
             [frontend.modules.outliner.tree :as tree]))
 
-;; TODO: extract to table utils
-(defn- sort-result-by
-  [by-item desc? result]
-  (let [comp (if desc? > <)]
-    (sort-by by-item comp result)))
-
-(rum/defc sortable-title
-  [title key by-item desc? block-id]
-  [:th.whitespace-nowrap
-   [:a {:on-click (fn []
-                    (reset! by-item key)
-                    (swap! desc? not)
-                    (when block-id
-                      (when key
-                        (editor-handler/set-block-property! block-id :query-sort-by (name key)))
-                      (editor-handler/set-block-property! block-id :query-sort-desc @desc?)))}
-    [:div.flex.items-center
-     [:span.mr-1 title]
-     (when (= @by-item key)
-       [:span
-        (if @desc? (svg/caret-down) (svg/caret-up))])]]])
-
-(defn get-keys
-  [result page?]
-  (let [keys (->> (distinct (mapcat keys (map :block/properties result)))
-                  (remove (property/built-in-properties))
-                  (remove #{:template}))
-        keys (if page? (cons :page keys) (cons :block keys))
-        keys (if page? (distinct (concat keys [:created-at :updated-at])) keys)]
-    keys))
-
-(defn attach-clock-property
+;; Util fns
+;; ================
+(defn- attach-clock-property
   [result]
   (let [ks [:block/properties :clock-time]
         result (map (fn [b]
@@ -77,6 +49,64 @@
     :else
     true))
 
+(defn- get-sort-state
+  "Return current sort direction and column (item) being sorted, respectively
+  :sort-desc? and :sort-by-item. :sort-by-item is nil if no sorting is to be
+  done"
+  [state current-block]
+  (let [*sort-by-item (get state ::sort-by-item)
+        *desc? (get state ::desc?)
+        p-desc? (get-in current-block [:block/properties :query-sort-desc])
+        desc? (desc? *desc? p-desc?)
+        p-sort-by (keyword (get-in current-block [:block/properties :query-sort-by]))
+        sort-by-item (or @*sort-by-item
+                         (some-> p-sort-by keyword)
+                         (if (query-dsl/query-contains-filter? (:block/content current-block) "sort-by")
+                           nil
+                           :updated-at))]
+    {:sort-desc? desc?
+     :sort-by-item sort-by-item}))
+
+(defn- sort-result [result {:keys [sort-by-item sort-desc?]}]
+  (if (some? sort-by-item)
+    (let [comp (if sort-desc? > <)]
+      (sort-by (fn [item]
+                 (block/normalize-block (sort-by-fn sort-by-item item)))
+               comp
+               result))
+    result))
+
+;; Components and public fns
+;; =========================
+(rum/defc sortable-title
+  [title key state {:keys [sort-by-item sort-desc?]} block-id]
+  (let [*sort-by-item (get state ::sort-by-item)
+        *desc? (get state ::desc?)]
+    [:th.whitespace-nowrap
+     [:a {:on-click (fn []
+                      ;; The two local state atom changes have no effect on
+                      ;; preserving state. Consider deleting?
+                      (reset! *sort-by-item key)
+                      (swap! *desc? not)
+                      (editor-handler/set-block-property! block-id :query-sort-by (name key))
+                      (editor-handler/set-block-property! block-id :query-sort-desc (not sort-desc?)))}
+     [:div.flex.items-center
+      [:span.mr-1 title]
+      (when (= sort-by-item key)
+        [:span
+         (if sort-desc? (svg/caret-down) (svg/caret-up))])]]]))
+
+(defn get-keys
+  [result page?]
+  (let [keys (->> (distinct (mapcat keys (map :block/properties result)))
+                  (remove (property/built-in-properties))
+                  (remove #{:template}))
+        keys (if page? (cons :page keys) (cons :block keys))
+        keys (if page? (distinct (concat keys [:created-at :updated-at])) keys)]
+    keys))
+
+;; We refer to rows and columns in a table as keys and items.
+;; TODO: Rename key(s) naming as it conflict with core fns
 (rum/defcs result-table < rum/reactive
   (rum/local nil ::sort-by-item)
   (rum/local nil ::desc?)
@@ -84,12 +114,8 @@
   [state config current-block result {:keys [page?]} map-inline page-cp ->elem inline-text]
   (when current-block
     (let [result (tree/filter-top-level-blocks result)
-          p-sort-by (keyword (get-in current-block [:block/properties :query-sort-by]))
-          p-desc? (get-in current-block [:block/properties :query-sort-desc])
           select? (get state ::select?)
-          *sort-by-item (get state ::sort-by-item)
-          *desc? (get state ::desc?)
-          sort-by-item (or @*sort-by-item (some-> p-sort-by keyword) :updated-at)
+          sort-state (get-sort-state state current-block)
           ;; remove templates
           result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)
           result (if page? result (attach-clock-property result))
@@ -108,11 +134,7 @@
                           (filter included-keys keys)
                           included-keys)
                   keys))
-          desc? (desc? *desc? p-desc?)
-          result (sort-result-by (fn [item]
-                                   (block/normalize-block (sort-by-fn sort-by-item item)))
-                                 desc?
-                                 result)]
+          result (sort-result result sort-state)]
       [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
                              :style {:width "100%"}
                              :class (when-not page? "query-table")}
@@ -124,7 +146,7 @@
                              (util/format "clock-time(total: %s)" (clock/minutes->days:hours:minutes
                                                                    clock-time-total))
                              (name key))]
-              (sortable-title key-name key *sort-by-item *desc? (:block/uuid current-block))))]]
+              (sortable-title key-name key state sort-state (:block/uuid current-block))))]]
         [:tbody
          (for [item result]
            (let [format (:block/format item)]

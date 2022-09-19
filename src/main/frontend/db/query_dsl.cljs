@@ -577,6 +577,10 @@ Some bindings in this fn:
                             (when sort-by
                               {:transform-fn sort-by})))))))
 
+(defn query-contains-filter?
+  [query filter-name]
+  (string/includes? query (str "(" filter-name)))
+
 (comment
   ;; {{query (and (page-property foo bar) [[hello]])}}
 
