@@ -155,6 +155,8 @@
 
 (defonce download-batch-size 100)
 (defonce upload-batch-size 20)
+(def ^:private current-sm-graph-uuid (atom nil))
+
 ;;; ### configs in config.edn
 ;; - :file-sync/ignore-files
 
@@ -2778,9 +2780,11 @@
         (debug/pprint ["stop sync-manager, graph-uuid" graph-uuid "base-path" base-path])
         (swap! *sync-state sync-state--update-state ::stop)
         (loop []
-          (when (not= ::stop state)
-            (<! (timeout 100))
-            (recur))))))
+          (if (not= ::stop state)
+            (do
+              (<! (timeout 100))
+              (recur))
+            (reset! current-sm-graph-uuid nil))))))
 
   IStopped?
   (-stopped? [_]
@@ -2805,8 +2809,6 @@
     (swap! *sync-state sync-state--update-current-syncing-graph-uuid graph-uuid)
     (->SyncManager graph-uuid base-path *sync-state local->remote-syncer remote->local-syncer remoteapi-with-stop
                    nil *txid nil nil nil *stopped? *paused? nil (chan 1) (chan 1) (chan 1) (chan 1) (chan 1))))
-
-(def ^:private current-sm-graph-uuid (atom nil))
 
 (defn sync-manager-singleton
   [user-uuid graph-uuid base-path repo txid *sync-state]

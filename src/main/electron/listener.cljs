@@ -52,7 +52,6 @@
   (js/window.apis.on "file-sync-progress"
                      (fn [data]
                        (let [payload (bean/->clj data)]
-                         (prn "updated progress:" payload)
                          (state/set-state! [:file-sync/progress (:file payload)] payload)
                          nil)))
 
