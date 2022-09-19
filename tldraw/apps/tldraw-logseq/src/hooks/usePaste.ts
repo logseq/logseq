@@ -150,8 +150,8 @@ export function usePaste() {
       async function tryCreateShapesFromDataTransfer(dataTransfer: DataTransfer) {
         return tryCreateShapeHelper(
           tryCreateShapeFromFiles,
-          tryCreateShapeFromTextHTML,
           tryCreateShapeFromTextPlain,
+          tryCreateShapeFromTextHTML,
           tryCreateShapeFromBlockUUID
         )(dataTransfer)
       }
