@@ -26,7 +26,8 @@
             [frontend.fs :as fs]
             [frontend.encrypt :as encrypt]
             [medley.core :refer [dedupe-by]]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [promesa.core :as p]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -180,13 +181,13 @@
 (def graphs-txid (persist-var/persist-var nil "graphs-txid"))
 
 (declare assert-local-txid<=remote-txid)
-(defn update-graphs-txid!
+(defn <update-graphs-txid!
   [latest-txid graph-uuid user-uuid repo]
   {:pre [(int? latest-txid) (>= latest-txid 0)]}
-  (persist-var/-reset-value! graphs-txid [user-uuid graph-uuid latest-txid] repo)
-  (some-> (persist-var/persist-save graphs-txid)
-          p->c)
-  (when (state/developer-mode?) (assert-local-txid<=remote-txid)))
+  (-> (p/let [_ (persist-var/-reset-value! graphs-txid [user-uuid graph-uuid latest-txid] repo)
+              _ (persist-var/persist-save graphs-txid)]
+        (when (state/developer-mode?) (assert-local-txid<=remote-txid)))
+      p->c))
 
 (defn clear-graphs-txid! [repo]
   (persist-var/-reset-value! graphs-txid nil repo)
@@ -1428,7 +1429,7 @@
               r)))))))
 
 (defn apply-filetxns-partitions
-  "won't call update-graphs-txid! when *txid is nil"
+  "won't call <update-graphs-txid! when *txid is nil"
   [*sync-state user-uuid graph-uuid base-path filetxns-partitions repo *txid *stopped *paused]
   (assert (some? *sync-state))
 
@@ -1460,7 +1461,7 @@
               ;; update local-txid
               (when *txid
                 (reset! *txid latest-txid)
-                (update-graphs-txid! latest-txid graph-uuid user-uuid repo))
+                (<! (<update-graphs-txid! latest-txid graph-uuid user-uuid repo)))
               (recur (next filetxns-partitions*)))))))))
 
 (defmulti need-sync-remote? (fn [v] (cond
@@ -2078,7 +2079,7 @@
           @*stopped                   {:stop true}
           @*paused                    {:pause true}
           :else
-          (do (update-graphs-txid! latest-txid graph-uuid user-uuid repo)
+          (do (<! (<update-graphs-txid! latest-txid graph-uuid user-uuid repo))
               (reset! *txid latest-txid)
               {:succ true})))))
 
@@ -2106,7 +2107,7 @@
                                                   :full-sync? false
                                                   :epoch      (tc/to-epoch (t/now))}})
                         (if (empty? (flatten partitioned-filetxns))
-                          (do (update-graphs-txid! latest-txid graph-uuid user-uuid repo)
+                          (do (<! (<update-graphs-txid! latest-txid graph-uuid user-uuid repo))
                               (reset! *txid latest-txid)
                               {:succ true})
                           (<! (apply-filetxns-partitions
@@ -2315,7 +2316,7 @@
                 (need-reset-local-txid? r*) ;; TODO: this cond shouldn't be true,
                 ;; but some potential bugs cause local-txid > remote-txid
                 (let [remote-txid (:TXId (<! (<get-remote-graph remoteapi nil graph-uuid)))]
-                  (update-graphs-txid! remote-txid graph-uuid user-uuid repo)
+                  (<! (<update-graphs-txid! remote-txid graph-uuid user-uuid repo))
                   (reset! *txid remote-txid)
                   {:succ true})
 
@@ -2330,7 +2331,7 @@
                 (do
                   (println "sync-local->remote! update txid" r*)
                   ;; persist txid
-                  (update-graphs-txid! r* graph-uuid user-uuid repo)
+                  (<! (<update-graphs-txid! r* graph-uuid user-uuid repo))
                   (reset! *txid r*)
                   {:succ true})
 

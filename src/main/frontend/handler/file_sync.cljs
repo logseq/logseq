@@ -44,7 +44,7 @@
       (if (and (not (instance? ExceptionInfo r))
                (string? r))
         (let [tx-info [0 r (user/user-uuid) (state/get-current-repo)]]
-          (apply sync/update-graphs-txid! tx-info)
+          (<! (apply sync/<update-graphs-txid! tx-info))
           (swap! refresh-file-sync-component not) tx-info)
         (do
           (state/set-state! [:ui/loading? :graph/create-remote?] false)
@@ -92,11 +92,13 @@
   (state/set-state! :file-sync/remote-graphs {:loading false :graphs nil}))
 
 (defn init-graph [graph-uuid]
-  (let [repo (state/get-current-repo)
-        user-uuid (user/user-uuid)]
-    (sync/update-graphs-txid! 0 graph-uuid user-uuid repo)
-    (swap! refresh-file-sync-component not)
-    (state/pub-event! [:graph/switch repo {:persist? false}])))
+  (go
+    (let [repo (state/get-current-repo)
+          user-uuid (user/user-uuid)]
+      (state/set-state! :sync-graph/init? true)
+      (<! (sync/<update-graphs-txid! 0 graph-uuid user-uuid repo))
+      (swap! refresh-file-sync-component not)
+      (state/pub-event! [:graph/switch repo {:persist? false}]))))
 
 (defn download-version-file
   ([graph-uuid file-uuid version-uuid]
@@ -182,7 +184,6 @@
           " to "
           (config/get-string-repo-dir (config/get-local-dir local)))
      :warning)
-
     (init-graph (:GraphUUID graph))
     (state/close-modal!)))
 

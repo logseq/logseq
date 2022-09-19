@@ -422,12 +422,12 @@
                                    (js/decodeURIComponent f)]
                            :key   (str "downloading-" f)
                            :icon  (if enabled-progress-panel?
-                                    (let [progress (get sync-progress f)]
-                                      (let [percent (or (:percent progress) 0)]
-                                        (if (and (number? percent)
-                                                 (< percent 100))
-                                          (indicator-progress-pie percent)
-                                          (ui/icon "circle-check"))))
+                                    (let [progress (get sync-progress f)
+                                          percent (or (:percent progress) 0)]
+                                      (if (and (number? percent)
+                                               (< percent 100))
+                                        (indicator-progress-pie percent)
+                                        (ui/icon "circle-check")))
                                     (ui/icon "arrow-narrow-down"))
                            }) downloading-files)
 
@@ -447,12 +447,12 @@
                                    (js/decodeURIComponent f)]
                            :key   (str "uploading-" f)
                            :icon  (if enabled-progress-panel?
-                                    (let [progress (get sync-progress f)]
-                                      (let [percent (or (:percent progress) 0)]
-                                        (if (and (number? percent)
-                                                 (< percent 100))
-                                          (indicator-progress-pie percent)
-                                          (ui/icon "circle-check"))))
+                                    (let [progress (get sync-progress f)
+                                          percent (or (:percent progress) 0)]
+                                      (if (and (number? percent)
+                                               (< percent 100))
+                                        (indicator-progress-pie percent)
+                                        (ui/icon "circle-check")))
                                     (ui/icon "arrow-up"))
                            }) uploading-files)
 
@@ -548,9 +548,7 @@
                                                       (nil? (second info))
                                                       (not= (second info) (:GraphUUID graph))))
                                          (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
-                                           (do
-                                             (state/set-state! :graph/remote-binding? true)
-                                             (p/resolved nil))
+                                           (p/resolved nil)
                                            (throw (js/Error. nil)))))))
 
                          ;; cancel pick a directory
