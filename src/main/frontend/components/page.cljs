@@ -318,7 +318,6 @@
                   :white-space "nowrap"
                   :overflow "hidden"
                   :text-overflow "ellipsis"
-                  :max-width (when-not (rum/react *edit?) "320px")
                   :min-width "80px"}}
          (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
                untitled? [:span.opacity-50 (t :untitled)]
