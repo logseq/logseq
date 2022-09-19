@@ -210,7 +210,7 @@
   [dir path]
   (util/p-handle
    (stat dir path)
-   (fn [_stat] true)
+   (fn [stat] (not (nil? stat)))
    (fn [_e] false)))
 
 (defn dir-exists?

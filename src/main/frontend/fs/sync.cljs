@@ -186,6 +186,7 @@
   {:pre [(int? latest-txid) (>= latest-txid 0)]}
   (-> (p/let [_ (persist-var/-reset-value! graphs-txid [user-uuid graph-uuid latest-txid] repo)
               _ (persist-var/persist-save graphs-txid)]
+        (state/pub-event! [:graph/refresh])
         (when (state/developer-mode?) (assert-local-txid<=remote-txid)))
       p->c))
 
@@ -2821,7 +2822,6 @@
     (go
       (when (and (graph-sync-off? repo) @network-online-cursor)
         (<! (p->c (persist-var/-load graphs-txid)))
-
         (let [[user-uuid graph-uuid txid] @graphs-txid]
           (when (and user-uuid graph-uuid txid
                      (user/logged-in?)

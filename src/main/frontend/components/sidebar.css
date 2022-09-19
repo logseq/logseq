@@ -460,7 +460,7 @@ html[data-theme='dark'] {
   &.closed {
     width: 0 !important;
 
-    .resizer {
+    @screen lg {
       width: 4px !important;
     }
   }
