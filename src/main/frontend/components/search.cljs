@@ -12,6 +12,7 @@
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.search :as search-handler]
+            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.ui :as ui]
             [frontend.state :as state]
@@ -62,11 +63,10 @@
             [:p {:class "m-0"} elements]))))))
 
 (rum/defc search-result-item
-  [type content]
-  [:.text-sm.font-medium.flex.items-baseline
-   [:.text-xs.rounded.border.mr-2.px-1 {:title type}
-    (get type 0)]
-   content])
+  [icon content]
+  [:.search-result
+   (ui/type-icon icon)
+   [:.self-center content]])
 
 (rum/defc block-search-result-item
   [repo uuid format content q search-mode]
@@ -123,7 +123,7 @@
     (page-handler/create! search-q {:redirect? true})
 
     :new-whiteboard
-    (route/redirect-to-whiteboard! search-q)
+    (whiteboard-handler/create-new-whiteboard! search-q)
 
     :page
     (let [data (or alias data)]
@@ -191,6 +191,15 @@
     nil)
   (state/close-modal!))
 
+(defn- create-item-render
+  [icon label name]
+  (search-result-item
+   {:name icon
+    :class "highlight"
+    :extension? true}
+   [:div.text.font-bold (str label ": ")
+    [:span.ml-1 name]]))
+
 (defn- search-item-render
   [search-q {:keys [type data alias]}]
   (let [search-mode (state/get-search-mode)
@@ -201,22 +210,25 @@
        [:b search-q]
 
        :new-page
-       [:div.text.font-bold (str (t :new-page) ": ")
-        [:span.ml-1 (str "\"" (string/trim search-q) "\"")]]
+       (create-item-render "new-page" (t :new-page) (str "\"" (string/trim search-q) "\""))
 
        :new-whiteboard
-       [:div.text.font-bold (str (t :new-whiteboard) ": ")
-        [:span.ml-1 (str "\"" (string/trim search-q) "\"")]]
+       (create-item-render "new-whiteboard" (t :new-whiteboard) (str "\"" (string/trim search-q) "\""))
 
        :page
        [:span {:data-page-ref data}
         (when alias
           (let [target-original-name (model/get-page-original-name alias)]
             [:span.mr-2.text-sm.font-medium.mb-2 (str "Alias -> " target-original-name)]))
-        (search-result-item (if (model/whiteboard-page? data) "Whiteboard" "Page") (highlight-exact-query data search-q))]
+        (search-result-item {:name (if (model/whiteboard-page? data) "whiteboard" "page")
+                             :extension? true
+                             :title (t (if (model/whiteboard-page? data) :search-item/whiteboard :search-item/page))}
+                            (highlight-exact-query data search-q))]
 
        :file
-       (search-result-item "File" (highlight-exact-query data search-q))
+       (search-result-item {:name "file"
+                            :title (t :search-item/file)}
+                           (highlight-exact-query data search-q))
 
        :block
        (let [{:block/keys [page uuid]} data  ;; content here is normalized
@@ -226,10 +238,13 @@
              block (model/query-block-by-uuid uuid)
              content (:block/content block)]
          [:span {:data-block-ref uuid}
-          (search-result-item "Block"  (if block
-                                         (block-search-result-item repo uuid format content search-q search-mode)
-                                         (do (log/error "search result with non-existing uuid: " data)
-                                             (str "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."))))])
+          (search-result-item {:name "block"
+                               :title (t :search-item/block)
+                               :extension? true}
+                              (if block
+                                (block-search-result-item repo uuid format content search-q search-mode)
+                                (do (log/error "search result with non-existing uuid: " data)
+                                    (str "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."))))])
 
        nil)]))
 
@@ -360,7 +375,9 @@
                                  svg/search
                                  [:span.ml-2 data]]
                         :page (when-let [original-name (model/get-page-original-name data)] ;; might be block reference
-                                (search-result-item "Page" original-name))
+                                (search-result-item {:name "page"
+                                                     :extension? true}
+                                                    original-name))
                         nil))}))])
 
 (defn default-placeholder

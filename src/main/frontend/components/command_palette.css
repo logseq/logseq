@@ -17,10 +17,12 @@
       transition: none;
       border: none;
       border-radius: unset !important;
+      background: none;
     }
 
     .chosen {
       background-color: var(--ls-quaternary-background-color);
+      color: var(--ls-secondary-text-color);
     }
 
     .command-results-wrap,
@@ -33,6 +35,14 @@
 
     .input-wrap {
       height: var(--palettle-input-height);
+    }
+
+    .cp__palette-input {
+      color: var(--ls-secondary-text-color);
+    }
+
+    .search-result {
+      @apply text-sm font-medium flex items-baseline;
     }
   }
 

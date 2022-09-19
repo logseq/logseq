@@ -1,6 +1,5 @@
 (ns frontend.components.whiteboard
   (:require [cljs.math :as math]
-            [datascript.core :as d]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
             [frontend.context.i18n :refer [t]]
@@ -151,9 +150,7 @@
    {:on-click
     (fn [e]
       (util/stop e)
-      (let [name (str (d/squuid))]
-        (whiteboard-handler/create-new-whiteboard-page! name)
-        (route-handler/redirect-to-whiteboard! name)))}
+      (whiteboard-handler/create-new-whiteboard!))}
    (ui/icon "plus")
    [:span.dashboard-create-card-caption.select-none
     "New whiteboard"]])

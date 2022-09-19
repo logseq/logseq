@@ -352,3 +352,35 @@ html.is-mobile {
 .bg-quaternary {
   background-color: var(--ls-quaternary-background-color);
 }
+
+.type-icon {
+  @apply text-xs text-center flex items-center justify-center rounded border mr-2 relative;
+
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  border-color: var(--ls-primary-background-color);
+  overflow: hidden;
+  color: var(--ls-primary-text-color);
+
+  .ti,
+  .tie {
+    z-index: 1;
+  }
+
+  &:before {
+    @apply block absolute inset-0 ;
+    background: var(--ls-primary-background-color);
+    content: " ";
+  }
+
+  &.highlight {
+    color: var(--ls-selection-text-color);
+    border-color: var(--ls-selection-background-color);
+
+    &:before {
+      opacity: 0.5;
+      background: var(--ls-selection-background-color);
+    }
+  }
+}

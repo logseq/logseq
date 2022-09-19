@@ -30,6 +30,7 @@
    :editor/delete                "Delete / Delete forwards"
    :editor/new-block             "Create new block"
    :editor/new-line              "New line in current block"
+   :editor/new-whiteboard        "Create new whiteboard"
    :editor/follow-link           "Follow link under cursor"
    :editor/open-link-in-sidebar  "Open link in sidebar"
    :editor/bold                  "Bold"

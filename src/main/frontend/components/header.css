@@ -317,7 +317,7 @@ html.is-native-iphone {
   --ls-headbar-inner-top-padding: 36px;
 
   .left-sidebar-inner {
-    .new-page {
+    .create {
       padding-bottom: 32px;
     }
   }
