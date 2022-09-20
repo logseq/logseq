@@ -1,5 +1,6 @@
 .cp__header {
   @apply z-10;
+
   -webkit-app-region: drag;
 
   padding-top: var(--ls-headbar-inner-top-padding);
@@ -17,7 +18,8 @@
   white-space: nowrap;
 
   > .l {
-    @apply pl-4;
+    @apply pl-2;
+    
     width: var(--ls-left-sidebar-width);
     height: 100%;
     align-items: center;
@@ -36,10 +38,6 @@
   > .l, > .r {
     -webkit-transform: translate3d(0, 0, 0);
     transform: translate3d(0, 0, 0);
-  }
-
-  .it svg {
-    transform: scale(0.8);
   }
 
   .button {
@@ -130,10 +128,6 @@
   }
 }
 
-.cp__header .navigation svg {
-  transform: scale(0.7);
-}
-
 .is-electron.is-mac.is-fullscreen .cp__header > .l {
   padding-left: 1rem;
 }
@@ -178,8 +172,14 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 15ch;
+  max-width: 20ch;
   height: 14px;
+
+  .ui__icon {
+    position: relative;
+    top: 5px;
+    right: -1px;
+  }
 }
 
 .button {
