@@ -922,10 +922,7 @@
              :on-tweet-load-success #(reset! *loading? false)})]]))
 
 (def get-adapt-icon-class
-  (memoize (fn [klass]
-             (do
-               (prn "==> pick:" klass)
-               (r/adapt-class klass)))))
+  (memoize (fn [klass] (r/adapt-class klass))))
 
 (defn icon
   ([class] (icon class nil))

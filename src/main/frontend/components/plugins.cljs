@@ -130,7 +130,7 @@
 (rum/defc category-tabs
   [t category on-action]
 
-  [:div.secondary-tabs.categories
+  [:div.secondary-tabs.categories.flex
    (ui/button
     [:span.flex.items-center (ui/icon "puzzle") (t :plugins)]
     :intent "logseq"
