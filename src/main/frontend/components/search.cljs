@@ -271,8 +271,8 @@
     [:div "Recent search:"]
     (ui/with-shortcut :go/search-in-page "bottom"
       [:div.flex-row.flex.align-items
-       [:div.mr-2 "Search blocks in page:"]
-       [:div {:style {:margin-top 3}}
+       [:div.mr-3.flex.leading-4 "Search blocks in page:"]
+       [:div.flex.items-center
         (ui/toggle in-page-search?
                    (fn [_value]
                      (state/set-search-mode! (if in-page-search? :global :page)))
@@ -283,7 +283,7 @@
                   :interactive     true
                   :arrow           true
                   :theme       "monospace"}
-                 [:a.inline-block.fade-link
+                 [:a.flex.fade-link.items-center
                   {:style {:margin-left 12}
                    :on-click #(state/toggle! :ui/command-palette-open?)}
                   (ui/icon "command" {:style {:font-size 20}})])])]
