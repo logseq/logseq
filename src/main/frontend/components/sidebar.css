@@ -112,7 +112,8 @@
   }
 
   .page-icon {
-    @apply mr-1 align-baseline;
+    @apply flex items-center mr-1 align-baseline;
+
     width: 16px;
     height: 18px;
     text-align: center;
@@ -236,6 +237,11 @@
             overflow: hidden;
             text-overflow: ellipsis;
             flex-grow: 1;
+          }
+
+          .page-icon {
+            display: flex;
+            align-items: center;
           }
 
           &:hover {
