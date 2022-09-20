@@ -1459,6 +1459,7 @@ Similar to re-frame subscriptions"
        (let [now (util/time-ms)]
          (>= (- now last-time) diff)))
      ;; not in editing mode
+     ;; Is this a good idea to put whiteboard check here?
      (not (or (get-edit-input-id) (active-tldraw-app))))))
 
 (defn set-nfs-refreshing!
