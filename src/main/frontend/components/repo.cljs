@@ -229,7 +229,7 @@
                                              (toggle-fn))
                                  :title    repo-path}       ;; show full path on hover
                                 [:span.flex.pr-2.relative
-                                 {:style {:top 2}}
+                                 {:style {:top 1}}
                                  (ui/icon "database" {:size 16 :id "database-icon"})]
                                 [:div.graphs
                                  [:span#repo-switch.block.pr-2.whitespace-nowrap
