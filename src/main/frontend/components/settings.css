@@ -286,6 +286,13 @@
       }
     }
   }
+
+  &-files-breaking-changed {
+    &[disabled] {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+  }
 }
 
 html.is-native-android,

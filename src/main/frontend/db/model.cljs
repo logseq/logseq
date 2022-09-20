@@ -119,6 +119,7 @@
    (conn/get-db repo)))
 
 (defn get-pages-with-file
+  "Return full file entity for calling file renaming"
   [repo]
   (d/q
    '[:find (pull ?page [:block/name :block/properties :block/journal?]) (pull ?file [*])

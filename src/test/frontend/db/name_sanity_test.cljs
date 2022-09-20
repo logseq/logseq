@@ -49,7 +49,7 @@
   (is (= (#'page-handler/compute-new-file-path "c://data/a sdfpp/dsal dsalf% * _ dsaf.mnk" "c d / f") "c://data/a sdfpp/c d / f.mnk")))
 
 (deftest break-change-conversion-tests
-  (let [conv-legacy #(#'conversion-handler/calc-previous-name % nil conversion-handler/legacy-title-parsing)]
+  (let [conv-legacy #(#'conversion-handler/calc-previous-name % nil gp-util/legacy-title-parsing)]
     (is (= "dsal dsalfjk aldsaf__jkl" (conv-legacy "dsal dsalfjk aldsaf.jkl")))
     (is (= nil (conv-legacy "dsal dsalfjk jkl")))
     (is (= nil (conv-legacy "dsa&amp;l dsalfjk jkl")))

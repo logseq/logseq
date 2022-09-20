@@ -24,8 +24,9 @@
      first block content
    note: `page-name-order` is deprecated on Apr. 2021
    uri-encoded? - since paths on mobile are uri-encoded, need to decode them first
+   filename-format - the format used to parse file name
    "
-  [file ast uri-encoded?]
+  [file ast uri-encoded? filename-format]
   ;; headline
   (let [ast  (map first ast)
         file (if uri-encoded? (js/decodeURI file) file)]
@@ -43,7 +44,9 @@
                                     title))
             file-name (when-let [result (gp-util/path->file-body file)]
                         (if (gp-config/mldoc-support? (gp-util/get-file-ext file))
-                          (gp-util/title-parsing result)
+                          (case filename-format
+                            :double-lowbar (gp-util/title-parsing result)
+                            (gp-util/legacy-title-parsing result))
                           result))]
         (or property-name
             file-name
@@ -116,9 +119,9 @@
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
   "uri-encoded? - if is true, apply URL decode on the file path"
-  [format ast properties file content {:keys [date-formatter db uri-encoded?] :as options}]
+  [format ast properties file content {:keys [date-formatter db uri-encoded? filename-format] :as options}]
   (try
-    (let [page (get-page-name file ast uri-encoded?)
+    (let [page (get-page-name file ast uri-encoded? filename-format)
           [page page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
           options' (-> options
                        (assoc :page-name page-name

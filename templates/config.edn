@@ -281,6 +281,19 @@
  ;   :list?            true
  ; }
 
- ;; Built in values for tracking data versions, don't edit manually
- :repo/dir-version 3
+ ;; Decide the way to escape the special characters in the page title.
+ ;; Warning:
+ ;;   This is a dangerous operation. If you want to change the setting, 
+ ;;   should access the `File name conversion` UI and follow the instructions. 
+ ;;   Or you have to rename all the affected files manually then re-index on all 
+ ;;   clients after the files are synced. Wrong handling may cause page titles 
+ ;;   containing special characters to be messy.
+ ;; Available values:
+ ;;   :file/name-format :double-lowbar 
+ ;;     ;use double underscore `__` for slash `/` in page title
+ ;;     ;use Percent-encoding for other invalid characters
+ ;;   :file/name-format :legacy 
+ ;;     ;use Percent-encoding for slash and other invalid characters
+ ;;     ;parse `.` in file name as slash `/` in page title
+ :file/name-format :double-lowbar
  }

@@ -64,10 +64,6 @@
   [:div.flex-1.overflow-hidden
    [:h1.title
     (t :all-files)]
-   ;; Only resolve files on Desktop.
-   (if (util/electron?)
-     (conversion-ui/files-breaking-changed)
-     [:p (t :conversion/non-desktop)])
    (files-all)
    ])
 

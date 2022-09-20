@@ -291,8 +291,8 @@
   {:feature/enable-search-remove-accents? true
    :default-arweave-gateway "https://arweave.net"
 
-   ;; For triggering file / db when updating from old versions of Logseq w/o these keys. Don't bump the value.
-   :repo/dir-version 0})
+   ;; For flushing the settings of old versions. Don't bump this value.
+   :file/name-format :legacy})
 
 ;; State that most user config is dependent on
 (declare get-current-repo)
@@ -1822,7 +1822,6 @@ Similar to re-frame subscriptions"
          (= #{:repo :old-path :new-path} (set (keys v)))]}
   (async/offer! (get-file-rename-event-chan) v))
 
-(defn get-dir-version
-  "If the version is outdated, action on graph directory is required."
+(defn get-filename-format
   [repo]
-  (:repo/dir-version (get-config repo)))
+  (:file/name-format (get-config repo)))

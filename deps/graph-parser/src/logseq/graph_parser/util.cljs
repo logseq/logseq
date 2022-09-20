@@ -208,3 +208,13 @@
                   (edn/read-string (str "{" s " nil}"))))
     (catch :default _
       false)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;     Keep for backward compatibility     ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Rule of dir-ver 0
+;; Source: https://github.com/logseq/logseq/blob/e7110eea6790eda5861fdedb6b02c2a78b504cd9/deps/graph-parser/src/logseq/graph_parser/extract.cljc#L35
+(defn legacy-title-parsing
+  [file-name-body]
+  (js/decodeURIComponent (string/replace file-name-body "." "/")))

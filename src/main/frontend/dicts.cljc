@@ -113,7 +113,19 @@
         :file/last-modified-at "Last modified at"
         :file/no-data "No data"
         :file/format-not-supported "Format .{1} is not supported."
-        :file/need-action "Suggested actions on updating from a previous version"
+        :file-rn/need-action "Step 2. To preserve Page titles, Actions are suggested under the current filename format, or you can "
+        :file-rn/close-panel "Close the Panel"
+        :file-rn/all-action "Apply all Actions!"
+        :file-rn/select-format "Step 1. Select the desired filename format"
+        :file-rn/rename "Rename"
+        :file-rn/affected-pages "Affected Pages after the format change" 
+        :file-rn/suggest-rename "To maintain the page name, file \"{1}\" should be renamed to "
+        :file-rn/otherwise-breaking "Otherwise, the page name will become"
+        :file-rn/no-action "Well done! No further action required"
+        :file-rn/confirm-proceed "Confirm!"
+        :file-rn/unreachable-title "Warning! The page name will become {1} under current filename format, unless setup `title::` property manually"
+        :file-rn/optional-rename "May rename file \"{1}\" to "
+        :file-rn/update-filename "to follow the current filename format"
         :page/created-at "Created At"
         :page/updated-at "Updated At"
         :page/backlinks "Back Links"
@@ -196,6 +208,7 @@
         :settings-page/plugin-system "Plugins"
         :settings-page/enable-flashcards "Flashcards"
         :settings-page/network-proxy "Network proxy"
+        :settings-page/filename-format "File naming format"
         :settings-page/sync "Sync"
         :logseq "Logseq"
         :on "ON"
@@ -350,7 +363,7 @@
 
         :conversion/non-desktop "Graph directory in old versions needs to be converted to the new format. 
           Please use the desktop app to do the conversion."
-        }
+        :conversion/write-filename-format "Apply format for incoming files"}
 
    :de {:help/about "Über Logseq"
         :on-boarding/demo-graph "Dies ist ein Demo-Graph. Änderungen werden nicht gespeichert, solange Sie kein lokales Verzeichnis öffnen."
@@ -1305,6 +1318,7 @@
            :settings-page/tab-version-control "多版本控制"
            :settings-page/plugin-system "插件系统"
            :settings-page/network-proxy "网络代理"
+           :settings-page/filename-format "文件名格式"
            :logseq "Logseq"
            :on "已打开"
            :more-options "更多选项"
