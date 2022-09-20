@@ -206,7 +206,6 @@
 
   (let [status                 (:state sync-state)
         status                 (or (nil? status) (keyword (name status)))
-
         uploading-files        (:current-local->remote-files sync-state)
         downloading-files      (:current-remote->local-files sync-state)
         uploading?             (seq uploading-files)
@@ -214,11 +213,18 @@
 
         progressing?           (or uploading? downloading?)
 
+        full-upload-files      (:full-local->remote-files sync-state)
+        full-download-files    (:full-remote->local-files sync-state)
         calc-progress-total    #(cond
-                                  uploading? (count (:full-local->remote-files sync-state))
-                                  downloading? (count (:full-remote->local-files sync-state))
+                                  uploading? (count full-upload-files)
+                                  downloading? (count full-download-files)
                                   :else 0)
-        calc-progress-finished (fn [] (count (filter #(= (:percent (second %)) 100) sync-progress)))
+        calc-progress-finished (fn []
+                                 (let [current-sync-files (set
+                                                           (->> (or (seq full-upload-files) (seq full-download-files))
+                                                                (map :path)))]
+                                   (count (filter #(and (= (:percent (second %)) 100)
+                                                        (contains? current-sync-files (first %))) sync-progress))))
         calc-time-left         (fn [] (let [last-calculated-at (:calculated-at @*last-calculated-time)
                                             now                (tc/to-epoch (t/now))]
                                         (if (and last-calculated-at (< (- now last-calculated-at) 10))
@@ -230,8 +236,6 @@
 
         p-total                (if syncing? (calc-progress-total) 0)
         p-finished             (if syncing? (calc-progress-finished) 0)
-        p-total                (max p-total p-finished)
-
         tip-b&p                (if (and syncing? progressing?)
                                  [[:span (util/format "%s of %s files" p-finished p-total)]
                                   [:div.progress-bar [:i {:style
@@ -267,8 +271,8 @@
           {:class (when idle-&-no-active? "is-no-active")}
           (cond
             (not online?) (ui/icon "wifi-off")
-            uploading? (ui/icon "arrows-transfer-down")
-            downloading? (ui/icon "arrows-transfer-up")
+            uploading? (ui/icon "arrow-up")
+            downloading? (ui/icon "arrow-down")
             :else (ui/icon "thumb-up"))]
          [:span
           (cond

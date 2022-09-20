@@ -2900,6 +2900,7 @@
                      (not (config/demo-graph? repo)))
             (not= @current-sm-graph-uuid graph-uuid)
             (clear-graph-progress! graph-uuid)
+
             (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
                                                    (config/get-repo-dir repo) repo
                                                    txid *sync-state)]
