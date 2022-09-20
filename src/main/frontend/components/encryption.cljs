@@ -141,7 +141,7 @@
 
     [:div.encryption-password.max-w-2xl.-mb-2
      [:div.cp__file-sync-related-normal-modal
-      [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "lock-access")]]
+      [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "lock-access" {:size 28})]]
 
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h1#modal-headline.text-2xl.font-bold.text-center
@@ -160,7 +160,7 @@
          [:div.folder-tip.flex.flex-col.items-center
           [:h3
            [:span.flex.space-x-2.leading-none.pb-1
-            (ui/icon "cloud-lock")
+            (ui/icon "cloud-lock" {:size 20})
             [:span GraphName]
             [:span.scale-75 (ui/icon "arrow-right")]
             [:span (ui/icon "folder")]]]
@@ -169,10 +169,10 @@
          [:div.input-hints.text-sm.py-2.px-3.rounded.mb-2.mt-2.flex.items-center
           (if-let [display-str (:fail set-remote-graph-pwd-result)]
             [:<>
-             [:span.scale-125.pr-1.text-red-600 (ui/icon "alert-circle" {:class "text-md mr-1"})]
+             [:span.flex.pr-1.text-red-600 (ui/icon "alert-circle" {:class "text-md mr-1"})]
              [:span.text-red-600 display-str]]
             [:<>
-             [:span.scale-125.pr-1 (ui/icon "bulb" {:class "text-md mr-1"})]
+             [:span.flex.pr-1 (ui/icon "bulb" {:class "text-md mr-1"})]
              [:span "Please enter the password for this graph to continue syncing."]])]])
 
       ;; secure this remote graph
@@ -186,9 +186,9 @@
                     (not (string/blank? @*pw-confirm)))
               (if (or (not (pattern-ok?))
                       (not= @*password @*pw-confirm))
-                [:span.scale-125.pr-1.text-red-600 (ui/icon "alert-circle" {:class "text-md mr-1"})]
-                [:span.scale-125.pr-1.text-green-600 (ui/icon "circle-check" {:class "text-md mr-1"})])
-              [:span.scale-125.pr-1 (ui/icon "bulb" {:class "text-md mr-1"})])
+                [:span.flex.pr-1.text-red-600 (ui/icon "alert-circle" {:class "text-md mr-1"})]
+                [:span.flex.pr-1.text-green-600 (ui/icon "circle-check" {:class "text-md mr-1"})])
+              [:span.flex.pr-1 (ui/icon "bulb" {:class "text-md mr-1"})])
 
             (if (not (string/blank? @*password))
               (if-not (pattern-ok?)
@@ -252,7 +252,7 @@
       (when init-graph-keys
         [:div.init-remote-pw-tips.space-x-4.pt-2.hidden.sm:flex
          [:div.flex-1.flex.items-center
-          [:span.px-3.scale-125 (ui/icon "key")]
+          [:span.px-3.flex (ui/icon "key")]
           [:p.dark:text-gray-100
            [:span "Please make sure you "]
            "remember the password you have set, "
@@ -261,7 +261,7 @@
            [:span "of the password."]]]
 
          [:div.flex-1.flex.items-center
-          [:span.px-3.scale-125 (ui/icon "lock")]
+          [:span.px-3.flex (ui/icon "lock")]
           [:p.dark:text-gray-100
            "If you lose your password, all of your data in the cloud can’t be decrypted. "
            [:span "You will still be able to access the local version of your graph."]]]])]

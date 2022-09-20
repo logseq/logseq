@@ -920,7 +920,7 @@
              [:a.button.journal
               {:class    (util/classnames [{:active (boolean @*journal?)}])
                :on-click #(reset! *journal? (not @*journal?))}
-              (ui/icon "calendar" {:style {:fontSize ui/icon-size}})])]
+              (ui/icon "calendar" {:size ui/icon-size})])]
 
            [:div.paginates
             [:span.flex.items-center
@@ -936,7 +936,7 @@
             (fn [{:keys [toggle-fn]}]
               [:a.button.fade-link
                {:on-click toggle-fn}
-               (ui/icon "dots" {:style {:fontSize ui/icon-size}})])
+               (ui/icon "dots" {:size ui/icon-size})])
             [{:title (t :remove-orphaned-pages)
               :options {:on-click (fn []
                                     (let [orphaned-pages (model/get-orphaned-pages {})

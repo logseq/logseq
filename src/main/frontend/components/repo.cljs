@@ -164,7 +164,7 @@
                           {:title        [:span.flex.items-center.whitespace-nowrap short-repo-name
                                           (when remote? [:span.pl-1
                                                          {:title (str "<" GraphName "> #" GraphUUID)}
-                                                         (ui/icon "cloud")])]
+                                                         (ui/icon "cloud" {:size 18})])]
                            :hover-detail repo-path ;; show full path on hover
                            :options      {:on-click (fn [e]
                                                       (if (gobj/get e "shiftKey")
