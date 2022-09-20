@@ -634,7 +634,7 @@
 (defprotocol IRSAPI
   (rsapi-ready? [this graph-uuid] "return true when rsapi ready")
   (<key-gen [this] "generate public+private keys")
-  (<set-env [this prod? private-key public-key graph-uuid] "set environment")
+  (<set-env [this graph-uuid prod? private-key public-key] "set environment")
   (<get-local-files-meta [this graph-uuid base-path filepaths] "get local files' metadata")
   (<get-local-all-files-meta [this graph-uuid base-path] "get all local files' metadata")
   (<rename-local-file [this graph-uuid base-path from to])
@@ -643,8 +643,8 @@
   (<delete-local-files [this graph-uuid base-path filepaths])
   (<update-remote-files [this graph-uuid base-path filepaths local-txid] "local -> remote, return err or txid")
   (<delete-remote-files [this graph-uuid base-path filepaths local-txid] "return err or txid")
-  (<encrypt-fnames [this fnames])
-  (<decrypt-fnames [this fnames]))
+  (<encrypt-fnames [this graph-uuid fnames])
+  (<decrypt-fnames [this graph-uuid fnames]))
 
 (defprotocol IRemoteAPI
   (<user-info [this] "user info")
@@ -720,13 +720,13 @@
   (rsapi-ready? [_ graph-uuid] (and (= graph-uuid graph-uuid') private-key' public-key'))
   (<key-gen [_] (go (js->clj (<! (p->c (ipc/ipc "key-gen")))
                              :keywordize-keys true)))
-  (<set-env [_ prod? private-key public-key graph-uuid]
+  (<set-env [_ graph-uuid prod? private-key public-key]
     (when (not-empty private-key)
       (print (util/format "[%s] setting sync age-encryption passphrase..." graph-uuid)))
     (set! graph-uuid' graph-uuid)
     (set! private-key' private-key)
     (set! public-key' public-key)
-    (p->c (ipc/ipc "set-env" (if prod? "prod" "dev") private-key public-key)))
+    (p->c (ipc/ipc "set-env" graph-uuid (if prod? "prod" "dev") private-key public-key)))
   (<get-local-all-files-meta [_ graph-uuid base-path]
     (go
       (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "get-local-all-files-meta" graph-uuid base-path))))]
@@ -781,9 +781,9 @@
         (<!
          (<retry-rsapi
           #(p->c (ipc/ipc "delete-remote-files" graph-uuid base-path filepaths local-txid token)))))))
-  (<encrypt-fnames [_ fnames] (go (js->clj (<! (p->c (ipc/ipc "encrypt-fnames" fnames))))))
-  (<decrypt-fnames [_ fnames] (go
-                                (let [r (<! (p->c (ipc/ipc "decrypt-fnames" fnames)))]
+  (<encrypt-fnames [_ graph-uuid fnames] (go (js->clj (<! (p->c (ipc/ipc "encrypt-fnames" graph-uuid fnames))))))
+  (<decrypt-fnames [_ graph-uuid fnames] (go
+                                (let [r (<! (p->c (ipc/ipc "decrypt-fnames" graph-uuid fnames)))]
                                   (if (instance? ExceptionInfo r)
                                     (ex-info "decrypt-failed" {:fnames fnames} (ex-cause r))
                                     (js->clj r))))))
@@ -806,7 +806,7 @@
     (go (let [r (<! (p->c (.keygen mobile-util/file-sync #js {})))]
           (-> r
               (js->clj :keywordize-keys true)))))
-  (<set-env [_ prod? secret-key public-key graph-uuid]
+  (<set-env [_ graph-uuid prod? secret-key public-key]
     (set! graph-uuid' graph-uuid)
     (set! private-key secret-key)
     (set! public-key' public-key)
@@ -899,14 +899,14 @@
          r
          (get (js->clj r) "txid")))))
 
-  (<encrypt-fnames [_ fnames]
+  (<encrypt-fnames [_ _graph-uuid fnames]
     (go
       (let [r (<! (p->c (.encryptFnames mobile-util/file-sync
                                         (clj->js {:filePaths fnames}))))]
         (if (instance? ExceptionInfo r)
           (.-cause r)
           (get (js->clj r) "value")))))
-  (<decrypt-fnames [_ fnames]
+  (<decrypt-fnames [_ _graph-uuid fnames]
     (go (let [r (<! (p->c (.decryptFnames mobile-util/file-sync
                                           (clj->js {:filePaths fnames}))))]
           (if (instance? ExceptionInfo r)
@@ -1107,7 +1107,7 @@
           exp-r
           (let [file-meta-list*      (persistent! file-meta-list)
                 encrypted-path-list* (persistent! encrypted-path-list)
-                path-list-or-exp     (<! (<decrypt-fnames rsapi encrypted-path-list*))]
+                path-list-or-exp     (<! (<decrypt-fnames rsapi graph-uuid encrypted-path-list*))]
             (if (instance? ExceptionInfo path-list-or-exp)
               path-list-or-exp
               (let [encrypted-path->path-map (zipmap encrypted-path-list* path-list-or-exp)]
@@ -1124,12 +1124,12 @@
   (<get-remote-files-meta [this graph-uuid filepaths]
     {:pre [(coll? filepaths)]}
     (go
-      (let [encrypted-paths* (<! (<encrypt-fnames rsapi filepaths))
+      (let [encrypted-paths* (<! (<encrypt-fnames rsapi graph-uuid filepaths))
             r                (<! (.<request this "get_files_meta" {:GraphUUID graph-uuid :Files encrypted-paths*}))]
         (if (instance? ExceptionInfo r)
           r
           (let [encrypted-paths (mapv :FilePath r)
-                paths-or-exp    (<! (<decrypt-fnames rsapi encrypted-paths))]
+                paths-or-exp    (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths))]
             (if (instance? ExceptionInfo paths-or-exp)
               paths-or-exp
               (let [encrypted-path->path-map (zipmap encrypted-paths paths-or-exp)]
@@ -1152,7 +1152,7 @@
 
   (<get-remote-file-versions [this graph-uuid filepath]
     (go
-      (let [encrypted-path (first (<! (<encrypt-fnames rsapi [filepath])))]
+      (let [encrypted-path (first (<! (<encrypt-fnames rsapi graph-uuid [filepath])))]
         (<! (.<request this "get_file_version_list" {:GraphUUID graph-uuid :File encrypted-path})))))
 
   (<list-remote-graphs [this]
@@ -1168,7 +1168,7 @@
                 encrypted-path->path-map
                 (zipmap
                  encrypted-paths
-                 (<! (<decrypt-fnames rsapi encrypted-paths)))
+                 (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths)))
                 txns
                 (mapv
                  (fn [txn] (update txn :path #(get encrypted-path->path-map %)))
@@ -1205,7 +1205,7 @@
                 encrypted-path->path-map
                 (zipmap
                  encrypted-paths
-                 (<! (<decrypt-fnames rsapi encrypted-paths)))
+                 (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths)))
                 txns
                 (mapv
                  (fn [txn]
@@ -1853,7 +1853,7 @@
   (let [{:keys [private-key public-key]} (get @pwd-map graph-uuid)]
     (assert (and private-key public-key) (pr-str :private-key private-key :public-key public-key
                                                  :pwd-map @pwd-map))
-    (<set-env rsapi prod? private-key public-key graph-uuid)))
+    (<set-env rsapi graph-uuid prod? private-key public-key)))
 
 (defn- <ensure-set-env&keys
   [graph-uuid *stopped?]
