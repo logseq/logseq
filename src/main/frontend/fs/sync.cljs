@@ -673,17 +673,17 @@
   it happens on macos (case-insensitive fs)
 
   return canonicalized filepath if exists"
-  [irsapi base-path filepath]
+  [graph-uuid irsapi base-path filepath]
   (go
-    (let [r (<! (<get-local-files-meta irsapi "" base-path [filepath]))]
+    (let [r (<! (<get-local-files-meta irsapi graph-uuid base-path [filepath]))]
       (when (some-> r first :path (not= filepath))
         (-> r first :path)))))
 
 
 (defn <local-file-not-exist?
-  [irsapi base-path filepath]
+  [graph-uuid irsapi base-path filepath]
   (go
-    (let [r (<! (<get-local-files-meta irsapi "" base-path [filepath]))]
+    (let [r (<! (<get-local-files-meta irsapi graph-uuid base-path [filepath]))]
 
       (or
        ;; not found at all
@@ -1334,11 +1334,11 @@
                   [@graphs-txid local-txid remote-txid])))))
 
 (defn- get-local-files-checksum
-  [base-path relative-paths]
+  [graph-uuid base-path relative-paths]
   (go
     (into {}
           (map (juxt #(.-path ^FileMetadata %) #(.-etag ^FileMetadata %)))
-          (<! (<get-local-files-meta rsapi "" base-path relative-paths)))))
+          (<! (<get-local-files-meta rsapi graph-uuid base-path relative-paths)))))
 
 (declare sync-state--add-current-local->remote-files
          sync-state--add-current-remote->local-files
@@ -1406,7 +1406,8 @@
                                      (remove nil?))]
 
         (doseq [relative-p (map relative-path filetxns)]
-          (when-some [relative-p* (<! (<case-different-local-file-exist? rsapi base-path relative-p))]
+          (when-some [relative-p*
+                      (<! (<case-different-local-file-exist? graph-uuid rsapi base-path relative-p))]
             (let [recent-remote->local-file-item {:remote->local-type :delete
                                                   :checksum nil
                                                   :path relative-p*}]
@@ -1433,7 +1434,7 @@
       (.-deleted? (first filetxns))
       (let [filetxn (first filetxns)]
         (assert (= 1 (count filetxns)))
-        (if (<! (<local-file-not-exist? rsapi base-path (relative-path filetxn)))
+        (if (<! (<local-file-not-exist? graph-uuid rsapi base-path (relative-path filetxn)))
           ;; not exist, ignore
           true
           (let [r (<! (<delete-local-files rsapi graph-uuid base-path [(relative-path filetxn)]))]
@@ -1547,7 +1548,7 @@
 
 
 (defn- <file-change-event=>recent-remote->local-file-item
-  [^FileChangeEvent e]
+  [graph-uuid ^FileChangeEvent e]
   (go
     (let [tp (case (.-type e)
                ("add" "change") :update
@@ -1555,7 +1556,7 @@
           path (relative-path e)]
       {:remote->local-type tp
        :checksum (if (= tp :delete) nil
-                     (val (first (<! (get-local-files-checksum (.-dir e) [path])))))
+                     (val (first (<! (get-local-files-checksum graph-uuid (.-dir e) [path])))))
        :path path})))
 
 (defn- distinct-file-change-events-xf
@@ -1602,7 +1603,8 @@
             (go
               (let [path (remove-dir-prefix dir path)
                     files-meta (and (not= "unlink" type)
-                                    (<! (<get-local-files-meta rsapi "" dir [path])))
+                                    (<! (<get-local-files-meta
+                                         rsapi (:current-syncing-graph-uuid sync-state) dir [path])))
                     checksum (and (coll? files-meta) (some-> files-meta first :etag))]
                 (>! local-changes-chan (->FileChangeEvent type dir path stat checksum))))))))))
 
@@ -2159,18 +2161,18 @@
       (case (.-type e)
         "unlink"
         ;; keep this e when it's not found
-        (<! (<local-file-not-exist? rsapi basepath r-path))
+        (<! (<local-file-not-exist? graph-uuid rsapi basepath r-path))
 
         ("add" "change")
         ;; 1. local file exists
         ;; 2. compare with remote file, and changed
-        (and (not (<! (<local-file-not-exist? rsapi basepath r-path)))
+        (and (not (<! (<local-file-not-exist? graph-uuid rsapi basepath r-path)))
              (<! (<file-changed? graph-uuid r-path basepath)))))))
 
 (defn- <filter-checksum-not-consistent
   "filter out FileChangeEvents checksum changed,
   compare checksum in FileChangeEvent and checksum calculated now"
-  [es]
+  [graph-uuid es]
   {:pre [(or (nil? es) (coll? es))
          (every? #(instance? FileChangeEvent %) es)]}
   (go
@@ -2178,7 +2180,8 @@
       (if (= "unlink" (.-type ^FileChangeEvent (first es)))
         es
         (let [base-path            (.-dir (first es))
-              files-meta           (<! (<get-local-files-meta rsapi "" base-path (mapv relative-path es)))
+              files-meta           (<! (<get-local-files-meta
+                                        rsapi graph-uuid base-path (mapv relative-path es)))
               current-checksum-map (when (coll? files-meta) (into {} (mapv (juxt :path :etag) files-meta)))
               origin-checksum-map  (into {} (mapv (juxt relative-path #(.-checksum ^FileChangeEvent %)) es))
               origin-map           (into {} (mapv (juxt relative-path identity) es))]
@@ -2243,7 +2246,8 @@
                  (not (ignored? e))     ;not ignored
                  ;; download files will also trigger file-change-events, ignore them
                  (let [r (not (contains? (:recent-remote->local-files @*sync-state)
-                                         (<! (<file-change-event=>recent-remote->local-file-item e))))]
+                                         (<! (<file-change-event=>recent-remote->local-file-item
+                                              graph-uuid e))))]
                    (when (and (true? r)
                               (seq (:recent-remote->local-files @*sync-state)))
                      (println :debug (:recent-remote->local-files @*sync-state) e))
@@ -2291,7 +2295,7 @@
                             (map #(relative-path %))
                             (remove ignored?))]
           (go
-            (let [es*   (<! (<filter-checksum-not-consistent es))
+            (let [es*   (<! (<filter-checksum-not-consistent graph-uuid es))
                   _     (when (not= (count es*) (count es))
                           (println :debug :filter-checksum-changed
                                    (mapv relative-path (set/difference (set es) (set es*)))))
@@ -2385,7 +2389,7 @@
               (loop [[f & fs] delete-local-files]
                 (when f
                   (let [relative-p (relative-path f)]
-                    (when-not (<! (<local-file-not-exist? rsapi base-path relative-p))
+                    (when-not (<! (<local-file-not-exist? graph-uuid rsapi base-path relative-p))
                       (let [fake-recent-remote->local-file-item {:remote->local-type :delete
                                                                  :checksum nil
                                                                  :path relative-p}]
