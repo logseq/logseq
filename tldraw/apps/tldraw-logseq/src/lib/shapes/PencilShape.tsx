@@ -3,11 +3,54 @@ import { SvgPathUtils, TLDrawShape, TLDrawShapeProps } from '@tldraw/core'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import { computed, makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
-import getStroke from 'perfect-freehand'
+import getStroke, { getStrokeOutlinePoints, getStrokePoints, StrokeOptions } from 'perfect-freehand'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
 export interface PencilShapeProps extends TLDrawShapeProps, CustomStyleProps {
   type: 'pencil'
+}
+
+const simulatePressureSettings: StrokeOptions = {
+  easing: t => Math.sin((t * Math.PI) / 2),
+  simulatePressure: true,
+}
+
+const realPressureSettings: StrokeOptions = {
+  easing: t => t * t,
+  simulatePressure: false,
+}
+
+function getFreehandOptions(shape: PencilShapeProps) {
+  const options: StrokeOptions = {
+    size: 1 + shape.strokeWidth * 1.5,
+    thinning: 0.65,
+    streamline: 0.65,
+    smoothing: 0.65,
+    ...(shape.points[1][2] === 0.5 ? simulatePressureSettings : realPressureSettings),
+    last: shape.isComplete,
+  }
+
+  return options
+}
+
+function getFillPath(shape: PencilShapeProps) {
+  if (shape.points.length < 2) return ''
+
+  return SvgPathUtils.getSvgPathFromStroke(
+    getStrokePoints(shape.points, getFreehandOptions(shape)).map(pt => pt.point)
+  )
+}
+
+function getDrawStrokePoints(shape: PencilShapeProps, options: StrokeOptions) {
+  return getStrokePoints(shape.points, options)
+}
+
+function getDrawStrokePathTDSnapshot(shape: PencilShapeProps) {
+  if (shape.points.length < 2) return ''
+  const options = getFreehandOptions(shape)
+  const strokePoints = getDrawStrokePoints(shape, options)
+  const path = SvgPathUtils.getSvgPathFromStroke(getStrokeOutlinePoints(strokePoints, options))
+  return path
 }
 
 export class PencilShape extends TLDrawShape<PencilShapeProps> {
@@ -34,16 +77,7 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
   }
 
   @computed get pointsPath() {
-    const {
-      props: { points, isComplete, strokeWidth },
-    } = this
-    if (points.length < 2) {
-      return `M -4, 0
-      a 4,4 0 1,0 8,0
-      a 4,4 0 1,0 -8,0`
-    }
-    const stroke = getStroke(points, { size: 4 + strokeWidth * 2, last: isComplete })
-    return SvgPathUtils.getCurvedPathForPolygon(stroke)
+    return getDrawStrokePathTDSnapshot(this.props)
   }
 
   ReactComponent = observer(({ events, isErasing }: TLComponentProps) => {
