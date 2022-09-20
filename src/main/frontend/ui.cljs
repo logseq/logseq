@@ -928,8 +928,8 @@
   ([class] (icon class nil))
   ([class {:keys [extension? font?] :as opts}]
    (when-not (string/blank? class)
-     (let [^js _tablerIcons (gobj/get js/window "tablerIcons")]
-       (if (or extension? font? (not _tablerIcons))
+     (let [^js jsTablerIcons (gobj/get js/window "tablerIcons")]
+       (if (or extension? font? (not jsTablerIcons))
          [:i (merge {:class
                      (util/format
                       (str "%s-" class
