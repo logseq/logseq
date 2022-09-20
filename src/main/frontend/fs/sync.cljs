@@ -27,7 +27,8 @@
             [frontend.encrypt :as encrypt]
             [medley.core :refer [dedupe-by]]
             [rum.core :as rum]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [lambdaisland.glogi :as log]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -2885,6 +2886,8 @@
 
 (declare network-online-cursor)
 
+;; Prevent starting of multiple sync managers
+(def *sync-starting? (atom {}))
 (defn sync-start []
   (let [*sync-state                 (atom (sync-state))
         current-user-uuid           (user/user-uuid)
@@ -2898,28 +2901,36 @@
                      (user/logged-in?)
                      repo
                      (not (config/demo-graph? repo)))
-            (not= @current-sm-graph-uuid graph-uuid)
-            (clear-graph-progress! graph-uuid)
+            (try
+              (when-not (get @*sync-starting? graph-uuid)
+                (do
+                  (swap! *sync-starting? assoc graph-uuid true)
+                  (clear-graph-progress! graph-uuid)
 
-            (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
-                                                   (config/get-repo-dir repo) repo
-                                                   txid *sync-state)]
-              (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
-                (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
-                  (clear-graphs-txid! repo)
-                  (do
-                    (state/set-file-sync-state repo @*sync-state)
-                    (state/set-file-sync-manager sm)
+                  (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
+                                                         (config/get-repo-dir repo) repo
+                                                         txid *sync-state)]
+                    (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
+                      (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
+                        (clear-graphs-txid! repo)
+                        (do
+                          (state/set-file-sync-state repo @*sync-state)
+                          (state/set-file-sync-manager sm)
 
-                    ;; update global state when *sync-state changes
-                    (add-watch *sync-state ::update-global-state
-                               (fn [_ _ _ n]
-                                 (state/set-file-sync-state repo n)))
+                          ;; update global state when *sync-state changes
+                          (add-watch *sync-state ::update-global-state
+                                     (fn [_ _ _ n]
+                                       (state/set-file-sync-state repo n)))
 
-                    (.start sm)
+                          (.start sm)
 
-                    (offer! remote->local-full-sync-chan true)
-                    (offer! full-sync-chan true)))))))))))
+                          (offer! remote->local-full-sync-chan true)
+                          (offer! full-sync-chan true)
+                          (swap! *sync-starting? assoc graph-uuid false)))))))
+              (catch :default e
+                (prn "Sync start error: ")
+                (log/error :exception e)
+                (swap! *sync-starting? assoc graph-uuid false)))))))))
 
 ;;; ### some add-watches
 
