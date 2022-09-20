@@ -1232,7 +1232,7 @@
              #(if (map? %)
                 (for [[k v] %]
                   (when v (name k)))
-                [(name %)])
+                (when-not (nil? %) [(name %)]))
              args)))
 
 #?(:cljs

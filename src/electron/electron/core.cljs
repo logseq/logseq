@@ -2,7 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater] :as updater]
-            [electron.utils :refer [*win mac? linux? dev? logger resolve-url-asset-real-path get-win-from-sender restore-user-fetch-agent get-graph-name]]
+            [electron.utils :refer [*win mac? linux? dev? resolve-url-asset-real-path get-win-from-sender restore-user-fetch-agent get-graph-name]]
             [electron.url :refer [logseq-url-handler]]
             [electron.logger :as logger]
             [clojure.string :as string]

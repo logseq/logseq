@@ -10,8 +10,48 @@
    [promesa.core :as p]
    [medley.core :as medley]
    [frontend.ui :as ui]
+   [frontend.config :as config]
+   [frontend.components.select :as cp-select]
    [frontend.handler.notification :as notification]
    [frontend.handler.assets :as assets-handler]))
+
+(defn -get-all-formats
+  []
+  (->> (concat config/doc-formats
+               config/audio-formats
+               config/video-formats
+               config/image-formats
+               config/markup-formats)
+       (map #(hash-map :id % :value (name %)))))
+
+(rum/defc input-auto-complete
+  [{:keys [items item-cp class
+           on-chosen on-keydown input-opts]}]
+
+  (let [[*input-val, set-*input-val] (rum/use-state (atom nil))
+        [input-empty?, set-input-empty?] (rum/use-state true)]
+
+    (rum/use-effect!
+     #(set-input-empty? (string/blank? @*input-val))
+     [@*input-val])
+
+    (cp-select/select
+     {:items          items
+      :close-modal?   false
+      :item-cp        item-cp
+      :on-chosen      on-chosen
+      :on-input       #(set-input-empty? (string/blank? %))
+      :tap-*input-val #(set-*input-val %)
+      :transform-fn   (fn [results]
+                        (if (and *input-val
+                                 (not (string/blank? @*input-val))
+                                 (not (seq results)))
+                          [{:id nil :value @*input-val}]
+                          results))
+      :host-opts      {:class (util/classnames [:cp__input-ac class {:is-empty-input input-empty?}])}
+      :input-opts     (cond-> input-opts
+                        (fn? on-keydown)
+                        (assoc :on-key-down #(on-keydown % *input-val)))})))
 
 (rum/defc confirm-dir-with-alias-name
   [dir set-dir!]
@@ -114,23 +154,31 @@
               [:span ext]
               (ui/icon "circle-minus")])
            (if (= dir @*ext-editing-dir)
-             [:input.ext-input
-              {:autoFocus   true
-               :on-key-down (fn [^js e]
-                              (let [^js input (.-target e)]
-                                (case (.-which e)
-                                  13                        ;; enter
-                                  (let [val (util/trim-safe (.-value input))]
-                                    (and (not (string/blank? val))
-                                         (add-ext dir val))
-                                    (reset! *ext-editing-dir nil))
+             (input-auto-complete
+              {:items        (-get-all-formats)
 
-                                  27                        ;; esc
-                                  (do (reset! *ext-editing-dir nil)
-                                      (util/stop e))
+               :close-modal? false
+               :item-cp      (fn [{:keys [value]}]
+                               [:div.ext-select-item value])
 
-                                  :dune)))
-               :on-blur     #(reset! *ext-editing-dir nil)}]
+               :on-chosen    (fn [{:keys [value]}]
+                               (add-ext dir value)
+                               (reset! *ext-editing-dir nil))
+               :on-keydown   (fn [^js e *input-val]
+                               (let [^js input (.-target e)]
+                                 (case (.-which e)
+                                   27                       ;; esc
+                                   (do (if-not (string/blank? (.-value input))
+                                         (reset! *input-val "")
+                                         (reset! *ext-editing-dir nil))
+                                       (util/stop e))
+
+                                   :dune)))
+               :input-opts   {:class       "cp__assets-alias-ext-input"
+                              :placeholder "E.g. mp3"
+                              :on-blur
+                              #(reset! *ext-editing-dir nil)}})
+
              [:small.ext-label.is-plus
               {:on-click #(reset! *ext-editing-dir dir)}
               (ui/icon "plus") "Acceptable file extensions"])]

@@ -319,6 +319,7 @@
       @apply rounded px-1.5 opacity-70 cursor-pointer flex items-center select-none active:opacity-50;
 
       background-color: var(--ls-secondary-border-color);
+      color: var(--ls-secondary-text-color);
 
       &.is-del {
         i.ti {
@@ -353,6 +354,45 @@
       padding: 1px 4px;
       width: 60px;
     }
+
+    .cp__input-ac {
+      width: unset;
+      margin: 0;
+      line-height: 1em;
+      position: relative;
+      overflow: visible;
+
+      /*noinspection ALL*/
+
+      .item-results-wrap {
+        position: absolute;
+        top: 24px;
+        left: 0;
+        z-index: 1;
+        width: 100px;
+        max-height: 180px;
+        border:1px solid var(--ls-border-color);
+        border-radius: 4px;
+        overflow: auto;
+        overflow: overlay;
+
+        .menu-link {
+          padding: 4px 6px;
+          font-size: 12px;
+        }
+
+        .ext-select-item {
+          display: block;
+          white-space: nowrap;
+        }
+      }
+
+      &.is-empty-input {
+        .item-results-wrap {
+          display: none;
+        }
+      }
+    }
   }
 
   &-alias-name-content {
@@ -364,6 +404,19 @@
       strong {
         @apply inline-block pr-4 text-right w-40 opacity-70;
       }
+    }
+  }
+
+  &-alias-ext-input {
+    width: 80px !important;
+    padding: 1px 4px;
+    border: 2px solid var(--ls-secondary-border-color);
+    font-size: 11px;
+    border-radius: 4px;
+    height: 22px;
+
+    &:focus {
+      border-color: var(--ls-border-color);
     }
   }
 }

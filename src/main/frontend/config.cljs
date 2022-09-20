@@ -85,7 +85,7 @@
   #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
 
 (def video-formats
-  #{:mp4 :ogg :webm :mov})
+  #{:mp4 :webm :mov})
 
 (def media-formats (set/union (gp-config/img-formats) audio-formats))
 
