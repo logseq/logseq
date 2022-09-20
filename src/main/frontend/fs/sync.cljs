@@ -1591,6 +1591,7 @@
    (map #(partition-all n %))
    cat))
 
+(declare sync-state--valid-to-accept-filewatcher-event?)
 (defonce local-changes-chan (chan (async/dropping-buffer 1000)))
 (defn file-watch-handler
   "file-watcher callback"
@@ -1598,7 +1599,7 @@
   (when-let [current-graph (state/get-current-repo)]
     (when (string/ends-with? current-graph dir)
       (let [sync-state (state/get-file-sync-state current-graph)]
-        (when (and sync-state (not (sync-state--stopped? sync-state)))
+        (when (and sync-state (sync-state--valid-to-accept-filewatcher-event? sync-state))
           (when (or (:mtime stat) (= type "unlink"))
             (go
               (let [path (remove-dir-prefix dir path)
@@ -2038,6 +2039,13 @@
   [sync-state]
   {:pre [(s/valid? ::sync-state sync-state)]}
   (= ::stop (:state sync-state)))
+
+(defn sync-state--valid-to-accept-filewatcher-event?
+  [sync-state]
+  {:pre [(s/valid? ::sync-state sync-state)]}
+  (contains? #{::idle ::local->remote ::remote->local ::local->remote-full-sync ::remote->local-full-sync}
+             (:state sync-state)))
+
 
 ;;; ### remote->local syncer & local->remote syncer
 
