@@ -764,10 +764,8 @@
   (<update-local-files [this graph-uuid base-path filepaths]
     (println "update-local-files" graph-uuid base-path filepaths)
     (go
-      (let [token (<! (<get-token this))
-            r (<! (<retry-rsapi
-                   #(p->c (ipc/ipc "update-local-files" graph-uuid base-path filepaths token))))]
-        r)))
+      (let [token (<! (<get-token this))]
+        (<! (p->c (ipc/ipc "update-local-files" graph-uuid base-path filepaths token))))))
   (<download-version-files [this graph-uuid base-path filepaths]
     (go
       (let [token (<! (<get-token this))
@@ -859,13 +857,11 @@
 
   (<update-local-files [this graph-uuid base-path filepaths]
     (go
-      (let [token (<! (<get-token this))
-            r (<! (<retry-rsapi
-                   #(p->c (.updateLocalFiles mobile-util/file-sync (clj->js {:graphUUID graph-uuid
-                                                                             :basePath base-path
-                                                                             :filePaths filepaths
-                                                                             :token token})))))]
-        r)))
+      (let [token (<! (<get-token this))]
+        (<! (p->c (.updateLocalFiles mobile-util/file-sync (clj->js {:graphUUID graph-uuid
+                                                                     :basePath base-path
+                                                                     :filePaths filepaths
+                                                                     :token token})))))))
 
   (<download-version-files [this graph-uuid base-path filepaths]
     (go
@@ -2279,12 +2275,8 @@
                    (string/starts-with? (str "file://" (.-dir e)) base-path)) ; valid path prefix
                (not (ignored? e))     ;not ignored
                ;; download files will also trigger file-change-events, ignore them
-               (let [r (not (contains? (:recent-remote->local-files @*sync-state)
-                                       (<! (<file-change-event=>recent-remote->local-file-item e))))]
-                 (when (and (true? r)
-                            (seq (:recent-remote->local-files @*sync-state)))
-                   (println :debug (:recent-remote->local-files @*sync-state) e))
-                 r)))))
+               (not (contains? (:recent-remote->local-files @*sync-state)
+                               (<! (<file-change-event=>recent-remote->local-file-item e))))))))
 
   (set-remote->local-syncer! [_ s] (set! remote->local-syncer s))
 
@@ -2488,7 +2480,7 @@
         ::local->remote-full-sync
         (<! (.full-sync this))
         ::remote->local-full-sync
-        (<! (.remote->local-full-sync this nil))
+        (<! (.remote->local-full-sync this args))
         ::pause
         (<! (.pause this))
         ::stop
@@ -2575,8 +2567,8 @@
 
   (pause [this]
     (put-sync-event! {:event :pause
-                      :data {:graph-uuid graph-uuid
-                             :epoch (tc/to-epoch (t/now))}})
+                      :data  {:graph-uuid graph-uuid
+                              :epoch      (tc/to-epoch (t/now))}})
     (go-loop []
       (let [{:keys [resume]} (<! ops-chan)]
         (if resume
@@ -2597,9 +2589,9 @@
               ;; if resume-state = nil, try a remote->local to sync recent diffs
               (offer! private-remote->local-sync-chan true))
             (put-sync-event! {:event :resume
-                              :data {:graph-uuid graph-uuid
-                                     :resume-state resume-state
-                                     :epoch (tc/to-epoch (t/now))}})
+                              :data  {:graph-uuid   graph-uuid
+                                      :resume-state resume-state
+                                      :epoch        (tc/to-epoch (t/now))}})
             (<! (.schedule this ::idle nil :resume)))
           (recur)))))
 
@@ -2649,11 +2641,11 @@
           unknown
           (do
             (put-sync-event! {:event :local->remote-full-sync-failed
-                              :data {:graph-uuid graph-uuid
-                                     :epoch (tc/to-epoch (t/now))}})
+                              :data  {:graph-uuid graph-uuid
+                                      :epoch      (tc/to-epoch (t/now))}})
             (.schedule this ::idle nil nil))))))
 
-  (remote->local-full-sync [this _next-state]
+  (remote->local-full-sync [this _]
     (go
       (let [{:keys [succ unknown stop pause]}
             (<! (<sync-remote->local-all-files! remote->local-syncer))]
@@ -2672,9 +2664,11 @@
           unknown
           (do
             (put-sync-event! {:event :remote->local-full-sync-failed
-                              :data {:graph-uuid graph-uuid
-                                     :epoch (tc/to-epoch (t/now))}})
-            (.schedule this ::idle nil nil))))))
+                              :data  {:graph-uuid graph-uuid
+                                      :exp        unknown
+                                      :epoch      (tc/to-epoch (t/now))}})
+            ;; if any exception occurred, re-exec remote->local-full-sync
+            (.schedule this ::remote->local-full-sync nil nil))))))
 
   (remote->local [this _next-state {remote-val :remote}]
     (go
