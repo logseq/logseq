@@ -1400,12 +1400,11 @@ Similar to re-frame subscriptions"
   []
   ^js js/window.tln)
 
-(defn tldraw-idle?
-  "return true when tldraw is active and idle. nil when tldraw is 
-   not active."
+(defn tldraw-editing-logseq-block?
   []
   (when-let [app (active-tldraw-app)]
-    (.. app -selectedTool (isIn "idle"))))
+    (and (= 1 (.. app -selectedShapesArray -length))
+         (= (.. app -editingShape) (.. app -selectedShapesArray (at 0))))))
 
 (defn set-graph-syncing?
   [value]
@@ -1460,7 +1459,19 @@ Similar to re-frame subscriptions"
          (>= (- now last-time) diff)))
      ;; not in editing mode
      ;; Is this a good idea to put whiteboard check here?
-     (not (or (get-edit-input-id) (active-tldraw-app))))))
+     (not (get-edit-input-id)))))
+
+(defn whiteboard-page-idle?
+  [repo whiteboard-page & {:keys [diff]
+                           :or {diff 1000}}]
+  (when repo
+    (or
+     (when-let [last-time (:block/updated-at whiteboard-page)]
+       (let [now (util/time-ms)]
+         (>= (- now last-time) diff)))
+     ;; not in idle mode
+     (not (when-let [tldraw-app (active-tldraw-app)]
+            (.. tldraw-app -selectedTool (isIn "idle")))))))
 
 (defn set-nfs-refreshing!
   [value]

@@ -104,7 +104,6 @@
   (let [{:keys [pages assets]} (js->clj tldr :keywordize-keys true)
         page (first pages)
         tx (tldr-page->blocks-tx page-name (assoc page :assets assets))]
-    (state/set-last-transact-time! (state/get-current-repo) (util/time-ms))
     (db-utils/transact! tx)))
 
 (defn get-default-tldr

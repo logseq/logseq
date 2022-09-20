@@ -34,6 +34,7 @@
   (fn [e]
     (when (and (or (contains? #{:srs :page-histories} (state/get-modal-id))
                    (not (state/block-component-editing?)))
-               (not (and (state/tldraw-idle?)
-                         (not (state/editing?)))))
+               ;; should not enable when in whiteboard mode, but not editing a logseq block
+               (not (and (state/active-tldraw-app)
+                         (not (state/tldraw-editing-logseq-block?)))))
       (f e))))
