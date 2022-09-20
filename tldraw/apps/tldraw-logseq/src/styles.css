@@ -54,6 +54,10 @@
   }
 }
 
+.tl-context-menu-button-row {
+  @apply flex justify-between px-4 py-1;
+}
+
 .tl-context-menu {
   @apply relative py-2 flex bottom-0 flex border-0 rounded shadow-lg;
 
@@ -512,7 +516,7 @@ button.tl-select-input-trigger {
   transition-delay: 0;
 
   .tie {
-    transform: translateY(-100%); 
+    transform: translateY(-100%);
   }
 
   &[data-active='false']:hover {

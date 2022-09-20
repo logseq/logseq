@@ -1,6 +1,8 @@
 import { useApp } from '@tldraw/react'
 import { MOD_KEY } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
+import { TablerIcon } from '../icons'
+import { Button } from '../Button'
 import * as React from 'react'
 
 import * as ReactContextMenu from '@radix-ui/react-context-menu'
@@ -36,6 +38,25 @@ export const ContextMenu = observer(function ContextMenu({
         tabIndex={-1}
       >
         <div>
+          {app.selectedShapes?.size > 1 && (
+            <>
+              <div className="tl-context-menu-button-row pb-0">
+                <Button title="Align left"><TablerIcon name="layout-align-left" /></Button>
+                <Button title="Align center"><TablerIcon name="layout-align-center" /></Button>
+                <Button title="Align right"><TablerIcon name="layout-align-right" /></Button>
+                <ReactContextMenu.Separator className="menu-separator vertical" />
+                <Button title="Distribute horizontal"><TablerIcon name="layout-distribute-horizontal" /></Button>
+              </div>
+              <div className="tl-context-menu-button-row pt-0">
+                <Button title="Align top"><TablerIcon name="layout-align-top" /></Button>
+                <Button title="Align middle"><TablerIcon name="layout-align-middle" /></Button>
+                <Button title="Align bottom"><TablerIcon name="layout-align-bottom" /></Button>
+                <ReactContextMenu.Separator className="menu-separator vertical" />
+                <Button title="Distribute vertical"><TablerIcon name="layout-distribute-vertical" /></Button>
+              </div>
+              <ReactContextMenu.Separator className="menu-separator" />
+            </>
+          )}
           {app.selectedShapes?.size > 0 && (
             <>
               <ReactContextMenu.Item
