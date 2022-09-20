@@ -662,9 +662,9 @@
                        {:content (str "The directory " dir " has been back, you can edit your graph now.")
                         :status :success
                         :clear? true}])
-    (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir))))
-  (when (= dir (config/get-repo-dir repo))
-    (fs/watch-dir! dir)))
+    (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir)))
+    (when (= dir (config/get-repo-dir repo))
+      (fs/watch-dir! dir))))
 
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]

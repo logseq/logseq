@@ -556,7 +556,6 @@
   (apply rsapi/delete-local-files (rest args)))
 
 (defmethod handle :update-local-files [_ args]
-  (prn "debug: update local files: " args)
   (apply rsapi/update-local-files (rest args)))
 
 (defmethod handle :download-version-files [_ args]
