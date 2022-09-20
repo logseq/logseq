@@ -35,6 +35,6 @@
   (fn [e]
     (when (and (or (contains? #{:srs :page-histories} (state/get-modal-id))
                    (not (state/block-component-editing?)))
-               (not (and (whiteboard/tldraw-idle?)
+               (not (and (state/tldraw-idle?)
                          (not (state/editing?)))))
       (f e))))

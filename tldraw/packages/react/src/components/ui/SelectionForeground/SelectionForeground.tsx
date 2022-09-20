@@ -22,7 +22,8 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
 
   const canResize = shapes.length === 1 ? shapes[0].canResize : [true, true]
 
-  const editing = !!app.editingShape
+  // @ts-expect-error ???
+  const borderRadius = app.editingShape?.props['borderRadius'] ?? 0
 
   return (
     <SVGContainer>
@@ -30,8 +31,8 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
         className="tl-bounds-fg"
         width={Math.max(width, 1)}
         height={Math.max(height, 1)}
-        rx={editing ? 8 : 0}
-        ry={editing ? 8 : 0}
+        rx={borderRadius}
+        ry={borderRadius}
         pointerEvents="none"
       />
       <EdgeHandle

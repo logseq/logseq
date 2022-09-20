@@ -1,20 +1,20 @@
 (ns frontend.state
   (:require [cljs-bean.core :as bean]
             [cljs.core.async :as async]
-            [clojure.string :as string]
             [cljs.spec.alpha :as s]
+            [clojure.string :as string]
             [dommy.core :as dom]
-            [medley.core :as medley]
             [electron.ipc :as ipc]
+            [frontend.mobile.util :as mobile-util]
             [frontend.storage :as storage]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [promesa.core :as p]
-            [rum.core :as rum]
             [logseq.graph-parser.config :as gp-config]
-            [frontend.mobile.util :as mobile-util]))
+            [medley.core :as medley]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 ;; Stores main application state
 (defonce ^:large-vars/data-var state
@@ -1396,6 +1396,16 @@ Similar to re-frame subscriptions"
         (set-state! [:plugin/installed-hooks hook-or-all] (disj coll pid))))
     true))
 
+(defn active-tldraw-app
+  []
+  ^js js/window.tln)
+
+(defn tldraw-idle?
+  "return true when tldraw is active and idle. nil when tldraw is 
+   not active."
+  []
+  (when-let [app (active-tldraw-app)]
+    (.. app -selectedTool (isIn "idle"))))
 
 (defn set-graph-syncing?
   [value]
@@ -1445,11 +1455,11 @@ Similar to re-frame subscriptions"
            :or {diff 1000}}]
   (when repo
     (or
-      (when-let [last-time (get-in @state [:editor/last-input-time repo])]
-        (let [now (util/time-ms)]
-          (>= (- now last-time) diff)))
-      ;; not in editing mode
-      (not (get-edit-input-id)))))
+     (when-let [last-time (get-in @state [:editor/last-input-time repo])]
+       (let [now (util/time-ms)]
+         (>= (- now last-time) diff)))
+     ;; not in editing mode
+     (not (or (get-edit-input-id) (active-tldraw-app))))))
 
 (defn set-nfs-refreshing!
   [value]
