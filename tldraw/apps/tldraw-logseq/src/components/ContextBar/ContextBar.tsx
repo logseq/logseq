@@ -42,7 +42,7 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) 
       {Actions.length > 0 && (
         <div
           ref={rContextBar}
-          className="tl-contextbar"
+          className="tl-button-bar tl-context-bar"
           style={{
             visibility: hidden ? 'hidden' : 'visible',
             pointerEvents: hidden ? 'none' : 'all',

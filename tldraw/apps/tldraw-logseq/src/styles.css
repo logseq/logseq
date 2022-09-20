@@ -79,14 +79,6 @@
   color: whites;
 }
 
-.tl-zoom-bar,
-.tl-history-bar {
-  @apply flex items-center border-0 rounded gap-1 p-1;
-
-  background: var(--ls-secondary-background-color);
-  box-shadow: var(--shadow-medium);
-}
-
 .tl-zoom-bar {
   @apply ml-4;
 }
@@ -96,22 +88,6 @@
 
   z-index: 100000;
   user-select: none;
-
-  button {
-    @apply text-sm rounded border-0 inline-flex items-center justify-center p-2;
-
-    height: 30px;
-    background: transparent;
-    color: var(--ls-primary-text-color);
-    font-family: var(--ls-font-family);
-    cursor: pointer;
-    opacity: 1;
-    white-space: nowrap;
-
-    &:hover {
-      background-color: var(--ls-primary-background-color);
-    }
-  }
 }
 
 .tl-zoom-menu-dropdown-menu-button {
@@ -139,7 +115,7 @@
   padding-left: 20px;
 }
 
-.tl-contextbar {
+.tl-button-bar {
   @apply relative flex text-sm;
 
   pointer-events: all;
@@ -153,7 +129,9 @@
   align-items: stretch;
   box-shadow: var(--shadow-medium);
   z-index: 1000;
+}
 
+.tl-context-bar {
   label {
     font-family: var(--ls-font-family);
     font-size: 10px;
@@ -240,6 +218,26 @@
   height: 32px;
 }
 
+.tl-button {
+  @apply relative flex items-center justify-center text-base rounded border-0;
+
+  height: 28px;
+  width: 28px;
+  font-family: var(--ls-font-family);
+  background: none;
+  cursor: pointer;
+  color: var(--ls-primary-text-color);
+
+  &:hover {
+    background-color: var(--ls-primary-background-color);
+  }
+
+  &[data-selected='true'] {
+    background-color: var(--color-selectedFill);
+    color: var(--color-selectedContrast);
+  }
+}
+
 .tl-primary-tools {
   @apply absolute h-full top-0 flex items-center justify-center;
 
@@ -250,26 +248,6 @@
   flex-flow: column;
   border-radius: 8px;
   padding: 8px;
-
-  .tl-button {
-    @apply relative flex items-center justify-center text-base rounded border-0;
-
-    height: 28px;
-    width: 28px;
-    font-family: var(--ls-font-family);
-    background: none;
-    cursor: pointer;
-    color: var(--ls-primary-text-color);
-
-    &:hover {
-      background-color: var(--color-hover);
-    }
-
-    &[data-selected='true'] {
-      background-color: var(--color-selectedFill);
-      color: var(--color-selectedContrast);
-    }
-  }
 }
 
 .tl-tools-floating-panel {
@@ -861,17 +839,6 @@ html[data-theme='dark'] {
     background-color: var(--ls-tertiary-background-color);
     color: var(--ls-primary-text-color);
     opacity: 1;
-  }
-}
-
-.tl-contextbar-button {
-  @apply rounded inline-flex items-center justify-center;
-  height: 32px;
-  width: 32px;
-  color: var(--ls-primary-text-color);
-
-  &:hover {
-    background-color: var(--ls-tertiary-background-color);
   }
 }
 
