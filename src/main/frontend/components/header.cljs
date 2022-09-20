@@ -191,9 +191,9 @@
         (if (or (state/home?) custom-home-page?)
           left-menu
           (ui/with-shortcut :go/backward "bottom"
-            [:button.it.navigation.nav-left.button.icon
+            [:button.it.navigation.nav-left.button.icon.opacity-70
              {:title "Go back" :on-click #(js/window.history.back)}
-             (ui/icon "chevron-left" {:style {:fontSize 25}})])))]
+             (ui/icon "chevron-left" {:size 26})])))]
 
      [:div.r.flex
       (when (and sync-enabled?
