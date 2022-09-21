@@ -129,7 +129,7 @@
   [s]
   {:pre (string? s)}
   (->>
-   (string/split s #",")
+   (string/split s #"[\,，]{1}")
    (map string/trim)
    (remove string/blank?)
    (set)))
