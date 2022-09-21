@@ -6,6 +6,7 @@ import { Button } from '../Button'
 import * as React from 'react'
 
 import * as ReactContextMenu from '@radix-ui/react-context-menu'
+import * as Separator from '@radix-ui/react-separator'
 
 const preventDefault = (e: Event) => e.stopPropagation()
 
@@ -44,14 +45,14 @@ export const ContextMenu = observer(function ContextMenu({
                 <Button title="Align left"><TablerIcon name="layout-align-left" /></Button>
                 <Button title="Align center"><TablerIcon name="layout-align-center" /></Button>
                 <Button title="Align right"><TablerIcon name="layout-align-right" /></Button>
-                <ReactContextMenu.Separator className="menu-separator vertical" />
+                <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
                 <Button title="Distribute horizontal"><TablerIcon name="layout-distribute-horizontal" /></Button>
               </div>
               <div className="tl-context-menu-button-row pt-0">
                 <Button title="Align top"><TablerIcon name="layout-align-top" /></Button>
                 <Button title="Align middle"><TablerIcon name="layout-align-middle" /></Button>
                 <Button title="Align bottom"><TablerIcon name="layout-align-bottom" /></Button>
-                <ReactContextMenu.Separator className="menu-separator vertical" />
+                <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
                 <Button title="Distribute vertical"><TablerIcon name="layout-distribute-vertical" /></Button>
               </div>
               <ReactContextMenu.Separator className="menu-separator" />
