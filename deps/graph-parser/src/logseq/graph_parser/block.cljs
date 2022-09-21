@@ -201,15 +201,18 @@
                                                  "id"
                                                  k))
                                            v' (text/parse-property k v mldoc-ast user-config)]
-                                       [k' v' mldoc-ast])
+                                       [k' v' mldoc-ast v])
                                      (do (swap! *invalid-properties conj k)
                                          nil)))))
                           (remove #(nil? (second %))))
           page-refs (get-page-ref-names-from-properties properties user-config)
+          properties-text-values (->> (map (fn [[k _v _refs original-text]] [k original-text]) properties)
+                                      (into {}))
           properties (map (fn [[k v _]] [k v]) properties)
           properties' (into {} properties)]
       {:properties properties'
        :properties-order (map first properties)
+       :properties-text-values properties-text-values
        :invalid-properties @*invalid-properties
        :page-refs page-refs})))
 
@@ -506,7 +509,7 @@
                  (cons
                   (merge
                    (let [content (utf8/substring encoded-content 0 first-block-start-pos)
-                         {:keys [properties properties-order invalid-properties]} pre-block-properties
+                         {:keys [properties properties-order properties-text-values invalid-properties]} pre-block-properties
                          id (get-custom-id-or-new-id {:properties properties})
                          property-refs (->> (get-page-refs-from-properties
                                              properties db date-formatter
@@ -521,6 +524,7 @@
                                 :level 1
                                 :properties properties
                                 :properties-order (vec properties-order)
+                                :properties-text-values properties-text-values
                                 :invalid-properties invalid-properties
                                 :refs property-refs
                                 :pre-block? true
@@ -555,10 +559,9 @@
                        :format format
                        :meta pos-meta)
                 (seq (:properties properties))
-                (assoc :properties (:properties properties))
-
-                (seq (:properties-order properties))
-                (assoc :properties-order (vec (:properties-order properties)))
+                (assoc :properties (:properties properties)
+                       :properties-text-values (:properties-text-values properties)
+                       :properties-order (vec (:properties-order properties)))
 
                 (seq (:invalid-properties properties))
                 (assoc :invalid-properties (:invalid-properties properties)))

@@ -127,11 +127,11 @@
 
 (defn sep-by-comma
   [s]
-  (when s
-    (some->>
-     (string/split s #",")
-     (remove string/blank?)
-     (map string/trim))))
+  {:pre (string? s)}
+  (->>
+   (string/split s #",")
+   (remove string/blank?)
+   (map string/trim)))
 
 (defn separated-by-commas?
   [config-state k]
@@ -147,10 +147,7 @@
         property-separated-by-commas? (and (separated-by-commas? config-state k)
                                            (empty? refs))
         refs' (if property-separated-by-commas?
-                (set
-                 (if (string/includes? v ",")
-                   (distinct (sep-by-comma v))
-                   [(string/trim v)]))
+                (sep-by-comma v)
                 refs)
         k (if (or (symbol? k) (keyword? k)) (subs (str k) 1) k)
         v (subs (str v) 1)
@@ -176,10 +173,6 @@
 
       (some? non-string-property)
       non-string-property
-
-      (and (= k "file-path")
-           (string/starts-with? v "file:"))
-      v
 
       :else
       v)))

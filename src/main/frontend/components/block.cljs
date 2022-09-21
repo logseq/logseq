@@ -1915,10 +1915,11 @@
         ;; When value is a set of refs, display full property text
         ;; because :block/properties value only contains refs but user wants to see text
         property-separated-by-commas? (text/separated-by-commas? (state/get-config) k)
-        v (if (and (coll? value) (seq value)
-                   (not property-separated-by-commas?))
-            (gp-property/property-value-from-content (name k) (:block/content block))
-            value)
+        v (or
+           (when (and (coll? value) (seq value)
+                      (not property-separated-by-commas?))
+             (get (:block/properties-text-values block) k))
+           value)
         property-pages-enabled? (contains? #{true nil} (:property-pages/enabled? user-config))]
     [:div
      (if property-pages-enabled?
