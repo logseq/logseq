@@ -22,7 +22,7 @@
   }
 }
 
-.tl-context-menu-button {
+.tl-menu-item {
   @apply flex items-center px-4 py-1 text-sm !important;
 
   min-width: 220px;
@@ -36,15 +36,16 @@
 
   &:hover,
   &:focus {
+    cursor: pointer;
     background-color: var(--ls-primary-background-color) !important;
   }
 }
 
-.tl-context-menu-button-row {
+.tl-menu-button-row {
   @apply flex justify-between px-4 py-1;
 }
 
-.tl-context-menu {
+.tl-menu {
   @apply relative py-2 flex bottom-0 flex border-0 rounded shadow-lg;
 
   opacity: 100%;
@@ -56,12 +57,12 @@
   background: var(--ls-secondary-background-color);
 }
 
-.tl-context-menu-right-slot {
+.tl-menu-right-slot {
   margin-left: auto;
   padding-left: 20px;
 }
 
-.tl-context-menu-right-slot:focus {
+.tl-menu-right-slot:focus {
   color: whites;
 }
 
@@ -74,31 +75,6 @@
 
   z-index: 100000;
   user-select: none;
-}
-
-.tl-zoom-menu-dropdown-menu-button {
-  @apply py-2 rounded shadow-lg;
-  opacity: 100%;
-  background-color: var(--ls-primary-background-color);
-}
-
-.tl-zoom-menu-dropdown-item {
-  @apply flex items-center px-4 py-1 text-sm !important;
-  min-width: 220px;
-  all: unset;
-  height: 25px;
-  user-select: none;
-  color: var(--color-text);
-
-  &:hover {
-    cursor: pointer;
-    background-color: var(--color-hover);
-  }
-}
-
-.tl-zoom-menu-right-slot {
-  margin-left: auto;
-  padding-left: 20px;
 }
 
 .tl-toolbar {

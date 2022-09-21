@@ -31,7 +31,7 @@ export const ContextMenu = observer(function ContextMenu({
     <ReactContextMenu.Root>
       <ReactContextMenu.Trigger>{children}</ReactContextMenu.Trigger>
       <ReactContextMenu.Content
-        className="tl-context-menu"
+        className="tl-menu tl-context-menu"
         ref={rContent}
         onEscapeKeyDown={() => app.transition('select')}
         collisionBoundary={collisionRef.current}
@@ -41,14 +41,14 @@ export const ContextMenu = observer(function ContextMenu({
         <div>
           {app.selectedShapes?.size > 1 && (
             <>
-              <div className="tl-context-menu-button-row pb-0">
+              <div className="tl-menu-button-row pb-0">
                 <Button title="Align left"><TablerIcon name="layout-align-left" /></Button>
                 <Button title="Align center"><TablerIcon name="layout-align-center" /></Button>
                 <Button title="Align right"><TablerIcon name="layout-align-right" /></Button>
                 <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
                 <Button title="Distribute horizontal"><TablerIcon name="layout-distribute-horizontal" /></Button>
               </div>
-              <div className="tl-context-menu-button-row pt-0">
+              <div className="tl-menu-button-row pt-0">
                 <Button title="Align top"><TablerIcon name="layout-align-top" /></Button>
                 <Button title="Align middle"><TablerIcon name="layout-align-middle" /></Button>
                 <Button title="Align bottom"><TablerIcon name="layout-align-bottom" /></Button>
@@ -61,22 +61,22 @@ export const ContextMenu = observer(function ContextMenu({
           {app.selectedShapes?.size > 0 && (
             <>
               <ReactContextMenu.Item
-                className="tl-context-menu-button"
+                className="tl-menu-item"
                 onClick={() => runAndTransition(app.cut)}
               >
                 Cut
-                <div className="tl-context-menu-right-slot">
+                <div className="tl-menu-right-slot">
                   <span className="keyboard-shortcut">
                     <code>{MOD_KEY}</code> <code>X</code>
                   </span>
                 </div>
               </ReactContextMenu.Item>
               <ReactContextMenu.Item
-                className="tl-context-menu-button"
+                className="tl-menu-item"
                 onClick={() => runAndTransition(app.copy)}
               >
                 Copy
-                <div className="tl-context-menu-right-slot">
+                <div className="tl-menu-right-slot">
                   <span className="keyboard-shortcut">
                     <code>{MOD_KEY}</code> <code>C</code>
                   </span>
@@ -85,11 +85,11 @@ export const ContextMenu = observer(function ContextMenu({
             </>
           )}
           <ReactContextMenu.Item
-            className="tl-context-menu-button"
+            className="tl-menu-item"
             onClick={() => runAndTransition(app.paste)}
           >
             Paste
-            <div className="tl-context-menu-right-slot">
+            <div className="tl-menu-right-slot">
               <span className="keyboard-shortcut">
                 <code>{MOD_KEY}</code> <code>V</code>
               </span>
@@ -97,11 +97,11 @@ export const ContextMenu = observer(function ContextMenu({
           </ReactContextMenu.Item>
           <ReactContextMenu.Separator className="menu-separator" />
           <ReactContextMenu.Item
-            className="tl-context-menu-button"
+            className="tl-menu-item"
             onClick={() => runAndTransition(app.api.selectAll)}
           >
             Select all
-            <div className="tl-context-menu-right-slot">
+            <div className="tl-menu-right-slot">
               <span className="keyboard-shortcut">
                 <code>{MOD_KEY}</code> <code>A</code>
               </span>
@@ -109,7 +109,7 @@ export const ContextMenu = observer(function ContextMenu({
           </ReactContextMenu.Item>
           {app.selectedShapes?.size > 1 && (
             <ReactContextMenu.Item
-              className="tl-context-menu-button"
+              className="tl-menu-item"
               onClick={() => runAndTransition(app.api.deselectAll)}
             >
               Deselect all
@@ -118,11 +118,11 @@ export const ContextMenu = observer(function ContextMenu({
           {app.selectedShapes?.size > 0 && (
             <>
               <ReactContextMenu.Item
-                className="tl-context-menu-button"
+                className="tl-menu-item"
                 onClick={() => runAndTransition(app.api.deleteShapes)}
               >
                 Delete
-                <div className="tl-context-menu-right-slot">
+                <div className="tl-menu-right-slot">
                   <span className="keyboard-shortcut">
                     <code>Del</code>
                   </span>
@@ -132,13 +132,13 @@ export const ContextMenu = observer(function ContextMenu({
                 <>
                   <ReactContextMenu.Separator className="menu-separator" />
                   <ReactContextMenu.Item
-                    className="tl-context-menu-button"
+                    className="tl-menu-item"
                     onClick={() => runAndTransition(app.flipHorizontal)}
                   >
                     Flip horizontally
                   </ReactContextMenu.Item>
                   <ReactContextMenu.Item
-                    className="tl-context-menu-button"
+                    className="tl-menu-item"
                     onClick={() => runAndTransition(app.flipVertical)}
                   >
                     Flip vertically
@@ -147,22 +147,22 @@ export const ContextMenu = observer(function ContextMenu({
               )}
               <ReactContextMenu.Separator className="menu-separator" />
               <ReactContextMenu.Item
-                className="tl-context-menu-button"
+                className="tl-menu-item"
                 onClick={() => runAndTransition(app.bringToFront)}
               >
                 Move to front
-                <div className="tl-context-menu-right-slot">
+                <div className="tl-menu-right-slot">
                   <span className="keyboard-shortcut">
                     <code>⇧</code> <code>]</code>
                   </span>
                 </div>
               </ReactContextMenu.Item>
               <ReactContextMenu.Item
-                className="tl-context-menu-button"
+                className="tl-menu-item"
                 onClick={() => runAndTransition(app.sendToBack)}
               >
                 Move to back
-                <div className="tl-context-menu-right-slot">
+                <div className="tl-menu-right-slot">
                   <span className="keyboard-shortcut">
                     <code>⇧</code> <code>[</code>
                   </span>
