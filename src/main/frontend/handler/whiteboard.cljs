@@ -2,7 +2,6 @@
   (:require [datascript.core :as d]
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
-            [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.file :as outliner-file]
@@ -29,17 +28,6 @@
 ;;     (cond (nil? el) false
 ;;           (and (.-classList el) (.. el -classList (contains "whiteboard"))) true
 ;;           :else (recur (.-parentElement el)))))
-
-(defn get-tldr-app
-  []
-  js/window.tln)
-
-(defn tldraw-idle?
-  "return true when tldraw is active and idle. nil when tldraw is 
-   not active."
-  []
-  (when-let [^js app (get-tldr-app)]
-    (.. app -selectedTool (isIn "idle"))))
 
 (defn- block->shape [block]
   (:block/properties block))

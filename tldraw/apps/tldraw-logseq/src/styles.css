@@ -540,7 +540,6 @@ button.tl-select-input-trigger {
   }
 
   &[data-recently-changed=true] {
-    transition-delay: 0.5s;
     i.tie {
       transition-delay: 0.5s;
     }

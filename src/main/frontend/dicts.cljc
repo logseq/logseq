@@ -227,7 +227,7 @@
         :open-new-window "New window"
         :sync-from-local-files "Refresh"
         :sync-from-local-files-detail "Import changes from local files"
-        :sync-from-local-changes-detected "Refresh detects and processes files modified on your disk and diverged from the actual Logseq page content. Continue?"
+        :sync-from-local-changes-detected "Refresh detects and processes files modified on your disk that have diverged from the current Logseq page content. Continue?"
 
         :unlink "unlink"
         :search/publishing "Search"

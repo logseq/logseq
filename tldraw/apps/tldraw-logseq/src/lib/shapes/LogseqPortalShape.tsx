@@ -30,6 +30,7 @@ export interface LogseqPortalShapeProps extends TLBoxShapeProps, CustomStyleProp
   blockType?: 'P' | 'B'
   collapsed?: boolean
   compact?: boolean
+  borderRadius?: number
   collapsedHeight?: number
   scaleLevel?: SizeLevel
 }
@@ -186,6 +187,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     stroke: 'var(--ls-primary-text-color)',
     fill: 'var(--ls-secondary-background-color)',
     noFill: false,
+    borderRadius: 8,
     strokeWidth: 2,
     strokeType: 'line',
     opacity: 1,

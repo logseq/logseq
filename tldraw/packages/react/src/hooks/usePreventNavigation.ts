@@ -32,19 +32,29 @@ export function usePreventNavigation(rCanvas: React.RefObject<HTMLDivElement>): 
 
     if (!elm) return () => void null
 
-    elm.addEventListener('touchstart', preventGestureNavigation)
+    elm.addEventListener('touchstart', preventGestureNavigation, {
+      passive: true,
+    })
 
     // @ts-ignore
-    elm.addEventListener('gestureend', preventGestureNavigation)
+    elm.addEventListener('gestureend', preventGestureNavigation, {
+      passive: true,
+    })
 
     // @ts-ignore
-    elm.addEventListener('gesturechange', preventGestureNavigation)
+    elm.addEventListener('gesturechange', preventGestureNavigation, {
+      passive: true,
+    })
 
     // @ts-ignore
-    elm.addEventListener('gesturestart', preventGestureNavigation)
+    elm.addEventListener('gesturestart', preventGestureNavigation, {
+      passive: true,
+    })
 
     // @ts-ignore
-    elm.addEventListener('touchstart', preventNavigation)
+    elm.addEventListener('touchstart', preventNavigation, {
+      passive: true,
+    })
 
     return () => {
       if (elm) {

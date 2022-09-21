@@ -1,8 +1,7 @@
 (ns frontend.modules.shortcut.before
-  (:require [frontend.state :as state]
-            [frontend.util :as util]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.handler.whiteboard :as whiteboard]))
+  (:require [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
+            [frontend.util :as util]))
 
 ;; before function
 (defn prevent-default-behavior
@@ -35,6 +34,7 @@
   (fn [e]
     (when (and (or (contains? #{:srs :page-histories} (state/get-modal-id))
                    (not (state/block-component-editing?)))
-               (not (and (whiteboard/tldraw-idle?)
-                         (not (state/editing?)))))
+               ;; should not enable when in whiteboard mode, but not editing a logseq block
+               (not (and (state/active-tldraw-app)
+                         (not (state/tldraw-editing-logseq-block?)))))
       (f e))))

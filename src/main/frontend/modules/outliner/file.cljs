@@ -40,12 +40,14 @@
   [repo page-db-id]
   (let [page-block (db/pull repo '[*] page-db-id)
         page-db-id (:db/id page-block)
+        whiteboard? (:block/whiteboard? page-block)
         blocks-count (model/get-page-blocks-count repo page-db-id)]
-    (if (and (> blocks-count 500)
-             (not (state/input-idle? repo :diff 3000))) ; long page
+    (if (or (and (> blocks-count 500)
+                 (not (state/input-idle? repo :diff 3000))) ;; long page
+            ;; when this whiteboard page is just being updated 
+            (and whiteboard? (state/whiteboard-page-idle? repo page-block 3000)))
       (async/put! (state/get-file-write-chan) [repo page-db-id])
-      (let [whiteboard? (:block/whiteboard? page-block)
-            pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
+      (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
             blocks (model/get-page-blocks-no-cache repo (:block/name page-block) {:pull-keys pull-keys})
             blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)]
         (when-not (and (= 1 (count blocks))
