@@ -28,7 +28,7 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
 
   return (
     <div className="tl-action-bar">
-      <div className="tl-button-bar tl-history-bar">
+      <div className="tl-toolbar tl-history-bar">
         <Button title="Undo" onClick={undo}>
           <TablerIcon name="arrow-back-up" />
         </Button>
@@ -37,7 +37,7 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
         </Button>
       </div>
 
-      <div className="tl-button-bar tl-zoom-bar">
+      <div className="tl-toolbar tl-zoom-bar">
         <Button title="Zoom in" onClick={zoomIn} id="tl-zoom-in">
           <TablerIcon name="plus" />
         </Button>
