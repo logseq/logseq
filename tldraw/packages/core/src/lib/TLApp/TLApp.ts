@@ -382,10 +382,11 @@ export class TLApp<
     if (shapes.length < 2) return this
 
     const boundsForShapes = shapes.map((shape) => {
+      const bounds = shape.getBounds();
       return {
         id: shape.id,
-        point: shape.getCenter(),
-        bounds: shape.getBounds(),
+        point: [bounds.minX, bounds.minY],
+        bounds: bounds,
       }
     })
 
