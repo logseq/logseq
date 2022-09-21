@@ -1,4 +1,6 @@
 (ns logseq.graph-parser.mldoc
+  "Wraps https://github.com/logseq/mldoc to parse files into mldoc ast. This ns
+  encapsulates mldoc's json api by only taking and returning edn"
   ;; Disable clj linters since we don't support clj
   #?(:clj {:clj-kondo/config {:linters {:unresolved-namespace {:level :off}
                                         :unresolved-symbol {:level :off}}}})

@@ -45,12 +45,12 @@
 }
 
 #main-container {
-    /* Hack: (overflow-y) to fix sticky header not working */
-    /* To reproduce: quick creating blocks */
-    overflow-y: hidden;
-    position: relative;
-    height: 100%;
-    transition: padding-left .3s;
+  /* Hack: (overflow-y) to fix sticky header not working */
+  /* To reproduce: quick creating blocks */
+  overflow-y: hidden;
+  position: relative;
+  height: 100%;
+  transition: padding-left .3s;
 
   &.is-left-sidebar-open {
     padding-left: 0;
@@ -112,13 +112,14 @@
   }
 
   .page-icon {
-    @apply mr-1 align-baseline;
+    @apply flex items-center mr-1 align-baseline;
+
     width: 16px;
-    height: 16px;
+    height: 18px;
     text-align: center;
     display: inline-block;
     line-height: 1em;
-    color: var(--ls-icon-color);
+    opacity: .6;
   }
 
   a.item {
@@ -130,7 +131,7 @@
     > .ti {
       font-size: 16px;
       margin-right: 8px;
-      opacity: .6;
+      opacity: .9;
       position: relative;
     }
 
@@ -228,12 +229,20 @@
         a {
           width: 100%;
           padding: 2px 24px;
-          display: block;
-          text-overflow: ellipsis;
-          overflow: hidden;
-          white-space: nowrap;
           color: var(--ls-primary-text-color);
           transition: background-color .3s;
+
+          .page-title {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex-grow: 1;
+          }
+
+          .page-icon {
+            display: flex;
+            align-items: center;
+          }
 
           &:hover {
             background-color: var(--ls-quaternary-background-color);
@@ -365,9 +374,6 @@
 }
 
 .ls-left-sidebar-open {
-  .cp__header > .r {
-    display: none;
-  }
 
   @screen sm {
     .cp__header > .r {
@@ -461,9 +467,7 @@ html[data-theme='dark'] {
     width: 0 !important;
 
     @screen lg {
-      .resizer {
-        left: -4px;
-      }
+      width: 4px !important;
     }
   }
 

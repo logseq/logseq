@@ -141,7 +141,7 @@ html[data-theme='light'] {
   --ls-scrollbar-thumb-hover-color: rgba(0, 0, 0, 0.2);
   --ls-head-text-color: var(--ls-link-text-color);
   --ls-cloze-text-color: #0000cd;
-  --ls-icon-color: #908e8b;
+  --ls-icon-color: #646464;
   --ls-search-icon-color: var(--ls-icon-color);
   --ls-a-chosen-bg: #f7f7f7;
   --ls-right-sidebar-code-bg-color: var(--ls-secondary-background-color);
@@ -172,10 +172,6 @@ body {
   background-color: transparent;
   min-height: 100%;
   word-break: break-word; /* compatible for overflow-wrap: anywhere */
-}
-
-a svg {
-  color: var(--ls-icon-color);
 }
 
 svg {

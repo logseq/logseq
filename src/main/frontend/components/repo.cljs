@@ -164,7 +164,7 @@
                           {:title        [:span.flex.items-center.whitespace-nowrap short-repo-name
                                           (when remote? [:span.pl-1
                                                          {:title (str "<" GraphName "> #" GraphUUID)}
-                                                         (ui/icon "cloud")])]
+                                                         (ui/icon "cloud" {:size 18})])]
                            :hover-detail repo-path ;; show full path on hover
                            :options      {:on-click (fn [e]
                                                       (if (gobj/get e "shiftKey")
@@ -228,7 +228,9 @@
                                              (check-multiple-windows? state)
                                              (toggle-fn))
                                  :title    repo-path}       ;; show full path on hover
-                                (ui/icon "database mr-2" {:style {:font-size 16} :id "database-icon"})
+                                [:span.flex.pr-2.relative
+                                 {:style {:top 1}}
+                                 (ui/icon "database" {:size 16 :id "database-icon"})]
                                 [:div.graphs
                                  [:span#repo-switch.block.pr-2.whitespace-nowrap
                                   [:span [:span#repo-name.font-medium

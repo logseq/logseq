@@ -317,6 +317,7 @@
                                   (when @*quit-dirty? ;; when not updating
                                     (.preventDefault e)
                                     (let [web-contents (. win -webContents)]
+                                      (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents))
                                       (.send web-contents "persistent-dbs"))
                                     (async/go
                                       (let [_ (async/<! state/persistent-dbs-chan)]
