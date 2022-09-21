@@ -131,7 +131,8 @@
   (->>
    (string/split s #",")
    (remove string/blank?)
-   (map string/trim)))
+   (map string/trim)
+   (set)))
 
 (defn separated-by-commas?
   [config-state k]
@@ -150,7 +151,9 @@
                 (sep-by-comma v)
                 refs)
         k (if (or (symbol? k) (keyword? k)) (subs (str k) 1) k)
-        v (subs (str v) 1)
+        v (if (or (symbol? v) (keyword? v))
+            (subs (str v) 1)
+            (str v))
         v (string/trim v)
         non-string-property (parse-non-string-property-value v)]
     (cond
