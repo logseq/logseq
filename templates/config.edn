@@ -129,12 +129,12 @@
  ;; Whether to show empty bullets for non-document mode (the default mode)
  :ui/show-empty-bullets? false
 
- ;; Pre-defined :view function to use in Query
+ ;; Pre-defined :view function to use with advanced queries
  :query/views
  {:pprint
   (fn [r] [:pre.code (pprint r)])}
 
- ;; Pre-defined :result-transform function to use in Query
+ ;; Pre-defined :result-transform function for use with advanced queries
  :query/result-transforms
  {:sort-by-priority
   (fn [result] (sort-by (fn [h] (get h :block/priority "Z")) result))}

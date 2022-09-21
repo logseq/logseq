@@ -1,4 +1,6 @@
 (ns logseq.graph-parser.extract
+  "Handles extraction of blocks, pages and mldoc ast in preparation for db
+  transaction"
   ;; Disable clj linters since we don't support clj
   #?(:clj {:clj-kondo/config {:linters {:unresolved-namespace {:level :off}
                                         :unresolved-symbol {:level :off}}}})

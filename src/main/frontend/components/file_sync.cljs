@@ -142,7 +142,7 @@
                                      (state/get-repos))))))))]
 
     [:div.cp__file-sync-related-normal-modal
-     [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "cloud-upload")]]
+     [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "cloud-upload" {:size 20})]]
 
      [:h1.text-xl.font-semibold.opacity-90.text-center.py-2
       "Are you sure you want to create a new remote graph?"]
@@ -250,12 +250,11 @@
                                              :queuing queuing?
                                              :idle    (and (not queuing?) idle?)}])}
                [:span.flex.items-center
-                (ui/icon "cloud"
-                         {:style {:fontSize ui/icon-size}})]]
+                (ui/icon "cloud" {:size ui/icon-size})]]
 
               [:a.button.cloud.off
                {:on-click turn-on}
-               (ui/icon "cloud-off" {:style {:fontSize ui/icon-size}})]))
+               (ui/icon "cloud-off" {:size ui/icon-size})]))
 
           (cond-> []
             synced-file-graph?
@@ -265,8 +264,9 @@
                         [:span.opacity-60 "Everything is synced!"]]
                  :as-link? false}]
                (if need-password?
-                 [{:title   [:div.file-item
-                             (ui/icon "lock") "Password is required"]
+                 [{:title   [:div.file-item.flex
+                             (ui/icon "lock")
+                             [:span.pl-1 "Password is required"]]
                    :options {:on-click fs-sync/sync-need-password!}}]
                  [{:title   [:div.file-item.is-first ""]
                    :options {:class "is-first-placeholder"}}]))
@@ -323,12 +323,6 @@
             ]}))])))
 
 (rum/defc pick-local-graph-for-sync [graph]
-  (rum/use-effect!
-   (fn []
-     (file-sync-handler/set-wait-syncing-graph graph)
-     #(file-sync-handler/set-wait-syncing-graph nil))
-   [graph])
-
   [:div.cp__file-sync-related-normal-modal
    [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "cloud-download")]]
 
@@ -346,41 +340,43 @@
 
    [:div.-mt-1
     (ui/button
-      (str "Open a local directory")
+      "Open a local directory"
       :class "w-full rounded-t-none py-4"
-      :on-click #(->
-                  (page-handler/ls-dir-files!
-                   (fn [{:keys [url]}]
-                     (file-sync-handler/init-remote-graph url)
-                     ;; TODO: wait for switch done
-                     (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
+      :on-click #(do
+                   (state/close-modal!)
+                   (fs-sync/<sync-stop)
+                   (->
+                    (page-handler/ls-dir-files!
+                     (fn [{:keys [url]}]
+                       (file-sync-handler/init-remote-graph url graph)
+                       (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
 
-                   {:empty-dir?-or-pred
-                    (fn [ret]
-                      (let [empty-dir? (nil? (second ret))]
-                        (if-let [root (first ret)]
+                     {:empty-dir?-or-pred
+                      (fn [ret]
+                        (let [empty-dir? (nil? (second ret))]
+                          (if-let [root (first ret)]
 
-                          ;; verify directory
-                          (-> (if empty-dir?
-                                (p/resolved nil)
-                                (if (util/electron?)
-                                  (ipc/ipc :readGraphTxIdInfo root)
-                                  (fs-util/read-graphs-txid-info root)))
+                            ;; verify directory
+                            (-> (if empty-dir?
+                                  (p/resolved nil)
+                                  (if (util/electron?)
+                                    (ipc/ipc :readGraphTxIdInfo root)
+                                    (fs-util/read-graphs-txid-info root)))
 
-                              (p/then (fn [^js info]
-                                        (when (and (not empty-dir?)
-                                                   (or (nil? info)
-                                                       (nil? (second info))
-                                                       (not= (second info) (:GraphUUID graph))))
-                                          (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
-                                            (do
-                                              (state/set-state! :graph/remote-binding? true)
-                                              (p/resolved nil))
-                                            (throw (js/Error. nil)))))))
+                                (p/then (fn [^js info]
+                                          (when (and (not empty-dir?)
+                                                     (or (nil? info)
+                                                         (nil? (second info))
+                                                         (not= (second info) (:GraphUUID graph))))
+                                            (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
+                                              (do
+                                                (state/set-state! :graph/remote-binding? true)
+                                                (p/resolved nil))
+                                              (throw (js/Error. nil)))))))
 
-                          ;; cancel pick a directory
-                          (throw (js/Error. nil)))))})
-                  (p/catch (fn []))))
+                            ;; cancel pick a directory
+                            (throw (js/Error. nil)))))})
+                    (p/catch (fn [])))))
     [:p.text-xs.opacity-50.px-1 (ui/icon "alert-circle") " An empty directory or an existing remote graph!"]]])
 
 (defn pick-dest-to-sync-panel [graph]
@@ -593,7 +589,7 @@
   [close-fn]
 
   [:div.cp__file-sync-related-normal-modal
-   [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "checkup-list")]]
+   [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "checkup-list" {:size 28})]]
 
    [:h1.text-xl.font-semibold.opacity-90.text-center.py-2
     [:span.dark:opacity-80 "Congrats on your first successful sync!"]]
@@ -608,7 +604,7 @@
 
    [:div.cloud-tip.rounded-md.mt-6.py-4
     [:div.items-center.opacity-90.flex.justify-center
-     [:span.pr-2 (ui/icon "bell-ringing" {:class "font-semibold"})]
+     [:span.pr-2.flex (ui/icon "bell-ringing" {:class "font-semibold"})]
      [:strong "Logseq Sync is still in Beta and we're working on a Pro plan!"]]
 
     ;; [:ul.flex.py-6.px-4

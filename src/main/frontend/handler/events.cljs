@@ -106,7 +106,14 @@
       (route-handler/redirect! {:to :import :query-params {:from "picker"}})
       (route-handler/redirect-to-home!)))
   (repo-handler/refresh-repos!)
-  (file-sync-stop!))
+  (file-sync-restart!))
+
+(defmethod handle :graph/unlinked [_]
+  (repo-handler/refresh-repos!)
+  (file-sync-restart!))
+
+(defmethod handle :graph/refresh [_]
+  (repo-handler/refresh-repos!))
 
 (defn- graph-switch
   ([graph]
@@ -568,9 +575,7 @@
                      (state/close-modal!)
                      (repo-handler/re-index!
                       nfs-handler/rebuild-index!
-                      #(do
-                         (page-handler/create-today-journal!)
-                         (file-sync-restart!)))))]])))
+                      page-handler/create-today-journal!)))]])))
 
 ;; encryption
 (defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]

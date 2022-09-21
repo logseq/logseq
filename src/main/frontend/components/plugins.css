@@ -231,6 +231,11 @@
           opacity: .8;
         }
       }
+
+      a {
+        color: var(--ls-primary-text-color);
+        opacity: .7;
+      }
     }
 
     > .l {

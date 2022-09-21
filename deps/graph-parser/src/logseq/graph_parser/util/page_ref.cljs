@@ -1,6 +1,6 @@
 (ns logseq.graph-parser.util.page-ref
-  "General purpose vars and util fns for page-ref. Currently this only handles
-a logseq page-ref e.g. [[page name]]"
+  "Core vars and util fns for page-ref. Currently this only handles a logseq
+  page-ref e.g. [[page name]]"
   (:require [clojure.string :as string]))
 
 (def left-brackets "Opening characters for page-ref" "[[")

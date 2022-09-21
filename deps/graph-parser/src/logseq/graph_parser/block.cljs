@@ -1,5 +1,5 @@
 (ns logseq.graph-parser.block
-  "Block related code needed for graph-parser"
+  "Given mldoc ast, prepares block data in preparation for db transaction"
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]

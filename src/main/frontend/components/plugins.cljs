@@ -130,14 +130,14 @@
 (rum/defc category-tabs
   [t category on-action]
 
-  [:div.secondary-tabs.categories
+  [:div.secondary-tabs.categories.flex
    (ui/button
-    [:span (ui/icon "puzzle") (t :plugins)]
+    [:span.flex.items-center (ui/icon "puzzle") (t :plugins)]
     :intent "logseq"
     :on-click #(on-action :plugins)
     :class (if (= category :plugins) "active" ""))
    (ui/button
-    [:span (ui/icon "palette") (t :themes)]
+    [:span.flex.items-center (ui/icon "palette") (t :themes)]
     :intent "logseq"
     :on-click #(on-action :themes)
     :class (if (= category :themes) "active" ""))])
@@ -232,8 +232,10 @@
        [:strong (ui/icon "coffee")]
        [:ul.menu-list
         (for [link sponsors]
-          [:li [:a {:href link :target "_blank"}
-                [:span.flex.items-center link (ui/icon "external-link")]]])]])]
+          [:li {:key link}
+           [:a {:href link :target "_blank"}
+            [:span.flex.items-center link (ui/icon "external-link")]]])
+        ]])]
 
    [:div.r.flex.items-center
     (when (and unpacked? (not disabled?))
@@ -438,7 +440,8 @@
          (ui/tippy {:html  [:div (t :plugin/unpacked-tips)]
                     :arrow true}
                    (ui/button
-                    [:span (ui/icon "upload") (t :plugin/load-unpacked)]
+                    [:span.flex.items-center
+                     (ui/icon "upload") (t :plugin/load-unpacked)]
                     :intent "logseq"
                     :class "load-unpacked"
                     :on-click plugin-handler/load-unpacked-plugin))
@@ -534,21 +537,21 @@
           :intent "link"))
 
        (concat (if market?
-                 [{:title   [:span (ui/icon "rotate-clockwise") (t :plugin/refresh-lists)]
+                 [{:title   [:span.flex.items-center (ui/icon "rotate-clockwise") (t :plugin/refresh-lists)]
                    :options {:on-click #(reload-market-fn)}}]
-                 [{:title   [:span (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
+                 [{:title   [:span.flex.items-center (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
                    :options {:on-click #(plugin-handler/check-enabled-for-updates (not= :plugins category))}}])
 
-               [{:title   [:span (ui/icon "world") (t :settings-page/network-proxy)]
+               [{:title   [:span.flex.items-center (ui/icon "world") (t :settings-page/network-proxy)]
                  :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}]
 
                (when (state/developer-mode?)
                  [{:hr true}
-                  {:title   [:span (ui/icon "file-code") "Open Preferences"]
+                  {:title   [:span.flex.items-center (ui/icon "file-code") "Open Preferences"]
                    :options {:on-click
                              #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                 (js/apis.openPath (str root "/preferences.json")))}}
-                  {:title   [:span (ui/icon "bug") "Open " [:code " ~/.logseq"]]
+                  {:title   [:span.flex.items-center (ui/icon "bug") "Open " [:code " ~/.logseq"]]
                    :options {:on-click
                              #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                 (js/apis.openPath root))}}]))
@@ -852,7 +855,7 @@
    (fn [{:keys [toggle-fn]}]
      [:div.toolbar-plugins-manager
       {:on-click toggle-fn}
-      [:a.button (ui/icon "puzzle")]])
+      [:a.button (ui/icon "puzzle" {:size 20})]])
 
    ;; items
    (for [[_ {:keys [key pinned?] :as opts} pid] items

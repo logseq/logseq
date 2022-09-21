@@ -162,6 +162,8 @@
         min-ratio 0.1
         max-ratio 0.7
         keyboard-step 5
+        add-resizing-class #(.. js/document.documentElement -classList (add "is-resizing-buf"))
+        remove-resizing-class #(.. js/document.documentElement -classList (remove "is-resizing-buf"))
         set-width! (fn [ratio element]
                      (when (and el-ref element)
                        (let [width (str (* ratio 100) "%")]
@@ -199,20 +201,22 @@
                          #(.. js/document.documentElement -classList (remove cursor-class)))
                        (when (> ratio (/ min-ratio 2)) (state/open-right-sidebar!)))))}}))
              (.styleCursor false)
-             (.on "dragstart" #(.. js/document.documentElement -classList (add "is-resizing-buf")))
-             (.on "dragend" #(.. js/document.documentElement -classList (remove "is-resizing-buf")))
+             (.on "dragstart" add-resizing-class)
+             (.on "dragend" remove-resizing-class)
              (.on "keydown" (fn [e]
                               (when-let [sidebar-el (js/document.getElementById sidebar-id)]
                                 (let [width js/document.documentElement.clientWidth
-                                      offset (+
-                                              (.-x (.getBoundingClientRect sidebar-el))
-                                              (case (.-code e)
-                                                "ArrowLeft" (- keyboard-step)
-                                                "ArrowRight" keyboard-step
-                                                :else 0))
+                                      keyboard-step (case (.-code e)
+                                                      "ArrowLeft" (- keyboard-step)
+                                                      "ArrowRight" keyboard-step
+                                                      0)
+                                      offset (+ (.-x (.getBoundingClientRect sidebar-el)) keyboard-step)
                                       ratio (.toFixed (/ offset width) 6)
                                       ratio (if (= handler-position :west) (- 1 ratio) ratio)]
-                                  (when (and (> ratio min-ratio) (< ratio max-ratio)) (set-width! ratio sidebar-el))))))))
+                                  (when (and (> ratio min-ratio) (< ratio max-ratio) (not (zero? keyboard-step)))
+                                    ((add-resizing-class)
+                                     (set-width! ratio sidebar-el)))))))
+             (.on "keyup" remove-resizing-class)))
        #())
      [])
     [:.resizer {:ref el-ref
