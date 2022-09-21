@@ -26,7 +26,8 @@
             [frontend.fs :as fs]
             [frontend.encrypt :as encrypt]
             [medley.core :refer [dedupe-by]]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [promesa.core :as p]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -71,8 +72,9 @@
                  ::local->remote-full-sync
                  ;; remote->local full sync
                  ::remote->local-full-sync
-                 ::stop
-                 ::pause})
+                 ;; snapshot state when switching between apps on iOS
+                 ::pause
+                 ::stop})
 (s/def ::path string?)
 (s/def ::time t/date?)
 (s/def ::remote->local-type #{:delete :update
@@ -180,8 +182,8 @@
   [latest-txid graph-uuid user-uuid repo]
   {:pre [(int? latest-txid) (>= latest-txid 0)]}
   (persist-var/-reset-value! graphs-txid [user-uuid graph-uuid latest-txid] repo)
-  (some-> (persist-var/persist-save graphs-txid)
-          p->c)
+  (p/let [_ (persist-var/persist-save graphs-txid)]
+    (state/pub-event! [:graph/refresh]))
   (when (state/developer-mode?) (assert-local-txid<=remote-txid)))
 
 (defn clear-graphs-txid! [repo]
@@ -632,7 +634,7 @@
 (defprotocol IRSAPI
   (rsapi-ready? [this graph-uuid] "return true when rsapi ready")
   (<key-gen [this] "generate public+private keys")
-  (<set-env [this prod? private-key public-key graph-uuid] "set environment")
+  (<set-env [this graph-uuid prod? private-key public-key] "set environment")
   (<get-local-files-meta [this graph-uuid base-path filepaths] "get local files' metadata")
   (<get-local-all-files-meta [this graph-uuid base-path] "get all local files' metadata")
   (<rename-local-file [this graph-uuid base-path from to])
@@ -641,8 +643,8 @@
   (<delete-local-files [this graph-uuid base-path filepaths])
   (<update-remote-files [this graph-uuid base-path filepaths local-txid] "local -> remote, return err or txid")
   (<delete-remote-files [this graph-uuid base-path filepaths local-txid] "return err or txid")
-  (<encrypt-fnames [this fnames])
-  (<decrypt-fnames [this fnames]))
+  (<encrypt-fnames [this graph-uuid fnames])
+  (<decrypt-fnames [this graph-uuid fnames]))
 
 (defprotocol IRemoteAPI
   (<user-info [this] "user info")
@@ -651,6 +653,7 @@
   (<get-remote-graph [this graph-name-opt graph-uuid-opt] "get graph info by GRAPH-NAME-OPT or GRAPH-UUID-OPT")
   (<get-remote-file-versions [this graph-uuid filepath] "get file's version list")
   (<list-remote-graphs [this] "list all remote graphs")
+  (<get-deletion-logs [this graph-uuid from-txid] "get deletion logs from FROM-TXID")
   (<get-diff [this graph-uuid from-txid] "get diff from FROM-TXID, return [txns, latest-txid, min-txid]")
   (<create-graph [this graph-name] "create graph")
   (<delete-graph [this graph-uuid] "delete graph")
@@ -670,17 +673,17 @@
   it happens on macos (case-insensitive fs)
 
   return canonicalized filepath if exists"
-  [irsapi base-path filepath]
+  [graph-uuid irsapi base-path filepath]
   (go
-    (let [r (<! (<get-local-files-meta irsapi "" base-path [filepath]))]
+    (let [r (<! (<get-local-files-meta irsapi graph-uuid base-path [filepath]))]
       (when (some-> r first :path (not= filepath))
         (-> r first :path)))))
 
 
 (defn <local-file-not-exist?
-  [irsapi base-path filepath]
+  [graph-uuid irsapi base-path filepath]
   (go
-    (let [r (<! (<get-local-files-meta irsapi "" base-path [filepath]))]
+    (let [r (<! (<get-local-files-meta irsapi graph-uuid base-path [filepath]))]
 
       (or
        ;; not found at all
@@ -717,13 +720,13 @@
   (rsapi-ready? [_ graph-uuid] (and (= graph-uuid graph-uuid') private-key' public-key'))
   (<key-gen [_] (go (js->clj (<! (p->c (ipc/ipc "key-gen")))
                              :keywordize-keys true)))
-  (<set-env [_ prod? private-key public-key graph-uuid]
+  (<set-env [_ graph-uuid prod? private-key public-key]
     (when (not-empty private-key)
       (print (util/format "[%s] setting sync age-encryption passphrase..." graph-uuid)))
     (set! graph-uuid' graph-uuid)
     (set! private-key' private-key)
     (set! public-key' public-key)
-    (p->c (ipc/ipc "set-env" (if prod? "prod" "dev") private-key public-key)))
+    (p->c (ipc/ipc "set-env" graph-uuid (if prod? "prod" "dev") private-key public-key)))
   (<get-local-all-files-meta [_ graph-uuid base-path]
     (go
       (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "get-local-all-files-meta" graph-uuid base-path))))]
@@ -778,9 +781,9 @@
         (<!
          (<retry-rsapi
           #(p->c (ipc/ipc "delete-remote-files" graph-uuid base-path filepaths local-txid token)))))))
-  (<encrypt-fnames [_ fnames] (go (js->clj (<! (p->c (ipc/ipc "encrypt-fnames" fnames))))))
-  (<decrypt-fnames [_ fnames] (go
-                                (let [r (<! (p->c (ipc/ipc "decrypt-fnames" fnames)))]
+  (<encrypt-fnames [_ graph-uuid fnames] (go (js->clj (<! (p->c (ipc/ipc "encrypt-fnames" graph-uuid fnames))))))
+  (<decrypt-fnames [_ graph-uuid fnames] (go
+                                (let [r (<! (p->c (ipc/ipc "decrypt-fnames" graph-uuid fnames)))]
                                   (if (instance? ExceptionInfo r)
                                     (ex-info "decrypt-failed" {:fnames fnames} (ex-cause r))
                                     (js->clj r))))))
@@ -803,7 +806,7 @@
     (go (let [r (<! (p->c (.keygen mobile-util/file-sync #js {})))]
           (-> r
               (js->clj :keywordize-keys true)))))
-  (<set-env [_ prod? secret-key public-key graph-uuid]
+  (<set-env [_ graph-uuid prod? secret-key public-key]
     (set! graph-uuid' graph-uuid)
     (set! private-key secret-key)
     (set! public-key' public-key)
@@ -896,14 +899,14 @@
          r
          (get (js->clj r) "txid")))))
 
-  (<encrypt-fnames [_ fnames]
+  (<encrypt-fnames [_ _graph-uuid fnames]
     (go
       (let [r (<! (p->c (.encryptFnames mobile-util/file-sync
                                         (clj->js {:filePaths fnames}))))]
         (if (instance? ExceptionInfo r)
           (.-cause r)
           (get (js->clj r) "value")))))
-  (<decrypt-fnames [_ fnames]
+  (<decrypt-fnames [_ _graph-uuid fnames]
     (go (let [r (<! (p->c (.decryptFnames mobile-util/file-sync
                                           (clj->js {:filePaths fnames}))))]
           (if (instance? ExceptionInfo r)
@@ -1102,9 +1105,9 @@
                        (recur next-continuation-token)))))))]
         (if (instance? ExceptionInfo exp-r)
           exp-r
-          (let [file-meta-list*          (persistent! file-meta-list)
-                encrypted-path-list*     (persistent! encrypted-path-list)
-                path-list-or-exp (<! (<decrypt-fnames rsapi encrypted-path-list*))]
+          (let [file-meta-list*      (persistent! file-meta-list)
+                encrypted-path-list* (persistent! encrypted-path-list)
+                path-list-or-exp     (<! (<decrypt-fnames rsapi graph-uuid encrypted-path-list*))]
             (if (instance? ExceptionInfo path-list-or-exp)
               path-list-or-exp
               (let [encrypted-path->path-map (zipmap encrypted-path-list* path-list-or-exp)]
@@ -1121,12 +1124,12 @@
   (<get-remote-files-meta [this graph-uuid filepaths]
     {:pre [(coll? filepaths)]}
     (go
-      (let [encrypted-paths* (<! (<encrypt-fnames rsapi filepaths))
+      (let [encrypted-paths* (<! (<encrypt-fnames rsapi graph-uuid filepaths))
             r                (<! (.<request this "get_files_meta" {:GraphUUID graph-uuid :Files encrypted-paths*}))]
         (if (instance? ExceptionInfo r)
           r
           (let [encrypted-paths (mapv :FilePath r)
-                paths-or-exp    (<! (<decrypt-fnames rsapi encrypted-paths))]
+                paths-or-exp    (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths))]
             (if (instance? ExceptionInfo paths-or-exp)
               paths-or-exp
               (let [encrypted-path->path-map (zipmap encrypted-paths paths-or-exp)]
@@ -1149,11 +1152,28 @@
 
   (<get-remote-file-versions [this graph-uuid filepath]
     (go
-      (let [encrypted-path (first (<! (<encrypt-fnames rsapi [filepath])))]
+      (let [encrypted-path (first (<! (<encrypt-fnames rsapi graph-uuid [filepath])))]
         (<! (.<request this "get_file_version_list" {:GraphUUID graph-uuid :File encrypted-path})))))
 
   (<list-remote-graphs [this]
     (.<request this "list_graphs"))
+
+  (<get-deletion-logs [this graph-uuid from-txid]
+    (go
+      (let [r (<! (.<request this "get_deletion_log" {:GraphUUID graph-uuid :FromTXId from-txid}))]
+        (if (instance? ExceptionInfo r)
+          r
+          (let [txns-with-encrypted-paths (mapv #(update % :path remove-user-graph-uuid-prefix) (:Transactions r))
+                encrypted-paths           (mapv :path txns-with-encrypted-paths)
+                encrypted-path->path-map
+                (zipmap
+                 encrypted-paths
+                 (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths)))
+                txns
+                (mapv
+                 (fn [txn] (update txn :path #(get encrypted-path->path-map %)))
+                 txns-with-encrypted-paths)]
+            txns)))))
 
   (<get-diff [this graph-uuid from-txid]
     ;; TODO: path in transactions should be relative path(now s3 key, which includes graph-uuid and user-uuid)
@@ -1185,7 +1205,7 @@
                 encrypted-path->path-map
                 (zipmap
                  encrypted-paths
-                 (<! (<decrypt-fnames rsapi encrypted-paths)))
+                 (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths)))
                 txns
                 (mapv
                  (fn [txn]
@@ -1314,11 +1334,11 @@
                   [@graphs-txid local-txid remote-txid])))))
 
 (defn- get-local-files-checksum
-  [base-path relative-paths]
+  [graph-uuid base-path relative-paths]
   (go
     (into {}
           (map (juxt #(.-path ^FileMetadata %) #(.-etag ^FileMetadata %)))
-          (<! (<get-local-files-meta rsapi "" base-path relative-paths)))))
+          (<! (<get-local-files-meta rsapi graph-uuid base-path relative-paths)))))
 
 (declare sync-state--add-current-local->remote-files
          sync-state--add-current-remote->local-files
@@ -1386,7 +1406,8 @@
                                      (remove nil?))]
 
         (doseq [relative-p (map relative-path filetxns)]
-          (when-some [relative-p* (<! (<case-different-local-file-exist? rsapi base-path relative-p))]
+          (when-some [relative-p*
+                      (<! (<case-different-local-file-exist? graph-uuid rsapi base-path relative-p))]
             (let [recent-remote->local-file-item {:remote->local-type :delete
                                                   :checksum nil
                                                   :path relative-p*}]
@@ -1413,7 +1434,7 @@
       (.-deleted? (first filetxns))
       (let [filetxn (first filetxns)]
         (assert (= 1 (count filetxns)))
-        (if (<! (<local-file-not-exist? rsapi base-path (relative-path filetxn)))
+        (if (<! (<local-file-not-exist? graph-uuid rsapi base-path (relative-path filetxn)))
           ;; not exist, ignore
           true
           (let [r (<! (<delete-local-files rsapi graph-uuid base-path [(relative-path filetxn)]))]
@@ -1527,7 +1548,7 @@
 
 
 (defn- <file-change-event=>recent-remote->local-file-item
-  [^FileChangeEvent e]
+  [graph-uuid ^FileChangeEvent e]
   (go
     (let [tp (case (.-type e)
                ("add" "change") :update
@@ -1535,7 +1556,7 @@
           path (relative-path e)]
       {:remote->local-type tp
        :checksum (if (= tp :delete) nil
-                     (val (first (<! (get-local-files-checksum (.-dir e) [path])))))
+                     (val (first (<! (get-local-files-checksum graph-uuid (.-dir e) [path])))))
        :path path})))
 
 (defn- distinct-file-change-events-xf
@@ -1570,6 +1591,7 @@
    (map #(partition-all n %))
    cat))
 
+(declare sync-state--valid-to-accept-filewatcher-event?)
 (defonce local-changes-chan (chan (async/dropping-buffer 1000)))
 (defn file-watch-handler
   "file-watcher callback"
@@ -1577,12 +1599,13 @@
   (when-let [current-graph (state/get-current-repo)]
     (when (string/ends-with? current-graph dir)
       (let [sync-state (state/get-file-sync-state current-graph)]
-        (when (and sync-state (not (sync-state--stopped? sync-state)))
+        (when (and sync-state (sync-state--valid-to-accept-filewatcher-event? sync-state))
           (when (or (:mtime stat) (= type "unlink"))
             (go
               (let [path (remove-dir-prefix dir path)
                     files-meta (and (not= "unlink" type)
-                                    (<! (<get-local-files-meta rsapi "" dir [path])))
+                                    (<! (<get-local-files-meta
+                                         rsapi (:current-syncing-graph-uuid sync-state) dir [path])))
                     checksum (and (coll? files-meta) (some-> files-meta first :etag))]
                 (>! local-changes-chan (->FileChangeEvent type dir path stat checksum))))))))))
 
@@ -1679,6 +1702,10 @@
   [graph-uuid]
   (js/localStorage.removeItem (local-storage-pwd-path graph-uuid)))
 
+(defn get-pwd
+  [graph-uuid]
+  (js/localStorage.getItem (local-storage-pwd-path graph-uuid)))
+
 (defn remove-all-pwd!
   []
   (doseq [k (filter #(string/starts-with? % "encrypted-pwd/") (js->clj (js-keys js/localStorage)))]
@@ -1706,7 +1733,7 @@
   "restore pwd from persisted encrypted-pwd, update `pwd-map`"
   [graph-uuid]
   (go
-    (let [encrypted-pwd (js/localStorage.getItem (local-storage-pwd-path graph-uuid))]
+    (let [encrypted-pwd (get-pwd graph-uuid)]
       (if (nil? encrypted-pwd)
         {:restore-pwd-failed true}
         (let [[salt-value _expired-at gone?]
@@ -1829,7 +1856,7 @@
   (let [{:keys [private-key public-key]} (get @pwd-map graph-uuid)]
     (assert (and private-key public-key) (pr-str :private-key private-key :public-key public-key
                                                  :pwd-map @pwd-map))
-    (<set-env rsapi prod? private-key public-key graph-uuid)))
+    (<set-env rsapi graph-uuid prod? private-key public-key)))
 
 (defn- <ensure-set-env&keys
   [graph-uuid *stopped?]
@@ -2013,6 +2040,13 @@
   {:pre [(s/valid? ::sync-state sync-state)]}
   (= ::stop (:state sync-state)))
 
+(defn sync-state--valid-to-accept-filewatcher-event?
+  [sync-state]
+  {:pre [(s/valid? ::sync-state sync-state)]}
+  (contains? #{::idle ::local->remote ::remote->local ::local->remote-full-sync ::remote->local-full-sync}
+             (:state sync-state)))
+
+
 ;;; ### remote->local syncer & local->remote syncer
 
 (defprotocol IRemote->LocalSync
@@ -2135,18 +2169,18 @@
       (case (.-type e)
         "unlink"
         ;; keep this e when it's not found
-        (<! (<local-file-not-exist? rsapi basepath r-path))
+        (<! (<local-file-not-exist? graph-uuid rsapi basepath r-path))
 
         ("add" "change")
         ;; 1. local file exists
         ;; 2. compare with remote file, and changed
-        (and (not (<! (<local-file-not-exist? rsapi basepath r-path)))
+        (and (not (<! (<local-file-not-exist? graph-uuid rsapi basepath r-path)))
              (<! (<file-changed? graph-uuid r-path basepath)))))))
 
 (defn- <filter-checksum-not-consistent
   "filter out FileChangeEvents checksum changed,
   compare checksum in FileChangeEvent and checksum calculated now"
-  [es]
+  [graph-uuid es]
   {:pre [(or (nil? es) (coll? es))
          (every? #(instance? FileChangeEvent %) es)]}
   (go
@@ -2154,7 +2188,8 @@
       (if (= "unlink" (.-type ^FileChangeEvent (first es)))
         es
         (let [base-path            (.-dir (first es))
-              files-meta           (<! (<get-local-files-meta rsapi "" base-path (mapv relative-path es)))
+              files-meta           (<! (<get-local-files-meta
+                                        rsapi graph-uuid base-path (mapv relative-path es)))
               current-checksum-map (when (coll? files-meta) (into {} (mapv (juxt :path :etag) files-meta)))
               origin-checksum-map  (into {} (mapv (juxt relative-path #(.-checksum ^FileChangeEvent %)) es))
               origin-map           (into {} (mapv (juxt relative-path identity) es))]
@@ -2184,6 +2219,21 @@
          (every? #(instance? FileChangeEvent %) es)]}
   (filterv filter-too-huge-files-aux es))
 
+(defn- filter-local-files-in-deletion-logs
+  [local-all-files-meta deletion-logs]
+  (let [deletion-logs-map (into {} (map (juxt :path identity)) deletion-logs)
+        *keep             (transient #{})
+        *delete           (transient #{})]
+    (doseq [f local-all-files-meta]
+      (let [epoch-long (some-> (get deletion-logs-map (:path f))
+                               :epoch
+                               (* 1000))]
+        (if (and epoch-long (> epoch-long (:last-modified f)))
+          (conj! *delete f)
+          (conj! *keep f))))
+    {:keep   (persistent! *keep)
+     :delete (persistent! *delete)}))
+
 
 (defrecord ^:large-vars/cleanup-todo
     Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state remoteapi
@@ -2201,10 +2251,11 @@
                    true)
                  (or (string/starts-with? (.-dir e) base-path)
                      (string/starts-with? (str "file://" (.-dir e)) base-path)) ; valid path prefix
-                 (not (ignored? e)) ;not ignored
+                 (not (ignored? e))     ;not ignored
                  ;; download files will also trigger file-change-events, ignore them
                  (let [r (not (contains? (:recent-remote->local-files @*sync-state)
-                                         (<! (<file-change-event=>recent-remote->local-file-item e))))]
+                                         (<! (<file-change-event=>recent-remote->local-file-item
+                                              graph-uuid e))))]
                    (when (and (true? r)
                               (seq (:recent-remote->local-files @*sync-state)))
                      (println :debug (:recent-remote->local-files @*sync-state) e))
@@ -2247,12 +2298,12 @@
     (<sync-local->remote! [_ es]
       (if (empty? es)
         (go {:succ true})
-        (let [type          (.-type ^FileChangeEvent (first es))
-              es->paths-xf  (comp
-                             (map #(relative-path %))
-                             (remove ignored?))]
+        (let [type         (.-type ^FileChangeEvent (first es))
+              es->paths-xf (comp
+                            (map #(relative-path %))
+                            (remove ignored?))]
           (go
-            (let [es*   (<! (<filter-checksum-not-consistent es))
+            (let [es*   (<! (<filter-checksum-not-consistent graph-uuid es))
                   _     (when (not= (count es*) (count es))
                           (println :debug :filter-checksum-changed
                                    (mapv relative-path (set/difference (set es) (set es*)))))
@@ -2310,7 +2361,9 @@
       (go
         (let [remote-all-files-meta-c      (<get-remote-all-files-meta remoteapi graph-uuid)
               local-all-files-meta-c       (<get-local-all-files-meta rsapi graph-uuid base-path)
-              remote-all-files-meta-or-exp (<! remote-all-files-meta-c)]
+              deletion-logs-c              (<get-deletion-logs remoteapi graph-uuid @*txid)
+              remote-all-files-meta-or-exp (<! remote-all-files-meta-c)
+              deletion-logs                (<! deletion-logs-c)]
           (if (or (storage-exceed-limit? remote-all-files-meta-or-exp)
                   (sync-stop-when-api-flying? remote-all-files-meta-or-exp)
                   (decrypt-exp? remote-all-files-meta-or-exp))
@@ -2321,6 +2374,8 @@
                 {:stop true})
             (let [remote-all-files-meta remote-all-files-meta-or-exp
                   local-all-files-meta  (<! local-all-files-meta-c)
+                  {local-all-files-meta :keep delete-local-files :delete}
+                  (filter-local-files-in-deletion-logs local-all-files-meta deletion-logs)
                   diff-local-files      (diff-file-metadata-sets local-all-files-meta remote-all-files-meta)
                   change-events
                   (sequence
@@ -2336,7 +2391,25 @@
                    (partition-file-change-events 10)
                    (distinct-file-change-events change-events))]
               (println "[full-sync(local->remote)]"
-                       (count (flatten change-events-partitions)) "files need to sync")
+                       (count (flatten change-events-partitions)) "files need to sync and"
+                       (count delete-local-files) "local files need to delete")
+              ;; 1. delete local files
+              (loop [[f & fs] delete-local-files]
+                (when f
+                  (let [relative-p (relative-path f)]
+                    (when-not (<! (<local-file-not-exist? graph-uuid rsapi base-path relative-p))
+                      (let [fake-recent-remote->local-file-item {:remote->local-type :delete
+                                                                 :checksum nil
+                                                                 :path relative-p}]
+                        (swap! *sync-state sync-state--add-recent-remote->local-files
+                               [fake-recent-remote->local-file-item])
+                        (<! (<delete-local-files rsapi graph-uuid base-path [(relative-path f)]))
+                        (go (<! (timeout 5000))
+                            (swap! *sync-state sync-state--remove-recent-remote->local-files
+                                   [fake-recent-remote->local-file-item])))))
+                  (recur fs)))
+
+              ;; 2. upload local files
               (loop [es-partitions change-events-partitions]
                 (if @*stopped
                   {:stop true}
@@ -2713,6 +2786,11 @@
       (state/set-file-sync-manager nil))
     (reset! current-sm-graph-uuid nil)))
 
+(defn sync-need-password!
+  []
+  (when-let [sm ^SyncManager (state/get-file-sync-manager)]
+    (.need-password sm)))
+
 (defn check-graph-belong-to-current-user
   [current-user-uuid graph-user-uuid]
   (cond
@@ -2746,6 +2824,20 @@
         (notification/show! (t :file-sync/graph-deleted) :warning false))
       result)))
 
+(defn sync-off?
+  [sync-state]
+  (or (nil? sync-state) (sync-state--stopped? sync-state)))
+
+(defn graph-sync-off?
+  "Is sync not running for this `graph`?"
+  [graph]
+  (sync-off? (state/get-file-sync-state graph)))
+
+(defn graph-encrypted?
+  []
+  (when-let [graph-uuid (second @graphs-txid)]
+    (get-pwd graph-uuid)))
+
 (declare network-online-cursor)
 
 (defn sync-start []
@@ -2753,12 +2845,8 @@
         current-user-uuid           (user/user-uuid)
         repo                        (state/get-current-repo)]
     (go
-      (when @network-online-cursor
-        ;; stop previous sync
-        (<! (<sync-stop))
-
+      (when (and (graph-sync-off? repo) @network-online-cursor)
         (<! (p->c (persist-var/-load graphs-txid)))
-
         (let [[user-uuid graph-uuid txid] @graphs-txid]
           (when (and user-uuid graph-uuid txid
                      (user/logged-in?)

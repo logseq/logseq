@@ -1,4 +1,5 @@
 (ns logseq.graph-parser.text
+  "Miscellaneous text util fns for the parser"
   (:require ["path" :as path]
             [goog.string :as gstring]
             [clojure.string :as string]

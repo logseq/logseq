@@ -43,6 +43,7 @@ on:
 env:
   CLOJURE_VERSION: '1.10.1.763'
   NODE_VERSION: '16'
+  JAVA_VERSION: '11'
 
 jobs:
   build-apk:
@@ -72,9 +73,10 @@ jobs:
             ${{ runner.os }}-yarn-
 
       - name: Setup Java JDK
-        uses: actions/setup-java@v1.4.3
+        uses: actions/setup-java@v2
         with:
-          java-version: 1.8
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
 
       - name: Cache clojure deps
         uses: actions/cache@v2
@@ -125,7 +127,6 @@ jobs:
         run: |
           cp -r static public/
           rm -rvf public/static/js/publishing
-          rm -rvf public/workspaces
           rm -rvf public/static/js/*.js.map || true
           rm -rvf public/static/*.*
           rm -rvf public/static/ios
