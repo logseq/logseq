@@ -40,7 +40,7 @@ export const ContextMenu = observer(function ContextMenu({
       >
         <div>
           {app.selectedShapes?.size > 1 && (
-            <>
+            <ReactContextMenu.Item>
               <div className="tl-menu-button-row pb-0">
                 <Button
                   title="Align left"
@@ -96,7 +96,7 @@ export const ContextMenu = observer(function ContextMenu({
                 </Button>
               </div>
               <ReactContextMenu.Separator className="menu-separator" />
-            </>
+            </ReactContextMenu.Item>
           )}
           {app.selectedShapes?.size > 0 && (
             <>
