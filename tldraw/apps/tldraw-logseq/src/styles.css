@@ -437,7 +437,7 @@ button.tl-select-input-trigger {
 }
 
 .tl-circle-button {
-  @apply absolute flex items-center	justify-center transition-all;
+  @apply absolute flex items-center	justify-center transition-all rounded-full shadow;
 
   color: var(--ls-primary-text-color);
   background-color: var(--ls-secondary-background-color);
@@ -445,7 +445,6 @@ button.tl-select-input-trigger {
   right: calc(100% + 12px);
   height: 34px;
   width: 34px;
-  border-radius: 50%;
   border: 2px solid var(--ls-secondary-background-color);
   top: 2px;
   transition-delay: 0;
