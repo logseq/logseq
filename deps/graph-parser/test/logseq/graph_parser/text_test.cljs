@@ -78,6 +78,11 @@
          :comma-prop "comma, separated" #{"comma" "separated"}
          :comma-prop "one, two, one" #{"one" "two"}))
 
+  (testing "for user comma separated properties with mixed values"
+    (are [k v y] (= (parse-property k v {:property/separated-by-commas #{:comma-prop}}) y)
+      :comma-prop "foo, #bar" #{"foo", "bar"}
+      :comma-prop "comma, separated, [[page ref]], [[nested [[page]]]], #[[nested [[tag]]]], end" #{"page ref" "nested [[page]]" "nested [[tag]]" "comma" "separated" "end"}))
+
   (testing "for normal properties"
     (are [k v y] (= (parse-property k v {}) y)
          :normal "[[foo]] [[bar]]" #{"foo" "bar"}
@@ -97,5 +102,6 @@
     (are [k v y] (= (parse-property k v {}) y)
          :tags "\"foo, bar\"" "\"foo, bar\""
          :tags "\"[[foo]], [[bar]]\"" "\"[[foo]], [[bar]]\"")))
+
 
 #_(cljs.test/test-ns 'logseq.graph-parser.text-test)

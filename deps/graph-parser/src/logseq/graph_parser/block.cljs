@@ -618,7 +618,7 @@
                   (recur headings (rest blocks) timestamps' properties body))
 
                 (gp-property/properties-ast? block)
-                (let [properties (extract-properties (second block) user-config)]
+                (let [properties (extract-properties (second block) (assoc user-config :format format))]
                   (recur headings (rest blocks) timestamps properties body))
 
                 (heading-block? block)

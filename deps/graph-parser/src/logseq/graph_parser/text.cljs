@@ -125,13 +125,13 @@
               (string/trim x)))
        (set)))
 
-(defn sep-by-comma
+(defn- sep-by-comma
   [s]
   {:pre (string? s)}
   (->>
    (string/split s #",")
-   (remove string/blank?)
    (map string/trim)
+   (remove string/blank?)
    (set)))
 
 (defn separated-by-commas?
@@ -141,14 +141,23 @@
                           (set (get config-state :property/separated-by-commas)))
                k')))
 
+(defn- extract-refs-by-commas
+  [v format]
+  (let [plains (->> (map first (gp-mldoc/->edn v (gp-mldoc/default-config format)))
+                    first
+                    second
+                    (filter #(and (vector? %) (= "Plain" (first %))))
+                    (map second))]
+    (set (mapcat sep-by-comma plains))))
+
 (defn parse-property
   "Property value parsing that takes into account built-in properties, and user config"
-  [k v mldoc-ast config-state]
-  (let [refs (extract-refs-from-mldoc-ast mldoc-ast)
-        property-separated-by-commas? (and (separated-by-commas? config-state k)
-                                           (empty? refs))
+  [k v mldoc-references-ast config-state]
+  (let [refs (extract-refs-from-mldoc-ast mldoc-references-ast)
+        property-separated-by-commas? (separated-by-commas? config-state k)
         refs' (if property-separated-by-commas?
-                (sep-by-comma v)
+                (->> (extract-refs-by-commas v (get config-state :format :markdown))
+                     (set/union refs))
                 refs)
         k (if (or (symbol? k) (keyword? k)) (subs (str k) 1) k)
         v (if (or (symbol? v) (keyword? v))

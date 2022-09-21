@@ -179,7 +179,7 @@
                                                          (let [k (if (keyword? x)
                                                                    (subs (str x) 1)
                                                                    x)]
-                                                           [(string/lower-case k) (text/parse-property k y mldoc-ast user-config)])))
+                                                           [(string/lower-case k) (text/parse-property k y mldoc-ast (assoc user-config :format format))])))
                                                   (into {})
                                                   (walk/keywordize-keys)))]
                          (when (and properties (seq properties))
