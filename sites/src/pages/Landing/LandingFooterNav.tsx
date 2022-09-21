@@ -1,13 +1,7 @@
 import {
-  AppleLogo, ArrowSquareOut, CaretDown,
-  DeviceMobile,
-  FileText,
-  GithubLogo,
-  Globe,
-  HandWaving,
-  Keyhole, LinkSimple, Play,
-  PuzzlePiece,
-  Swatches, TwitterLogo
+  ArrowSquareOut, CloudCheck, DeviceMobile, FileText,
+  GithubLogo, Globe, HandWaving, Keyhole, Play,
+  PuzzlePiece, ScribbleLoop, Swatches, TwitterLogo
 } from 'phosphor-react'
 import { Button } from '../../components/Buttons'
 import { AppLogo, FloatGlassButton, imageProductHuntLogo } from './common'
@@ -17,7 +11,7 @@ import { useAppState } from '../../state'
 export function FooterDescCard (props: any) {
   const { icon, title, desc } = props
   return (
-    <div className="item pb-4 sm:p-4">
+    <div className="item pb-4 sm:p-2">
       <div className="inner flex opacity-90">
         <div className="w-[40px] h-[40px] flex items-center justify-center">
           {icon}
@@ -26,6 +20,52 @@ export function FooterDescCard (props: any) {
         <div className="flex-1 pl-2">
           <h2 className="text-sm font-semibold">{title}</h2>
           <h3 className="text-xs pt-1">{desc}</h3>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function FeaturesBoards () {
+  return (
+    <div className={'app-features-boards hidden sm:block'}>
+      <div className="board-item">
+        <div className="inner">
+          <div className="l info-wrap flex-1">
+            <strong><CloudCheck size={38} weight={'duotone'}/></strong>
+            <h1>File sync <sup>BETA</sup></h1>
+            <h2>
+              <span>Always up-to-date notes</span> <br/>
+              <span className="opacity-60">between all your devices.</span>
+            </h2>
+            <h3>
+              <span className="opacity-60">With encrypted file syncing, you'll always have your <br/> notes </span>
+              <span>backed up and securely available in real-time <br/> on any device. </span>
+            </h3>
+          </div>
+
+          <div className="r img-wrap flex-1"></div>
+        </div>
+      </div>
+
+      <div className="board-item">
+        <div className="inner whiteboard">
+          <div className="l img-wrap flex-1"></div>
+
+          <div className="r info-wrap flex-1">
+            <strong><ScribbleLoop size={38} weight={'duotone'}/></strong>
+            <h1>Whiteboards <sup>ALPHA</sup></h1>
+            <h2>
+              <span>A new canvas</span> <br/>
+              <span className="opacity-60">for your thoughts.</span>
+            </h2>
+            <h3>
+              <span className="opacity-60">Place any of your thoughts from the knowledge base <br/>
+              or new ones next to each other on an infinite canvas</span> <br/>
+              <span>to connect, associate and understand in new ways.</span>
+            </h3>
+          </div>
+
         </div>
       </div>
     </div>
@@ -74,6 +114,9 @@ export function LandingFooterDesc () {
           )
         })}
       </div>
+
+      {/* features */}
+      <FeaturesBoards/>
 
       {/* downloads */}
       <div className="actions">
