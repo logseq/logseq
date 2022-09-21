@@ -129,7 +129,7 @@
   [s]
   (when s
     (some->>
-     (string/split s #"[\,|，]{1}")
+     (string/split s #",")
      (remove string/blank?)
      (map string/trim))))
 
@@ -153,9 +153,7 @@
                    [(string/trim v)]))
                 refs)
         k (if (or (symbol? k) (keyword? k)) (subs (str k) 1) k)
-        v (if (or (symbol? v) (keyword? v))
-            (subs (str v) 1)
-            (str v))
+        v (subs (str v) 1)
         v (string/trim v)
         non-string-property (parse-non-string-property-value v)]
     (cond

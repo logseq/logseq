@@ -1916,7 +1916,6 @@
         ;; because :block/properties value only contains refs but user wants to see text
         property-separated-by-commas? (text/separated-by-commas? (state/get-config) k)
         v (if (and (coll? value) (seq value)
-                   (not (contains? gp-property/editable-linkable-built-in-properties k))
                    (not property-separated-by-commas?))
             (gp-property/property-value-from-content (name k) (:block/content block))
             value)
