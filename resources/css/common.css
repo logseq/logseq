@@ -934,13 +934,6 @@ button.menu:focus {
   opacity: .5;
   border-top-width: 1px;
   border-color: var(--ls-border-color, #ccc);
-
-  &.vertical {
-    @apply my-0 mx-1;
-
-    border-top-width: 0;
-    border-left-width: 1px;
-  }
 }
 
 a.login {
