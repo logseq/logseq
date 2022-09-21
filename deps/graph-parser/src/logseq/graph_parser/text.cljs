@@ -160,10 +160,7 @@
                      (set/union refs))
                 refs)
         k (if (or (symbol? k) (keyword? k)) (subs (str k) 1) k)
-        v (if (or (symbol? v) (keyword? v))
-            (subs (str v) 1)
-            (str v))
-        v (string/trim v)
+        v (string/trim (str v))
         non-string-property (parse-non-string-property-value v)]
     (cond
       (contains? (set/union
