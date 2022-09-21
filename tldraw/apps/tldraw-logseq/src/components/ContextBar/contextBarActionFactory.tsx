@@ -234,11 +234,7 @@ const OpenPageAction = observer(() => {
       >
         <TablerIcon name="layout-sidebar-right" />
       </Button>
-      <Button
-        title="Open Page"
-        type="button"
-        onClick={() => handlers?.redirectToPage(pageId)}
-      >
+      <Button title="Open Page" type="button" onClick={() => handlers?.redirectToPage(pageId)}>
         <TablerIcon name="external-link" />
       </Button>
     </span>
@@ -269,11 +265,7 @@ const IFrameSourceAction = observer(() => {
         value={`${shape.props.url}`}
         onChange={handleChange}
       />
-      <Button
-        title="Open website url"
-        type="button"
-        onClick={() => window.open(shape.props.url)}
-      >
+      <Button title="Open website url" type="button" onClick={() => window.open(shape.props.url)}>
         <TablerIcon name="external-link" />
       </Button>
     </span>

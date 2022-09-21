@@ -42,18 +42,58 @@ export const ContextMenu = observer(function ContextMenu({
           {app.selectedShapes?.size > 1 && (
             <>
               <div className="tl-menu-button-row pb-0">
-                <Button title="Align left" onClick={() => runAndTransition(() => app.align(AlignType.Left))}><TablerIcon name="layout-align-left" /></Button>
-                <Button title="Align center horizontally" onClick={() => runAndTransition(() => app.align(AlignType.CenterHorizontal))}><TablerIcon name="layout-align-center" /></Button>
-                <Button title="Align right" onClick={() => runAndTransition(() => app.align(AlignType.Right))}><TablerIcon name="layout-align-right" /></Button>
+                <Button
+                  title="Align left"
+                  onClick={() => runAndTransition(() => app.align(AlignType.Left))}
+                >
+                  <TablerIcon name="layout-align-left" />
+                </Button>
+                <Button
+                  title="Align center horizontally"
+                  onClick={() => runAndTransition(() => app.align(AlignType.CenterHorizontal))}
+                >
+                  <TablerIcon name="layout-align-center" />
+                </Button>
+                <Button
+                  title="Align right"
+                  onClick={() => runAndTransition(() => app.align(AlignType.Right))}
+                >
+                  <TablerIcon name="layout-align-right" />
+                </Button>
                 <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
-                <Button title="Distribute horizontally" onClick={() => runAndTransition(() => app.distribute(DistributeType.Horizontal))}><TablerIcon name="layout-distribute-vertical" /></Button>
+                <Button
+                  title="Distribute horizontally"
+                  onClick={() => runAndTransition(() => app.distribute(DistributeType.Horizontal))}
+                >
+                  <TablerIcon name="layout-distribute-vertical" />
+                </Button>
               </div>
               <div className="tl-menu-button-row pt-0">
-                <Button title="Align top" onClick={() => runAndTransition(() => app.align(AlignType.Top))}><TablerIcon name="layout-align-top" /></Button>
-                <Button title="Align center vertically" onClick={() => runAndTransition(() => app.align(AlignType.CenterVertical))}><TablerIcon name="layout-align-middle" /></Button>
-                <Button title="Align bottom" onClick={() => runAndTransition(() => app.align(AlignType.Bottom))}><TablerIcon name="layout-align-bottom" /></Button>
+                <Button
+                  title="Align top"
+                  onClick={() => runAndTransition(() => app.align(AlignType.Top))}
+                >
+                  <TablerIcon name="layout-align-top" />
+                </Button>
+                <Button
+                  title="Align center vertically"
+                  onClick={() => runAndTransition(() => app.align(AlignType.CenterVertical))}
+                >
+                  <TablerIcon name="layout-align-middle" />
+                </Button>
+                <Button
+                  title="Align bottom"
+                  onClick={() => runAndTransition(() => app.align(AlignType.Bottom))}
+                >
+                  <TablerIcon name="layout-align-bottom" />
+                </Button>
                 <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
-                <Button title="Distribute vertically" onClick={() => runAndTransition(() => app.distribute(DistributeType.Vertical  ))}><TablerIcon name="layout-distribute-horizontal" /></Button>
+                <Button
+                  title="Distribute vertically"
+                  onClick={() => runAndTransition(() => app.distribute(DistributeType.Vertical))}
+                >
+                  <TablerIcon name="layout-distribute-horizontal" />
+                </Button>
               </div>
               <ReactContextMenu.Separator className="menu-separator" />
             </>

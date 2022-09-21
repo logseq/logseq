@@ -1,4 +1,3 @@
-
 export class SvgPathUtils {
   static getCurvedPathForPolygon(points: number[][]) {
     if (points.length < 3) {

@@ -496,7 +496,7 @@ button.tl-select-input-trigger {
     transition-delay: 0;
   }
 
-  &[data-recently-changed=true] {
+  &[data-recently-changed='true'] {
     i.tie {
       transition-delay: 0.5s;
     }
@@ -801,7 +801,7 @@ html[data-theme='dark'] {
 .tl-toolbar-separator {
   background-color: var(--ls-border-color);
   width: 1px;
-  opacity: .5;
+  opacity: 0.5;
 }
 
 .tl-youtube-link,

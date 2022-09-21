@@ -381,8 +381,8 @@ export class TLApp<
   align = (type: AlignType, shapes: S[] = this.selectedShapesArray): this => {
     if (shapes.length < 2) return this
 
-    const boundsForShapes = shapes.map((shape) => {
-      const bounds = shape.getBounds();
+    const boundsForShapes = shapes.map(shape => {
+      const bounds = shape.getBounds()
       return {
         id: shape.id,
         point: [bounds.minX, bounds.minY],
@@ -414,27 +414,30 @@ export class TLApp<
       })
     )
 
-    shapes.forEach(shape => shape.update(deltaMap[shape.id] ? { point: deltaMap[shape.id].next } : shape))
+    shapes.forEach(shape =>
+      shape.update(deltaMap[shape.id] ? { point: deltaMap[shape.id].next } : shape)
+    )
 
     this.persist()
     return this
   }
 
-
   distribute = (type: DistributeType, shapes: S[] = this.selectedShapesArray): this => {
     if (shapes.length < 2) return this
 
-    const deltaMap = Object.fromEntries(this.getDistributions(shapes, type).map((d) => [d.id, d]))
+    const deltaMap = Object.fromEntries(this.getDistributions(shapes, type).map(d => [d.id, d]))
 
-    shapes.forEach(shape => shape.update(deltaMap[shape.id] ? { point: deltaMap[shape.id].next } : shape))
+    shapes.forEach(shape =>
+      shape.update(deltaMap[shape.id] ? { point: deltaMap[shape.id].next } : shape)
+    )
 
     this.persist()
     return this
   }
 
   getDistributions = (shapes: TLShape[], type: DistributeType) => {
-    const entries = shapes.map((shape) => {
-      const bounds = shape.getBounds();
+    const entries = shapes.map(shape => {
+      const bounds = shape.getBounds()
       return {
         id: shape.id,
         point: [bounds.minX, bounds.minY],
@@ -458,7 +461,7 @@ export class TLApp<
           const right = entries.sort((a, b) => b.bounds.maxX - a.bounds.maxX)[0]
 
           const entriesToMove = entries
-            .filter((a) => a !== left && a !== right)
+            .filter(a => a !== left && a !== right)
             .sort((a, b) => a.center[0] - b.center[0])
 
           const step = (right.center[0] - left.center[0]) / (len - 1)
@@ -494,7 +497,7 @@ export class TLApp<
           const bottom = entries.sort((a, b) => b.bounds.maxY - a.bounds.maxY)[0]
 
           const entriesToMove = entries
-            .filter((a) => a !== top && a !== bottom)
+            .filter(a => a !== top && a !== bottom)
             .sort((a, b) => a.center[1] - b.center[1])
 
           const step = (bottom.center[1] - top.center[1]) / (len - 1)
