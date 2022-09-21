@@ -146,15 +146,19 @@
 (defn- get-page-refs-from-property-names
   [properties {:property-pages/keys [enabled? excludelist]}]
   (if (contains? #{true nil} enabled?)
-    (some->> properties
-             (map (comp name first))
-             (remove string/blank?)
-             (remove (set (map name excludelist)))
-             ;; Remove built-in properties as we don't want pages
-             ;; created for them by default
-             (remove (set (map name (into (gp-property/editable-built-in-properties)
-                                          (gp-property/hidden-built-in-properties)))))
-             distinct)
+    (sequence
+     (comp (map (comp name first))
+           (remove string/blank?)
+           (remove (set (map name excludelist)))
+           ;; Remove built-in properties as we don't want pages
+           ;; created for them by default
+           (remove (into #{}
+                         (map name)
+                         (apply conj
+                                (gp-property/editable-built-in-properties)
+                                (gp-property/hidden-built-in-properties))))
+           (distinct))
+     properties)
     []))
 
 (defn- get-page-ref-names-from-properties
@@ -164,8 +168,8 @@
                    (remove (fn [[k _]]
                              (contains?
                               (set/union (apply disj
-                                           (gp-property/editable-built-in-properties)
-                                           gp-property/editable-linkable-built-in-properties)
+                                                (gp-property/editable-built-in-properties)
+                                                gp-property/editable-linkable-built-in-properties)
                                          (gp-property/hidden-built-in-properties))
                               (keyword k))))
                    ;; get links ast
