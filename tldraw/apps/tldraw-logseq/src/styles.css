@@ -78,22 +78,25 @@
 }
 
 .tl-toolbar {
-  @apply relative flex text-sm;
+  @apply relative flex text-sm p-1 rounded-lg;
 
   pointer-events: all;
   position: relative;
   background-color: var(--ls-secondary-background-color);
   color: #a4b5b6;
-  padding: 8px 12px;
   border-radius: 8px;
   white-space: nowrap;
-  gap: 12px;
+  gap: 8px;
+
   align-items: stretch;
   box-shadow: var(--shadow-medium);
   z-index: 1000;
 }
 
 .tl-context-bar {
+  gap: 12px;
+  padding: 8px 12px;
+
   label {
     font-family: var(--ls-font-family);
     font-size: 10px;
@@ -213,15 +216,7 @@
 }
 
 .tl-tools-floating-panel {
-  @apply flex;
-
   flex-flow: column;
-  border-radius: 8px;
-  padding: 4px;
-  gap: 8px;
-  background-color: var(--color-panel);
-  box-shadow: var(--shadow-medium);
-  pointer-events: all;
 }
 
 button.tl-select-input-trigger {

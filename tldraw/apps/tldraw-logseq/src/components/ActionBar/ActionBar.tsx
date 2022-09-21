@@ -7,6 +7,7 @@ import type { Shape } from '../../lib'
 import { TablerIcon } from '../icons'
 import { Button } from '../Button'
 import { ZoomMenu } from '../ZoomMenu'
+import * as Separator from '@radix-ui/react-separator'
 
 export const ActionBar = observer(function ActionBar(): JSX.Element {
   const app = useApp<Shape>()
@@ -44,6 +45,7 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
         <Button title="Zoom out" onClick={zoomOut} id="tl-zoom-out">
           <TablerIcon name="minus" />
         </Button>
+        <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
         <ZoomMenu />
       </div>
     </div>

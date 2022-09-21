@@ -95,7 +95,7 @@ export const PrimaryTools = observer(function PrimaryTools() {
 
   return (
     <div className="tl-primary-tools">
-      <div className="tl-tools-floating-panel" data-tool-locked={app.settings.isToolLocked}>
+      <div className="tl-toolbar tl-tools-floating-panel" data-tool-locked={app.settings.isToolLocked}>
         <ToolButton title="Select" id="select" icon="select-cursor" />
         <ToolButton
           title="Move"
