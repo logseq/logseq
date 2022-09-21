@@ -12,6 +12,11 @@ export enum AlignType {
   Right = 'right',
 }
 
+export enum DistributeType {
+  Horizontal = 'horizontal',
+  Vertical = 'vertical',
+}
+
 export enum TLResizeEdge {
   Top = 'top_edge',
   Right = 'right_edge',
