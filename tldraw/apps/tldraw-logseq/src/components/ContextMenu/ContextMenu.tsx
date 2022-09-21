@@ -1,5 +1,5 @@
 import { useApp } from '@tldraw/react'
-import { MOD_KEY } from '@tldraw/core'
+import { MOD_KEY, AlignType } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import { TablerIcon } from '../icons'
 import { Button } from '../Button'
@@ -42,18 +42,18 @@ export const ContextMenu = observer(function ContextMenu({
           {app.selectedShapes?.size > 1 && (
             <>
               <div className="tl-menu-button-row pb-0">
-                <Button title="Align left"><TablerIcon name="layout-align-left" /></Button>
-                <Button title="Align center"><TablerIcon name="layout-align-center" /></Button>
-                <Button title="Align right"><TablerIcon name="layout-align-right" /></Button>
+                <Button title="Align left" onClick={() => runAndTransition(() => app.align(AlignType.Left))}><TablerIcon name="layout-align-left" /></Button>
+                <Button title="Align center horizontally" onClick={() => runAndTransition(() => app.align(AlignType.CenterHorizontal))}><TablerIcon name="layout-align-center" /></Button>
+                <Button title="Align right" onClick={() => runAndTransition(() => app.align(AlignType.Right))}><TablerIcon name="layout-align-right" /></Button>
                 <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
-                <Button title="Distribute horizontal"><TablerIcon name="layout-distribute-horizontal" /></Button>
+                <Button title="Distribute horizontally"><TablerIcon name="layout-distribute-horizontal" /></Button>
               </div>
               <div className="tl-menu-button-row pt-0">
-                <Button title="Align top"><TablerIcon name="layout-align-top" /></Button>
-                <Button title="Align middle"><TablerIcon name="layout-align-middle" /></Button>
-                <Button title="Align bottom"><TablerIcon name="layout-align-bottom" /></Button>
+                <Button title="Align top" onClick={() => runAndTransition(() => app.align(AlignType.Top))}><TablerIcon name="layout-align-top" /></Button>
+                <Button title="Align center vertically" onClick={() => runAndTransition(() => app.align(AlignType.CenterVertical))}><TablerIcon name="layout-align-middle" /></Button>
+                <Button title="Align bottom" onClick={() => runAndTransition(() => app.align(AlignType.Bottom))}><TablerIcon name="layout-align-bottom" /></Button>
                 <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
-                <Button title="Distribute vertical"><TablerIcon name="layout-distribute-vertical" /></Button>
+                <Button title="Distribute vertically"><TablerIcon name="layout-distribute-vertical" /></Button>
               </div>
               <ReactContextMenu.Separator className="menu-separator" />
             </>

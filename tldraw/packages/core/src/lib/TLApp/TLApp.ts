@@ -17,6 +17,7 @@ import type {
   TLEvents,
   TLHandle,
 } from '../../types'
+import { AlignType } from '../../types'
 import { KeyUtils, BoundsUtils, isNonNullable, createNewLineBinding } from '../../utils'
 import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
 import { TLApi } from '../TLApi'
@@ -374,6 +375,47 @@ export class TLApp<
 
   flipVertical = (shapes: S[] | string[] = this.selectedShapesArray): this => {
     this.currentPage.flip(shapes, 'vertical')
+    return this
+  }
+
+  align = (type: AlignType, shapes: S[] = this.selectedShapesArray): this => {
+    if (shapes.length < 2) return this
+
+    const boundsForShapes = shapes.map((shape) => {
+      return {
+        id: shape.id,
+        point: shape.getCenter(),
+        bounds: shape.getBounds(),
+      }
+    })
+
+    const commonBounds = BoundsUtils.getCommonBounds(boundsForShapes.map(({ bounds }) => bounds))
+
+    const midX = commonBounds.minX + commonBounds.width / 2
+    const midY = commonBounds.minY + commonBounds.height / 2
+
+    const deltaMap = Object.fromEntries(
+      boundsForShapes.map(({ id, point, bounds }) => {
+        return [
+          id,
+          {
+            prev: point,
+            next: {
+              [AlignType.Top]: [point[0], commonBounds.minY],
+              [AlignType.CenterVertical]: [point[0], midY - bounds.height / 2],
+              [AlignType.Bottom]: [point[0], commonBounds.maxY - bounds.height],
+              [AlignType.Left]: [commonBounds.minX, point[1]],
+              [AlignType.CenterHorizontal]: [midX - bounds.width / 2, point[1]],
+              [AlignType.Right]: [commonBounds.maxX - bounds.width, point[1]],
+            }[type],
+          },
+        ]
+      })
+    )
+
+    shapes.forEach(shape => shape.update(deltaMap[shape.id] ? { point: deltaMap[shape.id].next } : shape))
+
+    this.persist()
     return this
   }
 
