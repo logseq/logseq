@@ -1,7 +1,7 @@
 (ns frontend.components.conversion
   (:require [clojure.core.async :as async]
+            [cljs.core.async.interop :refer [p->c]]
             [logseq.graph-parser.util :as gp-util]
-            [promesa.core :as p]
             [frontend.util :as util]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -9,7 +9,6 @@
             [frontend.handler.conversion :refer [supported-filename-formats write-filename-format! calc-rename-target]]
             [frontend.db :as db]
             [frontend.context.i18n :refer [t]]
-            [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
 (rum/defc filename-format-select
@@ -47,7 +46,7 @@
         *pages         (::pages state)
         need-persist?  (not= @*solid-format @*target-format)
         *switch-disabled? (::switch-disabled? state)]
-    ;; would triggered on initialization or refreshed
+    ;; would triggered on initialization
     (when (nil? @*pages)
       (let [pages-with-file (db/get-pages-with-file repo)
             the-keys        (map (fn [[_page file]] (:file/path file)) pages-with-file)]
@@ -82,12 +81,12 @@
                                                {:page page
                                                 :file file}))))
                                (remove nil?))
-            promise-fns      (for [[_page file _path tgt] rename-items]
-                               #(page-handler/rename-file! file tgt (fn [] nil)))
-            promise-fns      (conj promise-fns #(reset! *pages {}))
-            rename-all-fn    (fn [] (apply p/chain
-                                           (p/resolved nil)
-                                           promise-fns))]
+            <rename-all       (fn []
+                                (async/go (doseq [{:keys [file target]} rename-items]
+                                            ;; TODO error handling
+                                            (async/<! (p->c (page-handler/rename-file! file target (constantly nil)))))
+                                          (reset! *pages {})))]
+
         (if (not-empty rename-items)
           [:div
            [:p (t :file-rn/need-action)
@@ -98,7 +97,7 @@
             [:thead
              [:tr [:th (t :file-rn/affected-pages)]
               [:th [:a.text-sm
-                    {:on-click rename-all-fn}
+                    {:on-click <rename-all}
                     [:div (t :file-rn/all-action) "(" (count rename-items) ")"]]]]]
             [:tbody
              (for [{:keys [page file status target old-title changed-title]} rename-items]
