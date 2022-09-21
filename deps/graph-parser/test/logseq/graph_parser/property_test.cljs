@@ -1,5 +1,5 @@
 (ns logseq.graph-parser.property-test
-  (:require [cljs.test :refer [are deftest is]]
+  (:require [cljs.test :refer [are deftest]]
             [logseq.graph-parser.property :as gp-property]))
 
 (deftest test->new-properties
