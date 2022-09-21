@@ -30,7 +30,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ILSButtonProps>((
       }
       ref={ref} {...rest}>
       <div className={'l flex items-center'}>
-        {leftIcon && <i className={'pr-1'}>{leftIcon}</i>}
+        {leftIcon && <i className={'pr-1.5'}>{leftIcon}</i>}
         <span>{children}</span>
       </div>
 

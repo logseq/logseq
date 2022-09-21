@@ -1,9 +1,9 @@
 import { AppLogo, FloatGlassButton, openLightbox } from './common'
 import {
   ArrowCircleLeft,
-  ArrowCircleRight, Brain, DiscordLogo,
-  FrameCorners, MonitorPlay, Notebook, SignOut, Sparkle,
-  StarFour,
+  ArrowCircleRight, ChatsCircle, DiscordLogo,
+  FrameCorners, MonitorPlay, Notebook, SignOut,
+  StarFour, SignIn
 } from 'phosphor-react'
 import { Button } from '../../components/Buttons'
 import { AnimateInTurnStage } from '../../components/Animations'
@@ -354,7 +354,7 @@ export function TutorialTips () {
           <div className="sm:flex sm:space-x-6 py-5">
             <div>
               <Button
-                leftIcon={<MonitorPlay size={24}/>}
+                leftIcon={<MonitorPlay size={24} weight={'duotone'}/>}
                 href={`https://discuss.logseq.com/`}
                 className={'w-full sm:w-auto'}
               >
@@ -369,7 +369,7 @@ export function TutorialTips () {
             <div className={'mt-3.5 border-b pb-8 border-b-logseq-300 sm:border-0 sm:mt-0'}>
               <Button
                 className="bg-logseq-700 w-full sm:w-auto"
-                leftIcon={<Notebook size={24}/>}
+                leftIcon={<Notebook size={24} weight={'duotone'}/>}
                 href={`https://docs.logseq.com/#/page/Contents`}
               >
                 Documentation
@@ -384,24 +384,43 @@ export function TutorialTips () {
 
         <div
           className="flex-1 sm:flex flex-col justify-center items-center sm:border-l sm:border-l-logseq-500">
-          <h2 className="text-xl sm:text-2xl tracking-wide">A helpful community</h2>
-          <div className="flex flex-col space-x-2 pt-10 -translate-y-6">
-            <Button
-              className="bg-[#7289da] px-4 sm:px-8"
-              leftIcon={<DiscordLogo size={20}/>}
-              rightIcon={<SignOut className="opacity-40" size={20}/>}
-              href={`https://discord.gg/VNfUaTtdFb`}
-            >
-              Join our Discord
-            </Button>
+          <h2 className="text-xl sm:text-2xl mt-2 sm:-mt-8">A helpful community</h2>
 
-            <span
-              className="text-[12px] flex items-center pt-2 sm:justify-center text-gray-400/80">
+          <div className="sm:flex sm:space-x-6 py-5">
+            <div className="flex flex-col space-x-2">
+              <Button
+                className="bg-[#7289da] px-4 sm:px-8"
+                leftIcon={<DiscordLogo size={20} weight={'duotone'}/>}
+                rightIcon={<SignIn className="opacity-40" size={20} weight={'duotone'}/>}
+                href={`https://discord.gg/VNfUaTtdFb`}
+              >
+                Join our Discord
+              </Button>
+
+              <span
+                className="text-[12px] flex items-center pt-2 sm:justify-center text-gray-400/80">
               <strong className="h-2 w-2 bg-green-600 rounded"></strong>
               <strong className="pl-2 pr-1">{appState.discord?.approximate_presence_count.get() || '-'}</strong>
               users online currently
             </span>
+            </div>
+
+            <div className="flex flex-col mt-3 sm:mt-0">
+              <Button
+                leftIcon={<ChatsCircle size={24} weight={'duotone'}/>}
+                rightIcon={<SignIn className="opacity-40" size={20} weight={'duotone'}/>}
+                href={`https://discuss.logseq.com`}
+                className={'bg-logseq-700 w-full sm:w-auto'}
+              >
+                Join our forum
+              </Button>
+              <span
+                className="hidden sm:inline-block text-[11px] pt-2 text-center w-full text-gray-400/80">
+                Feature requests, bugs, discussions
+              </span>
+            </div>
           </div>
+
         </div>
       </div>
     </div>
