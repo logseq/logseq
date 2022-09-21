@@ -186,8 +186,8 @@
 .tl-button {
   @apply relative flex items-center justify-center text-base rounded border-0;
 
-  height: 28px;
-  width: 28px;
+  height: 32px;
+  width: 32px;
   font-family: var(--ls-font-family);
   background: none;
   cursor: pointer;
@@ -801,6 +801,7 @@ html[data-theme='dark'] {
 .tl-toolbar-separator {
   background-color: var(--ls-border-color);
   width: 1px;
+  opacity: .5;
 }
 
 .tl-youtube-link,
