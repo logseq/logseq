@@ -52,7 +52,7 @@
    ;; "A", "B", "C"
    :block/priority {}
 
-   ;; block key value properties
+   ;; map, key -> set of refs in property value or full text if none are found
    :block/properties {}
    ;; vector
    :block/properties-order {}
