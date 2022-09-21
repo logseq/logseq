@@ -993,8 +993,7 @@
 (rum/defcs lazy-visible-inner
   [state visible? content-fn ref]
   [:div.lazy-visibility
-   {:ref ref
-    :style {:min-height 0}}
+   {:ref ref}
    (if visible?
      (when (fn? content-fn)
        [:div.fade-enter
