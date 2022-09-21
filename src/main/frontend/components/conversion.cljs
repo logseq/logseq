@@ -1,6 +1,8 @@
 (ns frontend.components.conversion
   (:require [clojure.core.async :as async]
             [cljs.core.async.interop :refer [p->c]]
+            [promesa.core :as p]
+            [electron.ipc :as ipc]
             [logseq.graph-parser.util :as gp-util]
             [frontend.util :as util]
             [frontend.state :as state]
@@ -10,6 +12,17 @@
             [frontend.db :as db]
             [frontend.context.i18n :refer [t]]
             [rum.core :as rum]))
+
+(defn- ask-for-re-index
+  "Multiple-windows? (optional) - if multiple exist on the current graph
+   Dont receive param `repo` as `graph/ask-for-re-index` event doesn't accept repo param"
+  ([]
+   (p/let [repo (state/get-current-repo)
+           multiple-windows? (ipc/ipc "graphHasMultipleWindows" repo)]
+     (ask-for-re-index multiple-windows?)))
+  ([multiple-windows?]
+   (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?)
+                      (t :file-rn/re-index)])))
 
 (rum/defc filename-format-select
   "A dropdown menu for selecting the target filename format"
@@ -85,7 +98,9 @@
                                 (async/go (doseq [{:keys [file target]} rename-items]
                                             ;; TODO error handling
                                             (async/<! (p->c (page-handler/rename-file! file target (constantly nil)))))
-                                          (reset! *pages {})))]
+                                          (state/close-settings!)
+                                          (async/<! (async/timeout 100)) ;; modal race condition requires investigation
+                                          (ask-for-re-index)))]
 
         (if (not-empty rename-items)
           [:div

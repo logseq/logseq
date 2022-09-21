@@ -113,6 +113,7 @@
         :file/last-modified-at "Last modified at"
         :file/no-data "No data"
         :file/format-not-supported "Format .{1} is not supported."
+        :file-rn/re-index "Re-index is strongly recommended after the format is changed. Re-index should also be done after the graph is synced to another device."
         :file-rn/need-action "Step 2. To preserve Page titles, Actions are suggested under the current filename format, or you can "
         :file-rn/close-panel "Close the Panel"
         :file-rn/all-action "Apply all Actions!"
