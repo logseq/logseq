@@ -176,9 +176,9 @@
           has-checked? (not-empty checked-page-names)]
       [:<>
        [:h1.select-none.flex.items-center.whiteboard-dashboard-title.title
-        "All whiteboards"
-        [:span.opacity-50
-         (str " · " total-whiteboards)]
+        [:div "All whiteboards"
+         [:span.opacity-50
+          (str " · " total-whiteboards)]]
         [:div.flex-1]
         (when has-checked?
           [:button.ui__button.m-0.py-1.inline-flex.items-center.bg-red-800
