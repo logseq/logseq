@@ -195,18 +195,16 @@
 
 (def *last-calculated-time (atom nil))
 
-(rum/defc indicator-progress-pane
+(rum/defc ^:large-vars/cleanup-todo indicator-progress-pane
   [sync-state sync-progress
-   {:keys [idle? syncing? no-active-files? online? need-password? history-files? queuing?]}]
+   {:keys [idle? syncing? no-active-files? online? history-files? queuing?]}]
 
   (rum/use-effect!
    (fn []
      #(reset! *last-calculated-time nil))
    [])
 
-  (let [status                 (:state sync-state)
-        status                 (or (nil? status) (keyword (name status)))
-        uploading-files        (:current-local->remote-files sync-state)
+  (let [uploading-files        (:current-local->remote-files sync-state)
         downloading-files      (:current-remote->local-files sync-state)
         uploading?             (seq uploading-files)
         downloading?           (seq downloading-files)
