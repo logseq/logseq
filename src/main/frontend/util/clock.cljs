@@ -77,7 +77,7 @@
               (str clock-in-log "\n")
               (str clock-out-log "\n"))))))
      content)
-    (catch js/Error _e
+    (catch :default _e
       content)))
 
 (defn clock-summary

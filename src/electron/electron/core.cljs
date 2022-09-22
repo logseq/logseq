@@ -166,7 +166,7 @@
                (fn [_ type & args]
                  (try
                    (js-invoke app type args)
-                   (catch js/Error e
+                   (catch :default e
                      (logger/error (str call-app-channel " " e))))))
 
       (.handle call-win-channel
@@ -174,7 +174,7 @@
                  (let [win (get-win-from-sender e)]
                    (try
                      (js-invoke win type args)
-                     (catch js/Error e
+                     (catch :default e
                        (logger/error (str call-win-channel " " e))))))))
 
     #(do (clear-win-effects!)
@@ -276,7 +276,7 @@
                                      (try
                                        (fs-watcher/close-watcher!)
                                        (search/close!)
-                                       (catch js/Error e
+                                       (catch :default e
                                          (logger/error "window-all-closed" e)))
                                      (.quit app)))
       (.on app "ready"

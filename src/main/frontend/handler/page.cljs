@@ -694,7 +694,7 @@
   (let [properties (db/get-page-properties page-name)
         properties-str (get properties :filters "{}")]
     (try (reader/read-string properties-str)
-         (catch js/Error e
+         (catch :default e
            (log/error :syntax/filters e)))))
 
 (defn save-filter!

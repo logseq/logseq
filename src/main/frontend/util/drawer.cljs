@@ -81,7 +81,7 @@
                       :else
                       content)]
         (string/trimr result))
-      (catch js/Error e
+      (catch :default e
         (js/console.error e)
         content))))
 

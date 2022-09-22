@@ -160,7 +160,7 @@
           _ (swap! conns assoc db-name db-conn)
           _ (when stored
               (let [stored-db (try (string->db stored)
-                                   (catch js/Error _e
+                                   (catch :default _e
                                      (js/console.warn "Invalid graph cache")
                                      (d/empty-db db-schema/schema)))
                     attached-db (d/db-with stored-db

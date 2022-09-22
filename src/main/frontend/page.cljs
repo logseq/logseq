@@ -17,7 +17,7 @@
   (try
     (comp
      (ui/setup-active-keystroke!))
-    (catch js/Error _e
+    (catch :default _e
       nil)))
 
 (rum/defc helpful-default-error-screen

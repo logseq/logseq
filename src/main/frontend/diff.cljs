@@ -68,6 +68,6 @@
 
           :else
           pos))
-      (catch js/Error e
+      (catch :default e
         (log/error :diff/find-position {:error e})
         (count markup)))))

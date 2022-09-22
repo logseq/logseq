@@ -45,7 +45,7 @@
       {}
       (let [[headers blocks] (-> content (parse-opml) (gp-util/json->clj))]
         [headers (gp-mldoc/collect-page-properties blocks config)]))
-    (catch js/Error e
+    (catch :default e
       (log/error :edn/convert-failed e)
       [])))
 

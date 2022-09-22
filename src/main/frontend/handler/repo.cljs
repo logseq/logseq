@@ -163,7 +163,7 @@
                            (remove nil?))]
              (when (seq metadata)
                (db/transact! repo metadata {:new-graph? true}))))))
-     (catch js/Error e
+     (catch :default e
        (log/error :exception e)))))
 
 (defn update-pages-metadata!
