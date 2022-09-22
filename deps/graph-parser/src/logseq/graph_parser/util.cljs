@@ -108,7 +108,7 @@
    If continuous underlines, only decode at start;
    Having empty namespace is invalid."
   [string]
-  (string/replace string "__" "/"))
+  (string/replace string "___" "/"))
 
 (defn page-name-sanity
   "Sanitize the page-name. Unify different diacritics and other visual differences.

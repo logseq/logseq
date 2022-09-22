@@ -6,7 +6,7 @@
             [frontend.util.fs :as fs-util]
             [frontend.handler.config :refer [set-config!]]))
 
-(defonce filename-formats {:double-lowbar {:parsing-fn gp-util/title-parsing
+(defonce filename-formats {:triple-lowbar {:parsing-fn gp-util/title-parsing
                                            :sanity-fn  fs-util/file-name-sanity}
                            :legacy        {:parsing-fn gp-util/legacy-title-parsing
                                            :sanity-fn  fs-util/legacy-url-file-name-sanity
@@ -96,7 +96,7 @@
     ;;   It's about user's own data management decision and should be handled
     ;;   by user manually.
     ;; Don't rename the hls files
-    ;;   keep `hls__` in file and use `hls/` as the title prefix
+    ;;   keep `hls__` in file
     ;;   don't do conversion on the following body, as the previous
     ;;   pdf name handling is buggy
     (when (and (not journal?)

@@ -45,7 +45,7 @@
             file-name (when-let [result (gp-util/path->file-body file)]
                         (if (gp-config/mldoc-support? (gp-util/get-file-ext file))
                           (case filename-format
-                            :double-lowbar (gp-util/title-parsing result)
+                            :triple-lowbar (gp-util/title-parsing result)
                             (gp-util/legacy-title-parsing result))
                           result))]
         (or property-name

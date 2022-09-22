@@ -24,6 +24,13 @@
    (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?)
                       (t :file-rn/re-index)])))
 
+(defn- <close-modal-on-done
+  "Ask users to re-index when the modal is exited"
+  []
+  (async/go (state/close-settings!)
+            (async/<! (async/timeout 100)) ;; modal race condition requires investigation
+            (ask-for-re-index)))
+
 (rum/defc filename-format-select
   "A dropdown menu for selecting the target filename format"
   [*target-format disabled?]
@@ -95,25 +102,27 @@
                                                 :file file}))))
                                (remove nil?))
             <rename-all       (fn []
-                                (async/go (doseq [{:keys [file target]} rename-items]
-                                            ;; TODO error handling
-                                            (async/<! (p->c (page-handler/rename-file! file target (constantly nil)))))
-                                          (state/close-settings!)
-                                          (async/<! (async/timeout 100)) ;; modal race condition requires investigation
-                                          (ask-for-re-index)))]
+                                (async/go (doseq [{:keys [file target status]} rename-items]
+                                            (when (not= status :unreachable)
+                                              ;; TODO error handling
+                                              (async/<! (p->c (page-handler/rename-file! file target (constantly nil))))))
+                                          (<close-modal-on-done)))]
 
         (if (not-empty rename-items)
           [:div
-           [:p (t :file-rn/need-action)
+           [:p (t :file-rn/need-action)]
+           [:p
+            (ui/button
+             (str (t :file-rn/all-action) " (" (count rename-items) ")")
+             :on-click <rename-all
+             :class "text-sm p-1 mr-1")
+            (t :file-rn/or-select-actions)
             [:a.text-sm
-             {:on-click #(state/close-modal!)}
+             {:on-click <close-modal-on-done}
              (t :file-rn/close-panel)]]
            [:table.table-auto
             [:thead
-             [:tr [:th (t :file-rn/affected-pages)]
-              [:th [:a.text-sm
-                    {:on-click <rename-all}
-                    [:div (t :file-rn/all-action) "(" (count rename-items) ")"]]]]]
+             [:tr [:th (t :file-rn/affected-pages)]]]
             [:tbody
              (for [{:keys [page file status target old-title changed-title]} rename-items]
                (let [path           (:file/path file)
@@ -122,20 +131,19 @@
                      src-file-name  (gp-util/path->file-name path)
                      tgt-file-name  (str target "." (gp-util/path->file-ext path))
                      rm-item-fn     #(swap! *pages dissoc path)
-                     rename-fn      #(page-handler/rename-file! file target rm-item-fn)]
+                     rename-fn      #(page-handler/rename-file! file target rm-item-fn)
+                     rename-but     [:a.text-sm {:on-click rename-fn
+                                                 :title (t :file-rn/apply-rename)}
+                                     [:span (t :file-rn/rename src-file-name tgt-file-name)]]]
                  [:tr {:key (:block/name page)}
-                  [:td [:div [:p "📄 Page: " old-title]]
+                  [:td [:div [:p "📄 " old-title]]
                    (case status
                      :breaking ;; if properety title override the title, it't not breaking change
-                     [:div [:p (t :file-rn/suggest-rename src-file-name) " \"" tgt-file-name \"]
+                     [:div [:p "🟡 " (t :file-rn/suggest-rename) rename-but]
                       [:p (t :file-rn/otherwise-breaking) " \"" changed-title \"]]
                      :unreachable
-                     [:div (t :file-rn/unreachable-title changed-title)]
+                     [:div [:p "🔴 " (t :file-rn/unreachable-title changed-title)]]
                      ;; default
-                     [:div [:p (t :file-rn/optional-rename src-file-name) " \"" tgt-file-name "\" "
-                            (t :file-rn/update-filename changed-title)]])]
-                  [:td (when (not= status :unreachable)
-                         [:a.text-sm
-                          {:on-click rename-fn}
-                          [:span (t :file-rn/rename)]])]]))]]]
+                     [:div [:p "🟢 " (t :file-rn/optional-rename) rename-but
+                            (t :file-rn/update-filename)]])]]))]]]
           [:div (t :file-rn/no-action)]))]]))

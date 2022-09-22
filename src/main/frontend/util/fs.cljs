@@ -86,16 +86,16 @@
   (string/replace input "%" "%25"))
 
 (defn- escape-namespace-slashes-and-multilowbars
-  "Encode slashes / as double lowbars __
+  "Encode slashes / as triple lowbars ___
    Don't encode _ in most cases, except causing ambiguation"
   [string]
   (-> string
       ;; The ambiguation is caused by the unbounded _ (possible continuation of `_`s)
-      (string/replace "__" encode-url-lowbar)
+      (string/replace "___" encode-url-lowbar)
       (string/replace "_/" encode-url-lowbar)
       (string/replace "/_" encode-url-lowbar)
       ;; After ambiguaous _ encoded, encode the slash
-      (string/replace "/" "__")))
+      (string/replace "/" "___")))
 
 (def windows-reserved-filebodies
   (set '("CON" "PRN" "AUX" "NUL" "COM1" "COM2" "COM3" "COM4" "COM5" "COM6"
@@ -107,7 +107,7 @@
   [file-body]
   (str file-body (when (or (contains? windows-reserved-filebodies file-body)
                            (string/ends-with? file-body "."))
-                   "/"))) ;; "__" would not break the title, but follow the Windows ruling
+                   "/"))) ;; "___" would not break the title, but follow the Windows ruling
 
 (defn- url-encode-file-name
   [file-name]

@@ -289,11 +289,11 @@
  ;;   clients after the files are synced. Wrong handling may cause page titles 
  ;;   containing special characters to be messy.
  ;; Available values:
- ;;   :file/name-format :double-lowbar 
+ ;;   :file/name-format :triple-lowbar 
  ;;     ;use double underscore `__` for slash `/` in page title
  ;;     ;use Percent-encoding for other invalid characters
  ;;   :file/name-format :legacy 
  ;;     ;use Percent-encoding for slash and other invalid characters
  ;;     ;parse `.` in file name as slash `/` in page title
- :file/name-format :double-lowbar
+ :file/name-format :triple-lowbar
  }

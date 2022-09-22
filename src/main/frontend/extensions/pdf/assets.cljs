@@ -18,7 +18,7 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
-(def HLS-PREFIX "hls/")
+(def HLS-PREFIX "hls__")
 
 (def HLS-PREFIX-DISPLAY "📒")
 

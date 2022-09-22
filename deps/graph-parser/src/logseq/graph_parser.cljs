@@ -31,7 +31,7 @@
           (let [extract-options' (merge {:block-pattern (gp-config/get-block-pattern format)
                                          :date-formatter "MMM do, yyyy"
                                          :supported-formats (gp-config/supported-formats)
-                                         :filename-format :double-lowbar}
+                                         :filename-format :triple-lowbar}
                                         extract-options
                                         {:db @conn})
                 {:keys [pages blocks ast]}
