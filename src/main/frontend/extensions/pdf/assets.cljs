@@ -11,6 +11,7 @@
             [frontend.util.page-property :as page-property]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.extensions.pdf.utils :as pdf-utils]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [medley.core :as medley]
@@ -241,18 +242,12 @@
      (rfe/push-state :page {:name (str "hls__" name)} (if id {:anchor (str "block-content-" + id)} nil)))))
 
 (rum/defc area-display
-  [block stamp]
-  (let [id (:block/uuid block)
-        props (:block/properties block)]
-    (when-let [page (db-utils/pull (:db/id (:block/page block)))]
-      (when-let [group-key (string/replace-first (:block/original-name page) #"^hls__" "")]
-        (when-let [hl-page (:hl-page props)]
-          (let [encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
-                group-key (if encoded-chars? (js/encodeURI group-key) group-key)
-                asset-path (editor-handler/make-asset-url
-                             (str "/" gp-config/local-assets-dir "/" group-key "/" (str hl-page "_" id "_" stamp ".png")))]
-            [:span.hl-area
-             [:img {:src asset-path}]]))))))
+  [block]
+  (when-let [asset-path' (and block (pdf-utils/get-area-block-asset-url
+                                     block (db-utils/pull (:db/id (:block/page block)))))]
+    (let [asset-path     (editor-handler/make-asset-url asset-path')]
+      [:span.hl-area
+       [:img {:src asset-path}]])))
 
 (defn fix-local-asset-filename
   [filename]

@@ -90,6 +90,7 @@
    :sidebar/clear                  "Clear all in the right sidebar"
    :misc/copy                      "mod+c"
    :command-palette/toggle         "Toggle command palette"
+   :graph/export-as-html           "Export public graph pages as html"
    :graph/open                     "Select graph to open"
    :graph/remove                   "Remove a graph"
    :graph/add                      "Add a graph"

@@ -12,6 +12,7 @@
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
+            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [logseq.graph-parser.util :as gp-util]
@@ -1436,16 +1437,32 @@
 
 (defn get-assets
   [datoms]
-  (keep
-   (fn [datom]
-     (when (= :block/content (:a datom))
-       (let [matched (re-seq #"\([./]*/assets/([^)]+)\)" (:v datom))
-             matched (get (into [] matched) 0)
-             path (get matched 1)]
-         (when (and (string? path)
-                    (not (string/ends-with? path ".js")))
-           path))))
-   datoms))
+  (let [get-page-by-eid
+        (memoize #(some->
+                   (db-utils/pull %)
+                   :block/page
+                   :db/id
+                   db-utils/pull))]
+    (flatten
+     (keep
+      (fn [datom]
+        (cond-> []
+
+          (= :block/content (:a datom))
+          (concat (let [matched (re-seq #"\([./]*/assets/([^)]+)\)" (:v datom))]
+                    (when (seq matched)
+                      (for [[_ path] matched]
+                        (when (and (string? path)
+                                   (not (string/ends-with? path ".js")))
+                          path)))))
+          ;; area image assets
+          (= (:hl-type (:v datom)) "area")
+          (#(let [path (some-> (db-utils/pull (:e datom))
+                               (pdf-utils/get-area-block-asset-url
+                                (get-page-by-eid (:e datom))))
+                  path (pdf-utils/clean-asset-path-prefix path)]
+              (conj % path)))))
+      datoms))))
 
 (defn clean-export!
   [db]

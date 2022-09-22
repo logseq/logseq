@@ -1883,7 +1883,9 @@
        (if title
          (conj
           (map-inline config title)
-          (when (and (util/electron?) (not= block-type :default))
+          (when (and
+                 (or config/publishing? (util/electron?))
+                 (not= block-type :default))
             (let [area? (= :area (keyword (:hl-type properties)))]
               [:div.prefix-link
                {:on-mouse-down (fn [^js e]
@@ -1903,8 +1905,8 @@
                 [:strong.forbid-edit (str "P" (or (:hl-page properties) "?"))]
                 [:label.blank " "]]
 
-               (when-let [st (and area? (:hl-stamp properties))]
-                 (pdf-assets/area-display t st))])))
+               (when (and area? (:hl-stamp properties))
+                 (pdf-assets/area-display t))])))
 
          [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])
        [tags])))))
@@ -2336,22 +2338,24 @@
                                            (editor-handler/unhighlight-blocks!)
                                            (state/set-editing! edit-input-id (:block/content block) block ""))}})
             (block-content config block edit-input-id block-id slide?))]
-          [:div.flex.flex-row.items-center
-           (when (and (:embed? config)
-                      (:embed-parent config))
-             [:a.opacity-70.hover:opacity-100.svg-small.inline
-              {:on-mouse-down (fn [e]
-                                (util/stop e)
-                                (when-let [block (:embed-parent config)]
-                                  (editor-handler/edit-block! block :max (:block/uuid block))))}
-              svg/edit])
+          [:div.flex.items-center
+           (when-not config/publishing?
+             [:div.flex.items-center
+              (when (and (:embed? config)
+                         (:embed-parent config))
+                [:a.opacity-70.hover:opacity-100.svg-small.inline
+                 {:on-mouse-down (fn [e]
+                                   (util/stop e)
+                                   (when-let [block (:embed-parent config)]
+                                     (editor-handler/edit-block! block :max (:block/uuid block))))}
+                 svg/edit])
 
-           (when block-reference-only?
-             [:a.opacity-70.hover:opacity-100.svg-small.inline
-              {:on-mouse-down (fn [e]
-                                (util/stop e)
-                                (editor-handler/edit-block! block :max (:block/uuid block)))}
-              svg/edit])
+              (when block-reference-only?
+                [:a.opacity-70.hover:opacity-100.svg-small.inline
+                 {:on-mouse-down (fn [e]
+                                   (util/stop e)
+                                   (editor-handler/edit-block! block :max (:block/uuid block)))}
+                 svg/edit])])
 
            (block-refs-count block *hide-block-refs?)]]
 

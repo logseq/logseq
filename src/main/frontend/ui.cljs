@@ -30,6 +30,7 @@
             [rum.core :as rum]
             [frontend.db-mixins :as db-mixins]
             [frontend.mobile.util :as mobile-util]
+            [frontend.config :as config]
             [goog.functions :refer [debounce]]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
@@ -341,6 +342,7 @@
 (defn inject-document-devices-envs!
   []
   (let [^js cl (.-classList js/document.documentElement)]
+    (when config/publishing? (.add cl "is-publish-mode"))
     (when util/mac? (.add cl "is-mac"))
     (when util/win32? (.add cl "is-win32"))
     (when (util/electron?) (.add cl "is-electron"))

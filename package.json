@@ -58,6 +58,7 @@
         "cljs:release-electron": "clojure -M:cljs release app electron --debug && clojure -M:cljs release publishing",
         "cljs:release-app": "clojure -M:cljs release app --config-merge \"{:compiler-options {:output-feature-set :es6}}\"",
         "cljs:release-android-app": "clojure -M:cljs release app --config-merge \"{:compiler-options {:output-feature-set :es6}}\"",
+        "cljs:release-publishing": "clojure -M:cljs release publishing",
         "cljs:test": "clojure -M:test compile test",
         "cljs:run-test": "node static/tests.js",
         "cljs:dev-release-app": "clojure -M:cljs release app --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\"",

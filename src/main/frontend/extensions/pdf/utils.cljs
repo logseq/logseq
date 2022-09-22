@@ -3,13 +3,30 @@
             [cljs-bean.core :as bean]
             [frontend.util :as util]
             ["/frontend/extensions/pdf/utils" :as js-utils]
-            [frontend.db :as front-db]
             [frontend.loader :refer [load]]
+            [datascript.core :as d]
+            [logseq.graph-parser.config :as gp-config]
             [clojure.string :as string]))
 
 (defonce MAX-SCALE 5.0)
 (defonce MIN-SCALE 0.25)
 (defonce DELTA_SCALE 1.05)
+
+(defn clean-asset-path-prefix
+  [path]
+  (if (string? path)
+    (string/replace-first path #"^[.\/\\]*(assets)[\/\\]+" "")))
+
+(defn get-area-block-asset-url
+  [block page]
+  (when-some [props (and block page (:block/properties block))]
+    (when-some [uuid (:block/uuid block)]
+      (when-some [stamp (:hl-stamp props)]
+        (let [group-key      (string/replace-first (:block/original-name page) #"^hls__" "")
+              hl-page        (:hl-page props)
+              encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
+              group-key      (if encoded-chars? (js/encodeURI group-key) group-key)]
+          (str "./" gp-config/local-assets-dir "/" group-key "/" (str hl-page "_" uuid "_" stamp ".png")))))))
 
 (defn get-bounding-rect
   [rects]
@@ -115,7 +132,7 @@
     (mapv #(if (map? %) % (bean/->clj %)) its)))
 
 (defn gen-uuid []
-  (front-db/new-block-id))
+  (d/squuid))
 
 (defn js-load$
   [url]

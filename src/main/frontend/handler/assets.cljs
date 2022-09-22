@@ -11,11 +11,16 @@
   (and (util/electron?)
        (:assets/alias-enabled? @state/state)))
 
+(defn clean-path-prefix
+  [path]
+  (if (string? path)
+    (string/replace-first path #"^[.\/\\]*(assets)[\/\\]+" "")))
+
 (defn check-alias-path?
   [path]
   (and (string? path)
        (some-> path
-               (string/replace-first #"^[.\/\\]*(assets)[\/\\]+" "")
+               (clean-path-prefix)
                (string/starts-with? "@"))))
 
 (defn get-alias-dirs
@@ -36,26 +41,28 @@
 
 (defn resolve-asset-real-path-url
   [repo full-path]
-  (let [full-path  (string/replace full-path #"^[.\/\\]+" "")
-        full-path  (if-not (string/starts-with? full-path gp-config/local-assets-dir)
-                     (util/node-path.join gp-config/local-assets-dir full-path)
-                     full-path)
-        graph-root (config/get-repo-dir repo)]
+  (when-let [full-path (and (string? full-path)
+                            (string/replace full-path #"^[.\/\\]+" ""))]
+    (if config/publishing?
+      (str "./" full-path)
+      (let [full-path  (if-not (string/starts-with? full-path gp-config/local-assets-dir)
+                         (util/node-path.join gp-config/local-assets-dir full-path)
+                         full-path)
+            graph-root (config/get-repo-dir repo)]
 
-    (if-let [[full-path' alias]
-             (and (alias-enabled?)
-                  (let [full-path' (string/replace full-path (re-pattern (str "^" gp-config/local-assets-dir "[\\/\\\\]+")) "")]
-                    (and
-                     (string/starts-with? full-path' "@")
-                     (some->> (and (seq (get-alias-dirs))
-                                   (second (get-alias-by-name (second (re-find #"^@([^\/]+)" full-path')))))
-                              (vector full-path')))))]
+        (if-let [[full-path' alias]
+                 (and (alias-enabled?)
+                      (let [full-path' (string/replace full-path (re-pattern (str "^" gp-config/local-assets-dir "[\\/\\\\]+")) "")]
+                        (and
+                         (string/starts-with? full-path' "@")
+                         (some->> (and (seq (get-alias-dirs))
+                                       (second (get-alias-by-name (second (re-find #"^@([^\/]+)" full-path')))))
+                                  (vector full-path')))))]
 
-      (str "assets://" (string/replace full-path' (str "@" (:name alias)) (:dir alias)))
+          (str "assets://" (string/replace full-path' (str "@" (:name alias)) (:dir alias)))
 
-      ;; TODO: bfs
-      (str "file://" (util/node-path.join graph-root full-path)))))
-
+          ;; TODO: bfs
+          (str "file://" (util/node-path.join graph-root full-path)))))))
 
 (defn normalize-asset-resource-url
   ;; try to convert resource file to url asset link
@@ -73,7 +80,6 @@
 
       :else
       (resolve-asset-real-path-url (state/get-current-repo) full-path))))
-
 
 (defn get-matched-alias-by-ext
   [ext]

@@ -827,7 +827,10 @@ input::-webkit-inner-spin-button {
 
       display: inline-block;
       cursor: text;
-      background-color: rgba(241,110,94,0.15);
+      border: 1px solid #eee;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 4px;
 
       img {
         margin: 0;

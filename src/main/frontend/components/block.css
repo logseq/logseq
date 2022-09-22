@@ -310,7 +310,7 @@
   color: #fff;
 
   a,
-  .page-reference:not(:hover), {
+  .page-reference:not(:hover) {
     color: #aacece;
 
     .bracket {

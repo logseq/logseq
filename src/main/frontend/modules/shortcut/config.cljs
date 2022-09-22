@@ -12,6 +12,7 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.export :as export-handler]
             [frontend.modules.shortcut.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
@@ -292,6 +293,10 @@
                                                 (editor-handler/escape-editing)
                                                 (state/toggle! :ui/command-palette-open?))}
 
+   :graph/export-as-html           {:fn #(export-handler/export-repo-as-html!
+                                          (state/get-current-repo))
+                                    :binding false}
+
    :graph/open                     {:fn      #(do
                                                 (editor-handler/escape-editing)
                                                 (state/set-state! :ui/open-select :graph-open))
@@ -480,6 +485,7 @@
     (->
      (build-category-map [:command/run
                           :command-palette/toggle
+                          :graph/export-as-html
                           :graph/open
                           :graph/remove
                           :graph/add
@@ -674,6 +680,7 @@
     :command/toggle-favorite
     :command/run
     :command-palette/toggle
+    :graph/export-as-html
     :graph/open
     :graph/remove
     :graph/add

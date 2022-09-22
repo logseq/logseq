@@ -1407,32 +1407,33 @@
 
 (defn make-asset-url
   [path] ;; path start with "/assets" or compatible for "../assets"
-  (let [repo      (state/get-current-repo)
-        repo-dir  (config/get-repo-dir repo)
-        path      (string/replace path "../" "/")
-        full-path (util/node-path.join repo-dir path)]
-    (cond
-      (and (assets-handler/alias-enabled?)
-           (assets-handler/check-alias-path? path))
-      (assets-handler/resolve-asset-real-path-url (state/get-current-repo) path)
+  (if config/publishing? path
+    (let [repo      (state/get-current-repo)
+          repo-dir  (config/get-repo-dir repo)
+          path      (string/replace path "../" "/")
+          full-path (util/node-path.join repo-dir path)]
+      (cond
+        (and (assets-handler/alias-enabled?)
+             (assets-handler/check-alias-path? path))
+        (assets-handler/resolve-asset-real-path-url (state/get-current-repo) path)
 
-      (util/electron?)
-      (str "assets://" full-path)
+        (util/electron?)
+        (str "assets://" full-path)
 
-      (mobile-util/native-platform?)
-      (mobile-util/convert-file-src full-path)
+        (mobile-util/native-platform?)
+        (mobile-util/convert-file-src full-path)
 
-      :else
-      (let [handle-path (str "handle" full-path)
-            cached-url (get @*assets-url-cache (keyword handle-path))]
-        (if cached-url
-          (p/resolved cached-url)
-          (p/let [handle (idb/get-item handle-path)
-                  file (and handle (.getFile handle))]
-            (when file
-              (p/let [url (js/URL.createObjectURL file)]
-                (swap! *assets-url-cache assoc (keyword handle-path) url)
-                url))))))))
+        :else
+        (let [handle-path (str "handle" full-path)
+              cached-url  (get @*assets-url-cache (keyword handle-path))]
+          (if cached-url
+            (p/resolved cached-url)
+            (p/let [handle (idb/get-item handle-path)
+                    file   (and handle (.getFile handle))]
+              (when file
+                (p/let [url (js/URL.createObjectURL file)]
+                  (swap! *assets-url-cache assoc (keyword handle-path) url)
+                  url)))))))))
 
 (defn delete-asset-of-block!
   [{:keys [repo href full-text block-id local? delete-local?] :as _opts}]
