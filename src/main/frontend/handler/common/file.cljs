@@ -71,7 +71,9 @@
                                               :date-formatter (state/get-date-formatter)
                                               :page-name-order (state/page-name-order)
                                               :block-pattern (config/get-block-pattern (gp-util/get-format file))
-                                              :supported-formats (gp-config/supported-formats)}
+                                              :supported-formats (gp-config/supported-formats)
+                                              :uri-encoded? (boolean (util/mobile?))
+                                              :filename-format (state/get-filename-format repo-url)}
                                              (when (some? verbose) {:verbose verbose}))})]
        (:tx (graph-parser/parse-file (db/get-db repo-url false) file content options)))
      (catch :default e

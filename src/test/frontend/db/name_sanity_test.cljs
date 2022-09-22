@@ -1,5 +1,5 @@
 (ns frontend.db.name-sanity-test
-  (:require [cljs.test :refer [deftest testing is]]
+  (:require [cljs.test :refer [deftest testing is are]]
             [clojure.string :as string]
             [logseq.graph-parser.util :as gp-util]
             [frontend.handler.page :as page-handler]
@@ -23,7 +23,7 @@
       (is (= file-name' file-name))
       (is (= file-name'' file-name)))))
 
-(deftest page-name-sanitization-tests
+(deftest ^:focus page-name-sanitization-tests
   (test-page-name "Some.Content!")
   (test-page-name "More _/_ Con tents")
   (test-page-name "More _________/________ Con tents")
@@ -41,6 +41,7 @@
   (test-page-name "__ont.?__byte&lowbar;/#_&amp;ont_ cont%/_ lsdksdf__")
   (test-page-name "dsa&amp&semi;l dsalfjk jkl")
   (test-page-name "dsa&amp&semi;l dsalfjk jkl.")
+  (test-page-name "hls__&amp&semi;l dsalfjk jkl.")
   (test-page-name "CON.")
   (mapv test-page-name fs-util/windows-reserved-filebodies))
 
@@ -49,8 +50,8 @@
   (is (= (#'page-handler/compute-new-file-path "c://data/a sdfpp/dsal dsalf% * _ dsaf.mnk" "c d / f") "c://data/a sdfpp/c d / f.mnk")))
 
 (deftest break-change-conversion-tests
-  (let [conv-legacy #(#'conversion-handler/calc-previous-name % nil gp-util/legacy-title-parsing)]
-    (is (= "dsal dsalfjk aldsaf__jkl" (conv-legacy "dsal dsalfjk aldsaf.jkl")))
+  (let [conv-legacy #(:target (#'conversion-handler/calc-previous-name :legacy :triple-lowbar %))]
+    (is (= "dsal dsalfjk aldsaf___jkl" (conv-legacy "dsal dsalfjk aldsaf.jkl")))
     (is (= nil (conv-legacy "dsal dsalfjk jkl")))
     (is (= nil (conv-legacy "dsa&amp;l dsalfjk jkl")))
     (is (= nil (conv-legacy "dsa&lt;l dsalfjk jkl")))
@@ -59,26 +60,80 @@
   )
 
 (deftest formalize-conversion-tests
-  (let [conv-informal #(#'conversion-handler/calc-current-name % nil)]
-    (is (= "sdaf __dsakl" (conv-informal "sdaf %2Fdsakl")))
-    (is (= "sdaf __dsakl" (conv-informal "sdaf /dsakl")))
+  (let [conv-informal #(:target (#'conversion-handler/calc-current-name :triple-lowbar % nil))]
+    (is (= "sdaf ___dsakl" (conv-informal "sdaf %2Fdsakl")))
+    (is (= "sdaf ___dsakl" (conv-informal "sdaf /dsakl")))
     (is (= nil (conv-informal "sdaf .dsakl")))))
 
-(deftest rename-dir-ver-3-tests
-  (is (= "aaa__bbb__ccc" (#'conversion-handler/calc-dir-ver-3-rename-target "aaa.bbb.ccc" "aaa/bbb/ccc")))
-  (is (= nil (#'conversion-handler/calc-dir-ver-3-rename-target "aa?#.bbb.ccc" "aa__/bbb/ccc")))
-  (is (= (fs-util/file-name-sanity "a?#/bbb/ccc") (#'conversion-handler/calc-dir-ver-3-rename-target "a__.bbb.ccc" "a?#/bbb/ccc")))
-  (is (= nil (#'conversion-handler/calc-dir-ver-3-rename-target "aaa__bbb__ccc" "aaa/bbb/ccc")))
-  (is (= nil (#'conversion-handler/calc-dir-ver-3-rename-target "aaa__bbb__cccon" "aaa/bbb/cccon")))
-  ;; likely to be converted already
-  (is (= nil (#'conversion-handler/calc-dir-ver-3-rename-target "aaa__bbb__ccc" nil)))
-  (is (= nil (#'conversion-handler/calc-dir-ver-3-rename-target "aaa_bbb_ccc" nil)))
-  ;; manually edited title properties, don't rename
-  (is (= nil (#'conversion-handler/calc-dir-ver-3-rename-target "aaa.bbb.ccc" "adbcde/aks/sdf")))
-  (is (= nil (#'conversion-handler/calc-dir-ver-3-rename-target "a__.bbb.ccc" "adbcde/aks/sdf")))
-  ;; windows reserved file names, rename
-  (is (= "CON__" (#'conversion-handler/calc-dir-ver-3-rename-target "CON" "CON")))
-  (is (= "CON__" (#'conversion-handler/calc-dir-ver-3-rename-target "CON" nil)))
-  (is (= "abc.__" (#'conversion-handler/calc-dir-ver-3-rename-target "abc." "abc.")))
-  (is (= "abc" (#'conversion-handler/calc-dir-ver-3-rename-target "abc." nil))) ;; shown as `abc` in the previous ver.
-  )
+(deftest manual-title-prop-test
+  (are [x y z] (= z (#'conversion-handler/is-manual-title-prop? :legacy x y))
+    "aaa.bbb.ccc" "aaa/bbb/ccc"   false
+    "aa__.bbb.ccc" "aa?#/bbb/ccc" false
+    "aa?#.bbb.ccc" "aa__/bbb/ccc" true
+    "aaa__bbb__ccc" "aaa/bbb/ccc" true
+    "aaa__bbb__cccon" "aaa/bbb/cccon"  true
+    "aaa.bbb.ccc"     "adbcde/aks/sdf" true
+    "a__.bbb.ccc"     "adbcde/aks/sdf" true
+    ))
+
+(deftest rename-previous-tests
+  (are [x y] (= y (#'conversion-handler/calc-previous-name :legacy :triple-lowbar x))
+    "aa?#.bbb.ccc"   {:status :breaking,
+                      :target "aa%3F%23___bbb___ccc",
+                      :old-title "aa?#/bbb/ccc",
+                      :changed-title "aa?#.bbb.ccc"}
+    "aaa__bbb__ccc"  nil
+    "aaa__bbb__cccon" nil
+    "aaa.bbb.ccc"    {:status :breaking,
+                      :target "aaa___bbb___ccc",
+                      :old-title "aaa/bbb/ccc",
+                      :changed-title "aaa.bbb.ccc"}
+    "a__.bbb.ccc"    {:status :breaking,
+                      :target "a_%5F___bbb___ccc",
+                      :old-title "a__/bbb/ccc",
+                      :changed-title "a__.bbb.ccc"})
+  ;; is not a common used case
+  (are [x y] (= y (#'conversion-handler/calc-previous-name :triple-lowbar :legacy x))
+    "aa%3F%23.bbb.ccc" {:status :unreachable,
+                        :target "aa%3F%23.bbb.ccc",
+                        :old-title "aa?#.bbb.ccc",
+                        :changed-title "aa?#/bbb/ccc"}))
+
+(deftest rename-tests
+  ;; z: new title structure; x: old ver title; y: title property (if available)
+  (are [x y z] (= z (#'conversion-handler/calc-rename-target-impl :legacy :triple-lowbar x y))
+    "aaa.bbb.ccc" "aaa/bbb/ccc"   {:status :informal,
+                                   :target "aaa___bbb___ccc",
+                                   :old-title "aaa/bbb/ccc",
+                                   :changed-title "aaa/bbb/ccc"}
+    "aaa.bbb.ccc" nil             {:status :breaking,
+                                   :target "aaa___bbb___ccc",
+                                   :old-title "aaa/bbb/ccc",
+                                   :changed-title "aaa.bbb.ccc"}
+    "aa__.bbb.ccc" "aa?#/bbb/ccc" {:status :informal,
+                                   :target "aa%3F%23___bbb___ccc",
+                                   :old-title "aa?#/bbb/ccc",
+                                   :changed-title "aa?#/bbb/ccc"}
+    "aa?#.bbb.ccc" "aa__/bbb/ccc" nil
+    "aaa__bbb__ccc" "aaa/bbb/ccc" nil
+    "aaa__bbb__cccon" "aaa/bbb/cccon" nil
+    "aaa__bbb__ccc" nil               nil
+    "aaa_bbb_ccc"   nil               nil
+    "aaa.bbb.ccc"   "adbcde/aks/sdf"  nil
+    "a__.bbb.ccc"   "adbcde/aks/sdf"  nil
+    "CON" "CON" {:status :informal,
+                 :target "CON___",
+                 :old-title "CON",
+                 :changed-title "CON"}
+    "CON" nil   {:status :informal,
+                 :target "CON___",
+                 :old-title "CON",
+                 :changed-title "CON"}
+    "abc." "abc." {:status :informal,
+                   :target "abc.___",
+                   :old-title "abc.",
+                   :changed-title "abc."}
+    "abc." nil    {:status :breaking,
+                   :target "abc", ;; abc/ is an invalid file name
+                   :old-title "abc/",
+                   :changed-title "abc."}))

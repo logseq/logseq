@@ -31,10 +31,6 @@
   []
   (redirect! {:to :all-pages}))
 
-(defn redirect-to-all-files!
-  []
-  (redirect! {:to :all-files}))
-
 (defn redirect-to-graph-view!
   []
   (redirect! {:to :graph}))

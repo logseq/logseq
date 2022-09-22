@@ -49,7 +49,7 @@
                 (into {})))
         "Task marker counts")
 
-    (is (= {:markdown 3143 :org 460}
+    (is (= {:markdown 3141 :org 460}
            (docs-graph-helper/get-block-format-counts db))
         "Block format counts")
 
@@ -99,7 +99,7 @@
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
     (is (= 211 (count files)) "Correct file count")
-    (is (= 41672 (count (d/datoms db :eavt))) "Correct datoms count")
+    (is (= 42272 (count (d/datoms db :eavt))) "Correct datoms count")
 
     (is (= 3600
            (ffirst
@@ -116,13 +116,13 @@
 
   (query-assertions-v067 db files))
 
-(defn- conversion-dir-ver3
+(defn- converst-to-triple-lowbar
   [path]
   (let [original-body (gp-util/path->file-body path)
         ;; only test file name parsing, don't consider title prop overriding
-        rename-target (conversion-handler/calc-dir-ver-3-rename-target original-body nil)]
+        rename-target (:target (#'conversion-handler/calc-rename-target-impl :legacy :triple-lowbar original-body nil))]
     (if rename-target
-      (do (prn "conversion dir-ver3: " original-body " -> " rename-target)
+      (do (prn "conversion triple-lowbar: " original-body " -> " rename-target)
           (#'page-handler/compute-new-file-path path rename-target))
       path)))
 
@@ -139,7 +139,7 @@
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.6.7")
         files (gp-cli/build-graph-files graph-dir)
         ;; Converting the v0.6.7 ver docs graph under the old namespace naming rule to the new one (:repo/dir-version 0->3)
-        files (convert-graph-files-path files conversion-dir-ver3)
+        files (convert-graph-files-path files converst-to-triple-lowbar)
         _ (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false :verbose false})
         db (conn/get-db test-helper/test-db)]
 

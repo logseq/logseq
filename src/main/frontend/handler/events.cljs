@@ -15,7 +15,6 @@
             [frontend.components.plugins :as plugin]
             [frontend.components.search :as component-search]
             [frontend.components.shell :as shell]
-            [frontend.components.conversion :as conversion-component]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]

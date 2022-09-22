@@ -5,7 +5,6 @@
             [datascript.core :as d]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.svg :as svg]
-            [frontend.components.conversion :as conversion-ui]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]

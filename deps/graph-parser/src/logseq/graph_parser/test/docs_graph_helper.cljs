@@ -92,7 +92,7 @@
                 (into {})))
         "Task marker counts")
 
-    (is (= {:markdown 3141 :org 460} ;; 2 pages for namespaces are not parsed
+    (is (= {:markdown 3143 :org 460} ;; 2 pages for namespaces are not parsed
            (get-block-format-counts db))
         "Block format counts")
 
@@ -143,7 +143,7 @@
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
     (is (= 211 (count files)) "Correct file count")
-    (is (= 41874 (count (d/datoms db :eavt))) "Correct datoms count")
+    (is (= 42070 (count (d/datoms db :eavt))) "Correct datoms count")
 
     (is (= 3600
            (ffirst

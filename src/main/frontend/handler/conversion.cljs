@@ -10,7 +10,7 @@
                                            :sanity-fn  fs-util/file-name-sanity}
                            :legacy        {:parsing-fn gp-util/legacy-title-parsing
                                            :sanity-fn  fs-util/legacy-url-file-name-sanity
-                                           :oudated-sanity-fn fs-util/legacy-dot-file-name-sanity}})
+                                           :outdated-sanity-fn fs-util/legacy-dot-file-name-sanity}})
 
 (defonce supported-filename-formats (keys filename-formats))
 
@@ -43,7 +43,7 @@
    Return: 
      the file name for that page name under the current file naming rules,
      and the new title if no action applied, or `nil` if no break change happens"
-  [old-format new-format file-body prop-title]
+  [old-format new-format file-body]
   (let [new-title ((get-in filename-formats [new-format :parsing-fn]) file-body) ;; Rename even the prop-title is provided.
         old-title ((get-in filename-formats [old-format :parsing-fn]) file-body)
         target    ((get-in filename-formats [new-format :sanity-fn]) old-title)]
@@ -54,16 +54,10 @@
          :old-title     old-title
          :changed-title new-title}
         ;; Even the same file body are producing mis-matched titles - it's unreachable!
-        (if (nil? prop-title)
-          {:status        :unreachable
-           :target        target
-           :old-title     old-title
-           :changed-title new-title}
-          ;; If property title is provided, it's fine.
-          {:status        :informal
-           :target        target
-           :old-title     old-title
-           :changed-title old-title})))))
+        {:status        :unreachable
+         :target        target
+         :old-title     old-title
+         :changed-title new-title}))))
 
 (defn- is-manual-title-prop?
   "If it's an user defined title property instead of the generated one"
@@ -73,6 +67,26 @@
              (when-let [sanity-fn (get-in filename-formats [format :outdated-sanity-fn])]
                (= file-body (sanity-fn prop-title)))))
     false))
+
+(defn- calc-rename-target-impl
+  [old-format new-format file-body prop-title]
+  ;; dont rename journal page. officially it's stored as `yyyy_mm_dd`
+  ;; If it's a journal file imported with custom :journal/page-title-format,
+  ;;   and it includes reserved characters, format config change / file renaming is required. 
+  ;;   It's about user's own data management decision and should be handled
+  ;;   by user manually.
+  ;; Don't rename the hls files
+  ;;   keep `hls__` in file
+  ;;   don't do conversion on the following body, as the previous
+  ;;   pdf name handling is buggy
+  ;; Don't rename page that with a custom setup `title` property
+  (when (not (is-manual-title-prop? old-format file-body prop-title))
+      ;; the 'expected' title of the user when updating from the previous format, or title will be broken in new format
+    (or (when (and (nil? prop-title)
+                   (not= old-format new-format))
+          (calc-previous-name old-format new-format file-body))
+      ;; if no break-change conversion triggered, check if file name is in an informal / outdated style.
+        (calc-current-name new-format file-body prop-title))))
 
 (defn calc-rename-target
   "Return the renaming status and new file body to recover the original title of the file in previous version. 
@@ -90,20 +104,6 @@
   (let [prop-title (get-in page [:block/properties :title])
         file-body  (gp-util/path->file-body path)
         journal?   (:block/journal? page)]
-    ;; dont rename journal page. officially it's stored as `yyyy_mm_dd`
-    ;; If it's a journal file imported with custom :journal/page-title-format,
-    ;;   and it includes reserved characters, format config change / file renaming is required. 
-    ;;   It's about user's own data management decision and should be handled
-    ;;   by user manually.
-    ;; Don't rename the hls files
-    ;;   keep `hls__` in file
-    ;;   don't do conversion on the following body, as the previous
-    ;;   pdf name handling is buggy
     (when (and (not journal?)
-               (not (string/starts-with? file-body "hls__"))
-               (not (is-manual-title-prop? old-format file-body prop-title)))
-      ;; the 'expected' title of the user when updating from the previous format, or title will be broken in new format
-      (or (when (and (not= old-format new-format) (nil? prop-title))
-            (calc-previous-name old-format new-format file-body prop-title))
-      ;; if no break-change conversion triggered, check if file name is in an informal / outdated style.
-          (calc-current-name new-format file-body prop-title)))))
+               (not (string/starts-with? file-body "hls__")))
+      (calc-rename-target-impl old-format new-format file-body prop-title))))

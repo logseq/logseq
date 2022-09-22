@@ -33,7 +33,6 @@
             [clojure.core.async :as async]
             [frontend.encrypt :as encrypt]
             [frontend.mobile.util :as mobile-util]
-            [frontend.encrypt :as encrypt]
             [medley.core :as medley]))
 
 ;; Project settings should be checked in two situations:
