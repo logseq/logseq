@@ -197,8 +197,7 @@
                                            k)
                                        k (-> (string/lower-case k)
                                              (string/replace " " "-")
-                                             (string/replace "_" "-")
-                                             (string/replace #"[\"|^|(|)|{|}]+" ""))]
+                                             (string/replace "_" "-"))]
                                    (if (gp-property/valid-property-name? (str ":" k))
                                      (let [k' (keyword
                                                (if (contains? #{"custom_id" "custom-id"} k)
