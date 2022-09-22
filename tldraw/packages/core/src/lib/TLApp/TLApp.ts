@@ -414,9 +414,9 @@ export class TLApp<
       })
     )
 
-    shapes.forEach(shape =>
-      shape.update(deltaMap[shape.id] ? { point: deltaMap[shape.id].next } : shape)
-    )
+    shapes.forEach(shape => {
+      if (deltaMap[shape.id]) shape.update({ point: deltaMap[shape.id].next })
+    })
 
     this.persist()
     return this
@@ -427,9 +427,9 @@ export class TLApp<
 
     const deltaMap = Object.fromEntries(BoundsUtils.getDistributions(shapes, type).map(d => [d.id, d]))
 
-    shapes.forEach(shape =>
-      shape.update(deltaMap[shape.id] ? { point: deltaMap[shape.id].next } : shape)
-    )
+    shapes.forEach(shape => {
+      if (deltaMap[shape.id]) shape.update({ point: deltaMap[shape.id].next })
+    })
 
     this.persist()
     return this
