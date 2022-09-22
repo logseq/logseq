@@ -1940,7 +1940,6 @@
                                   (property/insert-properties format content props))
                     ast (mldoc/->edn content* (gp-mldoc/default-config format))
                     blocks (block/extract-blocks ast content* format {})
-                    _ (prn {:block (first blocks)})
                     fst-block (first blocks)
                     fst-block (if (and keep-uuid? (uuid? (:uuid block)))
                                 (assoc fst-block :block/uuid (:uuid block))
