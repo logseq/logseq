@@ -49,16 +49,10 @@
   (rsapi/ageDecryptWithPassphrase passphrase data))
 
 (defonce progress-notify-chan "file-sync-progress")
-(set-progress-callback (fn [error graph-uuid fname type progress total]
+(set-progress-callback (fn [error progress-info]
                          (when-not error
                            (doseq [^js win (window/get-all-windows)]
                              (when-not (.isDestroyed win)
                                (.. win -webContents
-                                   (send progress-notify-chan
-                                         (bean/->js {:graph-uuid graph-uuid
-                                                     :file fname
-                                                     :type type
-                                                     :progress progress :total total
-                                                     :percent (Math/floor (/ (* progress 100) total))})))))
-
-                           (logger/info "sync progess" fname type progress total))))
+                                   (send progress-notify-chan (bean/->js progress-info)))))
+                           (logger/info "sync progess" progress-info))))
