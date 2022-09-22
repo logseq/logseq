@@ -234,7 +234,7 @@
 
             :else
             nil))
-        (catch js/Error e
+        (catch :default e
           (js/console.error e))
         (finally
           (reset! *show-left-menu? false)

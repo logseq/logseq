@@ -35,7 +35,7 @@
   [type & args]
   (try
     (apply js-invoke (aget js/window.logseq "api") type args)
-    (catch js/Error e (js/console.error e))))
+    (catch :default e (js/console.error e))))
 
 ;; state handlers
 (defonce central-endpoint "https://raw.githubusercontent.com/logseq/marketplace/master/")
@@ -153,7 +153,7 @@
   [id]
   (try
     (js/LSPluginCore.ensurePlugin (name id))
-    (catch js/Error _e
+    (catch :default _e
       nil)))
 
 (defn open-updates-downloading
@@ -431,7 +431,7 @@
                             matched)))
                       content)]
         (format/to-html content :markdown (gp-mldoc/default-config :markdown))))
-    (catch js/Error e
+    (catch :default e
       (log/error :parse-user-md-exception e)
       content)))
 
@@ -472,7 +472,7 @@
                    (bean/->js (normalize-keyword-for-json payload))
                    payload)
                  (if (keyword? plugin-id) (name plugin-id) plugin-id))
-      (catch js/Error e
+      (catch :default e
         (js/console.error "[Hook Plugin Err]" e)))))
 
 (defn hook-plugin-app

@@ -289,7 +289,7 @@
   (let [time-fn (fn []
                   (try
                     (util/time-ago input)
-                    (catch js/Error e
+                    (catch :default e
                       (js/console.error e)
                       input)))
         [time set-time] (rum/use-state (time-fn))]
@@ -369,11 +369,11 @@
   []
   (let [^js schemaMedia (js/window.matchMedia "(prefers-color-scheme: dark)")]
     (try (.addEventListener schemaMedia "change" state/sync-system-theme!)
-         (catch js/Error _error
+         (catch :default _error
            (.addListener schemaMedia state/sync-system-theme!)))
     (state/sync-system-theme!)
     #(try (.removeEventListener schemaMedia "change" state/sync-system-theme!)
-          (catch js/Error _error
+          (catch :default _error
             (.removeListener schemaMedia state/sync-system-theme!)))))
 
 (defn set-global-active-keystroke [val]
@@ -894,7 +894,7 @@
                                   (html)
                                   [:div.px-2.py-1
                                    html]))
-                              (catch js/Error e
+                              (catch :default e
                                 (log/error :exception e)
                                 [:div])))
                           [:div {:key "tippy"} ""])))

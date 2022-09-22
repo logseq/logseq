@@ -23,7 +23,7 @@
         (let [metadata-str (or file-content default-metadata-str)
               metadata (try
                          (reader/read-string metadata-str)
-                         (catch js/Error e
+                         (catch :default e
                            (println "Parsing metadata.edn failed: ")
                            (js/console.dir e)
                            {}))

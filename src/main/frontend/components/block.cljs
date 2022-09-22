@@ -1209,7 +1209,7 @@
              f (sci/eval-string fn-string)]
          (when (fn? f)
            (try (f query-result)
-                (catch js/Error e
+                (catch :default e
                   (js/console.error e)))))))
    [:span.warning
     (util/format "{{function %s}}" (first arguments))]))
@@ -2814,7 +2814,7 @@
                                    :colgroup
                                    (repeat number col-elem))))
                               col_groups)
-                        (catch js/Error _e
+                        (catch :default _e
                           []))
         head (when header
                [:thead (tr :th header)])
@@ -3042,7 +3042,7 @@
                (and (seq result) view-f)
                (let [result (try
                               (sci/call-fn view-f result)
-                              (catch js/Error error
+                              (catch :default error
                                 (log/error :custom-view-failed {:error error
                                                                 :result result})
                                 [:div "Custom view failed: "
@@ -3318,7 +3318,7 @@
 
       :else
       "")
-    (catch js/Error e
+    (catch :default e
       (println "Convert to html failed, error: " e)
       "")))
 

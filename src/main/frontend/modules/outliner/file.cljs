@@ -37,7 +37,7 @@
     (when-not config/publishing?
       (doseq [[repo page-id] (set pages)]
         (try (do-write-file! repo page-id)
-             (catch js/Error e
+             (catch :default e
                (notification/show!
                 [:div
                  [:p "Write file failed, please copy the changes to other editors in case of losing data."]

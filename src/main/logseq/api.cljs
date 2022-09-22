@@ -60,7 +60,7 @@
   (when (string? input)
     (try
       (sci/eval-string input {:preset :termination-safe})
-      (catch js/Error e
+      (catch :default e
         (js/console.error "[parse hiccup error]" e) input))))
 
 (defn ^:export install-plugin-hook

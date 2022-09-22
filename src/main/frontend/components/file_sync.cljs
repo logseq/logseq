@@ -677,5 +677,5 @@
 
           (state/pub-event! [:file-sync/onboarding-tip type])
           (state/set-state! [:file-sync/onboarding-state (keyword type)] true)))
-      (catch js/Error e
+      (catch :default e
         (js/console.warn "[onboarding SKIP] " (name type) e)))))

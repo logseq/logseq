@@ -293,7 +293,7 @@
                           :else
                           content)]
         new-content)
-      (catch js/Error _e
+      (catch :default _e
         content))
     content))
 
@@ -1292,7 +1292,7 @@
                       (not= (string/trim db-content-without-heading)
                             (string/trim value)))
                  (save-block-aux! db-block value opts))))
-           (catch js/Error error
+           (catch :default error
              (log/error :save-block-failed error))))))))
 
 (defn- clean-content!
@@ -1605,7 +1605,7 @@
               @commands/*initial-commands)
          (and last-command
               (commands/get-matched-commands last-command)))))
-    (catch js/Error e
+    (catch :default e
       (js/console.error e)
       nil)))
 
@@ -1625,7 +1625,7 @@
               (commands/get-matched-commands
                last-command
                (commands/block-commands-map))))))
-    (catch js/Error _error
+    (catch :default _error
       nil)))
 
 (defn auto-complete?
