@@ -155,14 +155,13 @@
           (repo-handler/persist-db! current-repo persist-db-noti-m)
           (repo-handler/broadcast-persist-db! graph))))
      (repo-handler/restore-and-setup-repo! graph)
-     (graph-switch graph))))
+     (graph-switch graph)
+     state/set-state! :sync-graph/init? false)))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (if (or @outliner-file/*writes-finished?
-          (:graph/remote-binding? @state/state))
-    (do
-      (state/set-state! :graph/remote-binding? false)
-      (graph-switch-on-persisted graph opts))
+  (if (or (not (false? (get @outliner-file/*writes-finished? graph)))
+          (:sync-graph/init? @state/state))
+    (graph-switch-on-persisted graph opts)
     (notification/show!
      "Please wait seconds until all changes are saved for the current graph."
      :warning)))
@@ -663,9 +662,9 @@
                        {:content (str "The directory " dir " has been back, you can edit your graph now.")
                         :status :success
                         :clear? true}])
-    (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir))))
-  (when (= dir (config/get-repo-dir repo))
-    (fs/watch-dir! dir)))
+    (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir)))
+    (when (= dir (config/get-repo-dir repo))
+      (fs/watch-dir! dir))))
 
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]

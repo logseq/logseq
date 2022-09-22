@@ -67,7 +67,7 @@
                             (string/replace "\\" "_"))
             recycle-dir (str repo-dir "/logseq/.recycle")
             _           (fs-extra/ensureDirSync recycle-dir)
-            new-path    (str recycle-dir "/" file-name)] 
+            new-path    (str recycle-dir "/" file-name)]
         (fs/renameSync path new-path)
         (logger/debug ::unlink "recycle to" new-path))
       (catch :default e
