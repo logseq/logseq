@@ -119,12 +119,12 @@
 
 (defn extract-refs-from-mldoc-ast
   [v]
-  (->> v
-       (remove gp-mldoc/ast-link?)
-       (keep get-ref-from-ast)
-       (map (fn [x]
-              (string/trim x)))
-       (set)))
+  (into #{}
+        (comp
+         (remove gp-mldoc/ast-link?)
+         (keep get-ref-from-ast)
+         (map string/trim))
+        v))
 
 (defn- sep-by-comma
   [s]
