@@ -475,10 +475,10 @@
     "@jridgewell/resolve-uri" "^3.0.3"
     "@jridgewell/sourcemap-codec" "^1.4.10"
 
-"@kanru/rage-wasm@0.2.1":
-  version "0.2.1"
-  resolved "https://registry.yarnpkg.com/@kanru/rage-wasm/-/rage-wasm-0.2.1.tgz#dd8fdd3133992c42bf68c0086d8cad40a13bc329"
-  integrity sha512-sYi4F2mL6Mpcz7zbS4myasw11xLBEbgZkDMRVg9jNxTKt6Ct/LT7/vCHDmEzAFcPcPqixD5De6Ql3bJijAX0/w==
+"@kanru/rage-wasm@^0.3.0":
+  version "0.3.0"
+  resolved "https://registry.yarnpkg.com/@kanru/rage-wasm/-/rage-wasm-0.3.0.tgz#de96b1fda1f781ff401d43b50d0f95b7338c4399"
+  integrity sha512-2LMRS27nNJPqFNpRQL7kXG0kgBeIPo63KM6u0Xu6Es5XIS7LP4MFtdHkCg8Pt7IhMM7GuOa2YnzAZgKBxE1lcw==
 
 "@logseq/capacitor-file-sync@0.0.6":
   version "0.0.6"
