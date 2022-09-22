@@ -15,13 +15,11 @@
        (map #(str (name (key %)) (str colons " ") (val %)))
        (string/join "\n")))
 
-(defn property-value-from-content
-  "Extracts full property value from block content"
-  [property content]
-  (second (re-find (re-pattern (str property colons "\\s+(.*)"))
-                   content)))
-
-(def valid-property-name? gp-util/valid-edn-keyword?)
+(defn valid-property-name?
+  [s]
+  [:pre (string? s)]
+  (and (gp-util/valid-edn-keyword? s)
+       (not (re-find #"[\"|^|(|)|{|}]+" s))))
 
 (defn properties-ast?
   [block]

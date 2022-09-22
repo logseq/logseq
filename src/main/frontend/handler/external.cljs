@@ -11,6 +11,7 @@
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
             [frontend.format.block :as block]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.date-time-util :as date-time-util]
             [frontend.handler.page :as page]
@@ -79,7 +80,8 @@
   [data finished-ok-handler]
   #_:clj-kondo/ignore
   (when-let [repo (state/get-current-repo)]
-    (let [[headers parsed-blocks] (mldoc/opml->edn data)
+    (let [config (gp-mldoc/default-config :markdown)
+          [headers parsed-blocks] (mldoc/opml->edn config data)
           parsed-blocks (->>
                          (block/extract-blocks parsed-blocks "" :markdown {})
                          (mapv editor/wrap-parse-block))
