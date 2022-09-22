@@ -279,8 +279,8 @@
             (not online?) "Currently having connection issues..."
             idle-&-no-active? "Everything is synced!"
             syncing? "Currently syncing your graph..."
-            (not need-password?) "Waiting..."
-            :else (str "#" status))]]
+            :else "Waiting..."
+            )]]
         [:div.ar
          (when queuing? (sync-now))]])
 

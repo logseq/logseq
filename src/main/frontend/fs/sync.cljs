@@ -1551,6 +1551,17 @@
            :path path
            :checksum checksum}))
 
+  ILookup
+  (-lookup [o k] (-lookup o k nil))
+  (-lookup [_ k not-found]
+    (case k
+      :type type
+      :dir  dir
+      :path path
+      :stat stat
+      :checksum checksum
+      not-found))
+
   IPrintWithWriter
   (-pr-writer [_ w _opts]
     (write-all w (str {:type type :base-path dir :path path :size (:size stat) :checksum checksum}))))
