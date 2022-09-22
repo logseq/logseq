@@ -542,13 +542,12 @@
     (with-path-refs blocks)))
 
 (defn- with-heading-property
-  [properties markdown-heading? size]
+  [properties markdown-heading? size level]
   (let [properties (if markdown-heading?
                      (assoc properties :heading size)
                      properties)]
     (if (true? (:heading properties))
-      ;; default-level 2
-      (assoc properties :heading 2)
+      (assoc properties :heading (min 6 level))
       properties)))
 
 (defn- construct-block
@@ -571,7 +570,7 @@
                            :meta pos-meta)
                     (dissoc :size))
                 (or (seq (:properties properties)) markdown-heading?)
-                (assoc :properties (with-heading-property (:properties properties) markdown-heading? (:size block))
+                (assoc :properties (with-heading-property (:properties properties) markdown-heading? (:size block) (:level block))
                        :properties-text-values (:properties-text-values properties)
                        :properties-order (vec (:properties-order properties)))
 
