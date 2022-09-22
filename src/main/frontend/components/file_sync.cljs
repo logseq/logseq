@@ -146,7 +146,7 @@
                                          (state/get-repos))))))))]
 
     [:div.cp__file-sync-related-normal-modal
-     [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "cloud-upload")]]
+     [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "cloud-upload" {:size 20})]]
 
      [:h1.text-xl.font-semibold.opacity-90.text-center.py-2
       "Are you sure you want to create a new remote graph?"]
@@ -416,12 +416,11 @@
                                              :queuing queuing?
                                              :idle    (and (not queuing?) idle?)}])}
                [:span.flex.items-center
-                (ui/icon "cloud"
-                         {:style {:fontSize ui/icon-size}})]]
+                (ui/icon "cloud" {:size ui/icon-size})]]
 
               [:a.button.cloud.off
                {:on-click turn-on}
-               (ui/icon "cloud-off" {:style {:fontSize ui/icon-size}})]))
+               (ui/icon "cloud-off" {:size ui/icon-size})]))
 
           ;; links
           (cond-> []
@@ -789,7 +788,7 @@
   [close-fn]
 
   [:div.cp__file-sync-related-normal-modal
-   [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "checkup-list")]]
+   [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "checkup-list" {:size 28})]]
 
    [:h1.text-xl.font-semibold.opacity-90.text-center.py-2
     [:span.dark:opacity-80 "Congrats on your first successful sync!"]]
@@ -804,7 +803,7 @@
 
    [:div.cloud-tip.rounded-md.mt-6.py-4
     [:div.items-center.opacity-90.flex.justify-center
-     [:span.pr-2 (ui/icon "bell-ringing" {:class "font-semibold"})]
+     [:span.pr-2.flex (ui/icon "bell-ringing" {:class "font-semibold"})]
      [:strong "Logseq Sync is still in Beta and we're working on a Pro plan!"]]
 
     ;; [:ul.flex.py-6.px-4

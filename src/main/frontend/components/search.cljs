@@ -267,12 +267,12 @@
 (rum/defc recent-search-and-pages
   [in-page-search?]
   [:div.recent-search
-   [:div.px-4.py-2.text-sm.opacity-70.flex.flex-row.justify-between.align-items
+   [:div.wrap.px-4.py-2.text-sm.opacity-70.flex.flex-row.justify-between.align-items.mx-1.sm:mx-0
     [:div "Recent search:"]
     (ui/with-shortcut :go/search-in-page "bottom"
       [:div.flex-row.flex.align-items
-       [:div.mr-2 "Search blocks in page:"]
-       [:div {:style {:margin-top 3}}
+       [:div.mr-3.flex "Search blocks in page:"]
+       [:div.flex.items-center
         (ui/toggle in-page-search?
                    (fn [_value]
                      (state/set-search-mode! (if in-page-search? :global :page)))
@@ -283,7 +283,7 @@
                   :interactive     true
                   :arrow           true
                   :theme       "monospace"}
-                 [:a.inline-block.fade-link
+                 [:a.flex.fade-link.items-center
                   {:style {:margin-left 12}
                    :on-click #(state/toggle! :ui/command-palette-open?)}
                   (ui/icon "command" {:style {:font-size 20}})])])]

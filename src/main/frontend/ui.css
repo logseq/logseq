@@ -243,7 +243,7 @@ html.is-mobile {
 }
 
 .ui__button {
-  @apply items-center px-3 py-2 border border-transparent
+  @apply flex items-center px-3 py-2 border border-transparent
   text-sm leading-4 font-medium rounded-md text-white
   focus:outline-none transition ease-in-out duration-150 mt-1;
 
@@ -351,4 +351,8 @@ html.is-mobile {
 
 .bg-quaternary {
   background-color: var(--ls-quaternary-background-color);
+}
+
+.ui__icon {
+  display: inline-block;
 }

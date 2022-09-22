@@ -4702,10 +4702,10 @@ mkdirp@^1.0.3:
   resolved "https://registry.yarnpkg.com/mkdirp/-/mkdirp-1.0.4.tgz#3eb5ed62622756d79a5f0e2a221dfebad75c2f7e"
   integrity sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==
 
-mldoc@1.4.0:
-  version "1.4.0"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.4.0.tgz#10dd8b57b1941a66b3d30fd031881ad31d499edb"
-  integrity sha512-6s1utUm03SCR1XH2EnHD3s0qAd+RLLGRc+1qb4SuHIjjmT5HMWbWGP+vADBLHKQKP6nwYCKsUJkiwLFjOXfP6w==
+mldoc@^1.4.9:
+  version "1.4.9"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.4.9.tgz#a61d93e98f19bf4ec6303810cc3573c5e14eab44"
+  integrity sha512-rroc1tWJnNm2n33MYk+sWgLjGWmP93Am+6zvpBe0BGEyccHQT3AxHHv8fNpF7HVvT7YPtU/dtHWTh6nE2n7vPA==
   dependencies:
     yargs "^12.0.2"
 

@@ -1,5 +1,5 @@
 (ns logseq.graph-parser.property-test
-  (:require [cljs.test :refer [are deftest is]]
+  (:require [cljs.test :refer [are deftest]]
             [logseq.graph-parser.property :as gp-property]))
 
 (deftest test->new-properties
@@ -24,16 +24,3 @@
 
     "hello\n:PROPERTIES:\n:foo: bar\n:nice\n:END:\nnice"
     "hello\nfoo:: bar\n:nice\nnice"))
-
-(deftest property-value-from-content
-  (is (= "62b38254-4be7-4627-a2b7-6d9ee20999e5"
-         (gp-property/property-value-from-content
-          "id"
-          "type:: blog-posting\ndesc:: nice walkthrough on creating a blog with #nbb\nid:: 62b38254-4be7-4627-a2b7-6d9ee20999e5"))
-      "Pulls value from end of block content")
-
-  (is (= "nice walkthrough on creating a blog with #nbb"
-         (gp-property/property-value-from-content
-          "desc"
-          "type:: blog-posting\ndesc:: nice walkthrough on creating a blog with #nbb\nid:: 62b38254-4be7-4627-a2b7-6d9ee20999e5"))
-      "Pulls value from middle of block content"))

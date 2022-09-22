@@ -1,6 +1,7 @@
 (ns logseq.graph-parser.text-test
-  (:require [cljs.test :refer [are deftest testing is]]
-            [logseq.graph-parser.text :as text]))
+  (:require [cljs.test :refer [are deftest testing]]
+            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.mldoc :as gp-mldoc]))
 
 (deftest test-get-page-name
   []
@@ -35,37 +36,6 @@
     "[single bracket]" "[single bracket]"
     "no brackets" "no brackets"))
 
-(deftest sep-by-comma
-  []
-  (are [x y] (= (text/sep-by-comma x) y)
-    "foo,bar" ["foo" "bar"]
-    "foo, bar" ["foo" "bar"]
-    "foo bar" ["foo bar"]
-    "[[foo]] [[bar]]" ["[[foo]] [[bar]]"]
-    "[[foo]],[[bar]]" ["[[foo]]", "[[bar]]"]
-    "[[foo]], [[bar]]" ["[[foo]]", "[[bar]]"]
-    "[[foo]]" ["[[foo]]"]
-    "[[nested [[foo]]]]" ["[[nested [[foo]]]]"]))
-
-(deftest split-page-refs-without-brackets
-  []
-  (are [x y] (= (text/split-page-refs-without-brackets x) y)
-    "foobar" "foobar"
-    "foo bar" "foo bar"
-    "foo, bar" #{"foo" "bar"}
-    "[[foo]] [[bar]]" #{"foo" "bar"}
-    "[[foo]],[[bar]]" #{"foo", "bar"}
-    "[[foo]], [[bar]]" #{"foo", "bar"}
-    "[[foo]]" #{"foo"}
-    "[[nested [[foo]]]]" #{"nested [[foo]]"}
-    "[[nested [[foo]]]], [[foo]]" #{"nested [[foo]]" "foo"}
-    "[[nested [[foo]] [[bar]]]], [[foo]]" #{"nested [[foo]] [[bar]]" "foo"}
-    "[[nested [[foo]], [[bar]]]], [[foo]]" #{"nested [[foo]], [[bar]]" "foo"}
-    "#tag," #{"tag"}
-    "#tag" #{"tag"}
-    "#tag1,#tag2" #{"tag1" "tag2"}
-    "[[Jan 26th, 2021]], hello" #{"hello" "Jan 26th, 2021"}))
-
 (def block-patterns
   {:markdown "-"
    :org "*"})
@@ -90,28 +60,48 @@
       "**foobar" "foobar"
       "*********************foobar" "foobar")))
 
-(deftest test-parse-property
-  (testing "parse-property"
-    (are [k v y] (= (text/parse-property k v {}) y)
-      :tags "foo" "foo"
-      :tags "foo, bar" #{"foo" "bar"}
-      :tags "foo,bar" #{"foo" "bar"}
-      :tags "[[foo]]" #{"foo"}
-      :tags "[[foo]] [[bar]]" #{"foo" "bar"}
-      :tags "[[foo]], [[bar]]" #{"foo" "bar"}
-      :tags "[[foo]], [[bar]], #baz" #{"foo" "bar" "baz"}
-      :tags "#baz, [[foo]], [[bar]]" #{"foo" "bar" "baz"}
-      :tags "[[foo [[bar]]]]" #{"foo [[bar]]"}
-      :tags "[[foo [[bar]]]], baz" #{"baz" "foo [[bar]]"}))
-  (testing "parse-property with quoted strings"
-    (are [k v y] (= (text/parse-property k v {}) y)
-      :tags "\"foo, bar\"" "\"foo, bar\""
-      :tags "\"[[foo]], [[bar]]\"" "\"[[foo]], [[bar]]\""
-      :tags "baz, \"[[foo]], [[bar]]\"" #{"baz"})))
+(defn- parse-property
+  [k v user-config]
+  (let [references (gp-mldoc/get-references v (gp-mldoc/default-config :markdown))]
+    (text/parse-property k v references user-config)))
 
-(deftest extract-page-refs-and-tags
-  (is (= #{"cljs" "nbb" "js" "amazing"}
-       (text/extract-page-refs-and-tags "This project is written with #cljs, #nbb and #js. #amazing!"))
-      "Don't extract punctation at end of a tag"))
+(deftest test-parse-property
+  (testing "for default comma separated properties"
+    (are [k v y] (= (parse-property k v {}) y)
+         :tags "foo" #{"foo"}
+         :tags "comma, separated" #{"comma" "separated"}
+         :alias "one, two, one" #{"one" "two"}))
+
+  (testing "for user comma separated properties"
+    (are [k v y] (= (parse-property k v {:property/separated-by-commas #{:comma-prop}}) y)
+         :comma-prop "foo" #{"foo"}
+         :comma-prop "comma, separated" #{"comma" "separated"}
+         :comma-prop "one, two, one" #{"one" "two"}))
+
+  (testing "for user comma separated properties with mixed values"
+    (are [k v y] (= (parse-property k v {:property/separated-by-commas #{:comma-prop}}) y)
+      :comma-prop "foo, #bar" #{"foo", "bar"}
+      :comma-prop "comma, separated, [[page ref]], [[nested [[page]]]], #[[nested [[tag]]]], end" #{"page ref" "nested [[page]]" "nested [[tag]]" "comma" "separated" "end"}))
+
+  (testing "for normal properties"
+    (are [k v y] (= (parse-property k v {}) y)
+         :normal "[[foo]] [[bar]]" #{"foo" "bar"}
+         :normal "[[foo]], [[bar]]" #{"foo" "bar"}
+         :normal "[[foo]]" #{"foo"}
+         :normal "[[foo]], [[bar]], #baz" #{"foo" "bar" "baz"}
+         :normal "[[foo [[bar]]]]" #{"foo [[bar]]"}
+         :normal "[[foo [[bar]]]], [[baz]]" #{"baz" "foo [[bar]]"}
+         :title "comma, is ok" "comma, is ok"))
+
+  (testing "for tags in properties with punctuation"
+    (are [k v y] (= (parse-property k v {}) y)
+         :prop "#foo, #bar. #baz!" #{"foo" "bar" "baz"}
+         :prop "#foo: '#bar'" #{"foo" "bar"}))
+
+  (testing "parse-property with quoted strings"
+    (are [k v y] (= (parse-property k v {}) y)
+         :tags "\"foo, bar\"" "\"foo, bar\""
+         :tags "\"[[foo]], [[bar]]\"" "\"[[foo]], [[bar]]\"")))
+
 
 #_(cljs.test/test-ns 'logseq.graph-parser.text-test)

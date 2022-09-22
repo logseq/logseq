@@ -633,8 +633,7 @@
 (defn properties-block
   [properties format page]
   (let [content (property/insert-properties format "" properties)
-        refs (gp-block/get-page-refs-from-properties format
-                                                     properties
+        refs (gp-block/get-page-refs-from-properties properties
                                                      (db/get-db (state/get-current-repo))
                                                      (state/get-date-formatter)
                                                      (state/get-config))]
@@ -2726,11 +2725,11 @@
             (autopair input-id "(" format nil))
 
         ;; If you type `xyz`, the last backtick should close the first and not add another autopair
-        ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)        
+        ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)
         (contains? (set (keys autopair-map)) key)
         (let [curr (get-current-input-char input)
                   prev (util/nth-safe value (dec pos))]
-            (util/stop e) 
+            (util/stop e)
             (if (and (= key "`") (= "`" curr) (not= "`" prev))
               (cursor/move-cursor-forward input)
               (autopair input-id key format nil)))

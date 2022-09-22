@@ -1912,13 +1912,14 @@
   [config block k value]
   (let [date (and (= k :date) (date/get-locale-string (str value)))
         user-config (state/get-config)
-        ;; In this mode and when value is a set of refs, display full property text
+        ;; When value is a set of refs, display full property text
         ;; because :block/properties value only contains refs but user wants to see text
-        v (if (and (:rich-property-values? user-config)
-                   (coll? value)
-                   (not (contains? gp-property/editable-linkable-built-in-properties k)))
-            (gp-property/property-value-from-content (name k) (:block/content block))
-            value)
+        property-separated-by-commas? (text/separated-by-commas? (state/get-config) k)
+        v (or
+           (when (and (coll? value) (seq value)
+                      (not property-separated-by-commas?))
+             (get (:block/properties-text-values block) k))
+           value)
         property-pages-enabled? (contains? #{true nil} (:property-pages/enabled? user-config))]
     [:div
      (if property-pages-enabled?
@@ -1935,7 +1936,10 @@
        date
        date
 
-       (coll? v)
+       (and (string? v) (gp-util/wrapped-by-quotes? v))
+       (gp-util/unquote-string v)
+
+       (and property-separated-by-commas? (coll? v))
        (let [v (->> (remove string/blank? v)
                     (filter string?))
              vals (for [v-item v]
@@ -1943,9 +1947,6 @@
              elems (interpose (span-comma) vals)]
          (for [elem elems]
            (rum/with-key elem (str (random-uuid)))))
-
-       (and (string? v) (gp-util/wrapped-by-quotes? v))
-       (gp-util/unquote-string v)
 
        :else
        (inline-text config (:block/format block) (str v)))]))
