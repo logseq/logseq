@@ -541,6 +541,16 @@
                  blocks)]
     (with-path-refs blocks)))
 
+(defn- with-heading-property
+  [properties markdown-heading? size]
+  (let [properties (if markdown-heading?
+                     (assoc properties :heading size)
+                     properties)]
+    (if (true? (:heading properties))
+      ;; default-level 2
+      (assoc properties :heading 2)
+      properties)))
+
 (defn- construct-block
   [block properties timestamps body encoded-content format pos-meta with-id? {:keys [block-pattern supported-formats db date-formatter]}]
   (let [id (get-custom-id-or-new-id properties)
@@ -551,18 +561,17 @@
         markdown-heading? (and (:size block) (= :markdown format))
         block (if markdown-heading?
                 (assoc block
-                       :type :heading
-                       :level (if unordered? (:level block) 1)
-                       :heading-level (or (:size block) 6))
+                       :level (if unordered? (:level block) 1))
                 block)
         block (cond->
-                (assoc block
-                       :uuid id
-                       :refs ref-pages-in-properties
-                       :format format
-                       :meta pos-meta)
-                (seq (:properties properties))
-                (assoc :properties (:properties properties)
+                (-> (assoc block
+                           :uuid id
+                           :refs ref-pages-in-properties
+                           :format format
+                           :meta pos-meta)
+                    (dissoc :size))
+                (or (seq (:properties properties)) markdown-heading?)
+                (assoc :properties (with-heading-property (:properties properties) markdown-heading? (:size block))
                        :properties-text-values (:properties-text-values properties)
                        :properties-order (vec (:properties-order properties)))
 

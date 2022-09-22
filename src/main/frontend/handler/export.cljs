@@ -482,7 +482,6 @@
          [:block/id
           :block/page-name
           :block/properties
-          :block/heading-level
           :block/format
           :block/children
           :block/content]))})

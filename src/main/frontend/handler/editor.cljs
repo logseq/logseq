@@ -316,9 +316,10 @@
                      (block/parse-title-and-body uuid format pre-block? (:block/content block)))
         properties (:block/properties block)
         real-content (:block/content block)
-        content (if (and (seq properties) real-content (not= real-content content))
-                  (property/with-built-in-properties properties content format)
-                  content)
+        content (let [properties (if (= format :markdown) (dissoc properties :heading) properties)]
+                  (if (and (seq properties) real-content (not= real-content content))
+                   (property/with-built-in-properties properties content format)
+                   content))
         content (drawer/with-logbook block content)
         content (with-timetracking block content)
         first-block? (= left page)
@@ -1939,6 +1940,7 @@
                                   (property/insert-properties format content props))
                     ast (mldoc/->edn content* (gp-mldoc/default-config format))
                     blocks (block/extract-blocks ast content* format {})
+                    _ (prn {:block (first blocks)})
                     fst-block (first blocks)
                     fst-block (if (and keep-uuid? (uuid? (:uuid block)))
                                 (assoc fst-block :block/uuid (:uuid block))
@@ -3465,3 +3467,21 @@
     ;; has children
     (first (:block/_parent (db/entity (:db/id block)))))
    (util/collapsed? block)))
+
+(defn set-heading!
+  [block-id format heading]
+  (if (= format :markdown)
+    (let [repo (state/get-current-repo)
+          block (db/entity [:block/uuid block-id])
+          content' (commands/set-markdown-heading (:block/content block) heading)]
+      (save-block! repo block-id content'))
+    (set-block-property! block-id "heading" heading)))
+
+(defn remove-heading!
+  [block-id format]
+  (remove-block-property! block-id "heading")
+  (when (= format :markdown)
+    (let [repo (state/get-current-repo)
+          block (db/entity [:block/uuid block-id])
+          content' (commands/clear-markdown-heading (:block/content block))]
+      (save-block! repo block-id content'))))
