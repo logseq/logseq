@@ -133,7 +133,6 @@
              page-name' (gp-util/title-parsing file-name)
              result     (or (not= page-name page-name')
                             (include-reserved-chars? file-name))]
-         (when result (js/console.error "`fs-util/create-title-property?` return true for page " page-name))
          result)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

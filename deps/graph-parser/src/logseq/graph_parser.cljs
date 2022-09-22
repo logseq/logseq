@@ -7,14 +7,8 @@
             [logseq.graph-parser.date-time-util :as date-time-util]
             [logseq.graph-parser.config :as gp-config]
             [clojure.string :as string]
-            [clojure.set :as set]))
-
-(defn- db-set-file-content!
-  "Modified copy of frontend.db.model/db-set-file-content!"
-  [conn path content]
-  (let [tx-data {:file/path path
-                 :file/content content}]
-    (d/transact! conn [tx-data] {:skip-refresh? true})))
+            [clojure.set :as set]
+            [frontend.util :as util]))
 
 (defn parse-file
   "Parse file and save parsed data to the given db. Main parse fn used by logseq app"
@@ -23,7 +17,6 @@
                            delete-blocks-fn (constantly [])
                            skip-db-transact? false}
                       :as options}]
-  (db-set-file-content! conn file content)
   (let [format (gp-util/get-format file)
         file-content [{:file/path file}]
         {:keys [tx ast]}
@@ -31,6 +24,7 @@
           (let [extract-options' (merge {:block-pattern (gp-config/get-block-pattern format)
                                          :date-formatter "MMM do, yyyy"
                                          :supported-formats (gp-config/supported-formats)
+                                         :uri-encoded? (util/mobile?)
                                          :filename-format :triple-lowbar}
                                         extract-options
                                         {:db @conn})
@@ -43,18 +37,18 @@
                                                            (= :block/uuid (first ref)))))
                                     (map (fn [ref] {:block/uuid (second ref)}))
                                     (seq))
-                   ;; To prevent "unique constraint" on datascript
+                ;; To prevent "unique constraint" on datascript
                 block-ids (set/union (set block-ids) (set block-refs-ids))
                 pages (extract/with-ref-pages pages blocks)
                 pages-index (map #(select-keys % [:block/name]) pages)]
-               ;; does order matter?
+            ;; does order matter?
             {:tx (concat file-content pages-index delete-blocks pages block-ids blocks)
              :ast ast})
           {:tx file-content})
         tx (concat tx [(cond-> {:file/path file
                                 :file/content content}
                          new?
-                               ;; TODO: use file system timestamp?
+                         ;; TODO: use file system timestamp?
                          (assoc :file/created-at (date-time-util/time-ms)))])
         tx' (gp-util/remove-nils tx)
         result (if skip-db-transact?
