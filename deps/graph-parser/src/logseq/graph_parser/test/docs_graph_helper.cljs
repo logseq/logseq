@@ -115,10 +115,9 @@
             :block/priority 4
             :block/deadline 1
             :block/collapsed? 22
-            :block/heading-level 60
             :block/repeated? 1}
            (->> [:block/scheduled :block/priority :block/deadline :block/collapsed?
-                 :block/heading-level :block/repeated?]
+                 :block/repeated?]
                 (map (fn [attr]
                        [attr
                         (ffirst (d/q [:find (list 'count '?b) :where ['?b attr]]
