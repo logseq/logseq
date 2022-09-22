@@ -3,6 +3,7 @@
             [medley.core :as medley]
             [frontend.util :as util]
             [frontend.config :as config]
+            [frontend.mobile.util :as mobile-util]
             [logseq.graph-parser.config :as gp-config]
             [clojure.string :as string]))
 
@@ -39,30 +40,44 @@
     (medley/find-first #(= name (:name (second %1)))
                        (medley/indexed alias-dirs))))
 
+(defn convert-platform-protocol
+  [full-path]
+
+  (cond-> full-path
+    (and (string? full-path)
+         (mobile-util/native-platform?))
+    (string/replace-first
+     #"^(file://|assets://)" gp-config/capacitor-protocol-with-prefix)))
+
 (defn resolve-asset-real-path-url
   [repo full-path]
   (when-let [full-path (and (string? full-path)
                             (string/replace full-path #"^[.\/\\]+" ""))]
     (if config/publishing?
       (str "./" full-path)
-      (let [full-path  (if-not (string/starts-with? full-path gp-config/local-assets-dir)
-                         (util/node-path.join gp-config/local-assets-dir full-path)
-                         full-path)
-            graph-root (config/get-repo-dir repo)]
+      (let [ret (let [full-path      (if-not (string/starts-with? full-path gp-config/local-assets-dir)
+                                       (util/node-path.join gp-config/local-assets-dir full-path)
+                                       full-path)
+                      encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" full-path))
+                      full-path      (if encoded-chars? full-path (js/encodeURI full-path))
+                      graph-root     (config/get-repo-dir repo)
+                      has-schema?    (string/starts-with? graph-root "file:")]
 
-        (if-let [[full-path' alias]
-                 (and (alias-enabled?)
-                      (let [full-path' (string/replace full-path (re-pattern (str "^" gp-config/local-assets-dir "[\\/\\\\]+")) "")]
-                        (and
-                         (string/starts-with? full-path' "@")
-                         (some->> (and (seq (get-alias-dirs))
-                                       (second (get-alias-by-name (second (re-find #"^@([^\/]+)" full-path')))))
-                                  (vector full-path')))))]
+                  (if-let [[full-path' alias]
+                           (and (alias-enabled?)
+                                (let [full-path' (string/replace full-path (re-pattern (str "^" gp-config/local-assets-dir "[\\/\\\\]+")) "")]
+                                  (and
+                                   (string/starts-with? full-path' "@")
+                                   (some->> (and (seq (get-alias-dirs))
+                                                 (second (get-alias-by-name (second (re-find #"^@([^\/]+)" full-path')))))
+                                            (vector full-path')))))]
 
-          (str "assets://" (string/replace full-path' (str "@" (:name alias)) (:dir alias)))
+                    (str "assets://" (string/replace full-path' (str "@" (:name alias)) (:dir alias)))
 
-          ;; TODO: bfs
-          (str "file://" (util/node-path.join graph-root full-path)))))))
+                    ;; TODO: bfs
+                    (str (if has-schema? "" "file://")
+                         (util/node-path.join graph-root full-path))))]
+        (convert-platform-protocol ret)))))
 
 (defn normalize-asset-resource-url
   ;; try to convert resource file to url asset link
