@@ -125,7 +125,7 @@
                                 (async/go (doseq [{:keys [file target status]} rename-items]
                                             (when (not= status :unreachable)
                                               ;; TODO error handling
-                                              (async/<! (p->c (page-handler/rename-file! file target (constantly nil))))))
+                                              (async/<! (p->c (page-handler/rename-file! file target (constantly nil) true)))))
                                           (<close-modal-on-done)))]
 
         (if (not-empty rename-items)

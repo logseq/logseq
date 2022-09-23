@@ -195,23 +195,32 @@
     (string/join "/" parts)))
 
 (defn rename-file!
-  "emit file-rename events to :file/rename-event-chan"
-  [file new-file-name-body ok-handler]
-  (let [repo (state/get-current-repo)
-        file (db/pull (:db/id file))
-        old-path (:file/path file)
-        new-path (compute-new-file-path old-path new-file-name-body)]
+  "emit file-rename events to :file/rename-event-chan
+   force-fs? - when true, rename file event the db transact is failed."
+  ([file new-file-name-body ok-handler]
+   (rename-file! file new-file-name-body ok-handler false))
+  ([file new-file-name-body ok-handler force-fs?]
+   (let [repo (state/get-current-repo)
+         file (db/pull (:db/id file))
+         old-path (:file/path file)
+         new-path (compute-new-file-path old-path new-file-name-body)
+         transact #(db/transact! repo [{:db/id (:db/id file)
+                                        :file/path new-path}])]
     ;; update db
-    (db/transact! repo [{:db/id (:db/id file)
-                         :file/path new-path}])
-    (->
-     (p/let [_ (state/offer-file-rename-event-chan! {:repo repo
-                                                     :old-path old-path
-                                                     :new-path new-path})
-             _ (fs/rename! repo old-path new-path)]
-       (ok-handler))
-     (p/catch (fn [error]
-                (println "file rename failed: " error))))))
+     (if force-fs?
+       (try (transact) ;; capture error and continue FS rename if failed
+            (catch js/Error e
+              (log/error :rename-file e)))
+       (transact)) ;; interrupted if failed
+
+     (->
+      (p/let [_ (state/offer-file-rename-event-chan! {:repo repo
+                                                      :old-path old-path
+                                                      :new-path new-path})
+              _ (fs/rename! repo old-path new-path)]
+        (ok-handler))
+      (p/catch (fn [error]
+                 (println "file rename failed: " error)))))))
 
 (defn- replace-page-ref!
   "Unsanitized names"
