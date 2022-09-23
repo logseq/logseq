@@ -32,6 +32,9 @@ module.exports = {
   darkMode: 'class',
   theme: {
     extend: {
+      fontSize: {
+        '2xs': ['0.625rem', '0.875rem']
+      },
       animation: {
         'spin-reverse': 'spin 2s linear infinite reverse',
       },
