@@ -54,5 +54,5 @@
                            (doseq [^js win (window/get-all-windows)]
                              (when-not (.isDestroyed win)
                                (.. win -webContents
-                                   (send progress-notify-chan (bean/->js progress-info)))))
-                           (logger/info "sync progess" progress-info))))
+                                   (send progress-notify-chan (bean/->js progress-info))))))))
+                                   
