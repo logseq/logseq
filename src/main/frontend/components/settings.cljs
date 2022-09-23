@@ -614,7 +614,7 @@
      [:p (t :settings-page/git-confirm)])])
 
 (rum/defc settings-advanced < rum/reactive
-  [_current-repo]
+  [current-repo]
   (let [instrument-disabled? (state/sub :instrument/disabled?)
         developer-mode? (state/sub [:ui/developer-mode?])
         https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])]
@@ -623,7 +623,7 @@
      (usage-diagnostics-row t instrument-disabled?)
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
-     (when (util/electron?) (filename-format-row))
+     (when (and (util/electron?) (not (config/demo-graph? current-repo))) (filename-format-row))
      (clear-cache-row t)
 
      (ui/admonition

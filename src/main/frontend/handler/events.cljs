@@ -572,19 +572,19 @@
    #(do (page-handler/create-today-journal!)
         (file-sync-restart!))))
 
-(defmethod handle :graph/ask-for-re-index [[_ *multiple-windows? text]]
+(defmethod handle :graph/ask-for-re-index [[_ *multiple-windows? ui]]
   ;; *multiple-windows? - if the graph is opened in multiple windows, boolean atom
-  ;; text - custom message to show on asking for re-index
+  ;; ui - custom message to show on asking for re-index
   (if (and (util/atom? *multiple-windows?) @*multiple-windows?)
     (handle
      [:modal/show
       [:div
-       (when (string? text) [:p text])
+       (when (not (nil? ui)) ui)
        [:p (t :re-index-multiple-windows-warning)]]])
     (handle
      [:modal/show
       [:div {:style {:max-width 700}}
-       (when (string? text) [:p text])
+       (when (not (nil? ui)) ui)
        [:p (t :re-index-discard-unsaved-changes-warning)]
        (ui/button
          (t :yes)

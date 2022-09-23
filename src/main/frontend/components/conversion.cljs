@@ -22,7 +22,9 @@
      (ask-for-re-index multiple-windows?)))
   ([multiple-windows?]
    (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?)
-                      (t :file-rn/re-index)])))
+                      (ui/admonition
+                       :tip
+                       [:p (t :file-rn/re-index)])])))
 
 (defn- <close-modal-on-done
   "Ask users to re-index when the modal is exited"
@@ -44,9 +46,7 @@
                                                   (reset! *target-format (keyword format-str))))}
      (for [format supported-filename-formats]
        (let [format-str (name format)]
-         [:option {:key format-str :value format-str} format-str]))]]
-   [:div.rounded-md.text-sm.opacity-70
-    "TODO Junyi: description"]])
+         [:option {:key format-str :value format-str} format-str]))]]])
 
 ;; UI for files that have been breaking changed. Conversion required to revert the change.
 ;; UI logic:
@@ -78,17 +78,37 @@
       (let [config-format (state/get-filename-format repo)]
         (reset! *dir-format config-format)
         (reset! *solid-format config-format)
-        (reset! *target-format config-format)))
+        (reset! *target-format :triple-lowbar)))
     [:div
-     (filename-format-select *target-format @*switch-disabled?)
-     (ui/button
-      (t :file-rn/confirm-proceed)
-      :disabled (not need-persist?)
-      :class "text-sm p-1 mr-1"
-      :on-click #(do (reset! *dir-format (state/get-filename-format repo)) ;; assure it's uptodate
-                     (write-filename-format! repo @*target-format)
-                     (reset! *solid-format @*target-format)
-                     (reset! *switch-disabled? true)))
+     [:h1.title (t :file-rn/filename-format)]
+     [:div.rounded-md.opacity-70
+      [:p (t :file-rn/filename-desc-1)]
+      [:p (t :file-rn/filename-desc-2)]
+      [:p (t :file-rn/filename-desc-3)]
+      [:p (t :file-rn/filename-desc-4)]]
+     ;; Normal UX stage 1: show the admonition & button for users using legacy format
+     (when (= @*solid-format :legacy)
+       [:div
+        (ui/admonition
+         :warning
+         [:p (t :file-rn/format-deprecated)])
+        (ui/button (t :file-rn/confirm-proceed)
+                   :class "text-sm p-1 mr-1"
+                   :on-click #(do (reset! *target-format :triple-lowbar)
+                                  (reset! *dir-format (state/get-filename-format repo)) ;; assure it's uptodate
+                                  (write-filename-format! repo :triple-lowbar)
+                                  (reset! *solid-format :triple-lowbar)))])
+     (when (state/developer-mode?)
+       [:div [:hr]
+        (filename-format-select *target-format @*switch-disabled?)
+        (ui/button (t :file-rn/confirm-proceed)
+                   :disabled (not need-persist?)
+                   :class "text-sm p-1 mr-1"
+                   :on-click #(do (reset! *dir-format (state/get-filename-format repo)) ;; assure it's uptodate
+                                  (write-filename-format! repo @*target-format)
+                                  (reset! *solid-format @*target-format)
+                                  (reset! *switch-disabled? true)))])
+     [:hr]
      [:div.cp__settings-files-breaking-changed
       {:disabled need-persist?}
       (let [rename-items  (->> (vals @*pages)
@@ -110,19 +130,23 @@
 
         (if (not-empty rename-items)
           [:div
-           [:p (t :file-rn/need-action)]
+           ;; Normal UX stage 2: close stage 1 UI, show the action description as admolition
+           (if (and (= @*solid-format :triple-lowbar)
+                    (= @*dir-format :legacy))
+             (ui/admonition
+              :tip
+              [:p (t :file-rn/need-action)])
+             [:p (t :file-rn/need-action)])
            [:p
             (ui/button
              (str (t :file-rn/all-action) " (" (count rename-items) ")")
              :on-click <rename-all
-             :class "text-sm p-1 mr-1")
+             :class "text-md p-1 mr-1")
             (t :file-rn/or-select-actions)
             [:a.text-sm
              {:on-click <close-modal-on-done}
              (t :file-rn/close-panel)]]
            [:table.table-auto
-            [:thead
-             [:tr [:th (t :file-rn/affected-pages)]]]
             [:tbody
              (for [{:keys [page file status target old-title changed-title]} rename-items]
                (let [path           (:file/path file)
@@ -132,8 +156,8 @@
                      tgt-file-name  (str target "." (gp-util/path->file-ext path))
                      rm-item-fn     #(swap! *pages dissoc path)
                      rename-fn      #(page-handler/rename-file! file target rm-item-fn)
-                     rename-but     [:a.text-sm {:on-click rename-fn
-                                                 :title (t :file-rn/apply-rename)}
+                     rename-but     [:a {:on-click rename-fn
+                                         :title (t :file-rn/apply-rename)}
                                      [:span (t :file-rn/rename src-file-name tgt-file-name)]]]
                  [:tr {:key (:block/name page)}
                   [:td [:div [:p "📄 " old-title]]
