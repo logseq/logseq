@@ -85,8 +85,8 @@
       (when (not (string/blank? selected-path))
         [:h5.text-xs.pt-1.-mb-1.flex.items-center.leading-none
          (if (mobile-util/iCloud-container-path? selected-path)
-           [:span.inline-block.pr-1.text-red-600.scale-75 (ui/icon "alert-circle")]
-           [:span.inline-block.pr-1.text-green-600.scale-75 (ui/icon "circle-check")])
+           [:span.inline-block.pr-1.text-error.scale-75 (ui/icon "alert-circle")]
+           [:span.inline-block.pr-1.text-success.scale-75 (ui/icon "circle-check")])
          selected-path])
 
       [:div.out-icloud

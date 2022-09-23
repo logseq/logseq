@@ -292,7 +292,7 @@
         svg/folder)
 
       (when (and (not market?) unpacked?)
-        [:span.flex.justify-center.text-xs.text-red-500.pt-2 (t :plugin/unpacked)])]
+        [:span.flex.justify-center.text-xs.text-error.pt-2 (t :plugin/unpacked)])]
 
      [:div.r
       [:h3.head.text-xl.font-bold.pt-1.5
@@ -1004,7 +1004,7 @@
   [:div
    [:span.block.whitespace-normal
     "This plugin "
-    [:strong.text-red-500 "#" name]
+    [:strong.text-error "#" name]
     " takes too long to load, affecting the application startup time and
      potentially causing other plugins to fail to load."]
 
@@ -1021,7 +1021,7 @@
                                 (notification/clear! pid)
                                 (notification/show!
                                  [:span "The plugin "
-                                  [:strong.text-red-500 "#" name]
+                                  [:strong.text-error "#" name]
                                   " is disabled."] :success
                                  true nil 3000)))
                      (p/catch #(js/console.error %)))))]])

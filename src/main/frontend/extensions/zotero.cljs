@@ -95,7 +95,7 @@
 
        [:span.animate-spin-reverse {:style {:visibility (if is-searching "visible"  "hidden")}}  svg/refresh]]]
 
-     [:div.h-2.text-sm.text-red-400.mb-2 (if search-error (str "Search error: " search-error) "")]
+     [:div.h-2.text-sm.text-error.mb-2 (if search-error (str "Search error: " search-error) "")]
 
      [:div
       (map
@@ -154,7 +154,7 @@
          (not (re-matches #"^\d+$" (str @(::type-id state)))))
      (ui/admonition
       :warning
-      [:p.text-red-500
+      [:p.text-error
        "User ID is different from username and can be found on the "
        [:a {:href "https://www.zotero.org/settings/keys" :target "_blank"}
         "https://www.zotero.org/settings/keys"]
@@ -176,7 +176,7 @@
    (when (setting/setting :overwrite-mode?)
      (ui/admonition
       :warning
-      [:p.text-red-500
+      [:p.text-error
        "Dangerous! This will delete and recreate Zotero existing page! Make sure to backup your notes first in case something goes wrong. Make sure you don't put any personal item in previous Zotero page and it's OK to overwrite the page!"]))])
 
 (rum/defc attachment-setting <

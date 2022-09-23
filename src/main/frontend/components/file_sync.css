@@ -1,3 +1,9 @@
+:root {
+  --ls-color-file-sync-error: var(--ls-error-color);
+  --ls-color-file-sync-pending: var(--ls-warning-color);
+  --ls-color-file-sync-idle: var(--ls-success-color);
+}
+
 .cp__file-sync {
   &-indicator {
     a.cloud {

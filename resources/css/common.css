@@ -14,9 +14,9 @@
   --ls-left-sidebar-width: 246px;
   --ls-left-sidebar-sm-width: 70%;
   --ls-left-sidebar-nav-btn-size: 38px;
-  --ls-color-file-sync-error: #ff0000;
-  --ls-color-file-sync-pending: #ffbb4d;
-  --ls-color-file-sync-idle: #04b404;
+  --ls-error-color: var(--color-red-500);
+  --ls-warning-color: var(--color-yellow-500);
+  --ls-success-color: var(--color-green-500);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -90,6 +90,10 @@ html[data-theme='dark'] {
   --ls-right-sidebar-code-bg-color: #04303c;
   --ls-pie-bg-color: #01303b;
   --ls-pie-fg-color: #0b5869;
+  --ls-error-text-color: var(--color-red-100);
+  --ls-error-background-color: var(--color-red-900);
+  --ls-warning-text-color: var(--color-yellow-100);
+  --ls-warning-background-color: var(--color-yellow-900);
   --color-level-1: var(--ls-secondary-background-color);
   --color-level-2: var(--ls-tertiary-background-color);
   --color-level-3: var(--ls-quaternary-background-color);
@@ -152,6 +156,10 @@ html[data-theme='light'] {
   --ls-right-sidebar-code-bg-color: var(--ls-secondary-background-color);
   --ls-pie-bg-color: #e1e1e1;
   --ls-pie-fg-color: #0a4a5d;
+  --ls-error-text-color: var(--color-red-900);
+  --ls-error-background-color: var(--color-red-100);
+  --ls-warning-text-color: var(--color-yellow-900);
+  --ls-warning-background-color: var(--color-yellow-100);
   --color-level-1: var(--ls-secondary-background-color);
   --color-level-2: var(--ls-tertiary-background-color);
   --color-level-3: var(--ls-quaternary-background-color);
@@ -593,23 +601,44 @@ a.chosen {
 
 a.warning,
 span.warning, div.warning:not(.admonitionblock), p.warning {
-  background: #f56565;
+  background: var(--ls-warning-background-color);
   padding: 0.1em 0.4em;
   border-radius: var(--ls-border-radius-low);
-  color: #fff;
+  color: var(--ls-warning-text-color);
 }
 
-.warning-text {
-  color: #f56565;
+.text-warning {
+  color: var(--ls-warning-text-color);
+}
+
+.bg-warning {
+  background: var(--ls-waring-background-color);
 }
 
 a.error,
 span.error {
-    background: red;
+    background: var(--ls-error-background-color);
     padding: 0.1em 0.4em;
     border-radius: var(--ls-border-radius-low);
-    color: #fff;
+    color: var(--ls-error-text-color);
 }
+
+.text-error {
+  color: var(--ls-error-text-color);
+}
+
+.bg-error {
+  background: var(--ls-error-background-color);
+}
+
+.text-success {
+  color: var(--ls-success-text-color);
+}
+
+.bg-success {
+  background: var(--ls-success-background-color);
+}
+
 
 img.small {
   display: inline;

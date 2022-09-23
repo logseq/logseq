@@ -148,11 +148,11 @@
                                    (empty? filter-state)
                                    ""
                                    (every? true? (vals filter-state))
-                                   "text-green-400"
+                                   "text-success"
                                    (every? false? (vals filter-state))
-                                   "text-red-400"
+                                   "text-error"
                                    :else
-                                   "text-yellow-400")
+                                   "text-warning")
                           :style {:fontSize 24}})]]
 
      (fn []

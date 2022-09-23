@@ -239,7 +239,7 @@
         (if (or (not asset-file?)
                 (and exist? (not loading?)))
           (content-fn)
-          [:p.text-red-500.text-xs [:small.opacity-80
+          [:p.text-error.text-xs [:small.opacity-80
                                     (util/format "%s not found!" (string/capitalize type))]])))))
 
 (defn open-lightbox
