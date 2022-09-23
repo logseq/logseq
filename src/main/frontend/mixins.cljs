@@ -1,4 +1,5 @@
 (ns frontend.mixins
+  "Rum mixins for use in components"
   (:require [rum.core :as rum]
             [goog.dom :as dom]
             [frontend.util :refer [profile] :as util]

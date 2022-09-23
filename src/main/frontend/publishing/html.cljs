@@ -1,4 +1,4 @@
-(ns frontend.publishing.html
+(ns ^:no-doc frontend.publishing.html
   (:require-macros [hiccups.core])
   (:require [frontend.state :as state]
             [frontend.util :as util]

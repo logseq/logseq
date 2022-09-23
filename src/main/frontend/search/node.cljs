@@ -1,4 +1,5 @@
 (ns frontend.search.node
+  "NodeJS implementation of search protocol"
   (:require [cljs-bean.core :as bean]
             [electron.ipc :as ipc]
             [frontend.search.db :as search-db]

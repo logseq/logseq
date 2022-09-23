@@ -1,4 +1,5 @@
 (ns frontend.idb
+  "System-component-like ns that provides indexedDB functionality"
   (:require ["/frontend/idbkv" :as idb-keyval :refer [Store]]
             [clojure.string :as string]
             [frontend.config :as config]

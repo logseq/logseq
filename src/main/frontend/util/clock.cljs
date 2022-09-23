@@ -1,4 +1,5 @@
 (ns frontend.util.clock
+  "Provides clock related functionality used by tasks"
   (:require [frontend.state :as state]
             [frontend.util.drawer :as drawer]
             [frontend.util :as util]

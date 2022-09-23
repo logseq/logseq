@@ -54,10 +54,12 @@ To configure the linter, see the `[:tasks/config :large-vars]` path of bb.edn.
 
 ### Document namespaces
 
-Documentation helps teams share their knowledge and enables more individuals to contribute to the codebase. Documenting our namespaces is a good first step to improving our documentation. Currently this linter is only run on our deps/. To run this linter:
+Documentation helps teams share their knowledge and enables more individuals to contribute to the codebase. Documenting our namespaces is a good first step to improving our documentation. To run this linter:
 ```
 bb lint:ns-docstrings
 ```
+
+To skip documenting a ns, use the common `^:no-doc` metadata flag.
 
 ### Datalog linting
 

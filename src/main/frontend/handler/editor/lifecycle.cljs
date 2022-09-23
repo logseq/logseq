@@ -1,4 +1,4 @@
-(ns frontend.handler.editor.lifecycle
+(ns ^:no-doc frontend.handler.editor.lifecycle
   (:require [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.editor.keyboards :as keyboards-handler]
             [frontend.state :as state :refer [sub]]

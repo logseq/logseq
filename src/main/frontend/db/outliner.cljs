@@ -1,4 +1,5 @@
 (ns frontend.db.outliner
+  "Db related fns for the outliner module"
   (:require [datascript.core :as d]))
 
 (defn get-by-id

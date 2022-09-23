@@ -1,4 +1,5 @@
 (ns frontend.image
+  "Image related utility fns"
   (:require ["/frontend/exif" :as exif]
             [clojure.string :as string]
             [frontend.date :as date]

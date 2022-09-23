@@ -1,4 +1,5 @@
 (ns frontend.handler.recent
+  "Fns related to recent pages feature"
   (:require [frontend.db :as db]))
 
 (defn add-page-to-recent!

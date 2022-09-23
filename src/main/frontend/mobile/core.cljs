@@ -1,9 +1,10 @@
 (ns frontend.mobile.core
+  "Main ns for handling mobile start"
   (:require ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
             [clojure.string :as string]
             [promesa.core :as p]
-            [frontend.fs.capacitor-fs :as mobile-fs]
+            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.deeplink :as deeplink]
             [frontend.mobile.intent :as intent]
@@ -22,7 +23,7 @@
 (defn- ios-init
   "Initialize iOS-specified event listeners"
   []
-  (p/let [path (mobile-fs/ios-ensure-documents!)]
+  (p/let [path (capacitor-fs/ios-ensure-documents!)]
     (println "iOS container path: " (js->clj path)))
 
   (state/pub-event! [:validate-appId])

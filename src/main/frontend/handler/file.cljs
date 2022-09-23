@@ -1,4 +1,5 @@
 (ns frontend.handler.file
+  "Provides util handler fns for files"
   (:refer-clojure :exclude [load-file])
   (:require [frontend.config :as config]
             [frontend.db :as db]

@@ -1,4 +1,5 @@
 (ns frontend.util.marker
+  "Task (formerly todo) related util fns"
   (:require [clojure.string :as string]
             [frontend.util :as util]))
 
