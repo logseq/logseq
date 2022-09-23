@@ -170,27 +170,29 @@
              [:a.m-2.shadow-sm
               {:on-click (fn [_e]
                            (editor-handler/set-block-property! block-id "background-color" color))}
-              [:div.heading-bg {:style {:background-color color}}]])]
-          [:a.m-2.shadow-sm
-           {:title    (t :remove-background)
-            :on-click (fn [_e]
-                        (editor-handler/remove-block-property! block-id "background-color"))}
-           [:div.heading-bg.remove "-"]]]
+              [:div.heading-bg {:style {:background-color color}}]])
+           [:a.m-2.shadow-sm
+            {:title    (t :remove-background)
+             :on-click (fn [_e]
+                         (editor-handler/remove-block-property! block-id "background-color"))}
+            [:div.heading-bg.remove "-"]]]]
 
          [:div.flex.flex-row.justify-between.pb-2.pt-1.px-2.items-center
           [:div.flex.flex-row.justify-between.flex-1
            (for [i (range 1 7)]
              (ui/button
-               (str "H" i)
-               :on-click (fn [_e]
-                           (editor-handler/set-heading! block-id format i))
-               :intent "link"
-               :small? true))]
-          [:a.m-2
-           {:title    (t :remove-heading)
+              (str "H" i)
+              :on-click (fn [_e]
+                          (editor-handler/set-heading! block-id format i))
+              :intent "link"
+              :small? true))
+           (ui/button
+            "H-"
+            :title (t :remove-heading)
             :on-click (fn [_e]
-                        (editor-handler/remove-heading! block-id format))}
-           [:div.heading-bg.remove "-"]]]
+                        (editor-handler/remove-heading! block-id format))
+            :intent "link"
+            :small? true)]]
 
          [:hr.menu-separator]
 
