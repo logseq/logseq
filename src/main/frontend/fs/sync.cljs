@@ -820,13 +820,15 @@
     (set! graph-uuid' graph-uuid)
     (set! private-key secret-key)
     (set! public-key' public-key)
-    (p->c (.setEnv mobile-util/file-sync (clj->js {:env (if prod? "prod" "dev")
+    (p->c (.setEnv mobile-util/file-sync (clj->js {:graphUUID graph-uuid
+                                                   :env (if prod? "prod" "dev")
                                                    :secretKey secret-key
                                                    :publicKey public-key}))))
 
-  (<get-local-all-files-meta [_ _graph-uuid base-path]
+  (<get-local-all-files-meta [_ graph-uuid base-path]
     (go
-      (let [r (<! (p->c (.getLocalAllFilesMeta mobile-util/file-sync (clj->js {:basePath base-path}))))]
+      (let [r (<! (p->c (.getLocalAllFilesMeta mobile-util/file-sync (clj->js {:graphUUID graph-uuid
+                                                                               :basePath base-path}))))]
         (if (instance? ExceptionInfo r)
           r
           (->> (.-result r)
@@ -836,10 +838,11 @@
                                       (get metadata "encryptedFname") (get metadata "mtime") false nil)))
                set)))))
 
-  (<get-local-files-meta [_ _graph-uuid base-path filepaths]
+  (<get-local-files-meta [_ graph-uuid base-path filepaths]
     (go
       (let [r (<! (p->c (.getLocalFilesMeta mobile-util/file-sync
-                                            (clj->js {:basePath base-path
+                                            (clj->js {:graphUUID graph-uuid
+                                                      :basePath base-path
                                                       :filePaths filepaths}))))]
         (assert (not (instance? ExceptionInfo r)) "get-local-files-meta shouldn't return exception")
         (->> (.-result r)
@@ -849,9 +852,10 @@
                                     (get metadata "encryptedFname") (get metadata "mtime") false nil)))
              set))))
 
-  (<rename-local-file [_ _graph-uuid base-path from to]
+  (<rename-local-file [_ graph-uuid base-path from to]
     (p->c (.renameLocalFile mobile-util/file-sync
-                            (clj->js {:basePath base-path
+                            (clj->js {:graphUUID graph-uuid
+                                      :basePath base-path
                                       :from from
                                       :to to}))))
 
@@ -874,10 +878,11 @@
                                                                           :token token})))))]
         r)))
 
-  (<delete-local-files [_ _graph-uuid base-path filepaths]
+  (<delete-local-files [_ graph-uuid base-path filepaths]
     (go
       (let [r (<! (<retry-rsapi #(p->c (.deleteLocalFiles mobile-util/file-sync
-                                                          (clj->js {:basePath base-path
+                                                          (clj->js {:graphUUID graph-uuid
+                                                                    :basePath base-path
                                                                     :filePaths filepaths})))))]
         r)))
 
@@ -907,16 +912,18 @@
          r
          (get (js->clj r) "txid")))))
 
-  (<encrypt-fnames [_ _graph-uuid fnames]
+  (<encrypt-fnames [_ graph-uuid fnames]
     (go
       (let [r (<! (p->c (.encryptFnames mobile-util/file-sync
-                                        (clj->js {:filePaths fnames}))))]
+                                        (clj->js {:graphUUID graph-uuid
+                                                  :filePaths fnames}))))]
         (if (instance? ExceptionInfo r)
           (.-cause r)
           (get (js->clj r) "value")))))
-  (<decrypt-fnames [_ _graph-uuid fnames]
+  (<decrypt-fnames [_ graph-uuid fnames]
     (go (let [r (<! (p->c (.decryptFnames mobile-util/file-sync
-                                          (clj->js {:filePaths fnames}))))]
+                                          (clj->js {:graphUUID graph-uuid
+                                                    :filePaths fnames}))))]
           (if (instance? ExceptionInfo r)
             (ex-info "decrypt-failed" {:fnames fnames} (ex-cause r))
             (get (js->clj r) "value"))))))
