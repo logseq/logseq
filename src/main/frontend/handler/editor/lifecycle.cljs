@@ -20,7 +20,7 @@
 
     ;; try to close all opened dropdown menu
     (when-let [close-fns (vals (sub :modal/dropdowns))]
-      (try (doseq [f close-fns] (f)) (catch js/Error _e ())))
+      (try (doseq [f close-fns] (f)) (catch :default _e ())))
 
     (when-let [element (gdom/getElement id)]
       (.focus element)

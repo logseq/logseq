@@ -31,7 +31,7 @@
                    (when (mobile-util/native-iphone?)
                      (state/set-left-sidebar-open! false))
                    (route-handler/redirect-to-home!))}
-     (ui/icon "home" {:style {:fontSize ui/icon-size}})]))
+     (ui/icon "home" {:size ui/icon-size})]))
 
 (rum/defc login < rum/reactive
   < {:key-fn #(identity "login-button")}
@@ -55,7 +55,7 @@
     [:button.#left-menu.cp__header-left-menu.button.icon
      {:title "Toggle left menu"
       :on-click on-click}
-     (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]))
+     (ui/icon "menu-2" {:size ui/icon-size})]))
 
 (rum/defc dropdown-menu < rum/reactive
   < {:key-fn #(identity "repos-dropdown-menu")}
@@ -68,7 +68,7 @@
        [:button.button.icon.toolbar-dots-btn
         {:on-click toggle-fn
          :title "More"}
-        (ui/icon "dots" {:style {:fontSize ui/icon-size}})])
+        (ui/icon "dots" {:size ui/icon-size})])
      (->>
       [(when (state/enable-editing?)
          {:title (t :settings)
@@ -118,12 +118,12 @@
    (ui/with-shortcut :go/backward "bottom"
      [:button.it.navigation.nav-left.button.icon
       {:title "Go back" :on-click #(js/window.history.back)}
-      (ui/icon "arrow-left" {:style {:fontSize ui/icon-size}})])
+      (ui/icon "arrow-left" {:size ui/icon-size})])
 
    (ui/with-shortcut :go/forward "bottom"
      [:button.it.navigation.nav-right.button.icon
       {:title "Go forward" :on-click #(js/window.history.forward)}
-      (ui/icon "arrow-right" {:style {:fontSize ui/icon-size}})])])
+      (ui/icon "arrow-right" {:size ui/icon-size})])])
 
 (rum/defc updater-tips-new-version
   [t]
@@ -186,14 +186,14 @@
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))
                               (state/pub-event! [:go/search]))}
-              (ui/icon "search" {:style {:fontSize ui/icon-size}})]))])
+              (ui/icon "search" {:size ui/icon-size})]))])
       (when (mobile-util/native-platform?)
         (if (or (state/home?) custom-home-page?)
           left-menu
           (ui/with-shortcut :go/backward "bottom"
-            [:button.it.navigation.nav-left.button.icon
+            [:button.it.navigation.nav-left.button.icon.opacity-70
              {:title "Go back" :on-click #(js/window.history.back)}
-             (ui/icon "chevron-left" {:style {:fontSize 25}})])))]
+             (ui/icon "chevron-left" {:size 26})])))]
 
      [:div.r.flex
       (when (and sync-enabled?

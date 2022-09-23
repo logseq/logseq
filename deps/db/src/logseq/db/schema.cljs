@@ -1,4 +1,5 @@
-(ns logseq.db.schema)
+(ns logseq.db.schema
+  "Main db schema for the Logseq app")
 
 (defonce version 1)
 (defonce ast-version 1)
@@ -51,10 +52,12 @@
    ;; "A", "B", "C"
    :block/priority {}
 
-   ;; block key value properties
+   ;; map, key -> set of refs in property value or full text if none are found
    :block/properties {}
    ;; vector
    :block/properties-order {}
+   ;; map, key -> original property value's content
+   :block/properties-text-values {}
 
    ;; first block that's not a heading or unordered list
    :block/pre-block? {}
@@ -117,6 +120,7 @@
     :block/type
     :block/properties
     :block/properties-order
+    :block/properties-text-values
     :block/invalid-properties
     :block/created-at
     :block/updated-at
@@ -135,6 +139,7 @@
     :block/content
     :block/properties
     :block/properties-order
+    :block/properties-text-values
     :block/invalid-properties
     :block/alias
     :block/tags})

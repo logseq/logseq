@@ -177,8 +177,9 @@
   min-width: 22px;
   min-height: 22px;
   padding: 2px;
-  color: initial;
+  color: var(--ls-secondary-text-color);
   user-select: none;
+  opacity: .4;
 
   .control-hide {
     display: none;
@@ -186,40 +187,40 @@
 }
 
 .block-left-menu {
-    background-color: var(--ls-secondary-background-color);
-    background: linear-gradient(90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%);
+  background-color: var(--ls-secondary-background-color);
+  background: linear-gradient(90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%);
 
-    .commands-button {
-        overflow: hidden;
-        max-width: 40px;
-        text-align: center;
-        margin: auto 0;
+  .commands-button {
+    overflow: hidden;
+    max-width: 40px;
+    text-align: center;
+    margin: auto 0;
 
-        .indent {
-            opacity: 30%;
-        }
+    .indent {
+      opacity: 30%;
     }
+  }
 }
 
 .block-right-menu {
-    background-color: var(--ls-secondary-background-color);
-    /* background: linear-gradient(-90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%); */
+  background-color: var(--ls-secondary-background-color);
+  /* background: linear-gradient(-90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%); */
 
-    .commands-button {
-        overflow: hidden;
-        text-align: center;
-        margin: auto 0;
+  .commands-button {
+    overflow: hidden;
+    text-align: center;
+    margin: auto 0;
 
-        .outdent {
-            margin: 0 12px;
-            opacity: 30%;
-        }
-
-        .more {
-            margin: 0 12px;
-            opacity: 30%;
-        }
+    .outdent {
+      margin: 0 12px;
+      opacity: 30%;
     }
+
+    .more {
+      margin: 0 12px;
+      opacity: 30%;
+    }
+  }
 }
 
 .block-ref {
@@ -279,16 +280,16 @@
   }
 
   &.is-doc {
-      &:before {
-          content: "[[📜";
-          opacity: .7;
-          margin-right: 4px;
-      }
+    &:before {
+      content: "[[📜";
+      opacity: .7;
+      margin-right: 4px;
+    }
 
-      &:after {
-          content: "]]";
-          opacity: .7;
-      }
+    &:after {
+      content: "]]";
+      opacity: .7;
+    }
   }
 }
 
@@ -309,8 +310,7 @@
 
   color: #fff;
 
-  a,
-  .page-reference:not(:hover) {
+  a, .page-reference:not(:hover) {
     color: #aacece;
 
     .bracket {
@@ -633,7 +633,7 @@ a.cloze-revealed {
 }
 
 .page-property-key:hover {
-    background-color: var(--ls-selection-background-color);
+  background-color: var(--ls-selection-background-color);
 }
 
 .block-parents a {
@@ -651,24 +651,24 @@ a.cloze-revealed {
 }
 
 html.is-native-ios {
-    audio {
-        width: 100%;
-        max-width: 350px;
-    }
+  audio {
+    width: 100%;
+    max-width: 350px;
+  }
 }
 
 html:not(.is-mac) {
-    body[data-active-keystroke="Control"] {
-        .block-content {
-            cursor: pointer;
-        }
+  body[data-active-keystroke="Control"] {
+    .block-content {
+      cursor: pointer;
     }
+  }
 }
 
 html.is-mac {
-    body[data-active-keystroke="Meta"] {
-        .block-content {
-            cursor: pointer;
-        }
+  body[data-active-keystroke="Meta"] {
+    .block-content {
+      cursor: pointer;
     }
+  }
 }

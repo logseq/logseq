@@ -166,7 +166,7 @@
                         (try
                           (js/eval scripts)
                           (execed)
-                          (catch js/Error e
+                          (catch :default e
                             (js/console.error "[custom js]" e)))))))))))))))
 
 (defn toggle-wide-mode!

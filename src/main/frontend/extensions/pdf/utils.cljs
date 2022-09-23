@@ -190,13 +190,13 @@
   []
   (try
     (js-invoke js/window.lsPdfViewer "nextPage")
-    (catch js/Error _e nil)))
+    (catch :default _e nil)))
 
 (defn prev-page
   []
   (try
     (js-invoke js/window.lsPdfViewer "previousPage")
-    (catch js/Error _e nil)))
+    (catch :default _e nil)))
 
 (defn open-finder
   []

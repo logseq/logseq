@@ -518,6 +518,7 @@
               (when-let [e (and protocol host port (str protocol "://" host ":" port))]
                 [:strong.pr-1 e])
               (ui/icon "edit")]
+             :small? true
              :on-click #(state/set-sub-modal!
                          (fn [_] (plugins/user-proxy-settings-panel agent-opts))
                          {:id :https-proxy-panel :center? true})))

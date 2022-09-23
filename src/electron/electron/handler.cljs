@@ -233,7 +233,7 @@
         (when-let [sync-meta (and (not (string/blank? root))
                                   (.toString (.readFileSync fs txid-path)))]
           (reader/read-string sync-meta))))
-    (catch js/Error e
+    (catch :default e
       (js/console.debug "[read txid meta] #" root (.-message e)))))
 
 (defmethod handle :inflateGraphsInfo [_win [_ graphs]]
@@ -316,7 +316,7 @@
       (let [path (path/join path dir)]
         (try
           (fs-extra/removeSync path)
-          (catch js/Error e
+          (catch :default e
             (logger/error "Clear cache:" e)))))
     (utils/send-to-renderer window "redirect" {:payload {:to :home}})))
 
@@ -352,7 +352,7 @@
                  (try
                    (and (fs-extra/pathExistsSync url)
                         (fs-extra/pathExistsSync (path/join url "package.json")))
-                   (catch js/Error _e false)))))
+                   (catch :default _e false)))))
 
 (defmethod handle :relaunchApp []
   (.relaunch app) (.quit app))
@@ -564,9 +564,6 @@
 (defmethod handle :delete-remote-files [_ args]
   (apply rsapi/delete-remote-files (rest args)))
 
-(defmethod handle :update-remote-file [_ args]
-  (apply rsapi/update-remote-file (rest args)))
-
 (defmethod handle :update-remote-files [_ args]
   (apply rsapi/update-remote-files (rest args)))
 
@@ -626,7 +623,7 @@
                    ;; exception -
                    ;; https://www.electronjs.org/docs/latest/breaking-changes#behavior-changed-sending-non-js-objects-over-ipc-now-throws-an-exception
                    (bean/->js (handle (or (utils/get-win-from-sender event) window) message)))
-                 (catch js/Error e
+                 (catch :default e
                    (when-not (contains? #{"mkdir" "stat"} (nth args-js 0))
                      (logger/error "IPC error: " {:event event
                                                   :args args-js}

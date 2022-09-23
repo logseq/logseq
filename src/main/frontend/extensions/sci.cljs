@@ -17,7 +17,7 @@
                                    'isNaN js/isNaN
                                    'log js/console.log
                                    'pprint util/pp-str}})
-    (catch js/Error e
+    (catch :default e
       (println "Query: sci eval failed:")
       (js/console.error e))))
 

@@ -66,7 +66,7 @@
        (d/pull db
                selector
                eid)
-       (catch js/Error _e
+       (catch :default _e
          nil)))))
 
 (defn pull-many
@@ -78,7 +78,7 @@
    (when-let [db (conn/get-db repo)]
      (try
        (d/pull-many db selector eids)
-       (catch js/Error e
+       (catch :default e
          (js/console.error e))))))
 
 (defn transact!

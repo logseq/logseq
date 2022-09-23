@@ -41,11 +41,8 @@
             color: var(--ls-primary-text-color);
 
             > i {
-              width: 20px;
-              height: 20px;
-              font-size: 20px;
               overflow: hidden;
-              opacity: .6;
+              opacity: .9;
             }
 
             > strong {
@@ -421,22 +418,17 @@
   }
 }
 
-/* Styles for the category icon on the left of settings-modal */
-.cp__settings-inner > aside ul > li > a > i {
-  margin-right: 4px;
-}
-
 html.is-native-android,
 html.is-native-iphone,
 html.is-native-iphone-without-notch {
 
   .cp__settings-inner {
     > article {
-      padding-bottom: 0px;
+      padding-bottom: 0;
     }
 
     .panel-wrap {
-      padding-bottom: 0px;
+      padding-bottom: 0;
     }
   }
 }

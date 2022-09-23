@@ -100,7 +100,7 @@
   (try
     (when (fs/existsSync path)
       (.toString (fs/readFileSync path)))
-    (catch js/Error e
+    (catch :default e
       (logger/error "Read file:" e))))
 
 (defn get-focused-window
@@ -111,7 +111,7 @@
   [^js evt]
   (try
     (.fromWebContents BrowserWindow (.-sender evt))
-    (catch js/Error _
+    (catch :default _
       nil)))
 
 (defn send-to-renderer

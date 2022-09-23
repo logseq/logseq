@@ -146,7 +146,7 @@
                                          (state/get-repos))))))))]
 
     [:div.cp__file-sync-related-normal-modal
-     [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "cloud-upload")]]
+     [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "cloud-upload" {:size 20})]]
 
      [:h1.text-xl.font-semibold.opacity-90.text-center.py-2
       "Are you sure you want to create a new remote graph?"]
@@ -195,18 +195,16 @@
 
 (def *last-calculated-time (atom nil))
 
-(rum/defc indicator-progress-pane
+(rum/defc ^:large-vars/cleanup-todo indicator-progress-pane
   [sync-state sync-progress
-   {:keys [idle? syncing? no-active-files? online? need-password? history-files? queuing?]}]
+   {:keys [idle? syncing? no-active-files? online? history-files? queuing?]}]
 
   (rum/use-effect!
    (fn []
      #(reset! *last-calculated-time nil))
    [])
 
-  (let [status                 (:state sync-state)
-        status                 (or (nil? status) (keyword (name status)))
-        uploading-files        (:current-local->remote-files sync-state)
+  (let [uploading-files        (:current-local->remote-files sync-state)
         downloading-files      (:current-remote->local-files sync-state)
         uploading?             (seq uploading-files)
         downloading?           (seq downloading-files)
@@ -279,8 +277,8 @@
             (not online?) "Currently having connection issues..."
             idle-&-no-active? "Everything is synced!"
             syncing? "Currently syncing your graph..."
-            (not need-password?) "Waiting..."
-            :else (str "#" status))]]
+            :else "Waiting..."
+            )]]
         [:div.ar
          (when queuing? (sync-now))]])
 
@@ -386,7 +384,7 @@
                                                      (if (= (:url r) current-repo)
                                                        (dissoc r :GraphUUID :GraphName :remote?)
                                                        r))
-                                                (state/get-repos)))
+                                                   (state/get-repos)))
                                              (create-remote-graph-fn))
 
                                          (second @fs-sync/graphs-txid) ; sync not started yet
@@ -416,12 +414,11 @@
                                              :queuing queuing?
                                              :idle    (and (not queuing?) idle?)}])}
                [:span.flex.items-center
-                (ui/icon "cloud"
-                         {:style {:fontSize ui/icon-size}})]]
+                (ui/icon "cloud" {:size ui/icon-size})]]
 
               [:a.button.cloud.off
                {:on-click turn-on}
-               (ui/icon "cloud-off" {:style {:fontSize ui/icon-size}})]))
+               (ui/icon "cloud-off" {:size ui/icon-size})]))
 
           ;; links
           (cond-> []
@@ -542,41 +539,41 @@
 
    [:div.-mt-1
     (ui/button
-      "Open a local directory"
-      :class "w-full rounded-t-none py-4"
-      :on-click #(do
-                   (state/close-modal!)
-                   (fs-sync/<sync-stop)
-                   (->
-                    (page-handler/ls-dir-files!
-                     (fn [{:keys [url]}]
-                       (file-sync-handler/init-remote-graph url graph)
-                       (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
+     "Open a local directory"
+     :class "w-full rounded-t-none py-4"
+     :on-click #(do
+                  (state/close-modal!)
+                  (fs-sync/<sync-stop)
+                  (->
+                   (page-handler/ls-dir-files!
+                    (fn [{:keys [url]}]
+                      (file-sync-handler/init-remote-graph url graph)
+                      (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
 
-                     {:empty-dir?-or-pred
-                      (fn [ret]
-                        (let [empty-dir? (nil? (second ret))]
-                          (if-let [root (first ret)]
+                    {:empty-dir?-or-pred
+                     (fn [ret]
+                       (let [empty-dir? (nil? (second ret))]
+                         (if-let [root (first ret)]
 
-                            ;; verify directory
-                            (-> (if empty-dir?
-                                  (p/resolved nil)
-                                  (if (util/electron?)
-                                    (ipc/ipc :readGraphTxIdInfo root)
-                                    (fs-util/read-graphs-txid-info root)))
+                           ;; verify directory
+                           (-> (if empty-dir?
+                                 (p/resolved nil)
+                                 (if (util/electron?)
+                                   (ipc/ipc :readGraphTxIdInfo root)
+                                   (fs-util/read-graphs-txid-info root)))
 
-                                (p/then (fn [^js info]
-                                          (when (and (not empty-dir?)
-                                                     (or (nil? info)
-                                                         (nil? (second info))
-                                                         (not= (second info) (:GraphUUID graph))))
-                                            (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
-                                              (p/resolved nil)
-                                              (throw (js/Error. nil)))))))
+                               (p/then (fn [^js info]
+                                         (when (and (not empty-dir?)
+                                                    (or (nil? info)
+                                                        (nil? (second info))
+                                                        (not= (second info) (:GraphUUID graph))))
+                                           (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
+                                             (p/resolved nil)
+                                             (throw (js/Error. nil)))))))
 
-                            ;; cancel pick a directory
-                            (throw (js/Error. nil)))))})
-                    (p/catch (fn [])))))
+                           ;; cancel pick a directory
+                           (throw (js/Error. nil)))))})
+                   (p/catch (fn [])))))
     [:p.text-xs.opacity-50.px-1 (ui/icon "alert-circle") " An empty directory or an existing remote graph!"]]])
 
 (defn pick-dest-to-sync-panel [graph]
@@ -789,7 +786,7 @@
   [close-fn]
 
   [:div.cp__file-sync-related-normal-modal
-   [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "checkup-list")]]
+   [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "checkup-list" {:size 28})]]
 
    [:h1.text-xl.font-semibold.opacity-90.text-center.py-2
     [:span.dark:opacity-80 "Congrats on your first successful sync!"]]
@@ -804,7 +801,7 @@
 
    [:div.cloud-tip.rounded-md.mt-6.py-4
     [:div.items-center.opacity-90.flex.justify-center
-     [:span.pr-2 (ui/icon "bell-ringing" {:class "font-semibold"})]
+     [:span.pr-2.flex (ui/icon "bell-ringing" {:class "font-semibold"})]
      [:strong "Logseq Sync is still in Beta and we're working on a Pro plan!"]]
 
     ;; [:ul.flex.py-6.px-4
@@ -877,5 +874,5 @@
 
           (state/pub-event! [:file-sync/onboarding-tip type])
           (state/set-state! [:file-sync/onboarding-state (keyword type)] true)))
-      (catch js/Error e
+      (catch :default e
         (js/console.warn "[onboarding SKIP] " (name type) e)))))

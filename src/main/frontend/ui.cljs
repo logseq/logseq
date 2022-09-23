@@ -28,6 +28,7 @@
             ["@logseq/react-tweet-embed" :as react-tweet-embed]
             ["react-intersection-observer" :as react-intersection-observer]
             [rum.core :as rum]
+            [camel-snake-kebab.core :as csk]
             [frontend.db-mixins :as db-mixins]
             [frontend.mobile.util :as mobile-util]
             [frontend.config :as config]
@@ -48,7 +49,7 @@
        (util/safari?)
        (js/window.scrollTo 0 0)))
 
-(defonce icon-size (if (mobile-util/native-platform?) 23 20))
+(defonce icon-size (if (mobile-util/native-platform?) 26 20))
 
 (rum/defc ls-textarea
   < rum/reactive
@@ -304,7 +305,7 @@
   (let [time-fn (fn []
                   (try
                     (util/time-ago input)
-                    (catch js/Error e
+                    (catch :default e
                       (js/console.error e)
                       input)))
         [time set-time] (rum/use-state (time-fn))]
@@ -385,11 +386,11 @@
   []
   (let [^js schemaMedia (js/window.matchMedia "(prefers-color-scheme: dark)")]
     (try (.addEventListener schemaMedia "change" state/sync-system-theme!)
-         (catch js/Error _error
+         (catch :default _error
            (.addListener schemaMedia state/sync-system-theme!)))
     (state/sync-system-theme!)
     #(try (.removeEventListener schemaMedia "change" state/sync-system-theme!)
-          (catch js/Error _error
+          (catch :default _error
             (.removeListener schemaMedia state/sync-system-theme!)))))
 
 (defn set-global-active-keystroke [val]
@@ -910,7 +911,7 @@
                                   (html)
                                   [:div.px-2.py-1
                                    html]))
-                              (catch js/Error e
+                              (catch :default e
                                 (log/error :exception e)
                                 [:div])))
                           [:div {:key "tippy"} ""])))
@@ -937,15 +938,29 @@
              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
              :on-tweet-load-success #(reset! *loading? false)})]]))
 
+(def get-adapt-icon-class
+  (memoize (fn [klass] (r/adapt-class klass))))
+
 (defn icon
   ([class] (icon class nil))
-  ([class {:keys [extension?] :as opts}]
-   [:i (merge {:class (util/format
-                       (str "%s-" class
-                            (when (:class opts)
-                              (str " " (string/trim (:class opts)))))
-                       (if extension? "tie tie" "ti ti"))}
-              (dissoc opts :class :extension?))]))
+  ([class {:keys [extension? font?] :as opts}]
+   (when-not (string/blank? class)
+     (let [^js jsTablerIcons (gobj/get js/window "tablerIcons")]
+       (if (or extension? font? (not jsTablerIcons))
+         [:i (merge {:class
+                     (util/format
+                      (str "%s-" class
+                           (when (:class opts)
+                             (str " " (string/trim (:class opts)))))
+                      (if extension? "tie tie" "ti ti"))}
+                    (dissoc opts :class :extension?))]
+
+         ;; tabler svg react
+         (when-let [klass (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase class)))]
+           (let [f (get-adapt-icon-class klass)]
+             [:span.ui__icon.ti
+              {:class (str "ls-icon-" class)}
+              (f (merge {:size 18} (r/map-keys->camel-case opts)))])))))))
 
 (rum/defc with-shortcut < rum/reactive
   < {:key-fn (fn [key pos] (str "shortcut-" key pos))}

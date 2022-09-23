@@ -677,7 +677,7 @@
       (let [payload (async/<! chan)]
         (try
           (handle payload)
-          (catch js/Error error
+          (catch :default error
             (let [type :handle-system-events/failed]
               (js/console.error (str type) (clj->js payload) "\n" error)
               (state/pub-event! [:instrument {:type    type

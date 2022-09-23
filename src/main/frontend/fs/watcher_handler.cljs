@@ -24,7 +24,7 @@
     (doseq [block-id (block-ref/get-all-block-ref-ids content)]
       (when-let [block (try
                          (model/get-block-by-uuid block-id)
-                         (catch js/Error _e
+                         (catch :default _e
                            nil))]
         (let [id-property (:id (:block/properties block))]
           (when-not (= (str id-property) (str block-id))

@@ -70,19 +70,21 @@
 (rum/defc page-name
   [name icon recent?]
   (let [original-name (db-model/get-page-original-name name)]
-    [:a {:on-click (fn [e]
-                     (let [name (util/safe-page-name-sanity-lc name)
-                           source-page (db-model/get-alias-source-page (state/get-current-repo) name)
-                           name (if (empty? source-page) name (:block/name source-page))]
-                       (if (gobj/get e "shiftKey")
-                         (when-let [page-entity (if (empty? source-page) (db/entity [:block/name name]) source-page)]
-                           (state/sidebar-add-block!
-                            (state/get-current-repo)
-                            (:db/id page-entity)
-                            :page))
-                         (route-handler/redirect-to-page! name {:click-from-recent? recent?}))))}
+    [:a.flex.items-center
+     {:on-click
+      (fn [e]
+        (let [name        (util/safe-page-name-sanity-lc name)
+              source-page (db-model/get-alias-source-page (state/get-current-repo) name)
+              name        (if (empty? source-page) name (:block/name source-page))]
+          (if (gobj/get e "shiftKey")
+            (when-let [page-entity (if (empty? source-page) (db/entity [:block/name name]) source-page)]
+              (state/sidebar-add-block!
+               (state/get-current-repo)
+               (:db/id page-entity)
+               :page))
+            (route-handler/redirect-to-page! name {:click-from-recent? recent?}))))}
      [:span.page-icon icon]
-     (pdf-assets/fix-local-asset-filename original-name)]))
+     [:span.page-title (pdf-assets/fix-local-asset-filename original-name)]]))
 
 (defn get-page-icon [page-entity]
   (let [default-icon (ui/icon "file-text")
@@ -126,8 +128,8 @@
   [t]
   (nav-content-item
    [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
-    (ui/icon "star mr-1" {:style {:font-size 16}})
-    [:span.flex-1.ml-1 (string/upper-case (t :left-side-bar/nav-favorites))]]
+    (ui/icon "star" {:size 16})
+    [:span.flex-1.ml-2 (string/upper-case (t :left-side-bar/nav-favorites))]]
 
    {:class "favorites"
     :edit-fn
@@ -150,8 +152,8 @@
   [t]
   (nav-content-item
    [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
-    (ui/icon "history mr-2" {:style {:font-size 16}})
-    [:span.flex-1
+    (ui/icon "history" {:size 16})
+    [:span.flex-1.ml-2
      (string/upper-case (t :left-side-bar/nav-recent-pages))]]
 
    {:class "recent"}
@@ -238,7 +240,7 @@
         [:div.fake-bar.absolute
          [:button
           {:on-click state/toggle-left-sidebar!}
-          (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]])
+          (ui/icon "menu-2" {:size ui/icon-size})]])
 
       [:nav.px-4.flex.flex-col.gap-1
        {:aria-label "Navigation menu"}
@@ -299,7 +301,7 @@
                        (and (util/sm-breakpoint?)
                             (state/toggle-left-sidebar!))
                        (state/pub-event! [:go/search]))}
-          (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
+          (ui/icon "circle-plus" {:style {:font-size 20}})
           [:span.flex-1 (t :right-side-bar/new-page)]])]]]))
 
 (rum/defc left-sidebar < rum/reactive

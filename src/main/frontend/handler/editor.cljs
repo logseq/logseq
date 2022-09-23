@@ -294,7 +294,7 @@
                           :else
                           content)]
         new-content)
-      (catch js/Error _e
+      (catch :default _e
         content))
     content))
 
@@ -634,8 +634,7 @@
 (defn properties-block
   [properties format page]
   (let [content (property/insert-properties format "" properties)
-        refs (gp-block/get-page-refs-from-properties format
-                                                     properties
+        refs (gp-block/get-page-refs-from-properties properties
                                                      (db/get-db (state/get-current-repo))
                                                      (state/get-date-formatter)
                                                      (state/get-config))]
@@ -1294,7 +1293,7 @@
                       (not= (string/trim db-content-without-heading)
                             (string/trim value)))
                  (save-block-aux! db-block value opts))))
-           (catch js/Error error
+           (catch :default error
              (log/error :save-block-failed error))))))))
 
 (defn- clean-content!
@@ -1637,7 +1636,7 @@
               @commands/*initial-commands)
          (and last-command
               (commands/get-matched-commands last-command)))))
-    (catch js/Error e
+    (catch :default e
       (js/console.error e)
       nil)))
 
@@ -1657,7 +1656,7 @@
               (commands/get-matched-commands
                last-command
                (commands/block-commands-map))))))
-    (catch js/Error _error
+    (catch :default _error
       nil)))
 
 (defn auto-complete?
@@ -2757,7 +2756,7 @@
             (autopair input-id "(" format nil))
 
         ;; If you type `xyz`, the last backtick should close the first and not add another autopair
-        ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)        
+        ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)
         (contains? (set (keys autopair-map)) key)
         (let [curr (get-current-input-char input)
                   prev (util/nth-safe value (dec pos))]

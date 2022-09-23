@@ -50,7 +50,7 @@
           (listen state js/window "visibilitychange"
                   (fn [e]
                     (on-hide state e :visibilitychange))))))
-    (catch js/Error _e
+    (catch :default _e
       ;; TODO: Unable to find node on an unmounted component.
       nil)))
 
