@@ -1,4 +1,4 @@
-(ns frontend.util.drawer
+(ns ^:no-doc frontend.util.drawer
   (:require [clojure.string :as string]
             [frontend.util :as util]
             [logseq.graph-parser.mldoc :as gp-mldoc]

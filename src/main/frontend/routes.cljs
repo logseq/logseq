@@ -1,4 +1,5 @@
 (ns frontend.routes
+  "Defines routes for use with reitit router"
   (:require [frontend.components.home :as home]
             [frontend.components.repo :as repo]
             [frontend.components.file :as file]

@@ -1,4 +1,5 @@
 (ns frontend.commands
+  "Provides functionality for commands and advanced commands"
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.date :as date]

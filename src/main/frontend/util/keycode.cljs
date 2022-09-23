@@ -1,4 +1,5 @@
-(ns frontend.util.keycode)
+(ns frontend.util.keycode
+  "Provides names for common keycodes")
 
 ;; code / keycode should all be deprecated for non funcional keys
 ;; (def left-square-bracket 219) ;; deprecated

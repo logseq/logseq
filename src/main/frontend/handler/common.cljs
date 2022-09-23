@@ -1,4 +1,5 @@
 (ns frontend.handler.common
+  "Common fns for handlers"
   (:require [cljs-bean.core :as bean]
             [cljs.reader :as reader]
             [clojure.string :as string]

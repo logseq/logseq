@@ -1,4 +1,4 @@
-(ns frontend.search.protocol)
+(ns ^:no-doc frontend.search.protocol)
 
 (defprotocol Engine
   (query [this q option])

@@ -1,4 +1,5 @@
 (ns frontend.fs.watcher-handler
+  "Main ns that handles file watching events from electron's main process"
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]

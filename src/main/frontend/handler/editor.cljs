@@ -1,4 +1,4 @@
-(ns frontend.handler.editor
+(ns ^:no-doc frontend.handler.editor
   (:require ["path" :as path]
             [clojure.set :as set]
             [clojure.string :as string]
@@ -613,7 +613,7 @@
             (when edit-block?
               (if (and replace-empty-target?
                        (string/blank? (:block/content last-block)))
-                ;; 20ms of waiting for DOM to load the block, to avoid race condition. 
+                ;; 20ms of waiting for DOM to load the block, to avoid race condition.
                 ;; It's ensuring good response under M1 pro
                 ;; Used to be 10ms before, but is causing occasional failure on M1 pro with a full page of blocks,
                 ;; or failing E2E with a small number of blocks.

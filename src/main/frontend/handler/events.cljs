@@ -1,4 +1,7 @@
 (ns frontend.handler.events
+  "System-component-like ns that defines named events and listens on a
+  core.async channel to handle them. Any part of the system can dispatch
+  one of these events using state/pub-event!"
   (:refer-clojure :exclude [run!])
   (:require ["@capacitor/filesystem" :refer [Directory Filesystem]]
             [clojure.core.async :as async]
@@ -10,7 +13,7 @@
             [frontend.components.diff :as diff]
             [frontend.components.git :as git-component]
             [frontend.components.plugins :as plugin]
-            [frontend.components.search :as search]
+            [frontend.components.search :as component-search]
             [frontend.components.shell :as shell]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -43,7 +46,7 @@
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.shortcut.core :as st]
-            [frontend.search :as search-db]
+            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -330,7 +333,7 @@
     (state/set-modal! shell/shell)))
 
 (defmethod handle :go/search [_]
-  (state/set-modal! search/search-modal
+  (state/set-modal! component-search/search-modal
                     {:fullscreen? false
                      :close-btn?  false}))
 
@@ -453,7 +456,7 @@
               (try
                 (update-file-path deprecated-repo current-repo deprecated-app-id current-app-id)
                 (db-persist/delete-graph! deprecated-repo)
-                (search-db/remove-db! deprecated-repo)
+                (search/remove-db! deprecated-repo)
                 (state/delete-repo! {:url deprecated-repo})
                 (state/add-repo! {:url current-repo :nfs? true})
                 (catch :default e

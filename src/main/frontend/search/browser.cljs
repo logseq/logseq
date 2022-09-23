@@ -1,4 +1,5 @@
 (ns frontend.search.browser
+  "Browser implementation of search protocol"
   (:require [cljs-bean.core :as bean]
             [frontend.search.db :as search-db :refer [indices]]
             [frontend.search.protocol :as protocol]

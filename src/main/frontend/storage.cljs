@@ -1,4 +1,6 @@
 (ns frontend.storage
+  "Provides fns for most common operations with localStorage. Assumes
+  localStorage values are edn"
   (:refer-clojure :exclude [get set remove])
   (:require [cljs.reader :as reader]
             [datascript.transit :as dt]
