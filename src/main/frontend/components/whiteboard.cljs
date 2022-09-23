@@ -213,7 +213,7 @@
                                                                                (disj checked-page-names whiteboard-name))))})])
          (for [n (range empty-cards)]
            [:div.dashboard-card.dashboard-bg-card {:key n}])]]])
-    [:div "This feature is not public available yet."]))
+    [:div "This feature is not publicly available yet."]))
 
 (rum/defc whiteboard-page
   [name block-id]

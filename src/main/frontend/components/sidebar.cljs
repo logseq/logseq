@@ -210,7 +210,7 @@
     class :class
     title :title
     icon :icon
-    icon-extention? :icon-extention?
+    icon-extension? :icon-extension?
     active :active
     href :href}]
   [:div
@@ -219,7 +219,7 @@
     {:on-click on-click-handler
      :class (when active "active")
      :href href}
-    (ui/icon (str icon) {:extension? icon-extention?})
+    (ui/icon (str icon) {:extension? icon-extension?})
     [:span.flex-1 title]]])
 
 (defn close-sidebar-on-mobile!
@@ -332,7 +332,7 @@
             :href  (rfe/href :whiteboards)
             :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
             :icon  "whiteboard"
-            :icon-extention? true}))]]
+            :icon-extension? true}))]]
 
       [:div.nav-contents-container.flex.flex-col.gap-1.pt-1
        {:on-scroll on-contents-scroll}
