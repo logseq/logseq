@@ -1,5 +1,24 @@
 const colors = require('tailwindcss/colors')
 
+function exposeColorsToCssVars({ addBase, theme }) {
+  function extractColorVars(colorObj, colorGroup = '') {
+    return Object.keys(colorObj).reduce((vars, colorKey) => {
+      const value = colorObj[colorKey];
+
+      const newVars =
+        typeof value === 'string'
+          ? { [`--color${colorGroup}-${colorKey}`]: value }
+          : extractColorVars(value, `-${colorKey}`);
+
+      return { ...vars, ...newVars };
+    }, {});
+  }
+
+  addBase({
+    ':root': extractColorVars(theme('colors')),
+  });
+}
+
 module.exports = {
   mode: 'jit',
   purge: [
@@ -7,7 +26,9 @@ module.exports = {
     './src/**/*.cljs',
     './resources/**/*.html',
   ],
-  plugins: [require('@tailwindcss/ui')],
+  plugins: [
+    require('@tailwindcss/ui'),
+    exposeColorsToCssVars],
   darkMode: 'class',
   theme: {
     extend: {
