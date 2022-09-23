@@ -263,7 +263,7 @@
             (string/trimr))
         filename))))
 
-(rum/defc human-page-name-display
+(defn human-page-name
   [page-name]
   (cond
     (string/starts-with? page-name "hls__")
