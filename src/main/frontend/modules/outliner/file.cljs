@@ -47,7 +47,7 @@
     (if (or (and (> blocks-count 500)
                  (not (state/input-idle? repo {:diff 3000}))) ;; long page
             ;; when this whiteboard page is just being updated 
-            (and whiteboard? (not (state/whiteboard-page-idle? repo page-block {:diff 3000}))))
+            (and whiteboard? (not (state/whiteboard-page-idle? repo page-block))))
       (async/put! (state/get-file-write-chan) [repo page-db-id])
       (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
             blocks (model/get-page-blocks-no-cache repo (:block/name page-block) {:pull-keys pull-keys})

@@ -1466,16 +1466,24 @@ Similar to re-frame subscriptions"
      (not (get-edit-input-id)))))
 
 (defn whiteboard-page-idle?
-  [repo whiteboard-page & {:keys [diff]
-                           :or {diff 1000}}]
+  "Check if whiteboard page is idle.
+   - when current tool is select and idle
+     - and whiteboard page is updated longer than 1000 seconds
+   - when current tool is other tool and idle
+     - and whiteboard page is updated longer than 3000 seconds"
+  [repo whiteboard-page & {:keys [select-idle-ms tool-idle-ms]
+                           :or {select-idle-ms 1000
+                                tool-idle-ms 3000}}]
   (when repo
-    (or
-     (when-let [last-time (:block/updated-at whiteboard-page)]
-       (let [now (util/time-ms)]
-         (>= (- now last-time) diff)))
-     ;; in idle mode
-     (when-let [tldraw-app (active-tldraw-app)]
-       (.. tldraw-app (isIn "select.idle"))))))
+    (if-let [tldraw-app (active-tldraw-app)]
+      (let [last-time (:block/updated-at whiteboard-page)
+            now (util/time-ms)
+            ellapsed (- now last-time)
+            select-idle (.. tldraw-app (isIn "select.idle"))
+            tool-idle (.. tldraw-app -selectedTool (isIn "idle"))]
+        (or (and select-idle (>= ellapsed select-idle-ms))
+            (and (not select-idle) tool-idle (>= ellapsed tool-idle-ms))))
+      true)))
 
 (defn set-nfs-refreshing!
   [value]
