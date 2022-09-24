@@ -235,7 +235,7 @@
                                  [:span#repo-switch.block.pr-2.whitespace-nowrap
                                   [:span [:span#repo-name.font-medium
                                           (if (= config/local-repo short-repo-name) "Demo" short-repo-name)
-                                          (when remote? [:span.pl-1 (ui/icon "cloud")])]]
+                                          (when remote? [:span.pl-1 (ui/icon "cloud" {:font? true})])]]
                                   [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]))
             links-header (cond->
                            {:modal-class (util/hiccup->class
