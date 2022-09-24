@@ -245,8 +245,7 @@
   (let [_ (when verbose (println "Parsing start: " file))
         {:keys [pages blocks]} (gp-util/safe-read-string content)
         page-block (first pages)
-        page-name (or (:block/original-name page-block)
-                      (:block/name page-block)
+        page-name (or (:block/name page-block)
                       (filepath->page-name file))
         page-original-name (-> (:block/original-name page-block)
                                (#(cond (nil? %) page-name
@@ -257,8 +256,7 @@
         page {:block/name page-name
               :block/original-name page-original-name
               :block/file {:file/path (gp-util/path-normalize file)}}
-        page-block (merge page page-block (when-not (:block/uuid page-block) {:block/uuid (d/squuid)}))
-        _ (println page-block)
+        page-block (merge page-block page (when-not (:block/uuid page-block) {:block/uuid (d/squuid)}))
         blocks (->> blocks
                     (map #(merge % {:block/uuid (or (:block/uuid %)
                                                     (gp-block/get-custom-id-or-new-id (:block/properties %)))}

@@ -1473,9 +1473,9 @@ Similar to re-frame subscriptions"
      (when-let [last-time (:block/updated-at whiteboard-page)]
        (let [now (util/time-ms)]
          (>= (- now last-time) diff)))
-     ;; not in idle mode
-     (not (when-let [tldraw-app (active-tldraw-app)]
-            (.. tldraw-app -selectedTool (isIn "idle")))))))
+     ;; in idle mode
+     (when-let [tldraw-app (active-tldraw-app)]
+       (.. tldraw-app (isIn "select.idle"))))))
 
 (defn set-nfs-refreshing!
   [value]
