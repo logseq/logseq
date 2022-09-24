@@ -248,7 +248,17 @@
         page-name (or (:block/original-name page-block)
                       (:block/name page-block)
                       (filepath->page-name file))
-        page-block (merge page-block (when-not (:block/uuid page-block) {:block/uuid (d/squuid)}))
+        page-original-name (-> (:block/original-name page-block)
+                               (#(cond (nil? %) page-name
+                                       (= (gp-util/page-name-sanity-lc %)
+                                          (gp-util/page-name-sanity-lc page-name)) page-name
+                                       :else %)))
+        page-name (gp-util/page-name-sanity-lc page-name)
+        page {:block/name page-name
+              :block/original-name page-original-name
+              :block/file {:file/path (gp-util/path-normalize file)}}
+        page-block (merge page page-block (when-not (:block/uuid page-block) {:block/uuid (d/squuid)}))
+        _ (println page-block)
         blocks (->> blocks
                     (map #(merge % {:block/uuid (or (:block/uuid %)
                                                     (gp-block/get-custom-id-or-new-id (:block/properties %)))}
