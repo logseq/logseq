@@ -1404,22 +1404,22 @@
 
 #?(:cljs
    (defn use-component-size
-     []
-     (let [[ref set-ref] (rum/use-state nil)
-           [rect set-rect] (rum/use-state nil)]
-       (rum/use-effect!
-        (if ref
-          (fn []
-            (let [update-rect #(set-rect (. ref getBoundingClientRect))
-                  updator (fn [entries]
-                            (when (.-contentRect (first (js->clj entries))) (update-rect)))
-                  observer (js/ResizeObserver. updator)]
-              (update-rect)
-              (.observe observer ref)
-              #(.disconnect observer)))
-          #())
-        [ref])
-       [set-ref rect])))
+     ([] (use-component-size nil))
+     ([tick] (let [[ref set-ref] (rum/use-state nil)
+                   [rect set-rect] (rum/use-state nil)]
+               (rum/use-effect!
+                (if ref
+                  (fn []
+                    (let [update-rect #(set-rect (. ref getBoundingClientRect))
+                          updator (fn [entries]
+                                    (when (.-contentRect (first (js->clj entries))) (update-rect)))
+                          observer (js/ResizeObserver. updator)]
+                      (update-rect)
+                      (.observe observer ref)
+                      #(.disconnect observer)))
+                  #())
+                [ref tick])
+               [set-ref rect]))))
 
 #?(:cljs
    (defn use-click-outside

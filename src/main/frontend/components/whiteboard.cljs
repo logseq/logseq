@@ -43,11 +43,15 @@
 
 (rum/defc dropdown
   [label children show? outside-click-hander]
-  (let [[anchor-ref anchor-rect] (util/use-component-size)
-        [content-ref content-rect] (util/use-component-size)
+  (let [[anchor-ref anchor-rect] (util/use-component-size show?)
+        [content-ref content-rect] (util/use-component-size show?)
         offset-x (when (and anchor-rect content-rect)
-                   (+ (* 0.5 (- (.-width anchor-rect) (.-width content-rect)))
-                      (.-x anchor-rect)))
+                   (let [offset-x (+ (* 0.5 (- (.-width anchor-rect) (.-width content-rect)))
+                                     (.-x anchor-rect))
+                         vp-w (.-innerWidth js/window)
+                         right (+ offset-x (.-width content-rect) 16)
+                         offset-x (if (> right vp-w) (- offset-x (- right vp-w)) offset-x)]
+                     offset-x))
         offset-y (when (and anchor-rect content-rect)
                    (+ (.-y anchor-rect) (.-height anchor-rect) 8))
         click-outside-ref (util/use-click-outside outside-click-hander)
@@ -57,11 +61,13 @@
     [:div.dropdown-anchor {:ref anchor-ref}
      label
      (ui/portal
-      [:div.fixed.shadow-lg.color-level.px-2.rounded-lg.transition.md:w-64.lg:w-128
+      [:div.fixed.shadow-lg.color-level.px-2.rounded-lg.transition.md:w-64.lg:w-128.overflow-auto
        {:ref (juxt content-ref click-outside-ref)
         :style {:opacity (if d-open 1 0)
+                :pointer-events (if d-open "auto" "none")
                 :transform (str "translateY(" (if d-open 0 10) "px)")
                 :min-height "40px"
+                :max-height "420px"
                 :left offset-x
                 :top offset-y}} children])]))
 
