@@ -10,6 +10,8 @@
             [datascript.core :as d]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
@@ -216,8 +218,8 @@
   {:block/content (case (:type shape)
                     "text" (:text shape)
                     "logseq-portal" (if (= (:blockType shape) "P")
-                                      (str "[[" (:pageId shape) "]]")
-                                      (str "((" (:pageId shape) "))"))
+                                      (page-ref/->page-ref (:pageId shape))
+                                      (block-ref/->block-ref (:pageId shape)))
                     "line" (str "whiteboard arrow" (when-let [label (:label shape)] (str ": " label)))
                     (str "whiteboard " (:type shape)))})
 

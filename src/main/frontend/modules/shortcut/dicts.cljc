@@ -98,6 +98,7 @@
    :command/run                    "Run git command"
    :go/home                        "Go to home"
    :go/all-graphs                  "Go to all graphs"
+   :go/whiteboards                 "Go to whiteboards"
    :go/all-pages                   "Go to all pages"
    :go/graph-view                  "Go to graph view"
    :go/keyboard-shortcuts          "Go to keyboard shortcuts"
