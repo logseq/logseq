@@ -49,7 +49,7 @@
              (fn [error]
                (println "Can't read local image file: ")
                (js/console.dir error))))))
-      (catch js/Error _e
+      (catch :default _e
         nil))))
 
 (defn request-presigned-url

@@ -76,6 +76,6 @@
                                        (map next))]
                  (assert (= (count left&parent-list) (count (distinct left&parent-list))) eids)))
              rs)
-           (catch js/Error e
+           (catch :default e
              (log/error :exception e)
              (throw e)))))))

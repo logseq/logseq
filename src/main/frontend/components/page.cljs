@@ -985,23 +985,27 @@
              [:a.button.journal
               {:class    (util/classnames [{:active (boolean @*journal?)}])
                :on-click #(reset! *journal? (not @*journal?))}
-              (ui/icon "calendar" {:style {:fontSize ui/icon-size}})])]
+              (ui/icon "calendar" {:size ui/icon-size})])]
 
            [:div.paginates
             [:span.flex.items-center
              {:class (util/classnames [{:is-first (= 1 @*current-page)
                                         :is-last  (= @*current-page total-pages)}])}
              (when has-prev?
-               [:a.py-4.pr-2.fade-link {:on-click #(to-page (dec @*current-page))} (ui/icon "caret-left") (str " " (t :paginates/prev))])
+               [:a.py-4.pr-2.fade-link.flex.items-center
+                {:on-click #(to-page (dec @*current-page))}
+                (ui/icon "caret-left") (str " " (t :paginates/prev))])
              [:span.opacity-60 (str @*current-page "/" total-pages)]
              (when has-next?
-               [:a.py-4.pl-2.fade-link {:on-click #(to-page (inc @*current-page))} (str (t :paginates/next) " ") (ui/icon "caret-right")])]]
+               [:a.py-4.pl-2.fade-link.flex.items-center
+                {:on-click #(to-page (inc @*current-page))} (str (t :paginates/next) " ")
+                (ui/icon "caret-right")])]]
 
            (ui/dropdown-with-links
             (fn [{:keys [toggle-fn]}]
               [:a.button.fade-link
                {:on-click toggle-fn}
-               (ui/icon "dots" {:style {:fontSize ui/icon-size}})])
+               (ui/icon "dots" {:size ui/icon-size})])
             [{:title (t :remove-orphaned-pages)
               :options {:on-click (fn []
                                     (let [orphaned-pages (model/get-orphaned-pages {})
@@ -1075,6 +1079,8 @@
           [:span]
           [:span.flex.items-center
            (when has-prev?
-             [:a.py-4.text-sm.fade-link {:on-click #(to-page (dec @*current-page))} (ui/icon "caret-left") (str " " (t :paginates/prev))])
+             [:a.py-4.text-sm.fade-link.flex.items-center {:on-click #(to-page (dec @*current-page))}
+              (ui/icon "caret-left") (str " " (t :paginates/prev))])
            (when has-next?
-             [:a.py-4.pl-2.text-sm.fade-link {:on-click #(to-page (inc @*current-page))} (str (t :paginates/next) " ") (ui/icon "caret-right")])]]]))]))
+             [:a.py-4.pl-2.text-sm.fade-link.flex.items-center {:on-click #(to-page (inc @*current-page))} (str (t :paginates/next) " ")
+              (ui/icon "caret-right")])]]]))]))

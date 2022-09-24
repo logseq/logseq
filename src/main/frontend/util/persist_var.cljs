@@ -41,7 +41,7 @@
                          (fn [content]
                            (when (not-empty content)
                              (try (cljs.reader/read-string content)
-                                  (catch js/Error e
+                                  (catch :default e
                                     (println (util/format "read persist-var failed: %s" (load-path location)))
                                     (js/console.dir e)))))
                          (fn [value]

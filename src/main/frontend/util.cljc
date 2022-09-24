@@ -568,12 +568,12 @@
      ([input text start end]
       (try
         (.setRangeText input text start end)
-        (catch js/Error _e
+        (catch :default _e
           nil)))
      ([input text start end select-mode]
       (try
         (.setRangeText input text start end select-mode)
-        (catch js/Error _e
+        (catch :default _e
           nil)))))
 
 #?(:cljs
@@ -587,7 +587,7 @@
            (let [^js splitter (GraphemeSplitter.)
                  ^js input (.splitGraphemes splitter input)]
              (- current-pos (.-length (.pop input))))
-           (catch js/Error e
+           (catch :default e
              (js/console.error e)
              (dec current-pos))))
        (dec current-pos))))
@@ -603,7 +603,7 @@
            (let [^js splitter (GraphemeSplitter.)
                  ^js input (.splitGraphemes splitter input)]
              (+ current-pos (.-length (.shift input))))
-           (catch js/Error e
+           (catch :default e
              (js/console.error e)
              (inc current-pos))))
        (inc current-pos))))
@@ -880,7 +880,7 @@
      [path]
      (try
        (js/window.apis.isAbsolutePath path)
-       (catch js/Error _
+       (catch :default _
          (utils/win32 path)))))
 
 (defn default-content-with-title

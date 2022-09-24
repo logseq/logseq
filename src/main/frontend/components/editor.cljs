@@ -487,7 +487,7 @@
    (fn [state]
      (when-not (:editor/on-paste? @state/state)
        (try (editor-handler/handle-last-input)
-            (catch js/Error _e
+            (catch :default _e
               nil)))
      (state/set-state! :editor/on-paste? false)
      state)}

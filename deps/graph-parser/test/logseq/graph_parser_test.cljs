@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [logseq.graph-parser :as graph-parser]
             [logseq.db :as ldb]
+            [logseq.db.default :as default-db]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
             [datascript.core :as d]))
@@ -99,13 +100,12 @@
   (testing "Sort order and persistence of 10 properties"
     (test-property-order 10)))
 
-(defn- quoted-property-values-test
-  [user-config]
+(deftest quoted-property-values
   (let [conn (ldb/start-conn)
         _ (graph-parser/parse-file conn
                                    "foo.md"
                                    "- desc:: \"#foo is not a ref\""
-                                   {:extract-options {:user-config user-config}})
+                                   {:extract-options {:user-config {}}})
         block (->> (d/q '[:find (pull ?b [* {:block/refs [*]}])
                        :in $
                        :where [?b :block/properties]]
@@ -119,47 +119,55 @@
            (map :block/original-name (:block/refs block)))
         "No refs from property value")))
 
-(deftest quoted-property-values
-  (testing "With default config"
-    (quoted-property-values-test {}))
-  (testing "With :rich-property-values config"
-    (quoted-property-values-test {:rich-property-values? true})))
+(deftest non-string-property-values
+  (let [conn (ldb/start-conn)]
+    (graph-parser/parse-file conn
+                             "lythe-of-heaven.md"
+                             "rating:: 8\nrecommend:: true\narchive:: false"
+                             {})
+    (is (= {:rating 8 :recommend true :archive false}
+           (->> (d/q '[:find (pull ?b [*])
+                       :in $
+                       :where [?b :block/properties]]
+                     @conn)
+                (map (comp :block/properties first))
+                first)))))
 
-(deftest page-properties-persistence
-  (testing "Non-string property values"
-    (let [conn (ldb/start-conn)]
-      (graph-parser/parse-file conn
-                               "lythe-of-heaven.md"
-                               "rating:: 8\nrecommend:: true\narchive:: false"
-                               {})
-      (is (= {:rating 8 :recommend true :archive false}
-             (->> (d/q '[:find (pull ?b [*])
-                         :in $
-                         :where [?b :block/properties]]
-                       @conn)
-                  (map (comp :block/properties first))
-                  first)))))
+(deftest linkable-built-in-properties
+  (let [conn (ldb/start-conn)
+        _ (graph-parser/parse-file conn
+                                   "lol.md"
+                                   (str "alias:: 233\ntags:: fun, facts"
+                                        "\n- "
+                                        "alias:: 666\ntags:: block, facts")
+                                   {})
+        page-block (->> (d/q '[:find (pull ?b [:block/properties {:block/alias [:block/name]} {:block/tags [:block/name]}])
+                               :in $
+                               :where [?b :block/name "lol"]]
+                             @conn)
+                        (map first)
+                        first)
+        block (->> (d/q '[:find (pull ?b [:block/properties])
+                          :in $
+                          :where
+                          [?b :block/properties]
+                          [(missing? $ ?b :block/pre-block?)]
+                          [(missing? $ ?b :block/name)]]
+                        @conn)
+                   (map first)
+                   first)]
 
-  (testing "Linkable built-in properties"
-    (let [conn (ldb/start-conn)
-          _ (graph-parser/parse-file conn
-                                     "lol.md"
-                                     "alias:: 233\ntags:: fun, facts"
-                                     {})
-          block (->> (d/q '[:find (pull ?b [:block/properties {:block/alias [:block/name]} {:block/tags [:block/name]}])
-                            :in $
-                            :where [?b :block/name "lol"]]
-                          @conn)
-                     (map first)
-                     first)]
+    (is (= {:block/alias [{:block/name "233"}]
+            :block/tags [{:block/name "fun"} {:block/name "facts"}]
+            :block/properties {:alias #{"233"} :tags #{"fun" "facts"}}}
+           page-block)
+        "page properties, alias and tags are correct")
+    (is (every? set? (vals (:block/properties page-block)))
+        "Linked built-in property values as sets provides for easier transforms")
 
-      (is (= {:block/alias [{:block/name "233"}]
-              :block/tags [{:block/name "fun"} {:block/name "facts"}]
-              :block/properties {:alias ["233"] :tags ["fun" "facts"]}}
-             block))
-
-      (is (every? vector? (vals (:block/properties block)))
-          "Linked built-in property values as vectors provides for easier transforms"))))
+    (is (= {:block/properties {:alias #{"666"} :tags #{"block" "facts"}}}
+           block)
+        "block properties are correct")))
 
 (defn- property-relationships-test
   "Runs tests on page properties and block properties. file-properties is what is
@@ -221,19 +229,10 @@
       (property-relationships-test
        properties
        {:single-link #{"bar"}
-        :multi-link #{"Logseq" "is the fastest" "triples" "text editor"}
-        :desc #{"This is a multiple sentence description. It has one" "link"}
-        :comma-prop #{"one" "two" "three"}}
-       {}))
-
-    (testing "With :rich-property-values config"
-      (property-relationships-test
-       properties
-       {:single-link #{"bar"}
         :multi-link #{"Logseq" "triples" "text editor"}
         :desc #{"link"}
         :comma-prop "one, two,three"}
-       {:rich-property-values? true}))))
+       {}))))
 
 (deftest invalid-properties
   (let [conn (ldb/start-conn)
@@ -266,3 +265,20 @@
                 (map first)
                 (map #(select-keys % [:block/properties :block/invalid-properties]))))
         "Has correct (in)valid page properties")))
+
+(deftest correct-page-names-created
+  (testing "from title"
+    (let [conn (ldb/start-conn)
+          built-in-pages (set (map string/lower-case default-db/built-in-pages-names))]
+      (graph-parser/parse-file conn
+                               "foo.md"
+                               "title:: core.async"
+                               {})
+      (is (= #{"core.async"}
+             (->> (d/q '[:find (pull ?b [*])
+                         :in $
+                         :where [?b :block/name]]
+                       @conn)
+                  (map (comp :block/name first))
+                  (remove built-in-pages)
+                  set))))))

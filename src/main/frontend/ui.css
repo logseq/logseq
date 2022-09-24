@@ -243,7 +243,7 @@ html.is-mobile {
 }
 
 .ui__button {
-  @apply items-center px-3 py-2 border border-transparent
+  @apply flex items-center px-3 py-2 border border-transparent
   text-sm leading-4 font-medium rounded-md text-white
   focus:outline-none transition ease-in-out duration-150 mt-1;
 
@@ -353,34 +353,6 @@ html.is-mobile {
   background-color: var(--ls-quaternary-background-color);
 }
 
-.type-icon {
-  @apply text-xs text-center flex items-center justify-center rounded border mr-2 relative;
-
-  width: 1.5rem;
-  height: 1.5rem;
-  flex-shrink: 0;
-  border-color: var(--ls-primary-background-color);
-  overflow: hidden;
-  color: var(--ls-primary-text-color);
-
-  .ti,
-  .tie {
-    z-index: 1;
-  }
-
-  &:before {
-    @apply block absolute inset-0 ;
-    background: var(--ls-primary-background-color);
-    content: " ";
-  }
-
-  &.highlight {
-    color: var(--ls-selection-text-color);
-    border-color: var(--ls-selection-background-color);
-
-    &:before {
-      opacity: 0.5;
-      background: var(--ls-selection-background-color);
-    }
-  }
+.ui__icon {
+  display: inline-block;
 }

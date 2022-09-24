@@ -10,7 +10,9 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]))
 
 (def batch-write-interval 1000)
 
@@ -64,7 +66,7 @@
     (when-not config/publishing?
       (doseq [[repo page-id] (set pages)]
         (try (do-write-file! repo page-id)
-             (catch js/Error e
+             (catch :default e
                (notification/show!
                 [:div
                  [:p "Write file failed, please copy the changes to other editors in case of losing data."]
@@ -81,16 +83,24 @@
     (when-let [repo (state/get-current-repo)]
       (if (:graph/importing @state/state) ; write immediately
         (write-files! [[repo page-db-id]])
-        (async/put! (state/get-file-write-chan) [repo page-db-id])))))
+        (async/put! (state/get-file-write-chan) [repo page-db-id (tc/to-long (t/now))])))))
 
-(def *writes-finished? (atom true))
+(def *writes-finished? (atom {}))
 
 (defn <ratelimit-file-writes!
   []
   (util/<ratelimit (state/get-file-write-chan) batch-write-interval
                  :filter-fn
-                 #(do (reset! *writes-finished? false) true)
+                 (fn [[repo _ time]]
+                   (swap! *writes-finished? assoc repo {:time time
+                                                        :value false})
+                   true)
                  :flush-fn
-                 #(do
-                    (write-files! %)
-                    (reset! *writes-finished? true))))
+                 (fn [col]
+                   (let [start-time (tc/to-long (t/now))
+                         repos (distinct (map first col))]
+                     (write-files! col)
+                     (doseq [repo repos]
+                       (let [last-write-time (get-in @*writes-finished? [repo :time])]
+                         (when (> start-time last-write-time)
+                           (swap! *writes-finished? assoc repo {:value true}))))))))

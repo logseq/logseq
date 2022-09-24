@@ -1226,7 +1226,7 @@
              f (sci/eval-string fn-string)]
          (when (fn? f)
            (try (f query-result)
-                (catch js/Error e
+                (catch :default e
                   (js/console.error e)))))))
    [:span.warning
     (util/format "{{function %s}}" (first arguments))]))
@@ -1930,13 +1930,14 @@
   [config block k value]
   (let [date (and (= k :date) (date/get-locale-string (str value)))
         user-config (state/get-config)
-        ;; In this mode and when value is a set of refs, display full property text
+        ;; When value is a set of refs, display full property text
         ;; because :block/properties value only contains refs but user wants to see text
-        v (if (and (:rich-property-values? user-config)
-                   (coll? value)
-                   (not (contains? gp-property/editable-linkable-built-in-properties k)))
-            (gp-property/property-value-from-content (name k) (:block/content block))
-            value)
+        property-separated-by-commas? (text/separated-by-commas? (state/get-config) k)
+        v (or
+           (when (and (coll? value) (seq value)
+                      (not property-separated-by-commas?))
+             (get (:block/properties-text-values block) k))
+           value)
         property-pages-enabled? (contains? #{true nil} (:property-pages/enabled? user-config))]
     [:div
      (if property-pages-enabled?
@@ -1953,7 +1954,10 @@
        date
        date
 
-       (coll? v)
+       (and (string? v) (gp-util/wrapped-by-quotes? v))
+       (gp-util/unquote-string v)
+
+       (and property-separated-by-commas? (coll? v))
        (let [v (->> (remove string/blank? v)
                     (filter string?))
              vals (for [v-item v]
@@ -1961,9 +1965,6 @@
              elems (interpose (span-comma) vals)]
          (for [elem elems]
            (rum/with-key elem (str (random-uuid)))))
-
-       (and (string? v) (gp-util/wrapped-by-quotes? v))
-       (gp-util/unquote-string v)
 
        :else
        (inline-text config (:block/format block) (str v)))]))
@@ -2868,7 +2869,7 @@
                                    :colgroup
                                    (repeat number col-elem))))
                               col_groups)
-                        (catch js/Error _e
+                        (catch :default _e
                           []))
         head (when header
                [:thead (tr :th header)])
@@ -3096,7 +3097,7 @@
                (and (seq result) view-f)
                (let [result (try
                               (sci/call-fn view-f result)
-                              (catch js/Error error
+                              (catch :default error
                                 (log/error :custom-view-failed {:error error
                                                                 :result result})
                                 [:div "Custom view failed: "
@@ -3372,7 +3373,7 @@
 
       :else
       "")
-    (catch js/Error e
+    (catch :default e
       (println "Convert to html failed, error: " e)
       "")))
 

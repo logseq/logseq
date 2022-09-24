@@ -51,7 +51,7 @@
 (defn capture [id data]
   (try
     (posthog/capture (str id) (bean/->js data))
-    (catch js/Error e
+    (catch :default e
       (js/console.error e)
       ;; opt out or network issues
       nil)))

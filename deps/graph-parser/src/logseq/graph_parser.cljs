@@ -1,5 +1,6 @@
 (ns logseq.graph-parser
-  "Main ns used by logseq app to parse graph from source files"
+  "Main ns used by logseq app to parse graph from source files and then save to
+  the given database connection"
   (:require [datascript.core :as d]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.util :as gp-util]

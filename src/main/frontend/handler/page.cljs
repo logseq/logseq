@@ -77,8 +77,7 @@
    (let [p (common-handler/get-page-default-properties title)
          ps (merge p properties)
          content (page-property/insert-properties format "" ps)
-         refs (gp-block/get-page-refs-from-properties format
-                                                      properties
+         refs (gp-block/get-page-refs-from-properties properties
                                                       (db/get-db (state/get-current-repo))
                                                       (state/get-date-formatter)
                                                       (state/get-config))]
@@ -700,7 +699,7 @@
   (let [properties (db/get-page-properties page-name)
         properties-str (get properties :filters "{}")]
     (try (reader/read-string properties-str)
-         (catch js/Error e
+         (catch :default e
            (log/error :syntax/filters e)))))
 
 (defn save-filter!

@@ -163,7 +163,7 @@
                            (remove nil?))]
              (when (seq metadata)
                (db/transact! repo metadata {:new-graph? true}))))))
-     (catch js/Error e
+     (catch :default e
        (log/error :exception e)))))
 
 (defn update-pages-metadata!
@@ -359,8 +359,9 @@
                         (when (= (state/get-current-repo) url)
                           (state/set-current-repo! (:url (first (state/get-repos)))))))]
     (when (or (config/local-db? url) (= url "local"))
-      (p/let [_ (idb/clear-local-db! url)] ; clear file handles
-        (delete-db-f)))))
+      (-> (p/let [_ (idb/clear-local-db! url)] ; clear file handles
+            )
+          (p/finally delete-db-f)))))
 
 (defn start-repo-db-if-not-exists!
   [repo]

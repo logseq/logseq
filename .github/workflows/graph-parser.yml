@@ -120,3 +120,6 @@ jobs:
 
       - name: Lint for vars that are too large
         run: bb lint:large-vars
+
+      - name: Lint for namespaces that aren't documented
+        run: bb lint:ns-docstrings

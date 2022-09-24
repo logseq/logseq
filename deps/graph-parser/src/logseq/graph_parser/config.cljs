@@ -1,5 +1,5 @@
 (ns logseq.graph-parser.config
-  "Config that is shared between graph-parser and rest of app"
+  "App config that is shared between graph-parser and rest of app"
   (:require [clojure.set :as set]
             [clojure.string :as string]))
 
