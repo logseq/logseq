@@ -1,5 +1,5 @@
 (ns frontend.extensions.tldraw
-  (:require ["/tldraw-logseq" :as TldrawLogseq]
+  (:require ["/frontend/tldraw-logseq" :as TldrawLogseq]
             [frontend.components.block :as block]
             [frontend.components.page :as page]
             [frontend.db.model :as model]
@@ -90,7 +90,7 @@
     (when (and (not-empty name) (not-empty (gobj/get data "currentPageId")))
       [:div.draw.tldraw.whiteboard.relative.w-full.h-full
        {:style {:overscroll-behavior "none"}
-        :on-blur (fn [e] 
+        :on-blur (fn [e]
                    (when (#{"INPUT" "TEXTAREA"} (.-tagName (gobj/get e "target")))
                      (state/clear-edit!)))
         ;; wheel -> overscroll may cause browser navigation
