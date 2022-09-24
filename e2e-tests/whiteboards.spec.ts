@@ -3,7 +3,7 @@ import { test } from './fixtures'
 
 test('enable whiteboards', async ({ page }) => {
     await page.click('#head .toolbar-dots-btn')
-    await page.click('#head .dropdown-wrapper .ti-settings')
+    await page.click('#head .dropdown-wrapper >> text=Settings')
     await page.click('.settings-modal a[data-id=features]')
     await page.click('text=Whiteboards >> .. >> .ui__toggle')
     await page.keyboard.press('Escape')
