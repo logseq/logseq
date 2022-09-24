@@ -241,21 +241,14 @@
    Whiteboard page edn is a subset of page schema
    - it will only contain a single page (for now). The page properties contains 'bindings' etc
    - blocks will be adapted to tldraw shapes. All blocks's parent is the given page."
-  [file content {:keys [verbose] :or {verbose true} :as options}]
+  [file content {:keys [verbose] :or {verbose true}}]
   (let [_ (when verbose (println "Parsing start: " file))
         {:keys [pages blocks]} (gp-util/safe-read-string content)
         page-block (first pages)
         page-name (or (:block/original-name page-block)
                       (:block/name page-block)
                       (filepath->page-name file))
-        page-original-name (-> (:block/original-name page-block)
-                               (#(cond (nil? %) page-name
-                                       (= (gp-util/page-name-sanity-lc %)
-                                          (gp-util/page-name-sanity-lc page-name)) page-name
-                                       :else %)))
-        page-name (gp-util/page-name-sanity-lc page-name)
-        page-entity (build-page-entity (:block/properties page-block) file page-name page-original-name nil options)
-        page-block (merge page-block page-entity (when-not (:block/uuid page-block) {:block/uuid (d/squuid)}))
+        page-block (merge page-block (when-not (:block/uuid page-block) {:block/uuid (d/squuid)}))
         blocks (->> blocks
                     (map #(merge % {:block/uuid (or (:block/uuid %)
                                                     (gp-block/get-custom-id-or-new-id (:block/properties %)))}

@@ -304,7 +304,7 @@
     }
 
     #create-button {
-      @apply p-2 text-sm font-medium rounded-md w-full border;
+      @apply flex items-center justify-center p-2 text-sm font-medium rounded-md w-full border;
       background-color: var(--ls-secondary-background-color) !important;
       border-color: transparent;
 

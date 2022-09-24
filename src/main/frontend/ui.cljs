@@ -5,6 +5,7 @@
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
+            [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -30,18 +31,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
-            [electron.ipc :as ipc]
-            ["react-resize-context" :as Resize]
-            ["react-textarea-autosize" :as TextareaAutosize]
-            ["react-tippy" :as react-tippy]
-            ["react-transition-group" :refer [CSSTransition TransitionGroup]]
-            ["@logseq/react-tweet-embed" :as react-tweet-embed]
-            ["react-intersection-observer" :as react-intersection-observer]
-            [rum.core :as rum]
-            [camel-snake-kebab.core :as csk]
-            [frontend.db-mixins :as db-mixins]
-            [frontend.mobile.util :as mobile-util]
-            [goog.functions :refer [debounce]]))
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -969,6 +960,12 @@
              [:span.ui__icon.ti
               {:class (str "ls-icon-" class)}
               (f (merge {:size 18} (r/map-keys->camel-case opts)))])))))))
+
+(rum/defc type-icon
+  [{:keys [name class title extension?]}]
+  [:.type-icon {:class class
+                :title title}
+   (icon name {:extension? extension?})])
 
 (rum/defc with-shortcut < rum/reactive
   < {:key-fn (fn [key pos] (str "shortcut-" key pos))}

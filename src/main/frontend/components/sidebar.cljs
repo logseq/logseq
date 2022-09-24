@@ -234,7 +234,7 @@
      [:button#create-button
       {:on-click toggle-fn}
       [:<>
-       (ui/icon "plus")
+       (ui/icon "plus" {:font? true})
        [:span.mx-1 (t :left-side-bar/create)]]])
    (->>
     [{:title (t :left-side-bar/new-page)
@@ -288,24 +288,24 @@
        [:div.nav-header.flex.gap-1.flex-col
         (let [page (:page default-home)]
           (if (and page (not (state/enable-journals? (state/get-current-repo))))
-          (sidebar-item
-           {:class            "home-nav"
-            :title            page
-            :on-click-handler route-handler/redirect-to-home!
-            :active           (and (not srs-open?)
-                                   (= route-name :page)
-                                   (= page (get-in route-match [:path-params :name])))
-            :icon             "home"})
-          (sidebar-item
-           {:class            "journals-nav"
-            :active           (and (not srs-open?)
-                                   (or (= route-name :all-journals) (= route-name :home)))
-            :title            (t :left-side-bar/journals)
-            :on-click-handler (fn [e]
-                                (if (gobj/get e "shiftKey")
-                                  (route-handler/sidebar-journals!)
-                                  (route-handler/go-to-journals!)))
-            :icon             "calendar"})))
+            (sidebar-item
+             {:class            "home-nav"
+              :title            page
+              :on-click-handler route-handler/redirect-to-home!
+              :active           (and (not srs-open?)
+                                     (= route-name :page)
+                                     (= page (get-in route-match [:path-params :name])))
+              :icon             "home"})
+            (sidebar-item
+             {:class            "journals-nav"
+              :active           (and (not srs-open?)
+                                     (or (= route-name :all-journals) (= route-name :home)))
+              :title            (t :left-side-bar/journals)
+              :on-click-handler (fn [e]
+                                  (if (gobj/get e "shiftKey")
+                                    (route-handler/sidebar-journals!)
+                                    (route-handler/go-to-journals!)))
+              :icon             "calendar"})))
 
         (when (state/enable-flashcards? (state/get-current-repo))
           [:div.flashcards-nav
@@ -347,10 +347,11 @@
          (if enable-whiteboards?
            (create-dropdown)
            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
-            {:on-click #((close-sidebar-on-mobile!)
+            {:on-click (fn []
+                         (and (util/sm-breakpoint?)
+                              (state/toggle-left-sidebar!))
                          (state/pub-event! [:go/search]))}
-            ;; TODO: check following line
-            (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
+            (ui/icon "circle-plus" {:style {:font-size 20}})
             [:span.flex-1 (t :right-side-bar/new-page)]]))]]]))
 
 (rum/defc left-sidebar < rum/reactive
