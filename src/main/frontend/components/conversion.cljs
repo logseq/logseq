@@ -22,9 +22,7 @@
      (ask-for-re-index multiple-windows?)))
   ([multiple-windows?]
    (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?)
-                      (ui/admonition
-                       :tip
-                       [:p (t :file-rn/re-index)])])))
+                      (ui/admonition :tip [:p (t :file-rn/re-index)])])))
 
 (defn- <close-modal-on-done
   "Ask users to re-index when the modal is exited"
@@ -66,13 +64,11 @@
         *pages         (::pages state)
         need-persist?  (not= @*solid-format @*target-format)
         *switch-disabled? (::switch-disabled? state)]
-    ;; would triggered on initialization
-    (when (nil? @*pages)
+    (when (nil? @*pages) ;; would triggered on initialization
       (let [pages-with-file (db/get-pages-with-file repo)
             the-keys        (map (fn [[_page file]] (:file/path file)) pages-with-file)]
         (reset! *pages (zipmap the-keys pages-with-file))))
-    ;; only triggered on initialization
-    (when (and (nil? @*dir-format)
+    (when (and (nil? @*dir-format) ;; would triggered on initialization
                (nil? @*solid-format)
                (nil? @*target-format))
       (let [config-format (state/get-filename-format repo)]
@@ -80,19 +76,16 @@
         (reset! *solid-format config-format)
         (reset! *target-format :triple-lowbar)))
     [:div
-     [:h1.title (t :file-rn/filename-format)]
+     [:h1.title (t :settings-page/filename-format)]
      [:div.rounded-md.opacity-70
       [:p (t :file-rn/filename-desc-1)]
       [:p (t :file-rn/filename-desc-2)]
       [:p (t :file-rn/filename-desc-3)]
       [:p (t :file-rn/filename-desc-4)]]
-     ;; Normal UX stage 1: show the admonition & button for users using legacy format
      (when (= @*solid-format :legacy)
-       [:div
-        (ui/admonition
-         :warning
-         [:p (t :file-rn/format-deprecated)])
-        (ui/button (t :file-rn/confirm-proceed)
+       [:div ;; Normal UX stage 1: show the admonition & button for users using legacy format
+        (ui/admonition :warning [:p (t :file-rn/format-deprecated)])
+        (ui/button (t :file-rn/confirm-proceed) ;; the button is for triple-lowbar only
                    :class "text-sm p-1 mr-1"
                    :on-click #(do (reset! *target-format :triple-lowbar)
                                   (reset! *dir-format (state/get-filename-format repo)) ;; assure it's uptodate
@@ -101,41 +94,29 @@
      (when (state/developer-mode?)
        [:div [:hr]
         (filename-format-select *target-format @*switch-disabled?)
-        (ui/button (t :file-rn/confirm-proceed)
+        (ui/button (t :file-rn/confirm-proceed) ;; the button is for persisting selected format
                    :disabled (not need-persist?)
                    :class "text-sm p-1 mr-1"
                    :on-click #(do (reset! *dir-format (state/get-filename-format repo)) ;; assure it's uptodate
                                   (write-filename-format! repo @*target-format)
                                   (reset! *solid-format @*target-format)
                                   (reset! *switch-disabled? true)))])
-     [:hr]
-     [:div.cp__settings-files-breaking-changed
-      {:disabled need-persist?}
+     [:div.cp__settings-files-breaking-changed {:disabled need-persist?} [:hr]
       (let [rename-items  (->> (vals @*pages)
                                (map (fn [[page file]]
-                                      (when-let [ret (calc-rename-target page
-                                                                         (:file/path file)
-                                                                         @*dir-format
-                                                                         @*target-format)]
-                                        (merge ret
-                                               {:page page
-                                                :file file}))))
+                                      (when-let [ret (calc-rename-target page (:file/path file) @*dir-format @*target-format)]
+                                        (merge ret {:page page :file file}))))
                                (remove nil?))
-            <rename-all       (fn []
-                                (async/go (doseq [{:keys [file target status]} rename-items]
-                                            (when (not= status :unreachable)
-                                              ;; TODO error handling
-                                              (async/<! (p->c (page-handler/rename-file! file target (constantly nil) true)))))
-                                          (<close-modal-on-done)))]
+            <rename-all   #(async/go (doseq [{:keys [file target status]} rename-items]
+                                       (when (not= status :unreachable)
+                                         (async/<! (p->c (page-handler/rename-file! file target (constantly nil) true)))))
+                                     (<close-modal-on-done))]
 
         (if (not-empty rename-items)
-          [:div
-           ;; Normal UX stage 2: close stage 1 UI, show the action description as admolition
+          [:div ;; Normal UX stage 2: close stage 1 UI, show the action description as admolition
            (if (and (= @*solid-format :triple-lowbar)
                     (= @*dir-format :legacy))
-             (ui/admonition
-              :tip
-              [:p (t :file-rn/need-action)])
+             (ui/admonition :tip [:p (t :file-rn/need-action)])
              [:p (t :file-rn/need-action)])
            [:p
             (ui/button
@@ -150,8 +131,6 @@
             [:tbody
              (for [{:keys [page file status target old-title changed-title]} rename-items]
                (let [path           (:file/path file)
-                    ;;  src-file-href  (rfe/href :file {:path path})
-                    ;;  page-href      (rfe/href :page {:name (:block/name page)})
                      src-file-name  (gp-util/path->file-name path)
                      tgt-file-name  (str target "." (gp-util/path->file-ext path))
                      rm-item-fn     #(swap! *pages dissoc path)
@@ -167,7 +146,6 @@
                       [:p (t :file-rn/otherwise-breaking) " \"" changed-title \"]]
                      :unreachable
                      [:div [:p "🔴 " (t :file-rn/unreachable-title changed-title)]]
-                     ;; default
                      [:div [:p "🟢 " (t :file-rn/optional-rename) rename-but
                             (t :file-rn/update-filename)]])]]))]]]
-          [:div (t :file-rn/no-action)]))]]))
+          [:div "🎉 " (t :file-rn/no-action)]))]]))
