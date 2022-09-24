@@ -126,7 +126,7 @@
    (create-new-whiteboard-page! nil))
   ([name]
    (let [name (or name (str (d/squuid)))
-         uuid (parse-uuid name)
+         uuid (uuid name)
          tldr (get-default-tldr (str uuid))]
      (transact-tldr! name (get-default-tldr (str uuid)))
      (let [entity (get-whiteboard-entity name)

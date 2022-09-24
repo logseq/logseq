@@ -17,6 +17,7 @@ import type {
   TLEvents,
   TLHandle,
 } from '../../types'
+import { AlignType, DistributeType } from '../../types'
 import { KeyUtils, BoundsUtils, isNonNullable, createNewLineBinding } from '../../utils'
 import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
 import { TLApi } from '../TLApi'
@@ -374,6 +375,63 @@ export class TLApp<
 
   flipVertical = (shapes: S[] | string[] = this.selectedShapesArray): this => {
     this.currentPage.flip(shapes, 'vertical')
+    return this
+  }
+
+  align = (type: AlignType, shapes: S[] = this.selectedShapesArray): this => {
+    if (shapes.length < 2) return this
+
+    const boundsForShapes = shapes.map(shape => {
+      const bounds = shape.getBounds()
+      return {
+        id: shape.id,
+        point: [bounds.minX, bounds.minY],
+        bounds: bounds,
+      }
+    })
+
+    const commonBounds = BoundsUtils.getCommonBounds(boundsForShapes.map(({ bounds }) => bounds))
+
+    const midX = commonBounds.minX + commonBounds.width / 2
+    const midY = commonBounds.minY + commonBounds.height / 2
+
+    const deltaMap = Object.fromEntries(
+      boundsForShapes.map(({ id, point, bounds }) => {
+        return [
+          id,
+          {
+            prev: point,
+            next: {
+              [AlignType.Top]: [point[0], commonBounds.minY],
+              [AlignType.CenterVertical]: [point[0], midY - bounds.height / 2],
+              [AlignType.Bottom]: [point[0], commonBounds.maxY - bounds.height],
+              [AlignType.Left]: [commonBounds.minX, point[1]],
+              [AlignType.CenterHorizontal]: [midX - bounds.width / 2, point[1]],
+              [AlignType.Right]: [commonBounds.maxX - bounds.width, point[1]],
+            }[type],
+          },
+        ]
+      })
+    )
+
+    shapes.forEach(shape => {
+      if (deltaMap[shape.id]) shape.update({ point: deltaMap[shape.id].next })
+    })
+
+    this.persist()
+    return this
+  }
+
+  distribute = (type: DistributeType, shapes: S[] = this.selectedShapesArray): this => {
+    if (shapes.length < 2) return this
+
+    const deltaMap = Object.fromEntries(BoundsUtils.getDistributions(shapes, type).map(d => [d.id, d]))
+
+    shapes.forEach(shape => {
+      if (deltaMap[shape.id]) shape.update({ point: deltaMap[shape.id].next })
+    })
+
+    this.persist()
     return this
   }
 

@@ -26,6 +26,7 @@ import {
   ToggleGroupMultipleInput,
 } from '../inputs/ToggleGroupInput'
 import { ToggleInput } from '../inputs/ToggleInput'
+import { Button } from '../Button'
 
 export const contextBarActionTypes = [
   // Order matters
@@ -84,8 +85,7 @@ const EditAction = observer(() => {
   const shape = filterShapeByAction(app.selectedShapesArray, 'Edit')[0]
 
   return (
-    <button
-      className="tl-contextbar-button"
+    <Button
       type="button"
       title="Edit"
       onClick={() => {
@@ -103,7 +103,7 @@ const EditAction = observer(() => {
       }}
     >
       <TablerIcon name="text" />
-    </button>
+    </Button>
   )
 })
 
@@ -120,7 +120,7 @@ const AutoResizingAction = observer(() => {
     <ToggleInput
       title="Auto Resize"
       toggle={shapes.every(s => s.props.type === 'logseq-portal')}
-      className="tl-contextbar-button"
+      className="tl-button"
       pressed={pressed}
       onPressedChange={v => {
         shapes.forEach(s => {
@@ -227,22 +227,16 @@ const OpenPageAction = observer(() => {
 
   return (
     <span className="flex gap-1">
-      <button
+      <Button
         title="Open Page in Right Sidebar"
-        className="tl-contextbar-button"
         type="button"
         onClick={() => handlers?.sidebarAddBlock(pageId, blockType === 'B' ? 'block' : 'page')}
       >
         <TablerIcon name="layout-sidebar-right" />
-      </button>
-      <button
-        title="Open Page"
-        className="tl-contextbar-button"
-        type="button"
-        onClick={() => handlers?.redirectToPage(pageId)}
-      >
+      </Button>
+      <Button title="Open Page" type="button" onClick={() => handlers?.redirectToPage(pageId)}>
         <TablerIcon name="external-link" />
-      </button>
+      </Button>
     </span>
   )
 })
@@ -262,23 +256,18 @@ const IFrameSourceAction = observer(() => {
 
   return (
     <span className="flex gap-3">
-      <button title="Reload" className="tl-contextbar-button" type="button" onClick={handleReload}>
+      <Button title="Reload" type="button" onClick={handleReload}>
         <TablerIcon name="refresh" />
-      </button>
-      <TextInput
+      </Button>
+      <Button
         title="Website Url"
         className="tl-iframe-src"
         value={`${shape.props.url}`}
         onChange={handleChange}
       />
-      <button
-        title="Open website url"
-        className="tl-contextbar-button"
-        type="button"
-        onClick={() => window.open(shape.props.url)}
-      >
+      <Button title="Open website url" type="button" onClick={() => window.open(shape.props.url)}>
         <TablerIcon name="external-link" />
-      </button>
+      </Button>
     </span>
   )
 })
@@ -299,14 +288,13 @@ const YoutubeLinkAction = observer(() => {
         value={`${shape.props.url}`}
         onChange={handleChange}
       />
-      <button
+      <Button
         title="Open YouTube Link"
-        className="tl-contextbar-button"
         type="button"
         onClick={() => window.logseq?.api?.open_external_link?.(shape.props.url)}
       >
         <TablerIcon name="external-link" />
-      </button>
+      </Button>
     </span>
   )
 })
@@ -327,7 +315,7 @@ const NoFillAction = observer(() => {
   return (
     <ToggleInput
       title="Fill Toggle"
-      className="tl-contextbar-button"
+      className="tl-button"
       pressed={noFill}
       onPressedChange={handleChange}
     >
@@ -454,7 +442,7 @@ const TextStyleAction = observer(() => {
     <span className="flex gap-1">
       <ToggleInput
         title="Bold"
-        className="tl-contextbar-button"
+        className="tl-button"
         pressed={bold}
         onPressedChange={v => {
           shapes.forEach(shape => {
@@ -470,7 +458,7 @@ const TextStyleAction = observer(() => {
       </ToggleInput>
       <ToggleInput
         title="Italic"
-        className="tl-contextbar-button"
+        className="tl-button"
         pressed={italic}
         onPressedChange={v => {
           shapes.forEach(shape => {

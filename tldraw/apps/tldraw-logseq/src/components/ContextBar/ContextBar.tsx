@@ -42,7 +42,7 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) 
       {Actions.length > 0 && (
         <div
           ref={rContextBar}
-          className="tl-contextbar"
+          className="tl-toolbar tl-context-bar"
           style={{
             visibility: hidden ? 'hidden' : 'visible',
             pointerEvents: hidden ? 'none' : 'all',
@@ -52,7 +52,7 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) 
             <React.Fragment key={idx}>
               <Action />
               {idx < Actions.length - 1 && (
-                <Separator.Root className="tl-contextbar-separator" orientation="vertical" />
+                <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
               )}
             </React.Fragment>
           ))}

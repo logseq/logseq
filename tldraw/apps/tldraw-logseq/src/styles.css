@@ -22,21 +22,7 @@
   }
 }
 
-.tl-toolbar {
-  @apply absolute top-0 w-full flex;
-
-  grid-row: 1;
-  align-items: center;
-  padding: 8px;
-  color: black;
-  z-index: 100000;
-  user-select: none;
-  background: white;
-  border-bottom: 1px solid var(--ls-secondary-border-color);
-  font-size: inherit;
-}
-
-.tl-context-menu-button {
+.tl-menu-item {
   @apply flex items-center px-4 py-1 text-sm !important;
 
   min-width: 220px;
@@ -50,11 +36,16 @@
 
   &:hover,
   &:focus {
-    background-color: var(--ls-secondary-background-color) !important;
+    cursor: pointer;
+    background-color: var(--ls-primary-background-color) !important;
   }
 }
 
-.tl-context-menu {
+.tl-menu-button-row {
+  @apply flex justify-between px-4 py-1;
+}
+
+.tl-menu {
   @apply relative py-2 flex bottom-0 flex border-0 rounded shadow-lg;
 
   opacity: 100%;
@@ -63,24 +54,16 @@
   z-index: 180;
   min-width: 220px;
   pointer-events: 'all';
-  background: var(--ls-primary-background-color);
+  background: var(--ls-secondary-background-color);
 }
 
-.tl-context-menu-right-slot {
+.tl-menu-right-slot {
   margin-left: auto;
   padding-left: 20px;
 }
 
-.tl-context-menu-right-slot:focus {
+.tl-menu-right-slot:focus {
   color: whites;
-}
-
-.tl-zoom-bar,
-.tl-history-bar {
-  @apply flex items-center border-0 rounded gap-1 p-1;
-
-  background: var(--ls-secondary-background-color);
-  box-shadow: var(--shadow-medium);
 }
 
 .tl-zoom-bar {
@@ -92,63 +75,27 @@
 
   z-index: 100000;
   user-select: none;
-
-  button {
-    @apply text-sm rounded border-0 inline-flex items-center justify-center p-2;
-
-    height: 30px;
-    background: transparent;
-    color: var(--ls-primary-text-color);
-    font-family: var(--ls-font-family);
-    cursor: pointer;
-    opacity: 1;
-    white-space: nowrap;
-
-    &:hover {
-      background-color: var(--ls-primary-background-color);
-    }
-  }
 }
 
-.tl-zoom-menu-dropdown-menu-button {
-  @apply py-2 rounded shadow-lg;
-  opacity: 100%;
-  background-color: var(--ls-primary-background-color);
-}
-
-.tl-zoom-menu-dropdown-item {
-  @apply flex items-center px-4 py-1 text-sm !important;
-  min-width: 220px;
-  all: unset;
-  height: 25px;
-  user-select: none;
-  color: var(--color-text);
-
-  &:hover {
-    cursor: pointer;
-    background-color: var(--color-hover);
-  }
-}
-
-.tl-zoom-menu-right-slot {
-  margin-left: auto;
-  padding-left: 20px;
-}
-
-.tl-contextbar {
-  @apply relative flex text-sm;
+.tl-toolbar {
+  @apply relative flex text-sm p-1 rounded-lg;
 
   pointer-events: all;
   position: relative;
   background-color: var(--ls-secondary-background-color);
   color: #a4b5b6;
-  padding: 8px 12px;
   border-radius: 8px;
   white-space: nowrap;
-  gap: 12px;
+  gap: 8px;
+
   align-items: stretch;
   box-shadow: var(--shadow-medium);
   z-index: 1000;
+}
+
+.tl-context-bar {
+  gap: 12px;
+  padding: 8px 12px;
 
   label {
     font-family: var(--ls-font-family);
@@ -236,6 +183,26 @@
   height: 32px;
 }
 
+.tl-button {
+  @apply relative flex items-center justify-center text-base rounded border-0;
+
+  height: 32px;
+  width: 32px;
+  font-family: var(--ls-font-family);
+  background: none;
+  cursor: pointer;
+  color: var(--ls-primary-text-color);
+
+  &:hover {
+    background-color: var(--ls-primary-background-color);
+  }
+
+  &[data-selected='true'] {
+    background-color: var(--color-selectedFill);
+    color: var(--color-selectedContrast);
+  }
+}
+
 .tl-primary-tools {
   @apply absolute h-full top-0 flex items-center justify-center;
 
@@ -246,38 +213,10 @@
   flex-flow: column;
   border-radius: 8px;
   padding: 8px;
-
-  .tl-button {
-    @apply relative flex items-center justify-center text-base rounded border-0;
-
-    height: 28px;
-    width: 28px;
-    font-family: var(--ls-font-family);
-    background: none;
-    cursor: pointer;
-    color: var(--ls-primary-text-color);
-
-    &:hover {
-      background-color: var(--color-hover);
-    }
-
-    &[data-selected='true'] {
-      background-color: var(--color-selectedFill);
-      color: var(--color-selectedContrast);
-    }
-  }
 }
 
 .tl-tools-floating-panel {
-  @apply flex;
-
   flex-flow: column;
-  border-radius: 8px;
-  padding: 4px;
-  gap: 8px;
-  background-color: var(--color-panel);
-  box-shadow: var(--shadow-medium);
-  pointer-events: all;
 }
 
 button.tl-select-input-trigger {
@@ -498,7 +437,7 @@ button.tl-select-input-trigger {
 }
 
 .tl-circle-button {
-  @apply absolute flex items-center	justify-center transition-all;
+  @apply absolute flex items-center	justify-center transition-all rounded-full shadow;
 
   color: var(--ls-primary-text-color);
   background-color: var(--ls-secondary-background-color);
@@ -506,13 +445,12 @@ button.tl-select-input-trigger {
   right: calc(100% + 12px);
   height: 34px;
   width: 34px;
-  border-radius: 50%;
   border: 2px solid var(--ls-secondary-background-color);
   top: 2px;
   transition-delay: 0;
 
   .tie {
-    transform: translateY(-100%); 
+    transform: translateY(-100%);
   }
 
   &[data-active='false']:hover {
@@ -557,7 +495,7 @@ button.tl-select-input-trigger {
     transition-delay: 0;
   }
 
-  &[data-recently-changed=true] {
+  &[data-recently-changed='true'] {
     i.tie {
       transition-delay: 0.5s;
     }
@@ -859,20 +797,10 @@ html[data-theme='dark'] {
   }
 }
 
-.tl-contextbar-button {
-  @apply rounded inline-flex items-center justify-center;
-  height: 32px;
-  width: 32px;
-  color: var(--ls-primary-text-color);
-
-  &:hover {
-    background-color: var(--ls-tertiary-background-color);
-  }
-}
-
-.tl-contextbar-separator {
+.tl-toolbar-separator {
   background-color: var(--ls-border-color);
   width: 1px;
+  opacity: 0.5;
 }
 
 .tl-youtube-link,

@@ -3,6 +3,20 @@ import type { TLShape, TLApp } from '../lib'
 import type { TLEventMap } from './TLEventMap'
 import type { TLHandle } from './TLHandle'
 
+export enum AlignType {
+  Top = 'top',
+  CenterVertical = 'centerVertical',
+  Bottom = 'bottom',
+  Left = 'left',
+  CenterHorizontal = 'centerHorizontal',
+  Right = 'right',
+}
+
+export enum DistributeType {
+  Horizontal = 'horizontal',
+  Vertical = 'vertical',
+}
+
 export enum TLResizeEdge {
   Top = 'top_edge',
   Right = 'right_edge',

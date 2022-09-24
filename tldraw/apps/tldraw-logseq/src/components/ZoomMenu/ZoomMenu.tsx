@@ -11,69 +11,65 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
 
   return (
     <DropdownMenuPrimitive.Root>
-      <DropdownMenuPrimitive.Trigger id="tl-zoom">
+      <DropdownMenuPrimitive.Trigger className="tl-button text-sm w-auto px-2" id="tl-zoom">
         {(app.viewport.camera.zoom * 100).toFixed(0) + '%'}
       </DropdownMenuPrimitive.Trigger>
-      <DropdownMenuPrimitive.Content
-        className="tl-zoom-menu-dropdown-menu-button"
-        id="zoomPopup"
-        sideOffset={12}
-      >
+      <DropdownMenuPrimitive.Content className="tl-menu" id="zoomPopup" sideOffset={12}>
         <DropdownMenuPrimitive.Item
-          className="menu-link tl-zoom-menu-dropdown-item"
+          className="tl-menu-item"
           onSelect={preventEvent}
           onClick={app.api.zoomToFit}
         >
           Zoom to fit
-          <div className="tl-zoom-menu-right-slot">
+          <div className="tl-menu-right-slot">
             <span className="keyboard-shortcut">
               <code>1</code>
             </span>
           </div>
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
-          className="menu-link tl-zoom-menu-dropdown-item"
+          className="tl-menu-item"
           onSelect={preventEvent}
           onClick={app.api.zoomToSelection}
         >
           Zoom to selection
-          <div className="tl-zoom-menu-right-slot">
+          <div className="tl-menu-right-slot">
             <span className="keyboard-shortcut">
               <code>⇧</code> <code>1</code>
             </span>
           </div>
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
-          className="menu-link tl-zoom-menu-dropdown-item"
+          className="tl-menu-item"
           onSelect={preventEvent}
           onClick={app.api.zoomIn}
         >
           Zoom in
-          <div className="tl-zoom-menu-right-slot">
+          <div className="tl-menu-right-slot">
             <span className="keyboard-shortcut">
               <code>{MOD_KEY}</code> <code>+</code>
             </span>
           </div>
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
-          className="menu-link tl-zoom-menu-dropdown-item"
+          className="tl-menu-item"
           onSelect={preventEvent}
           onClick={app.api.zoomOut}
         >
           Zoom out
-          <div className="tl-zoom-menu-right-slot">
+          <div className="tl-menu-right-slot">
             <span className="keyboard-shortcut">
               <code>{MOD_KEY}</code> <code>-</code>
             </span>
           </div>
         </DropdownMenuPrimitive.Item>
         <DropdownMenuPrimitive.Item
-          className="menu-link tl-zoom-menu-dropdown-item"
+          className="tl-menu-item"
           onSelect={preventEvent}
           onClick={app.api.resetZoom}
         >
           Reset zoom
-          <div className="tl-zoom-menu-right-slot">
+          <div className="tl-menu-right-slot">
             <span className="keyboard-shortcut">
               <code>⇧</code> <code>0</code>
             </span>

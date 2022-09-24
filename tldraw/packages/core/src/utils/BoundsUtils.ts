@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-extra-semi */
 import { Vec } from '@tldraw/vec'
+import type { TLShape } from '../lib'
 import {
   type TLBounds,
   TLResizeCorner,
@@ -7,6 +8,7 @@ import {
   type TLBoundsWithCenter,
   TLSnapPoints,
   type TLSnap,
+  DistributeType,
 } from '../types'
 
 export class BoundsUtils {
@@ -354,7 +356,7 @@ export class BoundsUtils {
 1. Delta
 
 Use the delta to adjust the new box by changing its corners.
-The dragging handle (corner or edge) will determine which 
+The dragging handle (corner or edge) will determine which
 corners should change.
 */
     switch (handle) {
@@ -894,5 +896,100 @@ left past the initial left edge) then swap points on that axis.
       newBounds.maxY += height - bounds.height
     }
     return newBounds
+  }
+
+  static getDistributions(shapes: TLShape[], type: DistributeType) {
+    const entries = shapes.map(shape => {
+      const bounds = shape.getBounds()
+      return {
+        id: shape.id,
+        point: [bounds.minX, bounds.minY],
+        bounds: bounds,
+        center: shape.getCenter(),
+      }
+    })
+
+    const len = entries.length
+    const commonBounds = BoundsUtils.getCommonBounds(entries.map(({ bounds }) => bounds))
+
+    const results: { id: string; prev: number[]; next: number[] }[] = []
+
+    switch (type) {
+      case DistributeType.Horizontal: {
+        const span = entries.reduce((a, c) => a + c.bounds.width, 0)
+
+        if (span > commonBounds.width) {
+          const left = entries.sort((a, b) => a.bounds.minX - b.bounds.minX)[0]
+
+          const right = entries.sort((a, b) => b.bounds.maxX - a.bounds.maxX)[0]
+
+          const entriesToMove = entries
+            .filter(a => a !== left && a !== right)
+            .sort((a, b) => a.center[0] - b.center[0])
+
+          const step = (right.center[0] - left.center[0]) / (len - 1)
+
+          const x = left.center[0] + step
+
+          entriesToMove.forEach(({ id, point, bounds }, i) => {
+            results.push({
+              id,
+              prev: point,
+              next: [x + step * i - bounds.width / 2, bounds.minY],
+            })
+          })
+        } else {
+          const entriesToMove = entries.sort((a, b) => a.center[0] - b.center[0])
+
+          let x = commonBounds.minX
+          const step = (commonBounds.width - span) / (len - 1)
+
+          entriesToMove.forEach(({ id, point, bounds }) => {
+            results.push({ id, prev: point, next: [x, bounds.minY] })
+            x += bounds.width + step
+          })
+        }
+        break
+      }
+      case DistributeType.Vertical: {
+        const span = entries.reduce((a, c) => a + c.bounds.height, 0)
+
+        if (span > commonBounds.height) {
+          const top = entries.sort((a, b) => a.bounds.minY - b.bounds.minY)[0]
+
+          const bottom = entries.sort((a, b) => b.bounds.maxY - a.bounds.maxY)[0]
+
+          const entriesToMove = entries
+            .filter(a => a !== top && a !== bottom)
+            .sort((a, b) => a.center[1] - b.center[1])
+
+          const step = (bottom.center[1] - top.center[1]) / (len - 1)
+
+          const y = top.center[1] + step
+
+          entriesToMove.forEach(({ id, point, bounds }, i) => {
+            results.push({
+              id,
+              prev: point,
+              next: [bounds.minX, y + step * i - bounds.height / 2],
+            })
+          })
+        } else {
+          const entriesToMove = entries.sort((a, b) => a.center[1] - b.center[1])
+
+          let y = commonBounds.minY
+          const step = (commonBounds.height - span) / (len - 1)
+
+          entriesToMove.forEach(({ id, point, bounds }) => {
+            results.push({ id, prev: point, next: [bounds.minX, y] })
+            y += bounds.height + step
+          })
+        }
+
+        break
+      }
+    }
+
+    return results
   }
 }
