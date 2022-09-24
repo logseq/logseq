@@ -43,24 +43,27 @@
 
 (rum/defc dropdown
   [label children show? outside-click-hander]
-  (let [anchor-ref (rum/use-ref nil)
-        content-ref (rum/use-ref nil)
-        rect (util/use-component-size (when show? anchor-ref))
-        _ (util/use-click-outside content-ref outside-click-hander)
+  (let [[anchor-ref anchor-rect] (util/use-component-size)
+        [content-ref content-rect] (util/use-component-size)
+        offset-x (when (and anchor-rect content-rect)
+                   (+ (* 0.5 (- (.-width anchor-rect) (.-width content-rect)))
+                      (.-x anchor-rect)))
+        offset-y (when (and anchor-rect content-rect)
+                   (+ (.-y anchor-rect) (.-height anchor-rect) 8))
+        click-outside-ref (util/use-click-outside outside-click-hander)
         [d-open set-d-open] (rum/use-state false)
         _ (rum/use-effect! (fn [] (js/setTimeout #(set-d-open show?) 100))
                            [show?])]
     [:div.dropdown-anchor {:ref anchor-ref}
      label
-     (when (and rect show? (> (.-y rect) 0))
-       (ui/portal
-        [:div.fixed.shadow-lg.color-level.px-2.rounded-lg.transition
-         {:ref content-ref
-          :style {:opacity (if d-open 1 0)
-                  :width "240px"
-                  :min-height "40px"
-                  :left (+ (* 0.5 (.-width rect)) (.-x rect) -120)
-                  :top (+ (.-y rect) (.-height rect) 8)}} children]))]))
+     (ui/portal
+      [:div.fixed.shadow-lg.color-level.px-2.rounded-lg.transition.md:w-64.lg:w-128
+       {:ref (juxt content-ref click-outside-ref)
+        :style {:opacity (if d-open 1 0)
+                :transform (str "translateY(" (if d-open 0 10) "px)")
+                :min-height "40px"
+                :left offset-x
+                :top offset-y}} children])]))
 
 (rum/defc page-refs-count < rum/static
   ([page-name classname]
@@ -162,8 +165,7 @@
                            (sort-by :block/updated-at)
                            reverse)
           whiteboard-names (map :block/name whiteboards)
-          ref (rum/use-ref nil)
-          rect (util/use-component-size ref)
+          [ref rect] (util/use-component-size)
           [container-width] (when rect [(.-width rect) (.-height rect)])
           cols (cond (< container-width 600) 1
                      (< container-width 900) 2

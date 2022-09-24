@@ -1046,8 +1046,9 @@
 
 (rum/defc portal
   ([children]
-   (portal children #(js/document.createElement "div") false))
-  ([children attach-to prepend?]
+   (portal children {:attach-to (fn [] js/document.body)
+                     :prepend? false}))
+  ([children {:keys [attach-to prepend?]}]
    (let [[portal-anchor set-portal-anchor] (rum/use-state nil)]
      (rum/use-effect!
       (fn []

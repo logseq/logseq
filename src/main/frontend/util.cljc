@@ -1404,31 +1404,34 @@
 
 #?(:cljs
    (defn use-component-size
-     [ref]
-     (let [[rect set-rect] (rum/use-state nil)]
+     []
+     (let [[ref set-ref] (rum/use-state nil)
+           [rect set-rect] (rum/use-state nil)]
        (rum/use-effect!
         (if ref
           (fn []
-            (let [update-rect #(set-rect (when (.-current ref) (.. ref -current getBoundingClientRect)))
+            (let [update-rect #(set-rect (. ref getBoundingClientRect))
                   updator (fn [entries]
                             (when (.-contentRect (first (js->clj entries))) (update-rect)))
                   observer (js/ResizeObserver. updator)]
               (update-rect)
-              (.observe observer (.-current ref))
+              (.observe observer ref)
               #(.disconnect observer)))
           #())
         [ref])
-       rect)))
+       [set-ref rect])))
 
 #?(:cljs
    (defn use-click-outside
-     [ref handler]
-     (rum/use-effect!
-      (fn []
-        (let [listener (fn [e]
-                         (when (and (.-current ref)
-                                    (not (.. ref -current (contains (.-target e))) ))
-                           (handler e)))]
-           (js/document.addEventListener "click" listener)
-           #(.removeEventListener js/document "click" listener)))
-      [ref])))
+     [handler]
+     (let [[ref set-ref] (rum/use-state nil)]
+       (rum/use-effect!
+        (fn []
+          (let [listener (fn [e]
+                           (when (and ref
+                                      (not (.. ref (contains (.-target e)))))
+                             (handler e)))]
+            (js/document.addEventListener "click" listener)
+            #(.removeEventListener js/document "click" listener)))
+        [ref])
+       set-ref)))
