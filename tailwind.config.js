@@ -88,7 +88,9 @@ module.exports = {
       red: colors.red,
       yellow: colors.amber,
       orange: colors.orange,
-      rose: colors.rose
+      rose: colors.rose,
+      purple: colors.purple,
+      pink: colors.pink
     }
   }
 }

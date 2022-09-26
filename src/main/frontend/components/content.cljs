@@ -95,13 +95,13 @@
 
 ;; FIXME: Make it configurable
 (def block-background-colors
-  ["#533e7d"
-   "#497d46"
-   "#787f97"
-   "#978626"
-   "#49767b"
-   "#264c9b"
-   "#793e3e"])
+  ["gray"
+   "red"
+   "yellow"
+   "green"
+   "blue"
+   "purple"
+   "pink"])
 
 (defonce *template-including-parent? (atom nil))
 
@@ -171,8 +171,8 @@
            (for [color block-background-colors]
              [:a.m-2.shadow-sm
               {:on-click (fn [_e]
-                           (editor-handler/set-block-property! block-id "background-color" color))}
-              [:div.heading-bg {:style {:background-color color}}]])
+                           (editor-handler/set-block-property! block-id "background-color" (str "var(--ls-highlight-color-" color ")")))}
+              [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
            [:a.m-2.shadow-sm
             {:title    (t :remove-background)
              :on-click (fn [_e]

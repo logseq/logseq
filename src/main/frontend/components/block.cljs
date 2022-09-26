@@ -1876,7 +1876,7 @@
         {:class (str (string/lower-case marker))})
       (when bg-color
         {:style {:background-color bg-color}
-         :class "with-bg-color"}))
+         :class "px-1 with-bg-color"}))
      (remove-nils
       (concat
        [(when-not slide? checkbox)
