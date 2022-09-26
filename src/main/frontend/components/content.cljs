@@ -169,7 +169,7 @@
           [:div.flex-row.flex.justify-between
            (for [color block-background-colors]
              [:a.m-2.shadow-sm
-              {:title color
+              {:title (t (keyword "color" color))
                :on-click (fn [_e]
                            (editor-handler/set-block-property! block-id "background-color" (str "var(--ls-highlight-color-" color ")")))}
               [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
