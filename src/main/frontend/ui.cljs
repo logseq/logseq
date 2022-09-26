@@ -763,7 +763,7 @@
                       nil)]
       [:div.flex.flex-row.admonitionblock.align-items {:class type}
        [:div.pr-4.admonition-icon.flex.flex-col.justify-center
-        {:title type} (icon)]
+        {:title (string/capitalize type)} (icon)]
        [:div.ml-4.text-lg
         content]])))
 
