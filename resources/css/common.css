@@ -15,8 +15,7 @@
   --ls-left-sidebar-sm-width: 70%;
   --ls-left-sidebar-nav-btn-size: 38px;
   --ls-error-color: var(--color-red-500);
-  --ls-caution-color: var(--color-orange-500);
-  --ls-warning-color: var(--color-yellow-500);
+  --ls-warning-color: var(--color-orange-500);
   --ls-success-color: var(--color-green-500);
 }
 
@@ -157,9 +156,9 @@ html[data-theme='light'] {
   --ls-right-sidebar-code-bg-color: var(--ls-secondary-background-color);
   --ls-pie-bg-color: #e1e1e1;
   --ls-pie-fg-color: #0a4a5d;
-  --ls-error-text-color: var(--color-red-900);
+  --ls-error-text-color: var(--color-red-800);
   --ls-error-background-color: var(--color-red-100);
-  --ls-warning-text-color: var(--color-yellow-900);
+  --ls-warning-text-color: var(--color-yellow-800);
   --ls-warning-background-color: var(--color-yellow-100);
   --color-level-1: var(--ls-secondary-background-color);
   --color-level-2: var(--ls-tertiary-background-color);
