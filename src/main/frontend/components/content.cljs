@@ -93,15 +93,6 @@
     "Cycle todos"
     nil)])
 
-(def block-background-colors
-  ["gray"
-   "red"
-   "yellow"
-   "green"
-   "blue"
-   "purple"
-   "pink"])
-
 (defonce *template-including-parent? (atom nil))
 
 (rum/defc template-checkbox
@@ -167,11 +158,11 @@
         [:.menu-links-wrapper
          [:div.flex-row.flex.justify-between.pb-2.pt-1.px-2
           [:div.flex-row.flex.justify-between
-           (for [color block-background-colors]
+           (for [color ui/block-background-colors]
              [:a.m-2.shadow-sm
-              {:title (t (keyword "color" color))
+              {:title (t (keyword "color" (:id color)))
                :on-click (fn [_e]
-                           (editor-handler/set-block-property! block-id "background-color" (str "var(--ls-highlight-color-" color ")")))}
+                           (editor-handler/set-block-property! block-id "background-color" color))}
               [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
            [:a.m-2.shadow-sm
             {:title    (t :remove-background)

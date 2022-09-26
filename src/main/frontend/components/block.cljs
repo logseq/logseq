@@ -1875,7 +1875,9 @@
                  (not= "nil" marker))
         {:class (str (string/lower-case marker))})
       (when bg-color
-        {:style {:background-color bg-color}
+        {:style {:background-color (if (contains? ui/block-background-colors bg-color) 
+                                     (str "var(--ls-highlight-color-" bg-color ")")
+                                     bg-color)}
          :class "px-1 with-bg-color"}))
      (remove-nils
       (concat

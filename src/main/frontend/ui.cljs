@@ -50,6 +50,15 @@
 
 (defonce icon-size (if (mobile-util/native-platform?) 26 20))
 
+(def block-background-colors
+  ["gray"
+   "red"
+   "yellow"
+   "green"
+   "blue"
+   "purple"
+   "pink"])
+
 (rum/defc ls-textarea
   < rum/reactive
   {:did-mount (fn [state]
