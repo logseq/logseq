@@ -225,8 +225,8 @@
           (case status
             :success
             ["text-gray-900 dark:text-gray-300 "
-             [:svg.h-6.w-6.text-success
-              {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
+             [:svg.h-6.w-6
+              {:stroke "var(--ls-success-color)", :viewBox "0 0 24 24", :fill "none"}
               [:path
                {:d               "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                 :stroke-width    "2"
@@ -234,8 +234,8 @@
                 :stroke-linecap  "round"}]]]
             :warning
             ["text-gray-900 dark:text-gray-300 "
-             [:svg.h-6.w-6.text-warning
-              {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
+             [:svg.h-6.w-6
+              {:stroke "var(--ls-warning-color)", :viewBox "0 0 24 24", :fill "none"}
               [:path
                {:d               "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 :stroke-width    "2"
@@ -243,8 +243,8 @@
                 :stroke-linecap  "round"}]]]
 
             ["text-error"
-             [:svg.h-6.w-6.text-error
-              {:view-box "0 0 20 20", :fill "currentColor"}
+             [:svg.h-6.w-6
+              {:view-box "0 0 20 20", :fill "var(--ls-error-color)"}
               [:path
                {:clip-rule "evenodd"
                 :d
