@@ -31,7 +31,7 @@
   org.clojars.mmb90/cljs-cache          {:mvn/version "0.1.4"}
   logseq/graph-parser                   {:local/root "deps/graph-parser"}}
 
- :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/" "src/js"]
+ :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.54"}
                                 org.clojure/tools.namespace      {:mvn/version "0.2.11"}
                                 cider/cider-nrepl                {:mvn/version "0.28.4"}

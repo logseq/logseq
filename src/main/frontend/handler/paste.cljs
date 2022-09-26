@@ -62,7 +62,7 @@
 (defn- try-parse-as-json
   [text]
   (try (js/JSON.parse text)
-       (catch js/Object _ #js{})))
+       (catch :default _ #js{})))
 
 (defn- paste-copied-blocks-or-text
   [text e html]
@@ -71,8 +71,8 @@
         input (state/get-input)
         text (string/replace text "\r\n" "\n") ;; Fix for Windows platform
         whiteboard-shape? (= "logseq/whiteboard-shapes" (gobj/get (try-parse-as-json text) "type"))
-        text (if whiteboard-shape? 
-               (str "((" (gobj/getValueByKeys (try-parse-as-json text) "shapes" 0 "id") "))")
+        text (if whiteboard-shape?
+               (block-ref/->block-ref (gobj/getValueByKeys (try-parse-as-json text) "shapes" 0 "id"))
                text)
         internal-paste? (and
                          (seq (:copy/blocks copied-blocks))
