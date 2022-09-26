@@ -1,11 +1,11 @@
 @import "_viewer.css";
 
 :root {
-  --ph-highlight-color-blue: #55b8fe;
-  --ph-highlight-color-green: #46da48;
-  --ph-highlight-color-red: #fd709a;
-  --ph-highlight-color-purple: #ac8cf1;
-  --ph-highlight-color-yellow: #fcd713;
+  --ph-highlight-color-blue: var(--color-blue-100);
+  --ph-highlight-color-green: var(--color-green-100);
+  --ph-highlight-color-red: var(--color-red-100);
+  --ph-highlight-color-purple: var(--color-purple-100);
+  --ph-highlight-color-yellow: var(--color-yellow-100);
 
   --ph-highlight-scroll-into-color: rgba(255, 75, 93, 0.67);
 
@@ -385,23 +385,23 @@ input::-webkit-inner-spin-button {
           }
 
           &[data-color=yellow] {
-            background-color: var(--ph-highlight-color-yellow);
+            background-color: var(--color-yellow-500);
           }
 
           &[data-color=blue] {
-            background-color: var(--ph-highlight-color-blue);
+            background-color: var(--color-blue-500);
           }
 
           &[data-color=green] {
-            background-color: var(--ph-highlight-color-green);
+            background-color: var(--color-green-500);
           }
 
           &[data-color=red] {
-            background-color: var(--ph-highlight-color-red);
+            background-color: var(--color-red-500);
           }
 
           &[data-color=purple] {
-            background-color: var(--ph-highlight-color-purple);
+            background-color: var(--color-purple-500);
           }
         }
       }
