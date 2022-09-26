@@ -111,7 +111,7 @@
    [:svg.h-8.w-8.warning
     (merge
       {:view-box "0 0 576 512"
-       :fill     "var(--ls-caution-color)"}
+       :fill     "var(--ls-warning-color)"}
       opts)
     [:path
      {:d
