@@ -93,7 +93,6 @@
     "Cycle todos"
     nil)])
 
-;; FIXME: Make it configurable
 (def block-background-colors
   ["gray"
    "red"
@@ -170,7 +169,8 @@
           [:div.flex-row.flex.justify-between
            (for [color block-background-colors]
              [:a.m-2.shadow-sm
-              {:on-click (fn [_e]
+              {:title color
+               :on-click (fn [_e]
                            (editor-handler/set-block-property! block-id "background-color" (str "var(--ls-highlight-color-" color ")")))}
               [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
            [:a.m-2.shadow-sm
