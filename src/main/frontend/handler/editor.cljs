@@ -1,4 +1,4 @@
-(ns frontend.handler.editor
+(ns ^:no-doc frontend.handler.editor
   (:require ["path" :as path]
             [clojure.set :as set]
             [clojure.string :as string]
@@ -316,9 +316,10 @@
                      (block/parse-title-and-body uuid format pre-block? (:block/content block)))
         properties (:block/properties block)
         real-content (:block/content block)
-        content (if (and (seq properties) real-content (not= real-content content))
-                  (property/with-built-in-properties properties content format)
-                  content)
+        content (let [properties (if (= format :markdown) (dissoc properties :heading) properties)]
+                  (if (and (seq properties) real-content (not= real-content content))
+                   (property/with-built-in-properties properties content format)
+                   content))
         content (drawer/with-logbook block content)
         content (with-timetracking block content)
         first-block? (= left page)
@@ -613,7 +614,7 @@
             (when edit-block?
               (if (and replace-empty-target?
                        (string/blank? (:block/content last-block)))
-                ;; 20ms of waiting for DOM to load the block, to avoid race condition. 
+                ;; 20ms of waiting for DOM to load the block, to avoid race condition.
                 ;; It's ensuring good response under M1 pro
                 ;; Used to be 10ms before, but is causing occasional failure on M1 pro with a full page of blocks,
                 ;; or failing E2E with a small number of blocks.
@@ -3465,3 +3466,21 @@
     ;; has children
     (first (:block/_parent (db/entity (:db/id block)))))
    (util/collapsed? block)))
+
+(defn set-heading!
+  [block-id format heading]
+  (if (= format :markdown)
+    (let [repo (state/get-current-repo)
+          block (db/entity [:block/uuid block-id])
+          content' (commands/set-markdown-heading (:block/content block) heading)]
+      (save-block! repo block-id content'))
+    (set-block-property! block-id "heading" heading)))
+
+(defn remove-heading!
+  [block-id format]
+  (remove-block-property! block-id "heading")
+  (when (= format :markdown)
+    (let [repo (state/get-current-repo)
+          block (db/entity [:block/uuid block-id])
+          content' (commands/clear-markdown-heading (:block/content block))]
+      (save-block! repo block-id content'))))

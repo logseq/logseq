@@ -1,4 +1,5 @@
 (ns frontend.util.fs
+  "Misc util fns built on top of frontend.fs"
   (:require ["path" :as path]
             [clojure.string :as string]
             [frontend.fs :as fs]

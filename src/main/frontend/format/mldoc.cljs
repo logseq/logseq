@@ -1,5 +1,6 @@
 (ns frontend.format.mldoc
-  "Mldoc code needed by app but not graph-parser"
+  "Contains any mldoc code needed by app but not graph-parser. Implements format
+  protocol for org and and markdown formats"
   (:require [clojure.string :as string]
             [frontend.format.protocol :as protocol]
             [goog.object :as gobj]

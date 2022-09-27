@@ -82,7 +82,7 @@
         "@capacitor/splash-screen": "^4.0.0",
         "@capacitor/status-bar": "^4.0.0",
         "@excalidraw/excalidraw": "0.10.0",
-        "@kanru/rage-wasm": "0.2.1",
+        "@kanru/rage-wasm": "^0.3.0",
         "@logseq/capacitor-file-sync": "0.0.10",
         "@logseq/react-tweet-embed": "1.3.1-1",
         "@sentry/react": "^6.18.2",

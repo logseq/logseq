@@ -1,8 +1,9 @@
 (ns frontend.ui
+  "Main ns for reusable components"
   (:require [clojure.string :as string]
             [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
-            [frontend.handler.notification :as notification-handler]
+            [frontend.handler.notification :as notification]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.rum :as r]
@@ -284,7 +285,7 @@
            [:div.ml-4.flex-shrink-0.flex
             [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150.notification-close-button
              {:on-click (fn []
-                          (notification-handler/clear! uid))}
+                          (notification/clear! uid))}
              [:svg.h-5.w-5
               {:fill "currentColor", :view-Box "0 0 20 20"}
               [:path
@@ -790,7 +791,7 @@
   < {:did-catch
      (fn [state error _info]
        (log/error :exception error)
-       (notification-handler/show!
+       (notification/show!
         (str "Error caught by UI!\n " error)
         :error)
        (assoc state ::error error))}

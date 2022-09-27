@@ -29,13 +29,14 @@
     content))
 
 (defn transform-content
-  [{:block/keys [collapsed? format pre-block? unordered content heading-level left page parent]} level {:keys [heading-to-list?]}]
-  (let [content (or content "")
+  [{:block/keys [collapsed? format pre-block? unordered content left page parent properties]} level {:keys [heading-to-list?]}]
+  (let [heading (:heading properties)
+        markdown? (= :markdown format)
+        content (or content "")
         pre-block? (or pre-block?
                        (and (= page parent left) ; first block
-                            (= :markdown format)
+                            markdown?
                             (string/includes? (first (string/split-lines content)) ":: ")))
-        markdown? (= format :markdown)
         content (cond
                   pre-block?
                   (let [content (string/trim content)]
@@ -45,7 +46,7 @@
                   (let [markdown-top-heading? (and markdown?
                                                    (= parent page)
                                                    (not unordered)
-                                                   heading-level)
+                                                   heading)
                         [prefix spaces-tabs]
                         (cond
                           (= format :org)
@@ -57,10 +58,10 @@
                           ["" ""]
 
                           :else
-                          (let [level (if (and heading-to-list? heading-level)
-                                        (if (> heading-level 1)
-                                          (dec heading-level)
-                                          heading-level)
+                          (let [level (if (and heading-to-list? heading)
+                                        (if (> heading 1)
+                                          (dec heading)
+                                          heading)
                                         level)
                                 spaces-tabs (->>
                                              (repeat (dec level) (state/get-export-bullet-indentation))

@@ -3,7 +3,7 @@
             [cljs-bean.core :as bean]
             [frontend.util :as util]
             ["/frontend/extensions/pdf/utils" :as js-utils]
-            [frontend.db :as front-db]
+            [frontend.db :as db]
             [frontend.loader :refer [load]]
             [clojure.string :as string]))
 
@@ -115,7 +115,7 @@
     (mapv #(if (map? %) % (bean/->clj %)) its)))
 
 (defn gen-uuid []
-  (front-db/new-block-id))
+  (db/new-block-id))
 
 (defn js-load$
   [url]

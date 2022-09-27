@@ -1,4 +1,5 @@
 (ns frontend.fs.sync
+  "Main ns for providing file sync functionality"
   (:require [cljs-http.client :as http]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]

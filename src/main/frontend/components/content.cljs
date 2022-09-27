@@ -84,7 +84,7 @@
      :on-click editor-handler/copy-block-embeds}
     "Copy block embeds"
     nil)
-   
+
    [:hr.menu-separator]
 
    (ui/menu-link
@@ -153,11 +153,10 @@
 (rum/defc ^:large-vars/cleanup-todo block-context-menu-content
   [_target block-id]
     (when-let [block (db/entity [:block/uuid block-id])]
-      (let [properties (:block/properties block)
-            heading? (true? (:heading properties))]
+      (let [format (:block/format block)]
         [:.menu-links-wrapper
-         [:div.flex-row.flex.justify-between.pb-2.pt-1.px-2
-          [:div.flex-row.flex.justify-between
+         [:div.flex.flex-row.justify-between.py-1.px-2.items-center
+          [:div.flex.flex-row.justify-between.flex-1
            (for [color ui/block-background-colors]
              [:a.m-2.shadow-sm
               {:title (t (keyword "color" color))
@@ -169,7 +168,26 @@
              :on-click (fn [_e]
                          (editor-handler/remove-block-property! block-id "background-color"))}
             [:div.heading-bg.remove "-"]]]]
-         
+
+         [:div.flex.flex-row.justify-between.pb-2.pt-1.px-2.items-center
+          [:div.flex.flex-row.justify-between.flex-1.px-1
+           (for [i (range 1 7)]
+             (ui/button
+              (str "H" i)
+              :class "to-heading-button"
+              :on-click (fn [_e]
+                          (editor-handler/set-heading! block-id format i))
+              :intent "link"
+              :small? true))
+           (ui/button
+            "H-"
+            :class "to-heading-button"
+            :title (t :remove-heading)
+            :on-click (fn [_e]
+                        (editor-handler/remove-heading! block-id format))
+            :intent "link"
+            :small? true)]]
+
          [:hr.menu-separator]
 
          (ui/menu-link
@@ -222,17 +240,6 @@
           nil)
 
          [:hr.menu-separator]
-
-         (ui/menu-link
-          {:key      "Convert heading"
-           :on-click (fn [_e]
-                       (if heading?
-                         (editor-handler/remove-block-property! block-id :heading)
-                         (editor-handler/set-block-property! block-id :heading true)))}
-          (if heading?
-            "Convert back to a block"
-            "Convert to a heading")
-          nil)
 
          (block-template block-id)
 

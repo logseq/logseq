@@ -1,4 +1,5 @@
 (ns frontend.loader
+  "Provides fns related to loading js assets"
   (:require [goog.net.jsloader :as jsloader]
             [goog.html.legacyconversions :as conv]
             [cljs-bean.core :as bean]))

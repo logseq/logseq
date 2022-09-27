@@ -1,4 +1,5 @@
 (ns frontend.util.priority
+  "Util fns for task priorities e.g. A, B, C"
   (:require [clojure.string :as string]
             [frontend.util :as util]
             [frontend.util.marker :as marker]))

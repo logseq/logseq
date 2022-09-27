@@ -13,7 +13,7 @@
             [frontend.fs :as fs]
             [frontend.fs.sync :as fs-sync]
             [frontend.handler.file-sync :refer [*beta-unavailable?] :as file-sync-handler]
-            [frontend.handler.notification :as notifications]
+            [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
@@ -61,7 +61,7 @@
                                  :else
                                  nil)
                                (.then #(do
-                                         (notifications/show! (str "Cloned to => " dest-dir) :success)
+                                         (notification/show! (str "Cloned to => " dest-dir) :success)
                                          (web-nfs/ls-dir-files-with-path! dest-dir)
                                          (repo-handler/remove-repo! {:url repo})
                                          (close-fn)))
