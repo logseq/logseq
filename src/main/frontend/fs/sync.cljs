@@ -2851,10 +2851,11 @@
     (when-let [sm ^SyncManager (state/get-file-sync-manager)]
       (println "[SyncManager" (:graph-uuid sm) "]" "stopping")
       (<! (-stop! sm))
-
+      (swap! state/state assoc :file-sync/sync-state {})
       (println "[SyncManager" (:graph-uuid sm) "]" "stopped")
       (state/set-file-sync-manager nil)
       (clear-graph-progress! (:graph-uuid sm)))
+
     (reset! current-sm-graph-uuid nil)))
 
 (defn sync-need-password!
