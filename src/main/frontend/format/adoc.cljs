@@ -1,4 +1,5 @@
 (ns frontend.format.adoc
+  "Partial implementation of format protocol for adoc that uses asciidoctor"
   (:require [frontend.format.protocol :as protocol]
             [frontend.loader :as loader]))
 

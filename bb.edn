@@ -6,7 +6,7 @@
   logseq/bb-tasks
   #_{:local/root "../bb-tasks"}
   {:git/url "https://github.com/logseq/bb-tasks"
-   :git/sha "abb32ccd26405d56fd28a29d56f3cb902b8c4334"}
+   :git/sha "95e4fbdb7bbf1c720c6f8b58e3b3b96b3b487526"}
   logseq/graph-parser
   {:local/root "deps/graph-parser"}
   org.clj-commons/digest
@@ -70,6 +70,9 @@
   lint:carve
   logseq.bb-tasks.lint.carve/-main
 
+  lint:ns-docstrings
+  logseq.bb-tasks.lint.ns-docstrings/-main
+
   nbb:watch
   logseq.bb-tasks.nbb.watch/watch
 
@@ -98,4 +101,10 @@
    ;; TODO: Address vars tagged with cleanup-todo. These
    ;; are left mostly because they are not high priority
    ;; or not well understood
-   :metadata-exceptions #{:large-vars/cleanup-todo}}}}
+   :metadata-exceptions #{:large-vars/cleanup-todo}}
+
+  :ns-docstrings
+  {:paths ["src/main"]
+   ;; Ignore namespaces that won't be helpful to document initially
+   ;; e.g. frontend.components.onboarding -> "Onboarding fns"
+   :ignore-regex "^(frontend.components|frontend.extensions|frontend.modules|frontend.mobile)"}}}

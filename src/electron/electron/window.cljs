@@ -111,7 +111,7 @@
 (defn- open-default-app!
   [url default-open]
   (let [URL (.-URL URL)
-        parsed-url (try (URL. url) (catch js/Error _ nil))]
+        parsed-url (try (URL. url) (catch :default _ nil))]
     (if (and parsed-url (contains? #{"https:" "http:" "mailto:"} (.-protocol parsed-url)))
       (.openExternal shell url)
       (when default-open (default-open url)))))

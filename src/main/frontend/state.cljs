@@ -1,4 +1,6 @@
 (ns frontend.state
+  "Provides main application state, fns associated to set and state based rum
+  cursors"
   (:require [cljs-bean.core :as bean]
             [cljs.core.async :as async]
             [clojure.string :as string]
@@ -244,6 +246,11 @@
 
      :ui/loading?                           {}
      :file-sync/set-remote-graph-password-result {}
+     ;; graph-uuid -> {file-path -> payload}
+     :file-sync/progress                    {}
+     :file-sync/start                       {}
+     ;; graph -> epoch
+     :file-sync/last-synced-at              {}
      :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
 
      :file/rename-event-chan                (async/chan 100)
@@ -716,9 +723,8 @@ Similar to re-frame subscriptions"
   [repo]
   (swap! state update-in [:me :repos]
          (fn [repos]
-           (->> (remove #(= (:url repo)
-                            (:url %))
-                        repos)
+           (->> (remove #(or (= (:url repo) (:url %))
+                             (= (:GraphUUID repo) (:GraphUUID %))) repos)
                 (util/distinct-by :url)))))
 
 (defn set-timestamp-block!

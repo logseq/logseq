@@ -203,7 +203,6 @@
                                     (state/add-repo! {:url repo :nfs? true})
                                     (state/set-loading-files! repo false)
                                     (when ok-handler (ok-handler {:url repo}))
-                                    (fs/watch-dir! dir-name)
                                     (db/persist-if-idle! repo))))))))
                 (p/catch (fn [error]
                            (log/error :nfs/load-files-error repo)

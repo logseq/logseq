@@ -1,4 +1,4 @@
-(ns frontend.external.protocol)
+(ns ^:no-doc frontend.external.protocol)
 
 (defprotocol External
   (toMarkdownFiles [this content config]
@@ -7,4 +7,3 @@
   ;; Long-term goal:
   ;; (toMldocAst [this content])
   ;; (fromMldocAst [this ast])
-

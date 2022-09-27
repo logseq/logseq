@@ -1,8 +1,9 @@
 (ns frontend.ui
+  "Main ns for reusable components"
   (:require [clojure.string :as string]
             [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
-            [frontend.handler.notification :as notification-handler]
+            [frontend.handler.notification :as notification]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.rum :as r]
@@ -143,44 +144,59 @@
 
 (rum/defc menu-link
   [options child shortcut]
-  [:a.flex.justify-between.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
-   options
-   [:span child]
-   (when shortcut
-     [:span.ml-1 (render-keyboard-shortcut shortcut)])])
+  (if (:only-child? options)
+    [:div.menu-link
+     (dissoc options :only-child?) child]
+    [:a.flex.justify-between.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
+     options
+     [:span child]
+     (when shortcut
+       [:span.ml-1 (render-keyboard-shortcut shortcut)])]))
 
 (rum/defc dropdown-with-links
-  [content-fn links {:keys [links-header links-footer] :as opts}]
+  [content-fn links
+   {:keys [outer-header outer-footer links-header links-footer] :as opts}]
+
   (dropdown
    content-fn
    (fn [{:keys [close-fn]}]
-     [:.menu-links-wrapper
-      (when links-header links-header)
+     (let [links-children
+           (let [links (if (fn? links) (links) links)
+                 links (remove nil? links)]
+             (for [{:keys [options title icon key hr hover-detail item _as-link?]} links]
+               (let [new-options
+                           (merge options
+                                  (cond->
+                                    {:title    hover-detail
+                                     :on-click (fn [e]
+                                                 (when-not (false? (when-let [on-click-fn (:on-click options)]
+                                                                     (on-click-fn e)))
+                                                   (close-fn)))}
+                                    key
+                                    (assoc :key key)))
+                     child (if hr
+                             nil
+                             (or item
+                                 [:div.flex.items-center
+                                  (when icon icon)
+                                  [:div.title-wrap {:style {:margin-right "8px"
+                                                            :margin-left  "4px"}} title]]))]
+                 (if hr
+                   [:hr.menu-separator {:key "dropdown-hr"}]
+                   (rum/with-key
+                    (menu-link new-options child nil)
+                    title)))))
 
-      (for [{:keys [options title icon key hr hover-detail item _as-link?]} (if (fn? links) (links) links)]
-        (let [new-options
-              (merge options
-                     (cond->
-                       {:title    hover-detail
-                        :on-click (fn [e]
-                                    (when-not (false? (when-let [on-click-fn (:on-click options)]
-                                                        (on-click-fn e)))
-                                      (close-fn)))}
-                       key
-                       (assoc :key key)))
-              child (if hr
-                      nil
-                      (or item
-                          [:div.flex.items-center
-                           (when icon icon)
-                           [:div {:style {:margin-right "8px"
-                                          :margin-left  "4px"}} title]]))]
-          (if hr
-            [:hr.menu-separator {:key "dropdown-hr"}]
-            (rum/with-key
-              (menu-link new-options child nil)
-              title))))
-      (when links-footer links-footer)])
+           wrapper-children
+           [:.menu-links-wrapper
+            (when links-header links-header)
+            links-children
+            (when links-footer links-footer)]]
+
+       (if (or outer-header outer-footer)
+         [:.menu-links-outer
+          outer-header wrapper-children outer-footer]
+         wrapper-children)))
    opts))
 
 (defn button
@@ -260,7 +276,7 @@
            [:div.ml-4.flex-shrink-0.flex
             [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150.notification-close-button
              {:on-click (fn []
-                          (notification-handler/clear! uid))}
+                          (notification/clear! uid))}
              [:svg.h-5.w-5
               {:fill "currentColor", :view-Box "0 0 20 20"}
               [:path
@@ -289,7 +305,7 @@
   (let [time-fn (fn []
                   (try
                     (util/time-ago input)
-                    (catch js/Error e
+                    (catch :default e
                       (js/console.error e)
                       input)))
         [time set-time] (rum/use-state (time-fn))]
@@ -369,11 +385,11 @@
   []
   (let [^js schemaMedia (js/window.matchMedia "(prefers-color-scheme: dark)")]
     (try (.addEventListener schemaMedia "change" state/sync-system-theme!)
-         (catch js/Error _error
+         (catch :default _error
            (.addListener schemaMedia state/sync-system-theme!)))
     (state/sync-system-theme!)
     #(try (.removeEventListener schemaMedia "change" state/sync-system-theme!)
-          (catch js/Error _error
+          (catch :default _error
             (.removeListener schemaMedia state/sync-system-theme!)))))
 
 (defn set-global-active-keystroke [val]
@@ -766,7 +782,7 @@
   < {:did-catch
      (fn [state error _info]
        (log/error :exception error)
-       (notification-handler/show!
+       (notification/show!
         (str "Error caught by UI!\n " error)
         :error)
        (assoc state ::error error))}
@@ -894,7 +910,7 @@
                                   (html)
                                   [:div.px-2.py-1
                                    html]))
-                              (catch js/Error e
+                              (catch :default e
                                 (log/error :exception e)
                                 [:div])))
                           [:div {:key "tippy"} ""])))

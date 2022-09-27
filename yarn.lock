@@ -480,10 +480,10 @@
   resolved "https://registry.yarnpkg.com/@kanru/rage-wasm/-/rage-wasm-0.3.0.tgz#de96b1fda1f781ff401d43b50d0f95b7338c4399"
   integrity sha512-2LMRS27nNJPqFNpRQL7kXG0kgBeIPo63KM6u0Xu6Es5XIS7LP4MFtdHkCg8Pt7IhMM7GuOa2YnzAZgKBxE1lcw==
 
-"@logseq/capacitor-file-sync@0.0.6":
-  version "0.0.6"
-  resolved "https://registry.yarnpkg.com/@logseq/capacitor-file-sync/-/capacitor-file-sync-0.0.6.tgz#e738ec08c1249ad96560c5f5090a60f4f49d679a"
-  integrity sha512-gnSAm2x9jNAtlQP4r8S5P2a7vRYZkGDIh6wX1/UgldDHPaY//+SWYvtFQQeDEJ1rLU/S+UYnPndlQdMDpu6mqA==
+"@logseq/capacitor-file-sync@0.0.10":
+  version "0.0.10"
+  resolved "https://registry.yarnpkg.com/@logseq/capacitor-file-sync/-/capacitor-file-sync-0.0.10.tgz#36575b369a4fff83e71b282c19cc948d60309809"
+  integrity sha512-O4bCHLym7+DnqCoO57D1Ii6ec6tcZBjp8SzFEYCKE9mvHsX5aFmCA61XUHgNEFovocQ3gBMJvi6GKSJBcGwT3Q==
 
 "@logseq/react-tweet-embed@1.3.1-1":
   version "1.3.1-1"
@@ -821,10 +821,10 @@
   dependencies:
     defer-to-connect "^1.0.1"
 
-"@tabler/icons@1.54.0":
-  version "1.54.0"
-  resolved "https://registry.yarnpkg.com/@tabler/icons/-/icons-1.54.0.tgz#c8cf4e777e61b19004d0e21443c9a7fae31d70c4"
-  integrity sha512-X0SjUMWlu6IWsWIZP6gtMZhi9Q7pO2+BQ9vex28rOu+gtym7fZjnDXWG0okzVhtt4mlOwJ2BHQllRky29lsn7Q==
+"@tabler/icons@^1.96.0":
+  version "1.96.0"
+  resolved "https://registry.yarnpkg.com/@tabler/icons/-/icons-1.96.0.tgz#ff3cb1a5ddc38b96f54a54b9c0b5e1ed88c24da7"
+  integrity sha512-ZAQ64CHi5sOFQE7COoBmZbhIBtTX+4XNuiVZsr8kcqJX1bmrw6dFU0W9ONJamt/2TO997uVfSqxr2o0WZqZr/g==
 
 "@tailwindcss/custom-forms@^0.2.1":
   version "0.2.1"
@@ -4702,10 +4702,10 @@ mkdirp@^1.0.3:
   resolved "https://registry.yarnpkg.com/mkdirp/-/mkdirp-1.0.4.tgz#3eb5ed62622756d79a5f0e2a221dfebad75c2f7e"
   integrity sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==
 
-mldoc@1.4.0:
-  version "1.4.0"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.4.0.tgz#10dd8b57b1941a66b3d30fd031881ad31d499edb"
-  integrity sha512-6s1utUm03SCR1XH2EnHD3s0qAd+RLLGRc+1qb4SuHIjjmT5HMWbWGP+vADBLHKQKP6nwYCKsUJkiwLFjOXfP6w==
+mldoc@^1.4.9:
+  version "1.4.9"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.4.9.tgz#a61d93e98f19bf4ec6303810cc3573c5e14eab44"
+  integrity sha512-rroc1tWJnNm2n33MYk+sWgLjGWmP93Am+6zvpBe0BGEyccHQT3AxHHv8fNpF7HVvT7YPtU/dtHWTh6nE2n7vPA==
   dependencies:
     yargs "^12.0.2"
 

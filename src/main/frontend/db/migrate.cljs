@@ -1,4 +1,4 @@
-(ns frontend.db.migrate
+(ns ^:no-doc frontend.db.migrate
   (:require [datascript.core :as d]))
 
 (defn get-collapsed-blocks

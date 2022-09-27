@@ -1,4 +1,5 @@
 (ns frontend.fs.capacitor-fs
+  "Implementation of fs protocol for mobile"
   (:require ["@capacitor/filesystem" :refer [Encoding Filesystem]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]

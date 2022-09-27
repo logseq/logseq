@@ -1,4 +1,4 @@
-(ns frontend.fs.nfs
+(ns ^:no-doc frontend.fs.nfs
   (:require [frontend.fs.protocol :as protocol]
             [frontend.util :as util]
             [clojure.string :as string]

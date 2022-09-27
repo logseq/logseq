@@ -166,7 +166,7 @@
           shortcut-m    (shortcut-map handler-id)
           parse-shortcut #(try
                            (KeyboardShortcutHandler/parseStringShortcut %)
-                           (catch js/Error e
+                           (catch :default e
                              (js/console.error "[shortcut/parse-error]" (str % " - " (.-message e)))))
           bindings      (->> (shortcut-binding k)
                              (map mod-key)

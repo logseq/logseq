@@ -1,4 +1,4 @@
-(ns frontend.handler.editor
+(ns ^:no-doc frontend.handler.editor
   (:require ["path" :as path]
             [clojure.set :as set]
             [clojure.string :as string]
@@ -293,7 +293,7 @@
                           :else
                           content)]
         new-content)
-      (catch js/Error _e
+      (catch :default _e
         content))
     content))
 
@@ -316,9 +316,10 @@
                      (block/parse-title-and-body uuid format pre-block? (:block/content block)))
         properties (:block/properties block)
         real-content (:block/content block)
-        content (if (and (seq properties) real-content (not= real-content content))
-                  (property/with-built-in-properties properties content format)
-                  content)
+        content (let [properties (if (= format :markdown) (dissoc properties :heading) properties)]
+                  (if (and (seq properties) real-content (not= real-content content))
+                   (property/with-built-in-properties properties content format)
+                   content))
         content (drawer/with-logbook block content)
         content (with-timetracking block content)
         first-block? (= left page)
@@ -613,7 +614,7 @@
             (when edit-block?
               (if (and replace-empty-target?
                        (string/blank? (:block/content last-block)))
-                ;; 20ms of waiting for DOM to load the block, to avoid race condition. 
+                ;; 20ms of waiting for DOM to load the block, to avoid race condition.
                 ;; It's ensuring good response under M1 pro
                 ;; Used to be 10ms before, but is causing occasional failure on M1 pro with a full page of blocks,
                 ;; or failing E2E with a small number of blocks.
@@ -633,8 +634,7 @@
 (defn properties-block
   [properties format page]
   (let [content (property/insert-properties format "" properties)
-        refs (gp-block/get-page-refs-from-properties format
-                                                     properties
+        refs (gp-block/get-page-refs-from-properties properties
                                                      (db/get-db (state/get-current-repo))
                                                      (state/get-date-formatter)
                                                      (state/get-config))]
@@ -1293,7 +1293,7 @@
                       (not= (string/trim db-content-without-heading)
                             (string/trim value)))
                  (save-block-aux! db-block value opts))))
-           (catch js/Error error
+           (catch :default error
              (log/error :save-block-failed error))))))))
 
 (defn- clean-content!
@@ -1606,7 +1606,7 @@
               @commands/*initial-commands)
          (and last-command
               (commands/get-matched-commands last-command)))))
-    (catch js/Error e
+    (catch :default e
       (js/console.error e)
       nil)))
 
@@ -1626,7 +1626,7 @@
               (commands/get-matched-commands
                last-command
                (commands/block-commands-map))))))
-    (catch js/Error _error
+    (catch :default _error
       nil)))
 
 (defn auto-complete?
@@ -2726,11 +2726,11 @@
             (autopair input-id "(" format nil))
 
         ;; If you type `xyz`, the last backtick should close the first and not add another autopair
-        ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)        
+        ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)
         (contains? (set (keys autopair-map)) key)
         (let [curr (get-current-input-char input)
                   prev (util/nth-safe value (dec pos))]
-            (util/stop e) 
+            (util/stop e)
             (if (and (= key "`") (= "`" curr) (not= "`" prev))
               (cursor/move-cursor-forward input)
               (autopair input-id key format nil)))
@@ -3466,3 +3466,21 @@
     ;; has children
     (first (:block/_parent (db/entity (:db/id block)))))
    (util/collapsed? block)))
+
+(defn set-heading!
+  [block-id format heading]
+  (if (= format :markdown)
+    (let [repo (state/get-current-repo)
+          block (db/entity [:block/uuid block-id])
+          content' (commands/set-markdown-heading (:block/content block) heading)]
+      (save-block! repo block-id content'))
+    (set-block-property! block-id "heading" heading)))
+
+(defn remove-heading!
+  [block-id format]
+  (remove-block-property! block-id "heading")
+  (when (= format :markdown)
+    (let [repo (state/get-current-repo)
+          block (db/entity [:block/uuid block-id])
+          content' (commands/clear-markdown-heading (:block/content block))]
+      (save-block! repo block-id content'))))

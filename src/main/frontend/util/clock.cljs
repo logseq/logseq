@@ -1,4 +1,5 @@
 (ns frontend.util.clock
+  "Provides clock related functionality used by tasks"
   (:require [frontend.state :as state]
             [frontend.util.drawer :as drawer]
             [frontend.util :as util]
@@ -77,7 +78,7 @@
               (str clock-in-log "\n")
               (str clock-out-log "\n"))))))
      content)
-    (catch js/Error _e
+    (catch :default _e
       content)))
 
 (defn clock-summary
