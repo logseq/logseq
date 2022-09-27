@@ -57,8 +57,7 @@
    "yellow"
    "green"
    "blue"
-   "purple"
-   "pink"])
+   "purple"])
 
 (rum/defc ls-textarea
   < rum/reactive

@@ -495,14 +495,18 @@ i.ti {
 
 .heading-bg {
   border-radius: 50%;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
 
   &.remove {
     @apply border flex items-center justify-center;
 
     border-color: var(--border-color);
   }
+}
+
+.to-heading-button {
+  @apply px-1 important;
 }
 
 /** endregion **/
