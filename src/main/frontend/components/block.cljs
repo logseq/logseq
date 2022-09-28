@@ -5,6 +5,7 @@
             [cljs-bean.core :as bean]
             [cljs.core.match :refer [match]]
             [cljs.reader :as reader]
+            [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
@@ -39,11 +40,13 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.file-sync :as file-sync]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.query :as query-handler]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
@@ -62,8 +65,8 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.text :as text]
             [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
@@ -71,8 +74,6 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.handler.file-sync :as file-sync]
-            [clojure.set :as set]
             [shadow.loader :as loader]))
 
 (defn safe-read-string
@@ -535,6 +536,11 @@
        (:db/id page-entity)
        :page))
 
+    (whiteboard-handler/inside-whiteboard-portal-container (.-target e))
+    (whiteboard-handler/add-new-block-portal-shape!
+     page-name
+     (whiteboard-handler/closest-whiteboard-shape-id (.-target e)))
+
     whiteboard-page?
     (route-handler/redirect-to-whiteboard! page-name)
 
@@ -885,12 +891,19 @@
                        (not (util/right-click? e)))
                   (util/stop e)
 
-                  (if (gobj/get e "shiftKey")
+                  (cond
+                    (gobj/get e "shiftKey")
                     (state/sidebar-add-block!
                      (state/get-current-repo)
                      (:db/id block)
                      :block-ref)
 
+                    (whiteboard-handler/inside-whiteboard-portal-container (.-target e))
+                    (whiteboard-handler/add-new-block-portal-shape!
+                     (:block/uuid block)
+                     (whiteboard-handler/closest-whiteboard-shape-id (.-target e)))
+
+                    :else
                     (match [block-type (util/electron?)]
                       ;; pdf annotation
                       [:annotation true] (pdf-assets/open-block-ref! block)

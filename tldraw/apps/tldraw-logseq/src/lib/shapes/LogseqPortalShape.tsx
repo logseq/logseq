@@ -835,6 +835,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 data-collapsed={this.collapsed}
                 data-page-id={pageId}
                 data-portal-selected={portalSelected}
+                data-editing={isEditing}
                 style={{
                   background: this.props.compact ? 'transparent' : fill,
                   color: stroke,

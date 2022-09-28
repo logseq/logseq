@@ -625,6 +625,10 @@ button.tl-select-input-trigger {
   user-select: text;
   transform-origin: top left;
 
+  &[data-collapsed='true'][data-editing='false'] {
+    @apply overflow-hidden;
+  }
+
   &[data-portal-selected='true'] {
     filter: brightness(0.9) contrast(0.5);
   }

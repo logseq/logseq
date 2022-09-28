@@ -192,7 +192,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     return this
   }
 
-  createNewLineBinding = (source: TLShape, target: TLShape) => {
+  createNewLineBinding = (source: S | string, target: S | string) => {
     return this.app.createNewLineBinding(source, target)
   }
 }

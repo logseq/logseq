@@ -425,7 +425,9 @@ export class TLApp<
   distribute = (type: DistributeType, shapes: S[] = this.selectedShapesArray): this => {
     if (shapes.length < 2) return this
 
-    const deltaMap = Object.fromEntries(BoundsUtils.getDistributions(shapes, type).map(d => [d.id, d]))
+    const deltaMap = Object.fromEntries(
+      BoundsUtils.getDistributions(shapes, type).map(d => [d.id, d])
+    )
 
     shapes.forEach(shape => {
       if (deltaMap[shape.id]) shape.update({ point: deltaMap[shape.id].next })
@@ -662,9 +664,11 @@ export class TLApp<
     return this.setBindingShapes()
   }
 
-  @action createNewLineBinding = (source: TLShape, target: TLShape) => {
-    if (source.canBind && target.canBind) {
-      const result = createNewLineBinding(source, target)
+  @action createNewLineBinding = (source: S | string, target: S | string) => {
+    const src = typeof source === 'string' ? this.getShapeById(source) : source
+    const tgt = typeof target === 'string' ? this.getShapeById(target) : target
+    if (src?.canBind && tgt?.canBind) {
+      const result = createNewLineBinding(src, tgt)
       if (result) {
         const [newLine, newBindings] = result
         this.createShapes([newLine])

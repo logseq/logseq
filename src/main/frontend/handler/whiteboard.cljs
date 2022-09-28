@@ -1,6 +1,7 @@
 (ns frontend.handler.whiteboard
   "Whiteboard related handlers"
   (:require [datascript.core :as d]
+            [dommy.core :as dom]
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
             [frontend.handler.route :as route-handler]
@@ -127,6 +128,32 @@
    (create-new-whiteboard-page! name)
    (route-handler/redirect-to-whiteboard! name)))
 
+(defn ->logseq-portal-shape
+  [block-id point]
+  {:blockType (if (parse-uuid (str block-id)) "B" "P")
+   :id (str (d/squuid))
+   :compact false
+   :pageId (str block-id)
+   :point point
+   :size [400, 0]
+   :type "logseq-portal"})
+
+(defn add-new-block-portal-shape!
+  "Given the block uuid, add a new shape to the referenced block.
+   By default it will be placed next to the given shape id"
+  [block-uuid source-shape & {:keys [link? bottom?]}]
+  (let [app (state/active-tldraw-app)
+        api (.-api app)
+        point (-> (.getShapeById app source-shape)
+                  (.-bounds)
+                  ((fn [bounds] (if bottom? 
+                                  [(.-minX bounds) (+ 64 (.-maxY bounds))]
+                                  [(+ 64 (.-maxX bounds)) (.-minY bounds)]))))
+        shape (->logseq-portal-shape block-uuid point)]
+    (.createShapes api (clj->js shape))
+    (when link?
+      (.createNewLineBinding api source-shape (:id shape)))))
+
 (defn page-name->tldr!
   ([page-name]
    (page-name->tldr! page-name nil))
@@ -169,3 +196,12 @@
             :block/parent {:block/name page-name}}]
     (db-utils/transact! [tx])
     uuid))
+
+(defn inside-whiteboard-portal-container
+  [target]
+  (dom/closest target ".tl-logseq-cp-container"))
+
+(defn closest-whiteboard-shape-id
+  [target]
+  (when-let [shape-el (dom/closest target "[data-shape-id]")]
+    (.getAttribute shape-el "data-shape-id")))

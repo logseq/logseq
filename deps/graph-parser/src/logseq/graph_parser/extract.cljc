@@ -250,11 +250,7 @@
         page-block (first pages)
         page-name (or (:block/name page-block)
                       (filepath->page-name file))
-        page-original-name (-> (:block/original-name page-block)
-                               (#(cond (some? %) %
-                                       (= (gp-util/page-name-sanity-lc %)
-                                          (gp-util/page-name-sanity-lc page-name)) page-name
-                                       :else page-name)))
+        page-original-name (:block/original-name page-block)
         page-name (gp-util/page-name-sanity-lc page-name)
         page {:block/name page-name
               :block/type "whiteboard"

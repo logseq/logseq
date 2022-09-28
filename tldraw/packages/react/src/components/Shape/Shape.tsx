@@ -37,7 +37,14 @@ export const Shape = observer(function Shape({
   } = shape
   const events = useShapeEvents(shape)
   return (
-    <Container zIndex={zIndex} data-type="Shape" bounds={bounds} rotation={rotation} scale={scale}>
+    <Container
+      data-shape-id={shape.id}
+      zIndex={zIndex}
+      data-type="Shape"
+      bounds={bounds}
+      rotation={rotation}
+      scale={scale}
+    >
       <ReactComponent
         meta={meta}
         isEditing={isEditing}
