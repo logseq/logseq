@@ -83,7 +83,7 @@
      (fn []
        (when (and tln name)
          (when-let [^js api (gobj/get tln "api")]
-           (when (parse-uuid block-id)
+           (when (and block-id (parse-uuid block-id))
              (. api selectShapes block-id)
              (. api zoomToSelection))))
        nil) [name block-id tln])
