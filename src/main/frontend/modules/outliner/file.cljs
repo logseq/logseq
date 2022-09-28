@@ -42,7 +42,7 @@
   [repo page-db-id]
   (let [page-block (db/pull repo '[*] page-db-id)
         page-db-id (:db/id page-block)
-        whiteboard? (:block/whiteboard? page-block)
+        whiteboard? (= "whiteboard" (:block/type page-block))
         blocks-count (model/get-page-blocks-count repo page-db-id)]
     (if (or (and (> blocks-count 500)
                  (not (state/input-idle? repo {:diff 3000}))) ;; long page

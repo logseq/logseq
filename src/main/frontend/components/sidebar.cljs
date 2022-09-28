@@ -249,7 +249,7 @@
       :class "new-whiteboard-link"
       :shortcut (ui/keyboard-shortcut-from-config :editor/new-whiteboard)
       :options {:on-click #(do (close-sidebar-on-mobile!)
-                               (whiteboard-handler/create-new-whiteboard!))}
+                               (whiteboard-handler/create-new-whiteboard-and-redirect!))}
       :icon (ui/type-icon {:name "new-whiteboard"
                            :class "highlight"
                            :extension? true})}])

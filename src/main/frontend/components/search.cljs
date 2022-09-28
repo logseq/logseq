@@ -123,7 +123,7 @@
     (page-handler/create! search-q {:redirect? true})
 
     :new-whiteboard
-    (whiteboard-handler/create-new-whiteboard! search-q)
+    (whiteboard-handler/create-new-whiteboard-and-redirect! search-q)
 
     :page
     (let [data (or alias data)]

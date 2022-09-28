@@ -26,7 +26,7 @@
   (let [page-name (util/page-name-sanity-lc page-name)
         page-entity (model/get-page page-name)
         page-block (merge {:block/name page-name
-                           :block/whiteboard? true
+                           :block/type "whiteboard"
                            :block/properties (-> tldr-data
                                                  (dissoc :shapes)
                                                  (assoc :ls-type :whiteboard-page))}
@@ -120,12 +120,12 @@
            (outliner-file/sync-to-file page-entity))))
      tldr)))
 
-(defn create-new-whiteboard!
+(defn create-new-whiteboard-and-redirect!
+  ([]
+   (create-new-whiteboard-and-redirect! (str (d/squuid))))
   ([name]
    (create-new-whiteboard-page! name)
-   (route-handler/redirect-to-whiteboard! name))
-  ([]
-   (create-new-whiteboard! (str (d/squuid)))))
+   (route-handler/redirect-to-whiteboard! name)))
 
 (defn page-name->tldr!
   ([page-name]

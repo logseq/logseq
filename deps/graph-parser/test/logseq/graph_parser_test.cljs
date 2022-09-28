@@ -62,6 +62,7 @@
       (let [blocks (d/q '[:find (pull ?b [* {:block/page
                                              [:block/name
                                               :block/original-name
+                                              :block/type
                                               {:block/file
                                                [:file/path]}]}])
                           :in $
@@ -70,6 +71,7 @@
             parent (:block/page (ffirst blocks))]
         (is (= {:block/name "foo" 
                 :block/original-name "Foo"
+                :block/type "whiteboard"
                 :block/file {:file/path "/whiteboards/Foo.edn"}}
                parent)
             "parsed block in the whiteboard page has correct parent page")))))

@@ -231,6 +231,9 @@
                     (and (collide?) whiteboard-page?)
                     (notification/show! (str "Page “" @*title-value "” already exists!") :error)
 
+                    (and (date/valid-journal-title? @*title-value) whiteboard-page?)
+                    (notification/show! (str "Whiteboard page cannot be renamed with journal titles!") :error)
+
                     untitled?
                     (page-handler/rename! (or title page-name) @*title-value)
 
@@ -897,7 +900,7 @@
                                              (or (boolean journal?)
                                                  (= false (boolean (:block/journal? %))))
                                              (or (boolean whiteboard?)
-                                                 (= false (boolean (:block/whiteboard? %))))))
+                                                 (not= "whiteboard" (:block/type %)))))
                                    (sort-pages-by sort-by-item desc?)))))
            (reset! *pages pages)))
 

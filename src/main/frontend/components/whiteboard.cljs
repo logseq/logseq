@@ -161,7 +161,7 @@
    {:on-click
     (fn [e]
       (util/stop e)
-      (whiteboard-handler/create-new-whiteboard!))}
+      (whiteboard-handler/create-new-whiteboard-and-redirect!))}
    (ui/icon "plus")
    [:span.dashboard-create-card-caption.select-none
     "New whiteboard"]])

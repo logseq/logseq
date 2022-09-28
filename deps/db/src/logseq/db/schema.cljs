@@ -14,6 +14,9 @@
 
    :recent/pages {}
 
+   ;; :block/type is a string type of the current block
+   ;; "whiteboard" for whiteboards
+   ;; "macros" for macro
    :block/type {}
    :block/uuid {:db/unique :db.unique/identity}
    :block/parent {:db/valueType :db.type/ref
@@ -89,9 +92,6 @@
                   :db/cardinality :db.cardinality/many}
    ;; block's file
    :block/file {:db/valueType :db.type/ref}
-
-   ;; whether page is a whiteboard
-   :block/whiteboard? {}
 
    ;; file
    :file/path {:db/unique :db.unique/identity}

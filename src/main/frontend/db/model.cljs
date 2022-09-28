@@ -1649,7 +1649,7 @@
   [page-name]
   (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page-name)])]
     (or
-     (:block/whiteboard? page)
+     (= "whiteboard" (:block/type page))
      (when-let [file (:block/file page)]
        (when-let [path (:file/path (db-utils/entity (:db/id file)))]
          (gp-config/whiteboard? path))))))
@@ -1657,21 +1657,6 @@
 (defn whiteboard-shape?
   [block]
   (gp-block/whiteboard-properties? (:properties block)))
-
-;; ;; fixme: caching?
-;; (defn get-all-whiteboard-tldrs
-;;   "Returns a vector of all whiteboard tldrs."
-;;   [repo]
-;;   (let [result (d/q
-;;                 '[:find [(pull ?page [* {:block/_page [:block/properties]}]) ...]
-;;                   :where
-;;                   [?page :block/name]
-;;                   [?page :block/whiteboard? true]]
-;;                 (conn/get-db repo))
-;;         tldrs (mapv (fn [row] (let [blocks (:block/_page row)
-;;                                     page (dissoc row :block/_page)]
-;;                                 (whiteboard-clj->tldr page blocks))) result)]
-;;     tldrs))
 
 (defn get-all-whiteboards
   [repo]
@@ -1681,5 +1666,5 @@
                               :block/updated-at]) ...]
           :where
           [?page :block/name]
-          [?page :block/whiteboard? true]]
+          [?page :block/type "whiteboard"]]
         (conn/get-db repo))))

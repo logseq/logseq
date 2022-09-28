@@ -82,5 +82,6 @@
         page (first pages)]
     (is (= (get-in page [:block/file :file/path]) "/whiteboards/Foo.edn"))
     (is (= (:block/name page) "foo"))
+    (is (= (:block/type page) "whiteboard"))
     (is (= (:block/original-name page) "Foo"))
     (is (every? #(= (:block/parent %) {:block/name "foo"}) blocks))))

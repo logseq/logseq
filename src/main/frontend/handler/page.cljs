@@ -107,7 +107,7 @@
                                                  (:block/name page)))
           page (merge page
                       (when (seq properties) {:block/properties properties})
-                      (when whiteboard? {:block/whiteboard? whiteboard?}))
+                      (when whiteboard? {:block/type "whiteboard"}))
           page-empty? (db/page-empty? (state/get-current-repo) (:block/name page))]
       (cond
         (not page-empty?)
@@ -458,7 +458,7 @@
 
       ;; Redirect to the newly renamed page
       (when redirect?
-        (route-handler/redirect! {:to          (if (:block/whiteboard? page) :whiteboard :page)
+        (route-handler/redirect! {:to          (if (= "whiteboard" (:block/type page)) :whiteboard :page)
                                   :push        false
                                   :path-params {:name new-page-name}}))
 

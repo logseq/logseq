@@ -230,7 +230,8 @@
         default-page-ref {:block/name (gp-util/page-name-sanity-lc page-name)}]
     (merge (if shape?
              (merge
-              {:block/uuid (uuid (:id shape))}
+              {:block/uuid (uuid (:id shape))
+               :block/type "whiteboard"}
               (with-whiteboard-block-refs shape)
               (with-whiteboard-content shape))
              {:block/unordered true})
@@ -250,12 +251,13 @@
         page-name (or (:block/name page-block)
                       (filepath->page-name file))
         page-original-name (-> (:block/original-name page-block)
-                               (#(cond (nil? %) page-name
+                               (#(cond (some? %) %
                                        (= (gp-util/page-name-sanity-lc %)
                                           (gp-util/page-name-sanity-lc page-name)) page-name
-                                       :else %)))
+                                       :else page-name)))
         page-name (gp-util/page-name-sanity-lc page-name)
         page {:block/name page-name
+              :block/type "whiteboard"
               :block/original-name page-original-name
               :block/file {:file/path (gp-util/path-normalize file)}}
         page-block (merge page-block page (when-not (:block/uuid page-block) {:block/uuid (d/squuid)}))
