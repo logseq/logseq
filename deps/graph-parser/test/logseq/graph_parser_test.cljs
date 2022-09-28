@@ -17,6 +17,7 @@
       :block/format :markdown}),
     :pages
     ({:block/format :markdown,
+      :block/original-name "Foo"
       :block/properties {:title "my whiteboard foo"}})})
 
 (deftest parse-file
@@ -58,7 +59,7 @@
   
   (testing "parsing whiteboard page"
     (let [conn (ldb/start-conn)]
-      (graph-parser/parse-file conn "/whiteboards/Foo.edn" (pr-str foo-edn) {})
+      (graph-parser/parse-file conn "/whiteboards/foo.edn" (pr-str foo-edn) {})
       (let [blocks (d/q '[:find (pull ?b [* {:block/page
                                              [:block/name
                                               :block/original-name
@@ -69,10 +70,10 @@
                           :where [?b :block/content] [(missing? $ ?b :block/name)]]
                         @conn)
             parent (:block/page (ffirst blocks))]
-        (is (= {:block/name "foo" 
+        (is (= {:block/name "foo"
                 :block/original-name "Foo"
                 :block/type "whiteboard"
-                :block/file {:file/path "/whiteboards/Foo.edn"}}
+                :block/file {:file/path "/whiteboards/foo.edn"}}
                parent)
             "parsed block in the whiteboard page has correct parent page")))))
 

@@ -74,13 +74,14 @@
       :block/format :markdown}),
     :pages
     ({:block/format :markdown,
+      :block/original-name "Foo"
       :block/properties {:title "my whiteboard foo"}})})
 
 (deftest test-extract-whiteboard-edn
   []
-  (let [{:keys [pages blocks]} (extract/extract-whiteboard-edn "/whiteboards/Foo.edn" (pr-str foo-edn) {})
+  (let [{:keys [pages blocks]} (extract/extract-whiteboard-edn "/whiteboards/foo.edn" (pr-str foo-edn) {})
         page (first pages)]
-    (is (= (get-in page [:block/file :file/path]) "/whiteboards/Foo.edn"))
+    (is (= (get-in page [:block/file :file/path]) "/whiteboards/foo.edn"))
     (is (= (:block/name page) "foo"))
     (is (= (:block/type page) "whiteboard"))
     (is (= (:block/original-name page) "Foo"))
