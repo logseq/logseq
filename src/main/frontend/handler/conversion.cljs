@@ -1,8 +1,8 @@
 ;; Convert data on updating from earlier version of Logseq on demand
 
 (ns frontend.handler.conversion
-  (:require [clojure.string :as string]
-            [logseq.graph-parser.util :as gp-util]
+  "For conversion logic between old version and new version"
+  (:require [logseq.graph-parser.util :as gp-util]
             [frontend.util.fs :as fs-util]
             [frontend.handler.config :refer [set-config!]]))
 
@@ -75,10 +75,6 @@
   ;;   and it includes reserved characters, format config change / file renaming is required. 
   ;;   It's about user's own data management decision and should be handled
   ;;   by user manually.
-  ;; Don't rename the hls files
-  ;;   keep `hls__` in file
-  ;;   don't do conversion on the following body, as the previous
-  ;;   pdf name handling is buggy
   ;; Don't rename page that with a custom setup `title` property
   (when (not (is-manual-title-prop? old-format file-body prop-title))
       ;; the 'expected' title of the user when updating from the previous format, or title will be broken in new format
@@ -96,7 +92,7 @@
    path: the path of the file of the page
    old-format, new-format: the filename formats
    Return:
-     {:status        :informal | :breaking
+     {:status        :informal | :breaking | :unreachable
       :target        the new file name
       :old-title     the old title
       :chagned-title the new title} | nil"
@@ -104,6 +100,5 @@
   (let [prop-title (get-in page [:block/properties :title])
         file-body  (gp-util/path->file-body path)
         journal?   (:block/journal? page)]
-    (when (and (not journal?)
-               (not (string/starts-with? file-body "hls__")))
+    (when (not journal?)
       (calc-rename-target-impl old-format new-format file-body prop-title))))
