@@ -72,21 +72,20 @@
                                                 (keyword type)))
    :redirectToPage (fn [page-name]
                      (if (model/whiteboard-page? page-name)
-                         (route-handler/redirect-to-whiteboard! page-name)
-                         (route-handler/redirect-to-page! page-name)))})
+                       (route-handler/redirect-to-whiteboard! page-name)
+                       (route-handler/redirect-to-page! page-name)))})
 
 (rum/defc tldraw-app
   [name block-id]
   (let [data (whiteboard-handler/page-name->tldr! name block-id)
         [tln set-tln] (rum/use-state nil)]
-    (rum/use-effect!
+    (rum/use-layout-effect!
      (fn []
        (when (and tln name)
          (when-let [^js api (gobj/get tln "api")]
-           (if (empty? block-id)
-             (. api zoomToFit)
-             (do (. api selectShapes block-id)
-                 (. api zoomToSelection)))))
+           (when block-id
+             (. api selectShapes block-id)
+             (. api zoomToSelection))))
        nil) [name block-id tln])
     (when (and (not-empty name) (not-empty (gobj/get data "currentPageId")))
       [:div.draw.tldraw.whiteboard.relative.w-full.h-full

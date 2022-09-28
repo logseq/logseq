@@ -14,6 +14,7 @@ import {
   useCursor,
   useZoom,
   useCanvasEvents,
+  useRestoreCamera,
 } from '../../hooks'
 import { useKeyboardEvents } from '../../hooks/useKeyboardEvents'
 import type { TLReactShape } from '../../lib'
@@ -96,6 +97,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
   usePreventNavigation(rContainer)
   useResizeObserver(rContainer, viewport, onBoundsChange)
   useGestureEvents(rContainer)
+  useRestoreCamera()
   useCursor(rContainer, cursor, cursorRotation)
   useZoom(rContainer)
   useKeyboardEvents(rContainer)
