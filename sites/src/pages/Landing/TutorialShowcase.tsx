@@ -24,18 +24,18 @@ const featuresSlideItems = [
     icon: '🧑‍🎓',
     notes: [
       {
-        icon: <ClockCounterClockwise size={32} weight="duotone"/>,
+        icon: <ClockCounterClockwise size={20} weight="duotone"/>,
         title: 'Review notes',
         desc: <span>Capture, structure, and review all of your class notes with ease using the
-          <a>Linked References</a>, <a>Queries</a>, and <a>Search</a>features.</span>
+          <a> Linked References</a>, <a>Queries</a>, and <a>Search </a>features.</span>
       },
       {
-        icon: <Brain size={32} weight="duotone"/>,
+        icon: <Brain size={20} weight="duotone"/>,
         title: 'Memorize facts',
         desc: (<span>Remember facts and insights using the <a>Flashcards</a> feature.</span>)
       },
       {
-        icon: <PencilLine size={32} weight="duotone"/>,
+        icon: <PencilLine size={20} weight="duotone"/>,
         title: 'Outline essays',
         desc: (
           <span>Organize your thoughts and ideas, and quickly turn them into outlines using <a>Block References</a>.</span>)
@@ -47,13 +47,13 @@ const featuresSlideItems = [
     icon: '🖋',
     notes: [
       {
-        icon: <ClockCounterClockwise size={32} weight="duotone"/>,
+        icon: <ClockCounterClockwise size={20} weight="duotone"/>,
         title: 'Review notes',
         desc: <span>Capture, structure, and review all of your class notes with ease using the
           <a>Linked References</a>, <a>Queries</a>, and <a>Search</a>features.</span>
       },
       {
-        icon: <CalendarCheck size={32} weight="duotone"/>,
+        icon: <CalendarCheck size={20} weight="duotone"/>,
         title: 'Manage writing stages',
         desc: (
           <span>
@@ -63,7 +63,7 @@ const featuresSlideItems = [
         )
       },
       {
-        icon: <Lightbulb size={32} weight="duotone"/>,
+        icon: <Lightbulb size={20} weight="duotone"/>,
         title: 'Combine ideas',
         desc: (
           <span>
@@ -73,7 +73,7 @@ const featuresSlideItems = [
         )
       },
       {
-        icon: <PencilLine size={32} weight="duotone"/>,
+        icon: <PencilLine size={20} weight="duotone"/>,
         title: 'Outline content',
         desc: (<span>Organize your thoughts and reuse ideas in easy-to-manage outlines.</span>)
       }
@@ -84,24 +84,24 @@ const featuresSlideItems = [
     icon: '🎓',
     notes: [
       {
-        icon: <ClockCounterClockwise size={32} weight="duotone"/>,
+        icon: <ClockCounterClockwise size={20} weight="duotone"/>,
         title: 'Review notes',
         desc: <span>Capture, structure, and review all of your class notes with ease using the
           <a>Linked References</a>, <a>Queries</a>, and <a>Search</a>features.</span>
       },
       {
-        icon: <Binoculars size={32} weight="duotone"/>,
+        icon: <Binoculars size={20} weight="duotone"/>,
         title: 'Investigate claims',
         desc: (<span>Spin your web of knowledge and see what evidence supports or contradicts claims.</span>)
       },
       {
-        icon: <Binoculars size={32} weight="duotone"/>,
+        icon: <Binoculars size={20} weight="duotone"/>,
         title: 'Manage sources',
         desc: (<span>Keep track of your research and easily manage your sources using the built-in
           <a>Zotero integration</a>.</span>)
       },
       {
-        icon: <Books size={32} weight="duotone"/>,
+        icon: <Books size={20} weight="duotone"/>,
         title: 'Outline papers',
         desc: (
           <span>Manage your writing process and ensure that your papers are well-organized and flow smoothly.</span>)
@@ -113,7 +113,7 @@ const featuresSlideItems = [
     icon: '📆',
     notes: [
       {
-        icon: <ClockCounterClockwise size={32} weight="duotone"/>,
+        icon: <ClockCounterClockwise size={20} weight="duotone"/>,
         title: 'Retrieve notes',
         desc: (<span>
           Always find the information where and when you need it using
@@ -121,7 +121,7 @@ const featuresSlideItems = [
         </span>)
       },
       {
-        icon: <CheckCircle size={32} weight="duotone"/>,
+        icon: <CheckCircle size={20} weight="duotone"/>,
         title: 'Manage tasks',
         desc: (
           <span>
@@ -133,7 +133,7 @@ const featuresSlideItems = [
         )
       },
       {
-        icon: <Gauge size={32} weight="duotone"/>,
+        icon: <Gauge size={20} weight="duotone"/>,
         title: 'Create dashboards',
         desc: (
           <span>
@@ -142,7 +142,7 @@ const featuresSlideItems = [
         )
       },
       {
-        icon: <PencilLine size={32} weight="duotone"/>,
+        icon: <PencilLine size={20} weight="duotone"/>,
         title: 'Outline documents',
         desc: (<span>Quickly pull together information and share it in different formats with stakeholders.</span>)
       }
@@ -153,7 +153,7 @@ const featuresSlideItems = [
     icon: '💻',
     notes: [
       {
-        icon: <ClockCounterClockwise size={32} weight="duotone"/>,
+        icon: <ClockCounterClockwise size={20} weight="duotone"/>,
         title: 'Retrieve notes',
         desc: (
           <span>
@@ -163,7 +163,7 @@ const featuresSlideItems = [
         )
       },
       {
-        icon: <Brain size={32} weight="duotone"/>,
+        icon: <Brain size={20} weight="duotone"/>,
         title: 'Memorize shortcuts',
         desc: (
           <span>
@@ -172,7 +172,7 @@ const featuresSlideItems = [
         )
       },
       {
-        icon: <Lightbulb size={32} weight={'duotone'}/>,
+        icon: <Lightbulb size={20} weight={'duotone'}/>,
         title: 'Decide on solutions',
         desc: (
           <span>
@@ -181,7 +181,7 @@ const featuresSlideItems = [
         )
       },
       {
-        icon: <Browsers size={32} weight="duotone"/>,
+        icon: <Browsers size={20} weight="duotone"/>,
         title: 'Build a personal wiki',
         desc: (
           <span>
@@ -194,35 +194,82 @@ const featuresSlideItems = [
   }
 ]
 
+export function TutorialFeaturesDescCard (
+  props: typeof featuresSlideItems[number]['notes'][number]
+) {
+  return (
+    <div className={'desc-card'}>
+      <h1 className={'flex items-center text-[20px]'}>
+        <span className={'w-[32px] h-[32px] bg-gray-400/40 rounded-full flex items-center justify-center'}>
+          {props.icon}
+        </span>
+        <strong className={'font-normal pl-3'}>
+          {props.title}
+        </strong>
+      </h1>
+
+      <h2 className={'pl-12 py-2 text-gray-200/70 leading-6 text-base'}>
+        {props.desc}
+      </h2>
+    </div>
+  )
+}
+
+export function TutorialFeaturesPanelHolder () {
+  return (
+    <div className="app-window-holder animate-in zoom-in-50 duration-500">
+    </div>
+  )
+}
+
 export function TutorialFeaturesPanel (
   props: Partial<{ activeItem: typeof featuresSlideItems[number] }>
 ) {
+  let inner = <img src={imageS1} alt="images"/>
+
+  if (props.activeItem?.label.toLocaleLowerCase() === 'students') {
+    inner = (
+      <>
+        <div className="a">
+          <TutorialFeaturesPanelHolder/>
+        </div>
+        <div className="b">
+          {props.activeItem.notes.map(it => {
+            return <TutorialFeaturesDescCard key={it.title} {...it} />
+          })}
+        </div>
+      </>
+    )
+  }
+
   return (
     <article className="app-tutorial-features-panel relative">
-      <div className="hd">
-        <strong>
-          <i>1</i>
-          <i>2</i>
-        </strong>
+      {/*<div className="hd">*/}
+      {/*  <strong>*/}
+      {/*    <i>1</i>*/}
+      {/*    <i>2</i>*/}
+      {/*  </strong>*/}
 
-        <h1 className="flex text-lg sm:text-3xl justify-center">
-          Capturing and structuring class notes
-        </h1>
-      </div>
+      {/*  <h1 className="flex text-lg sm:text-3xl justify-center">*/}
+      {/*    Capturing and structuring class notes*/}
+      {/*  </h1>*/}
+      {/*</div>*/}
+
       <div className="bd">
-        <div className="wrap flex">
-          <img src={imageS1} alt="images"/>
+        <div className={cx(`wrap flex`, `is-${props.activeItem?.label.toLocaleLowerCase()}`)}>
+          {inner}
         </div>
       </div>
-      <div className="ft absolute bottom-6 right-6">
-        <FloatGlassButton>
-          <FrameCorners
-            className={'font-bold cursor-pointer'}
-            size={26}
-            weight={'duotone'}
-          />
-        </FloatGlassButton>
-      </div>
+
+      {/*<div className="ft absolute bottom-6 right-6">*/}
+      {/*  <FloatGlassButton>*/}
+      {/*    <FrameCorners*/}
+      {/*      className={'font-bold cursor-pointer'}*/}
+      {/*      size={26}*/}
+      {/*      weight={'duotone'}*/}
+      {/*    />*/}
+      {/*  </FloatGlassButton>*/}
+      {/*</div>*/}
     </article>
   )
 }
@@ -233,7 +280,7 @@ export function TutorialFeaturesSlide () {
 
   return (
     <div className="app-tutorial-features-slide">
-      <div className="inner px-14">
+      <div className="inner px-2">
         {/* Tabs */}
         <ul className="tabs flex flex space-x-8 justify-around">
           {featuresSlideItems.map((it, idx) => {

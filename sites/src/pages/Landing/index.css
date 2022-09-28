@@ -343,7 +343,7 @@ h1, h2, h3 {
   ul.tabs {
     li {
       @apply flex flex-col items-center bg-logseq-600/90 rounded-xl
-      flex-1 py-3 px-2 justify-center select-none cursor-pointer
+      flex-1 py-4 px-2 justify-center select-none cursor-pointer
       active:opacity-80 border-2 border-transparent transition-all;
 
       &:first-child {
@@ -402,18 +402,24 @@ h1, h2, h3 {
       }
 
       > span {
-        font-size: 36px;
+        font-size: 38px;
       }
 
       > strong {
-        @apply text-lg font-normal opacity-70 text-center;
+        @apply text-[20px] pt-1 font-normal opacity-70 text-center tracking-wide;
+      }
+
+      &.active {
+        > strong {
+          @apply opacity-100 font-semibold;
+        }
       }
     }
   }
 }
 
 .app-tutorial-features-panel {
-  @apply border mt-8 rounded-2xl border-logseq-500 bg-logseq-700/90 overflow-hidden;
+  @apply mt-8 rounded-2xl border-logseq-500 overflow-hidden;
 
   min-height: 300px;
 
@@ -431,6 +437,58 @@ h1, h2, h3 {
     }
 
     @apply flex flex-col px-2 pt-2 pb-3 sm:py-4;
+  }
+
+  > .bd {
+    .wrap {
+      @apply flex items-center pt-8 pb-4;
+
+      &.is-students {
+        @apply flex-col;
+
+        > .b {
+          @apply flex py-10 -translate-y-12 relative z-10 bg-transparent;
+        }
+      }
+    }
+
+    .desc-card {
+      @apply flex-1 pl-10;
+
+      > h2 {
+        a {
+          @apply text-logseq-100;
+        }
+      }
+
+      &:first-child {
+        @apply pl-0;
+      }
+    }
+  }
+
+  .app-window-holder {
+    height: 270px;
+    width: 320px;
+    position: relative;
+
+    background-image: url("./assets/app-window-placeholder-bg.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position-y: 60px;
+
+    &:after {
+      content: " ";
+      width: 80px;
+      height: 80px;
+      position: absolute;
+      top: 20px;
+      right: -10px;
+
+      background-image: url("../../../assets/logo-with-shadow.png");
+      background-size: contain;
+      background-repeat: no-repeat;
+    }
   }
 }
 
