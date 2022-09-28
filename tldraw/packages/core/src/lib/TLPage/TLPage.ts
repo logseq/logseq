@@ -35,29 +35,25 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     this.addShapes(...shapes)
     makeObservable(this)
 
-    autorun(
-      () => {
-        const now = performance.now()
-        const newShapesNouncesMap = Object.fromEntries(
-          this.shapes.map(shape => [shape.id, shape.nonce])
-        )
-        if (this.lastShapesNounces) {
-          const lastShapesNounces = this.lastShapesNounces
-          const allIds = new Set([
-            ...Object.keys(newShapesNouncesMap),
-            ...Object.keys(lastShapesNounces),
-          ])
-          const changedShapeIds = [...allIds].filter(s => {
-            return lastShapesNounces[s] !== newShapesNouncesMap[s]
-          })
+    autorun(() => {
+      const newShapesNouncesMap = Object.fromEntries(
+        this.shapes.map(shape => [shape.id, shape.nonce])
+      )
+      if (this.lastShapesNounces) {
+        const lastShapesNounces = this.lastShapesNounces
+        const allIds = new Set([
+          ...Object.keys(newShapesNouncesMap),
+          ...Object.keys(lastShapesNounces),
+        ])
+        const changedShapeIds = [...allIds].filter(s => {
+          return lastShapesNounces[s] !== newShapesNouncesMap[s]
+        })
+        requestAnimationFrame(() => {
           this.cleanup(changedShapeIds)
-        }
-        this.lastShapesNounces = newShapesNouncesMap
-      },
-      {
-        delay: 10,
+        })
       }
-    )
+      this.lastShapesNounces = newShapesNouncesMap
+    })
   }
 
   lastShapesNounces = null as Record<string, number> | null
@@ -226,67 +222,67 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
   @action
   cleanup = (changedShapeIds: string[]) => {
     // Get bindings related to the changed shapes
-    const updated = this.serialized
-    const bindingsToUpdate = getRelatedBindings(updated, changedShapeIds)
+    const bindingsToUpdate = getRelatedBindings(this.serialized, changedShapeIds)
     const visitedShapes = new Set<string>()
 
-    transaction(() => {
-      let changed = false
-      const newBindings = deepCopy(updated.bindings)
-      // Update all of the bindings we've just collected
-      bindingsToUpdate.forEach(binding => {
-        if (!updated.bindings[binding.id]) {
-          return
+    let shapeChanged = false
+    let bindingChanged = false
+    const newBindings = deepCopy(this.bindings)
+    // Update all of the bindings we've just collected
+    bindingsToUpdate.forEach(binding => {
+      if (!this.bindings[binding.id]) {
+        return
+      }
+
+      const toShape = this.getShapeById(binding.toId)
+      const fromShape = this.getShapeById(binding.fromId)
+
+      if (!(toShape && fromShape)) {
+        delete newBindings[binding.id]
+        bindingChanged = true
+        return
+      }
+
+      if (visitedShapes.has(fromShape.id)) {
+        return
+      }
+
+      // We only need to update the binding's "from" shape (an arrow)
+      // @ts-expect-error ???
+      const fromDelta = this.updateArrowBindings(fromShape)
+      visitedShapes.add(fromShape.id)
+
+      if (fromDelta) {
+        const nextShape = {
+          ...fromShape.props,
+          ...fromDelta,
         }
+        shapeChanged = true
+        this.getShapeById(nextShape.id)?.update(nextShape, false, true)
+      }
+    })
 
-        const toShape = updated.shapes.find(s => s.id === binding.toId)
-        const fromShape = updated.shapes.find(s => s.id === binding.fromId)
+    // Cleanup outdated bindings
+    Object.keys(newBindings).forEach(id => {
+      const binding = this.bindings[id]
+      const relatedShapes = this.shapes.filter(
+        shape => shape.id === binding.fromId || shape.id === binding.toId
+      )
+      if (relatedShapes.length === 0) {
+        delete newBindings[id]
+        bindingChanged = true
+      }
+    })
 
-        if (!(toShape && fromShape)) {
-          delete newBindings[binding.id]
-          changed = true
-          return
-        }
-
-        if (visitedShapes.has(fromShape.id)) {
-          return
-        }
-
-        // We only need to update the binding's "from" shape (an arrow)
-        // @ts-expect-error ???
-        const fromDelta = this.updateArrowBindings(this.getShapeById<TLLineShape>(fromShape.id))
-        visitedShapes.add(fromShape.id)
-
-        if (fromDelta) {
-          const nextShape = {
-            ...fromShape,
-            ...fromDelta,
-          }
-          changed = true
-          this.getShapeById(nextShape.id)?.update(nextShape, false, true)
-        }
-      })
-
-      // Cleanup outdated bindings
-      Object.keys(newBindings).forEach(id => {
-        const binding = this.bindings[id]
-        const relatedShapes = updated.shapes.filter(
-          shape => shape.id === binding.fromId || shape.id === binding.toId
-        )
-        if (relatedShapes.length === 0) {
-          delete newBindings[id]
-          changed = true
-        }
-      })
-
+    if (bindingChanged) {
       this.update({
         bindings: newBindings,
       })
+    }
 
-      if (changed) {
-        this.app.persist(true)
-      }
-    })
+    if (shapeChanged || bindingChanged) {
+      this.app.persist(true)
+    }
   }
 
   private updateArrowBindings = (lineShape: TLLineShape) => {
