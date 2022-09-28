@@ -1,4 +1,5 @@
 (ns frontend.external
+  "Handles importing from external services"
   (:require [frontend.external.roam :refer [->Roam]]
             [frontend.external.protocol :as protocol]))
 

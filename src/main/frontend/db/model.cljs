@@ -55,7 +55,6 @@
     :block/created-at
     :block/updated-at
     :block/file
-    :block/heading-level
     {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
     {:block/_parent ...}])
 

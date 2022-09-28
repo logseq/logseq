@@ -1,4 +1,4 @@
-(ns frontend.search.db
+(ns ^:no-doc frontend.search.db
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.db :as db]

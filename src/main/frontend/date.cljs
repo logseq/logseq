@@ -1,4 +1,5 @@
 (ns frontend.date
+  "Date related utility fns"
   (:require ["chrono-node" :as chrono]
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]

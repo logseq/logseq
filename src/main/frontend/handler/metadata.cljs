@@ -1,4 +1,5 @@
 (ns frontend.handler.metadata
+  "System-component-like ns that manages writing to pages-metadata.edn"
   (:require [cljs.reader :as reader]
             [cljs.pprint]
             [clojure.string :as string]

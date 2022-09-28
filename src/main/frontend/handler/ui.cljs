@@ -1,4 +1,4 @@
-(ns frontend.handler.ui
+(ns ^:no-doc frontend.handler.ui
   (:require [cljs-time.core :refer [plus days weeks]]
             [dommy.core :as dom]
             [frontend.util :as util]

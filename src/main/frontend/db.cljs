@@ -1,4 +1,5 @@
 (ns frontend.db
+  "Main entry ns for db related fns"
   (:require [clojure.core.async :as async]
             [datascript.core :as d]
             [logseq.db.schema :as db-schema]

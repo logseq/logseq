@@ -1,4 +1,5 @@
 (ns frontend.util
+  "Main ns for utility fns. This ns should be split up into more focused namespaces"
   #?(:clj (:refer-clojure :exclude [format]))
   #?(:cljs (:require-macros [frontend.util]))
   #?(:cljs (:require

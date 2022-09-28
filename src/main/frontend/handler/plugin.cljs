@@ -1,10 +1,11 @@
 (ns frontend.handler.plugin
+  "System-component-like ns that provides all high level plugin functionality"
   (:require [promesa.core :as p]
             [rum.core :as rum]
             [frontend.util :as util]
             [clojure.walk :as walk]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [frontend.handler.notification :as notifications]
+            [frontend.handler.notification :as notification]
             [camel-snake-kebab.core :as csk]
             [frontend.state :as state]
             [medley.core :as medley]
@@ -202,7 +203,7 @@
                                  (.reload pl)
                                  #(do
                                     ;;(if theme (select-a-plugin-theme id))
-                                    (notifications/show!
+                                    (notification/show!
                                       (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success)
                                     (state/consume-updates-coming-plugin payload true))))
 
@@ -210,7 +211,7 @@
                                (p/then
                                  (js/LSPluginCore.register (bean/->js {:key id :url dst}))
                                  (fn [] (when theme (js/setTimeout #(select-a-plugin-theme id) 300))))
-                               (notifications/show!
+                               (notification/show!
                                  (str (t :plugin/installed) (t :plugins) ": " name) :success)))))
 
                        :error
@@ -232,7 +233,7 @@
                                (state/consume-updates-coming-plugin payload true))
 
                              ;; notify human tips
-                             (notifications/show!
+                             (notification/show!
                                (str
                                  (if (= :error type) "[Error]" "")
                                  (str "<" (:id payload) "> ")
@@ -446,7 +447,7 @@
                  (state/set-state! :plugin/active-readme [content item])
                  (state/set-sub-modal! (fn [_] (display))))
           (p/catch #(do (js/console.warn %)
-                        (notifications/show! "No README content." :warn))))
+                        (notification/show! "No README content." :warn))))
       ;; market
       (state/set-sub-modal! (fn [_] (display repo nil))))))
 

@@ -1,4 +1,6 @@
 (ns frontend.format
+  "Main ns for providing common operations on file content like conversion to html
+and edn. Can handle org, markdown and adoc formats"
   (:require [frontend.format.mldoc :refer [->MldocMode] :as mldoc]
             [frontend.format.adoc :refer [->AdocMode]]
             [frontend.format.protocol :as protocol]

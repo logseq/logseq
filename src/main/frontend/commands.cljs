@@ -1,4 +1,5 @@
 (ns frontend.commands
+  "Provides functionality for commands and advanced commands"
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -131,13 +132,11 @@
    [:editor/set-heading heading]
    [:editor/move-cursor-to-end]])
 
-(defn- markdown-headings
+(defn- headings
   []
-  (let [format (state/get-preferred-format)]
-    (when (= (name format) "markdown")
-      (mapv (fn [level]
-              (let [heading (str "h" level)]
-                [heading (->heading (apply str (repeat level "#")))])) (range 1 7)))))
+  (mapv (fn [level]
+          (let [heading (str "h" level)]
+            [heading (->heading level)])) (range 1 7)))
 
 (defonce *matched-commands (atom nil))
 (defonce *initial-commands (atom nil))
@@ -240,7 +239,7 @@
        ;; ["Upload an image" [[:editor/click-hidden-file-input :id]]]
        )]
 
-    (markdown-headings)
+    (headings)
 
     ;; time & date
 
@@ -345,6 +344,7 @@
                                          (or (string/starts-with? last-pattern block-ref/left-parens)
                                              (string/starts-with? last-pattern page-ref/left-brackets)))
                                     (and s (string/starts-with? s "{{embed"))
+                                    (and s (= (last s) \#) (string/starts-with? last-pattern "[["))
                                     (and last-pattern
                                          (or (string/ends-with? last-pattern gp-property/colons)
                                              (string/starts-with? last-pattern gp-property/colons)))))))]
@@ -592,19 +592,33 @@
         (property/goto-properties-end format current-input)
         (cursor/move-cursor-backward current-input 3)))))
 
+(defonce markdown-heading-pattern #"^#+\s+")
+(defn set-markdown-heading
+  [content heading]
+  (let [heading-str (apply str (repeat heading "#"))]
+    (if (util/safe-re-find markdown-heading-pattern content)
+      (string/replace-first content
+                            markdown-heading-pattern
+                            (str heading-str " "))
+      (str heading-str " " (string/triml content)))))
+
+(defn clear-markdown-heading
+  [content]
+  [:pre (string? content)]
+  (string/replace-first content
+                        markdown-heading-pattern
+                        ""))
+
 (defmethod handle-step :editor/set-heading [[_ heading]]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
-      (let [edit-content (gobj/get current-input "value")
-            heading-pattern #"^#+\s+"
-            new-value (cond
-                        (util/safe-re-find heading-pattern edit-content)
-                        (string/replace-first edit-content
-                                              heading-pattern
-                                              (str heading " "))
-                        :else
-                        (str heading " " (string/triml edit-content)))]
-        (state/set-edit-content! input-id new-value)))))
+      (let [current-block (state/get-edit-block)
+            format (:block/format current-block)]
+        (if (= format :markdown)
+          (let [edit-content (gobj/get current-input "value")
+                new-content (set-markdown-heading edit-content heading)]
+            (state/set-edit-content! input-id new-content))
+          (state/pub-event! [:editor/set-org-mode-heading current-block heading]))))))
 
 (defmethod handle-step :editor/search-page [[_]]
   (state/set-editor-action! :page-search))

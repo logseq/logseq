@@ -1,4 +1,4 @@
-(ns frontend.handler.image
+(ns ^:no-doc frontend.handler.image
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.fs :as fs]
