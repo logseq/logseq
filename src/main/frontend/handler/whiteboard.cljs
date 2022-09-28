@@ -1,4 +1,5 @@
 (ns frontend.handler.whiteboard
+  "Whiteboard related handlers"
   (:require [datascript.core :as d]
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
@@ -9,25 +10,6 @@
             [frontend.util :as util]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.extract :as gp-extract]))
-
-;; (defn set-linked-page-or-block!
-;;   [page-or-block-id]
-;;   (when-let [app ^js (state/get-current-whiteboard)]
-;;     (let [shapes (:whiteboard/linked-shapes @state/state)]
-;;       (when (and (seq shapes) page-or-block-id)
-;;         (let [fs (first shapes)]
-;;           (.updateShapes app (clj->js
-;;                               [{:id (.-id fs)
-;;                                 :logseqLink page-or-block-id}])))))))
-
-
-;; (defn inside-whiteboard?
-;;   [el]
-;;   (println el)
-;;   (loop [el el]
-;;     (cond (nil? el) false
-;;           (and (.-classList el) (.. el -classList (contains "whiteboard"))) true
-;;           :else (recur (.-parentElement el)))))
 
 (defn- block->shape [block]
   (:block/properties block))
@@ -154,25 +136,6 @@
        (whiteboard-clj->tldr page-block blocks shape-id)
        (create-new-whiteboard-page! page-name))
      (create-new-whiteboard-page! nil))))
-
-;; (defn ->logseq-portal-shape
-;;   [block-id point]
-;;   {:blockType "B"
-;;    :id (str (d/squuid))
-;;    :compact true
-;;    :pageId (str block-id)
-;;    :point point
-;;    :size [400, 0]
-;;    :type "logseq-portal"})
-
-;; (defn add-new-block-portal-shape!
-;;   "Given the block uuid and the point, add a new shape to the referenced block."
-;;   [block-uuid client-x client-y]
-;;   (let [api (get-tldr-api)
-;;         point (js->clj (.. (get-tldr-app) -viewport (getPagePoint #js[client-x client-y])))
-;;         shape (->logseq-portal-shape block-uuid point)]
-;;     (editor-handler/set-blocks-id! [block-uuid])
-;;     (.createShapes api (clj->js shape))))
 
 (defn- get-whiteboard-blocks
   "Given a page, return all the logseq blocks (exlude all shapes)"

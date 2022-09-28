@@ -1,4 +1,5 @@
 (ns frontend.extensions.tldraw
+  "Adapters related to tldraw"
   (:require ["/frontend/tldraw-logseq" :as TldrawLogseq]
             [frontend.components.block :as block]
             [frontend.components.page :as page]

@@ -4,9 +4,5 @@
   "exclude": ["node_modules", "dist", "docs"],
   "compilerOptions": {
     "outDir": "./dist/types"
-  },
-  "typedocOptions": {
-    "entryPoints": ["src/index.ts"],
-    "out": "docs"
   }
 }

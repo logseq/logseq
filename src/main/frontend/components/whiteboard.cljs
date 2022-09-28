@@ -1,4 +1,5 @@
 (ns frontend.components.whiteboard
+  "Whiteboard related components"
   (:require [cljs.math :as math]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
@@ -7,6 +8,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.rum :refer [use-bounding-client-rect use-click-outside]]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -43,8 +45,8 @@
 
 (rum/defc dropdown
   [label children show? outside-click-hander]
-  (let [[anchor-ref anchor-rect] (util/use-component-size show?)
-        [content-ref content-rect] (util/use-component-size show?)
+  (let [[anchor-ref anchor-rect] (use-bounding-client-rect show?)
+        [content-ref content-rect] (use-bounding-client-rect show?)
         offset-x (when (and anchor-rect content-rect)
                    (let [offset-x (+ (* 0.5 (- (.-width anchor-rect) (.-width content-rect)))
                                      (.-x anchor-rect))
@@ -54,7 +56,7 @@
                      offset-x))
         offset-y (when (and anchor-rect content-rect)
                    (+ (.-y anchor-rect) (.-height anchor-rect) 8))
-        click-outside-ref (util/use-click-outside outside-click-hander)
+        click-outside-ref (use-click-outside outside-click-hander)
         [d-open set-d-open] (rum/use-state false)
         _ (rum/use-effect! (fn [] (js/setTimeout #(set-d-open show?) 100))
                            [show?])]
@@ -166,12 +168,12 @@
 
 (rum/defc whiteboard-dashboard
   []
-  (if (user-handler/alpha-user?)
+  (if (state/enable-whiteboards?)
     (let [whiteboards (->> (model/get-all-whiteboards (state/get-current-repo))
                            (sort-by :block/updated-at)
                            reverse)
           whiteboard-names (map :block/name whiteboards)
-          [ref rect] (util/use-component-size)
+          [ref rect] (use-bounding-client-rect)
           [container-width] (when rect [(.-width rect) (.-height rect)])
           cols (cond (< container-width 600) 1
                      (< container-width 900) 2

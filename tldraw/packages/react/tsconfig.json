@@ -10,9 +10,5 @@
     { "path": "../core" },
     { "path": "../utils/vec" },
     { "path": "../utils/intersect" }
-  ],
-  "typedocOptions": {
-    "entryPoints": ["src/index.ts"],
-    "out": "docs"
-  }
+  ]
 }
