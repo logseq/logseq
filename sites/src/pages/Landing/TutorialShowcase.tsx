@@ -1,30 +1,196 @@
-import { FrameCorners, CaretLeft, CaretDown } from 'phosphor-react'
+import {
+  ClockCounterClockwise,
+  Brain,
+  FrameCorners,
+  PencilLine,
+  CaretDown,
+  Binoculars,
+  Books,
+  CalendarCheck,
+  Lightbulb,
+  CheckCircle,
+  Gauge,
+  Browsers
+} from 'phosphor-react'
 import { FloatGlassButton, imageS1 } from './common'
 import { AnimateInTurnStage } from '../../components/Animations'
 import cx from 'classnames'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useAppState } from '../../state'
 
 const featuresSlideItems = [
   {
     label: 'Students',
-    icon: '🧑‍🎓'
+    icon: '🧑‍🎓',
+    notes: [
+      {
+        icon: <ClockCounterClockwise size={32} weight="duotone"/>,
+        title: 'Review notes',
+        desc: <span>Capture, structure, and review all of your class notes with ease using the
+          <a>Linked References</a>, <a>Queries</a>, and <a>Search</a>features.</span>
+      },
+      {
+        icon: <Brain size={32} weight="duotone"/>,
+        title: 'Memorize facts',
+        desc: (<span>Remember facts and insights using the <a>Flashcards</a> feature.</span>)
+      },
+      {
+        icon: <PencilLine size={32} weight="duotone"/>,
+        title: 'Outline essays',
+        desc: (
+          <span>Organize your thoughts and ideas, and quickly turn them into outlines using <a>Block References</a>.</span>)
+      }
+    ]
   },
   {
     label: 'Writers',
-    icon: '🖋'
+    icon: '🖋',
+    notes: [
+      {
+        icon: <ClockCounterClockwise size={32} weight="duotone"/>,
+        title: 'Review notes',
+        desc: <span>Capture, structure, and review all of your class notes with ease using the
+          <a>Linked References</a>, <a>Queries</a>, and <a>Search</a>features.</span>
+      },
+      {
+        icon: <CalendarCheck size={32} weight="duotone"/>,
+        title: 'Manage writing stages',
+        desc: (
+          <span>
+           Manage your personal writing process using <a>Tasks</a>,
+           <a>Tags</a>, and <a>Queries</a> --no matter how simple or complex it is.
+         </span>
+        )
+      },
+      {
+        icon: <Lightbulb size={32} weight="duotone"/>,
+        title: 'Combine ideas',
+        desc: (
+          <span>
+            Effortlessly synthesize ideas from across your collection of notes using
+            <a>Block References</a>.
+          </span>
+        )
+      },
+      {
+        icon: <PencilLine size={32} weight="duotone"/>,
+        title: 'Outline content',
+        desc: (<span>Organize your thoughts and reuse ideas in easy-to-manage outlines.</span>)
+      }
+    ]
   },
   {
     label: 'Academics',
-    icon: '🎓'
+    icon: '🎓',
+    notes: [
+      {
+        icon: <ClockCounterClockwise size={32} weight="duotone"/>,
+        title: 'Review notes',
+        desc: <span>Capture, structure, and review all of your class notes with ease using the
+          <a>Linked References</a>, <a>Queries</a>, and <a>Search</a>features.</span>
+      },
+      {
+        icon: <Binoculars size={32} weight="duotone"/>,
+        title: 'Investigate claims',
+        desc: (<span>Spin your web of knowledge and see what evidence supports or contradicts claims.</span>)
+      },
+      {
+        icon: <Binoculars size={32} weight="duotone"/>,
+        title: 'Manage sources',
+        desc: (<span>Keep track of your research and easily manage your sources using the built-in
+          <a>Zotero integration</a>.</span>)
+      },
+      {
+        icon: <Books size={32} weight="duotone"/>,
+        title: 'Outline papers',
+        desc: (
+          <span>Manage your writing process and ensure that your papers are well-organized and flow smoothly.</span>)
+      }
+    ]
   },
   {
     label: 'Project Managers',
-    icon: '📆'
+    icon: '📆',
+    notes: [
+      {
+        icon: <ClockCounterClockwise size={32} weight="duotone"/>,
+        title: 'Retrieve notes',
+        desc: (<span>
+          Always find the information where and when you need it using
+          <a>Linked References</a>, <a>Queries</a> or <a>Search</a>.
+        </span>)
+      },
+      {
+        icon: <CheckCircle size={32} weight="duotone"/>,
+        title: 'Manage tasks',
+        desc: (
+          <span>
+            Manage tasks with Logseq's built-in
+            <a>Task management system</a>, including
+            <a>Priorities</a>, <a>Scheduling</a>, and
+            <a>Deadlines</a>.
+          </span>
+        )
+      },
+      {
+        icon: <Gauge size={32} weight="duotone"/>,
+        title: 'Create dashboards',
+        desc: (
+          <span>
+            Easily create dynamic dashboards to separate tasks and notes and keep track of many projects simultaneously.
+          </span>
+        )
+      },
+      {
+        icon: <PencilLine size={32} weight="duotone"/>,
+        title: 'Outline documents',
+        desc: (<span>Quickly pull together information and share it in different formats with stakeholders.</span>)
+      }
+    ]
   },
   {
     label: 'Developers',
-    icon: '💻'
+    icon: '💻',
+    notes: [
+      {
+        icon: <ClockCounterClockwise size={32} weight="duotone"/>,
+        title: 'Retrieve notes',
+        desc: (
+          <span>
+          Quickly find relevant information using the
+          <a>Linked References</a>, <a>Queries</a> or <a>Search</a>.
+        </span>
+        )
+      },
+      {
+        icon: <Brain size={32} weight="duotone"/>,
+        title: 'Memorize shortcuts',
+        desc: (
+          <span>
+            Become a 10x programmer by remembering more of what you need to do repeatedly.
+          </span>
+        )
+      },
+      {
+        icon: <Lightbulb size={32} weight={'duotone'}/>,
+        title: 'Decide on solutions',
+        desc: (
+          <span>
+            Find the best solutions to nagging problems by tracking your ideas, decisions, and priorities over time.
+          </span>
+        )
+      },
+      {
+        icon: <Browsers size={32} weight="duotone"/>,
+        title: 'Build a personal wiki',
+        desc: (
+          <span>
+            Build your career by building your personal wiki. Easily structure your knowledge and find it back
+            using <a>Namespaces</a>, <a>Linked References</a>, and <a>Queries</a>.
+          </span>
+        )
+      }
+    ]
   }
 ]
 
