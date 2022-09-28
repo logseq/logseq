@@ -167,6 +167,11 @@ export function TutorialShowcase (
         <li>Task Management</li>
         <li>PDF Annotations</li>
         <li>Flashcards</li>
+        <li>
+          <span className="relative">
+            Whiteboards<sup>NEW</sup>
+          </span>
+        </li>
       </ul>
 
       {/* Tutorial Features Slide/Select */}

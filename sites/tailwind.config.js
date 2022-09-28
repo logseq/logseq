@@ -21,7 +21,7 @@ module.exports = {
         },
       },
       fontSize: {
-        '4xl': '2rem',
+        '4xl': '2.4rem',
         '6xl': '4rem'
       },
       backdropBlur: {

@@ -1,3 +1,7 @@
+h1, h2, h3 {
+  -webkit-font-smoothing: antialiased;
+}
+
 .page-inner {
   @apply w-full md:max-w-screen-xl;
 
@@ -297,29 +301,37 @@
   }
 
   > .sub-hd {
-    @apply -mt-8 px-80;
+    @apply -mt-8 px-52 pb-4;
 
     > li {
-      @apply flex flex-col text-xl items-center flex-1 tracking-wide text-center;
+      @apply flex flex-col text-xl items-center flex-1 tracking-wide text-center whitespace-nowrap;
 
       &:before {
         content: " ";
-        width: 80px;
-        height: 80px;
-        background-color: beige;
+        width: 100px;
+        height: 100px;
         margin-bottom: 8px;
         background-image: url("./assets/features_sp.png");
-        background-size: 560px;
+        background-size: 760px;
         background-repeat: no-repeat;
-        background-position-x: -32px;
+        background-position-y: 2px;
+        background-position-x: -26px;
       }
 
       &:nth-child(2):before {
-        background-position-x: -255px;
+        background-position-x: -250px;
       }
 
       &:nth-child(3):before {
-        background-position-x: -464px;
+        background-position-x: -452px;
+      }
+
+      &:nth-child(4):before {
+        background-position-x: -636px;
+      }
+
+      sup {
+        @apply text-xs absolute top-0 -right-[38px] text-logseq-100;
       }
     }
   }
