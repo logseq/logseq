@@ -36,10 +36,11 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     makeObservable(this)
 
     autorun(() => {
-      const newShapesNouncesMap = Object.fromEntries(
-        this.shapes.map(shape => [shape.id, shape.nonce])
-      )
-      if (this.lastShapesNounces) {
+      const newShapesNouncesMap =
+        this.shapes.length > 0
+          ? Object.fromEntries(this.shapes.map(shape => [shape.id, shape.nonce]))
+          : null
+      if (this.lastShapesNounces && newShapesNouncesMap) {
         const lastShapesNounces = this.lastShapesNounces
         const allIds = new Set([
           ...Object.keys(newShapesNouncesMap),
@@ -52,7 +53,9 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
           this.cleanup(changedShapeIds)
         })
       }
-      this.lastShapesNounces = newShapesNouncesMap
+      if (newShapesNouncesMap) {
+        this.lastShapesNounces = newShapesNouncesMap
+      }
     })
   }
 

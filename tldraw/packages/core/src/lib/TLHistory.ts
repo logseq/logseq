@@ -132,7 +132,8 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
               } else {
                 // Create the shape
                 const ShapeClass = this.app.getShapeClass(serializedShape.type)
-                shapesToAdd.push(new ShapeClass(serializedShape))
+                const newShape = new ShapeClass(serializedShape)
+                shapesToAdd.push(newShape)
               }
             }
 

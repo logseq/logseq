@@ -70,7 +70,7 @@ export interface TLHandleChangeInfo {
 }
 
 export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
-  constructor(props: Partial<P>) {
+  constructor(props: Partial<TLShapeModel<P>>) {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     const type = this.constructor['id']
@@ -79,6 +79,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
     const defaultProps = this.constructor['defaultProps'] ?? {}
     this.type = type
     this.props = { scale: [1, 1], ...defaultProps, ...props }
+    this.nonce = props.nonce ?? Date.now()
     makeObservable(this)
   }
 
@@ -103,7 +104,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   canEdit: TLFlag = false
   canBind: TLFlag = false
 
-  @observable nonce = Date.now()
+  @observable nonce: number
 
   bindingDistance = BINDING_DISTANCE
 
@@ -300,7 +301,11 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
     return props
   }
 
-  @action update = (props: Partial<TLShapeProps & P & any>, isDeserializing = false, skipNounce = false) => {
+  @action update = (
+    props: Partial<TLShapeProps & P & any>,
+    isDeserializing = false,
+    skipNounce = false
+  ) => {
     if (!(isDeserializing || this.isDirty)) this.setIsDirty(true)
     if (!isDeserializing && !skipNounce) this.incNonce()
     Object.assign(this.props, this.validateProps(props as Partial<TLShapeProps> & Partial<P>))
