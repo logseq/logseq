@@ -97,14 +97,14 @@ and handles unexpected failure."
          (let [ast (->> (format/to-edn content format (gp-mldoc/default-config format))
                         (map first))
                title (when (gp-block/heading-block? (first ast))
-                       (second (first ast)))
+                       (:title (second (first ast))))
+               _ (println title (second (first ast)))
                body (vec (if title (rest ast) ast))
                body (drop-while gp-property/properties-ast? body)
                result (cond->
                        (if (seq body) {:block/body body} {})
                         title
-                        (assoc :block/title (:title title)
-                               :block/heading-level (:size title)))]
+                        (assoc :block/title title))]
            (state/add-block-ast-cache! block-uuid content result)
            result))))))
 
