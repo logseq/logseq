@@ -98,7 +98,6 @@ and handles unexpected failure."
                         (map first))
                title (when (gp-block/heading-block? (first ast))
                        (:title (second (first ast))))
-               _ (println title (second (first ast)))
                body (vec (if title (rest ast) ast))
                body (drop-while gp-property/properties-ast? body)
                result (cond->

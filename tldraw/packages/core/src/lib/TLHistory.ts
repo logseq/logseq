@@ -60,7 +60,7 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
     const { serialized } = this.app
 
     // Do not persist if the serialized state is the same as the last one
-    if (!shouldPersist(this.stack[this.pointer], serialized)) {
+    if (this.stack.length > 0 && !shouldPersist(this.stack[this.pointer], serialized)) {
       return
     }
 

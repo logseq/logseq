@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { intersectRayBounds, TLBounds } from '@tldraw/intersect'
 import Vec from '@tldraw/vec'
-import { action, computed, makeObservable, observable, reaction, toJS } from 'mobx'
+import { action, autorun, computed, makeObservable, observable, toJS, transaction } from 'mobx'
 import { BINDING_DISTANCE } from '../../constants'
-import { type TLBinding, type TLEventMap, TLResizeCorner, type TLHandle } from '../../types'
-import { deepCopy, BoundsUtils, deepEqual, PointUtils } from '../../utils'
-import type { TLShape, TLShapeModel, TLLineShape } from '../shapes'
+import { TLResizeCorner, type TLBinding, type TLEventMap, type TLHandle } from '../../types'
+import { BoundsUtils, deepCopy, PointUtils } from '../../utils'
+import type { TLLineShape, TLShape, TLShapeModel } from '../shapes'
 import type { TLApp } from '../TLApp'
 
 export interface TLPageModel<S extends TLShape = TLShape> {
@@ -35,22 +35,32 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     this.addShapes(...shapes)
     makeObservable(this)
 
-    // Performance bottleneck!! Optimize me :/
-    // Instead of watch for every shape change, we should only watch for the changed ones
-    reaction(
-      () => ({
-        id: this.id,
-        name: this.name,
-        shapes: toJS(this.shapes.map(shape => toJS(shape.props))),
-        bindings: toJS(this.bindings),
-        nonce: this.nonce,
-      }),
-      (curr, prev) => {
-        if (this.app.isInAny('creating')) return
-        this.cleanup(curr, prev)
+    autorun(
+      () => {
+        const now = performance.now()
+        const newShapesNouncesMap = Object.fromEntries(
+          this.shapes.map(shape => [shape.id, shape.nonce])
+        )
+        if (this.lastShapesNounces) {
+          const lastShapesNounces = this.lastShapesNounces
+          const allIds = new Set([
+            ...Object.keys(newShapesNouncesMap),
+            ...Object.keys(lastShapesNounces),
+          ])
+          const changedShapeIds = [...allIds].filter(s => {
+            return lastShapesNounces[s] !== newShapesNouncesMap[s]
+          })
+          this.cleanup(changedShapeIds)
+        }
+        this.lastShapesNounces = newShapesNouncesMap
+      },
+      {
+        delay: 10,
       }
     )
   }
+
+  lastShapesNounces = null as Record<string, number> | null
 
   app: TLApp<S, E>
 
@@ -212,88 +222,71 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     return shape
   }
 
-  /**
-   * Recalculate binding positions etc. Will also persist state when needed.
-   *
-   * @param curr
-   * @param prev
-   */
+  /** Recalculate binding positions for changed shapes etc. Will also persist state when needed. */
   @action
-  cleanup = (curr: TLPageModel, prev: TLPageModel) => {
-    const updated = deepCopy(curr)
-    const changedShapes: Record<string, TLShapeModel<S['props']> | undefined> = {}
-    const prevShapes = Object.fromEntries(prev.shapes.map(shape => [shape.id, shape]))
-    const currShapes = Object.fromEntries(curr.shapes.map(shape => [shape.id, shape]))
-
-    // TODO: deleted shapes?
-    curr.shapes.forEach(shape => {
-      if (deepEqual(shape, prevShapes[shape.id])) {
-        changedShapes[shape.id] = shape
-      }
-    })
-
+  cleanup = (changedShapeIds: string[]) => {
     // Get bindings related to the changed shapes
-    const bindingsToUpdate = getRelatedBindings(curr, Object.keys(changedShapes))
+    const updated = this.serialized
+    const bindingsToUpdate = getRelatedBindings(updated, changedShapeIds)
+    const visitedShapes = new Set<string>()
 
-    const visitedShapes = new Set<TLShapeModel>()
-
-    // Update all of the bindings we've just collected
-    bindingsToUpdate.forEach(binding => {
-      if (!updated.bindings[binding.id]) {
-        return
-      }
-
-      const toShape = currShapes[binding.toId]
-      const fromShape = currShapes[binding.fromId]
-
-      if (!(toShape && fromShape)) {
-        delete updated.bindings[binding.id]
-        return
-      }
-
-      if (visitedShapes.has(fromShape)) {
-        return
-      }
-
-      // We only need to update the binding's "from" shape (an arrow)
-      // @ts-expect-error ???
-      const fromDelta = this.updateArrowBindings(this.getShapeById<TLLineShape>(fromShape.id))
-      visitedShapes.add(fromShape)
-
-      if (fromDelta) {
-        const nextShape = {
-          ...fromShape,
-          ...fromDelta,
+    transaction(() => {
+      let changed = false
+      const newBindings = deepCopy(updated.bindings)
+      // Update all of the bindings we've just collected
+      bindingsToUpdate.forEach(binding => {
+        if (!updated.bindings[binding.id]) {
+          return
         }
-        const idx = updated.shapes.findIndex(s => s.id === nextShape.id)
-        if (idx !== -1) {
-          updated.shapes[idx] = nextShape
-        }
-      }
-    })
 
-    // Cleanup outdated bindings
-    Object.keys(updated.bindings).forEach(id => {
-      if (
-        !updated.shapes.find(
-          shape => shape.id === updated.bindings[id].toId || updated.bindings[id].fromId
+        const toShape = updated.shapes.find(s => s.id === binding.toId)
+        const fromShape = updated.shapes.find(s => s.id === binding.fromId)
+
+        if (!(toShape && fromShape)) {
+          delete newBindings[binding.id]
+          changed = true
+          return
+        }
+
+        if (visitedShapes.has(fromShape.id)) {
+          return
+        }
+
+        // We only need to update the binding's "from" shape (an arrow)
+        // @ts-expect-error ???
+        const fromDelta = this.updateArrowBindings(this.getShapeById<TLLineShape>(fromShape.id))
+        visitedShapes.add(fromShape.id)
+
+        if (fromDelta) {
+          const nextShape = {
+            ...fromShape,
+            ...fromDelta,
+          }
+          changed = true
+          this.getShapeById(nextShape.id)?.update(nextShape, false, true)
+        }
+      })
+
+      // Cleanup outdated bindings
+      Object.keys(newBindings).forEach(id => {
+        const binding = this.bindings[id]
+        const relatedShapes = updated.shapes.filter(
+          shape => shape.id === binding.fromId || shape.id === binding.toId
         )
-      ) {
-        delete updated.bindings[id]
+        if (relatedShapes.length === 0) {
+          delete newBindings[id]
+          changed = true
+        }
+      })
+
+      this.update({
+        bindings: newBindings,
+      })
+
+      if (changed) {
+        this.app.persist(true)
       }
     })
-
-    if (!deepEqual(updated, curr)) {
-      this.update({
-        bindings: updated.bindings,
-      })
-
-      updated.shapes.forEach(shape => {
-        this.getShapeById(shape.id)?.update(shape)
-      })
-
-      this.app.persist(true)
-    }
   }
 
   private updateArrowBindings = (lineShape: TLLineShape) => {

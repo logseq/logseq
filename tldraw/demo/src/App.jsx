@@ -144,7 +144,7 @@ export default function App() {
   // Mimic external reload event
   React.useEffect(() => {
     const interval = setInterval(() => {
-      setModel(onLoad())
+      // setModel(onLoad())
     }, 2000)
 
     return () => {

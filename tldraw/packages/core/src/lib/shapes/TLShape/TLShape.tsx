@@ -103,7 +103,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   canEdit: TLFlag = false
   canBind: TLFlag = false
 
-  @observable nonce = 0
+  @observable nonce = Date.now()
 
   bindingDistance = BINDING_DISTANCE
 
@@ -118,6 +118,10 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
 
   @action setNonce(nonce: number) {
     this.nonce = nonce
+  }
+
+  @action incNonce() {
+    this.nonce++
   }
 
   @action setIsDirty(isDirty: boolean) {
@@ -275,7 +279,6 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   protected getCachedSerialized = (): TLShapeModel<P> => {
     if (this.isDirty || !this.lastSerialized) {
       transaction(() => {
-        this.setNonce(Date.now())
         this.setIsDirty(false)
         this.setLastSerialized(this.getSerialized())
       })
@@ -297,8 +300,9 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
     return props
   }
 
-  @action update = (props: Partial<TLShapeProps & P & any>, isDeserializing = false) => {
-    if (!(isDeserializing || this.isDirty)) this.isDirty = true
+  @action update = (props: Partial<TLShapeProps & P & any>, isDeserializing = false, skipNounce = false) => {
+    if (!(isDeserializing || this.isDirty)) this.setIsDirty(true)
+    if (!isDeserializing && !skipNounce) this.incNonce()
     Object.assign(this.props, this.validateProps(props as Partial<TLShapeProps> & Partial<P>))
     return this
   }

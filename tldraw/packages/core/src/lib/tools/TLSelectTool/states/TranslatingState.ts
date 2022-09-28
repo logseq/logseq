@@ -1,4 +1,5 @@
 import { Vec } from '@tldraw/vec'
+import { transaction } from 'mobx'
 import { type TLEventMap, TLCursor, type TLEvents } from '../../../../types'
 import { uniqueId } from '../../../../utils'
 import type { TLShape } from '../../../shapes'
@@ -45,9 +46,11 @@ export class TranslatingState<
       }
     }
 
-    selectedShapes.forEach(shape =>
-      shape.update({ point: Vec.add(initialPoints[shape.id], delta) })
-    )
+    transaction(() => {
+      selectedShapes.forEach(shape =>
+        shape.update({ point: Vec.add(initialPoints[shape.id], delta) })
+      )
+    })
   }
 
   private startCloning() {
