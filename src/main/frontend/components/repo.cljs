@@ -40,15 +40,15 @@
        (if local?
          (let [local-dir (config/get-local-dir url)
                graph-name (text-util/get-graph-name-from-path local-dir)]
-           [:a {:title    local-dir
-                :on-click #(on-click graph)}
+           [:a.flex.items-center {:title    local-dir
+                                  :on-click #(on-click graph)}
             [:span graph-name (and GraphName [:strong.px-1 "(" GraphName ")"])]
-            (when remote? [:strong.pr-1 (ui/icon "cloud")])])
+            (when remote? [:strong.pr-1.flex.items-center (ui/icon "cloud")])])
 
-         [:a {:title  GraphUUID
-              :on-click #(on-click graph)}
+         [:a.flex.items-center {:title    GraphUUID
+                                :on-click #(on-click graph)}
           (db/get-repo-path (or url GraphName))
-          (when remote? [:strong.pl-1 (ui/icon "cloud")])])])))
+          (when remote? [:strong.pl-1.flex.items-center (ui/icon "cloud")])])])))
 
 (rum/defc repos-inner
   [repos]
@@ -162,7 +162,7 @@
                             short-repo-name (if local? (text-util/get-graph-name-from-path repo-path) GraphName)]
                         (when short-repo-name
                           {:title        [:span.flex.items-center.whitespace-nowrap short-repo-name
-                                          (when remote? [:span.pl-1
+                                          (when remote? [:span.pl-1.flex.items-center
                                                          {:title (str "<" GraphName "> #" GraphUUID)}
                                                          (ui/icon "cloud" {:size 18})])]
                            :hover-detail repo-path ;; show full path on hover

@@ -596,6 +596,13 @@ html[data-theme='dark'] {
   padding: 0;
 }
 
+.cp__menubar-repos {
+  .title-wrap {
+    line-height: 1.2em;
+    padding: 1px 0;
+  }
+}
+
 @supports not (overflow-y: overlay) {
   .scrollbar-spacing {
     overflow-y: auto;
