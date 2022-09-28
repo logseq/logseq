@@ -1,4 +1,5 @@
 (ns frontend.page
+  "Provides root component for both Logseq app and publishing build"
   (:require [rum.core :as rum]
             [frontend.state :as state]
             [frontend.ui :as ui]

@@ -1,4 +1,5 @@
 (ns frontend.config
+  "App config and fns built on top of configuration"
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [frontend.mobile.util :as mobile-util]

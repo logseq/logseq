@@ -1,4 +1,6 @@
 (ns frontend.util.text
+  "Misc low-level utility text fns that are useful across features or don't have
+  a good ns to be in yet"
   (:require [clojure.string :as string]
             [goog.string :as gstring]
             [frontend.util :as util]))

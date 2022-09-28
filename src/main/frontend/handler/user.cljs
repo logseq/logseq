@@ -1,4 +1,5 @@
 (ns frontend.handler.user
+  "Provides user related handler fns like login and logout"
   (:require [frontend.config :as config]
             [frontend.handler.config :as config-handler]
             [frontend.state :as state]

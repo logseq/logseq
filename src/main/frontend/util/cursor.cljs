@@ -1,4 +1,4 @@
-(ns frontend.util.cursor
+(ns ^:no-doc frontend.util.cursor
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.util :as util]

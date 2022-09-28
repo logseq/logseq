@@ -1,4 +1,4 @@
-(ns frontend.handler.paste
+(ns ^:no-doc frontend.handler.paste
   (:require [frontend.state :as state]
             [frontend.db :as db]
             [frontend.format.block :as block]

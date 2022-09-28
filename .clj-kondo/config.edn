@@ -22,25 +22,52 @@
   {:aliases {datascript.core d
              datascript.transit dt
              datascript.db ddb
-             lambdaisland.glogi log
-             medley.core medley
+             electron.ipc ipc
+             frontend.commands commands
+             frontend.config config
+             frontend.date date
+             frontend.db db
+             frontend.db-mixins db-mixins
              frontend.db.query-dsl query-dsl
              frontend.db.react react
              frontend.db.query-react query-react
-             frontend.util util
-             frontend.util.property property
-             frontend.util.text text-util
-             frontend.config config
+             frontend.diff diff
+             frontend.encrypt encrypt
              frontend.format.mldoc mldoc
              frontend.format.block block
+             frontend.fs fs
+             frontend.fs.bfs bfs
+             frontend.fs.capacitor-fs capacitor-fs
+             frontend.fs.nfs nfs
              frontend.handler.extract extract
              frontend.handler.common common-handler
              frontend.handler.common.file file-common-handler
              frontend.handler.config config-handler
+             frontend.handler.events events
              frontend.handler.global-config global-config-handler
+             frontend.handler.ui ui-handler
+             frontend.handler.notification notification
+             frontend.handler.page page-handler
+             frontend.handler.repo repo-handler
              frontend.handler.repo-config repo-config-handler
+             frontend.handler.search search-handler
+             frontend.idb idb
+             frontend.loader loader
+             frontend.mixins mixins
              frontend.mobile.util mobile-util
+             frontend.page page
+             frontend.search search
              frontend.state state
+             frontend.template template
+             frontend.ui ui
+             frontend.util util
+             frontend.util.clock clock
+             frontend.util.property property
+             frontend.util.persist-var persist-var
+             frontend.util.text text-util
+             frontend.util.url url-util
+             frontend.util.thingatpt thingatpt
+             lambdaisland.glogi log
              logseq.graph-parser graph-parser
              logseq.graph-parser.text text
              logseq.graph-parser.block gp-block
@@ -50,7 +77,8 @@
              logseq.graph-parser.config gp-config
              logseq.graph-parser.util.page-ref page-ref
              logseq.graph-parser.util.block-ref block-ref
-             logseq.graph-parser.date-time-util date-time-util}}
+             logseq.graph-parser.date-time-util date-time-util
+             medley.core medley}}
 
   :namespace-name-mismatch {:level :warning}
   :used-underscored-binding {:level :warning}}

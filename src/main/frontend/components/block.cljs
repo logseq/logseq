@@ -1856,7 +1856,7 @@
 (declare block-content)
 
 (defn build-block-title
-  [config {:block/keys [title marker pre-block? properties level heading-level]
+  [config {:block/keys [title marker pre-block? properties]
            :as t}]
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
@@ -1873,14 +1873,9 @@
         priority (priority-cp t)
         tags (block-tags-cp t)
         bg-color (:background-color properties)
-        heading-level (or (and heading-level
-                               (<= heading-level 6)
-                               heading-level)
-                          (and (get properties :heading)
-                               (<= level 6)
-                               level))
-        elem (if heading-level
-               (keyword (str "h" heading-level
+        heading (:heading properties)
+        elem (if heading
+               (keyword (str "h" heading
                              (when block-ref? ".inline")))
                :span.inline)]
     (->elem
@@ -2309,7 +2304,7 @@
 
 (rum/defcs block-content-or-editor < rum/reactive
   (rum/local true ::hide-block-refs?)
-  [state config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit? hide-block-refs-count?]
+  [state config {:block/keys [uuid format] :as block} edit-input-id block-id edit? hide-block-refs-count?]
   (let [*hide-block-refs? (get state ::hide-block-refs?)
         hide-block-refs? @*hide-block-refs?
         editor-box (get config :editor-box)
@@ -2327,7 +2322,6 @@
                      :block-id uuid
                      :block-parent-id block-id
                      :format format
-                     :heading-level heading-level
                      :on-hide (fn [value event]
                                 (when (= event :esc)
                                   (editor-handler/save-block! (editor-handler/get-state) value)
@@ -2402,7 +2396,7 @@
       [:div.single-block.ls-block
        {:class (str block-uuid)
         :id (str "ls-block-" blocks-container-id "-" block-uuid)}
-       (block-content-or-editor config block edit-input-id block-el-id (:block/heading-level block) edit? true)])))
+       (block-content-or-editor config block edit-input-id block-el-id edit? true)])))
 
 (rum/defc single-block-cp
   [block-uuid]
@@ -2629,7 +2623,7 @@
         block (if ref?
                 (merge block (db/pull-block (:db/id block)))
                 block)
-        {:block/keys [uuid children pre-block? top? refs heading-level level format content properties]} block
+        {:block/keys [uuid children pre-block? top? refs level format content properties]} block
         config (if navigated? (assoc config :id (str navigating-block)) config)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         blocks-container-id (:blocks-container-id config)
@@ -2638,7 +2632,7 @@
         config (if (nil? (:query-result config))
                  (assoc config :query-result (atom nil))
                  config)
-        heading? (or (:heading properties) (and heading-level (<= heading-level 6)))
+        heading? (:heading properties)
         *control-show? (get state ::control-show?)
         db-collapsed? (util/collapsed? block)
         collapsed? (cond
@@ -2720,7 +2714,7 @@
       (when @*show-left-menu?
         (block-left-menu config block))
 
-      (block-content-or-editor config block edit-input-id block-id heading-level edit? false)
+      (block-content-or-editor config block edit-input-id block-id edit? false)
 
       (when @*show-right-menu?
         (block-right-menu config block edit?))]

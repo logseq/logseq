@@ -1,4 +1,5 @@
 (ns frontend.handler.file-sync
+  "Provides util handler fns for file sync"
   (:require ["path" :as path]
             [cljs-time.format :as tf]
             [cljs.core.async :as async :refer [go <!]]

@@ -1,4 +1,6 @@
 (ns frontend.handler
+  "Main ns that handles application startup. Closest ns that we have to a
+  system. Contains a couple of small system components"
   (:require [cljs.reader :refer [read-string]]
             [clojure.string :as string]
             [electron.ipc :as ipc]

@@ -1,4 +1,6 @@
 (ns frontend.util.persist-var
+  "System-component-like ns that provides an atom-like abstraction over an edn
+  file"
   (:require [frontend.config :as config]
             [frontend.state :as state]
             [frontend.fs :as fs]

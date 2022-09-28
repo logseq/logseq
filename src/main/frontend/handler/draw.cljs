@@ -1,4 +1,5 @@
 (ns frontend.handler.draw
+  "Provides util handler fns for drawing"
   (:refer-clojure :exclude [load-file])
   (:require [frontend.config :as config]
             [frontend.date :as date]

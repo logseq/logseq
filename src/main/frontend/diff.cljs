@@ -1,4 +1,4 @@
-(ns frontend.diff
+(ns ^:no-doc frontend.diff
   (:require [clojure.string :as string]
             ["diff" :as jsdiff]
             [goog.object :as gobj]

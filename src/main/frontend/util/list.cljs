@@ -1,4 +1,5 @@
 (ns frontend.util.list
+  "High level list operations for use in editor"
   (:require [frontend.util.thingatpt :as thingatpt]
             [frontend.util.cursor :as cursor]
             [clojure.string :as string]))

@@ -1,4 +1,6 @@
 (ns electron.listener
+  "System-component-like ns that defines listeners by event name to receive ipc
+  messages from electron's main process"
   (:require [frontend.state :as state]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]

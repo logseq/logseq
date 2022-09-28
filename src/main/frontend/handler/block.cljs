@@ -1,4 +1,4 @@
-(ns frontend.handler.block
+(ns ^:no-doc frontend.handler.block
   (:require
    [clojure.set :as set]
    [clojure.string :as string]

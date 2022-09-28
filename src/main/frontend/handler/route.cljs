@@ -1,4 +1,4 @@
-(ns frontend.handler.route
+(ns ^:no-doc frontend.handler.route
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.date :as date]

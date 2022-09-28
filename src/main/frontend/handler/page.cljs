@@ -1,4 +1,5 @@
 (ns frontend.handler.page
+  "Provides util handler fns for pages"
   (:require [cljs.reader :as reader]
             [clojure.string :as string]
             [clojure.walk :as walk]

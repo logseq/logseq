@@ -571,7 +571,7 @@
 
 (rum/defcs box < rum/reactive
   {:init (fn [state]
-           (assoc state ::heading-level (:heading-level (first (:rum/args state)))
+           (assoc state
                   ::id (str (random-uuid))))
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))

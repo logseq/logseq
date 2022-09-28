@@ -18,7 +18,7 @@
             [electron.ipc :as ipc]
             [goog.object :as gobj]
             [frontend.components.encryption :as encryption]
-            [frontend.encrypt :as e]
+            [frontend.encrypt :as encrypt]
             [cljs.core.async :as async :refer [go <!]]
             [frontend.handler.file-sync :as file-sync]
             [reitit.frontend.easy :as rfe]))
@@ -60,7 +60,7 @@
                                      (state/pub-event! [:graph/switch url])))
 
      [:div.controls
-      (when (e/encrypted-db? url)
+      (when (encrypt/encrypted-db? url)
         [:a.control {:title    "Show encryption information about this graph"
                      :on-click (fn []
                                  (if remote?
