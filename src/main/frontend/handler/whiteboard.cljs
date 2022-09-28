@@ -197,11 +197,11 @@
     (db-utils/transact! [tx])
     uuid))
 
-(defn inside-whiteboard-portal-container
+(defn inside-portal
   [target]
   (dom/closest target ".tl-logseq-cp-container"))
 
-(defn closest-whiteboard-shape-id
+(defn closest-shape
   [target]
   (when-let [shape-el (dom/closest target "[data-shape-id]")]
     (.getAttribute shape-el "data-shape-id")))

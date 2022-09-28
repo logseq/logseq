@@ -536,10 +536,10 @@
        (:db/id page-entity)
        :page))
 
-    (whiteboard-handler/inside-whiteboard-portal-container (.-target e))
+    (whiteboard-handler/inside-portal (.-target e))
     (whiteboard-handler/add-new-block-portal-shape!
      page-name
-     (whiteboard-handler/closest-whiteboard-shape-id (.-target e)))
+     (whiteboard-handler/closest-shape (.-target e)))
 
     whiteboard-page?
     (route-handler/redirect-to-whiteboard! page-name)
@@ -898,10 +898,10 @@
                      (:db/id block)
                      :block-ref)
 
-                    (whiteboard-handler/inside-whiteboard-portal-container (.-target e))
+                    (whiteboard-handler/inside-portal (.-target e))
                     (whiteboard-handler/add-new-block-portal-shape!
                      (:block/uuid block)
-                     (whiteboard-handler/closest-whiteboard-shape-id (.-target e)))
+                     (whiteboard-handler/closest-shape (.-target e)))
 
                     :else
                     (match [block-type (util/electron?)]
@@ -1647,13 +1647,22 @@
 
 (defn- bullet-on-click
   [e block uuid]
-  (if (gobj/get e "shiftKey")
+  (cond
+    (gobj/get e "shiftKey")
     (do
       (state/sidebar-add-block!
        (state/get-current-repo)
        (:db/id block)
        :block)
       (util/stop e))
+
+    (whiteboard-handler/inside-portal (.-target e))
+    (do (whiteboard-handler/add-new-block-portal-shape!
+         uuid
+         (whiteboard-handler/closest-shape (.-target e)))
+        (util/stop e))
+
+    :else
     (route-handler/redirect-to-page! uuid)))
 
 (rum/defc block-children < rum/reactive
