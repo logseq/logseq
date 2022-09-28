@@ -69,7 +69,6 @@
                            :extract-options (merge
                                              {:user-config (state/get-config)
                                               :date-formatter (state/get-date-formatter)
-                                              :page-name-order (state/page-name-order)
                                               :block-pattern (config/get-block-pattern (gp-util/get-format file))
                                               :supported-formats (gp-config/supported-formats)
                                               :uri-encoded? (boolean (util/mobile?))

@@ -9,7 +9,7 @@
   [string]
   (if (string/includes? string "%")
     (try (some-> string str (js/decodeURIComponent))
-         (catch js/Error _
+         (catch :default _
            string))
     string))
 

@@ -435,11 +435,9 @@ should be done through this fn in order to get global config and config defaults
     "LATER"
     "TODO"))
 
-(defn page-name-order
-  "Decide whether to use file name or :title as page name. If it returns \"file\", use the file
-  name unless it is missing."
-  []
-  (:page-name-order (get-config)))
+(defn get-filename-format
+  [repo]
+  (:file/name-format (get-config repo)))
 
 (defn get-date-formatter
   []
@@ -1821,7 +1819,3 @@ Similar to re-frame subscriptions"
   {:pre [(map? v)
          (= #{:repo :old-path :new-path} (set (keys v)))]}
   (async/offer! (get-file-rename-event-chan) v))
-
-(defn get-filename-format
-  [repo]
-  (:file/name-format (get-config repo)))

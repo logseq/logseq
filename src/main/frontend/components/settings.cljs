@@ -542,7 +542,7 @@
 (defn filename-format-row []
   (row-with-button-action
    {:left-label (t :settings-page/filename-format)
-    :button-label (t :plugin/update)
+    :button-label (t :settings-page/edit-setting)
     :on-click #(state/set-sub-modal!
                 (fn [_] (conversion-component/files-breaking-changed))
                 {:id :filename-format-panel :center? true})}))

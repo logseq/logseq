@@ -185,7 +185,7 @@
             (p/catch (fn [error] (js/console.error error))))))))
 
 (defn- compute-new-file-path
-  "Construct the full path given old full path and the file sanitized body. 
+  "Construct the full path given old full path and the file sanitized body.
    Ext. included in the `old-path`."
   [old-path new-file-name-body]
   (let [result (string/split old-path "/")
@@ -209,7 +209,7 @@
     ;; update db
      (if force-fs?
        (try (transact) ;; capture error and continue FS rename if failed
-            (catch js/Error e
+            (catch :default e
               (log/error :rename-file e)))
        (transact)) ;; interrupted if failed
 
@@ -448,7 +448,7 @@
             page-txs            (if properties-block-tx (conj page-txs properties-block-tx) page-txs)]
 
         (d/transact! (db/get-db repo false) page-txs)
-        
+
         (when (fs-util/create-title-property? new-page-name)
           (page-property/add-property! new-page-name :title new-name))
 

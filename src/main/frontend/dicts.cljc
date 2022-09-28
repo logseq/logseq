@@ -113,24 +113,24 @@
         :file/last-modified-at "Last modified at"
         :file/no-data "No data"
         :file/format-not-supported "Format .{1} is not supported."
-        :file-rn/re-index "Re-index is strongly recommended after the files are renamed. Should also re-index on the other devices when the renamed files are synced."
+        :file-rn/re-index "Re-index is strongly recommended after the files are renamed and on other devices after syncing."
         :file-rn/need-action "File rename actions are suggested to match up with the format. Re-index is required on all devices when the renamed files are synced."
-        :file-rn/or-select-actions " or you may select and apply the desired actions from below, then "
+        :file-rn/or-select-actions " or manually do the desired actions below, then "
         :file-rn/close-panel "Close the Panel"
         :file-rn/all-action "Apply all Actions!"
         :file-rn/select-format "(Developer Option, Dangerous!) Select filename format"
         :file-rn/rename "rename file \"{1}\" to \"{2}\""
         :file-rn/apply-rename "Apply the file rename operation"
-        :file-rn/affected-pages "Affected Pages after the format change" 
+        :file-rn/affected-pages "Affected Pages after the format change"
         :file-rn/suggest-rename "To maintain the page name, should "
         :file-rn/otherwise-breaking "Otherwise, the page name will become"
         :file-rn/no-action "Well done! No further action required"
-        :file-rn/confirm-proceed "Backup is done and Clients are closed - Update format!"
+        :file-rn/confirm-proceed "Update format!"
         :file-rn/unreachable-title "Warning! The page name will become {1} under current filename format, unless setup `title::` property manually"
-        :file-rn/optional-rename "May "
+        :file-rn/optional-rename "Suggestion: "
         :file-rn/update-filename " to follow the current filename format"
-        :file-rn/format-deprecated "You are currently using an outdated format! May update to the latest format. Please backup your data and close Logseq clients on other devices before the operation."
-        :file-rn/filename-desc-1 "Logseq stores page in file, and the filename is the page name." 
+        :file-rn/format-deprecated "You are currently using an outdated format. Updating to the latest format is highly recommended. Please backup your data and close Logseq clients on other devices before the operation."
+        :file-rn/filename-desc-1 "Logseq stores page in file, and the filename is the page name."
         :file-rn/filename-desc-2 "There are some limitations for the filename, for example, it cannot contain reserved characters like \"/\" or \"?\"."
         :file-rn/filename-desc-3 "Instead, Logseq converts the page name to a valid filename by replacing the invalid characters with the URL encoded form (e.g. \"?\" becomes \"%3F\")."
         :file-rn/filename-desc-4 "Especially, the namespace separator \"/\" is replaced by \"___\" (triple underscore) for aesthetic consideration."
@@ -177,6 +177,7 @@
         :settings-page/edit-global-config-edn "Edit global config.edn"
         :settings-page/edit-custom-css "Edit custom.css"
         :settings-page/edit-export-css "Edit export.css"
+        :settings-page/edit-setting "Edit"
         :settings-page/custom-configuration "Custom configuration"
         :settings-page/custom-global-configuration "Custom global configuration"
         :settings-page/custom-theme "Custom theme"
@@ -369,7 +370,7 @@
         :file-sync/other-user-graph "Current local graph is bound to other user's remote graph. So can't start syncing."
         :file-sync/graph-deleted "The current remote graph has been deleted"
 
-        :conversion/non-desktop "Graph directory in old versions needs to be converted to the new format. 
+        :conversion/non-desktop "Graph directory in old versions needs to be converted to the new format.
           Please use the desktop app to do the conversion."
         :conversion/write-filename-format "Apply format for incoming files"}
 
@@ -2750,7 +2751,7 @@
            :settings-page/edit-export-css "Editar export.css"
            :settings-page/enable-flashcards "Flashcards"
            :settings-page/export-theme "Exportar Tema"
-           
+
            :discourse-title "Nosso fórum!"
            :importing "Importando"
            :asset/copy "Copiar imagem"
@@ -3093,7 +3094,7 @@
         :settings-page/export-theme "Exportar tema"
         :settings-page/network-proxy "Proxy de rede"
         :settings-page/plugin-system "Sistema de plugins"
-        
+
         :discourse-title "Nosso fórum!"
         :importing "Importando"
         :asset/copy "Copiar imagem"
