@@ -35,6 +35,7 @@
             [promesa.core :as p]
             [frontend.mobile.util :as mobile-util]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.text :as text]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
@@ -136,7 +137,10 @@
                   properties          nil
                   split-namespace?    true
                   uuid                nil}}]
-   (let [title      (string/trim title)
+   (let [title      (-> (string/trim title)
+                        (text/page-ref-un-brackets!)
+                        ;; remove `#` from tags
+                        (string/replace #"^#+" ""))
          title      (gp-util/remove-boundary-slashes title)
          page-name  (util/page-name-sanity-lc title)
          repo       (state/get-current-repo)
