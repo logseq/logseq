@@ -119,7 +119,8 @@
   .page-icon {
     @apply flex items-center mr-1 align-baseline;
 
-    width: 16px;
+    width: 20px;
+    flex-shrink: 0;
     height: 18px;
     text-align: center;
     display: inline-block;
@@ -133,7 +134,9 @@
     user-select: none;
     transition: background-color .3s;
 
-    > :is(.ti, .tie) {
+    .ui__icon {
+      width: 20px;
+      text-align: center;
       font-size: 16px;
       margin-right: 8px;
       opacity: .9;
