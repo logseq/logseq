@@ -290,7 +290,7 @@
  ;;   containing special characters to be messy.
  ;; Available values:
  ;;   :file/name-format :triple-lowbar
- ;;     ;use double underscore `__` for slash `/` in page title
+ ;;     ;use triple underscore `___` for slash `/` in page title
  ;;     ;use Percent-encoding for other invalid characters
  ;;   :file/name-format :legacy
  ;;     ;use Percent-encoding for slash and other invalid characters

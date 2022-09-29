@@ -76,6 +76,17 @@
         (reset! *solid-format config-format)
         (reset! *target-format :triple-lowbar)))
     [:div
+     (when (state/developer-mode?)
+       [:div
+        (filename-format-select *target-format @*switch-disabled?)
+        (ui/button (t :file-rn/select-confirm-proceed) ;; the button is for persisting selected format
+                   :disabled (not need-persist?)
+                   :class "text-sm p-1 mr-1"
+                   :on-click #(do (reset! *dir-format (state/get-filename-format repo)) ;; assure it's uptodate
+                                  (write-filename-format! repo @*target-format)
+                                  (reset! *solid-format @*target-format)
+                                  (reset! *switch-disabled? true)))
+        [:hr]])
      [:h1.title (t :settings-page/filename-format)]
      [:div.rounded-md.opacity-70
       [:p (t :file-rn/filename-desc-1)]
@@ -85,22 +96,15 @@
      (when (= @*solid-format :legacy)
        [:div ;; Normal UX stage 1: show the admonition & button for users using legacy format
         (ui/admonition :warning [:p (t :file-rn/format-deprecated)])
-        (ui/button (t :file-rn/confirm-proceed) ;; the button is for triple-lowbar only
-                   :class "text-sm p-1 mr-1"
-                   :on-click #(do (reset! *target-format :triple-lowbar)
-                                  (reset! *dir-format (state/get-filename-format repo)) ;; assure it's uptodate
-                                  (write-filename-format! repo :triple-lowbar)
-                                  (reset! *solid-format :triple-lowbar)))])
-     (when (state/developer-mode?)
-       [:div [:hr]
-        (filename-format-select *target-format @*switch-disabled?)
-        (ui/button (t :file-rn/confirm-proceed) ;; the button is for persisting selected format
-                   :disabled (not need-persist?)
-                   :class "text-sm p-1 mr-1"
-                   :on-click #(do (reset! *dir-format (state/get-filename-format repo)) ;; assure it's uptodate
-                                  (write-filename-format! repo @*target-format)
-                                  (reset! *solid-format @*target-format)
-                                  (reset! *switch-disabled? true)))])
+        [:p (t :file-rn/instruct-1)]
+        [:p (t :file-rn/instruct-2)
+         (ui/button (t :file-rn/confirm-proceed) ;; the button is for triple-lowbar only
+                    :class "text-md p-2 mr-1"
+                    :on-click #(do (reset! *target-format :triple-lowbar)
+                                   (reset! *dir-format (state/get-filename-format repo)) ;; assure it's uptodate
+                                   (write-filename-format! repo :triple-lowbar)
+                                   (reset! *solid-format :triple-lowbar))) ";"]
+        [:p (t :file-rn/instruct-3)]])
      [:div.cp__settings-files-breaking-changed {:disabled need-persist?} [:hr]
       (let [rename-items  (->> (vals @*pages)
                                (map (fn [[page file]]
@@ -118,15 +122,16 @@
                     (= @*dir-format :legacy))
              (ui/admonition :tip [:p (t :file-rn/need-action)])
              [:p (t :file-rn/need-action)])
-           [:p
+           [:p "May "
             (ui/button
              (str (t :file-rn/all-action) " (" (count rename-items) ")")
              :on-click <rename-all
-             :class "text-md p-1 mr-1")
+             :class "text-md p-2 mr-1")
             (t :file-rn/or-select-actions)
-            [:a.text-sm
-             {:on-click <close-modal-on-done}
-             (t :file-rn/close-panel)]]
+            [:a {:on-click <close-modal-on-done}
+             (t :file-rn/close-panel)]
+            (t :file-rn/or-select-actions-2)]
+           [:p (t :file-rn/legend)]
            [:table.table-auto
             [:tbody
              (for [{:keys [page file status target old-title changed-title]} rename-items]
@@ -137,7 +142,12 @@
                      rename-fn      #(page-handler/rename-file! file target rm-item-fn)
                      rename-but     [:a {:on-click rename-fn
                                          :title (t :file-rn/apply-rename)}
-                                     [:span (t :file-rn/rename src-file-name tgt-file-name)]]]
+                                     [:span (t :file-rn/rename src-file-name tgt-file-name)]]
+                     rename-but-sm  (ui/button
+                                     (t :file-rn/rename-sm)
+                                     :on-click rename-fn
+                                     :class "text-sm p-1 mr-1"
+                                     :style {:word-break "normal"})]
                  [:tr {:key (:block/name page)}
                   [:td [:div [:p "📄 " old-title]]
                    (case status
@@ -147,5 +157,6 @@
                      :unreachable
                      [:div [:p "🔴 " (t :file-rn/unreachable-title changed-title)]]
                      [:div [:p "🟢 " (t :file-rn/optional-rename) rename-but
-                            (t :file-rn/update-filename)]])]]))]]]
+                            (t :file-rn/update-filename)]])]
+                  [:td rename-but-sm]]))]]]
           [:div "🎉 " (t :file-rn/no-action)]))]]))
