@@ -6,18 +6,6 @@
             [frontend.util.fs :as fs-util]
             [frontend.handler.config :refer [set-config!]]))
 
-;; Register sanitization / parsing fns in:
-;; logseq.graph-parser.util (parsing only)
-;; frontend.util.fs         (sanitization only)
-;; frontend.handler.conversion (both)
-(defonce filename-formats {:triple-lowbar {:parsing-fn gp-util/title-parsing
-                                           :sanity-fn  fs-util/file-name-sanity}
-                           :legacy        {:parsing-fn gp-util/legacy-title-parsing
-                                           :sanity-fn  fs-util/legacy-url-file-name-sanity
-                                           :outdated-sanity-fn fs-util/legacy-dot-file-name-sanity}})
-
-(defonce supported-filename-formats (keys filename-formats))
-
 (defn write-filename-format!
   "Return:
      Promise <void>"
@@ -34,8 +22,8 @@
      if no change of path happens"
   [format file-body prop-title]
   (let [page-title    (or prop-title
-                          ((get-in filename-formats [format :parsing-fn]) file-body))
-        cur-file-body ((get-in filename-formats [format :sanity-fn]) page-title)]
+                          (gp-util/title-parsing file-body format))
+        cur-file-body (fs-util/file-name-sanity page-title format)]
     (when-not (= file-body cur-file-body)
       {:status        :informal
        :target        cur-file-body
@@ -48,9 +36,9 @@
      the file name for that page name under the current file naming rules,
      and the new title if no action applied, or `nil` if no break change happens"
   [old-format new-format file-body]
-  (let [new-title ((get-in filename-formats [new-format :parsing-fn]) file-body) ;; Rename even the prop-title is provided.
-        old-title ((get-in filename-formats [old-format :parsing-fn]) file-body)
-        target    ((get-in filename-formats [new-format :sanity-fn]) old-title)]
+  (let [new-title (gp-util/title-parsing file-body new-format) ;; Rename even the prop-title is provided.
+        old-title (gp-util/title-parsing file-body old-format)
+        target    (fs-util/file-name-sanity old-title new-format)]
     (when (not= new-title old-title)
       (if (not= target file-body)
         {:status        :breaking
@@ -63,13 +51,20 @@
          :old-title     old-title
          :changed-title new-title}))))
 
+;; Register sanitization / parsing fns in:
+;; logseq.graph-parser.util (parsing only)
+;; frontend.util.fs         (sanitization only)
+;; frontend.handler.conversion (both)
+;;   - the special rule in `is-manual-title-prop?`
+(defonce supported-filename-formats [:triple-lowbar :legacy])
+
 (defn- is-manual-title-prop?
   "If it's an user defined title property instead of the generated one"
   [format file-body prop-title]
   (if prop-title
-    (not (or (= file-body ((get-in filename-formats [format :sanity-fn]) prop-title))
-             (when-let [sanity-fn (get-in filename-formats [format :outdated-sanity-fn])]
-               (= file-body (sanity-fn prop-title)))))
+    (not (or (= file-body (fs-util/file-name-sanity prop-title format))
+             (when (= format :legacy)
+               (= file-body (fs-util/file-name-sanity prop-title :legacy-dot)))))
     false))
 
 (defn- calc-rename-target-impl

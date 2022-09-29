@@ -118,7 +118,8 @@
       ))
 
 (defn- tri-lb-file-name-sanity
-  "Sanitize page-name for file name (strict), for file name in file writing."
+  "Sanitize page-name for file name (strict), for file name in file writing.
+   Use triple lowbar as namespace separator"
   [title]
   (some-> title
           gp-util/page-name-sanity ;; we want to preserve the case sensitive nature of most file systems, don't lowercase

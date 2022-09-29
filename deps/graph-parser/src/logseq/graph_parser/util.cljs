@@ -130,7 +130,8 @@
 (def url-encoded-pattern #"(?i)%[0-9a-f]{2}") ;; (?i) for case-insensitive mode
 
 (defn- tri-lb-title-parsing
-  "Parsing file name under the new file name format"
+  "Parsing file name under the new file name format
+   Avoid calling directly"
   [file-name]
   (some-> file-name
           (decode-namespace-underlines)
