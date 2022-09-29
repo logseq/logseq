@@ -17,7 +17,6 @@
             [logseq.db.default :as default-db]
             [logseq.db.rules :refer [rules]]
             [logseq.db.schema :as db-schema]
-            [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util :as gp-util]))
