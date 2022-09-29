@@ -1355,8 +1355,7 @@
                       :where
                       [_ :block/properties ?p]]
                     (conn/get-db))
-        properties (remove (fn [m] (or (empty? m) 
-                                       (gp-block/whiteboard-properties? m))) properties)]
+        properties (remove (fn [m] (empty? m)) properties)]
     (->> (map keys properties)
          (apply concat)
          distinct
