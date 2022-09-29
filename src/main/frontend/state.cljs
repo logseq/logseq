@@ -243,11 +243,9 @@
                                              :file-sync/sync-manager nil
                                              :file-sync/sync-state nil
                                              ;; {file-path -> payload}
-                                             :file-sync/progress nil}
-
-     :file-sync/start                       {}
-     ;; graph -> epoch
-     :file-sync/last-synced-at              {}
+                                             :file-sync/progress nil
+                                             :file-sync/start-time nil
+                                             :file-sync/last-synced-at nil}
 
      :encryption/graph-parsing?             false
 

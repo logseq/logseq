@@ -178,7 +178,9 @@
 
 (rum/defc last-synced-cp < rum/reactive
   []
-  (let [last-synced-at (state/sub [:file-sync/last-synced-at (state/get-current-repo)])
+  (let [last-synced-at (state/sub [:file-sync/graph-state
+                                   (state/get-current-file-sync-graph-uuid)
+                                   :file-sync/last-synced-at])
         last-synced-at (if last-synced-at
                          (util/time-ago (tc/from-long (* last-synced-at 1000)))
                          "just now")]
