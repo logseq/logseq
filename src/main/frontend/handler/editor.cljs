@@ -1993,6 +1993,12 @@
            root-block (db/pull db-id)
            blocks-exclude-root (remove (fn [b] (= (:db/id b) db-id)) blocks)
            sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
+           sorted-blocks (cons
+                          (-> (first sorted-blocks)
+                              (update :block/properties-text-values dissoc :template)
+                              (update :block/properties-order (fn [keys]
+                                                                (vec (remove #{:template} keys)))))
+                          (rest sorted-blocks))
            blocks (if template-including-parent?
                     sorted-blocks
                     (drop 1 sorted-blocks))]
