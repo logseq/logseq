@@ -525,16 +525,8 @@
   [:div.cp__file-sync-related-normal-modal
    [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "cloud-download")]]
 
-   [:h1.mb-5.text-2xl.text-center.font-bold "Sync a remote graph to local"]
-
-   [:div.folder-tip.flex.flex-col.items-center
-    [:h3
-     [:span.flex.space-x-2.leading-none.pb-1
-      (ui/icon "cloud-lock")
-      [:span (:GraphName graph)]
-      [:span.scale-75 (ui/icon "arrow-right")]
-      [:span (ui/icon "folder")]]]
-    [:h4.px-2.-mb-1.5 [:strong "UUID: "] (:GraphUUID graph)]]
+   [:h1.mb-5.text-2xl.text-center.font-bold (util/format "Sync graph \"%s\" to local"
+                                                         (:GraphName graph))]
 
    (ui/button
      "Open a local directory"
