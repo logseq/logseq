@@ -1,4 +1,5 @@
 import cx from 'classnames'
+import Cookie from 'js-cookie'
 
 export type FunctionArguments<T extends Function> = T extends (...args: infer R) => any ? R : never;
 
@@ -58,4 +59,9 @@ export function mergeProps<T extends Dict[]> (...args: T) {
   }
 
   return result
+}
+
+export const openLiveDemo = () => {
+  Cookie.set(`spa`, '1', { expires: 7 })
+  setTimeout(() => window.location.reload(), 500)
 }

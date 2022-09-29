@@ -9,6 +9,7 @@ import { WrapGlobalDownloadButton } from '../Downloads'
 import { useAppState } from '../../state'
 import cx from 'classnames'
 import { useCallback, useState } from 'react'
+import { openLiveDemo } from '../../components/utils'
 
 export function GlassCardRefs (props: any) {
   const { className, onRefMouseEnter, onRefMouseLeave, ...rest } = props
@@ -196,6 +197,7 @@ export function HeadShowcase () {
               leftIcon={<Play size={18} weight={'duotone'}/>}
               rightIcon={<ArrowSquareOut size={18} className={'opacity-70'}/>}
               className={'bg-logseq-600'}
+              onClick={openLiveDemo}
             >
               Live Demo
             </Button>

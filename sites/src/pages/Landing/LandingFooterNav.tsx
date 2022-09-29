@@ -7,6 +7,7 @@ import { Button } from '../../components/Buttons'
 import { AppLogo, FloatGlassButton, imageProductHuntLogo } from './common'
 import { WrapGlobalDownloadButton } from '../Downloads'
 import { useAppState } from '../../state'
+import { openLiveDemo } from '../../components/utils'
 
 export function FooterDescCard (props: any) {
   const { icon, title, desc } = props
@@ -156,6 +157,7 @@ export function LandingFooterDesc () {
             leftIcon={<Play size={18} weight={'duotone'}/>}
             rightIcon={<ArrowSquareOut size={18} className={'opacity-70'}/>}
             className={'w-full bg-logseq-600 mt-4 sm:w-auto sm:mt-0'}
+            onClick={openLiveDemo}
           >
             Live Demo
           </Button>

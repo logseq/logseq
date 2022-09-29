@@ -1,0 +1,9 @@
+name = "sites"
+main = "index.ts"
+compatibility_date = "2022-09-29"
+
+[vars]
+ENVIRONMENT = "dev"
+
+[env.production.vars]
+ENVIRONMENT = "production"
