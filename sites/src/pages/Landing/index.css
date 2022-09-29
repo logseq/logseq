@@ -338,7 +338,7 @@ h1, h2, h3 {
 }
 
 .app-tutorial-features-slide {
-  @apply py-14 px-10;
+  @apply py-14 px-0;
 
   ul.tabs {
     li {
@@ -419,9 +419,8 @@ h1, h2, h3 {
 }
 
 .app-tutorial-features-panel {
-  @apply mt-8 rounded-2xl border-logseq-500 overflow-hidden;
-
-  min-height: 300px;
+  @apply mt-8 rounded-2xl border-logseq-500 overflow-hidden
+  sm:mb-6 sm:min-h-[300px];
 
   > .hd {
     > strong {
@@ -441,19 +440,41 @@ h1, h2, h3 {
 
   > .bd {
     .wrap {
-      @apply flex items-center pt-8 pb-4;
+      @apply px-1 flex items-center pt-2
+      sm:pt-0 sm:pt-8 sm:pb-4 sm:px-0;
+
+      > .a {
+        @apply hidden sm:block;
+      }
 
       &.is-students {
-        @apply flex-col;
+        @apply sm:flex-col;
 
         > .b {
-          @apply flex py-10 -translate-y-12 relative z-10 bg-transparent;
+          @apply sm:flex sm:py-10 sm:-translate-y-12 relative z-10 bg-transparent;
+        }
+      }
+
+      &:not(.is-students) {
+        @apply sm:flex-row-reverse sm:pt-16;
+
+        > .a {
+          @apply mr-3;
+        }
+
+        > .b {
+          @apply sm:grid gap-x-4 grid-rows-2 grid-cols-2 sm:mr-12 sm:my-6 gap-y-2;
+
+          .desc-card {
+            @apply pl-0;
+          }
         }
       }
     }
 
     .desc-card {
-      @apply flex-1 pl-10;
+      @apply mb-4 flex-1
+      sm:mb-0 sm:pl-10;
 
       > h2 {
         a {
@@ -477,17 +498,26 @@ h1, h2, h3 {
     background-repeat: no-repeat;
     background-position-y: 60px;
 
-    &:after {
-      content: " ";
-      width: 80px;
-      height: 80px;
-      position: absolute;
-      top: 20px;
-      right: -10px;
+    &:not(.without-logo) {
+      &:after {
+        content: " ";
+        width: 80px;
+        height: 80px;
+        position: absolute;
+        top: 20px;
+        right: -10px;
 
-      background-image: url("../../../assets/logo-with-shadow.png");
-      background-size: contain;
-      background-repeat: no-repeat;
+        background-image: url("../../../assets/logo-with-shadow.png");
+        background-size: contain;
+        background-repeat: no-repeat;
+      }
+    }
+
+    &.without-logo {
+      width: 200px;
+      height: 110px;
+      background-position-y: 8px;
+      background-position-x: center;
     }
   }
 }

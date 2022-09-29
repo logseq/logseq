@@ -43,6 +43,35 @@ const featuresSlideItems = [
     ]
   },
   {
+    label: 'Academics',
+    icon: '🎓',
+    notes: [
+      {
+        icon: <ClockCounterClockwise size={20} weight="duotone"/>,
+        title: 'Review notes',
+        desc: <span>Capture, structure, and review all of your class notes with ease using the
+          <a>Linked References</a>, <a>Queries</a>, and <a>Search </a>features.</span>
+      },
+      {
+        icon: <Binoculars size={20} weight="duotone"/>,
+        title: 'Investigate claims',
+        desc: (<span>Spin your web of knowledge and see what evidence supports or contradicts claims.</span>)
+      },
+      {
+        icon: <Binoculars size={20} weight="duotone"/>,
+        title: 'Manage sources',
+        desc: (<span>Keep track of your research and easily manage your sources using the built-in
+          <a> Zotero integration</a>.</span>)
+      },
+      {
+        icon: <Books size={20} weight="duotone"/>,
+        title: 'Outline papers',
+        desc: (
+          <span>Manage your writing process and ensure that your papers are well-organized and flow smoothly.</span>)
+      }
+    ]
+  },
+  {
     label: 'Writers',
     icon: '🖋',
     notes: [
@@ -50,7 +79,7 @@ const featuresSlideItems = [
         icon: <ClockCounterClockwise size={20} weight="duotone"/>,
         title: 'Review notes',
         desc: <span>Capture, structure, and review all of your class notes with ease using the
-          <a>Linked References</a>, <a>Queries</a>, and <a>Search</a>features.</span>
+          <a>Linked References</a>, <a>Queries</a>, and <a>Search </a>features.</span>
       },
       {
         icon: <CalendarCheck size={20} weight="duotone"/>,
@@ -68,7 +97,7 @@ const featuresSlideItems = [
         desc: (
           <span>
             Effortlessly synthesize ideas from across your collection of notes using
-            <a>Block References</a>.
+            <a> Block References</a>.
           </span>
         )
       },
@@ -76,35 +105,6 @@ const featuresSlideItems = [
         icon: <PencilLine size={20} weight="duotone"/>,
         title: 'Outline content',
         desc: (<span>Organize your thoughts and reuse ideas in easy-to-manage outlines.</span>)
-      }
-    ]
-  },
-  {
-    label: 'Academics',
-    icon: '🎓',
-    notes: [
-      {
-        icon: <ClockCounterClockwise size={20} weight="duotone"/>,
-        title: 'Review notes',
-        desc: <span>Capture, structure, and review all of your class notes with ease using the
-          <a>Linked References</a>, <a>Queries</a>, and <a>Search</a>features.</span>
-      },
-      {
-        icon: <Binoculars size={20} weight="duotone"/>,
-        title: 'Investigate claims',
-        desc: (<span>Spin your web of knowledge and see what evidence supports or contradicts claims.</span>)
-      },
-      {
-        icon: <Binoculars size={20} weight="duotone"/>,
-        title: 'Manage sources',
-        desc: (<span>Keep track of your research and easily manage your sources using the built-in
-          <a>Zotero integration</a>.</span>)
-      },
-      {
-        icon: <Books size={20} weight="duotone"/>,
-        title: 'Outline papers',
-        desc: (
-          <span>Manage your writing process and ensure that your papers are well-organized and flow smoothly.</span>)
       }
     ]
   },
@@ -117,7 +117,7 @@ const featuresSlideItems = [
         title: 'Retrieve notes',
         desc: (<span>
           Always find the information where and when you need it using
-          <a>Linked References</a>, <a>Queries</a> or <a>Search</a>.
+          <a> Linked References</a>, <a>Queries</a> or <a>Search</a>.
         </span>)
       },
       {
@@ -126,9 +126,9 @@ const featuresSlideItems = [
         desc: (
           <span>
             Manage tasks with Logseq's built-in
-            <a>Task management system</a>, including
-            <a>Priorities</a>, <a>Scheduling</a>, and
-            <a>Deadlines</a>.
+            <a> Task management system</a>, including
+            <a> Priorities</a>, <a>Scheduling</a>, and
+            <a> Deadlines</a>.
           </span>
         )
       },
@@ -158,7 +158,7 @@ const featuresSlideItems = [
         desc: (
           <span>
           Quickly find relevant information using the
-          <a>Linked References</a>, <a>Queries</a> or <a>Search</a>.
+          <a> Linked References</a>, <a>Queries</a> or <a>Search</a>.
         </span>
         )
       },
@@ -199,25 +199,28 @@ export function TutorialFeaturesDescCard (
 ) {
   return (
     <div className={'desc-card'}>
-      <h1 className={'flex items-center text-[20px]'}>
-        <span className={'w-[32px] h-[32px] bg-gray-400/40 rounded-full flex items-center justify-center'}>
+      <h1 className={'flex items-center text-[18px] sm:text-[20px]'}>
+        <span
+          className={'scale-90 sm:scale-100 w-[34px] h-[34px] bg-gray-400/40 rounded-full flex items-center justify-center'}>
           {props.icon}
         </span>
-        <strong className={'font-normal pl-3'}>
+        <strong className={'whitespace-nowrap font-normal pl-[14px]'}>
           {props.title}
         </strong>
       </h1>
 
-      <h2 className={'pl-12 py-2 text-gray-200/70 leading-6 text-base'}>
+      <h2 className={'hidden sm:block pl-12 py-2 text-gray-200/70 leading-6 text-base'}>
         {props.desc}
       </h2>
     </div>
   )
 }
 
-export function TutorialFeaturesPanelHolder () {
+export function TutorialFeaturesPanelHolder (
+  props: { withoutLogo?: boolean }
+) {
   return (
-    <div className="app-window-holder animate-in zoom-in-50 duration-500">
+    <div className={cx('app-window-holder animate-in zoom-in-50 duration-500', props.withoutLogo && 'without-logo')}>
     </div>
   )
 }
@@ -225,22 +228,21 @@ export function TutorialFeaturesPanelHolder () {
 export function TutorialFeaturesPanel (
   props: Partial<{ activeItem: typeof featuresSlideItems[number] }>
 ) {
-  let inner = <img src={imageS1} alt="images"/>
-
-  if (props.activeItem?.label.toLocaleLowerCase() === 'students') {
-    inner = (
-      <>
-        <div className="a">
-          <TutorialFeaturesPanelHolder/>
-        </div>
-        <div className="b">
-          {props.activeItem.notes.map(it => {
-            return <TutorialFeaturesDescCard key={it.title} {...it} />
-          })}
-        </div>
-      </>
-    )
-  }
+  let inner = (
+    <>
+      <div className="a">
+        <TutorialFeaturesPanelHolder/>
+      </div>
+      <div className="b">
+        {props.activeItem?.notes.map(it => {
+          return <TutorialFeaturesDescCard key={it.title} {...it} />
+        })}
+      </div>
+      <div className="c sm:hidden">
+        <TutorialFeaturesPanelHolder withoutLogo={true} />
+      </div>
+    </>
+  )
 
   return (
     <article className="app-tutorial-features-panel relative">
