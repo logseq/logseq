@@ -2863,7 +2863,7 @@
 
 (defn <sync-stop []
   (go
-    (when-let [sm ^SyncManager (state/get-file-sync-manager)]
+    (when-let [sm ^SyncManager (state/get-file-sync-manager (state/get-current-file-sync-graph-uuid))]
       (println "[SyncManager" (:graph-uuid sm) "]" "stopping")
 
       (state/clear-file-sync-state! (:graph-uuid sm))
@@ -2871,14 +2871,14 @@
       (<! (-stop! sm))
 
       (println "[SyncManager" (:graph-uuid sm) "]" "stopped")
-      (state/set-file-sync-manager nil)
+
       (clear-graph-progress! (:graph-uuid sm)))
 
     (reset! current-sm-graph-uuid nil)))
 
 (defn sync-need-password!
   []
-  (when-let [sm ^SyncManager (state/get-file-sync-manager)]
+  (when-let [sm ^SyncManager (state/get-file-sync-manager (state/get-current-file-sync-graph-uuid))]
     (.need-password sm)))
 
 (defn check-graph-belong-to-current-user
