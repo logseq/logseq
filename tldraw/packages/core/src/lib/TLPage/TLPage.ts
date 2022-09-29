@@ -225,7 +225,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
   @action
   cleanup = (changedShapeIds: string[]) => {
     // Get bindings related to the changed shapes
-    const bindingsToUpdate = getRelatedBindings(this.serialized, changedShapeIds)
+    const bindingsToUpdate = getRelatedBindings(this.bindings, changedShapeIds)
     const visitedShapes = new Set<string>()
 
     let shapeChanged = false
@@ -495,9 +495,9 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
   }
 }
 
-function getRelatedBindings(page: TLPageModel, ids: string[]): TLBinding[] {
+function getRelatedBindings(bindings: Record<string, TLBinding>, ids: string[]): TLBinding[] {
   const changedShapeIds = new Set(ids)
-  const bindingsArr = Object.values(page.bindings)
+  const bindingsArr = Object.values(bindings)
 
   // Start with bindings that are directly bound to our changed shapes
   const bindingsToUpdate = new Set(
