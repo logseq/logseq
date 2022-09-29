@@ -719,7 +719,7 @@
           (recur (dec n)))
         r))))
 
-(declare rsapi-cancel-all-requests)
+(declare <rsapi-cancel-all-requests)
 
 (deftype RSAPI [^:mutable graph-uuid' ^:mutable private-key' ^:mutable public-key']
   IToken
@@ -768,7 +768,7 @@
   (<update-local-files [this graph-uuid base-path filepaths]
     (println "update-local-files" graph-uuid base-path filepaths)
     (go
-      (<! (rsapi-cancel-all-requests))
+      (<! (<rsapi-cancel-all-requests))
       (let [token (<! (<get-token this))]
         (<! (p->c (ipc/ipc "update-local-files" graph-uuid base-path filepaths token))))))
   (<download-version-files [this graph-uuid base-path filepaths]
@@ -786,7 +786,7 @@
 
   (<update-remote-files [this graph-uuid base-path filepaths local-txid]
     (go
-      (<! (rsapi-cancel-all-requests))
+      (<! (<rsapi-cancel-all-requests))
       (let [token (<! (<get-token this))]
         (<! (<retry-rsapi
              #(p->c (ipc/ipc "update-remote-files" graph-uuid base-path filepaths local-txid token)))))))
@@ -803,8 +803,8 @@
                                              (if (instance? ExceptionInfo r)
                                                (ex-info "decrypt-failed" {:fnames fnames} (ex-cause r))
                                                (js->clj r)))))
-  (<cancel-all-requests [_] (go
-                              (<! (p->c (ipc/ipc "cancel-all-requests"))))))
+  (<cancel-all-requests [_]
+    (p->c (ipc/ipc "cancel-all-requests"))))
 
 
 (deftype ^:large-vars/cleanup-todo CapacitorAPI [^:mutable graph-uuid' ^:mutable private-key ^:mutable public-key']
@@ -936,7 +936,7 @@
             (ex-info "decrypt-failed" {:fnames fnames} (ex-cause r))
             (get (js->clj r) "value")))))
   (<cancel-all-requests [_]
-    (go (<! (p->c (.cancelAllRequests mobile-util/file-sync))))))
+    (p->c (.cancelAllRequests mobile-util/file-sync))))
 
 (def rsapi (cond
              (util/electron?)
@@ -951,7 +951,7 @@
              :else
              nil))
 
-(defn rsapi-cancel-all-requests []
+(defn <rsapi-cancel-all-requests []
   (go
     (when rsapi
       (<! (<cancel-all-requests rsapi)))))
@@ -2817,6 +2817,7 @@
         (when ops-chan (async/close! ops-chan))
         (stop-local->remote! local->remote-syncer)
         (stop-remote->local! remote->local-syncer)
+        (<! (<rsapi-cancel-all-requests))
         (debug/pprint ["stop sync-manager, graph-uuid" graph-uuid "base-path" base-path])
         (swap! *sync-state sync-state--update-state ::stop)
         (loop []
