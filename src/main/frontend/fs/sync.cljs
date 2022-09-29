@@ -657,7 +657,8 @@
   (<update-remote-files [this graph-uuid base-path filepaths local-txid] "local -> remote, return err or txid")
   (<delete-remote-files [this graph-uuid base-path filepaths local-txid] "return err or txid")
   (<encrypt-fnames [this graph-uuid fnames])
-  (<decrypt-fnames [this graph-uuid fnames]))
+  (<decrypt-fnames [this graph-uuid fnames])
+  (<cancel-all-requests [this]))
 
 (defprotocol IRemoteAPI
   (<user-info [this] "user info")
@@ -794,10 +795,12 @@
           #(p->c (ipc/ipc "delete-remote-files" graph-uuid base-path filepaths local-txid token)))))))
   (<encrypt-fnames [_ graph-uuid fnames] (go (js->clj (<! (p->c (ipc/ipc "encrypt-fnames" graph-uuid fnames))))))
   (<decrypt-fnames [_ graph-uuid fnames] (go
-                                (let [r (<! (p->c (ipc/ipc "decrypt-fnames" graph-uuid fnames)))]
-                                  (if (instance? ExceptionInfo r)
-                                    (ex-info "decrypt-failed" {:fnames fnames} (ex-cause r))
-                                    (js->clj r))))))
+                                           (let [r (<! (p->c (ipc/ipc "decrypt-fnames" graph-uuid fnames)))]
+                                             (if (instance? ExceptionInfo r)
+                                               (ex-info "decrypt-failed" {:fnames fnames} (ex-cause r))
+                                               (js->clj r)))))
+  (<cancel-all-requests [_] (go
+                              (<! (p->c (ipc/ipc "cancel-all-requests"))))))
 
 
 (deftype ^:large-vars/cleanup-todo CapacitorAPI [^:mutable graph-uuid' ^:mutable private-key ^:mutable public-key']
@@ -873,10 +876,10 @@
       (let [token (<! (<get-token this))
             r (<! (<retry-rsapi
                    #(p->c (.updateLocalVersionFiles mobile-util/file-sync
-                                                                (clj->js {:graphUUID graph-uuid
-                                                                          :basePath base-path
-                                                                          :filePaths filepaths
-                                                                          :token token})))))]
+                                                    (clj->js {:graphUUID graph-uuid
+                                                              :basePath base-path
+                                                              :filePaths filepaths
+                                                              :token token})))))]
         r)))
 
   (<delete-local-files [_ graph-uuid base-path filepaths]
@@ -903,15 +906,15 @@
 
   (<delete-remote-files [this graph-uuid _base-path filepaths local-txid]
     (go
-     (let [token (<! (<get-token this))
-           r (<! (p->c (.deleteRemoteFiles mobile-util/file-sync
-                                           (clj->js {:graphUUID graph-uuid
-                                                     :filePaths filepaths
-                                                     :txid local-txid
-                                                     :token token}))))]
-       (if (instance? ExceptionInfo r)
-         r
-         (get (js->clj r) "txid")))))
+      (let [token (<! (<get-token this))
+            r (<! (p->c (.deleteRemoteFiles mobile-util/file-sync
+                                            (clj->js {:graphUUID graph-uuid
+                                                      :filePaths filepaths
+                                                      :txid local-txid
+                                                      :token token}))))]
+        (if (instance? ExceptionInfo r)
+          r
+          (get (js->clj r) "txid")))))
 
   (<encrypt-fnames [_ graph-uuid fnames]
     (go
@@ -927,7 +930,9 @@
                                                     :filePaths fnames}))))]
           (if (instance? ExceptionInfo r)
             (ex-info "decrypt-failed" {:fnames fnames} (ex-cause r))
-            (get (js->clj r) "value"))))))
+            (get (js->clj r) "value")))))
+  (<cancel-all-requests [_]
+    (go (<! (p->c (.cancelAllRequest mobile-util/file-sync))))))
 
 (def rsapi (cond
              (util/electron?)
@@ -941,6 +946,10 @@
 
              :else
              nil))
+
+(defn rsapi-cancel-all-requests []
+  (when rsapi
+    (<! (<cancel-all-requests rsapi))))
 
 ;;; ### remote & rs api exceptions
 (defn sync-stop-when-api-flying?
