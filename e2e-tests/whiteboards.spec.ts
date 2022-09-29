@@ -25,7 +25,7 @@ test('set whiteboard title', async ({ page }) => {
 })
 
 test('select rectangle tool', async ({ page }) => {
-    await page.keyboard.press('R')
+    await page.keyboard.press('8')
     await expect(page.locator('.tl-geometry-tools-pane-anchor [title="Rectangle (r)"]')).toHaveAttribute('data-selected', 'true')
 })
 
@@ -33,7 +33,7 @@ test('draw a rectangle', async ({ page }) => {
     const canvas = await page.waitForSelector('.logseq-tldraw');
     const bounds = (await canvas.boundingBox())!;
 
-    await page.keyboard.press('R')
+    await page.keyboard.press('8')
 
     await page.mouse.move(bounds.x, bounds.y);
     await page.mouse.down();
