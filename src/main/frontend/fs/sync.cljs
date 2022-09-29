@@ -932,7 +932,7 @@
             (ex-info "decrypt-failed" {:fnames fnames} (ex-cause r))
             (get (js->clj r) "value")))))
   (<cancel-all-requests [_]
-    (go (<! (p->c (.cancelAllRequest mobile-util/file-sync))))))
+    (go (<! (p->c (.cancelAllRequests mobile-util/file-sync))))))
 
 (def rsapi (cond
              (util/electron?)
@@ -949,7 +949,7 @@
 
 (defn rsapi-cancel-all-requests []
   (when rsapi
-    (<! (<cancel-all-requests rsapi))))
+    (go (<! (<cancel-all-requests rsapi)))))
 
 ;;; ### remote & rs api exceptions
 (defn sync-stop-when-api-flying?
