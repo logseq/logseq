@@ -184,6 +184,12 @@
 ;; Warning: make sure to `persist-var/-load` graphs-txid before using it.
 (def graphs-txid (persist-var/persist-var nil "graphs-txid"))
 
+(defn get-graphs-txid
+  [graph-uuid]
+  ;; (when graph-uuid
+  ;;   (get @state/state [:file-sync/graph-state graph-uuid ]))
+  )
+
 (declare assert-local-txid<=remote-txid)
 (defn <update-graphs-txid!
   [latest-txid graph-uuid user-uuid repo]
@@ -264,6 +270,7 @@
        :api-name api-name
        :body body})))
 
+;; For debug
 (def *on-flying-request
   "requests not finished"
   (atom #{}))
@@ -2956,7 +2963,7 @@
                         ;; update global state when *sync-state changes
                         (add-watch *sync-state ::update-global-state
                                    (fn [_ _ _ n]
-                                     (state/set-file-sync-state repo n)))
+                                     (state/set-file-sync-state graph-uuid n)))
 
                         (state/set-state! [:file-sync/graph-state :current-graph-uuid] graph-uuid)
 

@@ -327,7 +327,7 @@
         current-repo            (state/get-current-repo)
         creating-remote-graph?  (state/sub [:ui/loading? :graph/create-remote?])
         current-graph-id        (state/get-current-file-sync-graph-uuid)
-        sync-state              (state/get-file-sync-state current-graph-id)
+        sync-state              (state/sub-file-sync-state current-graph-id)
         sync-progress           (state/sub [:file-sync/graph-state
                                             current-graph-id
                                             :file-sync/progress])
@@ -360,40 +360,41 @@
                                  (fn []
                                    (when-not (file-sync-handler/current-graph-sync-on?)
                                      (async/go
-                                       (async/<! (p->c (persist-var/-load fs-sync/graphs-txid)))
-                                       (cond
-                                         @*beta-unavailable?
-                                         (state/pub-event! [:file-sync/onboarding-tip :unavailable])
+                                       (let [graphs-txid fs-sync/graphs-txid]
+                                         (async/<! (p->c (persist-var/-load graphs-txid)))
+                                         (cond
+                                           @*beta-unavailable?
+                                           (state/pub-event! [:file-sync/onboarding-tip :unavailable])
 
-                                         ;; current graph belong to other user, do nothing
-                                         (and (first @fs-sync/graphs-txid)
-                                              (not (fs-sync/check-graph-belong-to-current-user (user-handler/user-uuid)
-                                                                                               (first @fs-sync/graphs-txid))))
-                                         nil
+                                           ;; current graph belong to other user, do nothing
+                                           (and (first @graphs-txid)
+                                                (not (fs-sync/check-graph-belong-to-current-user (user-handler/user-uuid)
+                                                                                                 (first @graphs-txid))))
+                                           nil
 
-                                         (and synced-file-graph?
-                                              (second @fs-sync/graphs-txid)
-                                              (fs-sync/graph-sync-off? (second @fs-sync/graphs-txid))
-                                              (async/<! (fs-sync/<check-remote-graph-exists (second @fs-sync/graphs-txid))))
-                                         (do
-                                           (prn "sync start")
-                                           (fs-sync/sync-start))
+                                           (and synced-file-graph?
+                                                (second @graphs-txid)
+                                                (fs-sync/graph-sync-off? (second @graphs-txid))
+                                                (async/<! (fs-sync/<check-remote-graph-exists (second @graphs-txid))))
+                                           (do
+                                             (prn "sync start")
+                                             (fs-sync/sync-start))
 
-                                         ;; remote graph already has been deleted, clear repos first, then create-remote-graph
-                                         synced-file-graph?  ; <check-remote-graph-exists -> false
-                                         (do (state/set-repos!
-                                              (map (fn [r]
-                                                     (if (= (:url r) current-repo)
-                                                       (dissoc r :GraphUUID :GraphName :remote?)
-                                                       r))
-                                                (state/get-repos)))
-                                             (create-remote-graph-fn))
+                                           ;; remote graph already has been deleted, clear repos first, then create-remote-graph
+                                           synced-file-graph?  ; <check-remote-graph-exists -> false
+                                           (do (state/set-repos!
+                                                (map (fn [r]
+                                                       (if (= (:url r) current-repo)
+                                                         (dissoc r :GraphUUID :GraphName :remote?)
+                                                         r))
+                                                  (state/get-repos)))
+                                               (create-remote-graph-fn))
 
-                                         (second @fs-sync/graphs-txid) ; sync not started yet
-                                         nil
+                                           (second @graphs-txid) ; sync not started yet
+                                           nil
 
-                                         :else
-                                         (create-remote-graph-fn)))))
+                                           :else
+                                           (create-remote-graph-fn))))))
                                  (debounce 1500))]
     (if creating-remote-graph?
       (ui/loading "")

@@ -20,7 +20,8 @@
 (def refresh-file-sync-component (atom false))
 
 
-(defn get-current-graph-uuid [] (second @sync/graphs-txid))
+(defn get-current-graph-uuid []
+  (state/get-current-file-sync-graph-uuid))
 
 (defn enable-sync?
   []
@@ -65,14 +66,14 @@
 
 (defn <delete-graph
   [graph-uuid]
-  (go
-    (when (= graph-uuid (get-current-graph-uuid))
+  (let [same-graph? (= graph-uuid (get-current-graph-uuid))]
+    (when same-graph?
       (<! (sync/<sync-stop)))
     (let [r (<! (sync/<delete-graph sync/remoteapi graph-uuid))]
       (if (instance? ExceptionInfo r)
         (notification/show! (str "Delete graph failed: " graph-uuid) :warning)
-        (let [[_ local-graph-uuid _] @sync/graphs-txid]
-          (when (= graph-uuid local-graph-uuid)
+        (do
+          (when same-graph?
             (sync/clear-graphs-txid! (state/get-current-repo))
             (swap! refresh-file-sync-component not))
           (notification/show! (str "Graph deleted") :success))))))
