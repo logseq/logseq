@@ -719,6 +719,8 @@
           (recur (dec n)))
         r))))
 
+(declare rsapi-cancel-all-requests)
+
 (deftype RSAPI [^:mutable graph-uuid' ^:mutable private-key' ^:mutable public-key']
   IToken
   (<get-token [this]
@@ -766,6 +768,7 @@
   (<update-local-files [this graph-uuid base-path filepaths]
     (println "update-local-files" graph-uuid base-path filepaths)
     (go
+      (<! (rsapi-cancel-all-requests))
       (let [token (<! (<get-token this))]
         (<! (p->c (ipc/ipc "update-local-files" graph-uuid base-path filepaths token))))))
   (<download-version-files [this graph-uuid base-path filepaths]
@@ -783,6 +786,7 @@
 
   (<update-remote-files [this graph-uuid base-path filepaths local-txid]
     (go
+      (<! (rsapi-cancel-all-requests))
       (let [token (<! (<get-token this))]
         (<! (<retry-rsapi
              #(p->c (ipc/ipc "update-remote-files" graph-uuid base-path filepaths local-txid token)))))))
@@ -948,8 +952,9 @@
              nil))
 
 (defn rsapi-cancel-all-requests []
-  (when rsapi
-    (go (<! (<cancel-all-requests rsapi)))))
+  (go
+    (when rsapi
+      (<! (<cancel-all-requests rsapi)))))
 
 ;;; ### remote & rs api exceptions
 (defn sync-stop-when-api-flying?
