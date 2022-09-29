@@ -500,6 +500,9 @@
           ;; options
           {:outer-header
            [:<>
+            (ui/button "stop syncing"
+                       :on-click (fn []
+                                   (fs-sync/rsapi-cancel-all-requests)))
             (when (util/electron?)
               (indicator-progress-pane
                sync-state sync-progress
