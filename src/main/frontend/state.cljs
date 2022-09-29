@@ -238,14 +238,16 @@
      :file-sync/remote-graphs               {:loading false :graphs nil}
      :file-sync/set-remote-graph-password-result {}
 
-     ;; graph-uuid -> [:current-graph-uuid :file-sync/sync-manager :file-sync/sync-state]
+     ;; graph-uuid -> {:graphs-txid {}
+     ;;                :file-sync/sync-manager {}
+     ;;                :file-sync/sync-state {}
+     ;;                ;; {file-path -> payload}
+     ;;                :file-sync/progress {}
+     ;;                :file-sync/start-time {}
+     ;;                :file-sync/last-synced-at {}}
      :file-sync/graph-state                 {:current-graph-uuid nil
-                                             :file-sync/sync-manager nil
-                                             :file-sync/sync-state nil
-                                             ;; {file-path -> payload}
-                                             :file-sync/progress nil
-                                             :file-sync/start-time nil
-                                             :file-sync/last-synced-at nil}
+                                             ;; graph-uuid -> ...
+                                             }
 
      :encryption/graph-parsing?             false
 
