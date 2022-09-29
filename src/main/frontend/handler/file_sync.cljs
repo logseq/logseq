@@ -74,7 +74,7 @@
         (notification/show! (str "Delete graph failed: " graph-uuid) :warning)
         (do
           (when same-graph?
-            (sync/clear-graphs-txid! (state/get-current-repo))
+            (sync/clear-graphs-txid! graph-uuid)
             (swap! refresh-file-sync-component not))
           (notification/show! (str "Graph deleted") :success))))))
 
