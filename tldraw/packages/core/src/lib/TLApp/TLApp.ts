@@ -98,11 +98,11 @@ export class TLApp<
         fn: () => this.api.resetZoom(),
       },
       {
-        keys: '1',
+        keys: 'shift+1',
         fn: () => this.api.zoomToFit(),
       },
       {
-        keys: 'shift+1',
+        keys: 'mod+shift+1',
         fn: () => this.api.zoomToSelection(),
       },
       {
@@ -920,7 +920,7 @@ export class TLApp<
   }
 
   readonly onWheel: TLEvents<S, K>['wheel'] = (info, e) => {
-    if (e.ctrlKey || this.isIn('select.contextMenu')) {
+    if (e.ctrlKey || e.metaKey || this.isIn('select.contextMenu')) {
       return
     }
 

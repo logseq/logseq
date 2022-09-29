@@ -4,7 +4,7 @@ import { PencilShape, type Shape } from '../shapes'
 
 export class PencilTool extends TLDrawTool<PencilShape, Shape, TLReactEventMap> {
   static id = 'pencil'
-  static shortcut = ['d', 'p']
+  static shortcut = ['3']
   Shape = PencilShape
   simplify = false
 }
