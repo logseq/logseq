@@ -31,6 +31,20 @@
             (async/<! (async/timeout 100)) ;; modal race condition requires investigation
             (ask-for-re-index)))
 
+(rum/defc legacy-warning
+  [repo *target-format *dir-format *solid-format]
+  [:div ;; Normal UX stage 1: show the admonition & button for users using legacy format
+   (ui/admonition :warning [:p (t :file-rn/format-deprecated)])
+   [:p (t :file-rn/instruct-1)]
+   [:p (t :file-rn/instruct-2)
+    (ui/button (t :file-rn/confirm-proceed) ;; the button is for triple-lowbar only
+               :class "text-md p-2 mr-1"
+               :on-click #(do (reset! *target-format :triple-lowbar)
+                            (reset! *dir-format (state/get-filename-format repo)) ;; assure it's uptodate
+                            (write-filename-format! repo :triple-lowbar)
+                            (reset! *solid-format :triple-lowbar)))]
+   [:p (t :file-rn/instruct-3)]])
+
 (rum/defc filename-format-select
   "A dropdown menu for selecting the target filename format"
   [*target-format disabled?]
@@ -94,17 +108,7 @@
       [:p (t :file-rn/filename-desc-3)]
       [:p (t :file-rn/filename-desc-4)]]
      (when (= @*solid-format :legacy)
-       [:div ;; Normal UX stage 1: show the admonition & button for users using legacy format
-        (ui/admonition :warning [:p (t :file-rn/format-deprecated)])
-        [:p (t :file-rn/instruct-1)]
-        [:p (t :file-rn/instruct-2)
-         (ui/button (t :file-rn/confirm-proceed) ;; the button is for triple-lowbar only
-                    :class "text-md p-2 mr-1"
-                    :on-click #(do (reset! *target-format :triple-lowbar)
-                                   (reset! *dir-format (state/get-filename-format repo)) ;; assure it's uptodate
-                                   (write-filename-format! repo :triple-lowbar)
-                                   (reset! *solid-format :triple-lowbar)))]
-        [:p (t :file-rn/instruct-3)]])
+       (legacy-warning repo *target-format *dir-format *solid-format))
      [:div.cp__settings-files-breaking-changed {:disabled need-persist?} [:hr]
       (let [rename-items  (->> (vals @*pages)
                                (map (fn [[page file]]
