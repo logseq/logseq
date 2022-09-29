@@ -53,6 +53,8 @@
     :block/repeated?
     :block/created-at
     :block/updated-at
+    ;; TODO: remove this in later releases
+    :block/heading-level
     :block/file
     {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
     {:block/_parent ...}])
