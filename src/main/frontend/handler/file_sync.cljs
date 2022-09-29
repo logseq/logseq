@@ -194,14 +194,12 @@
       (let [{:keys [event data]} (async/<! c)]
         (case event
           (list :finished-local->remote :finished-remote->local)
-          (do
-            (state/clear-file-sync-progress! (state/get-current-file-sync-graph-uuid))
-            (state/set-state! :file-sync/start {})
-            (state/set-state! [:file-sync/last-synced-at (state/get-current-repo)]
-                              (:epoch data)))
+          (when-let [current-uuid (state/get-current-file-sync-graph-uuid)]
+            (state/clear-file-sync-progress! current-uuid)
+            (state/set-state! [:file-sync/graph-state current-uuid :file-sync/last-synced-at] (:epoch data)))
 
           :start
-          (state/set-state! :file-sync/start data)
+          (state/set-state! [:file-sync/graph-state current-uuid :file-sync/start-time] data)
 
           nil)
 
@@ -220,20 +218,24 @@
 (defn calculate-time-left
   "This assumes that the network speed is stable which could be wrong sometimes."
   [sync-state progressing]
-  (let [start-time (get-in @state/state [:file-sync/start :epoch])
-        now (tc/to-epoch (t/now))
-        diff-seconds (- now start-time)
-        finished (reduce + (map (comp :progress second) progressing))
-        local->remote-files (:full-local->remote-files sync-state)
-        remote->local-files (:full-remote->local-files sync-state)
-        total (if (seq remote->local-files)
-                (reduce + (map (fn [m] (or (:size m) 0)) remote->local-files))
-                (reduce + (map #(:size (.-stat %)) local->remote-files)))
-        mins (int (/ (* (/ total finished) diff-seconds) 60))]
-    (if (or (zero? total) (zero? finished))
-      "waiting"
-      (cond
-        (zero? mins) "soon"
-        (= mins 1) "1 min left"
-        (> mins 30) "calculating..."
-        :else (str mins " mins left")))))
+  (when-let [start-time (get-in @state/state
+                                [:file-sync/graph-state
+                                 (state/get-current-file-sync-graph-uuid)
+                                 :file-sync/start-time
+                                 :epoch])]
+    (let [now (tc/to-epoch (t/now))
+          diff-seconds (- now start-time)
+          finished (reduce + (map (comp :progress second) progressing))
+          local->remote-files (:full-local->remote-files sync-state)
+          remote->local-files (:full-remote->local-files sync-state)
+          total (if (seq remote->local-files)
+                  (reduce + (map (fn [m] (or (:size m) 0)) remote->local-files))
+                  (reduce + (map #(:size (.-stat %)) local->remote-files)))
+          mins (int (/ (* (/ total finished) diff-seconds) 60))]
+      (if (or (zero? total) (zero? finished))
+        "waiting"
+        (cond
+          (zero? mins) "soon"
+          (= mins 1) "1 min left"
+          (> mins 30) "calculating..."
+          :else (str mins " mins left"))))))
