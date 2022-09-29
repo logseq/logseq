@@ -162,12 +162,13 @@
      state/set-state! :sync-graph/init? false)))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (if (or (not (false? (get @outliner-file/*writes-finished? graph)))
-          (:sync-graph/init? @state/state))
-    (graph-switch-on-persisted graph opts)
-    (notification/show!
-     "Please wait seconds until all changes are saved for the current graph."
-     :warning)))
+  (let [opts (if (false? (:persist? opts)) opts (assoc opts :persist? true))]
+    (if (or (not (false? (get @outliner-file/*writes-finished? graph)))
+           (:sync-graph/init? @state/state))
+      (graph-switch-on-persisted graph opts)
+     (notification/show!
+      "Please wait seconds until all changes are saved for the current graph."
+      :warning))))
 
 (defmethod handle :graph/pick-dest-to-sync [[_ graph]]
   (state/set-modal!
