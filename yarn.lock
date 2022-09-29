@@ -480,10 +480,10 @@
   resolved "https://registry.yarnpkg.com/@kanru/rage-wasm/-/rage-wasm-0.3.0.tgz#de96b1fda1f781ff401d43b50d0f95b7338c4399"
   integrity sha512-2LMRS27nNJPqFNpRQL7kXG0kgBeIPo63KM6u0Xu6Es5XIS7LP4MFtdHkCg8Pt7IhMM7GuOa2YnzAZgKBxE1lcw==
 
-"@logseq/capacitor-file-sync@0.0.10":
-  version "0.0.10"
-  resolved "https://registry.yarnpkg.com/@logseq/capacitor-file-sync/-/capacitor-file-sync-0.0.10.tgz#36575b369a4fff83e71b282c19cc948d60309809"
-  integrity sha512-O4bCHLym7+DnqCoO57D1Ii6ec6tcZBjp8SzFEYCKE9mvHsX5aFmCA61XUHgNEFovocQ3gBMJvi6GKSJBcGwT3Q==
+"@logseq/capacitor-file-sync@0.0.11":
+  version "0.0.11"
+  resolved "https://registry.yarnpkg.com/@logseq/capacitor-file-sync/-/capacitor-file-sync-0.0.11.tgz#aa84f320d73c292d8dd9e483e0ccf73baa2e021b"
+  integrity sha512-ZCV/2fp8iPpShk+rk+6aH3aFZID7BKhSlyw/f4fcSCapbh6im638GR2fi9RPRc1eg+0vbtrx6UzG7Vbw+Kz2aQ==
 
 "@logseq/react-tweet-embed@1.3.1-1":
   version "1.3.1-1"

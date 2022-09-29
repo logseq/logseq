@@ -249,17 +249,21 @@
 
          (block-template block-id)
 
-         (if (srs/card-block? block)
+         (cond 
+           (srs/card-block? block)
            (ui/menu-link
             {:key      "Preview Card"
              :on-click #(srs/preview (:db/id block))}
             "Preview Card"
             nil)
+           (state/enable-flashcards?)
            (ui/menu-link
             {:key      "Make a Card"
              :on-click #(srs/make-block-a-card! block-id)}
             "Make a Flashcard"
-            nil))
+            nil)
+           :else
+           nil)
 
          [:hr.menu-separator]
 
