@@ -259,7 +259,7 @@ const IFrameSourceAction = observer(() => {
       <Button title="Reload" type="button" onClick={handleReload}>
         <TablerIcon name="refresh" />
       </Button>
-      <Button
+      <TextInput
         title="Website Url"
         className="tl-iframe-src"
         value={`${shape.props.url}`}
