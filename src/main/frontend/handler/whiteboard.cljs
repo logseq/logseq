@@ -9,18 +9,15 @@
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.extract :as gp-extract]))
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]))
 
-(defn- block->shape [block]
-  (:block/properties block))
-
-(defn- shape->block [shape page-name idx]
-  (let [properties (assoc shape :ls-type :whiteboard-shape :index idx)
+(defn shape->block [shape page-name idx]
+  (let [properties {:ls-type :whiteboard-shape
+                    :logseq.tldraw.shape (assoc shape :index idx)}
         block {:block/page {:block/name (util/page-name-sanity-lc page-name)}
                :block/parent {:block/name page-name}
                :block/properties properties}
-        additional-props (gp-extract/with-whiteboard-block-props block page-name)]
+        additional-props (gp-whiteboard/with-whiteboard-block-props block page-name)]
     (merge block additional-props)))
 
 (defn- tldr-page->blocks-tx [page-name tldr-data]
@@ -28,9 +25,8 @@
         page-entity (model/get-page page-name)
         page-block (merge {:block/name page-name
                            :block/type "whiteboard"
-                           :block/properties (-> tldr-data
-                                                 (dissoc :shapes)
-                                                 (assoc :ls-type :whiteboard-page))}
+                           :block/properties {:ls-type :whiteboard-page
+                                              :logseq.tldraw.page (dissoc tldr-data :shapes)}}
                           (when page-entity (select-keys page-entity [:block/created-at])))
         page-block (outliner/block-with-timestamps page-block)
         ;; todo: use get-paginated-blocks instead?
@@ -50,11 +46,15 @@
                        (concat (map :block/uuid blocks))
                        (remove nil?)
                        (set))
+        ;; delete blocks when all of the following are false
+        ;; - the block is not in the new blocks list
+        ;; - the block's parent is not in the new block list
+        ;; - the block is not a shape block 
         delete-blocks (filterv (fn [block]
                                  (not
                                   (or (block-ids (:block/uuid block))
                                       (block-ids (:block/uuid (:block/parent block)))
-                                      (not= :whiteboard-shape (:ls-type (:block/properties block))))))
+                                      (not (gp-whiteboard/shape-block? block)))))
                                existing-blocks)
         delete-blocks-tx (mapv (fn [s] [:db/retractEntity (:db/id s)]) delete-blocks)]
     (concat [page-block] blocks delete-blocks-tx)))
@@ -69,16 +69,16 @@
 (defn- whiteboard-clj->tldr [page-block blocks shape-id]
   (let [id (str (:block/uuid page-block))
         shapes (->> blocks
-                    (map block->shape)
-                    (filter gp-block/whiteboard-properties?)
+                    (filter gp-whiteboard/shape-block?)
+                    (map gp-whiteboard/block->shape)
                     (sort-by :index))
-        page-properties (:block/properties page-block)
-        assets (:assets page-properties)
-        page-properties (dissoc page-properties :assets)]
+        tldr-page (gp-whiteboard/page-block->tldr-page page-block)
+        assets (:assets tldr-page)
+        tldr-page (dissoc tldr-page :assets)]
     (clj->js {:currentPageId id
               :assets (or assets #js[])
               :selectedIds (if (not-empty shape-id) #js[shape-id] #js[])
-              :pages [(merge page-properties
+              :pages [(merge tldr-page
                              {:id id
                               :name "page"
                               :shapes shapes})]})))
@@ -168,7 +168,7 @@
   "Given a page, return all the logseq blocks (exlude all shapes)"
   [page-name]
   (let [blocks (model/get-page-blocks-no-cache page-name)]
-    (remove model/whiteboard-shape? blocks)))
+    (remove gp-whiteboard/shape-block? blocks)))
 
 (defn- get-last-root-block
   "Get the last root Logseq block in the page. Main purpose is to calculate the new :block/left id"

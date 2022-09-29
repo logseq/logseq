@@ -255,7 +255,7 @@
                            :extension? true})}])
    {}))
 
-(rum/defc sidebar-nav
+(rum/defc sidebar-nav < rum/reactive
   [route-match close-modal-fn left-sidebar-open? srs-open?]
   (let [default-home (get-default-home-if-valid)
         route-name (get-in route-match [:data :name])

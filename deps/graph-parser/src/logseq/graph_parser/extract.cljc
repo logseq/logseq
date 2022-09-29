@@ -10,14 +10,13 @@
             [datascript.core :as d]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.util.page-ref :as page-ref]
-            [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.config :as gp-config]
             #?(:org.babashka/nbb [logseq.graph-parser.log :as log]
-               :default [lambdaisland.glogi :as log])))
+               :default [lambdaisland.glogi :as log])
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]))
 
 (defn- filepath->page-name
   [filepath]
@@ -202,43 +201,6 @@
          :blocks blocks
          :ast ast}))))
 
-(defn get-shape-refs [shape]
-  (when (= "logseq-portal" (:type shape))
-    [(if (= (:blockType shape) "P")
-       {:block/name (gp-util/page-name-sanity-lc (:pageId shape))}
-       {:block/uuid (uuid (:pageId shape))})]))
-
-(defn- with-whiteboard-block-refs
-  [shape]
-  (let [refs (or (get-shape-refs shape) [])]
-    (merge {:block/refs refs})))
-
-(defn- with-whiteboard-content
-  [shape]
-  {:block/content (case (:type shape)
-                    "text" (:text shape)
-                    "logseq-portal" (if (= (:blockType shape) "P")
-                                      (page-ref/->page-ref (:pageId shape))
-                                      (block-ref/->block-ref (:pageId shape)))
-                    "line" (str "whiteboard arrow" (when-let [label (:label shape)] (str ": " label)))
-                    (str "whiteboard " (:type shape)))})
-
-(defn with-whiteboard-block-props
-  [block page-name]
-  (let [shape (:block/properties block)
-        shape? (gp-block/whiteboard-properties? shape)
-        default-page-ref {:block/name (gp-util/page-name-sanity-lc page-name)}]
-    (merge (if shape?
-             (merge
-              {:block/uuid (uuid (:id shape))
-               :block/type "whiteboard"}
-              (with-whiteboard-block-refs shape)
-              (with-whiteboard-content shape))
-             {:block/unordered true})
-           (when (nil? (:block/parent block)) {:block/parent default-page-ref})
-           (when (nil? (:block/format block)) {:block/format :markdown}) ;; TODO: read from config
-           {:block/page default-page-ref})))
-
 (defn extract-whiteboard-edn
   "Extracts whiteboard page from given edn file
    Whiteboard page edn is a subset of page schema
@@ -247,20 +209,22 @@
   [file content {:keys [verbose] :or {verbose true}}]
   (let [_ (when verbose (println "Parsing start: " file))
         {:keys [pages blocks]} (gp-util/safe-read-string content)
-        page-block (first pages)
-        page-name (or (:block/name page-block)
-                      (filepath->page-name file))
-        page-original-name (:block/original-name page-block)
-        page-name (gp-util/page-name-sanity-lc page-name)
-        page {:block/name page-name
-              :block/type "whiteboard"
-              :block/original-name page-original-name
-              :block/file {:file/path (gp-util/path-normalize file)}}
-        page-block (merge page-block page (when-not (:block/uuid page-block) {:block/uuid (d/squuid)}))
+        serialized-page (first pages)
+        ;; whiteboard edn file should normally have valid :block/original-name, :block/name, :block/uuid
+        page-name (-> (or (:block/name serialized-page)
+                          (filepath->page-name file))
+                      (gp-util/page-name-sanity-lc))
+        original-name (or (:block/original-name serialized-page)
+                          page-name)
+        page-block (merge {:block/name page-name
+                           :block/original-name original-name
+                           :block/type "whiteboard"
+                           :block/file {:file/path (gp-util/path-normalize file)}}
+                          serialized-page)
+        page-block (gp-whiteboard/migrate-page-block page-block)
         blocks (->> blocks
-                    (map #(merge % {:block/uuid (or (:block/uuid %)
-                                                    (gp-block/get-custom-id-or-new-id (:block/properties %)))}
-                                 (with-whiteboard-block-props % page-name))))
+                    (map gp-whiteboard/migrate-shape-block)
+                    (map #(merge % (gp-whiteboard/with-whiteboard-block-props % page-name))))
         _ (when verbose (println "Parsing finished: " file))]
     {:pages (list page-block)
      :blocks blocks}))

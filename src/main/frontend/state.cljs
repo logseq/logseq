@@ -1851,11 +1851,6 @@ Similar to re-frame subscriptions"
       (when (:url graph)
         graph))))
 
-;; (defn get-tldraw-api
-;;   []
-;;   (some-> (get-current-whiteboard)
-;;           (gobj/get "api")))
-
 (defn unlinked-dir?
   [dir]
   (contains? (:file/unlinked-dirs @state) dir))

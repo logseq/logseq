@@ -92,6 +92,7 @@
                                     (util/uuid-string? (first (:sync-meta %)))
                                     (util/uuid-string? (second (:sync-meta %)))) repos)
                     (sync/sync-start)))))
+            (ui-handler/re-render-root!)
             (file-sync/maybe-onboarding-show status)))))))
 
 (defmethod handle :user/logout [[_]]

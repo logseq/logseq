@@ -1654,10 +1654,6 @@
        (when-let [path (:file/path (db-utils/entity (:db/id file)))]
          (gp-config/whiteboard? path))))))
 
-(defn whiteboard-shape?
-  [block]
-  (gp-block/whiteboard-properties? (:properties block)))
-
 (defn get-all-whiteboards
   [repo]
   (->> (d/q
