@@ -1640,8 +1640,8 @@
   [type {:keys [dir path _content stat] :as _payload}]
   (when-let [current-graph (state/get-current-repo)]
     (when (string/ends-with? current-graph dir)
-      (let [sync-state (state/get-file-sync-state current-graph)]
-        (when (and sync-state (sync-state--valid-to-accept-filewatcher-event? sync-state))
+      (when-let [sync-state (state/get-file-sync-state (state/get-current-file-sync-graph-uuid))]
+        (when (sync-state--valid-to-accept-filewatcher-event? sync-state)
           (when (or (:mtime stat) (= type "unlink"))
             (go
               (let [path (remove-dir-prefix dir path)
@@ -2869,7 +2869,7 @@
       (state/clear-file-sync-state! (:graph-uuid sm))
 
       (<! (-stop! sm))
-      (swap! state/state assoc :file-sync/sync-state {})
+
       (println "[SyncManager" (:graph-uuid sm) "]" "stopped")
       (state/set-file-sync-manager nil)
       (clear-graph-progress! (:graph-uuid sm)))
@@ -2919,9 +2919,9 @@
   (or (nil? sync-state) (sync-state--stopped? sync-state)))
 
 (defn graph-sync-off?
-  "Is sync not running for this `graph`?"
-  [graph]
-  (sync-off? (state/get-file-sync-state graph)))
+  "Is sync not running for this `graph-uuid`?"
+  [graph-uuid]
+  (sync-off? (state/get-file-sync-state graph-uuid)))
 
 (defn graph-encrypted?
   []
@@ -2957,7 +2957,7 @@
                     (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
                       (clear-graphs-txid! repo)
                       (do
-                        (state/set-file-sync-state repo @*sync-state)
+                        (state/set-file-sync-state graph-uuid @*sync-state)
                         (state/set-file-sync-manager graph-uuid sm)
 
                         ;; update global state when *sync-state changes
@@ -2966,6 +2966,8 @@
                                      (state/set-file-sync-state repo n)))
 
                         (.start sm)
+
+                        (state/set-state! [:file-sync/graph-state :current-graph-uuid] graph-uuid)
 
                         (offer! remote->local-full-sync-chan true)
                         (offer! full-sync-chan true)
@@ -3007,7 +3009,7 @@
 (go-loop []
   (let [{{graph-uuid :graph-uuid} :data} (<! re-remote->local-full-sync-chan)
         {:keys [current-syncing-graph-uuid]}
-        (state/get-file-sync-state (state/get-current-repo))]
+        (state/get-file-sync-state graph-uuid)]
     (when (= graph-uuid current-syncing-graph-uuid)
       (offer! remote->local-full-sync-chan true))
     (recur)))
@@ -3017,30 +3019,10 @@
 (async/sub sync-events-publication :local->remote-full-sync-failed re-local->remote-full-sync-chan)
 (go-loop []
   (let [{{graph-uuid :graph-uuid} :data} (<! re-local->remote-full-sync-chan)
-        {:keys [current-syncing-graph-uuid]} (state/get-file-sync-state (state/get-current-repo))]
+        {:keys [current-syncing-graph-uuid]} (state/get-file-sync-state graph-uuid)]
     (when (= graph-uuid current-syncing-graph-uuid)
       (offer! full-sync-chan true))
     (recur)))
-
-
-
-;;; debug funcs
-(comment
-  ;; (<get-remote-all-files-meta remoteapi graph-uuid)
-  (<get-local-all-files-meta rsapi graph-uuid
-                             (config/get-repo-dir (state/get-current-repo)))
-  (def base-path (config/get-repo-dir (state/get-current-repo)))
-
-  ;; upload
-  (def full-upload-files (:full-local->remote-files (state/sub [:file-sync/sync-state (state/get-current-repo)])))
-
-  ;; queued
-  (:queued-local->remote-files (state/sub [:file-sync/sync-state (state/get-current-repo)]))
-
-  ;; download
-  (:current-remote->local-files (state/sub [:file-sync/sync-state (state/get-current-repo)]))
-  )
-
 
 ;;; add-tap
 (comment
