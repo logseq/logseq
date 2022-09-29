@@ -2865,6 +2865,9 @@
   (go
     (when-let [sm ^SyncManager (state/get-file-sync-manager)]
       (println "[SyncManager" (:graph-uuid sm) "]" "stopping")
+
+      (state/clear-file-sync-state! (:graph-uuid sm))
+
       (<! (-stop! sm))
       (swap! state/state assoc :file-sync/sync-state {})
       (println "[SyncManager" (:graph-uuid sm) "]" "stopped")
@@ -2955,7 +2958,7 @@
                       (clear-graphs-txid! repo)
                       (do
                         (state/set-file-sync-state repo @*sync-state)
-                        (state/set-file-sync-manager sm)
+                        (state/set-file-sync-manager graph-uuid sm)
 
                         ;; update global state when *sync-state changes
                         (add-watch *sync-state ::update-global-state
