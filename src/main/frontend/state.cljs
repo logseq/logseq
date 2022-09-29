@@ -236,15 +236,15 @@
      :file-sync/onboarding-state            (or (storage/get :file-sync/onboarding-state)
                                                 {:welcome false})
      :file-sync/remote-graphs               {:loading false :graphs nil}
+     :file-sync/set-remote-graph-password-result {}
 
      ;; graph-uuid -> [:current-graph-uuid :file-sync/sync-manager :file-sync/sync-state]
-     :file-sync/graph-state                 {}
+     :file-sync/graph-state                 {:current-graph-uuid nil
+                                             :file-sync/sync-manager nil
+                                             :file-sync/sync-state nil
+                                             ;; {file-path -> payload}
+                                             :file-sync/progress nil}
 
-     :file-sync/sync-uploading-files        nil
-     :file-sync/sync-downloading-files      nil
-     :file-sync/set-remote-graph-password-result {}
-     ;; graph-uuid -> {file-path -> payload}
-     :file-sync/progress                    {}
      :file-sync/start                       {}
      ;; graph -> epoch
      :file-sync/last-synced-at              {}
@@ -629,13 +629,15 @@ Similar to re-frame subscriptions"
   [path value]
   (if (vector? path)
     (swap! state assoc-in path value)
-    (swap! state assoc path value)))
+    (swap! state assoc path value))
+  nil)
 
 (defn update-state!
   [path f]
   (if (vector? path)
     (swap! state update-in path f)
-    (swap! state update path f)))
+    (swap! state update path f))
+  nil)
 
 ;; State getters and setters
 ;; =========================
@@ -1771,6 +1773,12 @@ Similar to re-frame subscriptions"
 
 (defn clear-file-sync-state! [graph-uuid]
   (set-state! [:file-sync/graph-state graph-uuid] nil))
+
+(defn clear-file-sync-progress! [graph-uuid]
+  (set-state! [:file-sync/graph-state
+               graph-uuid
+               :file-sync/progress]
+              nil))
 
 (defn set-file-sync-state [graph-uuid v]
   (when v (s/assert :frontend.fs.sync/sync-state v))
