@@ -2857,10 +2857,6 @@
     (reset! current-sm-graph-uuid graph-uuid)
     (sync-manager user-uuid graph-uuid base-path repo txid *sync-state)))
 
-(defn clear-graph-progress!
-  [graph-uuid]
-  (state/set-state! [:file-sync/progress graph-uuid] {}))
-
 (defn <sync-stop []
   (go
     (when-let [sm ^SyncManager (state/get-file-sync-manager (state/get-current-file-sync-graph-uuid))]
@@ -2870,9 +2866,7 @@
 
       (<! (-stop! sm))
 
-      (println "[SyncManager" (:graph-uuid sm) "]" "stopped")
-
-      (clear-graph-progress! (:graph-uuid sm)))
+      (println "[SyncManager" (:graph-uuid sm) "]" "stopped"))
 
     (reset! current-sm-graph-uuid nil)))
 
@@ -2948,7 +2942,6 @@
             (try
               (when-not (get @*sync-starting? graph-uuid)
                 (swap! *sync-starting? assoc graph-uuid true)
-                (clear-graph-progress! graph-uuid)
 
                 (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
                                                        (config/get-repo-dir repo) repo

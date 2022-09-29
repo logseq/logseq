@@ -324,8 +324,11 @@
         enabled-progress-panel? (util/electron?)
         current-repo            (state/get-current-repo)
         creating-remote-graph?  (state/sub [:ui/loading? :graph/create-remote?])
-        sync-state              (state/get-file-sync-state (state/get-current-file-sync-graph-uuid))
-        sync-progress           (state/sub [:file-sync/progress (second @fs-sync/graphs-txid)])
+        current-graph-id        (state/get-current-file-sync-graph-uuid)
+        sync-state              (state/get-file-sync-state current-graph-id)
+        sync-progress           (state/sub [:file-sync/graph-state
+                                            current-graph-id
+                                            :file-sync/progress])
         _                       (rum/react file-sync-handler/refresh-file-sync-component)
         synced-file-graph?      (file-sync-handler/synced-file-graph? current-repo)
         uploading-files         (sort-files (:current-local->remote-files sync-state))
