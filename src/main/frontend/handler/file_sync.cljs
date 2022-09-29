@@ -29,7 +29,7 @@
 
 (defn current-graph-sync-on?
   []
-  (when-let [sync-state (state/sub [:file-sync/sync-state (state/get-current-repo)])]
+  (when-let [sync-state (state/sub-file-sync-state (state/get-current-file-sync-graph-uuid))]
     (not (sync/sync-state--stopped? sync-state))))
 
 (defn synced-file-graph?

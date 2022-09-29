@@ -237,10 +237,9 @@
                                                 {:welcome false})
      :file-sync/remote-graphs               {:loading false :graphs nil}
 
-     ;; graph-uuid -> {}
+     ;; graph-uuid -> [:current-graph-uuid :file-sync/sync-manager :file-sync/sync-state]
      :file-sync/graph-state                 {}
 
-     :file-sync/sync-state                  nil
      :file-sync/sync-uploading-files        nil
      :file-sync/sync-downloading-files      nil
      :file-sync/set-remote-graph-password-result {}
@@ -1773,15 +1772,21 @@ Similar to re-frame subscriptions"
 (defn clear-file-sync-state! [graph-uuid]
   (set-state! [:file-sync/graph-state graph-uuid] nil))
 
-(defn set-file-sync-state [graph v]
+(defn set-file-sync-state [graph-uuid v]
   (when v (s/assert :frontend.fs.sync/sync-state v))
-  (set-state! [:file-sync/sync-state graph] v))
+  (set-state! [:file-sync/graph-state graph-uuid :file-sync/sync-state] v))
 
 (defn get-file-sync-state
-  ([]
-   (get-file-sync-state (get-current-repo)))
-  ([repo]
-   (get-in @state [:file-sync/sync-state repo])))
+  [graph-uuid]
+  (get-in @state [:file-sync/graph-state graph-uuid :file-sync/sync-state]))
+
+(defn sub-file-sync-state
+  [graph-uuid]
+  (sub [:file-sync/graph-state graph-uuid :file-sync/sync-state]))
+
+(defn get-current-file-sync-graph-uuid
+  []
+  (get-in @state [:file-sync/graph-state :current-graph-uuid]))
 
 (defn reset-parsing-state!
   []
