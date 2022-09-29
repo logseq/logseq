@@ -2958,9 +2958,9 @@
                                    (fn [_ _ _ n]
                                      (state/set-file-sync-state repo n)))
 
-                        (.start sm)
-
                         (state/set-state! [:file-sync/graph-state :current-graph-uuid] graph-uuid)
+
+                        (.start sm)
 
                         (offer! remote->local-full-sync-chan true)
                         (offer! full-sync-chan true)

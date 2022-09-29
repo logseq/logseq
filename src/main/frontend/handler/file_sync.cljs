@@ -199,7 +199,8 @@
             (state/set-state! [:file-sync/graph-state current-uuid :file-sync/last-synced-at] (:epoch data)))
 
           :start
-          (state/set-state! [:file-sync/graph-state current-uuid :file-sync/start-time] data)
+          (when-let [current-uuid (state/get-current-file-sync-graph-uuid)]
+            (state/set-state! [:file-sync/graph-state current-uuid :file-sync/start-time] data))
 
           nil)
 
