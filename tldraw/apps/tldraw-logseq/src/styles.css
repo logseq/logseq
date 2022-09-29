@@ -60,6 +60,12 @@
 .tl-menu-right-slot {
   margin-left: auto;
   padding-left: 20px;
+
+  .keyboard-shortcut > code {
+    padding: 4px !important;
+    text-rendering: initial;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
 }
 
 .tl-menu-right-slot:focus {
@@ -822,10 +828,4 @@ html[data-theme='dark'] {
   stroke: transparent;
   pointer-events: all;
   stroke-width: min(100px, calc(12px * var(--tl-scale)));
-}
-
-.keyboard-shortcut > code {
-  padding: 4px !important;
-  text-rendering: initial;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
