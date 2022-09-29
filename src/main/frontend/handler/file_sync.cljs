@@ -66,19 +66,20 @@
 
 (defn <delete-graph
   [graph-uuid]
-  (let [same-graph? (= graph-uuid (get-current-graph-uuid))]
-    (when same-graph?
-      (<! (sync/<sync-stop)))
-    (let [r (<! (sync/<delete-graph sync/remoteapi graph-uuid))]
-      (if (instance? ExceptionInfo r)
-        (notification/show! (str "Delete graph failed: " graph-uuid) :warning)
-        (do
-          (when same-graph?
-            (sync/clear-graphs-txid! graph-uuid)
-            (swap! refresh-file-sync-component not))
-          (notification/show! (str "Graph deleted") :success))))))
+  (go
+    (let [same-graph? (= graph-uuid (get-current-graph-uuid))]
+      (when same-graph?
+        (<! (sync/<sync-stop)))
+      (let [r (<! (sync/<delete-graph sync/remoteapi graph-uuid))]
+        (if (instance? ExceptionInfo r)
+          (notification/show! (str "Delete graph failed: " graph-uuid) :warning)
+          (do
+            (when same-graph?
+              (sync/clear-graphs-txid! graph-uuid)
+              (swap! refresh-file-sync-component not))
+            (notification/show! (str "Graph deleted") :success)))))))
 
-(defn list-graphs
+(defn <list-graphs
   []
   (go (:Graphs (<! (sync/<list-remote-graphs sync/remoteapi)))))
 
@@ -86,7 +87,7 @@
   []
   (when-not (state/sub [:file-sync/remote-graphs :loading])
     (go (state/set-state! [:file-sync/remote-graphs :loading] true)
-        (let [graphs (<! (list-graphs))]
+        (let [graphs (<! (<list-graphs))]
           (state/set-state! :file-sync/remote-graphs {:loading false :graphs graphs})))))
 
 (defn reset-session-graphs
