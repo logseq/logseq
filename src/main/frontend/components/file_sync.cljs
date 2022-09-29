@@ -326,7 +326,7 @@
         enabled-progress-panel? (util/electron?)
         current-repo            (state/get-current-repo)
         creating-remote-graph?  (state/sub [:ui/loading? :graph/create-remote?])
-        current-graph-id        (state/get-current-file-sync-graph-uuid)
+        current-graph-id        (state/sub-current-file-sync-graph-uuid)
         sync-state              (state/sub-file-sync-state current-graph-id)
         sync-progress           (state/sub [:file-sync/graph-state
                                             current-graph-id
@@ -516,11 +516,7 @@
             (when (and
                    (not enabled-progress-panel?)
                    synced-file-graph? queuing?)
-              [:div.head-ctls (sync-now)])
-
-            ;(when config/dev?
-            ;  [:strong.debug-status (str status)])
-            ]}))])))
+              [:div.head-ctls (sync-now)])]}))])))
 
 (rum/defc pick-local-graph-for-sync [graph]
   [:div.cp__file-sync-related-normal-modal

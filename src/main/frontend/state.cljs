@@ -1796,6 +1796,10 @@ Similar to re-frame subscriptions"
   []
   (get-in @state [:file-sync/graph-state :current-graph-uuid]))
 
+(defn sub-current-file-sync-graph-uuid
+  []
+  (sub [:file-sync/graph-state :current-graph-uuid]))
+
 (defn reset-parsing-state!
   []
   (set-state! [:graph/parsing-state (get-current-repo)] {}))
