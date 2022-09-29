@@ -436,8 +436,9 @@ should be done through this fn in order to get global config and config defaults
     "TODO"))
 
 (defn get-filename-format
-  [repo]
-  (:file/name-format (get-config repo)))
+  ([] (get-filename-format (get-current-repo)))
+  ([repo]
+   (:file/name-format (get-config repo))))
 
 (defn get-date-formatter
   []

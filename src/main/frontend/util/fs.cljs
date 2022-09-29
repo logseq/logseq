@@ -6,6 +6,7 @@
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [clojure.string :as string]
+            [frontend.state :as state]
             [frontend.fs :as fs]
             [frontend.config :as config]
             [promesa.core :as p]
@@ -67,7 +68,7 @@
   (when-let [repo-dir (config/get-repo-dir repo-url)]
     (fs/read-file repo-dir file)))
 
-(def multiplatform-reserved-chars ":\\*\\?\"<>|\\#")
+(def multiplatform-reserved-chars ":\\*\\?\"<>|\\#\\\\")
 
 (def reserved-chars-pattern
   (re-pattern (str "[" multiplatform-reserved-chars "]+")))
@@ -116,7 +117,7 @@
       (string/replace "*" "%2A") ;; extra token that not involved in URI encoding
       ))
 
-(defn file-name-sanity
+(defn- tri-lb-file-name-sanity
   "Sanitize page-name for file name (strict), for file name in file writing."
   [title]
   (some-> title
@@ -125,15 +126,6 @@
           (string/replace reserved-chars-pattern url-encode-file-name)
           (escape-windows-reserved-filebodies) ;; do this before the lowbar encoding to avoid ambiguity
           (escape-namespace-slashes-and-multilowbars)))
-
-(defn create-title-property?
-  [page-name]
-  (and (string? page-name)
-       (let [file-name  (file-name-sanity page-name)
-             page-name' (gp-util/title-parsing file-name)
-             result     (or (not= page-name page-name')
-                            (include-reserved-chars? file-name))]
-         result)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;     Keep for backward compatibility     ;;
@@ -173,3 +165,26 @@
             (string/replace #"[:\\*\\?\"<>|]+" url-encode)
             (string/replace #"/" url-encode)
             (string/replace "*" "%2A"))))
+
+;; Register sanitization / parsing fns in:
+;; logseq.graph-parser.util (parsing only)
+;; frontend.util.fs         (sanitization only)
+;; frontend.handler.conversion (both)
+(defn file-name-sanity
+  ([title]
+   (file-name-sanity title (state/get-filename-format)))
+  ([title file-name-format]
+   (case file-name-format
+     :triple-lowbar (tri-lb-file-name-sanity title)
+     :legacy-dot    (legacy-dot-file-name-sanity title) ;; The earliest file name rule (before May 2022). For file name check in the conversion logic only. Don't allow users to use this.
+     (legacy-url-file-name-sanity title))))
+
+(defn create-title-property?
+  [page-name]
+  (and (string? page-name)
+       (let [filename-format (state/get-filename-format)
+             file-name  (file-name-sanity page-name filename-format)
+             page-name' (gp-util/title-parsing file-name filename-format)
+             result     (or (not= page-name page-name')
+                            (include-reserved-chars? file-name))]
+         result)))

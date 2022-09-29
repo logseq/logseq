@@ -6,6 +6,10 @@
             [frontend.util.fs :as fs-util]
             [frontend.handler.config :refer [set-config!]]))
 
+;; Register sanitization / parsing fns in:
+;; logseq.graph-parser.util (parsing only)
+;; frontend.util.fs         (sanitization only)
+;; frontend.handler.conversion (both)
 (defonce filename-formats {:triple-lowbar {:parsing-fn gp-util/title-parsing
                                            :sanity-fn  fs-util/file-name-sanity}
                            :legacy        {:parsing-fn gp-util/legacy-title-parsing

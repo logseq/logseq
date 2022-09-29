@@ -129,8 +129,8 @@
 
 (def url-encoded-pattern #"(?i)%[0-9a-f]{2}") ;; (?i) for case-insensitive mode
 
-(defn title-parsing
-  "Parse the file name back into page name"
+(defn- tri-lb-title-parsing
+  "Parsing file name under the new file name format"
   [file-name]
   (some-> file-name
           (decode-namespace-underlines)
@@ -218,3 +218,14 @@
 (defn legacy-title-parsing
   [file-name-body]
   (js/decodeURIComponent (string/replace file-name-body "." "/")))
+
+;; Register sanitization / parsing fns in:
+;; logseq.graph-parser.util (parsing only)
+;; frontend.util.fs         (sanitization only)
+;; frontend.handler.conversion (both)
+(defn title-parsing
+  "Convert file name in the given file name format to page title"
+  [file-name-body filename-format]
+  (case filename-format
+    :triple-lowbar (tri-lb-title-parsing file-name-body)
+    (legacy-title-parsing file-name-body)))

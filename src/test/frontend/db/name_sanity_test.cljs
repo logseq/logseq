@@ -10,8 +10,8 @@
   "Check if page name can be preserved after escaping"
   [page-name]
   (testing (str "Test sanitization page-name: " page-name)
-    (let [file-name   (fs-util/file-name-sanity page-name)
-          page-name'  (gp-util/title-parsing file-name)
+    (let [file-name   (#'fs-util/tri-lb-file-name-sanity page-name)
+          page-name'  (#'gp-util/tri-lb-title-parsing file-name)
           url-single  (js/encodeURIComponent file-name)
           url-double  (js/encodeURIComponent url-single)
           file-name'  (js/decodeURIComponent url-single)
