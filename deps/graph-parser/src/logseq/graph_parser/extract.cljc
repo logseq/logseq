@@ -204,7 +204,7 @@
 (defn extract-whiteboard-edn
   "Extracts whiteboard page from given edn file
    Whiteboard page edn is a subset of page schema
-   - it will only contain a single page (for now). The page properties contains 'bindings' etc
+   - it will only contain a single page (for now). The page properties are stored under :logseq.tldraw.* properties and contain 'bindings' etc
    - blocks will be adapted to tldraw shapes. All blocks's parent is the given page."
   [file content {:keys [verbose] :or {verbose true}}]
   (let [_ (when verbose (println "Parsing start: " file))
