@@ -173,7 +173,7 @@
                            :only-check only-check
                            :payload    (if only-check
                                          (assoc item :latest-version latest-version :latest-notes notes)
-                                         (assoc item :zip dl-url :dst dest))})
+                                         (assoc item :zip dl-url :dst dest :installed-version latest-version))})
 
                     (resolve nil))
 

@@ -5,6 +5,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.ui :as ui]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.plugin-config :as plugin-config]
             [frontend.search :as search]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
@@ -223,7 +224,8 @@
                     {:title      (t :plugin/delete-alert name)
                      :on-confirm (fn [_ {:keys [close-fn]}]
                                    (close-fn)
-                                   (plugin-handler/unregister-plugin id))})]
+                                   (plugin-handler/unregister-plugin id)
+                                   (plugin-config/remove-plugin name))})]
                (state/set-sub-modal! confirm-fn {:center? true}))}
        (t :plugin/uninstall)]]]
 

@@ -28,6 +28,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.global-config :as global-config-handler]
+            [frontend.handler.plugin-config :as plugin-config]
             [frontend.handler.metadata :as metadata-handler]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
@@ -91,7 +92,9 @@
            (->
             (p/do! (repo-config-handler/start {:repo repo})
                    (when (config/global-config-enabled?)
-                     (global-config-handler/start {:repo repo})))
+                     (global-config-handler/start {:repo repo}))
+                   ;; TODO: Is there a better place for this setup?
+                   (plugin-config/start))
             (p/finally
               (fn []
                 ;; install after config is restored

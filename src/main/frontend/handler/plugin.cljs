@@ -6,6 +6,7 @@
             [clojure.walk :as walk]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [frontend.handler.notification :as notification]
+            [frontend.handler.plugin-config :as plugin-config]
             [camel-snake-kebab.core :as csk]
             [frontend.state :as state]
             [medley.core :as medley]
@@ -209,10 +210,11 @@
 
                              (do                            ;; register new
                                (p/then
-                                 (js/LSPluginCore.register (bean/->js {:key id :url dst}))
-                                 (fn [] (when theme (js/setTimeout #(select-a-plugin-theme id) 300))))
+                                (js/LSPluginCore.register (bean/->js {:key id :url dst}))
+                                (fn [] (when theme (js/setTimeout #(select-a-plugin-theme id) 300))))
+                               (plugin-config/add-or-update-plugin name (:installed-version payload))
                                (notification/show!
-                                 (str (t :plugin/installed) (t :plugins) ": " name) :success)))))
+                                (str (t :plugin/installed) (t :plugins) ": " name) :success)))))
 
                        :error
                        (let [error-code (keyword (string/replace (:error-code payload) #"^[\s\:\[]+" ""))
