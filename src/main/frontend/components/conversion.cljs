@@ -156,7 +156,6 @@
                       [:p (t :file-rn/otherwise-breaking) " \"" changed-title \"]]
                      :unreachable
                      [:div [:p "🔴 " (t :file-rn/unreachable-title changed-title)]]
-                     [:div [:p "🟢 " (t :file-rn/optional-rename) rename-but
-                            (t :file-rn/update-filename)]])]
+                     [:div [:p "🟢 " (t :file-rn/optional-rename) rename-but]])]
                   [:td rename-but-sm]]))]]]
           [:div "🎉 " (t :file-rn/no-action)]))]]))
