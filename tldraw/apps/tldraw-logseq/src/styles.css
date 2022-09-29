@@ -823,3 +823,9 @@ html[data-theme='dark'] {
   pointer-events: all;
   stroke-width: min(100px, calc(12px * var(--tl-scale)));
 }
+
+.keyboard-shortcut > code {
+  padding: 4px !important;
+  text-rendering: initial;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
