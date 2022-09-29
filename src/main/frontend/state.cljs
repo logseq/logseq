@@ -235,9 +235,11 @@
      :file-sync/jstour-inst                   nil
      :file-sync/onboarding-state            (or (storage/get :file-sync/onboarding-state)
                                                 {:welcome false})
-
      :file-sync/remote-graphs               {:loading false :graphs nil}
-     :file-sync/sync-manager                nil
+
+     ;; graph-uuid -> {}
+     :file-sync/graph-state                 {}
+
      :file-sync/sync-state                  nil
      :file-sync/sync-uploading-files        nil
      :file-sync/sync-downloading-files      nil
@@ -1761,14 +1763,19 @@ Similar to re-frame subscriptions"
 (defn get-auth-refresh-token []
   (:auth/refresh-token @state))
 
-(defn set-file-sync-manager [v]
-  (set-state! :file-sync/sync-manager v))
+(defn set-file-sync-manager [graph-uuid v]
+  (when (and graph-uuid v)
+    (set-state! [:file-sync/graph-state graph-uuid :file-sync/sync-manager] v)))
+
+(defn get-file-sync-manager [graph-uuid]
+  (get-in @state [:file-sync/graph-state graph-uuid :file-sync/sync-manager]))
+
+(defn clear-file-sync-state! [graph-uuid]
+  (set-state! [:file-sync/graph-state graph-uuid] nil))
+
 (defn set-file-sync-state [graph v]
   (when v (s/assert :frontend.fs.sync/sync-state v))
   (set-state! [:file-sync/sync-state graph] v))
-
-(defn get-file-sync-manager []
-  (:file-sync/sync-manager @state))
 
 (defn get-file-sync-state
   ([]
