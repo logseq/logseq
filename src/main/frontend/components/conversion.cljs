@@ -103,7 +103,7 @@
                     :on-click #(do (reset! *target-format :triple-lowbar)
                                    (reset! *dir-format (state/get-filename-format repo)) ;; assure it's uptodate
                                    (write-filename-format! repo :triple-lowbar)
-                                   (reset! *solid-format :triple-lowbar))) ";"]
+                                   (reset! *solid-format :triple-lowbar)))]
         [:p (t :file-rn/instruct-3)]])
      [:div.cp__settings-files-breaking-changed {:disabled need-persist?} [:hr]
       (let [rename-items  (->> (vals @*pages)
@@ -122,7 +122,7 @@
                     (= @*dir-format :legacy))
              (ui/admonition :tip [:p (t :file-rn/need-action)])
              [:p (t :file-rn/need-action)])
-           [:p "May "
+           [:p
             (ui/button
              (str (t :file-rn/all-action) " (" (count rename-items) ")")
              :on-click <rename-all
