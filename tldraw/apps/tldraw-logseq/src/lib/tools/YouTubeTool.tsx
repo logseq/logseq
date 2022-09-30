@@ -4,7 +4,6 @@ import { YouTubeShape, type Shape } from '../shapes'
 
 export class YouTubeTool extends TLBoxTool<YouTubeShape, Shape, TLReactEventMap> {
   static id = 'youtube'
-  static shortcut = ['y']
   Shape = YouTubeShape
 }
 

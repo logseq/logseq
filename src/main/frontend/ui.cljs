@@ -947,7 +947,7 @@
    (when-not (string/blank? class)
      (let [^js jsTablerIcons (gobj/get js/window "tablerIcons")]
        (if (or extension? font? (not jsTablerIcons))
-         [:i (merge {:class
+         [:span.ui__icon (merge {:class
                      (util/format
                       (str "%s-" class
                            (when (:class opts)

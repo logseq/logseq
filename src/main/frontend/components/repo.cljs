@@ -228,7 +228,7 @@
                                              (check-multiple-windows? state)
                                              (toggle-fn))
                                  :title    repo-path}       ;; show full path on hover
-                                [:span.flex.pr-2.relative
+                                [:span.flex.relative
                                  {:style {:top 1}}
                                  (ui/icon "database" {:size 16 :id "database-icon"})]
                                 [:div.graphs
