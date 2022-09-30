@@ -233,24 +233,24 @@
 
      ;; file-sync
      :file-sync/jstour-inst                   nil
-     :file-sync/remote-graphs               {:loading false :graphs nil}
-     :file-sync/sync-manager                nil
-     :file-sync/sync-state-manager          nil
-     :file-sync/sync-state                  nil
-     :file-sync/sync-uploading-files        nil
-     :file-sync/sync-downloading-files      nil
      :file-sync/onboarding-state            (or (storage/get :file-sync/onboarding-state)
                                                 {:welcome false})
 
-     :encryption/graph-parsing?             false
-
-     :ui/loading?                           {}
+     :file-sync/remote-graphs               {:loading false :graphs nil}
+     :file-sync/sync-manager                nil
+     :file-sync/sync-state                  nil
+     :file-sync/sync-uploading-files        nil
+     :file-sync/sync-downloading-files      nil
      :file-sync/set-remote-graph-password-result {}
      ;; graph-uuid -> {file-path -> payload}
      :file-sync/progress                    {}
      :file-sync/start                       {}
      ;; graph -> epoch
      :file-sync/last-synced-at              {}
+
+     :encryption/graph-parsing?             false
+
+     :ui/loading?                           {}
      :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
 
      :file/rename-event-chan                (async/chan 100)

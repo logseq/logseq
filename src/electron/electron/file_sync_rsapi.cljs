@@ -47,6 +47,9 @@
 (defn decrypt-with-passphrase [passphrase data]
   (rsapi/ageDecryptWithPassphrase passphrase data))
 
+(defn cancel-all-requests []
+  (rsapi/cancelAllRequests))
+
 (defonce progress-notify-chan "file-sync-progress")
 (set-progress-callback (fn [error progress-info]
                          (when-not error
