@@ -344,6 +344,7 @@
                                          (or (string/starts-with? last-pattern block-ref/left-parens)
                                              (string/starts-with? last-pattern page-ref/left-brackets)))
                                     (and s (string/starts-with? s "{{embed"))
+                                    (and s (= (last s) \#) (string/starts-with? last-pattern "[["))
                                     (and last-pattern
                                          (or (string/ends-with? last-pattern gp-property/colons)
                                              (string/starts-with? last-pattern gp-property/colons)))))))]

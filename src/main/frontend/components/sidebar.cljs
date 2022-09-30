@@ -242,7 +242,7 @@
           {:on-click state/toggle-left-sidebar!}
           (ui/icon "menu-2" {:size ui/icon-size})]])
 
-      [:nav.px-4.flex.flex-col.gap-1
+      [:nav.px-4.flex.flex-col.gap-1.cp__menubar-repos
        {:aria-label "Navigation menu"}
        (repo/repos-dropdown)
 

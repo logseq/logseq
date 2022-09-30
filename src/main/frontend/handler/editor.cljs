@@ -1560,7 +1560,7 @@
         editing-page (and block
                           (when-let [page-id (:db/id (:block/page block))]
                             (:block/name (db/entity page-id))))
-        pages (search/page-search q 20)]
+        pages (search/page-search q 100)]
     (if editing-page
       ;; To prevent self references
       (remove (fn [p] (= (util/page-name-sanity-lc p) editing-page)) pages)
@@ -1988,6 +1988,12 @@
            root-block (db/pull db-id)
            blocks-exclude-root (remove (fn [b] (= (:db/id b) db-id)) blocks)
            sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
+           sorted-blocks (cons
+                          (-> (first sorted-blocks)
+                              (update :block/properties-text-values dissoc :template)
+                              (update :block/properties-order (fn [keys]
+                                                                (vec (remove #{:template} keys)))))
+                          (rest sorted-blocks))
            blocks (if template-including-parent?
                     sorted-blocks
                     (drop 1 sorted-blocks))]
@@ -2774,7 +2780,8 @@
             value (gobj/get input "value")
             c (util/nth-safe value (dec current-pos))
             [key-code k code is-processed?]
-            (if (and (mobile-util/native-android?)
+            (if (and c
+                     (mobile-util/native-android?)
                      (or (= key-code 229)
                          (= key-code 0)))
               [(.charCodeAt value (dec current-pos))
