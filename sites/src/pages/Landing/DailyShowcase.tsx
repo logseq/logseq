@@ -194,14 +194,14 @@ export function DailyShowcase () {
               <h2
                 className={cx('text-2xl sm:text-[36px] sm:leading-10 tracking-wide invisible', t[0] && 'ani-fade-in')}
               >
-                <span className="opacity-60">Logseq helps you</span>
+                <span className="text-logseq-50/80">Logseq helps you</span>
                 <span> turn this daily <br/>mess into structured information.</span>
               </h2>
 
               <h1
                 className={cx('text-4xl leading-10 sm:py-10 sm:text-6xl py-3 invisible', t[1] && 'ani-slide-in-from-bottom')}>
                 <strong>Gain clarity</strong>
-                <span className="opacity-60"> in your everyday life:</span>
+                <span className="text-logseq-50/80"> in your everyday life:</span>
               </h1>
             </>
           )
@@ -248,19 +248,19 @@ export function DailyShowcase () {
                   />
 
                   <div className="ft absolute bottom-6 right-6">
-                    <FloatGlassButton
-                      onClick={() => {
-                        const src = bdRef.current!.querySelector('img')?.getAttribute('src')!
+                    {/*<FloatGlassButton*/}
+                    {/*  onClick={() => {*/}
+                    {/*    const src = bdRef.current!.querySelector('img')?.getAttribute('src')!*/}
 
-                        openLightbox([{ src, width: 1000, height: 596 }])
-                      }}
-                    >
-                      <FrameCorners
-                        className={'font-bold cursor-pointer'}
-                        size={26}
-                        weight={'duotone'}
-                      />
-                    </FloatGlassButton>
+                    {/*    openLightbox([{ src, width: 1000, height: 596 }])*/}
+                    {/*  }}*/}
+                    {/*>*/}
+                    {/*  <FrameCorners*/}
+                    {/*    className={'font-bold cursor-pointer'}*/}
+                    {/*    size={26}*/}
+                    {/*    weight={'duotone'}*/}
+                    {/*  />*/}
+                    {/*</FloatGlassButton>*/}
                   </div>
                 </div>
 

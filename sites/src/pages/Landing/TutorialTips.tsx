@@ -143,7 +143,7 @@ export function TipSlideItem (props: {
 
           return (
             <span className={'animate-in duration-1000 fade-in-0'} key={idx}>
-              <strong>Tip{idx + 1}: </strong>
+              <strong>Tip {idx + 1}: </strong>
               <span className="text-gray-300/70">{it}</span>
             </span>
           )
@@ -186,11 +186,11 @@ export function TutorialTips () {
         {(t: Array<any>) => (<>
           <h1 className={cx('invisible pb-4 sm:pb-0 sm:flex items-center',
             t[0] && 'ani-slide-in-from-bottom')}>
-            <span className="pr-5 opacity-60">
+            <span className="pr-5 text-logseq-50/80">
               Braindump everything into
             </span>
             <AppLogo className="w-10 h-10 sm:w-16 sm:h-16"/>
-            <span className="pl-2 opacity-60">.</span>
+            <span className="pl-2 text-logseq-50/80">.</span>
 
             <h2 className={'inline-block pl-2 sm:!hidden'}>
               New ideas will pop up with time.
@@ -210,7 +210,7 @@ export function TutorialTips () {
           </h3>
 
           <h4 className={cx('invisible', t[3] && 'ani-fade-in')}>
-            <span className="opacity-60">so that you can</span>
+            <span className="text-logseq-50/80">so that you can </span>
             <span className="opacity-100 pl-1">
               come up with new outputs more easily.
             </span>
@@ -330,20 +330,20 @@ export function TutorialTips () {
                  src={promiseImages[activeTipTag]} alt="image"/>
           </div>
 
-          <FloatGlassButton
-            className="absolute right-6 bottom-5"
-            onClick={() => {
-              const src = bdRef.current!.querySelector('img')?.getAttribute('src')!
+          {/*<FloatGlassButton*/}
+          {/*  className="absolute right-6 bottom-5"*/}
+          {/*  onClick={() => {*/}
+          {/*    const src = bdRef.current!.querySelector('img')?.getAttribute('src')!*/}
 
-              openLightbox([{ src, width: 900, height: 553 }])
-            }}
-          >
-            <FrameCorners
-              className={'font-bold cursor-pointer'}
-              size={26}
-              weight={'duotone'}
-            />
-          </FloatGlassButton>
+          {/*    openLightbox([{ src, width: 900, height: 553 }])*/}
+          {/*  }}*/}
+          {/*>*/}
+          {/*  <FrameCorners*/}
+          {/*    className={'font-bold cursor-pointer'}*/}
+          {/*    size={26}*/}
+          {/*    weight={'duotone'}*/}
+          {/*  />*/}
+          {/*</FloatGlassButton>*/}
         </div>
       </div>
 

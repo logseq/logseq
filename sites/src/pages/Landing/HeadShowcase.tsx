@@ -128,11 +128,11 @@ export function HeadShowcase () {
         <div className="item-wrap relative flex-1">
           {/* text layer*/}
           <div className="text-1 z-0 w-full flex flex-col tracking-wide">
-            <span className="text-4xl sm:text-6xl opacity-70">Connect your notes, </span>
+            <span className="text-4xl sm:text-6xl text-logseq-50/80">Connect your notes, </span>
             <strong className="text-3xl sm:text-6xl flex">
               increase understanding.
               <sup
-                className="opacity-80 text-logseq-100 hover:opacity-60 sm:translate-y-6">
+                className="hidden opacity-80 text-logseq-100 hover:opacity-60 sm:translate-y-6">
                 <CircleWavyQuestion size={28}/>
               </sup>
             </strong>

@@ -385,7 +385,7 @@ export function HeadDownloadLinks () {
             <div className="flex flex-col items-center">
               <Button
                 className={'w-full bg-logseq-400 px-3 py-3 sm:px-6 sm:py-4'}
-                leftIcon={<IntelIcon className={'w-6 h-6 sm:w-8 sm:h-8 bg-white'}
+                leftIcon={<IntelIcon className={'w-6 h-6 sm:w-8 sm:h-8 bg-gray-900'}
                                      color={'white'}/>}
                 rightIcon={<DownloadSimple className="opacity-50"/>}
                 onClick={() => _downloadHandler('macos-x64')}
@@ -400,7 +400,7 @@ export function HeadDownloadLinks () {
             <div className="flex flex-col items-center">
               <Button
                 className={'w-full bg-logseq-600 px-3 py-3 sm:px-6 sm:py-4'}
-                leftIcon={<M1Icon className={'w-6 h-6 sm:w-8 sm:h-8 bg-gray-500'}
+                leftIcon={<M1Icon className={'w-6 h-6 sm:w-8 sm:h-8 bg-gray-900'}
                                   color={'white'}/>}
                 rightIcon={<DownloadSimple className="opacity-50"/>}
                 onClick={() => _downloadHandler('macos-arm64')}
@@ -434,12 +434,12 @@ export function HeadDownloadLinks () {
       <div className="flex flex-col pt-10 sm:items-center sm:pt-20 pb-12 text-slogan">
         <h1 className="text-3xl sm:text-6xl">
           <strong className="font-semibold tracking-wide">Download </strong>
-          <span className="opacity-60">the apps.</span>
+          <span className="text-logseq-50/80">the apps.</span>
         </h1>
 
         <h2
           className="text-xl flex flex-col justify-center sm:items-center pt-2 tracking-wide">
-          <span className="opacity-60">
+          <span className="text-logseq-50/80">
             Collect your thoughts and get inspired.
           </span>
           <span className="opacity-90">

@@ -58,13 +58,13 @@ const featuresSlideItems = [
         desc: (<span>Spin your web of knowledge and see what evidence supports or contradicts claims.</span>)
       },
       {
-        icon: <Binoculars size={20} weight="duotone"/>,
+        icon: <Books size={20} weight="duotone"/>,
         title: 'Manage sources',
         desc: (<span>Keep track of your research and easily manage your sources using the built-in
           <a> Zotero integration</a>.</span>)
       },
       {
-        icon: <Books size={20} weight="duotone"/>,
+        icon: <PencilLine size={20} weight="duotone"/>,
         title: 'Outline papers',
         desc: (
           <span>Manage your writing process and ensure that your papers are well-organized and flow smoothly.</span>)
@@ -356,7 +356,7 @@ export function TutorialShowcase (
         {(t: Array<string>) => {
           return (
             <>
-              <h1 className={cx('text-4xl sm:text-6xl opacity-70 invisible', t[0] && 'ani-slide-in-from-bottom')}>Today,
+              <h1 className={cx('text-4xl sm:text-6xl text-logseq-50/80 invisible', t[0] && 'ani-slide-in-from-bottom')}>Today,
                 everyone is
                 a</h1>
               <h2
@@ -365,7 +365,7 @@ export function TutorialShowcase (
 
               <div
                 className={cx('pt-2 sm:pt-0 sm:flex justify-center sm:flex-col items-center invisible', t[2] && 'ani-fade-in')}>
-                <h3 className="inline text-2xl sm:text-4xl font-normal pt-8 opacity-60">Logseq is the
+                <h3 className="inline text-2xl sm:text-4xl font-normal pt-8 text-logseq-50/80">Logseq is the
                   all-in-one tool
                   for </h3>
                 <h4 className="inline text-2xl sm:text-4xl pt-2 opacity-94">

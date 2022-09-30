@@ -37,10 +37,10 @@ export function FeaturesBoards () {
             <h1>File sync <sup>BETA</sup></h1>
             <h2>
               <span>Always up-to-date notes</span> <br/>
-              <span className="opacity-60">between all your devices.</span>
+              <span className="text-logseq-50/80">between all your devices.</span>
             </h2>
             <h3>
-              <span className="opacity-60">With encrypted file syncing, you'll always have your <br/> notes </span>
+              <span className="text-logseq-50/80">With encrypted file syncing, you'll always have your <br/> notes </span>
               <span>backed up and securely available in real-time <br/> on any device. </span>
             </h3>
           </div>
@@ -58,10 +58,10 @@ export function FeaturesBoards () {
             <h1>Whiteboards <sup>ALPHA</sup></h1>
             <h2>
               <span>A new canvas</span> <br/>
-              <span className="opacity-60">for your thoughts.</span>
+              <span className="text-logseq-50/80">for your thoughts.</span>
             </h2>
             <h3>
-              <span className="opacity-60">Place any of your thoughts from the knowledge base <br/>
+              <span className="text-logseq-50/80">Place any of your thoughts from the knowledge base <br/>
               or new ones next to each other on an infinite canvas</span> <br/>
               <span>to connect, associate and understand in new ways.</span>
             </h3>
@@ -80,15 +80,15 @@ export function LandingFooterDesc () {
     <div className="app-landing-footer-desc">
       <h1 className="text-4xl -mt-[230px] leading-9 pb-2 sm:mt-0 sm:text-6xl sm:text-center sm:py-10">
         <strong className="font-semibold">A safe space for </strong>
-        <span className="text-gray-400/60">your thoughts.</span>
+        <span className="text-logseq-50/80">your thoughts.</span>
       </h1>
 
       <h2 className="text-lg sm:text-[24px] sm:px-60 sm:text-center">
-        <span className="text-gray-400/60">Designed to store your </span>
+        <span className="text-logseq-50/80">Designed to store your </span>
         <strong className="font-normal">interests, questions, ideas, favorite quotes,
           reminders, reading and meeting
           notes </strong>
-        <span className="text-gray-400/60">easily and future-proof:</span>
+        <span className="text-logseq-50/80">easily and future-proof:</span>
       </h2>
 
       {/*  descriptions */}

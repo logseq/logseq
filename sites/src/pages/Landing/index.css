@@ -727,7 +727,7 @@ h1, h2, h3 {
       }
 
       @screen sm {
-        background-position-y: -60px;
+        background-position-y: -20px;
 
         .page-inner {
           margin-top: unset;
@@ -820,7 +820,7 @@ h1, h2, h3 {
       @apply pt-6 pb-10 sm:pb-20 sm:pt-10;
 
       > .l {
-        @apply w-full flex flex-1 border rounded-xl border-logseq-500 overflow-hidden;
+        @apply w-full flex flex-1 border rounded-xl border-logseq-500/50 overflow-hidden;
       }
 
       > .r {
