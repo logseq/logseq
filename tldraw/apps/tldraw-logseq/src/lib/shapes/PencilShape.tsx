@@ -1,9 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { SvgPathUtils, TLDrawShape, TLDrawShapeProps } from '@tldraw/core'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
+import Vec from '@tldraw/vec'
 import { computed, makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
-import getStroke, { getStrokeOutlinePoints, getStrokePoints, StrokeOptions } from 'perfect-freehand'
+import getStroke, {
+  getStrokeOutlinePoints,
+  getStrokePoints,
+  StrokeOptions,
+  StrokePoint,
+} from 'perfect-freehand'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
 export interface PencilShapeProps extends TLDrawShapeProps, CustomStyleProps {
@@ -50,6 +56,17 @@ function getDrawStrokePathTDSnapshot(shape: PencilShapeProps) {
   const options = getFreehandOptions(shape)
   const strokePoints = getDrawStrokePoints(shape, options)
   const path = SvgPathUtils.getSvgPathFromStroke(getStrokeOutlinePoints(strokePoints, options))
+  return path
+}
+
+function getSolidStrokePathTDSnapshot(shape: PencilShapeProps) {
+  const { points } = shape
+  if (points.length < 2) return 'M 0 0 L 0 0'
+  const options = getFreehandOptions(shape)
+  const strokePoints = getDrawStrokePoints(shape, options)
+  const last = points[points.length - 1]
+  if (!Vec.isEqual(strokePoints[0].point, last)) strokePoints.push({ point: last } as StrokePoint)
+  const path = SvgPathUtils.getSvgPathFromStrokePoints(strokePoints)
   return path
 }
 
@@ -109,11 +126,13 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
     } = this
     return (
       <path
+        pointerEvents="none"
         d={pointsPath}
-        strokeWidth={strokeWidth}
+        strokeWidth={strokeWidth / 2}
+        strokeLinejoin="round"
+        strokeLinecap="round"
         stroke={stroke}
         fill={stroke}
-        pointerEvents="all"
         strokeDasharray={strokeType === 'dashed' ? '12 4' : undefined}
       />
     )

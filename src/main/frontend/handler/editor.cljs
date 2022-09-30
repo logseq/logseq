@@ -2795,7 +2795,8 @@
             value (gobj/get input "value")
             c (util/nth-safe value (dec current-pos))
             [key-code k code is-processed?]
-            (if (and (mobile-util/native-android?)
+            (if (and c
+                     (mobile-util/native-android?)
                      (or (= key-code 229)
                          (= key-code 0)))
               [(.charCodeAt value (dec current-pos))

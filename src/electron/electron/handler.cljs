@@ -579,6 +579,9 @@
 (defmethod handle :decrypt-with-passphrase [_ args]
   (apply rsapi/decrypt-with-passphrase (rest args)))
 
+(defmethod handle :cancel-all-requests [_ args]
+  (apply rsapi/cancel-all-requests (rest args)))
+
 (defmethod handle :default [args]
   (logger/error "Error: no ipc handler for:" args))
 
