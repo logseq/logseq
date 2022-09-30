@@ -3,7 +3,7 @@
             [clojure.string :as string]
             ;; NOTE: Always use production build of excalidraw
             ;; See-also: https://github.com/excalidraw/excalidraw/pull/3330
-            ["@excalidraw/excalidraw/dist/excalidraw.production.min.js" :refer [Excalidraw serializeAsJSON]]
+            ["@excalidraw/excalidraw/dist/excalidraw.production.min" :refer [Excalidraw serializeAsJSON]]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
