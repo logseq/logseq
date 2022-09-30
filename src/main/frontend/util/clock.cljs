@@ -33,16 +33,6 @@
                  (if (zero? minutes) "" (str minutes "m"))
                  (if (zero? seconds) "" (str seconds "s")))))
 
-(defn minutes->days:hours:minutes
-  [minutes]
-  (let [days (quot (quot minutes 60) 24)
-        hours (quot (- minutes (* days 60 24)) 60)
-        minutes (mod minutes 60)]
-    (util/format "%s%s%s"
-                 (if (zero? days) "" (str days "d"))
-                 (if (zero? hours) "" (str hours "h"))
-                 (if (zero? minutes) "" (str minutes "m")))))
-
 (def support-seconds?
   (get (state/get-config)
        [:logbook/settings :with-second-support?] true))
@@ -115,4 +105,4 @@
                   (string/replace #"\s+minutes?$" "m")))
             (if zero-minutes?
               seconds
-              duration-in-minutes)))))))
+              (* 60 duration-in-minutes))))))))
