@@ -207,7 +207,7 @@
                         *loading? (::loading? state)
                         *exist? (::exist? state)]
                     (when (and sync-on? asset-file? (false? @*exist?))
-                      (let [sync-state (state/sub [:file-sync/sync-state (state/get-current-repo)])
+                      (let [sync-state (state/get-file-sync-state (state/get-current-file-sync-graph-uuid))
                             downloading-files (:current-remote->local-files sync-state)
                             contain-url? (and (seq downloading-files)
                                               (some #(string/ends-with? src %) downloading-files))]
@@ -221,7 +221,7 @@
                             (reset! *loading? false))))))
                   state)}
   [state src content-fn]
-  (let [_ (state/sub [:file-sync/sync-state (state/get-current-repo)])
+  (let [_ (state/sub-file-sync-state (state/get-current-file-sync-graph-uuid))
         exist? @(::exist? state)
         loading? @(::loading? state)
         asset-file? (::asset-file? state)

@@ -178,7 +178,9 @@
 
 (rum/defc last-synced-cp < rum/reactive
   []
-  (let [last-synced-at (state/sub [:file-sync/last-synced-at (state/get-current-repo)])
+  (let [last-synced-at (state/sub [:file-sync/graph-state
+                                   (state/get-current-file-sync-graph-uuid)
+                                   :file-sync/last-synced-at])
         last-synced-at (if last-synced-at
                          (util/time-ago (tc/from-long (* last-synced-at 1000)))
                          "just now")]
@@ -324,8 +326,11 @@
         enabled-progress-panel? (util/electron?)
         current-repo            (state/get-current-repo)
         creating-remote-graph?  (state/sub [:ui/loading? :graph/create-remote?])
-        sync-state              (state/sub [:file-sync/sync-state current-repo])
-        sync-progress           (state/sub [:file-sync/progress (second @fs-sync/graphs-txid)])
+        current-graph-id        (state/sub-current-file-sync-graph-uuid)
+        sync-state              (state/sub-file-sync-state current-graph-id)
+        sync-progress           (state/sub [:file-sync/graph-state
+                                            current-graph-id
+                                            :file-sync/progress])
         _                       (rum/react file-sync-handler/refresh-file-sync-component)
         synced-file-graph?      (file-sync-handler/synced-file-graph? current-repo)
         uploading-files         (sort-files (:current-local->remote-files sync-state))
@@ -355,40 +360,41 @@
                                  (fn []
                                    (when-not (file-sync-handler/current-graph-sync-on?)
                                      (async/go
-                                       (async/<! (p->c (persist-var/-load fs-sync/graphs-txid)))
-                                       (cond
-                                         @*beta-unavailable?
-                                         (state/pub-event! [:file-sync/onboarding-tip :unavailable])
+                                       (let [graphs-txid fs-sync/graphs-txid]
+                                         (async/<! (p->c (persist-var/-load graphs-txid)))
+                                         (cond
+                                           @*beta-unavailable?
+                                           (state/pub-event! [:file-sync/onboarding-tip :unavailable])
 
-                                         ;; current graph belong to other user, do nothing
-                                         (and (first @fs-sync/graphs-txid)
-                                              (not (fs-sync/check-graph-belong-to-current-user (user-handler/user-uuid)
-                                                                                               (first @fs-sync/graphs-txid))))
-                                         nil
+                                           ;; current graph belong to other user, do nothing
+                                           (and (first @graphs-txid)
+                                                (not (fs-sync/check-graph-belong-to-current-user (user-handler/user-uuid)
+                                                                                                 (first @graphs-txid))))
+                                           nil
 
-                                         (and synced-file-graph?
-                                              (fs-sync/graph-sync-off? current-repo)
-                                              (second @fs-sync/graphs-txid)
-                                              (async/<! (fs-sync/<check-remote-graph-exists (second @fs-sync/graphs-txid))))
-                                         (do
-                                           (prn "sync start")
-                                           (fs-sync/sync-start))
+                                           (and synced-file-graph?
+                                                (second @graphs-txid)
+                                                (fs-sync/graph-sync-off? (second @graphs-txid))
+                                                (async/<! (fs-sync/<check-remote-graph-exists (second @graphs-txid))))
+                                           (do
+                                             (prn "sync start")
+                                             (fs-sync/sync-start))
 
-                                         ;; remote graph already has been deleted, clear repos first, then create-remote-graph
-                                         synced-file-graph?  ; <check-remote-graph-exists -> false
-                                         (do (state/set-repos!
-                                              (map (fn [r]
-                                                     (if (= (:url r) current-repo)
-                                                       (dissoc r :GraphUUID :GraphName :remote?)
-                                                       r))
-                                                (state/get-repos)))
-                                             (create-remote-graph-fn))
+                                           ;; remote graph already has been deleted, clear repos first, then create-remote-graph
+                                           synced-file-graph?  ; <check-remote-graph-exists -> false
+                                           (do (state/set-repos!
+                                                (map (fn [r]
+                                                       (if (= (:url r) current-repo)
+                                                         (dissoc r :GraphUUID :GraphName :remote?)
+                                                         r))
+                                                  (state/get-repos)))
+                                               (create-remote-graph-fn))
 
-                                         (second @fs-sync/graphs-txid) ; sync not started yet
-                                         nil
+                                           (second @graphs-txid) ; sync not started yet
+                                           nil
 
-                                         :else
-                                         (create-remote-graph-fn)))))
+                                           :else
+                                           (create-remote-graph-fn))))))
                                  (debounce 1500))]
     (if creating-remote-graph?
       (ui/loading "")
@@ -512,11 +518,7 @@
             (when (and
                    (not enabled-progress-panel?)
                    synced-file-graph? queuing?)
-              [:div.head-ctls (sync-now)])
-
-            ;(when config/dev?
-            ;  [:strong.debug-status (str status)])
-            ]}))])))
+              [:div.head-ctls (sync-now)])]}))])))
 
 (rum/defc pick-local-graph-for-sync [graph]
   [:div.cp__file-sync-related-normal-modal

@@ -109,6 +109,8 @@
     (if empty-graph?
       (route-handler/redirect! {:to :import :query-params {:from "picker"}})
       (route-handler/redirect-to-home!)))
+  (when-let [dir-name (config/get-repo-dir repo)]
+    (fs/watch-dir! dir-name))
   (repo-handler/refresh-repos!)
   (file-sync-restart!))
 

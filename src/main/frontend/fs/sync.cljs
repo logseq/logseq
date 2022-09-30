@@ -182,7 +182,7 @@
 (def ws-addr config/WS-URL)
 
 ;; Warning: make sure to `persist-var/-load` graphs-txid before using it.
-(def graphs-txid (persist-var/persist-var nil "graphs-txid"))
+(defonce graphs-txid (persist-var/persist-var nil "graphs-txid"))
 
 (declare assert-local-txid<=remote-txid)
 (defn <update-graphs-txid!
@@ -264,6 +264,7 @@
        :api-name api-name
        :body body})))
 
+;; For debug
 (def *on-flying-request
   "requests not finished"
   (atom #{}))
@@ -1640,8 +1641,8 @@
   [type {:keys [dir path _content stat] :as _payload}]
   (when-let [current-graph (state/get-current-repo)]
     (when (string/ends-with? current-graph dir)
-      (let [sync-state (state/get-file-sync-state current-graph)]
-        (when (and sync-state (sync-state--valid-to-accept-filewatcher-event? sync-state))
+      (when-let [sync-state (state/get-file-sync-state (state/get-current-file-sync-graph-uuid))]
+        (when (sync-state--valid-to-accept-filewatcher-event? sync-state)
           (when (or (:mtime stat) (= type "unlink"))
             (go
               (let [path (remove-dir-prefix dir path)
@@ -2857,25 +2858,22 @@
     (reset! current-sm-graph-uuid graph-uuid)
     (sync-manager user-uuid graph-uuid base-path repo txid *sync-state)))
 
-(defn clear-graph-progress!
-  [graph-uuid]
-  (state/set-state! [:file-sync/progress graph-uuid] {}))
-
 (defn <sync-stop []
   (go
-    (when-let [sm ^SyncManager (state/get-file-sync-manager)]
+    (when-let [sm ^SyncManager (state/get-file-sync-manager (state/get-current-file-sync-graph-uuid))]
       (println "[SyncManager" (:graph-uuid sm) "]" "stopping")
+
+      (state/clear-file-sync-state! (:graph-uuid sm))
+
       (<! (-stop! sm))
-      (swap! state/state assoc :file-sync/sync-state {})
-      (println "[SyncManager" (:graph-uuid sm) "]" "stopped")
-      (state/set-file-sync-manager nil)
-      (clear-graph-progress! (:graph-uuid sm)))
+
+      (println "[SyncManager" (:graph-uuid sm) "]" "stopped"))
 
     (reset! current-sm-graph-uuid nil)))
 
 (defn sync-need-password!
   []
-  (when-let [sm ^SyncManager (state/get-file-sync-manager)]
+  (when-let [sm ^SyncManager (state/get-file-sync-manager (state/get-current-file-sync-graph-uuid))]
     (.need-password sm)))
 
 (defn check-graph-belong-to-current-user
@@ -2916,9 +2914,9 @@
   (or (nil? sync-state) (sync-state--stopped? sync-state)))
 
 (defn graph-sync-off?
-  "Is sync not running for this `graph`?"
-  [graph]
-  (sync-off? (state/get-file-sync-state graph)))
+  "Is sync not running for this `graph-uuid`?"
+  [graph-uuid]
+  (sync-off? (state/get-file-sync-state graph-uuid)))
 
 (defn graph-encrypted?
   []
@@ -2927,50 +2925,46 @@
 
 (declare network-online-cursor)
 
-;; Prevent starting of multiple sync managers
-(def *sync-starting? (atom {}))
-(defn sync-start []
-  (let [*sync-state                 (atom (sync-state))
-        current-user-uuid           (user/user-uuid)
-        repo                        (state/get-current-repo)]
-    (go
-      (<! (<sync-stop))
+(defn sync-start
+  []
+  (go
+    (let [*sync-state                 (atom (sync-state))
+          current-user-uuid           (user/user-uuid)
+          ;; put @graph-uuid & get-current-repo together,
+          ;; prevent to get older repo dir and current graph-uuid.
+          _                           (<! (p->c (persist-var/-load graphs-txid)))
+          [user-uuid graph-uuid txid] @graphs-txid
+          repo                        (state/get-current-repo)]
       (when (and (graph-sync-off? repo) @network-online-cursor)
-        (<! (p->c (persist-var/-load graphs-txid)))
-        (let [[user-uuid graph-uuid txid] @graphs-txid]
-          (when (and user-uuid graph-uuid txid
-                     (user/logged-in?)
-                     repo
-                     (not (config/demo-graph? repo)))
-            (try
-              (when-not (get @*sync-starting? graph-uuid)
-                (swap! *sync-starting? assoc graph-uuid true)
-                (clear-graph-progress! graph-uuid)
+        (when (and user-uuid graph-uuid txid
+                   (user/logged-in?)
+                   repo
+                   (not (config/demo-graph? repo)))
+          (try
+            (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
+                                                   (config/get-repo-dir repo) repo
+                                                   txid *sync-state)]
+              (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
+                (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
+                  (clear-graphs-txid! repo)
+                  (do
+                    (state/set-file-sync-state graph-uuid @*sync-state)
+                    (state/set-file-sync-manager graph-uuid sm)
 
-                (when-some [sm (sync-manager-singleton current-user-uuid graph-uuid
-                                                       (config/get-repo-dir repo) repo
-                                                       txid *sync-state)]
-                  (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
-                    (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
-                      (clear-graphs-txid! repo)
-                      (do
-                        (state/set-file-sync-state repo @*sync-state)
-                        (state/set-file-sync-manager sm)
+                    ;; update global state when *sync-state changes
+                    (add-watch *sync-state ::update-global-state
+                               (fn [_ _ _ n]
+                                 (state/set-file-sync-state graph-uuid n)))
 
-                        ;; update global state when *sync-state changes
-                        (add-watch *sync-state ::update-global-state
-                                   (fn [_ _ _ n]
-                                     (state/set-file-sync-state repo n)))
+                    (state/set-state! [:file-sync/graph-state :current-graph-uuid] graph-uuid)
 
-                        (.start sm)
+                    (.start sm)
 
-                        (offer! remote->local-full-sync-chan true)
-                        (offer! full-sync-chan true)
-                        (swap! *sync-starting? assoc graph-uuid false))))))
-              (catch :default e
-                (prn "Sync start error: ")
-                (log/error :exception e)
-                (swap! *sync-starting? assoc graph-uuid false)))))))))
+                    (offer! remote->local-full-sync-chan true)
+                    (offer! full-sync-chan true)))))
+            (catch :default e
+              (prn "Sync start error: ")
+              (log/error :exception e))))))))
 
 ;;; ### some add-watches
 
@@ -3004,7 +2998,7 @@
 (go-loop []
   (let [{{graph-uuid :graph-uuid} :data} (<! re-remote->local-full-sync-chan)
         {:keys [current-syncing-graph-uuid]}
-        (state/get-file-sync-state (state/get-current-repo))]
+        (state/get-file-sync-state graph-uuid)]
     (when (= graph-uuid current-syncing-graph-uuid)
       (offer! remote->local-full-sync-chan true))
     (recur)))
@@ -3014,30 +3008,10 @@
 (async/sub sync-events-publication :local->remote-full-sync-failed re-local->remote-full-sync-chan)
 (go-loop []
   (let [{{graph-uuid :graph-uuid} :data} (<! re-local->remote-full-sync-chan)
-        {:keys [current-syncing-graph-uuid]} (state/get-file-sync-state (state/get-current-repo))]
+        {:keys [current-syncing-graph-uuid]} (state/get-file-sync-state graph-uuid)]
     (when (= graph-uuid current-syncing-graph-uuid)
       (offer! full-sync-chan true))
     (recur)))
-
-
-
-;;; debug funcs
-(comment
-  ;; (<get-remote-all-files-meta remoteapi graph-uuid)
-  (<get-local-all-files-meta rsapi graph-uuid
-                             (config/get-repo-dir (state/get-current-repo)))
-  (def base-path (config/get-repo-dir (state/get-current-repo)))
-
-  ;; upload
-  (def full-upload-files (:full-local->remote-files (state/sub [:file-sync/sync-state (state/get-current-repo)])))
-
-  ;; queued
-  (:queued-local->remote-files (state/sub [:file-sync/sync-state (state/get-current-repo)]))
-
-  ;; download
-  (:current-remote->local-files (state/sub [:file-sync/sync-state (state/get-current-repo)]))
-  )
-
 
 ;;; add-tap
 (comment

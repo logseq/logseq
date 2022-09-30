@@ -235,18 +235,19 @@
      :file-sync/jstour-inst                   nil
      :file-sync/onboarding-state            (or (storage/get :file-sync/onboarding-state)
                                                 {:welcome false})
-
      :file-sync/remote-graphs               {:loading false :graphs nil}
-     :file-sync/sync-manager                nil
-     :file-sync/sync-state                  nil
-     :file-sync/sync-uploading-files        nil
-     :file-sync/sync-downloading-files      nil
      :file-sync/set-remote-graph-password-result {}
-     ;; graph-uuid -> {file-path -> payload}
-     :file-sync/progress                    {}
-     :file-sync/start                       {}
-     ;; graph -> epoch
-     :file-sync/last-synced-at              {}
+
+     ;; graph-uuid -> {:graphs-txid {}
+     ;;                :file-sync/sync-manager {}
+     ;;                :file-sync/sync-state {}
+     ;;                ;; {file-path -> payload}
+     ;;                :file-sync/progress {}
+     ;;                :file-sync/start-time {}
+     ;;                :file-sync/last-synced-at {}}
+     :file-sync/graph-state                 {:current-graph-uuid nil
+                                             ;; graph-uuid -> ...
+                                             }
 
      :encryption/graph-parsing?             false
 
@@ -604,7 +605,7 @@ Similar to re-frame subscriptions"
 
 (defn block-content-max-length
   [repo]
-  (or (:block/content-max-length (sub-config repo)) 5000))
+  (or (:block/content-max-length (sub-config repo)) 10000))
 
 (defn mobile?
   []
@@ -644,13 +645,15 @@ Similar to re-frame subscriptions"
   [path value]
   (if (vector? path)
     (swap! state assoc-in path value)
-    (swap! state assoc path value)))
+    (swap! state assoc path value))
+  nil)
 
 (defn update-state!
   [path f]
   (if (vector? path)
     (swap! state update-in path f)
-    (swap! state update path f)))
+    (swap! state update path f))
+  nil)
 
 ;; State getters and setters
 ;; =========================
@@ -1807,20 +1810,41 @@ Similar to re-frame subscriptions"
 (defn get-auth-refresh-token []
   (:auth/refresh-token @state))
 
-(defn set-file-sync-manager [v]
-  (set-state! :file-sync/sync-manager v))
-(defn set-file-sync-state [graph v]
-  (when v (s/assert :frontend.fs.sync/sync-state v))
-  (set-state! [:file-sync/sync-state graph] v))
+(defn set-file-sync-manager [graph-uuid v]
+  (when (and graph-uuid v)
+    (set-state! [:file-sync/graph-state graph-uuid :file-sync/sync-manager] v)))
 
-(defn get-file-sync-manager []
-  (:file-sync/sync-manager @state))
+(defn get-file-sync-manager [graph-uuid]
+  (get-in @state [:file-sync/graph-state graph-uuid :file-sync/sync-manager]))
+
+(defn clear-file-sync-state! [graph-uuid]
+  (set-state! [:file-sync/graph-state graph-uuid] nil))
+
+(defn clear-file-sync-progress! [graph-uuid]
+  (set-state! [:file-sync/graph-state
+               graph-uuid
+               :file-sync/progress]
+              nil))
+
+(defn set-file-sync-state [graph-uuid v]
+  (when v (s/assert :frontend.fs.sync/sync-state v))
+  (set-state! [:file-sync/graph-state graph-uuid :file-sync/sync-state] v))
 
 (defn get-file-sync-state
-  ([]
-   (get-file-sync-state (get-current-repo)))
-  ([repo]
-   (get-in @state [:file-sync/sync-state repo])))
+  [graph-uuid]
+  (get-in @state [:file-sync/graph-state graph-uuid :file-sync/sync-state]))
+
+(defn sub-file-sync-state
+  [graph-uuid]
+  (sub [:file-sync/graph-state graph-uuid :file-sync/sync-state]))
+
+(defn get-current-file-sync-graph-uuid
+  []
+  (get-in @state [:file-sync/graph-state :current-graph-uuid]))
+
+(defn sub-current-file-sync-graph-uuid
+  []
+  (sub [:file-sync/graph-state :current-graph-uuid]))
 
 (defn reset-parsing-state!
   []

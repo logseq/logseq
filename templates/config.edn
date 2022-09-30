@@ -121,7 +121,7 @@
 
  ;; Block content larger than `block/content-max-length` will not be searchable
  ;; or editable for performance.
- :block/content-max-length 5000
+ :block/content-max-length 10000
 
  ;; Whether to show command doc on hover
  :ui/show-command-doc? true
