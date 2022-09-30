@@ -182,13 +182,7 @@
 (def ws-addr config/WS-URL)
 
 ;; Warning: make sure to `persist-var/-load` graphs-txid before using it.
-(def graphs-txid (persist-var/persist-var nil "graphs-txid"))
-
-(defn get-graphs-txid
-  [graph-uuid]
-  ;; (when graph-uuid
-  ;;   (get @state/state [:file-sync/graph-state graph-uuid ]))
-  )
+(defonce graphs-txid (persist-var/persist-var nil "graphs-txid"))
 
 (declare assert-local-txid<=remote-txid)
 (defn <update-graphs-txid!
@@ -2970,8 +2964,7 @@
                     (offer! full-sync-chan true)))))
             (catch :default e
               (prn "Sync start error: ")
-              (log/error :exception e)))))))
-  )
+              (log/error :exception e))))))))
 
 ;;; ### some add-watches
 
