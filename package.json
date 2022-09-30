@@ -110,7 +110,7 @@
         "ignore": "5.1.8",
         "is-svg": "4.3.0",
         "jszip": "3.7.0",
-        "mldoc": "^1.4.9",
+        "mldoc": "^1.5.0",
         "path": "0.12.7",
         "pixi-graph-fork": "0.2.0",
         "pixi.js": "6.2.0",
