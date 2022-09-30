@@ -588,7 +588,7 @@ Similar to re-frame subscriptions"
 
 (defn block-content-max-length
   [repo]
-  (or (:block/content-max-length (sub-config repo)) 5000))
+  (or (:block/content-max-length (sub-config repo)) 10000))
 
 (defn mobile?
   []
