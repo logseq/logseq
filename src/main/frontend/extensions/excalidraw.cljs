@@ -3,7 +3,7 @@
             [clojure.string :as string]
             ;; NOTE: Always use production build of excalidraw
             ;; See-also: https://github.com/excalidraw/excalidraw/pull/3330
-            ["@excalidraw/excalidraw/dist/excalidraw.production.min" :as Excalidraw]
+            ["@excalidraw/excalidraw/dist/excalidraw.production.min.js" :refer [Excalidraw serializeAsJSON]]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
@@ -18,8 +18,7 @@
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]))
 
-(def excalidraw (r/adapt-class (gobj/get Excalidraw "default")))
-(def serialize-as-json (gobj/get Excalidraw "serializeAsJSON"))
+(def excalidraw (r/adapt-class Excalidraw))
 
 (defn from-json
   [text]
@@ -109,7 +108,7 @@
                               (reset! *elements elements->clj)
                               (draw/save-excalidraw!
                                file
-                               (serialize-as-json elements app-state))))))
+                               (serializeAsJSON elements app-state))))))
            
            :zen-mode-enabled @*zen-mode?
            :view-mode-enabled @*view-mode?
