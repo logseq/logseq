@@ -2,7 +2,7 @@ import Vec from '@tldraw/vec'
 import type { Handler, WebKitGestureEvent } from '@use-gesture/core/types'
 import { useGesture } from '@use-gesture/react'
 import * as React from 'react'
-import { TLTargetType, TLViewport, isDarwin } from '@tldraw/core'
+import { TLTargetType, TLViewport } from '@tldraw/core'
 import { useRendererContext } from './useRendererContext'
 
 type PinchHandler = Handler<
@@ -99,7 +99,6 @@ export function useGestureEvents(ref: React.RefObject<HTMLDivElement>) {
         max: TLViewport.maxZoom,
         min: TLViewport.minZoom,
       }),
-      modifierKey: isDarwin() ? 'metaKey' : 'ctrlKey',
     },
   })
 }
