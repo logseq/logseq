@@ -360,7 +360,7 @@
                                  (fn []
                                    (when-not (file-sync-handler/current-graph-sync-on?)
                                      (async/go
-                                       (let [graphs-txid (fs-sync/get-graphs-txid)]
+                                       (let [graphs-txid fs-sync/graphs-txid]
                                          (async/<! (p->c (persist-var/-load graphs-txid)))
                                          (cond
                                            @*beta-unavailable?
@@ -376,7 +376,9 @@
                                                 (second @graphs-txid)
                                                 (fs-sync/graph-sync-off? (second @graphs-txid))
                                                 (async/<! (fs-sync/<check-remote-graph-exists (second @graphs-txid))))
-                                           (fs-sync/sync-start)
+                                           (do
+                                             (prn "sync start")
+                                             (fs-sync/sync-start))
 
                                            ;; remote graph already has been deleted, clear repos first, then create-remote-graph
                                            synced-file-graph?  ; <check-remote-graph-exists -> false

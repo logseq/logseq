@@ -181,35 +181,28 @@
 
 (def ws-addr config/WS-URL)
 
+;; Warning: make sure to `persist-var/-load` graphs-txid before using it.
+(def graphs-txid (persist-var/persist-var nil "graphs-txid"))
+
 (defn get-graphs-txid
-  ([]
-   (let [result (persist-var/persist-var nil "graphs-txid")]
-     (p/let [_ (persist-var/-load result)]
-       (when-let [graph-uuid (second @result)]
-         (state/set-state! [:file-sync/graph-state graph-uuid :graphs-txid] result)))
-     result))
-  ([graph-uuid]
-   (when graph-uuid
-     (let [result (get-in @state/state [:file-sync/graph-state graph-uuid :graphs-txid]
-                          (get-graphs-txid))]
-       (persist-var/-load result)
-       result))))
+  [graph-uuid]
+  ;; (when graph-uuid
+  ;;   (get @state/state [:file-sync/graph-state graph-uuid ]))
+  )
 
 (declare assert-local-txid<=remote-txid)
 (defn <update-graphs-txid!
   [latest-txid graph-uuid user-uuid repo]
   {:pre [(int? latest-txid) (>= latest-txid 0)]}
-  (let [graphs-txid (get-graphs-txid graph-uuid)]
-    (-> (p/let [_ (persist-var/-reset-value! graphs-txid [user-uuid graph-uuid latest-txid] repo)
-               _ (persist-var/persist-save graphs-txid)]
-         (state/pub-event! [:graph/refresh])
-         (when (state/developer-mode?) (assert-local-txid<=remote-txid)))
-       p->c)))
+  (-> (p/let [_ (persist-var/-reset-value! graphs-txid [user-uuid graph-uuid latest-txid] repo)
+              _ (persist-var/persist-save graphs-txid)]
+        (state/pub-event! [:graph/refresh])
+        (when (state/developer-mode?) (assert-local-txid<=remote-txid)))
+      p->c))
 
-(defn clear-graphs-txid! [graph-uuid]
-  (when-let [graphs-txid (get-graphs-txid graph-uuid)]
-    (persist-var/-reset-value! graphs-txid nil (state/get-current-repo))
-    (persist-var/persist-save graphs-txid)))
+(defn clear-graphs-txid! [repo]
+  (persist-var/-reset-value! graphs-txid nil repo)
+  (persist-var/persist-save graphs-txid))
 
 (defn- ws-ping-loop [ws]
   (go-loop []
@@ -1373,11 +1366,10 @@
 
 (defn- assert-local-txid<=remote-txid
   []
-  (let [graphs-txid (get-graphs-txid)]
-    (when-let [local-txid (last @graphs-txid)]
-     (go (let [remote-txid (:TXId (<! (<get-remote-graph remoteapi nil (second @graphs-txid))))]
-           (assert (<= local-txid remote-txid)
-                   [@graphs-txid local-txid remote-txid]))))))
+  (when-let [local-txid (last @graphs-txid)]
+    (go (let [remote-txid (:TXId (<! (<get-remote-graph remoteapi nil (second @graphs-txid))))]
+          (assert (<= local-txid remote-txid)
+                  [@graphs-txid local-txid remote-txid])))))
 
 (defn- get-local-files-checksum
   [graph-uuid base-path relative-paths]
@@ -2934,7 +2926,7 @@
 
 (defn graph-encrypted?
   []
-  (when-let [graph-uuid (state/get-current-file-sync-graph-uuid)]
+  (when-let [graph-uuid (second @graphs-txid)]
     (get-pwd graph-uuid)))
 
 (declare network-online-cursor)
@@ -2944,8 +2936,7 @@
 (defn sync-start []
   (let [*sync-state                 (atom (sync-state))
         current-user-uuid           (user/user-uuid)
-        repo                        (state/get-current-repo)
-        graphs-txid                 (get-graphs-txid)]
+        repo                        (state/get-current-repo)]
     (go
       (<! (<sync-stop))
       (when (and (graph-sync-off? repo) @network-online-cursor)
@@ -2964,7 +2955,7 @@
                                                        txid *sync-state)]
                   (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
                     (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
-                      (clear-graphs-txid! graph-uuid)
+                      (clear-graphs-txid! repo)
                       (do
                         (state/set-file-sync-state graph-uuid @*sync-state)
                         (state/set-file-sync-manager graph-uuid sm)
