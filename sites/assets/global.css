@@ -70,10 +70,18 @@ body {
 
 .app-logo-link {
   display: inline-block;
-  width: 26px;
-  height: 26px;
-  background-image: url("./logo-transparent.png");
-  background-size: cover;
+  width: 32px;
+  height: 32px;
+  background-image: url("./logo-with-border.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  position: relative;
+  right: -5px;
+  top: 1px;
+
+  border-radius: 8px;
+  box-shadow: 0 4px 32px 0 rgba(133, 200, 200, 0.3);
 }
 
 .app-headbar {
@@ -83,10 +91,10 @@ body {
     @apply flex flex-1 space-x-8 whitespace-nowrap;
 
     a {
-      @apply text-logseq-100 sm:text-gray-300 text-base sm:text-lg hover:text-gray-50;
+      @apply text-logseq-100 sm:text-[#A4B5B6] text-base sm:text-lg hover:text-gray-300;
 
       &.app-link-active {
-        @apply text-gray-300 font-semibold sm:font-normal;
+        @apply text-gray-300 font-semibold sm:opacity-100;
       }
     }
   }
