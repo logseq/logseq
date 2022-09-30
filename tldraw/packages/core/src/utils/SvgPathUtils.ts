@@ -1,3 +1,5 @@
+import type { StrokePoint } from 'perfect-freehand'
+
 export class SvgPathUtils {
   static getCurvedPathForPolygon(points: number[][]) {
     if (points.length < 3) {
@@ -60,6 +62,39 @@ export class SvgPathUtils {
     for (let i = 2, max = len - 1; i < max; i++) {
       a = points[i]
       b = points[i + 1]
+      result += `${average(a[0], b[0]).toFixed(2)},${average(a[1], b[1]).toFixed(2)} `
+    }
+
+    if (closed) {
+      result += 'Z'
+    }
+
+    return result
+  }
+
+  /**
+   * Turn an array of stroke points into a path of quadradic curves.
+   *
+   * @param points - The stroke points returned from perfect-freehand
+   */
+  static getSvgPathFromStrokePoints(points: StrokePoint[], closed = false): string {
+    const len = points.length
+
+    if (len < 4) {
+      return ``
+    }
+
+    let a = points[0].point
+    let b = points[1].point
+    const c = points[2].point
+
+    let result = `M${a[0].toFixed(2)},${a[1].toFixed(2)} Q${b[0].toFixed(2)},${b[1].toFixed(
+      2
+    )} ${average(b[0], c[0]).toFixed(2)},${average(b[1], c[1]).toFixed(2)} T`
+
+    for (let i = 2, max = len - 1; i < max; i++) {
+      a = points[i].point
+      b = points[i + 1].point
       result += `${average(a[0], b[0]).toFixed(2)},${average(a[1], b[1]).toFixed(2)} `
     }
 
