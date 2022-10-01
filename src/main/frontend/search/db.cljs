@@ -1,4 +1,4 @@
-(ns frontend.search.db
+(ns ^:no-doc frontend.search.db
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.db :as db]
@@ -59,9 +59,6 @@
                         (clj->js {:keys ["name"]
                                   :shouldSort true
                                   :tokenize true
-                                  :minMatchCharLength 1
-                                  :distance 1000
-                                  :threshold 0.35
-                                  }))]
+                                  :minMatchCharLength 1}))]
       (swap! indices assoc-in [repo :pages] indice)
       indice)))

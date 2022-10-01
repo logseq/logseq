@@ -121,7 +121,7 @@
 
  ;; Block content larger than `block/content-max-length` will not be searchable
  ;; or editable for performance.
- :block/content-max-length 5000
+ :block/content-max-length 10000
 
  ;; Whether to show command doc on hover
  :ui/show-command-doc? true
@@ -232,10 +232,10 @@
  ;; E.g.:property-pages/excludelist #{:duration :author}
  ;; :property-pages/excludelist
 
- ;; Enables property values to contain a mix of tags, page-refs, special
- ;; punctuation and free-form text.
- ;; Re-index current graph for config to take effect
- ;; :rich-property-values? true
+ ;; By default, property value separated by commas will not be treated as
+ ;; page references. You can add properties to enable it.
+ ;; E.g. :property/separated-by-commas #{:alias :tags}
+ ;; :property/separated-by-commas #{}
 
  ;; logbook setup
  ;; :logbook/settings

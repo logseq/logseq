@@ -26,7 +26,7 @@
   (when-not (string/blank? text)
     (try
       (js/JSON.parse text)
-      (catch js/Error e
+      (catch :default e
         (println "from json error:")
         (js/console.dir e)
         (notification/show!

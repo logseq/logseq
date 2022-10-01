@@ -1,4 +1,6 @@
 (ns frontend.handler
+  "Main ns that handles application startup. Closest ns that we have to a
+  system. Contains a couple of small system components"
   (:require [cljs.reader :refer [read-string]]
             [clojure.string :as string]
             [electron.ipc :as ipc]
@@ -23,6 +25,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.global-config :as global-config-handler]
+            [frontend.handler.metadata :as metadata-handler]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
@@ -85,7 +88,7 @@
            (->
             (p/do! (repo-config-handler/start {:repo repo})
                    (when (config/global-config-enabled?)
-                        (global-config-handler/start {:repo repo})))
+                     (global-config-handler/start {:repo repo})))
             (p/finally
               (fn []
                 ;; install after config is restored
@@ -207,9 +210,9 @@
 
   (events/run!)
 
-  (-> (p/let [repos (get-repos)]
-        (state/set-repos! repos)
-        (restore-and-setup! repos))
+  (-> (p/let [repos (get-repos)
+              _ (state/set-repos! repos)
+              _ (restore-and-setup! repos)])
       (p/catch (fn [e]
                  (js/console.error "Error while restoring repos: " e)))
       (p/finally (fn []
@@ -227,6 +230,7 @@
   (persist-var/load-vars)
   (user-handler/restore-tokens-from-localstorage)
   (user-handler/refresh-tokens-loop)
+  (metadata-handler/run-set-page-metadata-job!)
   (js/setTimeout instrument! (* 60 1000)))
 
 (defn stop! []

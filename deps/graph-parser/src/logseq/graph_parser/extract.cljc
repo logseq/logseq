@@ -24,9 +24,10 @@
     (if (string/includes? file "pages/contents.")
       "Contents"
       (let [first-block (last (first (filter gp-block/heading-block? ast)))
-            property-name (when (and (contains? #{"Properties" "Property_Drawer"} (ffirst ast))
-                                     (not (string/blank? (:title (last (first ast))))))
-                            (:title (last (first ast))))
+            property-name (when (contains? #{"Properties" "Property_Drawer"} (ffirst ast))
+                            (let [properties-ast (second (first ast))
+                                  properties (zipmap (map (comp keyword first) properties-ast) (map second properties-ast))]
+                              (:title properties)))
             first-block-name (let [title (last (first (:title first-block)))]
                                (and first-block
                                     (string? title)
@@ -41,62 +42,69 @@
               (or first-block-name file-name)
               (or file-name first-block-name)))))))
 
-(defn- build-page-entity
-  [properties file page-name page ref-tags {:keys [date-formatter db from-page]}]
+(defn- extract-page-alias-and-tags
+  [page-m page page-name properties]
   (let [alias (:alias properties)
-        alias' (if (string? alias) [alias] alias)
+        alias' (if (coll? alias) alias [(str alias)])
         aliases (and alias'
                      (seq (remove #(or (= page-name (gp-util/page-name-sanity-lc %))
                                        (string/blank? %)) ;; disable blank alias
                                   alias')))
-        aliases' (->>
-                 (map
-                  (fn [alias]
-                    (let [page-name (gp-util/page-name-sanity-lc alias)
-                          aliases (distinct
-                                   (conj
-                                    (remove #{alias} aliases)
-                                    page))
-                          aliases (when (seq aliases)
-                                    (map
-                                     (fn [alias]
-                                       {:block/name (gp-util/page-name-sanity-lc alias)})
-                                     aliases))]
-                      (if (seq aliases)
-                        {:block/name page-name
-                         :block/alias aliases}
-                        {:block/name page-name})))
-                  aliases)
-                 (remove nil?))
-        [*valid-properties *invalid-properties]
+        aliases' (keep
+                   (fn [alias]
+                     (let [page-name (gp-util/page-name-sanity-lc alias)
+                           aliases (distinct
+                                    (conj
+                                     (remove #{alias} aliases)
+                                     page))
+                           aliases (when (seq aliases)
+                                     (map
+                                       (fn [alias]
+                                         {:block/name (gp-util/page-name-sanity-lc alias)})
+                                       aliases))]
+                       (if (seq aliases)
+                         {:block/name page-name
+                          :block/original-name alias
+                          :block/alias aliases}
+                         {:block/name page-name
+                          :block/original-name alias})))
+                   aliases)
+        result (cond-> page-m
+                 (seq aliases')
+                 (assoc :block/alias aliases')
+
+                 (:tags properties)
+                 (assoc :block/tags (let [tags (:tags properties)
+                                          tags (if (coll? tags) tags [(str tags)])
+                                          tags (remove string/blank? tags)]
+                                      (map (fn [tag] {:block/name (gp-util/page-name-sanity-lc tag)
+                                                      :block/original-name tag})
+                                        tags))))]
+    (update result :block/properties #(apply dissoc % gp-property/editable-linkable-built-in-properties))))
+
+(defn- build-page-map
+  [properties invalid-properties file page page-name {:keys [date-formatter db from-page]}]
+  (let [[*valid-properties *invalid-properties]
         ((juxt filter remove)
          (fn [[k _v]] (gp-property/valid-property-name? (str k))) properties)
         valid-properties (into {} *valid-properties)
-        invalid-properties (set (map (comp name first) *invalid-properties))]
+        invalid-properties (set (->> (map (comp name first) *invalid-properties)
+                                     (concat invalid-properties)))
+        page-m (->
+                (gp-util/remove-nils
+                 (assoc
+                  (gp-block/page-name->map page false db true date-formatter
+                                           :from-page from-page)
+                  :block/file {:file/path (gp-util/path-normalize file)}))
+                (extract-page-alias-and-tags page page-name properties))]
     (cond->
-     (gp-util/remove-nils
-      (assoc
-       (gp-block/page-name->map page false db true date-formatter
-                                :from-page from-page)
-       :block/file {:file/path (gp-util/path-normalize file)}))
+      page-m
 
-     (seq valid-properties)
-     (assoc :block/properties valid-properties)
+      (seq valid-properties)
+      (assoc :block/properties valid-properties)
 
-     (seq invalid-properties)
-     (assoc :block/invalid-properties invalid-properties)
-
-     (seq aliases')
-     (assoc :block/alias aliases')
-
-     (:tags properties)
-     (assoc :block/tags (let [tags (:tags properties)
-                              tags (if (string? tags) [tags] tags)
-                              tags (remove string/blank? tags)]
-                          (swap! ref-tags set/union (set tags))
-                          (map (fn [tag] {:block/name (gp-util/page-name-sanity-lc tag)
-                                          :block/original-name tag})
-                               tags))))))
+      (seq invalid-properties)
+      (assoc :block/invalid-properties invalid-properties))))
 
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
@@ -104,10 +112,14 @@
   (try
     (let [page (get-page-name file ast page-name-order)
           [page page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
-          blocks (->> (gp-block/extract-blocks ast content false format (dissoc options :page-name-order))
-                      (gp-block/with-parent-and-left {:block/name page-name}))
+          options' (-> options
+                       (assoc :page-name page-name
+                              :original-page-name page)
+                       (dissoc :page-name-order))
+          blocks (->> (gp-block/extract-blocks ast content false format options')
+                      (gp-block/with-parent-and-left {:block/name page-name})
+                      (vec))
           ref-pages (atom #{})
-          ref-tags (atom #{})
           blocks (map (fn [block]
                         (if (contains? #{"macro"} (:block/type block))
                           block
@@ -124,22 +136,20 @@
                                        :block/refs block-ref-pages
                                        :block/path-refs block-path-ref-pages)))))
                    blocks)
-          page-entity (build-page-entity properties file page-name page ref-tags
-                                         (assoc options :from-page page))
-          namespace-pages (let [page (:block/original-name page-entity)]
+          [properties invalid-properties] (if (:block/pre-block? (first blocks))
+                                            [(:block/properties (first blocks))
+                                             (:block/invalid-properties (first blocks))]
+                                            [properties []])
+          page-map (build-page-map properties invalid-properties file page page-name (assoc options' :from-page page))
+          namespace-pages (let [page (:block/original-name page-map)]
                             (when (text/namespace-page? page)
                               (->> (gp-util/split-namespace-pages page)
                                    (map (fn [page]
                                           (-> (gp-block/page-name->map page true db true date-formatter)
                                               (assoc :block/format format)))))))
           pages (->> (concat
-                      [page-entity]
+                      [page-map]
                       @ref-pages
-                      (map
-                       (fn [page]
-                         {:block/original-name page
-                          :block/name (gp-util/page-name-sanity-lc page)})
-                       @ref-tags)
                       namespace-pages)
                      ;; remove block references
                      (remove vector?)
@@ -162,18 +172,16 @@
           _ (when verbose (println "Parsing start: " file))
           ast (gp-mldoc/->edn content (gp-mldoc/default-config format
                                         ;; {:parse_outline_only? true}
-                                        )
-                              user-config)]
+                                        ))]
       (when verbose (println "Parsing finished: " file))
       (let [first-block (ffirst ast)
             properties (let [properties (and (gp-property/properties-ast? first-block)
                                              (->> (last first-block)
-                                                  (map (fn [[x y]]
-                                                         [x (if (and (string? y)
-                                                                     (not (and (= (keyword x) :file-path)
-                                                                               (string/starts-with? y "file:"))))
-                                                              (text/parse-property format x y user-config)
-                                                              y)]))
+                                                  (map (fn [[x y mldoc-ast]]
+                                                         (let [k (if (keyword? x)
+                                                                   (subs (str x) 1)
+                                                                   x)]
+                                                           [(string/lower-case k) (text/parse-property k y mldoc-ast (assoc user-config :format format))])))
                                                   (into {})
                                                   (walk/keywordize-keys)))]
                          (when (and properties (seq properties))
@@ -204,7 +212,3 @@
          vals
          (map (partial apply merge))
          (with-block-uuid))))
-
-;; TODO: Properly fix this circular dependency:
-;; mldoc/->edn > text/parse-property > mldoc/link? ->mldoc/inline->edn + mldoc/default-config
-(set! gp-mldoc/parse-property text/parse-property)

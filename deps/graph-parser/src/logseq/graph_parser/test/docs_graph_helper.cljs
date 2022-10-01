@@ -100,7 +100,8 @@
             :updated-at 47 :created-at 47
             :card-last-score 6 :card-repeats 6 :card-next-schedule 6
             :card-last-interval 6 :card-ease-factor 6 :card-last-reviewed 6
-            :alias 6 :logseq.macro-arguments 94 :logseq.macro-name 94}
+            :alias 6 :logseq.macro-arguments 94 :logseq.macro-name 94
+            :heading 64}
            (get-top-block-properties db))
         "Counts for top block properties")
 
@@ -115,10 +116,9 @@
             :block/priority 4
             :block/deadline 1
             :block/collapsed? 22
-            :block/heading-level 60
             :block/repeated? 1}
            (->> [:block/scheduled :block/priority :block/deadline :block/collapsed?
-                 :block/heading-level :block/repeated?]
+                 :block/repeated?]
                 (map (fn [attr]
                        [attr
                         (ffirst (d/q [:find (list 'count '?b) :where ['?b attr]]
@@ -142,7 +142,7 @@
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
     (is (= 211 (count files)) "Correct file count")
-    (is (= 41776 (count (d/datoms db :eavt))) "Correct datoms count")
+    (is (= 42006 (count (d/datoms db :eavt))) "Correct datoms count")
 
     (is (= 3600
            (ffirst

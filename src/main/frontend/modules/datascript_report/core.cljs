@@ -8,7 +8,7 @@
   [db selector eid]
   (try
     (d/pull db selector eid)
-    (catch js/Error e
+    (catch :default e
       (js/console.error e)
       nil)))
 

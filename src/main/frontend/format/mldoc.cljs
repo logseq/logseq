@@ -1,8 +1,8 @@
 (ns frontend.format.mldoc
-  "Mldoc code needed by app but not graph-parser"
+  "Contains any mldoc code needed by app but not graph-parser. Implements format
+  protocol for org and and markdown formats"
   (:require [clojure.string :as string]
             [frontend.format.protocol :as protocol]
-            [frontend.state :as state]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             ["mldoc" :as mldoc :refer [Mldoc]]
@@ -40,20 +40,21 @@
                "Heading"} type))
 
 (defn opml->edn
-  [content]
+  [config content]
   (try
     (if (string/blank? content)
       {}
       (let [[headers blocks] (-> content (parse-opml) (gp-util/json->clj))]
-        [headers (gp-mldoc/collect-page-properties blocks gp-mldoc/parse-property (state/get-config))]))
-    (catch js/Error e
+        [headers (gp-mldoc/collect-page-properties blocks config)]))
+    (catch :default e
       (log/error :edn/convert-failed e)
       [])))
 
 (defn ->edn
-  "Wrapper around gp-mldoc/->edn which provides config state"
+  "Alias to gp-mldoc/->edn but could serve as a wrapper e.g. handle
+  gp-mldoc/default-config"
   [content config]
-  (gp-mldoc/->edn content config (state/get-config)))
+  (gp-mldoc/->edn content config))
 
 (defrecord MldocMode []
   protocol/Format

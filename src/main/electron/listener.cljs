@@ -1,4 +1,6 @@
 (ns electron.listener
+  "System-component-like ns that defines listeners by event name to receive ipc
+  messages from electron's main process"
   (:require [frontend.state :as state]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -48,6 +50,11 @@
                          (watcher-handler/handle-changed! type payload)
                          (when (file-sync-handler/enable-sync?)
                            (sync/file-watch-handler type payload)))))
+
+  (js/window.apis.on "file-sync-progress"
+                     (fn [data]
+                       (let [payload (bean/->clj data)]
+                         (state/set-state! [:file-sync/graph-state (:graphUUID payload) :file-sync/progress (:file payload)] payload))))
 
   (js/window.apis.on "notification"
                      (fn [data]

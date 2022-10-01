@@ -1,4 +1,5 @@
 (ns frontend.util
+  "Main ns for utility fns. This ns should be split up into more focused namespaces"
   #?(:clj (:refer-clojure :exclude [format]))
   #?(:cljs (:require-macros [frontend.util]))
   #?(:cljs (:require
@@ -39,8 +40,13 @@
        (-write writer (str "\"" (.toString sym) "\"")))))
 
 #?(:cljs (defonce ^js node-path utils/nodePath))
-#?(:cljs (defn app-scroll-container-node []
-           (gdom/getElement "main-content-container")))
+#?(:cljs (defn app-scroll-container-node
+           ([]
+            (gdom/getElement "main-content-container"))
+           ([el]
+            (if (.closest el "#main-content-container")
+              (app-scroll-container-node)
+              (gdom/getElementByClass "sidebar-item-list")))))
 
 #?(:cljs
    (defn safe-re-find
@@ -568,12 +574,12 @@
      ([input text start end]
       (try
         (.setRangeText input text start end)
-        (catch js/Error _e
+        (catch :default _e
           nil)))
      ([input text start end select-mode]
       (try
         (.setRangeText input text start end select-mode)
-        (catch js/Error _e
+        (catch :default _e
           nil)))))
 
 #?(:cljs
@@ -587,7 +593,7 @@
            (let [^js splitter (GraphemeSplitter.)
                  ^js input (.splitGraphemes splitter input)]
              (- current-pos (.-length (.pop input))))
-           (catch js/Error e
+           (catch :default e
              (js/console.error e)
              (dec current-pos))))
        (dec current-pos))))
@@ -603,7 +609,7 @@
            (let [^js splitter (GraphemeSplitter.)
                  ^js input (.splitGraphemes splitter input)]
              (+ current-pos (.-length (.shift input))))
-           (catch js/Error e
+           (catch :default e
              (js/console.error e)
              (inc current-pos))))
        (inc current-pos))))
@@ -880,7 +886,7 @@
      [path]
      (try
        (js/window.apis.isAbsolutePath path)
-       (catch js/Error _
+       (catch :default _
          (utils/win32 path)))))
 
 (defn default-content-with-title
@@ -1299,7 +1305,7 @@
              header-height (-> (gdom/getElementByClass "cp__header")
                                .-clientHeight)
 
-             main-node   (app-scroll-container-node)
+             main-node   (app-scroll-container-node el)
              scroll-top  (.-scrollTop main-node)
 
              current-pos (get-selection-start el)
@@ -1325,7 +1331,7 @@
 
            (< cursor-y header-height)
            (let [_ (.scrollIntoView el true)
-                 main-node (app-scroll-container-node)
+                 main-node (app-scroll-container-node el)
                  scroll-top (.-scrollTop main-node)]
              (set! (.-scrollTop main-node) (- scroll-top (/ vw-height 4))))
 

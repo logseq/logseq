@@ -1,10 +1,15 @@
 (ns electron.file-sync-rsapi
-  (:require ["@logseq/rsapi" :as rsapi]))
+  (:require ["@logseq/rsapi" :as rsapi]
+            [electron.window :as window]
+            [cljs-bean.core :as bean]))
 
 (defn key-gen [] (rsapi/keygen))
 
 (defn set-env [graph-uuid env private-key public-key]
   (rsapi/setEnv graph-uuid env private-key public-key))
+
+(defn set-progress-callback [callback]
+  (rsapi/setProgressCallback callback))
 
 (defn get-local-files-meta [graph-uuid base-path file-paths]
   (rsapi/getLocalFilesMeta graph-uuid base-path (clj->js file-paths)))
@@ -41,3 +46,15 @@
 
 (defn decrypt-with-passphrase [passphrase data]
   (rsapi/ageDecryptWithPassphrase passphrase data))
+
+(defn cancel-all-requests []
+  (rsapi/cancelAllRequests))
+
+(defonce progress-notify-chan "file-sync-progress")
+(set-progress-callback (fn [error progress-info]
+                         (when-not error
+                           (doseq [^js win (window/get-all-windows)]
+                             (when-not (.isDestroyed win)
+                               (.. win -webContents
+                                   (send progress-notify-chan (bean/->js progress-info))))))))
+                                   

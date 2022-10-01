@@ -517,6 +517,7 @@
               (when-let [e (and protocol host port (str protocol "://" host ":" port))]
                 [:strong.pr-1 e])
               (ui/icon "edit")]
+             :small? true
              :on-click #(state/set-sub-modal!
                          (fn [_] (plugins/user-proxy-settings-panel agent-opts))
                          {:id :https-proxy-panel :center? true})))
@@ -699,7 +700,7 @@
                       (not (file-sync-handler/synced-file-graph? current-repo)))
                  [:git "git" (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
                [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]
-               [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature" {:style {:font-size 20}
+               [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature" {:style {:font-size 18}
                                                                                              :extension? true})]
                (when plugins-of-settings
                  [:plugins-setting "plugins" (t :settings-of-plugins) (ui/icon "puzzle")])]]

@@ -84,7 +84,7 @@
      :on-click editor-handler/copy-block-embeds}
     "Copy block embeds"
     nil)
-   
+
    [:hr.menu-separator]
 
    (ui/menu-link
@@ -100,8 +100,7 @@
    "#787f97"
    "#978626"
    "#49767b"
-   "#264c9b"
-   "#793e3e"])
+   "#264c9b"])
 
 (defonce *template-including-parent? (atom nil))
 
@@ -163,11 +162,10 @@
 (rum/defc ^:large-vars/cleanup-todo block-context-menu-content
   [_target block-id]
     (when-let [block (db/entity [:block/uuid block-id])]
-      (let [properties (:block/properties block)
-            heading? (true? (:heading properties))]
+      (let [format (:block/format block)]
         [:.menu-links-wrapper
-         [:div.flex-row.flex.justify-between.pb-2.pt-1.px-2
-          [:div.flex-row.flex.justify-between
+         [:div.flex.flex-row.justify-between.pb-2.pt-1.px-2.items-center
+          [:div.flex.flex-row.justify-between.flex-1
            (for [color block-background-colors]
              [:a.m-2.shadow-sm
               {:on-click (fn [_e]
@@ -178,7 +176,24 @@
              :on-click (fn [_e]
                          (editor-handler/remove-block-property! block-id "background-color"))}
             [:div.heading-bg.remove "-"]]]]
-         
+
+         [:div.flex.flex-row.justify-between.pb-2.pt-1.px-2.items-center
+          [:div.flex.flex-row.justify-between.flex-1
+           (for [i (range 1 7)]
+             (ui/button
+              (str "H" i)
+              :on-click (fn [_e]
+                          (editor-handler/set-heading! block-id format i))
+              :intent "link"
+              :small? true))
+           (ui/button
+            "H-"
+            :title (t :remove-heading)
+            :on-click (fn [_e]
+                        (editor-handler/remove-heading! block-id format))
+            :intent "link"
+            :small? true)]]
+
          [:hr.menu-separator]
 
          (ui/menu-link
@@ -232,30 +247,23 @@
 
          [:hr.menu-separator]
 
-         (ui/menu-link
-          {:key      "Convert heading"
-           :on-click (fn [_e]
-                       (if heading?
-                         (editor-handler/remove-block-property! block-id :heading)
-                         (editor-handler/set-block-property! block-id :heading true)))}
-          (if heading?
-            "Convert back to a block"
-            "Convert to a heading")
-          nil)
-
          (block-template block-id)
 
-         (if (srs/card-block? block)
+         (cond 
+           (srs/card-block? block)
            (ui/menu-link
             {:key      "Preview Card"
              :on-click #(srs/preview (:db/id block))}
             "Preview Card"
             nil)
+           (state/enable-flashcards?)
            (ui/menu-link
             {:key      "Make a Card"
              :on-click #(srs/make-block-a-card! block-id)}
             "Make a Flashcard"
-            nil))
+            nil)
+           :else
+           nil)
 
          [:hr.menu-separator]
 

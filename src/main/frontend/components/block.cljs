@@ -206,7 +206,7 @@
                         *loading? (::loading? state)
                         *exist? (::exist? state)]
                     (when (and sync-on? asset-file? (false? @*exist?))
-                      (let [sync-state (state/sub [:file-sync/sync-state (state/get-current-repo)])
+                      (let [sync-state (state/get-file-sync-state (state/get-current-file-sync-graph-uuid))
                             downloading-files (:current-remote->local-files sync-state)
                             contain-url? (and (seq downloading-files)
                                               (some #(string/ends-with? src %) downloading-files))]
@@ -220,7 +220,7 @@
                             (reset! *loading? false))))))
                   state)}
   [state src content-fn]
-  (let [_ (state/sub [:file-sync/sync-state (state/get-current-repo)])
+  (let [_ (state/sub-file-sync-state (state/get-current-file-sync-graph-uuid))
         exist? @(::exist? state)
         loading? @(::loading? state)
         asset-file? (::asset-file? state)
@@ -1209,7 +1209,7 @@
              f (sci/eval-string fn-string)]
          (when (fn? f)
            (try (f query-result)
-                (catch js/Error e
+                (catch :default e
                   (js/console.error e)))))))
    [:span.warning
     (util/format "{{function %s}}" (first arguments))]))
@@ -1839,7 +1839,7 @@
 (declare block-content)
 
 (defn build-block-title
-  [config {:block/keys [title marker pre-block? properties level heading-level]
+  [config {:block/keys [title marker pre-block? properties]
            :as t}]
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
@@ -1856,14 +1856,16 @@
         priority (priority-cp t)
         tags (block-tags-cp t)
         bg-color (:background-color properties)
-        heading-level (or (and heading-level
-                               (<= heading-level 6)
-                               heading-level)
-                          (and (get properties :heading)
-                               (<= level 6)
-                               level))
-        elem (if heading-level
-               (keyword (str "h" heading-level
+        ;; `heading-level` is for backward compatiblity, will remove it in later releases
+        heading-level (:block/heading-level t)
+        heading (or
+                 (and heading-level
+                      (<= heading-level 6)
+                      heading-level)
+                 (:heading properties))
+        heading (if (true? heading) 2 heading)
+        elem (if heading
+               (keyword (str "h" heading
                              (when block-ref? ".inline")))
                :span.inline)]
     (->elem
@@ -1912,13 +1914,14 @@
   [config block k value]
   (let [date (and (= k :date) (date/get-locale-string (str value)))
         user-config (state/get-config)
-        ;; In this mode and when value is a set of refs, display full property text
+        ;; When value is a set of refs, display full property text
         ;; because :block/properties value only contains refs but user wants to see text
-        v (if (and (:rich-property-values? user-config)
-                   (coll? value)
-                   (not (contains? gp-property/editable-linkable-built-in-properties k)))
-            (gp-property/property-value-from-content (name k) (:block/content block))
-            value)
+        property-separated-by-commas? (text/separated-by-commas? (state/get-config) k)
+        v (or
+           (when (and (coll? value) (seq value)
+                      (not property-separated-by-commas?))
+             (get (:block/properties-text-values block) k))
+           value)
         property-pages-enabled? (contains? #{true nil} (:property-pages/enabled? user-config))]
     [:div
      (if property-pages-enabled?
@@ -1935,7 +1938,10 @@
        date
        date
 
-       (coll? v)
+       (and (string? v) (gp-util/wrapped-by-quotes? v))
+       (gp-util/unquote-string v)
+
+       (and property-separated-by-commas? (coll? v))
        (let [v (->> (remove string/blank? v)
                     (filter string?))
              vals (for [v-item v]
@@ -1943,9 +1949,6 @@
              elems (interpose (span-comma) vals)]
          (for [elem elems]
            (rum/with-key elem (str (random-uuid)))))
-
-       (and (string? v) (gp-util/wrapped-by-quotes? v))
-       (gp-util/unquote-string v)
 
        :else
        (inline-text config (:block/format block) (str v)))]))
@@ -2288,7 +2291,7 @@
 
 (rum/defcs block-content-or-editor < rum/reactive
   (rum/local true ::hide-block-refs?)
-  [state config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
+  [state config {:block/keys [uuid format] :as block} edit-input-id block-id edit?]
   (let [*hide-block-refs? (get state ::hide-block-refs?)
         hide-block-refs? @*hide-block-refs?
         editor-box (get config :editor-box)
@@ -2306,7 +2309,6 @@
                      :block-id uuid
                      :block-parent-id block-id
                      :format format
-                     :heading-level heading-level
                      :on-hide (fn [value event]
                                 (when (= event :esc)
                                   (editor-handler/save-block! (editor-handler/get-state) value)
@@ -2573,7 +2575,7 @@
         block (if ref?
                 (merge block (db/pull-block (:db/id block)))
                 block)
-        {:block/keys [uuid children pre-block? top? refs heading-level level format content properties]} block
+        {:block/keys [uuid children pre-block? top? refs level format content properties]} block
         config (if navigated? (assoc config :id (str navigating-block)) config)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         blocks-container-id (:blocks-container-id config)
@@ -2582,7 +2584,7 @@
         config (if (nil? (:query-result config))
                  (assoc config :query-result (atom nil))
                  config)
-        heading? (or (:heading properties) (and heading-level (<= heading-level 6)))
+        heading? (:heading properties)
         *control-show? (get state ::control-show?)
         db-collapsed? (util/collapsed? block)
         collapsed? (cond
@@ -2664,7 +2666,7 @@
       (when @*show-left-menu?
         (block-left-menu config block))
 
-      (block-content-or-editor config block edit-input-id block-id heading-level edit?)
+      (block-content-or-editor config block edit-input-id block-id edit?)
 
       (when @*show-right-menu?
         (block-right-menu config block edit?))]
@@ -2813,7 +2815,7 @@
                                    :colgroup
                                    (repeat number col-elem))))
                               col_groups)
-                        (catch js/Error _e
+                        (catch :default _e
                           []))
         head (when header
                [:thead (tr :th header)])
@@ -3041,7 +3043,7 @@
                (and (seq result) view-f)
                (let [result (try
                               (sci/call-fn view-f result)
-                              (catch js/Error error
+                              (catch :default error
                                 (log/error :custom-view-failed {:error error
                                                                 :result result})
                                 [:div "Custom view failed: "
@@ -3317,7 +3319,7 @@
 
       :else
       "")
-    (catch js/Error e
+    (catch :default e
       (println "Convert to html failed, error: " e)
       "")))
 

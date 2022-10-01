@@ -1,4 +1,5 @@
 (ns frontend.db
+  "Main entry ns for db related fns"
   (:require [clojure.core.async :as async]
             [datascript.core :as d]
             [logseq.db.schema :as db-schema]
@@ -160,7 +161,7 @@
           _ (swap! conns assoc db-name db-conn)
           _ (when stored
               (let [stored-db (try (string->db stored)
-                                   (catch js/Error _e
+                                   (catch :default _e
                                      (js/console.warn "Invalid graph cache")
                                      (d/empty-db db-schema/schema)))
                     attached-db (d/db-with stored-db

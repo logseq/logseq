@@ -4,7 +4,6 @@ electron.core/start
 electron.core/stop
 ;; repl fn
 electron.search/query
-frontend.blob/blob
 ;; Used by shadow-cljs
 frontend.core/stop
 ;; For repl
