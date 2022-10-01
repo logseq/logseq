@@ -29,7 +29,9 @@ h1, h2, h3 {
 
     max-width: unset !important;
     width: 100%;
-    background-color: #011b22;
+
+    background: rgb(2, 0, 36);
+    background: linear-gradient(0deg, rgba(2, 0, 36, 1) 0%, rgba(0, 0, 0, 1) 0%, rgba(0, 212, 255, 0) 100%);
   }
 }
 

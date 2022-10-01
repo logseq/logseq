@@ -91,7 +91,7 @@ export function useDiscordState () {
   const state = useAppState()
 
   useEffect(() => {
-    fetch(discordEndpoint).then(res => res.json()).then((json) => {
+    fetch(discordEndpoint).then(res => res.json()).then((json: any) => {
       if (json && json.guild) {
         state.discord.set(json as any)
       }
