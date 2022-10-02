@@ -26,7 +26,7 @@ test('set whiteboard title', async ({ page }) => {
 
 test('select rectangle tool', async ({ page }) => {
     await page.keyboard.press('8')
-    await expect(page.locator('.tl-geometry-tools-pane-anchor [title="Rectangle (r)"]')).toHaveAttribute('data-selected', 'true')
+    await expect(page.locator('.tl-geometry-tools-pane-anchor [title="Rectangle (8)"]')).toHaveAttribute('data-selected', 'true')
 })
 
 test('draw a rectangle', async ({ page }) => {
