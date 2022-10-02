@@ -53,9 +53,7 @@
        (vec)))
 
 (defmethod handle :readdir [_window [_ dir]]
-  (let [entries (readdir dir)]
-    (js/console.log entries)
-    entries))
+  (readdir dir))
 
 (defmethod handle :unlink [_window [_ repo-dir path]]
   (if (plugin/dotdir-file? path)
