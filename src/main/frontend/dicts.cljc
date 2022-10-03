@@ -204,6 +204,8 @@
         :settings-page/plugin-system "Plugins"
         :settings-page/enable-flashcards "Flashcards"
         :settings-page/network-proxy "Network proxy"
+        :settings-page/alpha-features "Alpha features"
+        :settings-page/login-prompt "To access new features before anyone else you must be a financial supporter or alpha tester of Logseq and therefore log in first."
         :settings-page/sync "Sync"
         :settings-page/enable-whiteboards "Whiteboards"
         :logseq "Logseq"

@@ -630,7 +630,7 @@
 
 (defn sync-switcher-row [enabled?]
   (row-with-button-action
-   {:left-label (str (t :settings-page/sync) " 🔐")
+   {:left-label (t :settings-page/sync)
     :action (sync-enabled-switcher enabled?)}))
 
 (rum/defc whiteboards-enabled-switcher
@@ -653,7 +653,8 @@
         enable-encryption? (state/enable-encryption? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
         enable-sync? (state/enable-sync?)
-        enable-whiteboards? (state/enable-whiteboards? current-repo)]
+        enable-whiteboards? (state/enable-whiteboards? current-repo)
+        logged-in? (user-handler/logged-in?)]
     [:div.panel-wrap.is-features.mb-8
      (journal-row enable-journals?)
      (when (not enable-journals?)
@@ -677,7 +678,21 @@
      (when-not web-platform?
        [:div
         [:hr]
-        [:h2.mb-4 "Alpha test (sponsors only)"]
+        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+         [:label.flex.font-medium.leading-5 (ui/icon "lock" {:class "mr-1"}) (t :settings-page/alpha-features)]
+         [:div.mt-1.sm:mt-0.sm:col-span-2
+          (if logged-in?
+            (user-handler/logged-in?)
+            [:div
+             (ui/button
+              [:span.flex.text-sm
+               (ui/icon "login" {:class "mr-1"})
+               (t :login)]
+              {:class "p-1"
+               :on-click (fn []
+                           (state/close-settings!)
+                           (js/window.open config/LOGIN-URL))})
+             [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])]]
         [:div.flex.flex-col.gap-4
          (sync-switcher-row enable-sync?)
          (whiteboards-switcher-row enable-whiteboards?)]])]))
