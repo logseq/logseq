@@ -40,6 +40,7 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.common.file :as file-common-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
@@ -688,6 +689,59 @@
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]
     (ui-handler/re-render-root!)))
+
+(rum/defcs file-id-conflict-item <
+  (rum/local false ::resolved?)
+  [state repo file data]
+  (let [resolved? (::resolved? state)
+        id (last (:assertion data))]
+    [:li {:key file}
+     [:div
+      [:a {:on-click #(js/window.apis.openPath file)} file]
+      (if @resolved?
+        [:div.flex.flex-row.items-center
+         (ui/icon "circle-check" {:style {:font-size 20}})
+         [:div.ml-1 "Resolved"]]
+        [:div
+         [:p
+          (str "It seems that another whiteboard file already have the ID \"" id
+               "\", you can fix it by change replace the ID in this file with another UUID.")]
+         [:p
+          "Or, let me"
+          (ui/button "Fix"
+            :on-click (fn []
+                        (let [dir (config/get-repo-dir repo)]
+                          (p/let [content (fs/read-file dir file)]
+                            (let [new-content (string/replace content (str id) (str (random-uuid)))]
+                              (p/let [_ (fs/write-file! repo
+                                                        dir
+                                                        file
+                                                        new-content
+                                                        {})]
+                                (reset! resolved? true))))))
+            :class "inline mx-1")
+          "it."]])]]))
+
+(defmethod handle :file/parse-and-load-error [[_ repo parse-errors]]
+  (state/pub-event! [:notification/show
+                     {:content
+                      [:div
+                       [:h2.title "Oops, those files are failed to imported to your graph:"]
+                       [:ol.my-2
+                        (for [[file error] parse-errors]
+                          (let [data (ex-data error)]
+                            (cond
+                             (and (file-common-handler/whiteboard? file)
+                                  (= :transact/upsert (:error data))
+                                  (uuid? (last (:assertion data))))
+                             (rum/with-key (file-id-conflict-item repo file data) file)
+
+                             :else
+                             [:li.my-1 {:key file}
+                              [:p file]
+                              [:p (str error)]])))]
+                       [:p "Don't forget to re-index your graph when all the conflicts are resolved."]]
+                      :status :error}]))
 
 (defn run!
   []

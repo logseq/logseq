@@ -195,10 +195,12 @@
                                 (update m :finished inc)))
     @*file-tx
     (catch :default e
-      (prn "parse and load file failed: " (str (:file/path file)))
+      (println "Parse and load file failed: " (str (:file/path file)))
       (js/console.error e)
       (state/set-parsing-state! (fn [m]
                                   (update m :failed-parsing-files conj [(:file/path file) e])))
+      (state/set-parsing-state! (fn [m]
+                                  (update m :finished inc)))
       nil)))
 
 (defn- after-parse
@@ -214,16 +216,7 @@
   (state/pub-event! [:graph/added repo-url opts])
   (let [parse-errors (get-in @state/state [:graph/parsing-state repo-url :failed-parsing-files])]
     (when (seq parse-errors)
-     (state/pub-event! [:notification/show
-                        {:content
-                         [:div
-                          [:h2 "Oops, those files are failed to imported to your graph:"]
-                          [:ul
-                           (for [[file error] parse-errors]
-                             [:li
-                              [:p file]
-                              [:p (str error)]])]]
-                         :status :error}])))
+      (state/pub-event! [:file/parse-and-load-error repo-url parse-errors])))
   (state/reset-parsing-state!)
   (state/set-loading-files! repo-url false)
   (async/offer! graph-added-chan true))
@@ -255,8 +248,7 @@
       (async/go-loop [tx []]
         (if-let [item (async/<! chan)]
           (let [[idx file] item
-                whiteboard? (and (string/ends-with? (:file/path file) ".edn")
-                                 (string/includes? (:file/path file) "whiteboards/"))
+                whiteboard? (file-common-handler/whiteboard? (:file/path file))
                 yield-for-ui? (or (not large-graph?)
                                   (zero? (rem idx 10))
                                   (<= (- total idx) 10)

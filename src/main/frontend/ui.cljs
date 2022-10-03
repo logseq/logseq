@@ -223,35 +223,32 @@
 (rum/defc notification-content
   [state content status uid]
   (when (and content status)
-    (let [[color-class svg]
+    (let [svg
           (case status
             :success
-            ["text-gray-900 dark:text-gray-300 "
-             [:svg.h-6.w-6.text-green-400
-              {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
-              [:path
-               {:d               "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                :stroke-width    "2"
-                :stroke-linejoin "round"
-                :stroke-linecap  "round"}]]]
+            [:svg.h-6.w-6.text-green-400
+             {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
+             [:path
+              {:d               "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+               :stroke-width    "2"
+               :stroke-linejoin "round"
+               :stroke-linecap  "round"}]]
             :warning
-            ["text-gray-900 dark:text-gray-300 "
-             [:svg.h-6.w-6.text-yellow-500
-              {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
-              [:path
-               {:d               "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                :stroke-width    "2"
-                :stroke-linejoin "round"
-                :stroke-linecap  "round"}]]]
+            [:svg.h-6.w-6.text-yellow-500
+             {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
+             [:path
+              {:d               "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+               :stroke-width    "2"
+               :stroke-linejoin "round"
+               :stroke-linecap  "round"}]]
 
-            ["text-red-500"
-             [:svg.h-6.w-6.text-red-500
-              {:view-box "0 0 20 20", :fill "currentColor"}
-              [:path
-               {:clip-rule "evenodd"
-                :d
-                "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                :fill-rule "evenodd"}]]])]
+            [:svg.h-6.w-6.text-red-500
+             {:view-box "0 0 20 20", :fill "currentColor"}
+             [:path
+              {:clip-rule "evenodd"
+               :d
+               "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+               :fill-rule "evenodd"}]])]
       [:div.ui__notifications-content
        {:style
         (when (or (= state "exiting")
@@ -271,8 +268,7 @@
            [:div.flex-shrink-0
             svg]
            [:div.ml-3.w-0.flex-1
-            [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}
-                                                                     :class color-class}
+            [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}}
              content]]
            [:div.ml-4.flex-shrink-0.flex
             [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150.notification-close-button

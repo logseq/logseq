@@ -9,7 +9,8 @@
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [clojure.string :as string]))
 
 (defn- page-exists-in-another-file
   "Conflict of files towards same page"
@@ -73,3 +74,9 @@
                                             :supported-formats (gp-config/supported-formats)}
                                            (when (some? verbose) {:verbose verbose}))})]
      (:tx (graph-parser/parse-file (db/get-db repo-url false) file content options)))))
+
+(defn whiteboard?
+  "Whether a file is a whiteboard. "
+  [path]
+  (and (string/includes? path "whiteboards/")
+       (string/ends-with? path ".edn")))
