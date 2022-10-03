@@ -191,12 +191,15 @@
                                              :from-disk? true
                                              :skip-db-transact? skip-db-transact?}
                                             (when (some? verbose) {:verbose verbose}))))
+    (state/set-parsing-state! (fn [m]
+                                (update m :finished inc)))
+    @*file-tx
     (catch :default e
+      (prn "parse and load file failed: " (str (:file/path file)))
+      (js/console.error e)
       (state/set-parsing-state! (fn [m]
-                                  (update m :failed-parsing-files conj [(:file/path file) e])))))
-  (state/set-parsing-state! (fn [m]
-                              (update m :finished inc)))
-  @*file-tx)
+                                  (update m :failed-parsing-files conj [(:file/path file) e])))
+      nil)))
 
 (defn- after-parse
   [repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan]
@@ -240,17 +243,25 @@
       (async/go-loop [tx []]
         (if-let [item (async/<! chan)]
           (let [[idx file] item
+                whiteboard? (and (string/ends-with? (:file/path file) ".edn")
+                                 (string/includes? (:file/path file) "whiteboards/"))
                 yield-for-ui? (or (not large-graph?)
                                   (zero? (rem idx 10))
-                                  (<= (- total idx) 10))]
+                                  (<= (- total idx) 10)
+                                  whiteboard?)]
             (state/set-parsing-state! (fn [m]
                                         (assoc m :current-parsing-file (:file/path file))))
 
             (when yield-for-ui? (async/<! (async/timeout 1)))
 
-            (let [result (parse-and-load-file! repo-url file (select-keys opts [:new-graph? :verbose]))
-                  tx' (concat tx result)
-                  tx' (if (zero? (rem (inc idx) 100))
+            (let [opts' (select-keys opts [:new-graph? :verbose])
+                  ;; whiteboards might have conflicting block IDs so that db transaction could be failed
+                  opts' (if whiteboard?
+                          (assoc opts' :skip-db-transact? false)
+                          opts')
+                  result (parse-and-load-file! repo-url file opts')
+                  tx' (if whiteboard? tx (concat tx result))
+                  tx' (if (or whiteboard? (zero? (rem (inc idx) 100)))
                         (do (db/transact! repo-url tx' {:from-disk? true})
                             [])
                         tx')]
@@ -432,6 +443,7 @@
 (defn re-index!
   [nfs-rebuild-index! ok-handler]
   (when-let [repo (state/get-current-repo)]
+    (state/reset-parsing-state!)
     (let [dir (config/get-repo-dir repo)]
       (when-not (state/unlinked-dir? dir)
        (route-handler/redirect-to-home!)

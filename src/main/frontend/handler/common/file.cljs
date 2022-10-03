@@ -39,41 +39,37 @@
   ([repo-url file content]
    (reset-file! repo-url file content {}))
   ([repo-url file content {:keys [verbose] :as options}]
-   (try
-     (let [electron-local-repo? (and (util/electron?)
-                                     (config/local-db? repo-url))
-           file (cond
-                  (and electron-local-repo?
-                       util/win32?
-                       (utils/win32 file))
-                  file
+   (let [electron-local-repo? (and (util/electron?)
+                                   (config/local-db? repo-url))
+         file (cond
+                (and electron-local-repo?
+                     util/win32?
+                     (utils/win32 file))
+                file
 
-                  (and electron-local-repo? (or
-                                             util/win32?
-                                             (not= "/" (first file))))
-                  (str (config/get-repo-dir repo-url) "/" file)
+                (and electron-local-repo? (or
+                                           util/win32?
+                                           (not= "/" (first file))))
+                (str (config/get-repo-dir repo-url) "/" file)
 
-                  (and (mobile-util/native-android?) (not= "/" (first file)))
-                  file
+                (and (mobile-util/native-android?) (not= "/" (first file)))
+                file
 
-                  (and (mobile-util/native-ios?) (not= "/" (first file)))
-                  file
+                (and (mobile-util/native-ios?) (not= "/" (first file)))
+                file
 
-                  :else
-                  file)
-           file (gp-util/path-normalize file)
-           new? (nil? (db/entity [:file/path file]))
-           options (merge (dissoc options :verbose)
-                          {:new? new?
-                           :delete-blocks-fn (partial get-delete-blocks repo-url)
-                           :extract-options (merge
-                                             {:user-config (state/get-config)
-                                              :date-formatter (state/get-date-formatter)
-                                              :page-name-order (state/page-name-order)
-                                              :block-pattern (config/get-block-pattern (gp-util/get-format file))
-                                              :supported-formats (gp-config/supported-formats)}
-                                             (when (some? verbose) {:verbose verbose}))})]
-       (:tx (graph-parser/parse-file (db/get-db repo-url false) file content options)))
-     (catch :default e
-       (prn "Reset file failed " {:file file})
-       (log/error :exception e)))))
+                :else
+                file)
+         file (gp-util/path-normalize file)
+         new? (nil? (db/entity [:file/path file]))
+         options (merge (dissoc options :verbose)
+                        {:new? new?
+                         :delete-blocks-fn (partial get-delete-blocks repo-url)
+                         :extract-options (merge
+                                           {:user-config (state/get-config)
+                                            :date-formatter (state/get-date-formatter)
+                                            :page-name-order (state/page-name-order)
+                                            :block-pattern (config/get-block-pattern (gp-util/get-format file))
+                                            :supported-formats (gp-config/supported-formats)}
+                                           (when (some? verbose) {:verbose verbose}))})]
+     (:tx (graph-parser/parse-file (db/get-db repo-url false) file content options)))))
