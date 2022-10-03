@@ -15,6 +15,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.object :as gobj]
+            [goog.functions :refer [debounce]]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]))
 
@@ -63,8 +64,14 @@
   (rum/local false ::view-mode?)
   (rum/local false ::grid-mode?)
   (rum/local nil ::elements)
-  {:did-mount update-draw-content-width
-   :did-update update-draw-content-width}
+  (rum/local nil ::resize-observer)
+  (rum/local (random-uuid) ::uuid)
+  {:did-mount (fn [state]
+                (reset! (::resize-observer state) (js/ResizeObserver. (debounce #(reset! (::uuid state) (random-uuid)) 500)))
+                (.observe @(::resize-observer state) (ui/main-node))
+                (update-draw-content-width state))
+   :did-update update-draw-content-width
+   :will-unmount (fn [state] (.disconnect @(::resize-observer state)))}
   [state data option]
   (let [*draw-width (get state ::draw-width)
         *zen-mode? (get state ::zen-mode?)
@@ -88,12 +95,14 @@
                                (editor-handler/edit-block! block :max block-uuid))}
          "Edit Block"]]
        [:div.draw-wrap
-        {:on-mouse-down (fn [e]
+        {:key @(::uuid state)
+         :on-mouse-down (fn [e]
                           (util/stop e)
                           (state/set-block-component-editing-mode! true))
          :on-blur #(state/set-block-component-editing-mode! false)
          :style {:width  @*draw-width
                  :height (if wide-mode? 650 500)}}
+        
         (excalidraw
          (merge
           {:on-change (fn [elements app-state]
@@ -109,7 +118,7 @@
                               (draw/save-excalidraw!
                                file
                                (serializeAsJSON elements app-state))))))
-           
+
            :zen-mode-enabled @*zen-mode?
            :view-mode-enabled @*view-mode?
            :grid-mode-enabled @*grid-mode?
