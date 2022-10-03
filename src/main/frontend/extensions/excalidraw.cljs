@@ -102,7 +102,6 @@
          :on-blur #(state/set-block-component-editing-mode! false)
          :style {:width  @*draw-width
                  :height (if wide-mode? 650 500)}}
-        
         (excalidraw
          (merge
           {:on-change (fn [elements app-state]
