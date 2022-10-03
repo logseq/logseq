@@ -212,6 +212,18 @@
   (when re-render?
     (ui-handler/re-render-root! re-render-opts))
   (state/pub-event! [:graph/added repo-url opts])
+  (let [parse-errors (get-in @state/state [:graph/parsing-state repo-url :failed-parsing-files])]
+    (when (seq parse-errors)
+     (state/pub-event! [:notification/show
+                        {:content
+                         [:div
+                          [:h2 "Oops, those files are failed to imported to your graph:"]
+                          [:ul
+                           (for [[file error] parse-errors]
+                             [:li
+                              [:p file]
+                              [:p (str error)]])]]
+                         :status :error}])))
   (state/reset-parsing-state!)
   (state/set-loading-files! repo-url false)
   (async/offer! graph-added-chan true))
