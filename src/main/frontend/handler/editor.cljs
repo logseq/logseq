@@ -314,12 +314,12 @@
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
         block (merge block
                      (block/parse-title-and-body uuid format pre-block? (:block/content block)))
-        properties (:block/properties block)
+        properties (-> (:block/properties block)
+                       (dissoc :heading))
         real-content (:block/content block)
-        content (let [properties (if (= format :markdown) (dissoc properties :heading) properties)]
-                  (if (and (seq properties) real-content (not= real-content content))
-                   (property/with-built-in-properties properties content format)
-                   content))
+        content (if (and (seq properties) real-content (not= real-content content))
+                  (property/with-built-in-properties properties content format)
+                  content)
         content (drawer/with-logbook block content)
         content (with-timetracking block content)
         first-block? (= left page)
@@ -369,6 +369,7 @@
     (profile
      "Save block: "
      (let [block' (wrap-parse-block block)]
+       (util/pprint block')
        (outliner-tx/transact!
          {:outliner-op :save-block}
          (outliner-core/save-block! block'))
@@ -3481,7 +3482,9 @@
           block (db/entity [:block/uuid block-id])
           content' (commands/set-markdown-heading (:block/content block) heading)]
       (save-block! repo block-id content'))
-    (set-block-property! block-id "heading" heading)))
+    (do
+      (save-current-block!)
+      (set-block-property! block-id "heading" heading))))
 
 (defn remove-heading!
   [block-id format]
