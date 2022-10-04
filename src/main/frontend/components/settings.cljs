@@ -676,13 +676,20 @@
      (encryption-row enable-encryption?)
 
      (when-not web-platform?
-       [:div
+       [:<>
         [:hr]
         [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-         [:label.flex.font-medium.leading-5 (ui/icon "lock" {:class "mr-1"}) (t :settings-page/alpha-features)]
+         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]
          [:div.mt-1.sm:mt-0.sm:col-span-2
           (if logged-in?
-            (user-handler/logged-in?)
+            [:div 
+              [:p (user-handler/email)]
+              [:p (ui/button
+              [:span.flex.text-sm
+               (ui/icon "logout" {:class "mr-1"})
+               (t :logout)]
+              {:class "p-1"
+               :on-click user-handler/logout})]]
             [:div
              (ui/button
               [:span.flex.text-sm
