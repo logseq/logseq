@@ -65,9 +65,8 @@
   (rum/local false ::grid-mode?)
   (rum/local nil ::elements)
   (rum/local nil ::resize-observer)
-  (rum/local (random-uuid) ::uuid)
   {:did-mount (fn [state]
-                (reset! (::resize-observer state) (js/ResizeObserver. (debounce #(reset! (::uuid state) (random-uuid)) 500)))
+                (reset! (::resize-observer state) (js/ResizeObserver. (debounce #(reset! (::draw-width state) 0) 300)))
                 (.observe @(::resize-observer state) (ui/main-node))
                 (update-draw-content-width state))
    :did-update update-draw-content-width
@@ -95,8 +94,7 @@
                                (editor-handler/edit-block! block :max block-uuid))}
          "Edit Block"]]
        [:div.draw-wrap
-        {:key @(::uuid state)
-         :on-mouse-down (fn [e]
+        {:on-mouse-down (fn [e]
                           (util/stop e)
                           (state/set-block-component-editing-mode! true))
          :on-blur #(state/set-block-component-editing-mode! false)
