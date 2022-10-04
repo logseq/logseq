@@ -35,7 +35,7 @@
 
 (defn get-ls-dotdir-root
   []
-  (let [lg-dir (str (.getPath app "home") "/.logseq")]
+  (let [lg-dir (path/join (.getPath app "home") ".logseq")]
     (if-not (fs/existsSync lg-dir)
       (do (fs/mkdirSync lg-dir) lg-dir)
       lg-dir)))

@@ -420,6 +420,12 @@
     (string/replace
      source "../assets" (util/format "%s://%s/assets" protocol (get-repo-dir (state/get-current-repo))))))
 
+(defn get-current-repo-assets-root
+  []
+  (when-let [repo-root (and (local-db? (state/get-current-repo))
+                            (get-repo-dir (state/get-current-repo)))]
+    (util/node-path.join repo-root "assets")))
+
 (defn get-custom-js-path
   ([]
    (get-custom-js-path (state/get-current-repo)))
