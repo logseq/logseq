@@ -44,7 +44,7 @@
 
 (defn- embed-audio [database64]
   (p/let [page (or (state/get-current-page) (string/lower-case (date/journal-name)))
-          filename (str (date/get-date-time-string-2) ".mp3")
+          filename (str (date/get-date-time-string-2) ".m4a")
           edit-block (state/get-edit-block)
           format (or (:block/format edit-block) (db/get-page-format page))
           path (editor-handler/get-asset-path filename)
