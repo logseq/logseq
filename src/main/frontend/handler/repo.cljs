@@ -28,6 +28,7 @@
             [frontend.db.persist :as db-persist]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser :as graph-parser]
+            [logseq.graph-parser.config :as gp-config]
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
@@ -248,7 +249,7 @@
       (async/go-loop [tx []]
         (if-let [item (async/<! chan)]
           (let [[idx file] item
-                whiteboard? (file-common-handler/whiteboard? (:file/path file))
+                whiteboard? (gp-config/whiteboard? (:file/path file))
                 yield-for-ui? (or (not large-graph?)
                                   (zero? (rem idx 10))
                                   (<= (- total idx) 10)

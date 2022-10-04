@@ -58,7 +58,8 @@
             [goog.dom :as gdom]
             [logseq.db.schema :as db-schema]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.graph-parser.config :as gp-config]))
 
 ;; TODO: should we move all events here?
 
@@ -705,7 +706,7 @@
         [:div
          [:p
           (str "It seems that another whiteboard file already have the ID \"" id
-               "\", you can fix it by change replace the ID in this file with another UUID.")]
+               "\". You can fix it by changing the ID in this file with another UUID.")]
          [:p
           "Or, let me"
           (ui/button "Fix"
@@ -731,7 +732,7 @@
                         (for [[file error] parse-errors]
                           (let [data (ex-data error)]
                             (cond
-                             (and (file-common-handler/whiteboard? file)
+                             (and (gp-config/whiteboard? file)
                                   (= :transact/upsert (:error data))
                                   (uuid? (last (:assertion data))))
                              (rum/with-key (file-id-conflict-item repo file data) file)
