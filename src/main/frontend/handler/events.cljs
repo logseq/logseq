@@ -737,9 +737,12 @@
                              (rum/with-key (file-id-conflict-item repo file data) file)
 
                              :else
-                             [:li.my-1 {:key file}
-                              [:a {:on-click #(js/window.apis.openPath file)} file]
-                              [:p (.-message error)]])))]
+                             (do
+                               (state/pub-event! [:instrument {:type :file/parse-and-load-error
+                                                               :payload error}])
+                               [:li.my-1 {:key file}
+                                [:a {:on-click #(js/window.apis.openPath file)} file]
+                                [:p (.-message error)]]))))]
                        [:p "Don't forget to re-index your graph when all the conflicts are resolved."]]
                       :status :error}]))
 
