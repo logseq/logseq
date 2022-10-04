@@ -705,7 +705,7 @@
          [:div.ml-1 "Resolved"]]
         [:div
          [:p
-          (str "It seems that another whiteboard file already have the ID \"" id
+          (str "It seems that another whiteboard file already has the ID \"" id
                "\". You can fix it by changing the ID in this file with another UUID.")]
          [:p
           "Or, let me"
