@@ -53,6 +53,10 @@
     .search-result {
       @apply text-sm font-medium flex items-baseline;
     }
+
+    .ui__icon {
+      font-size: 16px;
+    }
   }
 
   &-input {
