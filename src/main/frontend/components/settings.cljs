@@ -683,7 +683,7 @@
          [:div.mt-1.sm:mt-0.sm:col-span-2
           (if logged-in?
             [:div 
-              [:p (user-handler/email)]
+              (user-handler/email)
               [:p (ui/button
               [:span.flex.text-sm
                (ui/icon "logout" {:class "mr-1"})
@@ -701,6 +701,7 @@
                            (js/window.open config/LOGIN-URL))})
              [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])]]
         [:div.flex.flex-col.gap-4
+         {:class (when-not logged-in? "opacity-50 pointer-events-none cursor-not-allowed")}
          (sync-switcher-row enable-sync?)
          (whiteboards-switcher-row enable-whiteboards?)]])]))
 
