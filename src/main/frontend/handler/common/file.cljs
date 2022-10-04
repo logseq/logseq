@@ -8,9 +8,7 @@
             [frontend.mobile.util :as mobile-util]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.config :as gp-config]
-            [lambdaisland.glogi :as log]
-            [clojure.string :as string]))
+            [logseq.graph-parser.config :as gp-config]))
 
 (defn- page-exists-in-another-file
   "Conflict of files towards same page"

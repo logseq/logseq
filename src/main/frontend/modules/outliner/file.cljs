@@ -21,21 +21,22 @@
     :block/uuid
     :block/content
     :block/format
-    {:block/page      [:block/name :block/uuid]}
-    {:block/left      [:block/name :block/uuid]}
-    {:block/parent    [:block/name :block/uuid]}])
+    {:block/page      [:block/uuid]}
+    {:block/left      [:block/uuid]}
+    {:block/parent    [:block/uuid]}])
 
 (defn- cleanup-whiteboard-block
   [block]
   (if (get-in block [:block/properties :ls-type] false)
     (dissoc block
+            :db/id
             :block/uuid ;; shape block uuid is read from properties
             :block/content
             :block/format
             :block/left
             :block/page
             :block/parent) ;; these are auto-generated for whiteboard shapes
-    (dissoc block :block/page)))
+    (dissoc block :db/id :block/page)))
 
 
 (defn do-write-file!
@@ -46,7 +47,7 @@
         blocks-count (model/get-page-blocks-count repo page-db-id)]
     (if (or (and (> blocks-count 500)
                  (not (state/input-idle? repo {:diff 3000}))) ;; long page
-            ;; when this whiteboard page is just being updated 
+            ;; when this whiteboard page is just being updated
             (and whiteboard? (not (state/whiteboard-page-idle? repo page-block))))
       (async/put! (state/get-file-write-chan) [repo page-db-id])
       (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])

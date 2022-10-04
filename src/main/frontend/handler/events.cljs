@@ -40,7 +40,6 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.common.file :as file-common-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
@@ -739,8 +738,8 @@
 
                              :else
                              [:li.my-1 {:key file}
-                              [:p file]
-                              [:p (str error)]])))]
+                              [:a {:on-click #(js/window.apis.openPath file)} file]
+                              [:p (.-message error)]])))]
                        [:p "Don't forget to re-index your graph when all the conflicts are resolved."]]
                       :status :error}]))
 
