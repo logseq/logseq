@@ -1,4 +1,5 @@
 (ns logseq.db.default
+  "Provides fns for seeding default data in a logseq db"
   (:require [clojure.string :as string]))
 
 (defonce built-in-pages-names

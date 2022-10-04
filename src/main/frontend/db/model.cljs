@@ -46,14 +46,16 @@
     :block/marker
     :block/priority
     :block/properties
+    :block/properties-text-values
     :block/pre-block?
     :block/scheduled
     :block/deadline
     :block/repeated?
     :block/created-at
     :block/updated-at
-    :block/file
+    ;; TODO: remove this in later releases
     :block/heading-level
+    :block/file
     {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
     {:block/_parent ...}])
 

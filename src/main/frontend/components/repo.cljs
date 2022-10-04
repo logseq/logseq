@@ -18,7 +18,7 @@
             [electron.ipc :as ipc]
             [goog.object :as gobj]
             [frontend.components.encryption :as encryption]
-            [frontend.encrypt :as e]
+            [frontend.encrypt :as encrypt]
             [cljs.core.async :as async :refer [go <!]]
             [frontend.handler.file-sync :as file-sync]
             [reitit.frontend.easy :as rfe]))
@@ -40,15 +40,15 @@
        (if local?
          (let [local-dir (config/get-local-dir url)
                graph-name (text-util/get-graph-name-from-path local-dir)]
-           [:a {:title    local-dir
-                :on-click #(on-click graph)}
+           [:a.flex.items-center {:title    local-dir
+                                  :on-click #(on-click graph)}
             [:span graph-name (and GraphName [:strong.px-1 "(" GraphName ")"])]
-            (when remote? [:strong.pr-1 (ui/icon "cloud")])])
+            (when remote? [:strong.pr-1.flex.items-center (ui/icon "cloud")])])
 
-         [:a {:title  GraphUUID
-              :on-click #(on-click graph)}
+         [:a.flex.items-center {:title    GraphUUID
+                                :on-click #(on-click graph)}
           (db/get-repo-path (or url GraphName))
-          (when remote? [:strong.pl-1 (ui/icon "cloud")])])])))
+          (when remote? [:strong.pl-1.flex.items-center (ui/icon "cloud")])])])))
 
 (rum/defc repos-inner
   [repos]
@@ -60,7 +60,7 @@
                                      (state/pub-event! [:graph/switch url])))
 
      [:div.controls
-      (when (e/encrypted-db? url)
+      (when (encrypt/encrypted-db? url)
         [:a.control {:title    "Show encryption information about this graph"
                      :on-click (fn []
                                  (if remote?
@@ -97,7 +97,8 @@
                                      (state/set-modal! (confirm-fn)))
                                    (do
                                      (repo-handler/remove-repo! repo)
-                                     (file-sync/load-session-graphs))))}
+                                     (file-sync/load-session-graphs)
+                                     (state/pub-event! [:graph/unlinked]))))}
                     (if only-cloud? "Remove" "Unlink")])])]]))
 
 (rum/defc repos < rum/reactive
@@ -161,9 +162,9 @@
                             short-repo-name (if local? (text-util/get-graph-name-from-path repo-path) GraphName)]
                         (when short-repo-name
                           {:title        [:span.flex.items-center.whitespace-nowrap short-repo-name
-                                          (when remote? [:span.pl-1
+                                          (when remote? [:span.pl-1.flex.items-center
                                                          {:title (str "<" GraphName "> #" GraphUUID)}
-                                                         (ui/icon "cloud")])]
+                                                         (ui/icon "cloud" {:size 18})])]
                            :hover-detail repo-path ;; show full path on hover
                            :options      {:on-click (fn [e]
                                                       (if (gobj/get e "shiftKey")
@@ -227,7 +228,9 @@
                                              (check-multiple-windows? state)
                                              (toggle-fn))
                                  :title    repo-path}       ;; show full path on hover
-                                (ui/icon "database mr-2" {:style {:font-size 16} :id "database-icon"})
+                                [:span.flex.pr-2.relative
+                                 {:style {:top 1}}
+                                 (ui/icon "database" {:size 16 :id "database-icon"})]
                                 [:div.graphs
                                  [:span#repo-switch.block.pr-2.whitespace-nowrap
                                   [:span [:span#repo-name.font-medium

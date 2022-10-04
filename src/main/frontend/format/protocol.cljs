@@ -1,4 +1,4 @@
-(ns frontend.format.protocol)
+(ns ^:no-doc frontend.format.protocol)
 
 (defprotocol Format
   (toEdn [this content config])

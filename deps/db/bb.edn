@@ -4,7 +4,7 @@
  {logseq/bb-tasks
   #_{:local/root "../../../bb-tasks"}
   {:git/url "https://github.com/logseq/bb-tasks"
-   :git/sha "abb32ccd26405d56fd28a29d56f3cb902b8c4334"}}
+   :git/sha "1815db538241082a01e95601e23e4290dd64d0c0"}}
 
  :pods
  {clj-kondo/clj-kondo {:version "2022.02.09"}}
@@ -18,6 +18,9 @@
 
   lint:carve
   logseq.bb-tasks.lint.carve/-main
+
+  lint:ns-docstrings
+  logseq.bb-tasks.lint.ns-docstrings/-main
 
   lint:rules
   {:requires ([logseq.bb-tasks.lint.datalog :as datalog]

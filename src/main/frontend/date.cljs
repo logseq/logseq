@@ -1,4 +1,5 @@
 (ns frontend.date
+  "Date related utility fns"
   (:require ["chrono-node" :as chrono]
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
@@ -66,7 +67,7 @@
     (->> (tf/parse (tf/formatters :date-time-no-ms) s)
         (t/to-default-time-zone)
         (tf/unparse (tf/formatter "MMM do, yyyy")))
-    (catch js/Error _e
+    (catch :default _e
       nil)))
 
 (def custom-formatter-2 (tf/formatter "yyyy-MM-dd-HH-mm-ss"))
@@ -112,7 +113,7 @@
 (defn journal-name-s [s]
   (try
     (journal-name (tf/parse (tf/formatter "yyyy-MM-dd") s))
-    (catch js/Error _e
+    (catch :default _e
       (log/info :parse-journal-date {:message  "Unable to parse date to journal name, skipping."
                                      :date-str s})
       nil)))
@@ -168,7 +169,7 @@
    (fn [formatter]
      (try
        (tf/parse (tf/formatter formatter) s)
-       (catch js/Error _e
+       (catch :default _e
          false)))
    (journal-title-formatters)))
 

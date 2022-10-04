@@ -1,4 +1,5 @@
 (ns frontend.rum
+  "Utility fns for rum"
   (:require [clojure.string :as s]
             [clojure.set :as set]
             [clojure.walk :as w]
@@ -33,6 +34,7 @@
                     x))
                 data)))
 
+;; TODO: Replace this with rum's built in rum.core/adapt-class
 ;; adapted from https://github.com/tonsky/rum/issues/20
 (defn adapt-class
   ([react-class]

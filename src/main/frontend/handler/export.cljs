@@ -1,4 +1,4 @@
-(ns frontend.handler.export
+(ns ^:no-doc frontend.handler.export
   (:require ["@capacitor/filesystem" :refer [Encoding Filesystem]]
             [cljs.pprint :as pprint]
             [clojure.set :as s]
@@ -482,7 +482,6 @@
          [:block/id
           :block/page-name
           :block/properties
-          :block/heading-level
           :block/format
           :block/children
           :block/content]))})

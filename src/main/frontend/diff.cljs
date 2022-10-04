@@ -1,4 +1,4 @@
-(ns frontend.diff
+(ns ^:no-doc frontend.diff
   (:require [clojure.string :as string]
             ["diff" :as jsdiff]
             [goog.object :as gobj]
@@ -68,6 +68,6 @@
 
           :else
           pos))
-      (catch js/Error e
+      (catch :default e
         (log/error :diff/find-position {:error e})
         (count markup)))))

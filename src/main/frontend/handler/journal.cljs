@@ -1,4 +1,4 @@
-(ns frontend.handler.journal
+(ns ^:no-doc frontend.handler.journal
   (:require [frontend.date :as date]
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]

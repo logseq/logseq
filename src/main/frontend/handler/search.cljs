@@ -1,8 +1,9 @@
 (ns frontend.handler.search
+  "Provides util handler fns for search"
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.handler.notification :as notification-handler]
+            [frontend.handler.notification :as notification]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -118,7 +119,7 @@
    (println "Starting to rebuild search indices!")
    (p/let [_ (search/rebuild-indices!)]
      (when notice?
-       (notification-handler/show!
+       (notification/show!
         "Search indices rebuilt successfully!"
         :success)))))
 
@@ -130,6 +131,6 @@
      (when cache-stale?
        (js/console.log "cache stale: " repo)
        (p/let [_ (search/rebuild-indices! repo)]
-         (notification-handler/show!
+         (notification/show!
           "Stale search cache detected. Search indices rebuilt successfully!"
           :success))))))

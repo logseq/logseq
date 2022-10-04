@@ -1,4 +1,5 @@
 (ns frontend.fs.watcher-handler
+  "Main ns that handles file watching events from electron's main process"
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
@@ -24,7 +25,7 @@
     (doseq [block-id (block-ref/get-all-block-ref-ids content)]
       (when-let [block (try
                          (model/get-block-by-uuid block-id)
-                         (catch js/Error _e
+                         (catch :default _e
                            nil))]
         (let [id-property (:id (:block/properties block))]
           (when-not (= (str id-property) (str block-id))

@@ -1,4 +1,5 @@
 (ns frontend.handler.user
+  "Provides user related handler fns like login and logout"
   (:require [frontend.config :as config]
             [frontend.handler.config :as config-handler]
             [frontend.state :as state]
@@ -7,7 +8,6 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [cljs-http.client :as http]
-            [lambdaisland.glogi :as log]
             [cljs.core.async :as async :refer [go go-loop <! timeout]]))
 
 (defn set-preferred-format!
@@ -68,11 +68,11 @@
 
 (defn- set-token-to-localstorage!
   ([id-token access-token]
-   (log/info :debug "set-token-to-localstorage!")
+   (prn :debug "set-token-to-localstorage!")
    (js/localStorage.setItem "id-token" id-token)
    (js/localStorage.setItem "access-token" access-token))
   ([id-token access-token refresh-token]
-   (log/info :debug "set-token-to-localstorage!")
+   (prn :debug "set-token-to-localstorage!")
    (js/localStorage.setItem "id-token" id-token)
    (js/localStorage.setItem "access-token" access-token)
    (js/localStorage.setItem "refresh-token" refresh-token)))

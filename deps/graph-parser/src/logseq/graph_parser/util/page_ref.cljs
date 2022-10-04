@@ -1,6 +1,6 @@
 (ns logseq.graph-parser.util.page-ref
-  "General purpose vars and util fns for page-ref. Currently this only handles
-a logseq page-ref e.g. [[page name]]"
+  "Core vars and util fns for page-ref. Currently this only handles a logseq
+  page-ref e.g. [[page name]]"
   (:require [clojure.string :as string]))
 
 (def left-brackets "Opening characters for page-ref" "[[")
@@ -9,10 +9,7 @@ a logseq page-ref e.g. [[page name]]"
   (str left-brackets right-brackets))
 
 ;; common regular expressions
-(def left-brackets-re #"\[\[")
-(def right-brackets-re #"\]\]")
 (def page-ref-re "Inner capture and doesn't match nested brackets" #"\[\[(.*?)\]\]")
-(def page-ref-outer-capture-re #"(\[\[.*?\]\])")
 (def page-ref-without-nested-re "Matches most inner nested brackets" #"\[\[([^\[\]]+)\]\]")
 (def page-ref-any-re "Inner capture that matches anything between brackets" #"\[\[(.*)\]\]")
 
@@ -26,11 +23,6 @@ a logseq page-ref e.g. [[page name]]"
   "Create a page ref given a page name"
   [page-name]
   (str left-brackets page-name right-brackets))
-
-(defn ->page-ref-re-str
-  "Create a page ref regex escaped string given a page name"
-  [page-name]
-  (string/replace (->page-ref page-name) #"([\[\]])" "\\$1"))
 
 (defn get-page-name
   "Extracts page-name from page-ref string"

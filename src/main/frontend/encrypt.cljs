@@ -1,4 +1,5 @@
 (ns frontend.encrypt
+  "Encryption related fns for use with encryption feature and file sync"
   (:require [logseq.graph-parser.utf8 :as utf8]
             [frontend.db.utils :as db-utils]
             [frontend.util :as util]
@@ -97,7 +98,7 @@
             encrypted (ipc/ipc "encrypt-with-passphrase" passphrase raw-content)]
       (utf8/decode encrypted))
 
-    (mobile-util/native-ios?)
+    (mobile-util/native-platform?)
     (p/chain (.encryptWithPassphrase mobile-util/file-sync
                                      (clj->js {:passphrase passphrase :content content}))
              #(js->clj % :keywordize-keys true)
@@ -117,12 +118,12 @@
             decrypted (ipc/ipc "decrypt-with-passphrase" passphrase raw-content)]
       (utf8/decode decrypted))
 
-    (mobile-util/native-ios?)
+    (mobile-util/native-platform?)
     (p/chain (.decryptWithPassphrase mobile-util/file-sync
                                      (clj->js {:passphrase passphrase :content content}))
              #(js->clj % :keywordize-keys true)
              :data)
-    
+
     :else
     (p/let [_ (loader/load :age-encryption)
             lazy-decrypt-with-user-passphrase (resolve 'frontend.extensions.age-encryption/decrypt-with-user-passphrase)

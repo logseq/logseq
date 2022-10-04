@@ -1,5 +1,5 @@
 (ns logseq.graph-parser.property
-  "Property fns needed by graph-parser"
+  "Core vars and util fns for properties"
   (:require [logseq.graph-parser.util :as gp-util]
             [clojure.string :as string]
             [clojure.set :as set]
@@ -15,13 +15,11 @@
        (map #(str (name (key %)) (str colons " ") (val %)))
        (string/join "\n")))
 
-(defn property-value-from-content
-  "Extracts full property value from block content"
-  [property content]
-  (second (re-find (re-pattern (str property colons "\\s+(.*)"))
-                   content)))
-
-(def valid-property-name? gp-util/valid-edn-keyword?)
+(defn valid-property-name?
+  [s]
+  [:pre (string? s)]
+  (and (gp-util/valid-edn-keyword? s)
+       (not (re-find #"[\"|^|(|)|{|}]+" s))))
 
 (defn properties-ast?
   [block]

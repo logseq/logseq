@@ -1,4 +1,5 @@
 (ns frontend.handler.repo
+  "System-component-like ns that manages user's repos/graphs"
   (:refer-clojure :exclude [clone])
   (:require [clojure.string :as string]
             [frontend.config :as config]
@@ -163,7 +164,7 @@
                            (remove nil?))]
              (when (seq metadata)
                (db/transact! repo metadata {:new-graph? true}))))))
-     (catch js/Error e
+     (catch :default e
        (log/error :exception e)))))
 
 (defn update-pages-metadata!
@@ -359,8 +360,9 @@
                         (when (= (state/get-current-repo) url)
                           (state/set-current-repo! (:url (first (state/get-repos)))))))]
     (when (or (config/local-db? url) (= url "local"))
-      (p/let [_ (idb/clear-local-db! url)] ; clear file handles
-        (delete-db-f)))))
+      (-> (p/let [_ (idb/clear-local-db! url)] ; clear file handles
+            )
+          (p/finally delete-db-f)))))
 
 (defn start-repo-db-if-not-exists!
   [repo]
@@ -525,9 +527,12 @@
 
 (defn refresh-repos!
   []
-  (p/let [repos (get-repos)]
-    (state/set-repos! repos)
-    repos))
+  (p/let [repos (get-repos)
+          repos' (combine-local-&-remote-graphs
+                  repos
+                  (state/get-remote-repos))]
+    (state/set-repos! repos')
+    repos'))
 
 (defn graph-ready!
   "Call electron that the graph is loaded."

@@ -1,9 +1,11 @@
 (ns frontend.fs
+  "System-component-like ns that provides common file operations for all
+  platforms by delegating to implementations of the fs protocol"
   (:require [cljs-bean.core :as bean]
             [frontend.config :as config]
             [frontend.fs.nfs :as nfs]
             [frontend.fs.node :as node]
-            [frontend.fs.capacitor-fs :as mobile]
+            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.fs.bfs :as bfs]
             [frontend.mobile.util :as mobile-util]
             [frontend.fs.protocol :as protocol]
@@ -18,7 +20,7 @@
 (defonce nfs-record (nfs/->Nfs))
 (defonce bfs-record (bfs/->Bfs))
 (defonce node-record (node/->Node))
-(defonce mobile-record (mobile/->Capacitorfs))
+(defonce mobile-record (capacitor-fs/->Capacitorfs))
 
 (defn local-db?
   [dir]
@@ -210,7 +212,7 @@
   [dir path]
   (util/p-handle
    (stat dir path)
-   (fn [_stat] true)
+   (fn [stat] (not (nil? stat)))
    (fn [_e] false)))
 
 (defn dir-exists?

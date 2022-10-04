@@ -1,4 +1,5 @@
 (ns frontend.handler.file-sync
+  "Provides util handler fns for file sync"
   (:require ["path" :as path]
             [cljs-time.format :as tf]
             [cljs.core.async :as async :refer [go <!]]
@@ -10,14 +11,17 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.handler.user :as user]
-            [frontend.fs :as fs]))
+            [frontend.fs :as fs]
+            [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]))
 
 (def *beta-unavailable? (volatile! false))
 
 (def refresh-file-sync-component (atom false))
 
 
-(defn get-current-graph-uuid [] (second @sync/graphs-txid))
+(defn get-current-graph-uuid []
+  (state/get-current-file-sync-graph-uuid))
 
 (defn enable-sync?
   []
@@ -26,7 +30,7 @@
 
 (defn current-graph-sync-on?
   []
-  (when-let [sync-state (state/sub [:file-sync/sync-state (state/get-current-repo)])]
+  (when-let [sync-state (state/sub-file-sync-state (state/get-current-file-sync-graph-uuid))]
     (not (sync/sync-state--stopped? sync-state))))
 
 (defn synced-file-graph?
@@ -42,7 +46,7 @@
       (if (and (not (instance? ExceptionInfo r))
                (string? r))
         (let [tx-info [0 r (user/user-uuid) (state/get-current-repo)]]
-          (apply sync/update-graphs-txid! tx-info)
+          (<! (apply sync/<update-graphs-txid! tx-info))
           (swap! refresh-file-sync-component not) tx-info)
         (do
           (state/set-state! [:ui/loading? :graph/create-remote?] false)
@@ -63,18 +67,19 @@
 (defn <delete-graph
   [graph-uuid]
   (go
-    (when (= graph-uuid (get-current-graph-uuid))
-      (<! (sync/<sync-stop)))
-    (let [r (<! (sync/<delete-graph sync/remoteapi graph-uuid))]
-      (if (instance? ExceptionInfo r)
-        (notification/show! (str "Delete graph failed: " graph-uuid) :warning)
-        (let [[_ local-graph-uuid _] @sync/graphs-txid]
-          (when (= graph-uuid local-graph-uuid)
-            (sync/clear-graphs-txid! (state/get-current-repo))
-            (swap! refresh-file-sync-component not))
-          (notification/show! (str "Graph deleted") :success))))))
+    (let [same-graph? (= graph-uuid (get-current-graph-uuid))]
+      (when same-graph?
+        (<! (sync/<sync-stop)))
+      (let [r (<! (sync/<delete-graph sync/remoteapi graph-uuid))]
+        (if (instance? ExceptionInfo r)
+          (notification/show! (str "Delete graph failed: " graph-uuid) :warning)
+          (do
+            (when same-graph?
+              (sync/clear-graphs-txid! graph-uuid)
+              (swap! refresh-file-sync-component not))
+            (notification/show! (str "Graph deleted") :success)))))))
 
-(defn list-graphs
+(defn <list-graphs
   []
   (go (:Graphs (<! (sync/<list-remote-graphs sync/remoteapi)))))
 
@@ -82,7 +87,7 @@
   []
   (when-not (state/sub [:file-sync/remote-graphs :loading])
     (go (state/set-state! [:file-sync/remote-graphs :loading] true)
-        (let [graphs (<! (list-graphs))]
+        (let [graphs (<! (<list-graphs))]
           (state/set-state! :file-sync/remote-graphs {:loading false :graphs graphs})))))
 
 (defn reset-session-graphs
@@ -90,11 +95,13 @@
   (state/set-state! :file-sync/remote-graphs {:loading false :graphs nil}))
 
 (defn init-graph [graph-uuid]
-  (let [repo (state/get-current-repo)
-        user-uuid (user/user-uuid)]
-    (sync/update-graphs-txid! 0 graph-uuid user-uuid repo)
-    (swap! refresh-file-sync-component not)
-    (state/pub-event! [:graph/switch repo {:persist? false}])))
+  (go
+    (let [repo (state/get-current-repo)
+          user-uuid (user/user-uuid)]
+      (state/set-state! :sync-graph/init? true)
+      (<! (sync/<update-graphs-txid! 0 graph-uuid user-uuid repo))
+      (swap! refresh-file-sync-component not)
+      (state/pub-event! [:graph/switch repo {:persist? false}]))))
 
 (defn download-version-file
   ([graph-uuid file-uuid version-uuid]
@@ -165,22 +172,15 @@
             all-version-list))))))
 
 
-(def *wait-syncing-graph (atom nil))
-
-(defn set-wait-syncing-graph
-  [graph]
-  (reset! *wait-syncing-graph graph))
-
 (defn init-remote-graph
-  [local]
-  (when-let [graph (and local @*wait-syncing-graph)]
+  [local graph]
+  (when (and local graph)
     (notification/show!
      (str "Start syncing the remote graph "
           (:GraphName graph)
           " to "
           (config/get-string-repo-dir (config/get-local-dir local)))
      :warning)
-
     (init-graph (:GraphUUID graph))
     (state/close-modal!)))
 
@@ -188,20 +188,57 @@
   []
   (let [c     (async/chan 1)
         p     sync/sync-events-publication
-        topic :finished-local->remote]
-
-    (async/sub p topic c)
+        topics [:finished-local->remote :finished-remote->local :start]]
+    (doseq [topic topics]
+      (async/sub p topic c))
 
     (async/go-loop []
-      (let [{:keys [data]} (async/<! c)]
+      (let [{:keys [event data]} (async/<! c)]
+        (case event
+          (list :finished-local->remote :finished-remote->local)
+          (when-let [current-uuid (state/get-current-file-sync-graph-uuid)]
+            (state/clear-file-sync-progress! current-uuid)
+            (state/set-state! [:file-sync/graph-state current-uuid :file-sync/last-synced-at] (:epoch data)))
+
+          :start
+          (when-let [current-uuid (state/get-current-file-sync-graph-uuid)]
+            (state/set-state! [:file-sync/graph-state current-uuid :file-sync/start-time] data))
+
+          nil)
+
         (when (and (:file-change-events data)
                    (= :page (state/get-current-route)))
-          (state/pub-event!
-           [:file-sync/maybe-onboarding-show :sync-history])))
+          (state/pub-event! [:file-sync/maybe-onboarding-show :sync-history])))
       (recur))
 
-    #(async/unsub p topic c)))
+    #(doseq [topic topics]
+       (async/unsub p topic c))))
 
 (defn reset-user-state! []
   (vreset! *beta-unavailable? false)
   (state/set-state! :file-sync/onboarding-state nil))
+
+(defn calculate-time-left
+  "This assumes that the network speed is stable which could be wrong sometimes."
+  [sync-state progressing]
+  (when-let [start-time (get-in @state/state
+                                [:file-sync/graph-state
+                                 (state/get-current-file-sync-graph-uuid)
+                                 :file-sync/start-time
+                                 :epoch])]
+    (let [now (tc/to-epoch (t/now))
+          diff-seconds (- now start-time)
+          finished (reduce + (map (comp :progress second) progressing))
+          local->remote-files (:full-local->remote-files sync-state)
+          remote->local-files (:full-remote->local-files sync-state)
+          total (if (seq remote->local-files)
+                  (reduce + (map (fn [m] (or (:size m) 0)) remote->local-files))
+                  (reduce + (map #(:size (.-stat %)) local->remote-files)))
+          mins (int (/ (* (/ total finished) diff-seconds) 60))]
+      (if (or (zero? total) (zero? finished))
+        "waiting"
+        (cond
+          (zero? mins) "soon"
+          (= mins 1) "1 min left"
+          (> mins 30) "calculating..."
+          :else (str mins " mins left"))))))

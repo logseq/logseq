@@ -46,7 +46,7 @@
   (try
     (let [p (.join path (state/get-graph-path) ".git")]
       (.isDirectory (fs/statSync p)))
-    (catch js/Error _e
+    (catch :default _e
       nil)))
 
 (defn remove-dot-git-file!
@@ -66,7 +66,7 @@
                      (string/includes? content ".logseq/")
                      (not (fs/existsSync dir-path)))
             (fs/unlinkSync p)))))
-    (catch js/Error e
+    (catch :default e
       (log-error e))))
 
 (defn init!

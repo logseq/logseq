@@ -1,4 +1,7 @@
 (ns frontend.handler.events
+  "System-component-like ns that defines named events and listens on a
+  core.async channel to handle them. Any part of the system can dispatch
+  one of these events using state/pub-event!"
   (:refer-clojure :exclude [run!])
   (:require ["@capacitor/filesystem" :refer [Directory Filesystem]]
             [clojure.core.async :as async]
@@ -10,7 +13,7 @@
             [frontend.components.diff :as diff]
             [frontend.components.git :as git-component]
             [frontend.components.plugins :as plugin]
-            [frontend.components.search :as search]
+            [frontend.components.search :as component-search]
             [frontend.components.shell :as shell]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -43,7 +46,7 @@
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.shortcut.core :as st]
-            [frontend.search :as search-db]
+            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -88,7 +91,7 @@
                                     (vector? (:sync-meta %))
                                     (util/uuid-string? (first (:sync-meta %)))
                                     (util/uuid-string? (second (:sync-meta %)))) repos)
-                    (file-sync-restart!)))))
+                    (sync/sync-start)))))
             (file-sync/maybe-onboarding-show status)))))))
 
 (defmethod handle :user/logout [[_]]
@@ -105,8 +108,17 @@
     (if empty-graph?
       (route-handler/redirect! {:to :import :query-params {:from "picker"}})
       (route-handler/redirect-to-home!)))
+  (when-let [dir-name (config/get-repo-dir repo)]
+    (fs/watch-dir! dir-name))
   (repo-handler/refresh-repos!)
-  (file-sync-stop!))
+  (file-sync-restart!))
+
+(defmethod handle :graph/unlinked [_]
+  (repo-handler/refresh-repos!)
+  (file-sync-restart!))
+
+(defmethod handle :graph/refresh [_]
+  (repo-handler/refresh-repos!))
 
 (defn- graph-switch
   ([graph]
@@ -148,17 +160,17 @@
           (repo-handler/persist-db! current-repo persist-db-noti-m)
           (repo-handler/broadcast-persist-db! graph))))
      (repo-handler/restore-and-setup-repo! graph)
-     (graph-switch graph))))
+     (graph-switch graph)
+     state/set-state! :sync-graph/init? false)))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (if (or @outliner-file/*writes-finished?
-          (:graph/remote-binding? @state/state))
-    (do
-      (state/set-state! :graph/remote-binding? false)
-      (graph-switch-on-persisted graph opts))
-    (notification/show!
-     "Please wait seconds until all changes are saved for the current graph."
-     :warning)))
+  (let [opts (if (false? (:persist? opts)) opts (assoc opts :persist? true))]
+    (if (or (not (false? (get @outliner-file/*writes-finished? graph)))
+           (:sync-graph/init? @state/state))
+      (graph-switch-on-persisted graph opts)
+     (notification/show!
+      "Please wait seconds until all changes are saved for the current graph."
+      :warning))))
 
 (defmethod handle :graph/pick-dest-to-sync [[_ graph]]
   (state/set-modal!
@@ -324,7 +336,7 @@
     (state/set-modal! shell/shell)))
 
 (defmethod handle :go/search [_]
-  (state/set-modal! search/search-modal
+  (state/set-modal! component-search/search-modal
                     {:fullscreen? false
                      :close-btn?  false}))
 
@@ -447,7 +459,7 @@
               (try
                 (update-file-path deprecated-repo current-repo deprecated-app-id current-app-id)
                 (db-persist/delete-graph! deprecated-repo)
-                (search-db/remove-db! deprecated-repo)
+                (search/remove-db! deprecated-repo)
                 (state/delete-repo! {:url deprecated-repo})
                 (state/add-repo! {:url current-repo :nfs? true})
                 (catch :default e
@@ -568,9 +580,7 @@
                      (state/close-modal!)
                      (repo-handler/re-index!
                       nfs-handler/rebuild-index!
-                      #(do
-                         (page-handler/create-today-journal!)
-                         (file-sync-restart!)))))]])))
+                      page-handler/create-today-journal!)))]])))
 
 ;; encryption
 (defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]
@@ -603,6 +613,10 @@
            nil
            template
            {:target page}))))))
+
+(defmethod handle :editor/set-org-mode-heading [[_ block heading]]
+  (when-let [id (:block/uuid block)]
+    (editor-handler/set-heading! id :org heading)))
 
 (defmethod handle :file-sync-graph/restore-file [[_ graph page-entity content]]
   (when (db/get-db graph)
@@ -639,9 +653,6 @@
   (notification/show! "file sync graph count exceed limit" :warning false)
   (file-sync-stop!))
 
-(defmethod handle :file-sync/restart [[_]]
-  (file-sync-restart!))
-
 (defmethod handle :graph/restored [[_ _graph]]
   (mobile/init!)
   (when-not (mobile-util/native-ios?)
@@ -661,9 +672,9 @@
                        {:content (str "The directory " dir " has been back, you can edit your graph now.")
                         :status :success
                         :clear? true}])
-    (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir))))
-  (when (= dir (config/get-repo-dir repo))
-    (fs/watch-dir! dir)))
+    (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir)))
+    (when (= dir (config/get-repo-dir repo))
+      (fs/watch-dir! dir))))
 
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]
@@ -676,7 +687,7 @@
       (let [payload (async/<! chan)]
         (try
           (handle payload)
-          (catch js/Error error
+          (catch :default error
             (let [type :handle-system-events/failed]
               (js/console.error (str type) (clj->js payload) "\n" error)
               (state/pub-event! [:instrument {:type    type

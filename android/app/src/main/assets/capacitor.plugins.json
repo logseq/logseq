@@ -36,6 +36,10 @@
 		"classpath": "com.capacitorjs.plugins.statusbar.StatusBarPlugin"
 	},
 	{
+		"pkg": "@logseq/capacitor-file-sync",
+		"classpath": "com.logseq.app.filesync.FileSyncPlugin"
+	},
+	{
 		"pkg": "capacitor-voice-recorder",
 		"classpath": "com.tchvu3.capacitorvoicerecorder.VoiceRecorder"
 	},

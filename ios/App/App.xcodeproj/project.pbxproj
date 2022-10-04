@@ -25,14 +25,8 @@
 		D32752BE275496C60039291C /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D32752BD275496C60039291C /* CloudKit.framework */; };
 		D3D62A0A275C92880003FBDC /* FileContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D62A09275C92880003FBDC /* FileContainer.swift */; };
 		D3D62A0C275C928F0003FBDC /* FileContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = D3D62A0B275C928F0003FBDC /* FileContainer.m */; };
-		FE443F1C27FF5420007ECE65 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE443F1B27FF5420007ECE65 /* Extensions.swift */; };
-		FE443F1E27FF54AA007ECE65 /* Payload.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE443F1D27FF54AA007ECE65 /* Payload.swift */; };
-		FE443F2027FF54C9007ECE65 /* SyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE443F1F27FF54C9007ECE65 /* SyncClient.swift */; };
 		FE647FF427BDFEDE00F3206B /* FsWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE647FF327BDFEDE00F3206B /* FsWatcher.swift */; };
 		FE647FF627BDFEF500F3206B /* FsWatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = FE647FF527BDFEF500F3206B /* FsWatcher.m */; };
-		FE8C946B27FD762700C8017B /* FileSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE8C946927FD762700C8017B /* FileSync.swift */; };
-		FE8C946C27FD762700C8017B /* FileSync.m in Sources */ = {isa = PBXBuildFile; fileRef = FE8C946A27FD762700C8017B /* FileSync.m */; };
-		FEE688A428448F8C0019510E /* AgeEncryption.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE688A328448F8C0019510E /* AgeEncryption.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -87,14 +81,8 @@
 		D3D62A09275C92880003FBDC /* FileContainer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileContainer.swift; sourceTree = "<group>"; };
 		D3D62A0B275C928F0003FBDC /* FileContainer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FileContainer.m; sourceTree = "<group>"; };
 		DE5650F4AD4E2242AB9C012D /* Pods-Logseq.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Logseq.debug.xcconfig"; path = "Target Support Files/Pods-Logseq/Pods-Logseq.debug.xcconfig"; sourceTree = "<group>"; };
-		FE443F1B27FF5420007ECE65 /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
-		FE443F1D27FF54AA007ECE65 /* Payload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Payload.swift; sourceTree = "<group>"; };
-		FE443F1F27FF54C9007ECE65 /* SyncClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncClient.swift; sourceTree = "<group>"; };
 		FE647FF327BDFEDE00F3206B /* FsWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FsWatcher.swift; sourceTree = "<group>"; };
 		FE647FF527BDFEF500F3206B /* FsWatcher.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FsWatcher.m; sourceTree = "<group>"; };
-		FE8C946927FD762700C8017B /* FileSync.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileSync.swift; sourceTree = "<group>"; };
-		FE8C946A27FD762700C8017B /* FileSync.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FileSync.m; sourceTree = "<group>"; };
-		FEE688A328448F8C0019510E /* AgeEncryption.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgeEncryption.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -154,7 +142,6 @@
 				50B271D01FEDC1A000F3C39B /* public */,
 				7435D10B2704659F00AB88E0 /* FolderPicker.swift */,
 				FE647FF327BDFEDE00F3206B /* FsWatcher.swift */,
-				FE443F1A27FF53A2007ECE65 /* FileSync */,
 				FE647FF527BDFEF500F3206B /* FsWatcher.m */,
 				7435D10E2704660B00AB88E0 /* FolderPicker.m */,
 				D3D62A09275C92880003FBDC /* FileContainer.swift */,
@@ -191,19 +178,6 @@
 				8A489CEC51E94726DDD58810 /* Pods-Logseq.release.xcconfig */,
 			);
 			path = Pods;
-			sourceTree = "<group>";
-		};
-		FE443F1A27FF53A2007ECE65 /* FileSync */ = {
-			isa = PBXGroup;
-			children = (
-				FE8C946927FD762700C8017B /* FileSync.swift */,
-				FE443F1F27FF54C9007ECE65 /* SyncClient.swift */,
-				FE443F1D27FF54AA007ECE65 /* Payload.swift */,
-				FE443F1B27FF5420007ECE65 /* Extensions.swift */,
-				FE8C946A27FD762700C8017B /* FileSync.m */,
-				FEE688A328448F8C0019510E /* AgeEncryption.swift */,
-			);
-			path = FileSync;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -356,20 +330,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
-				FE443F1E27FF54AA007ECE65 /* Payload.swift in Sources */,
 				5FF8632C283B5BFD0047731B /* Utils.m in Sources */,
-				FEE688A428448F8C0019510E /* AgeEncryption.swift in Sources */,
-				FE8C946B27FD762700C8017B /* FileSync.swift in Sources */,
 				FE647FF427BDFEDE00F3206B /* FsWatcher.swift in Sources */,
 				5FF8632A283B5ADB0047731B /* Utils.swift in Sources */,
 				D3D62A0A275C92880003FBDC /* FileContainer.swift in Sources */,
 				D3D62A0C275C928F0003FBDC /* FileContainer.m in Sources */,
-				FE443F1C27FF5420007ECE65 /* Extensions.swift in Sources */,
-				FE8C946C27FD762700C8017B /* FileSync.m in Sources */,
 				7435D10F2704660B00AB88E0 /* FolderPicker.m in Sources */,
 				7435D10C2704659F00AB88E0 /* FolderPicker.swift in Sources */,
 				FE647FF627BDFEF500F3206B /* FsWatcher.m in Sources */,
-				FE443F2027FF54C9007ECE65 /* SyncClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -547,7 +515,7 @@
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.8.6;
+				MARKETING_VERSION = 0.8.8;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = com.logseq.logseq;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -574,7 +542,7 @@
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.8.6;
+				MARKETING_VERSION = 0.8.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.logseq.logseq;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
@@ -599,7 +567,7 @@
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				MARKETING_VERSION = 0.8.6;
+				MARKETING_VERSION = 0.8.8;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.logseq.logseq.ShareViewController;
@@ -626,7 +594,7 @@
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				MARKETING_VERSION = 0.8.6;
+				MARKETING_VERSION = 0.8.8;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.logseq.logseq.ShareViewController;
 				PRODUCT_NAME = "$(TARGET_NAME)";
