@@ -1,7 +1,8 @@
 (ns frontend.security
   "Provide security focused fns like preventing XSS attacks"
   (:require [clojure.walk :as walk]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            ["dompurify" :as DOMPurify]))
 
 ;; To prevent from cross-site scripting vulnerability, we should add security checks for both hiccup and raw html.
 ;; Hiccup: [:a {:href "javascript:alert('hei')"} "click me"]
@@ -23,6 +24,10 @@
        (update f 1 dissoc :href)
        f))
    hiccup))
+
+(defn sanitize-html
+  [html]
+  (.sanitize DOMPurify html))
 
 ;; HTML:
 ;; Example 1:
