@@ -684,24 +684,18 @@
           (if logged-in?
             [:div 
               (user-handler/email)
-              [:p (ui/button
-              [:span.flex.text-sm
-               (ui/icon "logout" {:class "mr-1"})
-               (t :logout)]
-              {:class "p-1"
-               :on-click user-handler/logout})]]
+              [:p (ui/button (t :logout) {:class "p-1"
+                                          :icon "logout"
+                                          :on-click user-handler/logout})]]
             [:div
-             (ui/button
-              [:span.flex.text-sm
-               (ui/icon "login" {:class "mr-1"})
-               (t :login)]
-              {:class "p-1"
-               :on-click (fn []
-                           (state/close-settings!)
-                           (js/window.open config/LOGIN-URL))})
+             (ui/button (t :login) {:class "p-1"
+                                    :icon "login"
+                                    :on-click (fn []
+                                                (state/close-settings!)
+                                                (js/window.open config/LOGIN-URL))})
              [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])]]
         [:div.flex.flex-col.gap-4
-         {:class (when-not logged-in? "opacity-50 pointer-events-none cursor-not-allowed")}
+         {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
          (sync-switcher-row enable-sync?)
          (whiteboards-switcher-row enable-whiteboards?)]])]))
 

@@ -200,26 +200,6 @@
          wrapper-children)))
    opts))
 
-(defn button
-  [text & {:keys [background href class intent on-click small? large? title]
-           :or   {small? false large? false}
-           :as   option}]
-  (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center")
-        klass (if background (string/replace klass "indigo" background) klass)
-        klass (if small? (str klass ".px-2.py-1") klass)
-        klass (if large? (str klass ".text-base") klass)]
-    [:button.ui__button
-     (merge
-      {:type  "button"
-       :title title
-       :class (str (util/hiccup->class klass) " " class)}
-      (dissoc option :background :class :small? :large?)
-      (when href
-        {:on-click (fn []
-                     (util/open-url href)
-                     (when (fn? on-click) (on-click)))}))
-     text]))
-
 (rum/defc notification-content
   [state content status uid]
   (when (and content status)
@@ -961,6 +941,27 @@
              [:span.ui__icon.ti
               {:class (str "ls-icon-" class)}
               (f (merge {:size 18} (r/map-keys->camel-case opts)))])))))))
+
+(defn button
+  [text & {:keys [background href class intent on-click small? large? title icon]
+           :or   {small? false large? false}
+           :as   option}]
+  (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center")
+        klass (if background (string/replace klass "indigo" background) klass)
+        klass (if small? (str klass ".px-2.py-1") klass)
+        klass (if large? (str klass ".text-base") klass)]
+    [:button.ui__button
+     (merge
+      {:type  "button"
+       :title title
+       :class (str (util/hiccup->class klass) " " class)}
+      (dissoc option :background :class :small? :large?)
+      (when href
+        {:on-click (fn []
+                     (util/open-url href)
+                     (when (fn? on-click) (on-click)))}))
+     (when icon (frontend.ui/icon icon {:class "mr-1"}))
+     text]))
 
 (rum/defc type-icon
   [{:keys [name class title extension?]}]
