@@ -1515,7 +1515,7 @@
 
          ["Entity" e]
          [:span {:dangerouslySetInnerHTML
-                 {:__html (:html e)}}]
+                 {:__html (:html (security/sanitize-html e))}}]
 
          ["Latex_Fragment" [display s]] ;display can be "Displayed" or "Inline"
          (if html-export?
@@ -1545,18 +1545,20 @@
          ["Export_Snippet" "html" s]
          (when (not html-export?)
            [:span {:dangerouslySetInnerHTML
-                   {:__html s}}])
+                   {:__html (security/sanitize-html s)}}])
 
          ["Inline_Hiccup" s] ;; String to hiccup
          (ui/catch-error
           [:div.warning {:title "Invalid hiccup"} s]
-          (-> (safe-read-string s)
-              (security/remove-javascript-links-in-href)))
+          [:div.hiccup_html {:dangerouslySetInnerHTML
+                             {:__html (-> (safe-read-string s)
+                                          (rum/render-static-markup)
+                                          (security/sanitize-html))}}])
 
          ["Inline_Html" s]
          (when (not html-export?)
            ;; TODO: how to remove span and only export the content of `s`?
-           [:span {:dangerouslySetInnerHTML {:__html s}}])
+           [:span {:dangerouslySetInnerHTML {:__html (security/sanitize-html s)}}])
 
          [(:or "Break_Line" "Hard_Break_Line")]
          [:br]
@@ -3230,17 +3232,19 @@
       ["Raw_Html" content]
       (when (not html-export?)
         [:div.raw_html {:dangerouslySetInnerHTML
-                        {:__html content}}])
+                        {:__html (security/sanitize-html content)}}])
       ["Export" "html" _options content]
       (when (not html-export?)
         [:div.export_html {:dangerouslySetInnerHTML
-                           {:__html content}}])
+                           {:__html (security/sanitize-html content)}}])
       ["Hiccup" content]
       (ui/catch-error
        [:div.warning {:title "Invalid hiccup"}
         content]
-       (-> (safe-read-string content)
-           (security/remove-javascript-links-in-href)))
+       [:div.hiccup_html {:dangerouslySetInnerHTML
+                          {:__html (-> (safe-read-string content)
+                                       (rum/render-static-markup)
+                                       (security/sanitize-html))}}])
 
       ["Export" "latex" _options content]
       (if html-export?
