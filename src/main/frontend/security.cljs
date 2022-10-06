@@ -25,9 +25,18 @@
        f))
    hiccup))
 
+(def sanitization-options (clj->js {:ADD_TAGS ["iframe"]
+                                    :ALLOW_UNKNOWN_PROTOCOLS true
+                                    :ADD_ATTR ["allow"
+                                               "src"
+                                               "allowfullscreen"
+                                               "frameborder"
+                                               "scrolling"
+                                               "target"]}))
+
 (defn sanitize-html
   [html]
-  (.sanitize DOMPurify html))
+  (.sanitize DOMPurify html sanitization-options))
 
 ;; HTML:
 ;; Example 1:
