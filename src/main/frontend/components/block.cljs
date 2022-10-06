@@ -1,5 +1,6 @@
 (ns frontend.components.block
   (:refer-clojure :exclude [range])
+  (:require-macros [hiccups.core])
   (:require ["/frontend/utils" :as utils]
             ["@capacitor/share" :refer [^js Share]]
             [cljs-bean.core :as bean]
@@ -1580,7 +1581,7 @@
           [:div.warning {:title "Invalid hiccup"} s]
           [:span {:dangerouslySetInnerHTML
                   {:__html (-> (safe-read-string s)
-                               (rum/render-static-markup)
+                               (hiccups.core/html)
                                (security/sanitize-html))}}])
 
          ["Inline_Html" s]
@@ -3319,7 +3320,7 @@
         content]
        [:div.hiccup_html {:dangerouslySetInnerHTML
                           {:__html (-> (safe-read-string content)
-                                       (rum/render-static-markup)
+                                       (hiccups.core/html)
                                        (security/sanitize-html))}}])
 
       ["Export" "latex" _options content]
