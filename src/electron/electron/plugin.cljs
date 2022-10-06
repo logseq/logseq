@@ -32,39 +32,57 @@
 ;; Zipball https://api.github.com/repos/{owner}/{repo}/zipball
 
 (defn- fetch-release-asset
-  [{:keys [repo theme]} url-suffix]
+  [{:keys [repo theme]} url-suffix {:keys [response-transform]
+                                    :or {response-transform identity}}]
   (p/catch
-    (p/let [repo (some-> repo (string/trim) (string/replace #"^/+(.+?)/+$" "$1"))
-            api #(str "https://api.github.com/repos/" repo "/" %)
-            endpoint (api url-suffix)
-            ^js res (fetch endpoint)
-            res (.json res)
-            _ (debug "[Release URL] " endpoint)
-            res (bean/->clj res)
-            version (:tag_name res)
-            asset (first (filter #(string/ends-with? (:name %) ".zip") (:assets res)))]
+   (p/let [repo (some-> repo (string/trim) (string/replace #"^/+(.+?)/+$" "$1"))
+           api #(str "https://api.github.com/repos/" repo "/" %)
+           endpoint (api url-suffix)
+           ^js res (fetch endpoint)
+           res (response-transform res)
+           res (.json res)
+           _ (debug "[Release URL] " endpoint)
+           res (bean/->clj res)
+           version (:tag_name res)
+           asset (first (filter #(string/ends-with? (:name %) ".zip") (:assets res)))]
 
-      [(if (and (nil? asset) theme)
-         (if-let [zipball (:zipball_url res)]
-           zipball
-           (api "zipball"))
-         asset)
-       version
-       (:body res)])
+          [(if (and (nil? asset) theme)
+             (if-let [zipball (:zipball_url res)]
+               zipball
+               (api "zipball"))
+             asset)
+           version
+           (:body res)])
 
-    (fn [^js e]
-      (debug e)
-      (throw (js/Error. [:release-channel-issue (.-message e)])))))
+   (fn [^js e]
+     (debug e)
+     (throw (js/Error. [:release-channel-issue (.-message e)])))))
 
 (defn fetch-latest-release-asset
   "Fetches latest release, normally when user clicks to install or update a plugin"
   [item]
-  (fetch-release-asset item "releases/latest"))
+  (fetch-release-asset item "releases/latest" {}))
 
 (defn fetch-specific-release-asset
-  "Fetches a specific release asset, normally when installing specific versions from plugins.edn"
-  [{:keys [version] :as item}]
-  (fetch-release-asset item (str "releases/tags/" version)))
+  "Fetches a specific release asset, normally when installing specific versions
+  from plugins.edn. If a release does not exist, it falls back to fetching the
+  latest release for a plugin. This is done for unusual plugins where the
+  package.json version does not match the git tagged version e.g.
+  https://github.com/hkgnp/logseq-osmmaps-plugin has respective values of 1.5
+  and v1.5."
+  [{:keys [version repo] :as item}]
+  (fetch-release-asset item
+                       (str "releases/tags/" version)
+                       {:response-transform
+                        (fn [res]
+                          (if (= 404 (.-status res))
+                            ;; Fall back to fetching the latest For these rare
+                            ;; cases, previous logseq versions did not store the
+                            ;; plugin's git tag required to correctly install it
+                            (let [repo' (some-> repo (string/trim) (string/replace #"^/+(.+?)/+$" "$1"))
+                                  api #(str "https://api.github.com/repos/" repo' "/" %)]
+                              (fetch (api "releases/latest")))
+                            res))}))
 
 (defn download-asset-zip
   [{:keys [id repo title author description effect sponsors]} dl-url dl-version dot-extract-to]

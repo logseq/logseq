@@ -98,6 +98,8 @@
            frontend.modules.outliner.datascript/auto-transact! clojure.core/let
            frontend.namespaces/import-vars potemkin/import-vars
            ;; src/test
+           frontend.test.helper/deftest-async clojure.test/deftest
+           frontend.test.helper/with-reset cljs.test/async
            frontend.react/defc clojure.core/defn}
  :skip-comments true
  :output {:progress true}}

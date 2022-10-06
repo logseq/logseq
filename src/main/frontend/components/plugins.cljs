@@ -806,9 +806,8 @@
    [:h1.mb-4.text-2xl.p-1 "Install plugins from plugins.edn"]
    (if (seq plugins)
      [:div
-      [:div.mb-2.text-xl (util/format "The following %s plugin(s) will replace your %s plugin(s):"
-                                      (count (:install plugins))
-                                      (count (:uninstall plugins)))]
+      [:div.mb-2.text-xl (util/format "The following %s plugin(s) will replace your plugins:"
+                                      (count (:install plugins)))]
       ;; lists
       [:ul
        (for [it (:install plugins)

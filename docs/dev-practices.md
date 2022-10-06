@@ -153,15 +153,18 @@ aren't readable.
 
 ## Data validation and generation
 
-We currently use [spec](https://github.com/clojure/spec.alpha) for data
-validation (and generation someday). We may switch to
-[malli](https://github.com/metosin/malli) if we need to datafy our data models
-at some point.
+We use both [spec](https://github.com/clojure/spec.alpha) and [malli](https://github.com/metosin/malli) for data validation and (and generation someday). malli has the advantage that its schema
+is data and can be used for additional purposes. See plugin-config for an example.
 
 Specs should go under `src/main/frontend/spec/` and be compatible with clojure
-and clojurescript. See `frontend.spec.storage` for an example. By following
-these conventions, specs should also be usable by babashka. This is helpful as it
-allows for third party tools to be written with logseq's data model.
+and clojurescript. See `frontend.spec.storage` for an example.
+
+Malli schemas should go under `src/main/frontend/schema/` and be compatible with clojure
+and clojurescript. See `frontend.schema.handler.plugin-config` for an example.
+
+By following these conventions, these should also be usable by babashka. This is
+helpful as it allows for third party tools to be written with logseq's data
+model.
 
 ## Development Tools
 

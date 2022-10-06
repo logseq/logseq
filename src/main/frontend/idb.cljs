@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.storage :as storage]
+            [frontend.util :as util]
             [goog.object :as gobj]
             [promesa.core :as p]))
 
@@ -13,7 +14,10 @@
 ;; To maintain backward compatibility
 
 
-(defonce store (Store. "localforage" "keyvaluepairs" 2))
+;; store is unused and fails async tests so disable them in tests
+(if util/node-test?
+  (def store nil)
+  (defonce store (Store. "localforage" "keyvaluepairs" 2)))
 
 (defn clear-idb!
   []

@@ -201,22 +201,21 @@
                            (if (installed? id)
                              (when-let [^js pl (get-plugin-inst id)] ;; update
                                (p/then
-                                 (.reload pl)
-                                 #(do
-                                    ;;(if theme (select-a-plugin-theme id))
-                                    (notification/show!
-                                      (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success)
-                                    (state/consume-updates-coming-plugin payload true))))
+                                (.reload pl)
+                                #(do
+                                   ;;(if theme (select-a-plugin-theme id))
+                                   (notification/show!
+                                    (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success)
+                                   (state/consume-updates-coming-plugin payload true))))
 
                              (do                            ;; register new
                                (p/then
                                 (js/LSPluginCore.register (bean/->js {:key id :url dst}))
                                 (fn [] (when theme (js/setTimeout #(select-a-plugin-theme id) 300))))
                                (plugin-config/add-or-update-plugin
-                                {:id id
-                                 :name (:name payload)
-                                 :version (:installed-version payload)
-                                 :repo (:repo payload)})
+                                (assoc payload
+                                       :version (:installed-version payload)
+                                       :name name))
                                (notification/show!
                                 (str (t :plugin/installed) (t :plugins) ": " name) :success)))))
 
