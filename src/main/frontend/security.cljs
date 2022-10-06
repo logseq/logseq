@@ -14,12 +14,3 @@
 (defn sanitize-html
   [html]
   (.sanitize DOMPurify html sanitization-options))
-
-;; HTML:
-;; Example 1:
-;; <script>
-;; alert('gotcha');
-;; </script>
-
-;; Example 2:
-;; <div style="padding: 20px; opacity: 0;height: 20px;" onmouseout="alert('Gotcha!')"></div>
