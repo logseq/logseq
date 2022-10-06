@@ -1578,10 +1578,10 @@
          ["Inline_Hiccup" s] ;; String to hiccup
          (ui/catch-error
           [:div.warning {:title "Invalid hiccup"} s]
-          [:div.hiccup_html {:dangerouslySetInnerHTML
-                             {:__html (-> (safe-read-string s)
-                                          (rum/render-static-markup)
-                                          (security/sanitize-html))}}])
+          [:span {:dangerouslySetInnerHTML
+                  {:__html (-> (safe-read-string s)
+                               (rum/render-static-markup)
+                               (security/sanitize-html))}}])
 
          ["Inline_Html" s]
          (when (not html-export?)
