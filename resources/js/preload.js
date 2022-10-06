@@ -5,6 +5,8 @@ const { ipcRenderer, contextBridge, shell, clipboard, webFrame } = require('elec
 const IS_MAC = process.platform === 'darwin'
 const IS_WIN32 = process.platform === 'win32'
 
+const ALLOWED_EXTERNAL_PROTOCOLS = ['https:', 'http:', 'mailto:']
+
 function getFilePathFromClipboard () {
   if (IS_WIN32) {
     const rawFilePath = clipboard.read('FileNameW')
@@ -63,6 +65,10 @@ contextBridge.exposeInMainWorld('apis', {
   },
 
   async openExternal (url, options) {
+    const protocol = new URL(url).protocol
+    if (!ALLOWED_EXTERNAL_PROTOCOLS.includes(protocol)) {
+      throw new Error('illegal protocol')
+    }
     await shell.openExternal(url, options)
   },
 
