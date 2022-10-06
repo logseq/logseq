@@ -1523,6 +1523,12 @@
                "Highlight" :mark)]
     (->elem elem (map-inline config data))))
 
+(defn hiccup->html
+  [s]
+  (-> (safe-read-string s)
+      (hiccups.core/html)
+      (security/sanitize-html)))
+
 (defn inline
   [{:keys [html-export?] :as config} item]
   (match item
@@ -1580,9 +1586,7 @@
          (ui/catch-error
           [:div.warning {:title "Invalid hiccup"} s]
           [:span {:dangerouslySetInnerHTML
-                  {:__html (-> (safe-read-string s)
-                               (hiccups.core/html)
-                               (security/sanitize-html))}}])
+                  {:__html (hiccup->html s)}}])
 
          ["Inline_Html" s]
          (when (not html-export?)
@@ -3319,9 +3323,7 @@
        [:div.warning {:title "Invalid hiccup"}
         content]
        [:div.hiccup_html {:dangerouslySetInnerHTML
-                          {:__html (-> (safe-read-string content)
-                                       (hiccups.core/html)
-                                       (security/sanitize-html))}}])
+                          {:__html (hiccup->html content)}}])
 
       ["Export" "latex" _options content]
       (if html-export?
