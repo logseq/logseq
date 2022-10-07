@@ -7,7 +7,7 @@ export function useDrop() {
   const handlePaste = usePaste()
   return React.useCallback<TLReactCallbacks<Shape>['onDrop']>(
     async (app, { dataTransfer, point }) => {
-      handlePaste(app, { point, shiftKey: false, dataTransfer })
+      handlePaste(app, { point, shiftKey: false, dataTransfer, fromDrop: true })
     },
     []
   )

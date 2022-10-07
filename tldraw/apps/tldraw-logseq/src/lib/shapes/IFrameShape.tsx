@@ -30,7 +30,9 @@ export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
   }
 
   @action reload = () => {
-    this.frameRef.current.src = this.frameRef?.current?.src
+    if (this.frameRef.current) {
+      this.frameRef.current.src = this.frameRef?.current?.src
+    }
   }
 
   ReactComponent = observer(({ events, isErasing, isEditing }: TLComponentProps) => {
@@ -46,7 +48,7 @@ export class IFrameShape extends TLBoxShape<IFrameShapeProps> {
         {...events}
       >
         <div
-          className="rounded-lg w-full h-full relative overflow-hidden shadow-xl"
+          className="tl-iframe-container"
           style={{
             pointerEvents: isEditing ? 'all' : 'none',
             userSelect: 'none',

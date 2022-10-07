@@ -8,7 +8,6 @@ import {
   TLShapeModel,
   uniqueId,
   validUUID,
-  createNewLineBinding,
 } from '@tldraw/core'
 import type { TLReactCallbacks } from '@tldraw/react'
 import Vec from '@tldraw/vec'
@@ -102,7 +101,7 @@ export function usePaste() {
   const { handlers } = React.useContext(LogseqContext)
 
   return React.useCallback<TLReactCallbacks<Shape>['onPaste']>(
-    async (app, { point, shiftKey, dataTransfer }) => {
+    async (app, { point, shiftKey, dataTransfer, fromDrop }) => {
       let imageAssetsToCreate: VideoImageAsset[] = []
       let assetsToClone: TLAsset[] = []
       const bindingsToCreate: TLBinding[] = []
@@ -150,8 +149,8 @@ export function usePaste() {
       async function tryCreateShapesFromDataTransfer(dataTransfer: DataTransfer) {
         return tryCreateShapeHelper(
           tryCreateShapeFromFiles,
-          tryCreateShapeFromTextPlain,
           tryCreateShapeFromTextHTML,
+          tryCreateShapeFromTextPlain,
           tryCreateShapeFromBlockUUID
         )(dataTransfer)
       }
@@ -203,7 +202,8 @@ export function usePaste() {
       }
 
       async function tryCreateShapeFromTextHTML(item: DataTransfer | ClipboardItem) {
-        if (shiftKey) {
+        // skips if it's a drop event or using shift key
+        if (item.types.includes('text/plain') && (shiftKey || fromDrop)) {
           return null
         }
         const rawText = await getDataFromType(item, 'text/html')

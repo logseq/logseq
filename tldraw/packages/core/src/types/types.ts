@@ -172,7 +172,7 @@ export type TLSubscriptionEvent =
     }
   | {
       event: 'paste'
-      info: { point: number[]; shiftKey: boolean; dataTransfer?: DataTransfer }
+      info: { point: number[]; shiftKey: boolean; dataTransfer?: DataTransfer, fromDrop?: boolean }
     }
   | {
       event: 'create-assets'

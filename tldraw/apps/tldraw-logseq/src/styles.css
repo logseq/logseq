@@ -689,8 +689,14 @@ button.tl-select-input-trigger {
   transform-origin: top left;
 }
 
+.tl-iframe-container {
+  @apply rounded-lg w-full h-full relative overflow-hidden shadow-xl;
+  background-color: var(--ls-secondary-background-color);
+}
+
 .tl-html-anchor {
   width: fit-content;
+  display: flex;
 }
 
 .tl-html-anchor > iframe {
