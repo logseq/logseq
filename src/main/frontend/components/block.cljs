@@ -239,7 +239,7 @@
         (if (or (not asset-file?)
                 (and exist? (not loading?)))
           (content-fn)
-          [:p.text-red-500.text-xs [:small.opacity-80
+          [:p.text-error.text-xs [:small.opacity-80
                                     (util/format "%s not found!" (string/capitalize type))]])))))
 
 (defn open-lightbox
@@ -1877,8 +1877,10 @@
                  (not= "nil" marker))
         {:class (str (string/lower-case marker))})
       (when bg-color
-        {:style {:background-color bg-color}
-         :class "with-bg-color"}))
+        {:style {:background-color (if (some #{bg-color} ui/block-background-colors) 
+                                     (str "var(--ls-highlight-color-" bg-color ")")
+                                     bg-color)}
+         :class "px-1 with-bg-color"}))
      (remove-nils
       (concat
        [(when-not slide? checkbox)
@@ -3097,22 +3099,6 @@
     {:debug-id q
      :trigger-once? false})))
 
-(defn admonition
-  [config type result]
-  (when-let [icon (case (string/lower-case (name type))
-                    "note" svg/note
-                    "tip" svg/tip
-                    "important" svg/important
-                    "caution" svg/caution
-                    "warning" svg/warning
-                    "pinned" svg/pinned
-                    nil)]
-    [:div.flex.flex-row.admonitionblock.align-items {:class type}
-     [:div.pr-4.admonition-icon.flex.flex-col.justify-center
-      {:title (string/upper-case type)} (icon)]
-     [:div.ml-4.text-lg
-      (markup-elements-cp config result)]]))
-
 ;; TODO: move to mldoc
 ;; (defn- convert-md-src-to-custom-block
 ;;   [item]
@@ -3256,22 +3242,22 @@
           (ui/block-error "Invalid query:" {:content content})))
 
       ["Custom" "note" _options result _content]
-      (admonition config "note" result)
+      (ui/admonition "note" (markup-elements-cp config result))
 
       ["Custom" "tip" _options result _content]
-      (admonition config "tip" result)
+      (ui/admonition "tip" (markup-elements-cp config result))
 
       ["Custom" "important" _options result _content]
-      (admonition config "important" result)
+      (ui/admonition "important" (markup-elements-cp config result))
 
       ["Custom" "caution" _options result _content]
-      (admonition config "caution" result)
+      (ui/admonition "caution" (markup-elements-cp config result))
 
       ["Custom" "warning" _options result _content]
-      (admonition config "warning" result)
+      (ui/admonition "warning" (markup-elements-cp config result))
 
       ["Custom" "pinned" _options result _content]
-      (admonition config "pinned" result)
+      (ui/admonition "pinned" (markup-elements-cp config result))
 
       ["Custom" "center" _options l _content]
       (->elem
