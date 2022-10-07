@@ -8,9 +8,11 @@
      (frontend.state/set-config! repo# nil)))
 
 ;; Copied from https://github.com/babashka/nbb/blob/e5d84b0fac59774f5d7a4a9e807240cce04bf252/test/nbb/test_macros.clj
-;; This macro ensures an async test's uncaught exception is caught and correctly
-;; errors the test suite. It also handles calling async and done
-(defmacro deftest-async [name opts & body]
+(defmacro deftest-async
+  "A wrapper around deftest that handles async and done in all cases.
+  Importantly, it prevents unexpected failures in an async test from abruptly
+  ending a test suite"
+  [name opts & body]
   (let [[opts body]
         (if (map? opts)
           [opts body]

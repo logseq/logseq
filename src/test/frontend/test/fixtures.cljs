@@ -7,7 +7,7 @@
             [frontend.fs.test-node :as test-node]
             [frontend.fs :as fs]
             [frontend.state :as state]
-            [frontend.test.helper :as helper]
+            [frontend.test.helper :as test-helper]
             [cljs.test :refer [async]]))
 
 (defn load-test-env
@@ -30,7 +30,7 @@
 
 (defn reset-db
   [f]
-  (let [repo helper/test-db]
+  (let [repo test-helper/test-db]
     (reset-datascript repo)
     (let [r (f)]
       (reset-datascript repo) r)))

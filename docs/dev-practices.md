@@ -139,6 +139,18 @@ To write a test that uses a datascript db:
 
 For examples of these tests, see `frontend.db.query-dsl-test` and `frontend.db.model-test`.
 
+### Async Unit Testing
+
+Async unit testing is well supported in ClojureScript.
+https://clojurescript.org/tools/testing#async-testing is a good guide for how to
+do this. We have a couple of test helpers that make testing async easier:
+
+- `frontend.test.helper/deftest-async` - `deftest` for async tests that ensures
+  uncaught exceptions don't abruptly end the test suite. If you don't use this
+  macro for async tests, you are expected to handle unexpected failures in your test
+- `frontend.test.helper/with-reset` - A version of `with-redefs` that works for
+  async contexts
+
 ## Accessibility
 
 Please refer to our [accessibility guidelines](accessibility.md).

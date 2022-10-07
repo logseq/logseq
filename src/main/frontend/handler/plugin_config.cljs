@@ -23,7 +23,7 @@ This component depends on TODO"
 
 (def common-plugin-keys
   "Vec of plugin keys to store in plugins.edn and to compare with installed-plugins state"
-  (->> plugin-config-schema/Plugins-edn last rest (mapv first)))
+  (->> plugin-config-schema/Plugin rest (mapv first)))
 
 (defn add-or-update-plugin
   [{:keys [id] :as plugin}]

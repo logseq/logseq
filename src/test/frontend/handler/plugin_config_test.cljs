@@ -1,6 +1,6 @@
 (ns frontend.handler.plugin-config-test
   (:require [clojure.test :refer [is use-fixtures testing deftest]]
-            [frontend.test.helper :as helper :include-macros true :refer [deftest-async]]
+            [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [frontend.test.fixtures :as fixtures]
             [frontend.handler.plugin-config :as plugin-config]
             [frontend.handler.global-config :as global-config-handler]
@@ -16,7 +16,7 @@
 (use-fixtures :once fixtures/redef-get-fs)
 
 (deftest-async add-or-update-plugin
-  (let [dir (helper/create-tmp-dir)
+  (let [dir (test-helper/create-tmp-dir)
         plugins-file (path/join dir "plugins.edn")
         plugin-to-add {:id :foo :name "Foo" :repo "some-user/foo" :version "v0.9.0"}
         body (pr-str (mg/generate plugin-config-schema/Plugins-edn {:size 10}))]
@@ -31,11 +31,12 @@
 
      (.finally
       (fn []
+        (reset! global-config-handler/root-dir nil)
         (fs-node/unlinkSync plugins-file)
         (fs-node/rmdirSync dir))))))
 
 (deftest-async remove-plugin
-  (let [dir (helper/create-tmp-dir)
+  (let [dir (test-helper/create-tmp-dir)
         plugins-file (path/join dir "plugins.edn")
         ;; use seed to consistently generate 5 plugins
         ;; if we want more randomness we could look into gen/such-that
@@ -53,17 +54,18 @@
 
      (.finally
       (fn []
+        (reset! global-config-handler/root-dir nil)
         (fs-node/unlinkSync plugins-file)
         (fs-node/rmdirSync dir))))))
 
 (deftest-async open-sync-modal-malformed-edn
-  (let [dir (helper/create-tmp-dir)
+  (let [dir (test-helper/create-tmp-dir)
         plugins-file (path/join dir "plugins.edn")
         error-message (atom nil)]
     (fs-node/writeFileSync plugins-file "{:id {}")
     (reset! global-config-handler/root-dir dir)
 
-    (helper/with-reset reset
+    (test-helper/with-reset reset
       [notification/show! (fn [msg _] (reset! error-message msg))]
       (->
        (p/do!
@@ -72,18 +74,19 @@
             "User sees correct notification"))
        (p/finally (fn []
                     (reset)
+                    (reset! global-config-handler/root-dir nil)
                     (fs-node/unlinkSync plugins-file)
                     (fs-node/rmdirSync dir)))))))
 
 (deftest-async open-sync-modal-invalid-edn
-  (let [dir (helper/create-tmp-dir)
+  (let [dir (test-helper/create-tmp-dir)
         plugins-file (path/join dir "plugins.edn")
         error-message (atom nil)]
     ;; Missing a couple plugin keys
     (fs-node/writeFileSync plugins-file (pr-str {:id {:theme true :repo "user/repo"}}))
     (reset! global-config-handler/root-dir dir)
 
-    (helper/with-reset reset
+    (test-helper/with-reset reset
       [notification/show! (fn [msg _] (reset! error-message msg))]
       (->
        (p/do!

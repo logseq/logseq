@@ -60,6 +60,7 @@
              frontend.search search
              frontend.state state
              frontend.template template
+             frontend.test.helper test-helper
              frontend.ui ui
              frontend.util util
              frontend.util.clock clock
@@ -79,7 +80,8 @@
              logseq.graph-parser.util.page-ref page-ref
              logseq.graph-parser.util.block-ref block-ref
              logseq.graph-parser.date-time-util date-time-util
-             medley.core medley}}
+             medley.core medley
+             promesa.core p}}
 
   :namespace-name-mismatch {:level :warning}
   :used-underscored-binding {:level :warning}}
