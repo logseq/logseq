@@ -29,7 +29,7 @@
     "@types/react-dom": "^17.0.0",
     "@typescript-eslint/eslint-plugin": "^5.36.1",
     "@typescript-eslint/parser": "^5.36.1",
-    "eslint": "^8.23.1",
+    "eslint": "^8.24.0",
     "lint-staged": "^13.0.1",
     "prettier": "^2.6.2",
     "prettier-plugin-jsdoc": "^0.3.38",

@@ -1,6 +1,7 @@
-import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import basicSsl from '@vitejs/plugin-basic-ssl'
 import path from 'path'
+import { defineConfig } from 'vite'
 
 const bases = {
   core: path.resolve(__dirname, '../packages/core/src'),
@@ -19,13 +20,12 @@ export default defineConfig({
         plugins: [[require.resolve('@babel/plugin-proposal-decorators'), { legacy: true }]],
       },
     }),
+    basicSsl(),
   ],
   server: {
     port: '3031',
-    // force: true,
-    fs: {
-      strict: false,
-    },
+    fs: { strict: false },
+    https: true,
   },
   resolve: {
     alias: [
