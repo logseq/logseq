@@ -70,7 +70,7 @@
      :d               "M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"}]])
 (rum/defc note
   []
-  [:svg.h-8.w-8.svg-shadow.note
+  [:svg.h-8.w-8.note
    {:view-box "0 0 512 512"
     :fill     "currentColor"}
    [:path
@@ -88,20 +88,18 @@
 
 (rum/defc important
   []
-  [:svg.h-8.w-8.svg-shadow.important
+  [:svg.h-8.w-8.important
    {:view-box "0 0 512 512"
-    :fill     "currentColor"
-    :color    "#bf0000"}
+    :fill     "var(--ls-error-color)"}
    [:path
     {:d
      "M504 256c0 136.997-111.043 248-248 248S8 392.997 8 256C8 119.083 119.043 8 256 8s248 111.083 248 248zm-248 50c-25.405 0-46 20.595-46 46s20.595 46 46 46 46-20.595 46-46-20.595-46-46-46zm-43.673-165.346l7.418 136c.347 6.364 5.609 11.346 11.982 11.346h48.546c6.373 0 11.635-4.982 11.982-11.346l7.418-136c.375-6.874-5.098-12.654-11.982-12.654h-63.383c-6.884 0-12.356 5.78-11.981 12.654z"}]])
 
 (rum/defc caution
   []
-  [:svg.h-8.w-8.svg-shadow.caution
+  [:svg.h-8.w-8.caution
    {:view-box "0 0 384 512"
-    :fill     "currentColor"
-    :color    "#bf3400"}
+    :fill     "var(--ls-warning-color)"}
    [:path
     {:d
      "M216 23.86c0-23.8-30.65-32.77-44.15-13.04C48 191.85 224 200 224 288c0 35.63-29.11 64.46-64.85 63.99-35.17-.45-63.15-29.77-63.15-64.94v-85.51c0-21.7-26.47-32.23-41.43-16.5C27.8 213.16 0 261.33 0 320c0 105.87 86.13 192 192 192s192-86.13 192-192c0-170.29-168-193-168-296.14z"}]])
@@ -110,11 +108,10 @@
   ([]
    (warning nil))
   ([opts]
-   [:svg.h-8.w-8.svg-shadow.warning
+   [:svg.h-8.w-8.warning
     (merge
       {:view-box "0 0 576 512"
-       :fill     "currentColor"
-       :color    "#bf6900"}
+       :fill     "var(--ls-warning-color)"}
       opts)
     [:path
      {:d

@@ -52,6 +52,14 @@
 
 (defonce icon-size (if (mobile-util/native-platform?) 26 20))
 
+(def block-background-colors
+  ["gray"
+   "red"
+   "yellow"
+   "green"
+   "blue"
+   "purple"])
+
 (rum/defc ls-textarea
   < rum/reactive
   {:did-mount (fn [state]
@@ -207,7 +215,7 @@
           (case status
             :success
             [:svg.h-6.w-6.text-green-400
-             {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
+             {:stroke "var(--ls-success-color)", :viewBox "0 0 24 24", :fill "none"}
              [:path
               {:d               "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                :stroke-width    "2"
@@ -215,7 +223,7 @@
                :stroke-linecap  "round"}]]
             :warning
             [:svg.h-6.w-6.text-yellow-500
-             {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
+             {:stroke "var(--ls-warning-color)", :viewBox "0 0 24 24", :fill "none"}
              [:path
               {:d               "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                :stroke-width    "2"
@@ -223,7 +231,7 @@
                :stroke-linecap  "round"}]]
 
             [:svg.h-6.w-6.text-red-500
-             {:view-box "0 0 20 20", :fill "currentColor"}
+             {:view-box "0 0 20 20", :fill "var(--ls-error-color)"}
              [:path
               {:clip-rule "evenodd"
                :d
@@ -602,8 +610,8 @@
       [:div.ui__confirm-modal
        {:class (str "is-" tag)}
        [:div.sm:flex.sm:items-start
-        [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-red-100.sm:mx-0.sm:h-10.sm:w-10
-         [:svg.h-6.w-6.text-red-600
+        [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-error.sm:mx-0.sm:h-10.sm:w-10
+         [:svg.h-6.w-6.text-error
           {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
           [:path
            {:d
@@ -741,7 +749,7 @@
                       nil)]
       [:div.flex.flex-row.admonitionblock.align-items {:class type}
        [:div.pr-4.admonition-icon.flex.flex-col.justify-center
-        {:title (string/upper-case type)} (icon)]
+        {:title (string/capitalize type)} (icon)]
        [:div.ml-4.text-lg
         content]])))
 
@@ -774,7 +782,7 @@
   [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui
    section-attrs
    [:div.flex.justify-between.items-center.px-1
-    [:h5.text-red-600.pb-1 title]
+    [:h5.text-error.pb-1 title]
     [:a.text-xs.opacity-50.hover:opacity-80
      {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
       :target "_blank"} "report issue"]]
