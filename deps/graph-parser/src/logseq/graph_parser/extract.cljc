@@ -16,8 +16,7 @@
             [logseq.graph-parser.config :as gp-config]
             #?(:org.babashka/nbb [logseq.graph-parser.log :as log]
                :default [lambdaisland.glogi :as log])
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]
-            [medley.core :as medley]))
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]))
 
 (defn- filepath->page-name
   [filepath]
@@ -213,8 +212,8 @@
         blocks (map
                  (fn [block]
                    (-> block
-                       (medley/dissoc-in [:block/parent :block/name])
-                       (medley/dissoc-in [:block/left :block/name])))
+                       (gp-util/dissoc-in [:block/parent :block/name])
+                       (gp-util/dissoc-in [:block/left :block/name])))
                  blocks)
         serialized-page (first pages)
         ;; whiteboard edn file should normally have valid :block/original-name, :block/name, :block/uuid
