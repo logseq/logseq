@@ -12,13 +12,47 @@
   "Example exported whiteboard page as an edn exportable."
   '{:blocks
     ({:block/content "foo content a",
+      :block/format :markdown
+      :block/parent {:block/uuid #uuid "16c90195-6a03-4b3f-839d-095a496d9acd"}},
+     {:block/content "foo content b",
+      :block/format :markdown
+      :block/parent {:block/uuid #uuid "16c90195-6a03-4b3f-839d-095a496d9acd"}}),
+    :pages
+    ({:block/format :markdown,
+      :block/name "foo"
+      :block/original-name "Foo"
+      :block/uuid #uuid "16c90195-6a03-4b3f-839d-095a496d9acd"
+      :block/properties {:title "my whiteboard foo"}})})
+
+(def foo-conflict-edn
+  "Example exported whiteboard page as an edn exportable."
+  '{:blocks
+    ({:block/content "foo content a",
       :block/format :markdown},
      {:block/content "foo content b",
       :block/format :markdown}),
     :pages
     ({:block/format :markdown,
-      :block/original-name "Foo"
-      :block/properties {:title "my whiteboard foo"}})})
+      :block/name "foo conflicted"
+      :block/original-name "Foo conflicted"
+      :block/uuid #uuid "16c90195-6a03-4b3f-839d-095a496d9acd"})})
+
+(def bar-edn
+  "Example exported whiteboard page as an edn exportable."
+  '{:blocks
+    ({:block/content "foo content a",
+      :block/format :markdown
+      :block/parent {:block/uuid #uuid "71515b7d-b5fc-496b-b6bf-c58004a34ee3"
+                     :block/name "foo"}},
+     {:block/content "foo content b",
+      :block/format :markdown
+      :block/parent {:block/uuid #uuid "71515b7d-b5fc-496b-b6bf-c58004a34ee3"
+                     :block/name "foo"}}),
+    :pages
+    ({:block/format :markdown,
+      :block/name "bar"
+      :block/original-name "Bar"
+      :block/uuid #uuid "71515b7d-b5fc-496b-b6bf-c58004a34ee3"})})
 
 (deftest parse-file
   (testing "id properties"
@@ -56,7 +90,7 @@
           (catch :default _)))
       (is (= nil @deleted-page)
           "Page should not be deleted when there is unexpected failure")))
-  
+
   (testing "parsing whiteboard page"
     (let [conn (ldb/start-conn)]
       (graph-parser/parse-file conn "/whiteboards/foo.edn" (pr-str foo-edn) {})
@@ -75,7 +109,27 @@
                 :block/type "whiteboard"
                 :block/file {:file/path "/whiteboards/foo.edn"}}
                parent)
-            "parsed block in the whiteboard page has correct parent page")))))
+            "parsed block in the whiteboard page has correct parent page"))))
+
+  (testing "Loading whiteboard pages that same block/uuid should throw an error."
+    (let [conn (ldb/start-conn)]
+      (graph-parser/parse-file conn "/whiteboards/foo.edn" (pr-str foo-edn) {})
+      (is (thrown-with-msg?
+           js/Error
+           #"Conflicting upserts"
+           (graph-parser/parse-file conn "/whiteboards/foo-conflict.edn" (pr-str foo-conflict-edn) {})))))
+
+  (testing "Loading whiteboard pages should ignore the :block/name property inside :block/parent."
+    (let [conn (ldb/start-conn)]
+      (graph-parser/parse-file conn "/whiteboards/foo.edn" (pr-str foo-edn) {})
+      (graph-parser/parse-file conn "/whiteboards/bar.edn" (pr-str bar-edn) {})
+      (let [pages (d/q '[:find ?name
+                         :in $
+                         :where
+                         [?b :block/name ?name]
+                         [?b :block/type "whiteboard"]]
+                    @conn)]
+        (is (= pages #{["foo"] ["bar"]}))))))
 
 (defn- test-property-order [num-properties]
   (let [conn (ldb/start-conn)
