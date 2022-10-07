@@ -39,8 +39,8 @@ export class EditingShapeState<
     this.app.persist()
     this.app.setEditingShape()
 
-    // Blur all inputs when exit idle
-    document.querySelectorAll<HTMLElement>('input,textarea').forEach(el => el.blur())
+    // Reset focus when exit idle
+    document.querySelector<HTMLElement>('.tl-canvas')?.focus()
   }
 
   onPinchStart: TLEvents<S>['pinch'] = (info, event) => {

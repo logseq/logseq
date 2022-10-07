@@ -449,8 +449,9 @@ export function usePaste() {
 
         app.currentPage.updateBindings(Object.fromEntries(bindingsToCreate.map(b => [b.id, b])))
         app.setSelectedShapes(allShapesToAdd.map(s => s.id))
+        app.selectedTool.transition('idle') // clears possible editing states
+        app.cursors.setCursor(TLCursor.Default)
       })
-      app.cursors.setCursor(TLCursor.Default)
     },
     []
   )

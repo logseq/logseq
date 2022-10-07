@@ -145,23 +145,10 @@ export class TLApp<
         keys: 'mod+a',
         fn: () => {
           const { selectedTool } = this
-          if (
-            selectedTool.currentState.id !== 'idle' &&
-            !selectedTool.currentState.id.includes('hovering')
-          ) {
-            return
-          }
           if (selectedTool.id !== 'select') {
             this.selectTool('select')
           }
           this.api.selectAll()
-        },
-      },
-      {
-        keys: 'mod+s',
-        fn: () => {
-          this.save()
-          this.notify('save', null)
         },
       },
       {
@@ -183,13 +170,6 @@ export class TLApp<
       {
         keys: ['del', 'backspace'],
         fn: () => {
-          const { selectedTool } = this
-          if (
-            selectedTool.currentState.id !== 'idle' &&
-            !selectedTool.currentState.id.includes('hovering')
-          ) {
-            return
-          }
           this.api.deleteShapes()
         },
       },
