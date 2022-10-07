@@ -640,9 +640,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                   setPrefixIcon(actionIcon)
                   setFocusedOptionIdx(index)
                 }}
-                // we have to use mousedown && stop propagation, otherwise some
+                // we have to use mousedown && stop propagation EARLY, otherwise some
                 // default behavior of clicking the rendered elements will happen
-                onMouseDown={e => {
+                onMouseDownCapture={e => {
                   if (onChosen()) {
                     e.stopPropagation()
                     e.preventDefault()
