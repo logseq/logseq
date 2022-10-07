@@ -10,12 +10,12 @@ test('custom html should not spawn any dialogs', async ({ page, block }) => {
 
   await createRandomPage(page)
 
-  await page.keyboard.type('<iframe src="javascript:confirm(1);" />')
+  await page.keyboard.type('<iframe src="javascript:confirm(1);" />', { delay: 5 })
   await block.enterNext()
 
-  await page.keyboard.type('<button id="test-xss-button" onclick="confirm(1)">Click me!</button>')
+  await page.keyboard.type('<button id="test-xss-button" onclick="confirm(1)">Click me!</button>', { delay: 5 })
   await block.enterNext()
-  await page.keyboard.type('<details open id="test-xss-toggle" ontoggle="confirm(1)">test</details>')
+  await page.keyboard.type('<details open id="test-xss-toggle" ontoggle="confirm(1)">test</details>', { delay: 5 })
   await block.enterNext()
 
   await page.click('#test-xss-toggle')
@@ -32,7 +32,7 @@ test('custom hiccup should not spawn any dialogs', async ({ page, block }) => {
 
   await createRandomPage(page)
 
-  await page.keyboard.type('[:iframe {:src "javascript:confirm(1);"}]')
+  await page.keyboard.type('[:iframe {:src "javascript:confirm(1);"}]', { delay: 5 })
   await block.enterNext()
 
   expect(true).toBeTruthy()
