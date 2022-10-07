@@ -139,7 +139,7 @@
         file-path (-> (db-utils/entity file-db-id) :file/path)]
     (if (and (string? file-path) (not-empty file-path))
       (let [new-content (if (= "whiteboard" (:block/type page-block))
-                          (pr-str {:blocks (map remove-transit-ids tree)
+                          (pr-str {:blocks tree
                                    :pages (list (remove-transit-ids page-block))})
                           (tree->file-content tree {:init-level init-level}))
             files [[file-path new-content]]
