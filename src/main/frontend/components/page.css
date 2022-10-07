@@ -133,7 +133,7 @@
 
     .r {
       @apply text-base space-x-2;
-      
+
       a.button {
         color: var(--ls-primary-text-color);
         margin-top: 1px;
@@ -361,11 +361,6 @@ html.is-native-ios {
   .control-hide {
     display: none;
   }
- }
-
- .text-2xs {
-  font-size: 0.625rem; /* 10px */
-  line-height: 0.875rem; /* 14px */
  }
 
  .toned-down {

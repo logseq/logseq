@@ -170,8 +170,8 @@
          [:div.input-hints.text-sm.py-2.px-3.rounded.mb-2.mt-2.flex.items-center
           (if-let [display-str (:fail set-remote-graph-pwd-result)]
             [:<>
-             [:span.flex.pr-1.text-red-600 (ui/icon "alert-circle" {:class "text-md mr-1"})]
-             [:span.text-red-600 display-str]]
+             [:span.flex.pr-1.text-error (ui/icon "alert-circle" {:class "text-md mr-1"})]
+             [:span.text-error display-str]]
             [:<>
              [:span.flex.pr-1 (ui/icon "bulb" {:class "text-md mr-1"})]
              [:span "Please enter the password for this graph to continue syncing."]])]])
@@ -187,8 +187,8 @@
                     (not (string/blank? @*pw-confirm)))
               (if (or (not (pattern-ok?))
                       (not= @*password @*pw-confirm))
-                [:span.flex.pr-1.text-red-600 (ui/icon "alert-circle" {:class "text-md mr-1"})]
-                [:span.flex.pr-1.text-green-600 (ui/icon "circle-check" {:class "text-md mr-1"})])
+                [:span.flex.pr-1.text-error (ui/icon "alert-circle" {:class "text-md mr-1"})]
+                [:span.flex.pr-1.text-success (ui/icon "circle-check" {:class "text-md mr-1"})])
               [:span.flex.pr-1 (ui/icon "bulb" {:class "text-md mr-1"})])
 
             (if (not (string/blank? @*password))
