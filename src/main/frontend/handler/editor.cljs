@@ -2389,22 +2389,18 @@
 
 (defn- inside-of-single-block
   "When we are in a single block wrapper, we should always insert a new line instead of new block"
-  [state]
-  (let [el (rum/dom-node state)]
-    (loop [el el]
-      (cond (nil? el) false
-            (and (.-classList el) (.. el -classList (contains "single-block"))) true
-            :else (recur (.-parentElement el))))))
+  [el]
+  (some? (dom/closest el ".single-block")))
 
 (defn keydown-new-block-handler [state e]
-  (if (or (state/doc-mode-enter-for-new-line?) (inside-of-single-block state))
+  (if (or (state/doc-mode-enter-for-new-line?) (inside-of-single-block (rum/dom-node state)))
     (keydown-new-line)
     (do
       (.preventDefault e)
       (keydown-new-block state))))
 
 (defn keydown-new-line-handler [state e]
-  (if (and (state/doc-mode-enter-for-new-line?) (not (inside-of-single-block state)))
+  (if (and (state/doc-mode-enter-for-new-line?) (not (inside-of-single-block (rum/dom-node state))))
     (keydown-new-block state)
     (do
       (.preventDefault e)
@@ -2584,6 +2580,7 @@
         block (state/get-edit-block)
         repo (state/get-current-repo)
         top-block? (= (:block/left block) (:block/page block))
+        single-block? (inside-of-single-block (.-target e))
         root-block? (= (:block/container block) (str (:block/uuid block)))]
     (mark-last-input-time! repo)
     (cond
@@ -2598,7 +2595,8 @@
       (do
         (util/stop e)
         (when (and (if top-block? (string/blank? value) true)
-                   (not root-block?))
+                   (not root-block?)
+                   (not single-block?))
           (delete-block! repo false)))
 
       (and (> current-pos 1)
