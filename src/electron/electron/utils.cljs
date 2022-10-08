@@ -142,31 +142,11 @@
   [graph-dir]
   (str "logseq_local_" graph-dir))
 
-(def Origin_Log_Seq "log.seq")
-(def Spliter_Asset_File "~~@~~")
-
 (defn decode-protected-assets-schema-path
   [schema-path]
   (cond-> schema-path
     (string? schema-path)
     (string/replace "/logseq__colon/" ":/")))
-
-(defn _resolve-url-asset-real-path
-  [url]
-  (let [alias-enabled? (cfgs/get-item :assets/alias-enabled?)
-        full-path (string/replace-first url "assets://" "")]
-    (if-let [pathname' (and alias-enabled?
-                            (string/starts-with? full-path Origin_Log_Seq)
-                            (some-> (try (js/URL. url) (catch js/Error _e nil))
-                                    (.-pathname)
-                                    (string/split Spliter_Asset_File)))]
-      (if-let [file-root (and (= (count pathname') 2)
-                              (first pathname'))]
-        (let [file-path (second pathname')]
-          (-> (.join path file-root file-path)
-              (js/decodeURI)))
-        (throw (js/Error. (str "Bad asset: " url))))
-      (js/decodeURI full-path))))
 
 ;; Keep update with the normalization in main
 (defn normalize

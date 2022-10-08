@@ -352,17 +352,6 @@ should be done through this fn in order to get global config and config defaults
     built-in-macros
     (:macros (get-config))))
 
-(defn get-app-config
-  ([] (get-app-config nil))
-  ([k]
-   (cond-> (:electron/user-cfgs @state)
-     (some? k) (get k))))
-
-(defn set-app-config!
-  [k v]
-  (set-state! [:electron/user-cfgs k] v)
-  (ipc/ipc :userAppCfgs k v))
-
 (defn set-assets-alias-enabled!
   [v]
   (set-state! :assets/alias-enabled? (boolean v))
@@ -373,10 +362,6 @@ should be done through this fn in order to get global config and config defaults
   (when dirs
     (set-state! :assets/alias-dirs dirs)
     (storage/set :assets/alias-dirs dirs)))
-
-(defn sub-app-config
-  [k]
-  (sub [:electron/user-cfgs k]) )
 
 (defn get-custom-css-link
   []
