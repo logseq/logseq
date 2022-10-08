@@ -173,6 +173,7 @@
                                                                 (contains? #{config/app-name
                                                                              gp-config/default-draw-directory
                                                                              (config/get-journals-directory)
+                                                                             (config/get-whiteboards-directory)
                                                                              (config/get-pages-directory)}
                                                                            last-part)))))
                                                    (into {})))))

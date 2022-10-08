@@ -72,6 +72,7 @@ html[data-theme='dark'] {
   --ls-block-bullet-color: #608e91;
   --ls-block-highlight-color: #0a3d4b;
   --ls-selection-background-color: #338fff;
+  --ls-selection-text-color: #fff;
   --ls-page-checkbox-color: #6093a0;
   --ls-page-checkbox-border-color: var(--ls-primary-background-color);
   --ls-page-blockquote-color: var(--ls-primary-text-color);
@@ -101,6 +102,7 @@ html[data-theme='dark'] {
   --ls-error-background-color: var(--color-red-900);
   --ls-warning-text-color: var(--color-yellow-100);
   --ls-warning-background-color: var(--color-yellow-900);
+  --ls-focus-ring-color: rgba(18, 98, 119, 0.5);
   --color-level-1: var(--ls-secondary-background-color);
   --color-level-2: var(--ls-tertiary-background-color);
   --color-level-3: var(--ls-quaternary-background-color);
@@ -174,6 +176,7 @@ html[data-theme='light'] {
   --ls-error-background-color: var(--color-red-100);
   --ls-warning-text-color: var(--color-yellow-800);
   --ls-warning-background-color: var(--color-yellow-100);
+  --ls-focus-ring-color: rgba(66, 133, 244, 0.5);
   --color-level-1: var(--ls-secondary-background-color);
   --color-level-2: var(--ls-tertiary-background-color);
   --color-level-3: var(--ls-quaternary-background-color);
@@ -192,7 +195,6 @@ html:not(.is-native-android) {
 html {
   /* FIXME: rewrite revealjs.css ? */
   height: unset !important;
-  overflow: auto !important;
 }
 
 body {
@@ -587,6 +589,8 @@ button.menu:focus {
   @apply my-1;
 
   opacity: .5;
+  border-top-width: 1px;
+  border-color: var(--ls-border-color, #ccc);
 }
 
 a.login {

@@ -8,17 +8,18 @@
             [datascript.core :as d]
             [frontend.config :as config]
             [frontend.date :as date]
-            [logseq.db.schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.text :as text]
-            [logseq.db.rules :refer [rules]]
+            [frontend.util.drawer :as drawer]
             [logseq.db.default :as default-db]
-            [frontend.util.drawer :as drawer]))
+            [logseq.db.rules :refer [rules]]
+            [logseq.db.schema :as db-schema]
+            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util :as gp-util]))
 
 ;; lazy loading
 
@@ -64,9 +65,9 @@
   (when-let [repo (state/get-current-repo)]
     (->
      (react/q repo [:frontend.db.react/block id]
-       {:query-fn (fn [_]
-                    (db-utils/pull (butlast block-attrs) id))}
-       nil)
+              {:query-fn (fn [_]
+                           (db-utils/pull (butlast block-attrs) id))}
+              nil)
      react)))
 
 (def get-original-name util/get-page-original-name)
@@ -1358,10 +1359,10 @@
 (defn get-all-properties
   []
   (let [properties (d/q
-                     '[:find [?p ...]
-                       :where
-                       [_ :block/properties ?p]]
-                     (conn/get-db))
+                    '[:find [?p ...]
+                      :where
+                      [_ :block/properties ?p]]
+                    (conn/get-db))
         properties (remove (fn [m] (empty? m)) properties)]
     (->> (map keys properties)
          (apply concat)
@@ -1374,13 +1375,13 @@
                (get properties property))]
     (->>
      (d/q
-       '[:find [?property-val ...]
-         :in $ ?pred
-         :where
-         [_ :block/properties ?p]
-         [(?pred $ ?p) ?property-val]]
-       (conn/get-db)
-       pred)
+      '[:find [?property-val ...]
+        :in $ ?pred
+        :where
+        [_ :block/properties ?p]
+        [(?pred $ ?p) ?property-val]]
+      (conn/get-db)
+      pred)
      (map (fn [x] (if (coll? x) x [x])))
      (apply concat)
      (map str)
@@ -1641,12 +1642,32 @@
 (defn get-macro-blocks
   [repo macro-name]
   (d/q
-    '[:find [(pull ?b [*]) ...]
-      :in $ ?macro-name
-      :where
-      [?b :block/type "macro"]
-      [?b :block/properties ?properties]
-      [(get ?properties :logseq.macro-name) ?name]
-      [(= ?name ?macro-name)]]
-    (conn/get-db repo)
-    macro-name))
+   '[:find [(pull ?b [*]) ...]
+     :in $ ?macro-name
+     :where
+     [?b :block/type "macro"]
+     [?b :block/properties ?properties]
+     [(get ?properties :logseq.macro-name) ?name]
+     [(= ?name ?macro-name)]]
+   (conn/get-db repo)
+   macro-name))
+
+(defn whiteboard-page?
+  [page-name]
+  (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page-name)])]
+    (or
+     (= "whiteboard" (:block/type page))
+     (when-let [file (:block/file page)]
+       (when-let [path (:file/path (db-utils/entity (:db/id file)))]
+         (gp-config/whiteboard? path))))))
+
+(defn get-all-whiteboards
+  [repo]
+  (->> (d/q
+        '[:find [(pull ?page [:block/name
+                              :block/created-at
+                              :block/updated-at]) ...]
+          :where
+          [?page :block/name]
+          [?page :block/type "whiteboard"]]
+        (conn/get-db repo))))

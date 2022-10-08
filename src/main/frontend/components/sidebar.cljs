@@ -26,6 +26,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
@@ -69,25 +70,28 @@
 
 (rum/defc page-name
   [name icon recent?]
-  (let [original-name (db-model/get-page-original-name name)]
+  (let [original-name (db-model/get-page-original-name name)
+        whiteboard-page? (db-model/whiteboard-page? name)]
     [:a.flex.items-center
      {:on-click
       (fn [e]
         (let [name        (util/safe-page-name-sanity-lc name)
               source-page (db-model/get-alias-source-page (state/get-current-repo) name)
               name        (if (empty? source-page) name (:block/name source-page))]
-          (if (gobj/get e "shiftKey")
+          (if (and (gobj/get e "shiftKey") (not whiteboard-page?))
             (when-let [page-entity (if (empty? source-page) (db/entity [:block/name name]) source-page)]
               (state/sidebar-add-block!
                (state/get-current-repo)
                (:db/id page-entity)
                :page))
-            (route-handler/redirect-to-page! name {:click-from-recent? recent?}))))}
-     [:span.page-icon icon]
+            (if whiteboard-page?
+              (route-handler/redirect-to-whiteboard! name)
+              (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))}
+     [:span.page-icon (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
      [:span.page-title (pdf-assets/fix-local-asset-pagename original-name)]]))
 
 (defn get-page-icon [page-entity]
-  (let [default-icon (ui/icon "file-text")
+  (let [default-icon (ui/icon "page" {:extension? true})
         from-properties (get-in (into {} page-entity) [:block/properties :icon])]
     (or
      (when (not= from-properties "") from-properties)
@@ -206,6 +210,7 @@
     class :class
     title :title
     icon :icon
+    icon-extension? :icon-extension?
     active :active
     href :href}]
   [:div
@@ -214,13 +219,47 @@
     {:on-click on-click-handler
      :class (when active "active")
      :href href}
-    (ui/icon (str icon))
+    (ui/icon (str icon) {:extension? icon-extension?})
     [:span.flex-1 title]]])
 
-(rum/defc sidebar-nav
+(defn close-sidebar-on-mobile!
+  []
+  (and (util/sm-breakpoint?)
+    (state/toggle-left-sidebar!)))
+
+(defn create-dropdown
+  []
+  (ui/dropdown-with-links
+   (fn [{:keys [toggle-fn]}]
+     [:button#create-button
+      {:on-click toggle-fn}
+      [:<>
+       (ui/icon "plus" {:font? "true"})
+       [:span.mx-1 (t :left-side-bar/create)]]])
+   (->>
+    [{:title (t :left-side-bar/new-page)
+      :class "new-page-link"
+      :shortcut (ui/keyboard-shortcut-from-config :go/search)
+      :options {:on-click #(do (close-sidebar-on-mobile!)
+                               (state/pub-event! [:go/search]))}
+      :icon (ui/type-icon {:name "new-page"
+                           :class "highlight"
+                           :extension? true})}
+     {:title (t :left-side-bar/new-whiteboard)
+      :class "new-whiteboard-link"
+      :shortcut (ui/keyboard-shortcut-from-config :editor/new-whiteboard)
+      :options {:on-click #(do (close-sidebar-on-mobile!)
+                               (whiteboard-handler/create-new-whiteboard-and-redirect!))}
+      :icon (ui/type-icon {:name "new-whiteboard"
+                           :class "highlight"
+                           :extension? true})}])
+   {}))
+
+(rum/defc sidebar-nav < rum/reactive
   [route-match close-modal-fn left-sidebar-open? srs-open?]
   (let [default-home (get-default-home-if-valid)
         route-name (get-in route-match [:data :name])
+        enable-whiteboards? (state/enable-whiteboards?)
         on-contents-scroll #(when-let [^js el (.-target %)]
                               (let [top (.-scrollTop el)
                                     cls (.-classList el)
@@ -249,24 +288,24 @@
        [:div.nav-header.flex.gap-1.flex-col
         (let [page (:page default-home)]
           (if (and page (not (state/enable-journals? (state/get-current-repo))))
-          (sidebar-item
-           {:class            "home-nav"
-            :title            page
-            :on-click-handler route-handler/redirect-to-home!
-            :active           (and (not srs-open?)
-                                   (= route-name :page)
-                                   (= page (get-in route-match [:path-params :name])))
-            :icon             "home"})
-          (sidebar-item
-           {:class            "journals-nav"
-            :active           (and (not srs-open?)
-                                   (or (= route-name :all-journals) (= route-name :home)))
-            :title            (t :left-side-bar/journals)
-            :on-click-handler (fn [e]
-                                (if (gobj/get e "shiftKey")
-                                  (route-handler/sidebar-journals!)
-                                  (route-handler/go-to-journals!)))
-            :icon             "calendar"})))
+            (sidebar-item
+             {:class            "home-nav"
+              :title            page
+              :on-click-handler route-handler/redirect-to-home!
+              :active           (and (not srs-open?)
+                                     (= route-name :page)
+                                     (= page (get-in route-match [:path-params :name])))
+              :icon             "home"})
+            (sidebar-item
+             {:class            "journals-nav"
+              :active           (and (not srs-open?)
+                                     (or (= route-name :all-journals) (= route-name :home)))
+              :title            (t :left-side-bar/journals)
+              :on-click-handler (fn [e]
+                                  (if (gobj/get e "shiftKey")
+                                    (route-handler/sidebar-journals!)
+                                    (route-handler/go-to-journals!)))
+              :icon             "calendar"})))
 
         (when (state/enable-flashcards? (state/get-current-repo))
           [:div.flashcards-nav
@@ -284,7 +323,16 @@
           :title  (t :right-side-bar/all-pages)
           :href   (rfe/href :all-pages)
           :active (and (not srs-open?) (= route-name :all-pages))
-          :icon   "files"})]]
+          :icon   "files"})
+
+        (when enable-whiteboards?
+          (sidebar-item
+           {:class "whiteboard"
+            :title (t :right-side-bar/whiteboards)
+            :href  (rfe/href :whiteboards)
+            :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
+            :icon  "whiteboard"
+            :icon-extension? true}))]]
 
       [:div.nav-contents-container.flex.flex-col.gap-1.pt-1
        {:on-scroll on-contents-scroll}
@@ -294,15 +342,17 @@
        (when (and left-sidebar-open? (not config/publishing?))
          (recent-pages t))]
 
-      [:footer.px-2 {:class "new-page"}
+      [:footer.px-2 {:class "create"}
        (when-not config/publishing?
-         [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
-          {:on-click (fn []
-                       (and (util/sm-breakpoint?)
-                            (state/toggle-left-sidebar!))
-                       (state/pub-event! [:go/search]))}
-          (ui/icon "circle-plus" {:style {:font-size 20}})
-          [:span.flex-1 (t :right-side-bar/new-page)]])]]]))
+         (if enable-whiteboards?
+           (create-dropdown)
+           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
+            {:on-click (fn []
+                         (and (util/sm-breakpoint?)
+                              (state/toggle-left-sidebar!))
+                         (state/pub-event! [:go/search]))}
+            (ui/icon "circle-plus" {:style {:font-size 20}})
+            [:span.flex-1 (t :right-side-bar/new-page)]]))]]]))
 
 (rum/defc left-sidebar < rum/reactive
   [{:keys [left-sidebar-open? route-match]}]
@@ -343,7 +393,7 @@
                                 (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))))})
                   (common-handler/listen-to-scroll! element))
                 state)}
-  [{:keys [route-match global-graph-pages? route-name indexeddb-support? db-restoring? main-content show-action-bar? show-recording-bar?]}]
+  [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content show-action-bar? show-recording-bar?]}]
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
@@ -357,7 +407,8 @@
 
      [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row.outline-none
 
-      {:tabIndex "-1"}
+      {:tabIndex "-1"
+       :data-is-margin-less-pages margin-less-pages?}
 
       (when (util/electron?)
         (find-in-page/search))
@@ -366,9 +417,9 @@
         (action-bar/action-bar))
 
       [:div.cp__sidebar-main-content
-       {:data-is-global-graph-pages global-graph-pages?
-        :data-is-full-width         (or global-graph-pages?
-                                        (contains? #{:all-files :all-pages :my-publishing} route-name))}
+       {:data-is-margin-less-pages margin-less-pages?
+        :data-is-full-width        (or margin-less-pages?
+                                       (contains? #{:all-files :all-pages :my-publishing} route-name))}
 
        (when show-recording-bar?
          (recording-bar))
@@ -390,11 +441,13 @@
            (ui/loading (t :loading))]]
          
          :else
-         [:div.mx-auto.pb-24 {:style {:margin-bottom (cond
-                                                       global-graph-pages? 0
-                                                       onboarding-and-home? -48
-                                                       :else 120)
-                                      :padding-bottom (when (mobile-util/native-iphone?) "7rem")}}
+         [:div
+          {:class (if margin-less-pages? "" (util/hiccup->class "mx-auto.pb-24"))
+           :style {:margin-bottom (cond
+                                    margin-less-pages? 0
+                                    onboarding-and-home? -48
+                                    :else 120)
+                   :padding-bottom (when (mobile-util/native-iphone?) "7rem")}}
           main-content])
 
        (when onboarding-and-home?
@@ -573,7 +626,7 @@
         onboarding-state (state/sub :file-sync/onboarding-state)
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
-        global-graph-pages? (= :graph route-name)
+        margin-less-pages? (boolean (#{:graph :whiteboard} route-name))
         db-restoring? (state/sub :db/restoring?)
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
@@ -624,7 +677,7 @@
                         :new-block-mode new-block-mode})
 
         (main {:route-match         route-match
-               :global-graph-pages? global-graph-pages?
+               :margin-less-pages?  margin-less-pages?
                :logged?             logged?
                :home?               home?
                :route-name          route-name

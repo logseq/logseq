@@ -63,7 +63,7 @@
                                 (not (string/starts-with? value "https:"))
                                 (not (string/starts-with? value "file:"))
                                 (not (gp-config/local-asset? value))
-                                (or (= ext :excalidraw)
+                                (or (#{:excalidraw :tldr} ext)
                                     (not (contains? supported-formats ext))))
                        value)))
 
@@ -411,7 +411,7 @@
       content
       (gp-property/->new-properties content))))
 
-(defn- get-custom-id-or-new-id
+(defn get-custom-id-or-new-id
   [properties]
   (or (when-let [custom-id (or (get-in properties [:properties :custom-id])
                                (get-in properties [:properties :custom_id])
@@ -652,7 +652,7 @@
   (let [[blocks other-blocks] (split-with
                                (fn [b]
                                  (not= "macro" (:block/type b)))
-                                blocks)
+                               blocks)
         result (loop [blocks (map (fn [block] (assoc block :block/level-spaces (:block/level block))) blocks)
                       parents [{:page/id page-id     ; db id or a map {:block/name "xxx"}
                                 :block/level 0

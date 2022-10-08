@@ -31,6 +31,8 @@
        (property/remove-built-in-properties format)))
 
 (defn search
+  ([q]
+   (search (state/get-current-repo) q))
   ([repo q]
    (search repo q {:limit 20}))
   ([repo q {:keys [page-db-id limit more?]
@@ -50,7 +52,8 @@
                          {:pages (search/page-search q)
                           :files (search/file-search q)}))
                search-key (if more? :search/more-result :search/result)]
-           (swap! state/state assoc search-key result)))))))
+           (swap! state/state assoc search-key result)
+           result))))))
 
 (defn open-find-in-page!
   []

@@ -38,10 +38,18 @@
     s))
 
 (defonce default-draw-directory "draws")
+;; TODO read configurable value?
+(defonce default-whiteboards-directory "whiteboards")
 
 (defn draw?
   [path]
   (string/starts-with? path default-draw-directory))
+
+(defn whiteboard?
+  [path]
+  (and path
+       (string/includes? path (str default-whiteboards-directory "/"))
+       (string/ends-with? path ".edn")))
 
 ;; TODO: rename
 (defonce mldoc-support-formats
@@ -54,7 +62,7 @@
 (defn text-formats
   []
   #{:json :org :md :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :edn :clj :ml :rb :ex :erl :java :php :c :css
-    :excalidraw :sh})
+    :excalidraw :tldr :sh})
 
 (defn img-formats
   []
