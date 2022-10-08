@@ -92,7 +92,7 @@
      [])
     [:span.extensions__pdf-resizer {:ref el-ref}]))
 
-(rum/defc pdf-highlights-ctx-menu
+(rum/defc ^:large-vars/data-var pdf-highlights-ctx-menu
   "The contextual menu which appears over a text selection and allows e.g. creating a highlight."
   [^js viewer
    {:keys [highlight point ^js selection]}
@@ -747,7 +747,7 @@
          [(rum/with-key (pdf-resizer viewer) "pdf-resizer")
           (rum/with-key (pdf-toolbar viewer) "pdf-toolbar")])])))
 
-(rum/defc pdf-loader
+(rum/defc ^:large-vars/data-var pdf-loader
   [{:keys [url hls-file] :as pdf-current}]
   (let [*doc-ref       (rum/use-ref nil)
         [state, set-state!] (rum/use-state {:error nil :pdf-document nil :status nil})

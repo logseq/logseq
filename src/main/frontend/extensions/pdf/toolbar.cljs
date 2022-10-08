@@ -117,7 +117,7 @@
    2 ::wrapped
    3 ::pending})
 
-(rum/defc pdf-finder
+(rum/defc ^:large-vars/data-var pdf-finder
   [^js viewer {:keys [hide-finder!]}]
 
   (let [*el-finder    (rum/use-ref nil)

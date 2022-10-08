@@ -94,7 +94,7 @@
                :on-click #(js/logseq.api.relaunch)
                :small? true :intent "logseq")))
 
-(rum/defcs alias-directories
+(rum/defcs ^:large-vars/data-var alias-directories
   < rum/reactive
     (rum/local nil ::ext-editing-dir)
   [_state]
