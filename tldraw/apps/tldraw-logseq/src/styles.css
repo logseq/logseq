@@ -696,7 +696,6 @@ button.tl-select-input-trigger {
 
 .tl-html-anchor {
   width: fit-content;
-  display: flex;
 }
 
 .tl-html-anchor > iframe {
