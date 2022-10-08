@@ -477,6 +477,9 @@
        (on-success)))
     (p/catch (fn [error]
                (js/console.error error)
+               (state/pub-event! [:instrument {:type :db/persist-failed
+                                               :payload {:error-str (str error)
+                                                         :error error}}])
                (when on-error
                  (on-error)))))))
 
@@ -487,7 +490,7 @@
      step 1. [In HERE]  a window         ---broadcastPersistGraph---->   electron
      step 2.            electron         ---------persistGraph------->   window holds the graph
      step 3.            window w/ graph  --broadcastPersistGraphDone->   electron
-     step 4. [In HERE]  a window         <---broadcastPersistGraph----   electron"
+     step 4. [In HERE]  a window         <--broadcastPersistGraph-----   electron"
   [graph]
   (p/let [_ (ipc/ipc "broadcastPersistGraph" graph)] ;; invoke for chaining promise
     nil))
@@ -552,6 +555,6 @@
     repos'))
 
 (defn graph-ready!
-  "Call electron that the graph is loaded."
+  ;; FIXME: Call electron that the graph is loaded, an ugly implementation for redirect to page when graph is restored
   [graph]
   (ipc/ipc "graphReady" graph))

@@ -88,7 +88,7 @@
               (route-handler/redirect-to-whiteboard! name)
               (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))}
      [:span.page-icon (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
-     [:span.page-title (pdf-assets/fix-local-asset-filename original-name)]]))
+     [:span.page-title (pdf-assets/fix-local-asset-pagename original-name)]]))
 
 (defn get-page-icon [page-entity]
   (let [default-icon (ui/icon "page" {:extension? true})

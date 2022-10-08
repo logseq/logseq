@@ -21,7 +21,9 @@
         {:keys [tx ast]}
         (let [extract-options' (merge {:block-pattern (gp-config/get-block-pattern format)
                                        :date-formatter "MMM do, yyyy"
-                                       :supported-formats (gp-config/supported-formats)}
+                                       :supported-formats (gp-config/supported-formats)
+                                       :uri-encoded? false
+                                       :filename-format :legacy}
                                       extract-options
                                       {:db @conn})
               {:keys [pages blocks ast]
