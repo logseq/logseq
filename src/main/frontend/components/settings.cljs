@@ -28,7 +28,8 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.components.conversion :as conversion-component]))
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
@@ -416,7 +417,8 @@
              (config-handler/set-config! :feature/enable-encryption? value)
              (when value
                (state/close-modal!)
-               (js/setTimeout (fn [] (state/pub-event! [:graph/ask-for-re-index (atom false)]))
+               ;; FIXME: Don't send the `(atom false)` ! Should check multi-window! or internal status error happens
+               (js/setTimeout (fn [] (state/pub-event! [:graph/ask-for-re-index (atom false) nil]))
                               100)))
           [:p.text-sm.opacity-50 "⚠️ This feature is experimental! "
            [:span "You can use "]
@@ -537,6 +539,14 @@
    {:left-label (t :settings-page/network-proxy)
     :action (user-proxy-settings agent-opts)}))
 
+(defn filename-format-row []
+  (row-with-button-action
+   {:left-label (t :settings-page/filename-format)
+    :button-label (t :settings-page/edit-setting)
+    :on-click #(state/set-sub-modal!
+                (fn [_] (conversion-component/files-breaking-changed))
+                {:id :filename-format-panel :center? true})}))
+
 (rum/defcs settings-general < rum/reactive
   [_state current-repo]
   (let [preferred-language (state/sub [:preferred-language])
@@ -604,7 +614,7 @@
      [:p (t :settings-page/git-confirm)])])
 
 (rum/defc settings-advanced < rum/reactive
-  []
+  [current-repo]
   (let [instrument-disabled? (state/sub :instrument/disabled?)
         developer-mode? (state/sub [:ui/developer-mode?])
         https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])]
@@ -613,6 +623,7 @@
      (usage-diagnostics-row t instrument-disabled?)
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
+     (when (and (util/electron?) (not (config/demo-graph? current-repo))) (filename-format-row))
      (clear-cache-row t)
 
      (ui/admonition
@@ -736,7 +747,7 @@
          (settings-git)
 
          :advanced
-         (settings-advanced)
+         (settings-advanced current-repo)
 
          :features
          (settings-features)

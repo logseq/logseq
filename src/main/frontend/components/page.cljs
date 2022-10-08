@@ -194,9 +194,9 @@
           *edit? (get state ::edit?)
           input-ref (rum/create-ref)
           repo (state/get-current-repo)
-          hls-file? (pdf-assets/hls-file? title)
-          title (if hls-file?
-                  (pdf-assets/human-hls-filename-display title)
+          hls-page? (pdf-assets/hls-page? title)
+          title (if hls-page?
+                  (pdf-assets/human-hls-pagename-display title)
                   (if fmt-journal? (date/journal-title->custom-format title) title))
           old-name (or title page-name)
           confirm-fn (fn []
@@ -270,7 +270,7 @@
                                          repo
                                          (:db/id page)
                                          :page))
-                                      (when (and (not hls-file?) (not fmt-journal?))
+                                      (when (and (not hls-page?) (not fmt-journal?))
                                         (reset! *edit? true))))}
          [:h1.title.ls-page-title {:data-ref page-name}
           (when (not= icon "") [:span.page-icon icon])

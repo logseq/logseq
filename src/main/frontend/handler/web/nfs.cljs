@@ -120,6 +120,7 @@
 
 ;; TODO: extract code for `ls-dir-files` and `reload-dir!`
 (defn ^:large-vars/cleanup-todo ls-dir-files-with-handler!
+  "Read files from directory and setup repo (for the first time setup a repo)"
   ([ok-handler] (ls-dir-files-with-handler! ok-handler nil))
   ([ok-handler {:keys [empty-dir?-or-pred dir-result-fn]}]
    (let [path-handles (atom {})

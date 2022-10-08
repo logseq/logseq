@@ -69,10 +69,7 @@
        nil)
      react)))
 
-(defn get-original-name
-  [page-entity]
-  (or (:block/original-name page-entity)
-      (:block/name page-entity)))
+(def get-original-name util/get-page-original-name)
 
 (defn get-tag-pages
   [repo tag-name]
@@ -123,6 +120,16 @@
      [?page :block/name]]
    (conn/get-db repo)))
 
+(defn get-pages-with-file
+  "Return full file entity for calling file renaming"
+  [repo]
+  (d/q
+   '[:find (pull ?page [:block/name :block/properties :block/journal?]) (pull ?file [*])
+     :where
+     [?page :block/name ?page-name]
+     [?page :block/file ?file]]
+   (conn/get-db repo)))
+
 (defn get-page-alias
   [repo page-name]
   (when-let [db (and repo (conn/get-db repo))]
@@ -137,6 +144,7 @@
              distinct)))
 
 (defn get-alias-source-page
+  "return the source page (page-name) of an alias"
   [repo alias]
   (when-let [db (and repo (conn/get-db repo))]
     (let [alias (util/page-name-sanity-lc alias)
@@ -149,6 +157,8 @@
                       db
                       alias)
                  (db-utils/seq-flatten))]
+      ;; may be a case that a user added same alias into multiple pages.
+      ;; only return the first result for idiot-proof
       (when (seq pages)
         (some (fn [page]
                 (let [aliases (->> (get-in page [:block/properties :alias])
@@ -173,16 +183,13 @@
          ;; (sort-by last)
          (reverse))))
 
-(defn get-files-v2
+(defn get-files-entity
   [repo]
   (when-let [db (conn/get-db repo)]
     (->> (d/q
           '[:find ?file ?path
-            ;; ?modified-at
             :where
-            [?file :file/path ?path]
-            ;; [?file :file/last-modified-at ?modified-at]
-            ]
+            [?file :file/path ?path]]
           db)
          (seq)
          ;; (sort-by last)

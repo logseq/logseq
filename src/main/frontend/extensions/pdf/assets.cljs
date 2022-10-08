@@ -10,6 +10,7 @@
             [frontend.util.page-property :as page-property]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [medley.core :as medley]
@@ -17,9 +18,21 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
-(defn hls-file?
-  [filename]
-  (and filename (string? filename) (string/starts-with? filename "hls__")))
+(def HLS-PREFIX "hls__")
+
+(def HLS-PREFIX-DISPLAY "📒")
+
+(def HLS-PREFIX-LEN (count HLS-PREFIX))
+
+(def HLS-PREFIX-PATTERN (re-pattern (str "^" HLS-PREFIX)))
+
+(defn make-hls
+  [name]
+  (str HLS-PREFIX name))
+
+(defn hls-page?
+  [title]
+  (and title (string? title) (string/starts-with? title HLS-PREFIX)))
 
 (defn inflate-asset
   [full-path]
@@ -154,7 +167,7 @@
   [pdf-current]
   (let [page-name (:key pdf-current)
         page-name (string/trim page-name)
-        page-name (str "hls__" page-name)
+        page-name (make-hls page-name)
         page (db-model/get-page page-name)
         url (:url pdf-current)
         format (state/get-preferred-format)
@@ -222,7 +235,7 @@
         page (db-utils/pull (:db/id (:block/page block)))
         page-name (:block/original-name page)
         file-path (:file-path (:block/properties page))]
-    (when-let [target-key (and page-name (subs page-name 5))]
+    (when-let [target-key (and page-name (subs page-name HLS-PREFIX-LEN))]
       (p/let [hls (resolve-hls-data-by-key$ target-key)
               hls (and hls (:highlights hls))]
         (let [file-path (if file-path file-path (str target-key ".pdf"))]
@@ -242,37 +255,39 @@
   ([current] (goto-annotations-page! current nil))
   ([current id]
    (when-let [name (:key current)]
-     (rfe/push-state :page {:name (str "hls__" name)} (if id {:anchor (str "block-content-" + id)} nil)))))
+     (rfe/push-state :page {:name (make-hls name)} (if id {:anchor (str "block-content-" + id)} nil)))))
 
 (rum/defc area-display
   [block stamp]
   (let [id (:block/uuid block)
         props (:block/properties block)]
     (when-let [page (db-utils/pull (:db/id (:block/page block)))]
-      (when-let [group-key (string/replace-first (:block/original-name page) #"^hls__" "")]
+      (when-let [group-key (string/replace-first (:block/original-name page) HLS-PREFIX-PATTERN "")]
         (when-let [hl-page (:hl-page props)]
-          (let [encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
+          (let [encoded-chars? (boolean (re-find gp-util/url-encoded-pattern group-key))
                 group-key (if encoded-chars? (js/encodeURI group-key) group-key)
                 asset-path (editor-handler/make-asset-url
                              (str "/" gp-config/local-assets-dir "/" group-key "/" (str hl-page "_" id "_" stamp ".png")))]
             [:span.hl-area
              [:img {:src asset-path}]]))))))
 
-(defn fix-local-asset-filename
-  [filename]
-  (when-not (string/blank? filename)
-    (let [local-asset? (re-find #"[0-9]{13}_\d$" filename)
-          hls? (and local-asset? (re-find #"^hls__" filename))]
-      (if (or local-asset? hls?)
-        (-> filename
-            (subs 0 (- (count filename) 15))
-            (string/replace #"^hls__" "")
+(defn fix-local-asset-pagename
+  [title]
+  (when-not (string/blank? title)
+    (let [local-asset? (re-find #"[0-9]{13}_\d$" title)]
+      (if local-asset?
+        (-> title
+            (subs 0 (- (count title) 15))
+            (string/replace HLS-PREFIX-PATTERN HLS-PREFIX-DISPLAY)
             (string/replace "_" " ")
             (string/trimr))
-        filename))))
+        (-> title
+            (string/replace HLS-PREFIX-PATTERN HLS-PREFIX-DISPLAY)
+            (gp-util/safe-url-decode)) ;; In case user import URI pdf resource like #6167
+        ))))
 
-(rum/defc human-hls-filename-display
+(rum/defc human-hls-pagename-display
+  "Ensure it's a hls page by `hls-page?` before hand"
   [title]
-  (when (string/starts-with? title "hls__")
-    [:a.asset-ref
-     (fix-local-asset-filename title)]))
+  [:a.asset-ref
+   (fix-local-asset-pagename title)])

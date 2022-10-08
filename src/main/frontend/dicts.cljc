@@ -113,6 +113,33 @@
         :file/last-modified-at "Last modified at"
         :file/no-data "No data"
         :file/format-not-supported "Format .{1} is not supported."
+        :file-rn/re-index "Re-index is strongly recommended after the files are renamed and on other devices after syncing."
+        :file-rn/need-action "File rename actions are suggested to match the new format. Re-index is required on all devices when the renamed files are synced."
+        :file-rn/or-select-actions " or individually rename files below, then "
+        :file-rn/or-select-actions-2 ". These actions are not available once you close this panel."
+        :file-rn/legend "🟢 Optional rename actions; 🟡 Rename action required to avoid title change; 🔴 Breaking change."
+        :file-rn/close-panel "Close the Panel"
+        :file-rn/all-action "Apply all Actions!"
+        :file-rn/select-format "(Developer Mode Option, Dangerous!) Select filename format"
+        :file-rn/rename "rename file \"{1}\" to \"{2}\""
+        :file-rn/rename-sm "Rename"
+        :file-rn/apply-rename "Apply the file rename operation"
+        :file-rn/affected-pages "Affected Pages after the format change"
+        :file-rn/suggest-rename "Action required: "
+        :file-rn/otherwise-breaking "Or title will becomes"
+        :file-rn/no-action "Well done! No further action required"
+        :file-rn/confirm-proceed "Update format!"
+        :file-rn/select-confirm-proceed "Dev: write format"
+        :file-rn/unreachable-title "Warning! The page name will become {1} under current filename format, unless setup `title::` property manually"
+        :file-rn/optional-rename "Suggestion: "
+        :file-rn/format-deprecated "You are currently using an outdated format. Updating to the latest format is highly recommended. Please backup your data and close Logseq clients on other devices before the operation."
+        :file-rn/filename-desc-1 "This setting configures how a page is stored to a file. Logseq stores a page to a file with the same name."
+        :file-rn/filename-desc-2 "Some characters like \"/\" or \"?\" are invalid for a filename."
+        :file-rn/filename-desc-3 "Logseq replaces invalid characters with their URL encoded equivalent to make them valid (e.g. \"?\" becomes \"%3F\")."
+        :file-rn/filename-desc-4 "The namespace separator \"/\" is also replaced by \"___\" (triple underscore) for aesthetic consideration."
+        :file-rn/instruct-1 "It's a 2-step process to update filename format:"
+        :file-rn/instruct-2 "1. Click "
+        :file-rn/instruct-3 "2. Follow the instructions below to rename the files to the new format:"
         :page/created-at "Created At"
         :page/updated-at "Updated At"
         :page/backlinks "Back Links"
@@ -163,6 +190,7 @@
         :settings-page/edit-global-config-edn "Edit global config.edn"
         :settings-page/edit-custom-css "Edit custom.css"
         :settings-page/edit-export-css "Edit export.css"
+        :settings-page/edit-setting "Edit"
         :settings-page/custom-configuration "Custom configuration"
         :settings-page/custom-global-configuration "Custom global configuration"
         :settings-page/custom-theme "Custom theme"
@@ -202,6 +230,7 @@
         :settings-page/plugin-system "Plugins"
         :settings-page/enable-flashcards "Flashcards"
         :settings-page/network-proxy "Network proxy"
+        :settings-page/filename-format "Filename format"
         :settings-page/sync "Sync"
         :logseq "Logseq"
         :on "ON"
@@ -353,7 +382,10 @@
 
         :file-sync/other-user-graph "Current local graph is bound to other user's remote graph. So can't start syncing."
         :file-sync/graph-deleted "The current remote graph has been deleted"
-        }
+
+        :conversion/non-desktop "Graph directory in old versions needs to be converted to the new format.
+          Please use the desktop app to do the conversion."
+        :conversion/write-filename-format "Apply format for incoming files"}
 
    :de {:help/about "Über Logseq"
         :on-boarding/demo-graph "Dies ist ein Demo-Graph. Änderungen werden nicht gespeichert, solange Sie kein lokales Verzeichnis öffnen."
@@ -1308,6 +1340,7 @@
            :settings-page/tab-version-control "多版本控制"
            :settings-page/plugin-system "插件系统"
            :settings-page/network-proxy "网络代理"
+           :settings-page/filename-format "文件名格式"
            :logseq "Logseq"
            :on "已打开"
            :more-options "更多选项"
@@ -2731,7 +2764,7 @@
            :settings-page/edit-export-css "Editar export.css"
            :settings-page/enable-flashcards "Flashcards"
            :settings-page/export-theme "Exportar Tema"
-           
+
            :discourse-title "Nosso fórum!"
            :importing "Importando"
            :asset/copy "Copiar imagem"
@@ -3074,7 +3107,7 @@
         :settings-page/export-theme "Exportar tema"
         :settings-page/network-proxy "Proxy de rede"
         :settings-page/plugin-system "Sistema de plugins"
-        
+
         :discourse-title "Nosso fórum!"
         :importing "Importando"
         :asset/copy "Copiar imagem"

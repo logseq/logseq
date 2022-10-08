@@ -2,7 +2,7 @@
   "Datalog rules for use with logseq.db.schema")
 
 (def ^:large-vars/data-var rules
-  ;; rule "parent" is optimized for child node -> parent node nesting queries
+  ;; rule "parent" is optimized for parent node -> child node nesting queries
   '[[(parent ?p ?c)
      [?c :block/parent ?p]]
     [(parent ?p ?c)

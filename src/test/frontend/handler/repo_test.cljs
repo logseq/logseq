@@ -9,10 +9,11 @@
 (use-fixtures :each {:before test-helper/start-test-db!
                      :after test-helper/destroy-test-db!})
 
-;; Integration test that test parsing a large graph like docs
+;; TODO update docs filename rules to the latest version when the namespace PR is released
 (deftest ^:integration parse-and-load-files-to-db
   (let [graph-dir "src/test/docs"
-        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir)
+        ;; TODO update me to the latest version of doc when namespace is updated
+        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.6.7")
         files (gp-cli/build-graph-files graph-dir)
         _ (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false :verbose false})
         db (conn/get-db test-helper/test-db)]

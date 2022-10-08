@@ -18,9 +18,19 @@
                :default [lambdaisland.glogi :as log])))
 
 (defn- get-page-name
-  [file ast page-name-order]
+  "Get page name with overridden order of
+     `title::` property
+     file name parsing
+     first block content
+   note: `page-name-order` is deprecated on Apr. 2021
+   uri-encoded? - since paths on mobile are uri-encoded, need to decode them first
+   filename-format - the format used to parse file name
+   "
+  [file ast uri-encoded? filename-format]
   ;; headline
-  (let [ast (map first ast)]
+  (let [ast  (map first ast)
+        file (if uri-encoded? (js/decodeURI file) file)]
+    ;; check backward compatibility?
     (if (string/includes? file "pages/contents.")
       "Contents"
       (let [first-block (last (first (filter gp-block/heading-block? ast)))
@@ -32,15 +42,13 @@
                                (and first-block
                                     (string? title)
                                     title))
-            file-name (when-let [file-name (last (string/split file #"/"))]
-                        (let [result (first (gp-util/split-last "." file-name))]
-                          (if (gp-config/mldoc-support? (string/lower-case (gp-util/get-file-ext file)))
-                            (js/decodeURIComponent (string/replace result "." "/"))
-                            result)))]
+            file-name (when-let [result (gp-util/path->file-body file)]
+                        (if (gp-config/mldoc-support? (gp-util/get-file-ext file))
+                          (gp-util/title-parsing result filename-format)
+                          result))]
         (or property-name
-            (if (= page-name-order "heading")
-              (or first-block-name file-name)
-              (or file-name first-block-name)))))))
+            file-name
+            first-block-name)))))
 
 (defn- extract-page-alias-and-tags
   [page-m page page-name properties]
@@ -108,14 +116,14 @@
 
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
-  [format ast properties file content {:keys [date-formatter page-name-order db] :as options}]
+  "uri-encoded? - if is true, apply URL decode on the file path"
+  [format ast properties file content {:keys [date-formatter db uri-encoded? filename-format] :as options}]
   (try
-    (let [page (get-page-name file ast page-name-order)
+    (let [page (get-page-name file ast uri-encoded? filename-format)
           [page page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
           options' (-> options
                        (assoc :page-name page-name
-                              :original-page-name page)
-                       (dissoc :page-name-order))
+                              :original-page-name page))
           blocks (->> (gp-block/extract-blocks ast content false format options')
                       (gp-block/with-parent-and-left {:block/name page-name})
                       (vec))
