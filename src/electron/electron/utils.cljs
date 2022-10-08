@@ -5,7 +5,6 @@
             [electron.configs :as cfgs]
             [electron.logger :as logger]
             [cljs-bean.core :as bean]
-            [goog.string :as gstring]
             ["electron" :refer [app BrowserWindow]]))
 
 (defonce *win (atom nil)) ;; The main window
