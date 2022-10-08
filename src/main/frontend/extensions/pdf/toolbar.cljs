@@ -23,7 +23,7 @@
 (rum/defcontext *highlights-ctx* )
 
 (rum/defc pdf-settings
-  [^js _viewer theme {:keys [hide-settings! select-theme! t]}]
+  [^js viewer theme {:keys [hide-settings! select-theme! t]}]
 
   (let [*el-popup (rum/use-ref nil)
         [area-dashed? set-area-dashed?] (use-atom *area-dashed?)
@@ -80,7 +80,7 @@
       [:div.extensions__pdf-settings-item.toggle-input
        [:a.is-info.w-full.text-gray-500
         {:title    (t :pdf/doc-metadata)
-         :on-click #(p/let [ret (pdf-utils/get-meta-data$ _viewer)]
+         :on-click #(p/let [ret (pdf-utils/get-meta-data$ viewer)]
                       (state/set-modal! (make-docinfo-in-modal ret)))}
 
         [:span.flex.items-center.justify-between.w-full
@@ -336,7 +336,7 @@
          [:section.is-empty "No outlines"])])))
 
 (rum/defc pdf-highlights-list
-  [^js _viewer]
+  [^js viewer]
 
   (let [[active, set-active!] (rum/use-state false)]
     (rum/with-context
@@ -350,7 +350,7 @@
           {:key      id
            :class (when (= active id) "active")
            :on-click (fn []
-                       (pdf-utils/scroll-to-highlight _viewer hl)
+                       (pdf-utils/scroll-to-highlight viewer hl)
                        (set-active! id))
            :on-double-click goto-ref!}
           [:h6.flex

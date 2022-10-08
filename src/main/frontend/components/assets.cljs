@@ -78,7 +78,7 @@
         :on-change   (fn [^js e]
                        (set-val! (util/trim-safe (.. e -target -value))))
         :on-key-up   (fn [^js e]
-                       (if (and (= 13 (.-which e))
+                       (when (and (= 13 (.-which e))
                                 (not (string/blank? val)))
                          (on-submit)))}]]
 

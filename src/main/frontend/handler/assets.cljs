@@ -28,7 +28,7 @@
 
 (defn clean-path-prefix
   [path]
-  (if (string? path)
+  (when (string? path)
     (string/replace-first path #"^[.\/\\]*(assets)[\/\\]+" "")))
 
 (defn check-alias-path?

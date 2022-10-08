@@ -895,7 +895,7 @@
 (rum/defcs playground
   < rum/static rum/reactive
     (shortcut/mixin :shortcut.handler/pdf)
-  [_state]
+  []
   (let [pdf-current (state/sub :pdf/current)]
     [:div.extensions__pdf-playground
 

@@ -1378,31 +1378,30 @@
                                                       (count ext-full))) ext-full ext-base])
                               ["" "" ""])
             filename  (str (gen-filename index file-base) ext-full)
-            filename  (str path "/" filename)]
-
-        (let [matched-alias (assets-handler/get-matched-alias-by-ext ext-base)
+            filename  (str path "/" filename)
+            matched-alias (assets-handler/get-matched-alias-by-ext ext-base)
               filename (cond-> filename
                          (not (nil? matched-alias))
                          (string/replace #"^[.\/\\]*assets[\/\\]+" ""))
               dir (or (:dir matched-alias) dir)]
 
-          (if (util/electron?)
-            (let [from (.-path file)
-                  from (if (string/blank? from) nil from)]
+        (if (util/electron?)
+          (let [from (.-path file)
+                from (if (string/blank? from) nil from)]
 
-              (js/console.debug "Debug: Copy Asset #" dir filename from)
+            (js/console.debug "Debug: Copy Asset #" dir filename from)
 
-              (-> (js/window.apis.copyFileToAssets dir filename from)
-                  (p/then
-                   (fn [dest]
-                     [filename
-                      (if (string? dest) (js/File. #js[] dest) file)
-                      (.join util/node-path dir filename)
-                      matched-alias]))
-                  (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
+            (-> (js/window.apis.copyFileToAssets dir filename from)
+                (p/then
+                 (fn [dest]
+                   [filename
+                    (if (string? dest) (js/File. #js[] dest) file)
+                    (.join util/node-path dir filename)
+                    matched-alias]))
+                (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
 
-            (p/then (fs/write-file! repo dir filename (.stream file) nil)
-                    #(p/resolved [filename file nil matched-alias])))))))))
+          (p/then (fs/write-file! repo dir filename (.stream file) nil)
+                  #(p/resolved [filename file nil matched-alias]))))))))
 
 (defonce *assets-url-cache (atom {}))
 

@@ -14,7 +14,7 @@
 
 (defn clean-asset-path-prefix
   [path]
-  (if (string? path)
+  (when (string? path)
     (string/replace-first path #"^[.\/\\]*(assets)[\/\\]+" "")))
 
 (defn get-area-block-asset-url
