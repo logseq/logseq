@@ -812,10 +812,9 @@
 
 (defn- get-label-text
   [label]
-  (and (= 1 (count label))
-       (let [label (first label)]
-         (string? (last label))
-         (js/decodeURIComponent (last label)))))
+  (when (and (= 1 (count label))
+             (string? (last (first label))))
+    (js/decodeURIComponent (last (first label)))))
 
 (defn- get-page
   [label]
@@ -1011,7 +1010,8 @@
          {:on-mouse-down (fn [_event]
                            (when-let [current (pdf-assets/inflate-asset s)]
                              (state/set-state! :pdf/current current)))}
-         label-text]
+         (or label-text
+             (->elem :span (map-inline config label)))]
 
         (mobile-util/native-platform?)
         (asset-link config label-text s metadata full_text))
@@ -1874,7 +1874,7 @@
                  (not= "nil" marker))
         {:class (str (string/lower-case marker))})
       (when bg-color
-        {:style {:background-color (if (some #{bg-color} ui/block-background-colors) 
+        {:style {:background-color (if (some #{bg-color} ui/block-background-colors)
                                      (str "var(--ls-highlight-color-" bg-color ")")
                                      bg-color)}
          :class "px-1 with-bg-color"}))
