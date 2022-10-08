@@ -1,11 +1,11 @@
 @import "_viewer.css";
 
 :root {
-  --ph-highlight-color-blue: var(--color-blue-100);
-  --ph-highlight-color-green: var(--color-green-100);
-  --ph-highlight-color-red: var(--color-red-100);
-  --ph-highlight-color-purple: var(--color-purple-100);
-  --ph-highlight-color-yellow: var(--color-yellow-100);
+  --ph-highlight-color-blue: var(--color-blue-300);
+  --ph-highlight-color-green: var(--color-green-300);
+  --ph-highlight-color-red: var(--color-red-300);
+  --ph-highlight-color-purple: var(--color-purple-300);
+  --ph-highlight-color-yellow: var(--color-yellow-300);
 
   --ph-link-color: #106ba3;
 
@@ -364,14 +364,15 @@ input::-webkit-inner-spin-button {
           margin-top: unset;
           border-radius: 4px;
           color: black;
+          padding: 4px;
 
           .ti {
             font-weight: bold;
             color: #989898;
           }
 
-          &.active .ti {
-            color: black !important;
+          &.active .ti, &:hover .ti {
+            color: #1f1f1f !important;
           }
 
           &.icon-enter {
@@ -380,6 +381,10 @@ input::-webkit-inner-spin-button {
             right: -1px;
             top: 2px;
           }
+        }
+
+        > .ui__button {
+          margin-left: 8px;
         }
       }
 
