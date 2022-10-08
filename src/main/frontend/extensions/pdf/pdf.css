@@ -332,7 +332,8 @@ input::-webkit-inner-spin-button {
     }
 
     &.hls-popup-box {
-      width: 360px;
+      min-width: 360px;
+      width: auto;
 
       > .input-inner {
         @apply p-2 relative;
