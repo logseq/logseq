@@ -249,7 +249,7 @@
       [:span.hl-area
        [:img {:src asset-path}]])))
 
-(defn fix-local-asset-filename
+(defn fix-local-asset-pagename
   [filename]
   (when-not (string/blank? filename)
     (let [local-asset? (re-find #"[0-9]{13}_\d$" filename)
@@ -267,6 +267,6 @@
   [page-name]
   (cond
     (string/starts-with? page-name "hls__")
-    (fix-local-asset-filename page-name)
+    (fix-local-asset-pagename page-name)
 
     :else (util/trim-safe page-name)))

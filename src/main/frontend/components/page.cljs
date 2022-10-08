@@ -196,7 +196,7 @@
           repo (state/get-current-repo)
           hls-file? (pdf-assets/hls-file? title)
           title (if hls-file?
-                  [:span (pdf-assets/fix-local-asset-filename title)]
+                  [:a.asset-ref (pdf-assets/fix-local-asset-pagename title)]
                   (if fmt-journal? (date/journal-title->custom-format title) title))
           old-name (or title page-name)
           confirm-fn (fn []
