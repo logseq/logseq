@@ -270,7 +270,10 @@
                              {:scheme     FILE_LSP_SCHEME
                               :privileges privileges}
                              {:scheme     FILE_ASSETS_SCHEME
-                              :privileges privileges}]))
+                              :privileges {:standard        false
+                                           :secure          false
+                                           :bypassCSP       false
+                                           :supportFetchAPI false}}]))
 
       (set-app-menu!)
       (setup-deeplink!)
