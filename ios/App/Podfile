@@ -1,8 +1,5 @@
 require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
 
-# pod specs for AgeEncryption
-source 'https://github.com/CocoaPods/Specs.git'
-
 platform :ios, '13.0'
 use_frameworks!
 
