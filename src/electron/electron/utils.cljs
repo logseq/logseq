@@ -28,7 +28,6 @@
 (defonce HttpsProxyAgent (js/require "https-proxy-agent"))
 (defonce _fetch (js/require "node-fetch"))
 (defonce extract-zip (js/require "extract-zip"))
-(defn format [fmt & args] (apply gstring/format fmt args))
 
 (defn fetch
   ([url] (fetch url nil))
