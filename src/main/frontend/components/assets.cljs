@@ -141,7 +141,7 @@
            (str "@" name)]
 
           [:div.flex.items-center.space-x-2
-           [:a.opacity-90.active:opacity-50.text-sm
+           [:a.opacity-90.active:opacity-50.text-sm.flex.space-x-1
             {:on-click #(when (util/electron?)
                           (js/apis.openPath dir))}
             (ui/icon "folder") dir]]]
