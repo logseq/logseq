@@ -2,9 +2,8 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater] :as updater]
-            [electron.utils :refer [*win mac? linux? dev? resolve-url-asset-real-path
-                                    get-win-from-sender restore-user-fetch-agent get-graph-name
-                                    send-to-renderer]]
+            [electron.utils :refer [*win mac? linux? dev? get-win-from-sender restore-user-fetch-agent
+                                    decode-protected-assets-schema-path get-graph-name send-to-renderer]]
             [electron.url :refer [logseq-url-handler]]
             [electron.logger :as logger]
             [clojure.string :as string]
@@ -63,6 +62,7 @@
    protocol FILE_ASSETS_SCHEME
    (fn [^js request callback]
      (let [url (.-url request)
+           url (decode-protected-assets-schema-path url)
            path (js/decodeURI url)
            path (string/replace path "assets://" "")]
        (callback #js {:path path}))))

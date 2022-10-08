@@ -12,6 +12,20 @@
   (and (util/electron?)
        (:assets/alias-enabled? @state/state)))
 
+(defn encode-to-protect-assets-schema-path
+  [schema-path]
+  (cond-> schema-path
+    (string? schema-path)
+    (->
+     (string/replace #"\\+" "/")
+     (string/replace ":/" "/logseq__colon/"))))
+
+(defn decode-protected-assets-schema-path
+  [schema-path]
+  (cond-> schema-path
+    (string? schema-path)
+    (string/replace "/logseq__colon/" ":/")))
+
 (defn clean-path-prefix
   [path]
   (if (string? path)
@@ -72,9 +86,10 @@
                                                  (second (get-alias-by-name (second (re-find #"^@([^\/]+)" full-path')))))
                                             (vector full-path')))))]
 
-                    (str "assets://" (string/replace full-path' (str "@" (:name alias)) (:dir alias)))
+                    (str "assets://"
+                         (encode-to-protect-assets-schema-path
+                          (string/replace full-path' (str "@" (:name alias)) (:dir alias))))
 
-                    ;; TODO: bfs
                     (str (if has-schema? "" "file://")
                          (util/node-path.join graph-root full-path))))]
         (convert-platform-protocol ret)))))

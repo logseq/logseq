@@ -145,7 +145,13 @@
 (def Origin_Log_Seq "log.seq")
 (def Spliter_Asset_File "~~@~~")
 
-(defn resolve-url-asset-real-path
+(defn decode-protected-assets-schema-path
+  [schema-path]
+  (cond-> schema-path
+    (string? schema-path)
+    (string/replace "/logseq__colon/" ":/")))
+
+(defn _resolve-url-asset-real-path
   [url]
   (let [alias-enabled? (cfgs/get-item :assets/alias-enabled?)
         full-path (string/replace-first url "assets://" "")]
