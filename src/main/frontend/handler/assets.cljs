@@ -1,4 +1,4 @@
-(ns frontend.handler.assets
+(ns ^:no-doc frontend.handler.assets
   (:require [frontend.state :as state]
             [medley.core :as medley]
             [frontend.util :as util]
