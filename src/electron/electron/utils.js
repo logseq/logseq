@@ -1,5 +1,5 @@
-import path from "path";
-import fs from 'fs';
+import path from 'path'
+import fse from 'fs-extra'
 
 // workaround from https://github.com/electron/electron/issues/426#issuecomment-658901422
 // We set an intercept on incoming requests to disable x-frame-options
@@ -20,13 +20,13 @@ export const disableXFrameOptions = (win) => {
 }
 
 export async function getAllFiles (dir, exts) {
-  const dirents = await readdir(dir, { withFileTypes: true })
+  const dirents = await fse.readdir(dir, { withFileTypes: true })
 
-  if (exts) {
+  if (exts != null) {
     !Array.isArray(exts) && (exts = [exts])
 
     exts = exts.map(it => {
-      if (it && !it.startsWith('.')) {
+      if (typeof it === 'string' && it !== '' && !it.startsWith('.')) {
         it = '.' + it
       }
 
@@ -35,12 +35,18 @@ export async function getAllFiles (dir, exts) {
   }
 
   const files = await Promise.all(dirents.map(async (dirent) => {
-    if (exts && !exts.includes(path.extname(dirent.name))) {
+    const filePath = path.resolve(dir, dirent.name)
+
+    if (dirent.isDirectory()) {
+      return getAllFiles(filePath, exts)
+    }
+
+    if (exts && !exts.includes(path.extname(dirent.name)?.toLowerCase())) {
       return null
     }
 
-    const filePath = path.resolve(dir, dirent.name)
-    const fileStats = await lstat(filePath)
+    const fileStats = await fse.lstat(filePath)
+
     const stats = {
       size: fileStats.size,
       accessTime: fileStats.atimeMs,
@@ -48,9 +54,23 @@ export async function getAllFiles (dir, exts) {
       changeTime: fileStats.ctimeMs,
       birthTime: fileStats.birthtimeMs
     }
-    return dirent.isDirectory() ? getAllFiles(filePath) : {
-      path: filePath, ...stats
-    }
+
+    return { path: filePath, ...stats }
   }))
   return files.flat().filter(it => it != null)
+}
+
+export async function deepReadDir (dirPath, flat = true) {
+  const ret = await Promise.all(
+    (await fse.readdir(dirPath)).map(async (entity) => {
+      const root = path.join(dirPath, entity)
+      return (await fse.lstat(root)).isDirectory() ? await deepReadDir(root) : root
+    })
+  )
+
+  if (flat) {
+    return ret?.flat()
+  }
+
+  return ret
 }

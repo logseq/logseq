@@ -207,7 +207,7 @@
                         *loading? (::loading? state)
                         *exist? (::exist? state)]
                     (when (and sync-on? asset-file? (false? @*exist?))
-                      (let [sync-state (state/sub [:file-sync/sync-state (state/get-current-repo)])
+                      (let [sync-state (state/get-file-sync-state (state/get-current-file-sync-graph-uuid))
                             downloading-files (:current-remote->local-files sync-state)
                             contain-url? (and (seq downloading-files)
                                               (some #(string/ends-with? src %) downloading-files))]
@@ -221,7 +221,7 @@
                             (reset! *loading? false))))))
                   state)}
   [state src content-fn]
-  (let [_ (state/sub [:file-sync/sync-state (state/get-current-repo)])
+  (let [_ (state/sub-file-sync-state (state/get-current-file-sync-graph-uuid))
         exist? @(::exist? state)
         loading? @(::loading? state)
         asset-file? (::asset-file? state)
@@ -240,7 +240,7 @@
         (if (or (not asset-file?)
                 (and exist? (not loading?)))
           (content-fn)
-          [:p.text-red-500.text-xs [:small.opacity-80
+          [:p.text-error.text-xs [:small.opacity-80
                                     (util/format "%s not found!" (string/capitalize type))]])))))
 
 (defn open-lightbox
@@ -1853,7 +1853,14 @@
         priority (priority-cp t)
         tags (block-tags-cp t)
         bg-color (:background-color properties)
-        heading (:heading properties)
+        ;; `heading-level` is for backward compatiblity, will remove it in later releases
+        heading-level (:block/heading-level t)
+        heading (or
+                 (and heading-level
+                      (<= heading-level 6)
+                      heading-level)
+                 (:heading properties))
+        heading (if (true? heading) 2 heading)
         elem (if heading
                (keyword (str "h" heading
                              (when block-ref? ".inline")))
@@ -1867,8 +1874,10 @@
                  (not= "nil" marker))
         {:class (str (string/lower-case marker))})
       (when bg-color
-        {:style {:background-color bg-color}
-         :class "with-bg-color"}))
+        {:style {:background-color (if (some #{bg-color} ui/block-background-colors) 
+                                     (str "var(--ls-highlight-color-" bg-color ")")
+                                     bg-color)}
+         :class "px-1 with-bg-color"}))
      (remove-nils
       (concat
        [(when-not slide? checkbox)
@@ -3103,22 +3112,6 @@
     {:debug-id q
      :trigger-once? false})))
 
-(defn admonition
-  [config type result]
-  (when-let [icon (case (string/lower-case (name type))
-                    "note" svg/note
-                    "tip" svg/tip
-                    "important" svg/important
-                    "caution" svg/caution
-                    "warning" svg/warning
-                    "pinned" svg/pinned
-                    nil)]
-    [:div.flex.flex-row.admonitionblock.align-items {:class type}
-     [:div.pr-4.admonition-icon.flex.flex-col.justify-center
-      {:title (string/upper-case type)} (icon)]
-     [:div.ml-4.text-lg
-      (markup-elements-cp config result)]]))
-
 ;; TODO: move to mldoc
 ;; (defn- convert-md-src-to-custom-block
 ;;   [item]
@@ -3262,22 +3255,22 @@
           (ui/block-error "Invalid query:" {:content content})))
 
       ["Custom" "note" _options result _content]
-      (admonition config "note" result)
+      (ui/admonition "note" (markup-elements-cp config result))
 
       ["Custom" "tip" _options result _content]
-      (admonition config "tip" result)
+      (ui/admonition "tip" (markup-elements-cp config result))
 
       ["Custom" "important" _options result _content]
-      (admonition config "important" result)
+      (ui/admonition "important" (markup-elements-cp config result))
 
       ["Custom" "caution" _options result _content]
-      (admonition config "caution" result)
+      (ui/admonition "caution" (markup-elements-cp config result))
 
       ["Custom" "warning" _options result _content]
-      (admonition config "warning" result)
+      (ui/admonition "warning" (markup-elements-cp config result))
 
       ["Custom" "pinned" _options result _content]
-      (admonition config "pinned" result)
+      (ui/admonition "pinned" (markup-elements-cp config result))
 
       ["Custom" "center" _options l _content]
       (->elem

@@ -53,12 +53,15 @@
        (vec)))
 
 (defmethod handle :readdir [_window [_ dir]]
-  (let [entries (readdir dir)]
-    (js/console.log entries)
-    entries))
+  (readdir dir))
+
+(defmethod handle :listdir [_window [_ dir flat?]]
+  (when (and dir (fs-extra/pathExistsSync dir))
+    (js-utils/deepReadDir dir (if (boolean? flat?) flat? true))))
 
 (defmethod handle :unlink [_window [_ repo-dir path]]
-  (if (plugin/dotdir-file? path)
+  (if (or (plugin/dotdir-file? path)
+          (plugin/assetsdir-file? path))
     (fs/unlinkSync path)
     (try
       (logger/info ::unlink {:path path})
@@ -376,8 +379,10 @@
 
 (defmethod handle :getAssetsFiles [^js win [_ {:keys [exts]}]]
   (when-let [graph-path (state/get-window-graph-path win)]
-    (p/let [^js files (js-utils/getAllFiles (.join path graph-path "assets") (clj->js exts))]
-      files)))
+    (when-let [assets-path (.join path graph-path "assets")]
+      (when (fs-extra/pathExistsSync assets-path)
+        (p/let [^js files (js-utils/getAllFiles assets-path (clj->js exts))]
+          files)))))
 
 (defn close-watcher-when-orphaned!
   "When it's the last window for the directory, close the watcher."
@@ -578,6 +583,9 @@
 
 (defmethod handle :decrypt-with-passphrase [_ args]
   (apply rsapi/decrypt-with-passphrase (rest args)))
+
+(defmethod handle :cancel-all-requests [_ args]
+  (apply rsapi/cancel-all-requests (rest args)))
 
 (defmethod handle :default [args]
   (logger/error "Error: no ipc handler for:" args))

@@ -41,8 +41,13 @@
 
 #?(:cljs (defonce ^js node-path utils/nodePath))
 #?(:cljs (defonce ^js full-path-extname utils/fullPathExtname))
-#?(:cljs (defn app-scroll-container-node []
-           (gdom/getElement "main-content-container")))
+#?(:cljs (defn app-scroll-container-node
+           ([]
+            (gdom/getElement "main-content-container"))
+           ([el]
+            (if (.closest el "#main-content-container")
+              (app-scroll-container-node)
+              (gdom/getElementByClass "sidebar-item-list")))))
 
 #?(:cljs
    (defn safe-re-find
@@ -1301,7 +1306,7 @@
              header-height (-> (gdom/getElementByClass "cp__header")
                                .-clientHeight)
 
-             main-node   (app-scroll-container-node)
+             main-node   (app-scroll-container-node el)
              scroll-top  (.-scrollTop main-node)
 
              current-pos (get-selection-start el)
@@ -1327,7 +1332,7 @@
 
            (< cursor-y header-height)
            (let [_ (.scrollIntoView el true)
-                 main-node (app-scroll-container-node)
+                 main-node (app-scroll-container-node el)
                  scroll-top (.-scrollTop main-node)]
              (set! (.-scrollTop main-node) (- scroll-top (/ vw-height 4))))
 

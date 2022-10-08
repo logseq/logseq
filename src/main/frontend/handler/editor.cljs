@@ -315,12 +315,12 @@
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
         block (merge block
                      (block/parse-title-and-body uuid format pre-block? (:block/content block)))
-        properties (:block/properties block)
+        properties (-> (:block/properties block)
+                       (dissoc :heading))
         real-content (:block/content block)
-        content (let [properties (if (= format :markdown) (dissoc properties :heading) properties)]
-                  (if (and (seq properties) real-content (not= real-content content))
-                   (property/with-built-in-properties properties content format)
-                   content))
+        content (if (and (seq properties) real-content (not= real-content content))
+                  (property/with-built-in-properties properties content format)
+                  content)
         content (drawer/with-logbook block content)
         content (with-timetracking block content)
         first-block? (= left page)
@@ -370,6 +370,7 @@
     (profile
      "Save block: "
      (let [block' (wrap-parse-block block)]
+       (util/pprint block')
        (outliner-tx/transact!
          {:outliner-op :save-block}
          (outliner-core/save-block! block'))
@@ -1591,7 +1592,7 @@
         editing-page (and block
                           (when-let [page-id (:db/id (:block/page block))]
                             (:block/name (db/entity page-id))))
-        pages (search/page-search q 20)]
+        pages (search/page-search q 100)]
     (if editing-page
       ;; To prevent self references
       (remove (fn [p] (= (util/page-name-sanity-lc p) editing-page)) pages)
@@ -2019,6 +2020,12 @@
            root-block (db/pull db-id)
            blocks-exclude-root (remove (fn [b] (= (:db/id b) db-id)) blocks)
            sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
+           sorted-blocks (cons
+                          (-> (first sorted-blocks)
+                              (update :block/properties-text-values dissoc :template)
+                              (update :block/properties-order (fn [keys]
+                                                                (vec (remove #{:template} keys)))))
+                          (rest sorted-blocks))
            blocks (if template-including-parent?
                     sorted-blocks
                     (drop 1 sorted-blocks))]
@@ -2805,7 +2812,8 @@
             value (gobj/get input "value")
             c (util/nth-safe value (dec current-pos))
             [key-code k code is-processed?]
-            (if (and (mobile-util/native-android?)
+            (if (and c
+                     (mobile-util/native-android?)
                      (or (= key-code 229)
                          (= key-code 0)))
               [(.charCodeAt value (dec current-pos))
@@ -3505,7 +3513,9 @@
           block (db/entity [:block/uuid block-id])
           content' (commands/set-markdown-heading (:block/content block) heading)]
       (save-block! repo block-id content'))
-    (set-block-property! block-id "heading" heading)))
+    (do
+      (save-current-block!)
+      (set-block-property! block-id "heading" heading))))
 
 (defn remove-heading!
   [block-id format]

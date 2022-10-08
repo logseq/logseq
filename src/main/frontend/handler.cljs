@@ -88,7 +88,7 @@
            (->
             (p/do! (repo-config-handler/start {:repo repo})
                    (when (config/global-config-enabled?)
-                        (global-config-handler/start {:repo repo})))
+                     (global-config-handler/start {:repo repo})))
             (p/finally
               (fn []
                 ;; install after config is restored
@@ -210,9 +210,9 @@
 
   (events/run!)
 
-  (-> (p/let [repos (get-repos)]
-        (state/set-repos! repos)
-        (restore-and-setup! repos))
+  (-> (p/let [repos (get-repos)
+              _ (state/set-repos! repos)
+              _ (restore-and-setup! repos)])
       (p/catch (fn [e]
                  (js/console.error "Error while restoring repos: " e)))
       (p/finally (fn []

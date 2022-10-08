@@ -108,6 +108,8 @@
     (if empty-graph?
       (route-handler/redirect! {:to :import :query-params {:from "picker"}})
       (route-handler/redirect-to-home!)))
+  (when-let [dir-name (config/get-repo-dir repo)]
+    (fs/watch-dir! dir-name))
   (repo-handler/refresh-repos!)
   (file-sync-restart!))
 
@@ -162,12 +164,13 @@
      state/set-state! :sync-graph/init? false)))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (if (or (not (false? (get @outliner-file/*writes-finished? graph)))
-          (:sync-graph/init? @state/state))
-    (graph-switch-on-persisted graph opts)
-    (notification/show!
-     "Please wait seconds until all changes are saved for the current graph."
-     :warning)))
+  (let [opts (if (false? (:persist? opts)) opts (assoc opts :persist? true))]
+    (if (or (not (false? (get @outliner-file/*writes-finished? graph)))
+           (:sync-graph/init? @state/state))
+      (graph-switch-on-persisted graph opts)
+     (notification/show!
+      "Please wait seconds until all changes are saved for the current graph."
+      :warning))))
 
 (defmethod handle :graph/pick-dest-to-sync [[_ graph]]
   (state/set-modal!

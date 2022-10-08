@@ -54,8 +54,7 @@
   (js/window.apis.on "file-sync-progress"
                      (fn [data]
                        (let [payload (bean/->clj data)]
-                         (state/set-state! [:file-sync/progress (:graphUUID payload) (:file payload)] payload)
-                         nil)))
+                         (state/set-state! [:file-sync/graph-state (:graphUUID payload) :file-sync/progress (:file payload)] payload))))
 
   (js/window.apis.on "notification"
                      (fn [data]
