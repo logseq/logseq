@@ -191,7 +191,7 @@
 }
 
 .tl-button {
-  @apply relative flex items-center justify-center text-base rounded border-0;
+  @apply relative flex items-center justify-center rounded border-0;
 
   height: 32px;
   width: 32px;
@@ -220,6 +220,10 @@
   flex-flow: column;
   border-radius: 8px;
   padding: 8px;
+
+  .tl-button {
+    font-size: 16px;
+  }
 }
 
 .tl-tools-floating-panel {
