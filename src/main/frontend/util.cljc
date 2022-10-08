@@ -911,24 +911,6 @@
      [string]
      (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
 
-(def windows-reserved-chars #"[:\\*\\?\"<>|]+")
-
-#?(:cljs
-   (do
-     (defn include-windows-reserved-chars?
-      [s]
-       (safe-re-find windows-reserved-chars s))
-
-     (defn create-title-property?
-       [s]
-       (and (string? s)
-            (or (include-windows-reserved-chars? s)
-                (string/includes? s "_")
-                (string/includes? s "/")
-                (string/includes? s ".")
-                (string/includes? s "%")
-                (string/includes? s "#"))))))
-
 #?(:cljs
    (defn search-normalize
      "Normalize string for searching (loose)"
@@ -937,19 +919,6 @@
       (if remove-accents?
         (removeAccents  normalize-str)
         normalize-str))))
-
-#?(:cljs
-   (defn file-name-sanity
-     "Sanitize page-name for file name (strict), for file writing."
-     [page-name]
-     (some-> page-name
-             gp-util/page-name-sanity
-             ;; for android filesystem compatiblity
-             (string/replace #"[\\#|%]+" url-encode)
-             ;; Windows reserved path characters
-             (string/replace windows-reserved-chars url-encode)
-             (string/replace #"/" url-encode)
-             (string/replace "*" "%2A"))))
 
 #?(:cljs
    (def page-name-sanity-lc
@@ -1007,12 +976,13 @@
     [col1 col2]))
 
 ;; fs
-(defn get-file-ext
-  [file]
-  (and
-   (string? file)
-   (string/includes? file ".")
-   (some-> (last (string/split file #"\.")) string/lower-case)))
+#?(:cljs
+   (defn get-file-ext
+     [file]
+     (and
+      (string? file)
+      (string/includes? file ".")
+      (some-> (gp-util/path->file-ext file) string/lower-case))))
 
 (defn get-dir-and-basename
   [path]

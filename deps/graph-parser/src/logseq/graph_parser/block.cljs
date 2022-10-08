@@ -57,6 +57,7 @@
                   (and
                    (= typ "Search")
                    (not (contains? #{\# \* \/ \[} (first value)))
+                   ;; FIXME: use `gp-util/get-format` instead
                    (let [ext (some-> (gp-util/get-file-ext value) keyword)]
                      (when (and (not (string/starts-with? value "http:"))
                                 (not (string/starts-with? value "https:"))

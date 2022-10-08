@@ -15,6 +15,8 @@
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [lambdaisland.glogi :as log]
+            [logseq.graph-parser.util :as gp-util]
+            [frontend.util.fs :as fs-util]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util.page-ref :as page-ref]
@@ -75,17 +77,18 @@
     (-> (string/replace template "{time}" time)
         (string/replace "{url}" (or url "")))))
 
-(defn- embed-text-file [url title]
+(defn- embed-text-file 
+  "Store external content with url into Logseq repo" 
+  [url title]
   (p/let [time (date/get-current-time)
           title (some-> (or title (path/basename url))
                         js/decodeURIComponent
                         util/node-path.name
-                        util/file-name-sanity
-                        js/decodeURIComponent
-                        (string/replace "." ""))
+                        ;; make the title more user friendly
+                        gp-util/page-name-sanity)
           path (path/join (config/get-repo-dir (state/get-current-repo))
                           (config/get-pages-directory)
-                          (str (js/encodeURI title) (path/extname url)))
+                          (str (js/encodeURI (fs-util/file-name-sanity title)) (path/extname url)))
           _ (p/catch
                 (.copy Filesystem (clj->js {:from url :to path}))
                 (fn [error]

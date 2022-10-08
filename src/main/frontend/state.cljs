@@ -299,7 +299,10 @@
 (def default-config
   "Default config for a repo-specific, user config"
   {:feature/enable-search-remove-accents? true
-   :default-arweave-gateway "https://arweave.net"})
+   :default-arweave-gateway "https://arweave.net"
+
+   ;; For flushing the settings of old versions. Don't bump this value.
+   :file/name-format :legacy})
 
 ;; State that most user config is dependent on
 (declare get-current-repo sub set-state!)
@@ -468,11 +471,10 @@ should be done through this fn in order to get global config and config defaults
     "LATER"
     "TODO"))
 
-(defn page-name-order
-  "Decide whether to use file name or :title as page name. If it returns \"file\", use the file
-  name unless it is missing."
-  []
-  (:page-name-order (get-config)))
+(defn get-filename-format
+  ([] (get-filename-format (get-current-repo)))
+  ([repo]
+   (:file/name-format (get-config repo))))
 
 (defn get-date-formatter
   []

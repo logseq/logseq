@@ -4,9 +4,9 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
-            [frontend.util :as util]
-            [frontend.util.property :as property]
             [frontend.state :as state]
+            [frontend.util.property :as property]
+            [frontend.util.fs :as fs-util]
             [frontend.handler.file :as file-handler]))
 
 (defn- indented-block-content
@@ -114,7 +114,7 @@
             filename (if journal-page?
                        (date/date->file-name journal-page?)
                        (-> (or (:block/original-name page) (:block/name page))
-                           (util/file-name-sanity)))
+                           (fs-util/file-name-sanity)))
             sub-dir (if journal-page?
                       (config/get-journals-directory)
                       (config/get-pages-directory))
