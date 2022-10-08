@@ -387,7 +387,8 @@
                            (when (and
                                   (not= "Outline" (.-title target))
                                   (not (.contains (rum/deref *el-container) target)))
-                             (set-visible! false))))]
+                             (set-visible! false)
+                             (set-outline-visible!))))]
            (.addEventListener el-viewer "click" handler)
            #(.removeEventListener el-viewer "click" handler))))
      [viewer *el-container])
