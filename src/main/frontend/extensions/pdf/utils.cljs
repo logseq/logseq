@@ -3,7 +3,6 @@
             [cljs-bean.core :as bean]
             [frontend.util :as util]
             ["/frontend/extensions/pdf/utils" :as js-utils]
-            [frontend.loader :refer [load]]
             [datascript.core :as d]
             [logseq.graph-parser.config :as gp-config]
             [clojure.string :as string]))
