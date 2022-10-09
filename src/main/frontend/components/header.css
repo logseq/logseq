@@ -19,7 +19,7 @@
 
   > .l {
     @apply pl-2;
-    
+
     width: var(--ls-left-sidebar-width);
     height: 100%;
     align-items: center;
@@ -44,7 +44,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    opacity: .8;
 
     .ti, .tie {
       font-size: 20px;
