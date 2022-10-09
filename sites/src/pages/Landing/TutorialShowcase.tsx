@@ -366,7 +366,7 @@ export function TutorialShowcase (
               <div
                 className={cx('pt-2 sm:pt-0 sm:flex justify-center sm:flex-col items-center invisible', t[2] && 'ani-fade-in')}>
                 <h3 className="inline text-2xl sm:text-4xl font-normal pt-8 text-logseq-50/80">Logseq is the
-                  all-in-one tool
+                  open toolbox
                   for </h3>
                 <h4 className="inline text-2xl sm:text-4xl pt-2 opacity-94">
                   workflows that deal with lots of information:
