@@ -21,6 +21,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.assets :as assets-handler]
             [frontend.idb :as idb]
             [frontend.image :as image]
             [frontend.mobile.util :as mobile-util]
@@ -1370,50 +1371,75 @@
     (for [[index ^js file] (map-indexed vector files)]
       ;; WARN file name maybe fully qualified path when paste file
       (let [file-name (util/node-path.basename (.-name file))
-            [file-base ext] (if file-name
-                              (let [last-dot-index (string/last-index-of file-name ".")]
-                                [(subs file-name 0 last-dot-index)
-                                 (subs file-name last-dot-index)])
-                              ["" ""])
-            filename (str (gen-filename index file-base) ext)
-            filename (str path "/" filename)]
-                                        ;(js/console.debug "Write asset #" dir filename file)
+            [file-base ext-full ext-base] (if file-name
+                              (let [ext-base (util/node-path.extname file-name)
+                                    ext-full (if-not (config/extname-of-supported? ext-base)
+                                               (util/full-path-extname file-name) ext-base)]
+                                [(subs file-name 0 (- (count file-name)
+                                                      (count ext-full))) ext-full ext-base])
+                              ["" "" ""])
+            filename  (str (gen-filename index file-base) ext-full)
+            filename  (str path "/" filename)
+            matched-alias (assets-handler/get-matched-alias-by-ext ext-base)
+              filename (cond-> filename
+                         (not (nil? matched-alias))
+                         (string/replace #"^[.\/\\]*assets[\/\\]+" ""))
+              dir (or (:dir matched-alias) dir)]
+
         (if (util/electron?)
           (let [from (.-path file)
                 from (if (string/blank? from) nil from)]
-            (p/then (js/window.apis.copyFileToAssets dir filename from)
-                    #(p/resolved [filename (if (string? %) (js/File. #js[] %) file) (.join util/node-path dir filename)])))
+
+            (js/console.debug "Debug: Copy Asset #" dir filename from)
+
+            (-> (js/window.apis.copyFileToAssets dir filename from)
+                (p/then
+                 (fn [dest]
+                   [filename
+                    (if (string? dest) (js/File. #js[] dest) file)
+                    (.join util/node-path dir filename)
+                    matched-alias]))
+                (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
+
           (p/then (fs/write-file! repo dir filename (.stream file) nil)
-                  #(p/resolved [filename file]))))))))
+                  #(p/resolved [filename file nil matched-alias]))))))))
 
 (defonce *assets-url-cache (atom {}))
 
 (defn make-asset-url
   [path] ;; path start with "/assets" or compatible for "../assets"
-  (let [repo-dir (config/get-repo-dir (state/get-current-repo))
-        path (string/replace path "../" "/")
-        data-url? (string/starts-with? path "data:")]
-    (cond
-      data-url?
-      path ;; just return the original
-      
-      (util/electron?)
-      (str "assets://" repo-dir path)
+  (if config/publishing? path
+    (let [repo      (state/get-current-repo)
+          repo-dir  (config/get-repo-dir repo)
+          path      (string/replace path "../" "/")
+          full-path (util/node-path.join repo-dir path)
+          data-url? (string/starts-with? path "data:")]
+      (cond
+        data-url?
+        path ;; just return the original
 
-      (mobile-util/native-platform?)
-      (mobile-util/convert-file-src (str repo-dir path))
+        (and (assets-handler/alias-enabled?)
+             (assets-handler/check-alias-path? path))
+        (assets-handler/resolve-asset-real-path-url (state/get-current-repo) path)
 
-      :else
-      (let [handle-path (str "handle" repo-dir path)
-            cached-url (get @*assets-url-cache (keyword handle-path))]
-        (if cached-url
-          (p/resolved cached-url)
-          (p/let [handle (idb/get-item handle-path)
-                  file (and handle (.getFile handle))]
-            (when file
-              (p/let [url (js/URL.createObjectURL file)]
-                (swap! *assets-url-cache assoc (keyword handle-path) url)
-                url))))))))
+        (util/electron?)
+        (str "assets://"
+             (assets-handler/encode-to-protect-assets-schema-path full-path))
+
+        (mobile-util/native-platform?)
+        (mobile-util/convert-file-src full-path)
+
+        :else
+        (let [handle-path (str "handle" full-path)
+              cached-url  (get @*assets-url-cache (keyword handle-path))]
+          (if cached-url
+            (p/resolved cached-url)
+            (p/let [handle (idb/get-item handle-path)
+                    file   (and handle (.getFile handle))]
+              (when file
+                (p/let [url (js/URL.createObjectURL file)]
+                  (swap! *assets-url-cache assoc (keyword handle-path) url)
+                  url)))))))))
 
 (defn delete-asset-of-block!
   [{:keys [repo href full-text block-id local? delete-local?] :as _opts}]
@@ -1424,7 +1450,9 @@
     (save-block! repo block content)
     (when (and local? delete-local?)
       ;; FIXME: should be relative to current block page path
-      (when-let [href (if (util/electron?) href (second (re-find #"\((.+)\)$" full-text)))]
+      (when-let [href (if (util/electron?)
+                        (assets-handler/decode-protected-assets-schema-path href)
+                        (second (re-find #"\((.+)\)$" full-text)))]
         (fs/unlink! repo
                     (config/get-repo-path
                      repo (-> href
@@ -1451,11 +1479,16 @@
       (-> (save-assets! block repo (js->clj files))
           (p/then
            (fn [res]
-             (when-let [[asset-file-name file full-file-path] (and (seq res) (first res))]
+             (when-let [[asset-file-name file full-file-path matched-alias] (and (seq res) (first res))]
                (let [image? (util/ext-of-image? asset-file-name)]
                  (insert-command!
                   id
-                  (get-asset-file-link format (resolve-relative-path (or full-file-path asset-file-name))
+                  (get-asset-file-link format
+                                       (if matched-alias
+                                         (str
+                                          (if image? "../assets/" "")
+                                          "@" (:name matched-alias) "/" asset-file-name)
+                                         (resolve-relative-path (or full-file-path asset-file-name)))
                                        (if file (.-name file) (if image? "image" "asset"))
                                        image?)
                   format

@@ -214,7 +214,7 @@ export type SlashCommandActionCmd =
   | 'editor/clear-current-slash'
   | 'editor/restore-saved-cursor'
 export type SlashCommandAction = [cmd: SlashCommandActionCmd, ...args: any]
-export type SimpleCommandCallback = (e: IHookEvent) => void
+export type SimpleCommandCallback<E = any> = (e: IHookEvent & E) => void
 export type BlockCommandCallback = (
   e: IHookEvent & { uuid: BlockUUID }
 ) => Promise<void>
@@ -487,13 +487,27 @@ export interface IEditorProxy extends Record<string, any> {
   ) => unknown
 
   /**
-   * register a custom command in the block context menu (triggered by right clicking the block dot)
-   * @param tag - displayed name of command
+   * register a custom command in the block context menu (triggered by right-clicking the block dot)
+   * @param label - displayed name of command
    * @param action - can be a single callback function to run when the command is called
    */
   registerBlockContextMenuItem: (
-    tag: string,
+    label: string,
     action: BlockCommandCallback
+  ) => unknown
+
+  /**
+   * Current it's only available for pdf viewer
+   * @param label - displayed name of command
+   * @param action - callback for the clickable item
+   * @param opts - clearSelection: clear highlight selection when callback invoked
+   */
+  registerHighlightContextMenuItem: (
+    label: string,
+    action: SimpleCommandCallback,
+    opts?: {
+      clearSelection: boolean
+    }
   ) => unknown
 
   // block related APIs

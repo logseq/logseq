@@ -12,6 +12,7 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.export :as export-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.modules.shortcut.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
@@ -56,6 +57,9 @@
 
    :pdf/close                    {:binding "alt+x"
                                   :fn      #(state/set-state! :pdf/current nil)}
+
+   :pdf/find                     {:binding "alt+f"
+                                  :fn      pdf-utils/open-finder}
 
    :auto-complete/complete       {:binding "enter"
                                   :fn      ui-handler/auto-complete-complete}
@@ -294,6 +298,10 @@
                                                 (editor-handler/escape-editing)
                                                 (state/toggle! :ui/command-palette-open?))}
 
+   :graph/export-as-html           {:fn #(export-handler/export-repo-as-html!
+                                          (state/get-current-repo))
+                                    :binding false}
+
    :graph/open                     {:fn      #(do
                                                 (editor-handler/escape-editing)
                                                 (state/set-state! :ui/open-select :graph-open))
@@ -434,7 +442,8 @@
     :shortcut.handler/pdf
     (-> (build-category-map [:pdf/previous-page
                              :pdf/next-page
-                             :pdf/close])
+                             :pdf/close
+                             :pdf/find])
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/auto-complete
@@ -484,6 +493,7 @@
     (->
      (build-category-map [:command/run
                           :command-palette/toggle
+                          :graph/export-as-html
                           :graph/open
                           :graph/remove
                           :graph/add
@@ -677,9 +687,11 @@
    [:pdf/previous-page
     :pdf/next-page
     :pdf/close
+    :pdf/find
     :command/toggle-favorite
     :command/run
     :command-palette/toggle
+    :graph/export-as-html
     :graph/open
     :graph/remove
     :graph/add

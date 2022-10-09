@@ -279,11 +279,11 @@
           *edit? (get state ::edit?)
           *input-value (get state ::input-value)
           repo (state/get-current-repo)
-          hls-page? (pdf-assets/hls-page? title)
+          hls-page? (pdf-assets/hls-file? title)
           whiteboard-page? (model/whiteboard-page? page-name)
           untitled? (and whiteboard-page? (parse-uuid page-name)) ;; normal page cannot be untitled right?
           title (if hls-page?
-                  (pdf-assets/human-hls-pagename-display title)
+                  [:a.asset-ref (pdf-assets/fix-local-asset-pagename title)]
                   (if fmt-journal? (date/journal-title->custom-format title) title))
           old-name (or title page-name)]
       [:h1.page-title.flex.cursor-pointer.gap-1

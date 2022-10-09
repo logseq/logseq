@@ -2,7 +2,8 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater] :as updater]
-            [electron.utils :refer [*win mac? linux? dev? get-win-from-sender restore-user-fetch-agent get-graph-name]]
+            [electron.utils :refer [*win mac? linux? dev? get-win-from-sender restore-user-fetch-agent
+                                    decode-protected-assets-schema-path get-graph-name send-to-renderer]]
             [electron.url :refer [logseq-url-handler]]
             [electron.logger :as logger]
             [clojure.string :as string]
@@ -24,6 +25,7 @@
 ;; Keep same as main/frontend.util.url
 (defonce LSP_SCHEME "logseq")
 (defonce FILE_LSP_SCHEME "lsp")
+(defonce FILE_ASSETS_SCHEME "assets")
 (defonce LSP_PROTOCOL (str FILE_LSP_SCHEME "://"))
 (defonce PLUGIN_URL (str LSP_PROTOCOL "logseq.io/"))
 (defonce STATIC_URL (str LSP_PROTOCOL "logseq.com/"))
@@ -57,11 +59,12 @@
   (.setAsDefaultProtocolClient app LSP_SCHEME)
 
   (.registerFileProtocol
-   protocol "assets"
+   protocol FILE_ASSETS_SCHEME
    (fn [^js request callback]
      (let [url (.-url request)
-           path (string/replace url "assets://" "")
-           path (js/decodeURI path)]
+           url (decode-protected-assets-schema-path url)
+           path (js/decodeURI url)
+           path (string/replace path "assets://" "")]
        (callback #js {:path path}))))
 
   (.registerFileProtocol
@@ -81,7 +84,7 @@
 
   #(do
      (.unregisterProtocol protocol FILE_LSP_SCHEME)
-     (.unregisterProtocol protocol "assets")))
+     (.unregisterProtocol protocol FILE_ASSETS_SCHEME)))
 
 (defn- handle-export-publish-assets [_event html custom-css-path export-css-path repo-path asset-filenames output-path]
   (p/let [app-path (. app getAppPath)
@@ -132,8 +135,12 @@
                 ;; TODO: ugly, replace with ls-files and filter with ".map"
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" (str file ".map"))))
-                              ["main.js" "code-editor.js" "excalidraw.js" "tldraw.js" "age-encryption.js"]))]
-          (. dialog showMessageBox (clj->js {:message (str "Export public pages and publish assets to " root-dir " successfully")})))))))
+                              ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
+          
+          (send-to-renderer
+           :notification
+           {:type "success"
+            :payload (str "Export public pages and publish assets to " root-dir " successfully 🎉")}))))))
 
 (defn setup-app-manager!
   [^js win]
@@ -261,7 +268,12 @@
         protocol (bean/->js [{:scheme     LSP_SCHEME
                               :privileges privileges}
                              {:scheme     FILE_LSP_SCHEME
-                              :privileges privileges}]))
+                              :privileges privileges}
+                             {:scheme     FILE_ASSETS_SCHEME
+                              :privileges {:standard        false
+                                           :secure          false
+                                           :bypassCSP       false
+                                           :supportFetchAPI false}}]))
 
       (set-app-menu!)
       (setup-deeplink!)

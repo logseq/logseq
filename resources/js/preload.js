@@ -110,11 +110,7 @@ contextBridge.exposeInMainWorld('apis', {
 
     const dest = path.join(repoPathRoot, to)
     const assetsRoot = path.dirname(dest)
-
-    if (!/assets$/.test(assetsRoot)) {
-      throw new Error('illegal assets dirname')
-    }
-
+    
     await fs.promises.mkdir(assetsRoot, { recursive: true })
 
     from = from && decodeURIComponent(from || getFilePathFromClipboard())

@@ -38,30 +38,41 @@
                    state)}
   [state {:keys [items limit on-chosen empty-placeholder
                  prompt-key input-default-placeholder close-modal?
-                 extract-fn]
+                 extract-fn host-opts on-input input-opts
+                 item-cp transform-fn tap-*input-val]
           :or {limit 100
                prompt-key :select/default-prompt
                empty-placeholder (fn [_t] [:div])
                close-modal? true
                extract-fn :value}}]
   (let [input (::input state)]
-    [:div.cp__select.cp__select-main
+    (when (fn? tap-*input-val)
+      (tap-*input-val input))
+    [:div.cp__select
+     (merge {:class "cp__select-main"} host-opts)
      [:div.input-wrap
       [:input.cp__select-input.w-full
-       {:type        "text"
-        :placeholder (or input-default-placeholder (t prompt-key))
-        :auto-focus  true
-        :value       @input
-        :on-change   (fn [e] (reset! input (util/evalue e)))}]]
+       (merge {:type        "text"
+               :placeholder (or input-default-placeholder (t prompt-key))
+               :auto-focus  true
+               :value       @input
+               :on-change   (fn [e]
+                              (let [v (util/evalue e)]
+                                (reset! input v)
+                                (and (fn? on-input) (on-input v))))}
+              input-opts)]]
 
      [:div.item-results-wrap
       (ui/auto-complete
-       (search/fuzzy-search items @input :limit limit :extract-fn extract-fn)
-       {:item-render render-item
-        :class       "cp__select-results"
-        :on-chosen   (fn [x]
-                       (when close-modal? (state/close-modal!))
-                       (on-chosen x))
+       (cond-> (search/fuzzy-search items @input :limit limit :extract-fn extract-fn)
+         (fn? transform-fn)
+         (transform-fn @input))
+
+       {:item-render       (or item-cp render-item)
+        :class             "cp__select-results"
+        :on-chosen         (fn [x]
+                             (when close-modal? (state/close-modal!))
+                             (on-chosen x))
         :empty-placeholder (empty-placeholder t)})]]))
 
 (defn select-config

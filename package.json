@@ -58,6 +58,7 @@
         "cljs:release-electron": "clojure -M:cljs release app electron --debug && clojure -M:cljs release publishing",
         "cljs:release-app": "clojure -M:cljs release app --config-merge \"{:compiler-options {:output-feature-set :es6}}\"",
         "cljs:release-android-app": "clojure -M:cljs release app --config-merge \"{:compiler-options {:output-feature-set :es6}}\"",
+        "cljs:release-publishing": "clojure -M:cljs release publishing",
         "cljs:test": "clojure -M:test compile test",
         "cljs:run-test": "node static/tests.js",
         "cljs:dev-release-app": "clojure -M:cljs release app --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\"",
@@ -132,7 +133,8 @@
         "send-intent": "3.0.11",
         "threads": "1.6.5",
         "url": "^0.11.0",
-        "yargs-parser": "20.2.4"
+        "yargs-parser": "20.2.4",
+        "path-complete-extname": "1.0.0"
     },
     "resolutions": {
         "pixi-graph-fork/@pixi/app": "6.2.0",

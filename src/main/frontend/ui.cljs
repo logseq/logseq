@@ -32,6 +32,7 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
+            [frontend.config :as config]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -328,6 +329,7 @@
 (defn inject-document-devices-envs!
   []
   (let [^js cl (.-classList js/document.documentElement)]
+    (when config/publishing? (.add cl "is-publish-mode"))
     (when util/mac? (.add cl "is-mac"))
     (when util/win32? (.add cl "is-win32"))
     (when (util/electron?) (.add cl "is-electron"))

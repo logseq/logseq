@@ -42,6 +42,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-sync :as file-sync]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.query :as query-handler]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
@@ -448,7 +449,9 @@
                     href
 
                     :else
-                    (get-file-absolute-path config href))]
+                    (if (assets-handler/check-alias-path? href)
+                      (assets-handler/normalize-asset-resource-url href)
+                      (get-file-absolute-path config href)))]
          (resizable-image config title href metadata full_text false))))))
 
 (defn repetition-to-string
@@ -593,7 +596,7 @@
          (let [original-name (util/get-page-original-name page-entity)
                s (if (not= (util/safe-page-name-sanity-lc original-name) page-name-in-block)
                    page-name-in-block ;; page-name-in-block might be overrided (legacy)
-                   original-name)
+                   (pdf-assets/human-page-name original-name))
                _ (when-not page-entity (js/console.warn "page-inner's page-entity is nil, given page-name: " page-name
                                                         " page-name-in-block: " page-name-in-block))]
            (if tag? (str "#" s) s))))]))
@@ -701,11 +704,11 @@
 
 (rum/defc asset-reference
   [config title path]
-  (let [repo-path (config/get-repo-dir (state/get-current-repo))
-        full-path (if (util/absolute-path? path)
+  (let [repo (state/get-current-repo)
+        real-path-url (if (util/absolute-path? path)
                     path
-                    (.. util/node-path (join repo-path (config/get-local-asset-absolute-path path))))
-        ext-name (util/get-file-ext full-path)
+                    (assets-handler/resolve-asset-real-path-url repo path))
+        ext-name (util/get-file-ext path)
         title-or-path (cond
                         (string? title)
                         title
@@ -713,26 +716,19 @@
                         (->elem :span (map-inline config title))
                         :else
                         path)]
+
     [:div.asset-ref-wrap
      {:data-ext ext-name}
 
-     (if (= "pdf" ext-name)
-       [:a.asset-ref.is-pdf
-        {:on-mouse-down (fn [e]
-                          (when-let [current (pdf-assets/inflate-asset full-path)]
-                            (util/stop e)
-                            (state/set-state! :pdf/current current)))}
-        title-or-path]
-       [:a.asset-ref {:target "_blank" :href full-path}
-        title-or-path])
-
-     (case ext-name
+     (cond
        ;; https://en.wikipedia.org/wiki/HTML5_video
-       ("mp4" "ogg" "webm" "mov")
-       [:video {:src full-path
+       (contains? config/video-formats (keyword ext-name))
+       [:video {:src real-path-url
                 :controls true}]
 
-       nil)]))
+       :else
+       [:a.asset-ref {:target "_blank" :href real-path-url}
+        title-or-path])]))
 
 (defonce excalidraw-loaded? (atom false))
 (rum/defc excalidraw < rum/reactive
@@ -835,10 +831,9 @@
 
 (defn- get-label-text
   [label]
-  (and (= 1 (count label))
-       (let [label (first label)]
-         (string? (last label))
-         (js/decodeURIComponent (last label)))))
+  (when (and (= 1 (count label))
+             (string? (last (first label))))
+    (js/decodeURIComponent (last (first label)))))
 
 (defn- get-page
   [label]
@@ -987,7 +982,8 @@
         (nil? metadata-show)
         (or
          (gp-config/local-asset? s)
-         (text-util/media-link? media-formats s)))
+         (text-util/media-link? media-formats s)
+         (= (first s) \@)))
        (true? (boolean metadata-show))))
 
      ;; markdown
@@ -1025,7 +1021,9 @@
                  href
 
                  :else
-                 (get-file-absolute-path config href))]
+                 (if (assets-handler/check-alias-path? href)
+                   (assets-handler/resolve-asset-real-path-url (state/get-current-repo) href)
+                   (get-file-absolute-path config href)))]
       (audio-cp href))))
 
 (defn- media-link
@@ -1040,16 +1038,16 @@
       (cond
         (util/electron?)
         [:a.asset-ref.is-pdf
-         {:href "javascript:void(0);"
-          :on-mouse-down (fn [_event]
+         {:on-mouse-down (fn [_event]
                            (when-let [current (pdf-assets/inflate-asset s)]
                              (state/set-state! :pdf/current current)))}
-         label-text]
+         (or label-text
+             (->elem :span (map-inline config label)))]
 
         (mobile-util/native-platform?)
         (asset-link config label-text s metadata full_text))
 
-      (contains? (config/doc-formats) ext)
+      (contains? config/doc-formats ext)
       (asset-link config label-text s metadata full_text)
 
       (not (contains? #{:mp4 :webm :mov} ext))
@@ -1916,7 +1914,7 @@
                  (not= "nil" marker))
         {:class (str (string/lower-case marker))})
       (when bg-color
-        {:style {:background-color (if (some #{bg-color} ui/block-background-colors) 
+        {:style {:background-color (if (some #{bg-color} ui/block-background-colors)
                                      (str "var(--ls-highlight-color-" bg-color ")")
                                      bg-color)}
          :class "px-1 with-bg-color"}))
@@ -1930,20 +1928,30 @@
          (conj
           (map-inline config title)
           (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})])
-          (when (and (util/electron?) (not (#{:default :whiteboard-shape} block-type)))
-            [:a.prefix-link
-             {:on-click #(case block-type
-                           ;; pdf annotation
-                           :annotation (pdf-assets/open-block-ref! t)
-                           (.preventDefault %))}
+          (when (and
+                 (or config/publishing? (util/electron?))
+                 (not= block-type :default))
+            (let [area? (= :area (keyword (:hl-type properties)))]
+              [:div.prefix-link
+               {:on-mouse-down (fn [^js e]
+                                 (let [^js target (.-target e)]
+                                   (case block-type
+                                     ;; pdf annotation
+                                     :annotation
+                                     (if (and area? (.contains (.-classList target) "blank"))
+                                       :actions
+                                       (do
+                                         (pdf-assets/open-block-ref! t)
+                                         (util/stop e)))
 
-             [:span.hl-page
-              [:strong.forbid-edit (str "P" (or (:hl-page properties) "?"))]
-              [:label.blank " "]]
+                                     :dune)))}
 
-             (when-let [st (and (= :area (keyword (:hl-type properties)))
-                                (:hl-stamp properties))]
-               (pdf-assets/area-display t st))]))
+               [:span.hl-page
+                [:strong.forbid-edit (str "P" (or (:hl-page properties) "?"))]
+                [:label.blank " "]]
+
+               (when (and area? (:hl-stamp properties))
+                 (pdf-assets/area-display t))])))
 
          [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])
        [tags])))))
@@ -2228,6 +2236,10 @@
                {:blockid       (str uuid)
                 :data-type (name block-type)
                 :style {:width "100%" :pointer-events (when stop-events? "none")}}
+
+                (not (string/blank? (:hl-color properties)))
+                (assoc :data-hl-color (:hl-color properties))
+
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
                                         (block-content-on-mouse-down e block block-id content edit-input-id))))]
@@ -2373,6 +2385,7 @@
                                            (editor-handler/unhighlight-blocks!)
                                            (state/set-editing! edit-input-id (:block/content block) block ""))}})
             (block-content config block edit-input-id block-id slide?))]
+
           (when-not hide-block-refs-count?
             [:div.flex.flex-row.items-center
              (when (and (:embed? config)

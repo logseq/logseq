@@ -1,3 +1,10 @@
+/**
+ * @returns {*}
+ */
+export const getPdfjsLib = () => {
+  return window.pdfjsLib
+}
+
 export const viewportToScaled = (
   rect,
   { width, height }
@@ -185,4 +192,182 @@ export const optimizeClientRects = (clientRects) => {
   }
 
   return firstPass.filter(rect => !toRemove.has(rect))
+}
+
+/**
+ * Use binary search to find the index of the first item in a given array which
+ * passes a given condition. The items are expected to be sorted in the sense
+ * that if the condition is true for one item in the array, then it is also true
+ * for all following items.
+ *
+ * @returns {number} Index of the first array element to pass the test,
+ * or |items.length| if no such element exists.
+ */
+export function binarySearchFirstItem (items, condition, start = 0) {
+  let minIndex = start
+  let maxIndex = items.length - 1
+
+  if (maxIndex < 0 || !condition(items[maxIndex])) {
+    return items.length
+  }
+  if (condition(items[minIndex])) {
+    return minIndex
+  }
+
+  while (minIndex < maxIndex) {
+    const currentIndex = (minIndex + maxIndex) >> 1
+    const currentItem = items[currentIndex]
+    if (condition(currentItem)) {
+      maxIndex = currentIndex
+    } else {
+      minIndex = currentIndex + 1
+    }
+  }
+  return minIndex /* === maxIndex */
+}
+
+/**
+ * Scrolls specified element into view of its parent.
+ * @param {Object} element - The element to be visible.
+ * @param {Object} spot - An object with optional top and left properties,
+ *   specifying the offset from the top left edge.
+ * @param {boolean} [scrollMatches] - When scrolling search results into view,
+ *   ignore elements that either: Contains marked content identifiers,
+ *   or have the CSS-rule `overflow: hidden;` set. The default value is `false`.
+ */
+function scrollIntoView (element, spot, scrollMatches = false) {
+  // Assuming offsetParent is available (it's not available when viewer is in
+  // hidden iframe or object). We have to scroll: if the offsetParent is not set
+  // producing the error. See also animationStarted.
+  let parent = element.offsetParent
+  if (!parent) {
+    console.error('offsetParent is not set -- cannot scroll')
+    return
+  }
+  let offsetY = element.offsetTop + element.clientTop
+  let offsetX = element.offsetLeft + element.clientLeft
+  while (
+    (parent.clientHeight === parent.scrollHeight &&
+      parent.clientWidth === parent.scrollWidth) ||
+    (scrollMatches &&
+      (parent.classList.contains('markedContent') ||
+        getComputedStyle(parent).overflow === 'hidden'))
+    ) {
+    offsetY += parent.offsetTop
+    offsetX += parent.offsetLeft
+
+    parent = parent.offsetParent
+    if (!parent) {
+      return // no need to scroll
+    }
+  }
+  if (spot) {
+    if (spot.top !== undefined) {
+      offsetY += spot.top
+    }
+    if (spot.left !== undefined) {
+      offsetX += spot.left
+      parent.scrollLeft = offsetX
+    }
+  }
+  parent.scrollTop = offsetY
+}
+
+export const CharacterType = {
+  SPACE: 0,
+  ALPHA_LETTER: 1,
+  PUNCT: 2,
+  HAN_LETTER: 3,
+  KATAKANA_LETTER: 4,
+  HIRAGANA_LETTER: 5,
+  HALFWIDTH_KATAKANA_LETTER: 6,
+  THAI_LETTER: 7,
+}
+
+function isAlphabeticalScript (charCode) {
+  return charCode < 0x2e80
+}
+
+function isAscii (charCode) {
+  return (charCode & 0xff80) === 0
+}
+
+function isAsciiAlpha (charCode) {
+  return (
+    (charCode >= /* a = */ 0x61 && charCode <= /* z = */ 0x7a) ||
+    (charCode >= /* A = */ 0x41 && charCode <= /* Z = */ 0x5a)
+  )
+}
+
+function isAsciiDigit (charCode) {
+  return charCode >= /* 0 = */ 0x30 && charCode <= /* 9 = */ 0x39
+}
+
+function isAsciiSpace (charCode) {
+  return (
+    charCode === /* SPACE = */ 0x20 ||
+    charCode === /* TAB = */ 0x09 ||
+    charCode === /* CR = */ 0x0d ||
+    charCode === /* LF = */ 0x0a
+  )
+}
+
+function isHan (charCode) {
+  return (
+    (charCode >= 0x3400 && charCode <= 0x9fff) ||
+    (charCode >= 0xf900 && charCode <= 0xfaff)
+  )
+}
+
+function isKatakana (charCode) {
+  return charCode >= 0x30a0 && charCode <= 0x30ff
+}
+
+function isHiragana (charCode) {
+  return charCode >= 0x3040 && charCode <= 0x309f
+}
+
+function isHalfwidthKatakana (charCode) {
+  return charCode >= 0xff60 && charCode <= 0xff9f
+}
+
+function isThai (charCode) {
+  return (charCode & 0xff80) === 0x0e00
+}
+
+/**
+ * This function is based on the word-break detection implemented in:
+ * https://hg.mozilla.org/mozilla-central/file/tip/intl/lwbrk/WordBreaker.cpp
+ */
+export function getCharacterType (charCode) {
+  if (isAlphabeticalScript(charCode)) {
+    if (isAscii(charCode)) {
+      if (isAsciiSpace(charCode)) {
+        return CharacterType.SPACE
+      } else if (
+        isAsciiAlpha(charCode) ||
+        isAsciiDigit(charCode) ||
+        charCode === /* UNDERSCORE = */ 0x5f
+      ) {
+        return CharacterType.ALPHA_LETTER
+      }
+      return CharacterType.PUNCT
+    } else if (isThai(charCode)) {
+      return CharacterType.THAI_LETTER
+    } else if (charCode === /* NBSP = */ 0xa0) {
+      return CharacterType.SPACE
+    }
+    return CharacterType.ALPHA_LETTER
+  }
+
+  if (isHan(charCode)) {
+    return CharacterType.HAN_LETTER
+  } else if (isKatakana(charCode)) {
+    return CharacterType.KATAKANA_LETTER
+  } else if (isHiragana(charCode)) {
+    return CharacterType.HIRAGANA_LETTER
+  } else if (isHalfwidthKatakana(charCode)) {
+    return CharacterType.HALFWIDTH_KATAKANA_LETTER
+  }
+  return CharacterType.ALPHA_LETTER
 }

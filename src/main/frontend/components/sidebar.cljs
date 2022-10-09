@@ -623,6 +623,7 @@
         settings-open? (state/sub :ui/settings-open?)
         left-sidebar-open?  (state/sub :ui/left-sidebar-open?)
         wide-mode? (state/sub :ui/wide-mode?)
+        ls-block-hl-colored? (state/sub :pdf/block-highlight-colored?)
         onboarding-state (state/sub :file-sync/onboarding-state)
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
@@ -658,7 +659,9 @@
      [:main.theme-inner
       {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?
                                  :ls-right-sidebar-open sidebar-open?
-                                 :ls-wide-mode wide-mode?}])}
+                                 :ls-wide-mode wide-mode?
+                                 :ls-hl-colored ls-block-hl-colored?}])}
+
       [:button#skip-to-main
        {:on-key-up (fn [e]
                         (when (= (.-key e) "Enter")
