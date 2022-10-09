@@ -982,7 +982,8 @@
         (nil? metadata-show)
         (or
          (gp-config/local-asset? s)
-         (text-util/media-link? media-formats s)))
+         (text-util/media-link? media-formats s)
+         (= (first s) \@)))
        (true? (boolean metadata-show))))
 
      ;; markdown
