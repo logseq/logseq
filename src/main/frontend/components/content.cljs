@@ -93,15 +93,6 @@
     "Cycle todos"
     nil)])
 
-;; FIXME: Make it configurable
-(def block-background-colors
-  ["#533e7d"
-   "#497d46"
-   "#787f97"
-   "#978626"
-   "#49767b"
-   "#264c9b"])
-
 (defonce *template-including-parent? (atom nil))
 
 (rum/defc template-checkbox
@@ -164,13 +155,14 @@
     (when-let [block (db/entity [:block/uuid block-id])]
       (let [format (:block/format block)]
         [:.menu-links-wrapper
-         [:div.flex.flex-row.justify-between.pb-2.pt-1.px-2.items-center
+         [:div.flex.flex-row.justify-between.py-1.px-2.items-center
           [:div.flex.flex-row.justify-between.flex-1
-           (for [color block-background-colors]
+           (for [color ui/block-background-colors]
              [:a.m-2.shadow-sm
-              {:on-click (fn [_e]
+              {:title (t (keyword "color" color))
+               :on-click (fn [_e]
                            (editor-handler/set-block-property! block-id "background-color" color))}
-              [:div.heading-bg {:style {:background-color color}}]])
+              [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
            [:a.m-2.shadow-sm
             {:title    (t :remove-background)
              :on-click (fn [_e]
@@ -178,16 +170,18 @@
             [:div.heading-bg.remove "-"]]]]
 
          [:div.flex.flex-row.justify-between.pb-2.pt-1.px-2.items-center
-          [:div.flex.flex-row.justify-between.flex-1
+          [:div.flex.flex-row.justify-between.flex-1.px-1
            (for [i (range 1 7)]
              (ui/button
               (str "H" i)
+              :class "to-heading-button"
               :on-click (fn [_e]
                           (editor-handler/set-heading! block-id format i))
               :intent "link"
               :small? true))
            (ui/button
             "H-"
+            :class "to-heading-button"
             :title (t :remove-heading)
             :on-click (fn [_e]
                         (editor-handler/remove-heading! block-id format))

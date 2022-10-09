@@ -28,7 +28,8 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.components.conversion :as conversion-component]))
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
@@ -416,7 +417,8 @@
              (config-handler/set-config! :feature/enable-encryption? value)
              (when value
                (state/close-modal!)
-               (js/setTimeout (fn [] (state/pub-event! [:graph/ask-for-re-index (atom false)]))
+               ;; FIXME: Don't send the `(atom false)` ! Should check multi-window! or internal status error happens
+               (js/setTimeout (fn [] (state/pub-event! [:graph/ask-for-re-index (atom false) nil]))
                               100)))
           [:p.text-sm.opacity-50 "⚠️ This feature is experimental! "
            [:span "You can use "]
@@ -537,6 +539,14 @@
    {:left-label (t :settings-page/network-proxy)
     :action (user-proxy-settings agent-opts)}))
 
+(defn filename-format-row []
+  (row-with-button-action
+   {:left-label (t :settings-page/filename-format)
+    :button-label (t :settings-page/edit-setting)
+    :on-click #(state/set-sub-modal!
+                (fn [_] (conversion-component/files-breaking-changed))
+                {:id :filename-format-panel :center? true})}))
+
 (rum/defcs settings-general < rum/reactive
   [_state current-repo]
   (let [preferred-language (state/sub [:preferred-language])
@@ -604,7 +614,7 @@
      [:p (t :settings-page/git-confirm)])])
 
 (rum/defc settings-advanced < rum/reactive
-  []
+  [current-repo]
   (let [instrument-disabled? (state/sub :instrument/disabled?)
         developer-mode? (state/sub [:ui/developer-mode?])
         https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])]
@@ -613,6 +623,7 @@
      (usage-diagnostics-row t instrument-disabled?)
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
+     (when (and (util/electron?) (not (config/demo-graph? current-repo))) (filename-format-row))
      (clear-cache-row t)
 
      (ui/admonition
@@ -630,8 +641,21 @@
 
 (defn sync-switcher-row [enabled?]
   (row-with-button-action
-   {:left-label (str (t :settings-page/sync) " 🔐")
+   {:left-label (t :settings-page/sync)
     :action (sync-enabled-switcher enabled?)}))
+
+(rum/defc whiteboards-enabled-switcher
+  [enabled?]
+  (ui/toggle enabled?
+             (fn []
+               (let [value (not enabled?)]
+                 (config-handler/set-config! :feature/enable-whiteboards? value)))
+             true))
+
+(defn whiteboards-switcher-row [enabled?]
+  (row-with-button-action
+   {:left-label (t :settings-page/enable-whiteboards)
+    :action (whiteboards-enabled-switcher enabled?)}))
 
 (rum/defc settings-features < rum/reactive
   []
@@ -639,7 +663,9 @@
         enable-journals? (state/enable-journals? current-repo)
         enable-encryption? (state/enable-encryption? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
-        enable-sync? (state/enable-sync?)]
+        enable-sync? (state/enable-sync?)
+        enable-whiteboards? (state/enable-whiteboards? current-repo)
+        logged-in? (user-handler/logged-in?)]
     [:div.panel-wrap.is-features.mb-8
      (journal-row enable-journals?)
      (when (not enable-journals?)
@@ -661,10 +687,28 @@
      (encryption-row enable-encryption?)
 
      (when-not web-platform?
-       [:div
+       [:<>
         [:hr]
-        [:h2.mb-4 "Alpha test (sponsors only)"]
-        (sync-switcher-row enable-sync?)])]))
+        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]
+         [:div.mt-1.sm:mt-0.sm:col-span-2
+          (if logged-in?
+            [:div 
+              (user-handler/email)
+              [:p (ui/button (t :logout) {:class "p-1"
+                                          :icon "logout"
+                                          :on-click user-handler/logout})]]
+            [:div
+             (ui/button (t :login) {:class "p-1"
+                                    :icon "login"
+                                    :on-click (fn []
+                                                (state/close-settings!)
+                                                (js/window.open config/LOGIN-URL))})
+             [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])]]
+        [:div.flex.flex-col.gap-4
+         {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
+         (sync-switcher-row enable-sync?)
+         (whiteboards-switcher-row enable-whiteboards?)]])]))
 
 (rum/defcs settings
   < (rum/local [:general :general] ::active)
@@ -736,7 +780,7 @@
          (settings-git)
 
          :advanced
-         (settings-advanced)
+         (settings-advanced current-repo)
 
          :features
          (settings-features)

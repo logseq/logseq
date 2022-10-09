@@ -46,6 +46,11 @@
    tc/from-long
    (t/before? (-> 1 t/hours t/from-now))))
 
+(defn- almost-expired-or-expired?
+  [parsed-jwt]
+  (or (almost-expired? parsed-jwt)
+      (expired? parsed-jwt)))
+
 (defn email []
   (some->
    (state/get-auth-id-token)
@@ -167,7 +172,7 @@
     (when (state/get-auth-refresh-token)
       (let [id-token (state/get-auth-id-token)]
         (when (or (nil? id-token)
-                  (-> id-token (parse-jwt) (almost-expired?)))
+                  (-> id-token (parse-jwt) (almost-expired-or-expired?)))
           (debug/pprint (str "refresh tokens... " (tc/to-string(t/now))))
           (<! (<refresh-id-token&access-token)))))
     (when-not stop-refresh

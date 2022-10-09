@@ -116,7 +116,7 @@
                           [:db/retract page-id :block/tags]]
                          opts)))
                    (file-common-handler/reset-file! repo path content (merge opts
-                                                         (when (some? verbose) {:verbose verbose}))))
+                                                                             (when (some? verbose) {:verbose verbose}))))
                  (db/set-file-content! repo path content opts))]
     (util/p-handle (write-file!)
                    (fn [_]

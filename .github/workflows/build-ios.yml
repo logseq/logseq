@@ -1,0 +1,85 @@
+# This workflow tries to build iOS app if any changes detected on the iOS source tree,
+# ensuring at least it builds.
+
+name: CI-iOS
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'ios/App'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'ios/App'
+
+env:
+  CLOJURE_VERSION: '1.10.1.763'
+  NODE_VERSION: '16'
+  JAVA_VERSION: '11'
+
+jobs:
+  build-app:
+    runs-on: macos-latest
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v2
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+
+      - name: Cache yarn cache directory
+        uses: actions/cache@v2
+        id: yarn-cache
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Cache clojure deps
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: ${{ runner.os }}-clojure-lib-${{ hashFiles('**/deps.edn') }}
+
+      - name: Setup clojure
+        uses: DeLaGuardo/setup-clojure@3.5
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+
+      - name: Set Build Environment Variables
+        run: |
+          echo "ENABLE_FILE_SYNC_PRODUCTION=true" >> $GITHUB_ENV
+
+      - name: Compile CLJS
+        run: yarn install && yarn release-app
+
+      - name: Sync static build files
+        run: rsync -avz --exclude node_modules --exclude '*.js.map' --exclude android ./static/ ./public/static/
+
+      - name: Prepare iOS build
+        run: npx cap sync ios
+
+      - name: List iOS build targets
+        run: xcodebuild -list -workspace App.xcworkspace
+        working-directory: ./ios/App
+
+      - name: Build iOS App
+        run: |
+          xcodebuild -workspace App.xcworkspace -scheme Logseq -destination generic/platform=iOS build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+        working-directory: ./ios/App

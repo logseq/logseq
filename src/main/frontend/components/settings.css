@@ -116,7 +116,7 @@
 
         &.app-updater {
           padding-top: 15px;
-          align-items: start;
+          align-items: flex-start;
 
 
           > .wrap {
@@ -284,6 +284,13 @@
         font-weight: 500;
         width: 60px;
       }
+    }
+  }
+
+  &-files-breaking-changed {
+    &[disabled] {
+      opacity: 0.5;
+      pointer-events: none;
     }
   }
 }

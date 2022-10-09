@@ -1,0 +1,46 @@
+{
+  "version": "0.0.0-dev",
+  "name": "@tldraw/logseq",
+  "license": "MIT",
+  "module": "./src/index.ts",
+  "scripts": {
+    "build": "zx build.mjs",
+    "build:packages": "yarn build",
+    "dev": "tsup --watch",
+    "dev:vite": "tsup --watch --sourcemap inline"
+  },
+  "devDependencies": {
+    "@radix-ui/react-context-menu": "^1.0.0",
+    "@radix-ui/react-dropdown-menu": "^1.0.0",
+    "@radix-ui/react-select": "^1.0.0",
+    "@radix-ui/react-separator": "^1.0.0",
+    "@radix-ui/react-switch": "^1.0.0",
+    "@radix-ui/react-toggle": "^1.0.0",
+    "@radix-ui/react-toggle-group": "^1.0.0",
+    "@tldraw/core": "2.0.0-alpha.1",
+    "@tldraw/react": "2.0.0-alpha.1",
+    "@tldraw/vec": "2.0.0-alpha.1",
+    "@types/node": "^17.0.42",
+    "@types/react": "^17.0.0",
+    "@types/react-dom": "^17.0.0",
+    "autoprefixer": "^10.4.7",
+    "concurrently": "^7.2.1",
+    "esbuild": "^0.15.10",
+    "mobx": "^6.6.2",
+    "mobx-react-lite": "^3.4.0",
+    "perfect-freehand": "^1.2.0",
+    "polished": "^4.0.0",
+    "postcss": "^8.4.17",
+    "react": "^17.0.0",
+    "react-dom": "^17.0.0",
+    "rimraf": "3.0.2",
+    "shadow-cljs": "^2.19.5",
+    "tsup": "^6.2.3",
+    "typescript": "^4.8.2",
+    "zx": "^7.1.0"
+  },
+  "peerDependencies": {
+    "react": "^16.8.0 || ^17.0.0 || ^18.0.0",
+    "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0"
+  }
+}

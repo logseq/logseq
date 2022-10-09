@@ -1,6 +1,7 @@
 @charset "utf-8";
 @import "tailwindcss/base";
 @import "tailwindcss/components";
+@import "tailwindcss/utilities";
 @import "resources/css/inter.css";
 @import "resources/css/reveal.min.css";
 @import "resources/css/reveal_black.min.css";
@@ -8,6 +9,7 @@
 @import "resources/css/shepherd.css";
 @import "resources/css/fonts.css";
 @import "resources/css/excalidraw.min.css";
+@import "tldraw/apps/tldraw-logseq/src/styles.css";
 @import "resources/css/katex.min.css";
 @import "resources/css/codemirror.min.css";
 @import "resources/css/codemirror.solarized.css";
@@ -20,4 +22,3 @@
 @import "resources/css/srs_cards.css";
 @import "resources/css/tabler-extension.css";
 @import-glob "src/main/frontend/**/[!_]*.css";
-@import "tailwindcss/utilities";

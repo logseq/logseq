@@ -55,8 +55,13 @@
 (defmethod handle :readdir [_window [_ dir]]
   (readdir dir))
 
+(defmethod handle :listdir [_window [_ dir flat?]]
+  (when (and dir (fs-extra/pathExistsSync dir))
+    (js-utils/deepReadDir dir (if (boolean? flat?) flat? true))))
+
 (defmethod handle :unlink [_window [_ repo-dir path]]
-  (if (plugin/dotdir-file? path)
+  (if (or (plugin/dotdir-file? path)
+          (plugin/assetsdir-file? path))
     (fs/unlinkSync path)
     (try
       (logger/info ::unlink {:path path})
@@ -137,7 +142,7 @@
   (fs/statSync path))
 
 (defonce allowed-formats
-  #{:org :markdown :md :edn :json :js :css :excalidraw})
+  #{:org :markdown :md :edn :json :js :css :excalidraw :tldr})
 
 (defn get-ext
   [p]
@@ -287,7 +292,6 @@
   (search/truncate-blocks-table! repo)
   ;; unneeded serialization
   (search/upsert-blocks! repo (bean/->js data))
-  (search/write-search-version! repo)
   [])
 
 (defmethod handle :transact-blocks [_window [_ repo data]]
@@ -374,8 +378,10 @@
 
 (defmethod handle :getAssetsFiles [^js win [_ {:keys [exts]}]]
   (when-let [graph-path (state/get-window-graph-path win)]
-    (p/let [^js files (js-utils/getAllFiles (.join path graph-path "assets") (clj->js exts))]
-      files)))
+    (when-let [assets-path (.join path graph-path "assets")]
+      (when (fs-extra/pathExistsSync assets-path)
+        (p/let [^js files (js-utils/getAllFiles assets-path (clj->js exts))]
+          files)))))
 
 (defn close-watcher-when-orphaned!
   "When it's the last window for the directory, close the watcher."
@@ -518,10 +524,6 @@
   (when-let [f (:window/once-graph-ready @state/state)]
     (f window graph-name)
     (state/set-state! :window/once-graph-ready nil)))
-
-(defmethod handle :searchVersionChanged?
-  [^js _win [_ graph]]
-  (search/version-changed? graph))
 
 (defmethod handle :reloadWindowPage [^js win]
   (logger/warn ::reload-window-page)

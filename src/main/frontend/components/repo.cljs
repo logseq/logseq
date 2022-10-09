@@ -186,7 +186,7 @@
                       :options (cond->
                                 {:on-click
                                  (fn []
-                                   (state/pub-event! [:graph/ask-for-re-index *multiple-windows?]))})}
+                                   (state/pub-event! [:graph/ask-for-re-index *multiple-windows? nil]))})}
         new-window-link (when (and (util/electron?)
                                    ;; New Window button in menu bar of macOS is available.
                                    (not util/mac?))
@@ -228,7 +228,7 @@
                                              (check-multiple-windows? state)
                                              (toggle-fn))
                                  :title    repo-path}       ;; show full path on hover
-                                [:span.flex.pr-2.relative
+                                [:span.flex.relative
                                  {:style {:top 1}}
                                  (ui/icon "database" {:size 16 :id "database-icon"})]
                                 [:div.graphs

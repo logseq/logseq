@@ -155,7 +155,7 @@
   ([type optional]
    (let [format (get (state/get-edit-block) :block/format)
          markdown-src? (and (= format :markdown)
-                       (= (string/lower-case type) "src"))
+                            (= (string/lower-case type) "src"))
          [left right] (cond
                         markdown-src?
                         ["```" "\n```"]
@@ -282,7 +282,7 @@
      ["Embed HTML " (->inline "html")]
 
      ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern (state/get-editor-command-trigger)
-                                                    :backward-pos 2}]]]
+                                                      :backward-pos 2}]]]
 
      ["Embed Youtube timestamp" [[:youtube/insert-timestamp]]]
 
@@ -580,10 +580,10 @@
 (defmethod handle-step :editor/insert-properties [[_ _] _format]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
-        (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
-              edit-content (gobj/get current-input "value")
-              new-value (property/insert-property format edit-content "" "")]
-          (state/set-edit-content! input-id new-value)))))
+      (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
+            edit-content (gobj/get current-input "value")
+            new-value (property/insert-property format edit-content "" "")]
+        (state/set-edit-content! input-id new-value)))))
 
 (defmethod handle-step :editor/move-cursor-to-properties [[_]]
   (when-let [input-id (state/get-edit-input-id)]
@@ -644,7 +644,7 @@
         macro (youtube/gen-youtube-ts-macro)]
     (when-let [input (gdom/getElement input-id)]
       (when macro
-       (util/insert-at-current-position! input (str macro " "))))))
+        (util/insert-at-current-position! input (str macro " "))))))
 
 (defmethod handle-step :youtube/insert-timestamp [[_]]
   (let [input-id (state/get-edit-input-id)

@@ -4,9 +4,9 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
-            [frontend.util :as util]
-            [frontend.util.property :as property]
             [frontend.state :as state]
+            [frontend.util.property :as property]
+            [frontend.util.fs :as fs-util]
             [frontend.handler.file :as file-handler]))
 
 (defn- indented-block-content
@@ -110,14 +110,17 @@
       (let [format (name (get page :block/format
                               (state/get-preferred-format)))
             title (string/capitalize (:block/name page))
+            whiteboard-page? (= "whiteboard" (:block/type page))
+            format (if whiteboard-page? "edn" format)
             journal-page? (date/valid-journal-title? title)
             filename (if journal-page?
                        (date/date->file-name journal-page?)
                        (-> (or (:block/original-name page) (:block/name page))
-                           (util/file-name-sanity)))
-            sub-dir (if journal-page?
-                      (config/get-journals-directory)
-                      (config/get-pages-directory))
+                           (fs-util/file-name-sanity)))
+            sub-dir (cond
+                      journal-page?    (config/get-journals-directory)
+                      whiteboard-page? (config/get-whiteboards-directory)
+                      :else            (config/get-pages-directory))
             ext (if (= format "markdown") "md" format)
             file-path (config/get-page-file-path repo sub-dir filename ext)
             file {:file/path file-path}
@@ -127,20 +130,25 @@
         (db/transact! tx)
         (when ok-handler (ok-handler))))))
 
+(defn- remove-transit-ids [block] (dissoc block :db/id :block/file))
+
 (defn save-tree-aux!
   [page-block tree]
   (let [page-block (db/pull (:db/id page-block))
-        new-content (tree->file-content tree {:init-level init-level})
         file-db-id (-> page-block :block/file :db/id)
         file-path (-> (db-utils/entity file-db-id) :file/path)]
     (if (and (string? file-path) (not-empty file-path))
-      (let [files [[file-path new-content]]
+      (let [new-content (if (= "whiteboard" (:block/type page-block))
+                          (pr-str {:blocks tree
+                                   :pages (list (remove-transit-ids page-block))})
+                          (tree->file-content tree {:init-level init-level}))
+            files [[file-path new-content]]
             repo (state/get-current-repo)]
         (file-handler/alter-files-handler! repo files {} {}))
       ;; In e2e tests, "card" page in db has no :file/path
       (js/console.error "File path from page-block is not valid" page-block tree))))
 
-(defn save-tree
+(defn save-tree!
   [page-block tree]
   {:pre [(map? page-block)]}
   (let [ok-handler #(save-tree-aux! page-block tree)

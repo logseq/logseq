@@ -31,6 +31,8 @@
        (property/remove-built-in-properties format)))
 
 (defn search
+  ([q]
+   (search (state/get-current-repo) q))
   ([repo q]
    (search repo q {:limit 20}))
   ([repo q {:keys [page-db-id limit more?]
@@ -50,7 +52,8 @@
                          {:pages (search/page-search q)
                           :files (search/file-search q)}))
                search-key (if more? :search/more-result :search/result)]
-           (swap! state/state assoc search-key result)))))))
+           (swap! state/state assoc search-key result)
+           result))))))
 
 (defn open-find-in-page!
   []
@@ -122,15 +125,3 @@
        (notification/show!
         "Search indices rebuilt successfully!"
         :success)))))
-
-(defn rebuild-indices-when-stale!
-  ([]
-   (rebuild-indices-when-stale! (state/get-current-repo)))
-  ([repo]
-   (p/let [cache-stale? (search/cache-stale? repo)]
-     (when cache-stale?
-       (js/console.log "cache stale: " repo)
-       (p/let [_ (search/rebuild-indices! repo)]
-         (notification/show!
-          "Stale search cache detected. Search indices rebuilt successfully!"
-          :success))))))

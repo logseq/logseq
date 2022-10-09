@@ -30,3 +30,5 @@ logseq.graph-parser.util.page-ref/page-ref-re
 logseq.graph-parser.property/->block-content
 ;; API
 logseq.graph-parser.property/property-value-from-content
+;; API
+logseq.graph-parser.whiteboard/page-block->tldr-page

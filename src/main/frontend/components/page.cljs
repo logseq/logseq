@@ -16,6 +16,7 @@
             [frontend.db.model :as model]
             [frontend.extensions.graph :as graph]
             [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.format.block :as block]
             [frontend.handler.common :as common-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
@@ -25,18 +26,17 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.mixins :as mixins]
-            [frontend.state :as state]
+            [frontend.mobile.util :as mobile-util]
             [frontend.search :as search]
+            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
-            [reitit.frontend.easy :as rfe]
-            [medley.core :as medley]
-            [rum.core :as rum]
             [logseq.graph-parser.util :as gp-util]
-            [frontend.format.block :as block]
-            [frontend.mobile.util :as mobile-util]))
+            [medley.core :as medley]
+            [reitit.frontend.easy :as rfe]
+            [rum.core :as rum]))
 
 (defn- get-page-name
   [state]
@@ -59,7 +59,7 @@
   (let [[_ blocks _ sidebar? preview?] (:rum/args state)]
     (when (and
            (or preview?
-               (not (contains? #{:home :all-journals} (state/get-current-route))))
+               (not (contains? #{:home :all-journals :whiteboard} (state/get-current-route))))
            (not sidebar?))
       (let [block (first blocks)]
         (when (and (= (count blocks) 1)
@@ -70,7 +70,13 @@
 
 (rum/defc page-blocks-inner <
   {:did-mount  open-first-block!
-   :did-update open-first-block!}
+   :did-update open-first-block!
+   :should-update (fn [prev-state state]
+                    (let [[old-page-name _ old-hiccup _ old-block-uuid] (:rum/args prev-state)
+                          [page-name _ hiccup _ block-uuid] (:rum/args state)]
+                      (or (not= page-name old-page-name)
+                          (not= hiccup old-hiccup)
+                          (not= block-uuid old-block-uuid))))}
   [page-name _blocks hiccup sidebar? _block-uuid]
   [:div.page-blocks-inner {:style {:margin-left (if sidebar? 0 -20)}}
    (rum/with-key
@@ -184,97 +190,141 @@
               original-name]])]
          {:default-collapsed? false})]])))
 
-(rum/defcs page-title <
+(rum/defc page-title-editor < rum/reactive
+  [{:keys [*input-value *title-value *edit? untitled? page-name old-name title whiteboard-page?]}]
+  (let [input-ref (rum/create-ref)
+        collide? #(and (not= (util/page-name-sanity-lc page-name)
+                             (util/page-name-sanity-lc @*title-value))
+                       (db/page-exists? page-name)
+                       (db/page-exists? @*title-value))
+        confirm-fn (fn []
+                     (let [new-page-name (string/trim @*title-value)]
+                       (ui/make-confirm-modal
+                        {:title         (if (collide?)
+                                          (str "Page “" @*title-value "” already exists, merge to it?")
+                                          (str "Do you really want to change the page name to “" new-page-name "”?"))
+                         :on-confirm    (fn [_e {:keys [close-fn]}]
+                                          (close-fn)
+                                          (page-handler/rename! (or title page-name) @*title-value)
+                                          (reset! *edit? false))
+                         :on-cancel     (fn []
+                                          (reset! *title-value old-name)
+                                          (gobj/set (rum/deref input-ref) "value" old-name)
+                                          (reset! *edit? true)
+                                          (.focus (rum/deref input-ref)))})))
+        rollback-fn #(do
+                       (reset! *title-value old-name)
+                       (gobj/set (rum/deref input-ref) "value" old-name)
+                       (reset! *edit? false)
+                       (when-not untitled? (notification/show! "Illegal page name, can not rename!" :warning)))
+        blur-fn (fn [e]
+                  (when (gp-util/wrapped-by-quotes? @*title-value)
+                    (swap! *title-value gp-util/unquote-string)
+                    (gobj/set (rum/deref input-ref) "value" @*title-value))
+                  (cond
+                    (= old-name @*title-value)
+                    (reset! *edit? false)
+
+                    (string/blank? @*title-value)
+                    (rollback-fn)
+
+                    (and (collide?) whiteboard-page?)
+                    (notification/show! (str "Page “" @*title-value "” already exists!") :error)
+
+                    (and (date/valid-journal-title? @*title-value) whiteboard-page?)
+                    (notification/show! (str "Whiteboard page cannot be renamed with journal titles!") :error)
+
+                    untitled?
+                    (page-handler/rename! (or title page-name) @*title-value)
+
+                    :else
+                    (state/set-modal! (confirm-fn)))
+                  (util/stop e))]
+    [:span.absolute.inset-0
+     {:class (util/classnames [{:editing @*edit?}])}
+     [:input.edit-input
+      {:type          "text"
+       :ref           input-ref
+       :auto-focus    true
+       :style         {:outline "none"
+                       :width "100%"
+                       :font-weight "inherit"}
+       :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
+       :value         (rum/react *input-value)
+       :on-change     (fn [^js e]
+                        (let [value (util/evalue e)]
+                          (reset! *title-value (string/trim value))
+                          (reset! *input-value value)))
+       :on-blur       blur-fn
+       :on-key-down   (fn [^js e]
+                        (when (= (gobj/get e "key") "Enter")
+                          (blur-fn e)))
+       :placeholder   (when untitled? (t :untitled))
+       :on-key-up     (fn [^js e]
+                            ;; Esc
+                        (when (= 27 (.-keyCode e))
+                          (reset! *title-value old-name)
+                          (reset! *edit? false)))
+       :on-focus (fn []
+                   (when untitled? (reset! *title-value "")))}]]))
+
+(rum/defcs page-title < rum/reactive
   (rum/local false ::edit?)
+  (rum/local "" ::input-value)
   {:init (fn [state]
            (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
   [state page-name icon title _format fmt-journal?]
   (when title
     (let [*title-value (get state ::title-value)
           *edit? (get state ::edit?)
-          input-ref (rum/create-ref)
+          *input-value (get state ::input-value)
           repo (state/get-current-repo)
-          hls-file? (pdf-assets/hls-file? title)
-          title (if hls-file?
-                  (pdf-assets/human-hls-filename-display title)
+          hls-page? (pdf-assets/hls-page? title)
+          whiteboard-page? (model/whiteboard-page? page-name)
+          untitled? (and whiteboard-page? (parse-uuid page-name)) ;; normal page cannot be untitled right?
+          title (if hls-page?
+                  (pdf-assets/human-hls-pagename-display title)
                   (if fmt-journal? (date/journal-title->custom-format title) title))
-          old-name (or title page-name)
-          confirm-fn (fn []
-                       (let [new-page-name (string/trim @*title-value)
-                             merge? (and (not= (util/page-name-sanity-lc page-name)
-                                               (util/page-name-sanity-lc @*title-value))
-                                         (db/page-exists? page-name)
-                                         (db/page-exists? @*title-value))]
-                         (ui/make-confirm-modal
-                          {:title         (if merge?
-                                            (str "Page “" @*title-value "” already exists, merge to it?")
-                                            (str "Do you really want to change the page name to “" new-page-name "”?"))
-                           :on-confirm    (fn [_e {:keys [close-fn]}]
-                                            (close-fn)
-                                            (page-handler/rename! (or title page-name) @*title-value)
-                                            (reset! *edit? false))
-                           :on-cancel     (fn []
-                                            (reset! *title-value old-name)
-                                            (gobj/set (rum/deref input-ref) "value" old-name)
-                                            (reset! *edit? true))})))
-          rollback-fn #(do
-                         (reset! *title-value old-name)
-                         (gobj/set (rum/deref input-ref) "value" old-name)
-                         (reset! *edit? false)
-                         (notification/show! "Illegal page name, can not rename!" :warning))
-          blur-fn (fn [e]
-                    (when (gp-util/wrapped-by-quotes? @*title-value)
-                      (swap! *title-value gp-util/unquote-string)
-                      (gobj/set (rum/deref input-ref) "value" @*title-value))
-                    (cond
-                      (= old-name @*title-value)
-                      (reset! *edit? false)
-
-                      (string/blank? @*title-value)
-                      (rollback-fn)
-
-                      :else
-                      (state/set-modal! (confirm-fn)))
-                    (util/stop e))]
-      (if @*edit?
-        [:h1.title.ls-page-title
-         {:class (util/classnames [{:editing @*edit?}])}
-         [:input.edit-input
-          {:type          "text"
-           :ref           input-ref
-           :auto-focus    true
-           :style         {:outline "none"
-                           :font-weight 600}
-           :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
-           :default-value old-name
-           :on-change     (fn [^js e]
-                            (let [value (util/evalue e)]
-                              (reset! *title-value (string/trim value))))
-           :on-blur       blur-fn
-           :on-key-down   (fn [^js e]
-                            (when (= (gobj/get e "key") "Enter")
-                              (blur-fn e)))
-           :on-key-up     (fn [^js e]
-                            ;; Esc
-                            (when (= 27 (.-keyCode e))
-                              (reset! *title-value old-name)
-                              (reset! *edit? false)))}]]
-        [:a.page-title {:on-mouse-down (fn [e]
-                                         (when (util/right-click? e)
-                                           (state/set-state! :page-title/context {:page page-name})))
-                        :on-click (fn [e]
-                                    (.preventDefault e)
-                                    (if (gobj/get e "shiftKey")
-                                      (when-let [page (db/pull repo '[*] [:block/name page-name])]
-                                        (state/sidebar-add-block!
-                                         repo
-                                         (:db/id page)
-                                         :page))
-                                      (when (and (not hls-file?) (not fmt-journal?))
-                                        (reset! *edit? true))))}
-         [:h1.title.ls-page-title {:data-ref page-name}
-          (when (not= icon "") [:span.page-icon icon])
-          title]]))))
+          old-name (or title page-name)]
+      [:h1.page-title.flex.cursor-pointer.gap-1
+       {:on-mouse-down (fn [e]
+                           (when (util/right-click? e)
+                             (state/set-state! :page-title/context {:page page-name})))
+          :on-click (fn [e]
+                      (.preventDefault e)
+                      (if (gobj/get e "shiftKey")
+                        (when-let [page (db/pull repo '[*] [:block/name page-name])]
+                          (state/sidebar-add-block!
+                           repo
+                           (:db/id page)
+                           :page))
+                        (when (and (not hls-page?) (not fmt-journal?))
+                          (reset! *input-value (if untitled? "" old-name))
+                          (reset! *edit? true))))}
+       (when (not= icon "") [:span.page-icon icon])
+       [:div.page-title-sizer-wrapper.relative
+        (when (rum/react *edit?)
+          (page-title-editor {:*title-value *title-value
+                              :*edit? *edit?
+                              :*input-value *input-value
+                              :title title
+                              :page-name page-name
+                              :old-name old-name
+                              :untitled? untitled?
+                              :whiteboard-page? whiteboard-page?}))
+        [:span.title.block
+         {:data-value (rum/react *input-value)
+          :data-ref page-name
+          :style {:opacity (when @*edit? 0)
+                  :pointer-events "none"
+                  :font-weight "inherit"
+                  :white-space "nowrap"
+                  :overflow "hidden"
+                  :text-overflow "ellipsis"
+                  :min-width "80px"}}
+         (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
+               untitled? [:span.opacity-50 (t :untitled)]
+               :else title)]]])))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
@@ -326,6 +376,8 @@
           journal? (db/journal-page? page-name)
           fmt-journal? (boolean (date/journal-title->int page-name))
           sidebar? (:sidebar? option)
+          whiteboard? (:whiteboard? option)
+          whiteboard-page? (model/whiteboard-page? page-name)
           route-page-name path-page-name
           page (if block?
                  (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
@@ -355,30 +407,33 @@
               {:key path-page-name
                :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
 
-       [:div.relative
-        (when (and (not sidebar?) (not block?))
-          [:div.flex.flex-row.space-between
-           (when (or (mobile-util/native-platform?) (util/mobile?))
-             [:div.flex.flex-row.pr-2
-              {:style {:margin-left -15}
-               :on-mouse-over (fn [e]
-                                (page-mouse-over e *control-show? *all-collapsed?))
-               :on-mouse-leave (fn [e]
-                                 (page-mouse-leave e *control-show?))}
-              (page-blocks-collapse-control title *control-show? *all-collapsed?)])
-           [:div.flex-1.flex-row
-            (page-title page-name icon title format fmt-journal?)]
-           (when (not config/publishing?)
-             [:div.flex.flex-row
-              (when plugin-handler/lsp-enabled?
-                (plugins/hook-ui-slot :page-head-actions-slotted nil)
-                (plugins/hook-ui-items :pagebar))])])
-        [:div
-         (when (and block? (not sidebar?))
-           (let [config {:id "block-parent"
-                         :block? true}]
-             [:div.mb-4
-              (component-block/breadcrumb config repo block-id {:level-limit 3})]))
+       (if whiteboard-page?
+         [:div ((state/get-component :whiteboard/tldraw-preview) page-name)] ;; FIXME: this is not reactive
+         [:div.relative
+          (when (and (not sidebar?) (not block?))
+            [:div.flex.flex-row.space-between
+             (when (or (mobile-util/native-platform?) (util/mobile?))
+               [:div.flex.flex-row.pr-2
+                {:style {:margin-left -15}
+                 :on-mouse-over (fn [e]
+                                  (page-mouse-over e *control-show? *all-collapsed?))
+                 :on-mouse-leave (fn [e]
+                                   (page-mouse-leave e *control-show?))}
+                (page-blocks-collapse-control title *control-show? *all-collapsed?)])
+             (when-not whiteboard?
+               [:div.flex-1.flex-row
+                [:h1.title.ls-page-title (page-title page-name icon title format fmt-journal?)]])
+             (when (not config/publishing?)
+               [:div.flex.flex-row
+                (when plugin-handler/lsp-enabled?
+                  (plugins/hook-ui-slot :page-head-actions-slotted nil)
+                  (plugins/hook-ui-items :pagebar))])])
+          [:div
+           (when (and block? (not sidebar?) (not whiteboard?))
+             (let [config {:id "block-parent"
+                           :block? true}]
+               [:div.mb-4
+                (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
          ;; blocks
          (let [page (if block?
@@ -387,7 +442,7 @@
                _ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
                _ (when (and block? (not page))
                    (route-handler/redirect-to-page! @*current-block-page))]
-           (page-blocks-cp repo page {:sidebar? sidebar?}))]]
+           (page-blocks-cp repo page {:sidebar? sidebar?}))]])
 
        (when today?
          (today-queries repo today? sidebar?))
@@ -399,13 +454,13 @@
          (tagged-pages repo page-name))
 
        ;; referenced blocks
-       (when-not block?
+       (when-not (or block? whiteboard?)
          [:div {:key "page-references"}
           (rum/with-key
             (reference/references route-page-name)
             (str route-page-name "-refs"))])
 
-       (when-not block?
+       (when-not (or block? whiteboard?)
          [:div
           (when (not journal?)
             (hierarchy/structures route-page-name))
@@ -723,8 +778,8 @@
   (fn [close-fn]
     [:div
      [:div.sm:flex.items-center
-      [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-red-100.sm:mx-0.sm:h-10.sm:w-10
-       [:span.text-red-600.text-xl
+      [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-error.sm:mx-0.sm:h-10.sm:w-10
+       [:span.text-error.text-xl
         (ui/icon "alert-triangle")]]
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium
@@ -777,6 +832,7 @@
   (rum/local :block/updated-at ::sort-by-item)
   (rum/local true ::desc?)
   (rum/local false ::journals)
+  (rum/local false ::whiteboards)
   (rum/local nil ::filter-fn)
   (rum/local 1 ::current-page)
   [state]
@@ -785,6 +841,7 @@
         *sort-by-item (get state ::sort-by-item)
         *desc? (::desc? state)
         *journal? (::journals state)
+        *whiteboard? (::whiteboards state)
         *results (::results state)
         *results-all (::results-all state)
         *checks (::checks state)
@@ -837,16 +894,19 @@
                                                              :block/backlinks (count (:block/_refs (db/entity (:db/id page))))
                                                              :block/idx idx))))]
            (reset! *filter-fn
-                   (memoize (fn [sort-by-item desc? journal?]
+                   (memoize (fn [sort-by-item desc? journal? whiteboard?]
                               (->> pages
-                                   (filter #(or (boolean journal?)
-                                                (= false (boolean (:block/journal? %)))))
+                                   (filter #(and
+                                             (or (boolean journal?)
+                                                 (= false (boolean (:block/journal? %))))
+                                             (or (boolean whiteboard?)
+                                                 (not= "whiteboard" (:block/type %)))))
                                    (sort-pages-by sort-by-item desc?)))))
            (reset! *pages pages)))
 
        ;; filter results
        (when @*filter-fn
-         (let [pages (@*filter-fn @*sort-by-item @*desc? @*journal?)
+         (let [pages (@*filter-fn @*sort-by-item @*desc? @*journal? @*whiteboard?)
 
                ;; search key
                pages (if-not (string/blank? @*search-key)
@@ -913,6 +973,14 @@
                   (ui/icon "x")])])]]
 
           [:div.r.flex.items-center.justify-between
+           [:div
+            (ui/tippy
+             {:html  [:small (str (t :page/show-whiteboards) " ?")]
+              :arrow true}
+             [:a.button.whiteboard
+              {:class    (util/classnames [{:active (boolean @*whiteboard?)}])
+               :on-click #(reset! *whiteboard? (not @*whiteboard?))}
+              (ui/icon "whiteboard" {:extension? true :style {:fontSize ui/icon-size}})])]
            [:div
             (ui/tippy
              {:html  [:small (str (t :page/show-journals) " ?")]
