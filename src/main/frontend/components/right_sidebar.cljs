@@ -24,7 +24,7 @@
   []
   (when-not (util/mobile?)
     (ui/with-shortcut :ui/toggle-right-sidebar "left"
-      [:button.button.icon.fade-link.toggle-right-sidebar
+      [:button.button.icon.toggle-right-sidebar
        {:title "Toggle right sidebar"
         :on-click ui-handler/toggle-right-sidebar!}
        (ui/icon "layout-sidebar-right" {:style {:fontSize "20px"}})])))
@@ -261,8 +261,7 @@
                                                          (state/sidebar-add-block! repo "help" :help))}
           (t :right-side-bar/help)]]]
 
-       [:div
-        (toggle)]]
+       (toggle)]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.flex.flex-col.gap-2
        (if @*anim-finished?

@@ -243,7 +243,7 @@
 
          (block-template block-id)
 
-         (cond 
+         (cond
            (srs/card-block? block)
            (ui/menu-link
             {:key      "Preview Card"
@@ -395,7 +395,7 @@
   [:div {:id id}
    (if hiccup
      hiccup
-     [:div.text-gray-500.cursor "Click to edit"])])
+     [:div.cursor "Click to edit"])])
 
 (rum/defc non-hiccup-content < rum/reactive
   [id content on-click on-hide config format]
@@ -426,7 +426,7 @@
            {:id id
             :on-click on-click}
            (if (string/blank? content)
-             [:div.text-gray-500.cursor "Click to edit"]
+             [:div.cursor "Click to edit"]
              content)])))))
 
 (defn- set-draw-iframe-style!
