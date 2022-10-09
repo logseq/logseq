@@ -134,12 +134,6 @@
 (defn gen-uuid []
   (d/squuid))
 
-(defn js-load$
-  [url]
-  (p/create
-    (fn [resolve]
-      (load url resolve))))
-
 (defn load-base-assets$
   []
   (p/let [_ (util/js-load$ (str util/JS_ROOT "/pdfjs/pdf.js"))
