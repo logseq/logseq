@@ -323,7 +323,7 @@
   [_state]
   (let [_                       (state/sub :auth/id-token)
         online?                 (state/sub :network/online?)
-        enabled-progress-panel? (util/electron?)
+        enabled-progress-panel? (or (util/electron?) (mobile-util/native-ios?))
         current-repo            (state/get-current-repo)
         creating-remote-graph?  (state/sub [:ui/loading? :graph/create-remote?])
         current-graph-id        (state/sub-current-file-sync-graph-uuid)
@@ -428,7 +428,7 @@
             synced-file-graph?
             (concat
              (if (and no-active-files? idle?)
-               [(when-not (util/electron?)
+               [(when-not (or (util/electron?) (mobile-util/native-ios?))
                   {:item     [:div.flex.justify-center.w-full.py-2
                               [:span.opacity-60 "Everything is synced!"]]
                    :as-link? false})]
@@ -503,7 +503,7 @@
           ;; options
           {:outer-header
            [:<>
-            (when (util/electron?)
+            (when (or (util/electron?) (mobile-util/native-ios?))
               (indicator-progress-pane
                sync-state sync-progress
                {:idle?            idle?
