@@ -6,7 +6,7 @@
   (testing "matched filenames"
     (are [x y] (= y (assets/fix-local-asset-pagename x))
       "2015_Book_Intertwingled_1659920114630_0" "2015 Book Intertwingled"
-      "hls__2015_Book_Intertwingled_1659920114630_0" "📒2015 Book Intertwingled"
+      "hls__2015_Book_Intertwingled_1659920114630_0" "2015 Book Intertwingled"
       "hls/2015_Book_Intertwingled_1659920114630_0" "hls/2015 Book Intertwingled"))
   (testing "non matched filenames"
     (are [x y] (= y (assets/fix-local-asset-pagename x))

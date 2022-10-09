@@ -140,15 +140,10 @@
     (fn [resolve]
       (load url resolve))))
 
-(def PDFJS_ROOT
-  (if (= js/location.protocol "file:")
-    "./js"
-    "./static/js"))
-
 (defn load-base-assets$
   []
-  (p/let [_ (js-load$ (str PDFJS_ROOT "/pdfjs/pdf.js"))
-          _ (js-load$ (str PDFJS_ROOT "/pdfjs/pdf_viewer.js"))]))
+  (p/let [_ (util/js-load$ (str util/JS_ROOT "/pdfjs/pdf.js"))
+          _ (util/js-load$ (str util/JS_ROOT "/pdfjs/pdf_viewer.js"))]))
 
 (defn get-page-from-el
   [^js/HTMLElement el]

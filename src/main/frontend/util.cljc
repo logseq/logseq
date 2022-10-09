@@ -9,6 +9,7 @@
             ["grapheme-splitter" :as GraphemeSplitter]
             ["remove-accents" :as removeAccents]
             ["check-password-strength" :refer [passwordStrength]]
+            [frontend.loader :refer [load]]
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
@@ -1378,3 +1379,16 @@
                Math/floor
                int
                (#(str % " " (:name unit) (when (> % 1) "s") " ago"))))))))
+#?(:cljs
+   (def JS_ROOT
+     (when-not node-test?
+       (if (= js/location.protocol "file:")
+         "./js"
+         "./static/js"))))
+
+#?(:cljs
+   (defn js-load$
+     [url]
+     (p/create
+      (fn [resolve]
+        (load url resolve)))))

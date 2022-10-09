@@ -1,7 +1,6 @@
 (ns frontend.components.onboarding.quick-tour
   (:require [promesa.core :as p]
             [cljs-bean.core :as bean]
-            [frontend.loader :refer [load]]
             [frontend.state :as state]
             [frontend.date :as date]
             [frontend.util :as util]
@@ -10,20 +9,9 @@
             [hiccups.runtime :as h]
             [dommy.core :as d]))
 
-(defn js-load$
-  [url]
-  (p/create
-   (fn [resolve]
-     (load url resolve))))
-
-(def JS_ROOT
-  (if (= js/location.protocol "file:")
-    "./js"
-    "./static/js"))
-
 (defn- load-base-assets$
   []
-  (js-load$ (str JS_ROOT "/shepherd.min.js")))
+  (util/js-load$ (str util/JS_ROOT "/shepherd.min.js")))
 
 (defn- make-skip-fns
   [^js jsTour]
