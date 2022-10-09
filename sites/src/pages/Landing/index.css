@@ -894,13 +894,14 @@ h1, h2, h3 {
 .app-features-boards {
   @apply pt-8;
 
-  > .board-item {
+  .board-item {
     @apply min-h-[300px] mx-24 px-16 mb-10;
 
     position: relative;
     box-sizing: border-box;
     background: url("./assets/gradient-bg-demo.png") repeat-x;
     background-clip: padding-box;
+    background-size: cover;
     border: solid 1px transparent;
     border-radius: 1em;
 
@@ -914,7 +915,7 @@ h1, h2, h3 {
       z-index: -1;
       margin: -1px;
       border-radius: inherit;
-      background: linear-gradient(to bottom, #4d4d4d, #0c272a);
+      background: linear-gradient(to bottom, #4d4d4d, #0e2c2f);
     }
 
     > .inner {
@@ -969,6 +970,54 @@ h1, h2, h3 {
 
         > .r {
           @apply pl-16;
+        }
+      }
+    }
+  }
+
+  &.dl-page {
+    @apply flex space-x-7 px-32;
+
+    > .board-item-wrap {
+      @apply flex-1;
+    }
+
+    .board-item {
+      @apply mx-0 px-8;
+
+      &.file-sync, &.rtc-collaboration {
+        margin-bottom: 30px;
+
+        .info-wrap h3 {
+          background-image: url("./assets/filesync-abstraction.png");
+          background-size: contain;
+          background-repeat: no-repeat;
+          height: 60px;
+          margin-top: 15px;
+        }
+      }
+
+      &.rtc-collaboration {
+        .info-wrap h3 {
+          background-image: url("./assets/rtc-abstraction.png");
+          height: 86px;
+          position: relative;
+          left: -16px;
+        }
+      }
+
+      &.whiteboard {
+        @apply flex;
+
+        > .inner {
+          @apply pt-10 mb-8 -mx-8 -mb-2 px-8 flex flex-1;
+
+          border-radius: 1em;
+          overflow: hidden;
+          background-image: url("./assets/whiteboard_canvas_fadeout.png");
+          background-repeat: no-repeat;
+          background-size: contain;
+          background-position: bottom;
         }
       }
     }

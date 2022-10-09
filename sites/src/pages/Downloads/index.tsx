@@ -493,7 +493,7 @@ export function DownloadsPage () {
         {/*<div id="particles-bg" className="particles-bg"></div>*/}
 
         <div className="page-inner footer-desc pt-16">
-          <LandingFooterDesc/>
+          <LandingFooterDesc downloadsPage={true}/>
         </div>
 
         <div className="page-inner footer-nav">
