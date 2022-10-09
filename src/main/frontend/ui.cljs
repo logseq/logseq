@@ -1,39 +1,40 @@
 (ns frontend.ui
   "Main ns for reusable components"
-  (:require [clojure.string :as string]
+  (:require ["@logseq/react-tweet-embed" :as react-tweet-embed]
+            ["react-intersection-observer" :as react-intersection-observer]
+            ["react-resize-context" :as Resize]
+            ["react-textarea-autosize" :as TextareaAutosize]
+            ["react-tippy" :as react-tippy]
+            ["react-transition-group" :refer [CSSTransition TransitionGroup]]
+            [camel-snake-kebab.core :as csk]
+            [cljs-bean.core :as bean]
+            [clojure.string :as string]
+            [datascript.core :as d]
+            [electron.ipc :as ipc]
             [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
+            [frontend.db-mixins :as db-mixins]
             [frontend.handler.notification :as notification]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.mixins :as mixins]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.core :as shortcut]
+            [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.rum :as r]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui.date-picker]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [frontend.handler.plugin :as plugin-handler]
-            [cljs-bean.core :as bean]
             [goog.dom :as gdom]
-            [frontend.modules.shortcut.config :as shortcut-config]
-            [frontend.modules.shortcut.data-helper :as shortcut-helper]
-            [promesa.core :as p]
+            [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
-            [electron.ipc :as ipc]
-            ["react-resize-context" :as Resize]
-            ["react-textarea-autosize" :as TextareaAutosize]
-            ["react-tippy" :as react-tippy]
-            ["react-transition-group" :refer [CSSTransition TransitionGroup]]
-            ["@logseq/react-tweet-embed" :as react-tweet-embed]
-            ["react-intersection-observer" :as react-intersection-observer]
-            [rum.core :as rum]
-            [camel-snake-kebab.core :as csk]
-            [frontend.db-mixins :as db-mixins]
-            [frontend.mobile.util :as mobile-util]
             [frontend.config :as config]
-            [goog.functions :refer [debounce]]))
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -208,58 +209,35 @@
          wrapper-children)))
    opts))
 
-(defn button
-  [text & {:keys [background href class intent on-click small? large? title]
-           :or   {small? false large? false}
-           :as   option}]
-  (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center")
-        klass (if background (string/replace klass "indigo" background) klass)
-        klass (if small? (str klass ".px-2.py-1") klass)
-        klass (if large? (str klass ".text-base") klass)]
-    [:button.ui__button
-     (merge
-      {:type  "button"
-       :title title
-       :class (str (util/hiccup->class klass) " " class)}
-      (dissoc option :background :class :small? :large?)
-      (when href
-        {:on-click (fn []
-                     (util/open-url href)
-                     (when (fn? on-click) (on-click)))}))
-     text]))
-
 (rum/defc notification-content
   [state content status uid]
   (when (and content status)
-    (let [[color-class svg]
+    (let [svg
           (case status
             :success
-            ["text-gray-900 dark:text-gray-300 "
-             [:svg.h-6.w-6
-              {:stroke "var(--ls-success-color)", :viewBox "0 0 24 24", :fill "none"}
-              [:path
-               {:d               "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                :stroke-width    "2"
-                :stroke-linejoin "round"
-                :stroke-linecap  "round"}]]]
+            [:svg.h-6.w-6.text-green-400
+             {:stroke "var(--ls-success-color)", :viewBox "0 0 24 24", :fill "none"}
+             [:path
+              {:d               "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+               :stroke-width    "2"
+               :stroke-linejoin "round"
+               :stroke-linecap  "round"}]]
             :warning
-            ["text-gray-900 dark:text-gray-300 "
-             [:svg.h-6.w-6
-              {:stroke "var(--ls-warning-color)", :viewBox "0 0 24 24", :fill "none"}
-              [:path
-               {:d               "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                :stroke-width    "2"
-                :stroke-linejoin "round"
-                :stroke-linecap  "round"}]]]
+            [:svg.h-6.w-6.text-yellow-500
+             {:stroke "var(--ls-warning-color)", :viewBox "0 0 24 24", :fill "none"}
+             [:path
+              {:d               "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+               :stroke-width    "2"
+               :stroke-linejoin "round"
+               :stroke-linecap  "round"}]]
 
-            ["text-error"
-             [:svg.h-6.w-6
-              {:view-box "0 0 20 20", :fill "var(--ls-error-color)"}
-              [:path
-               {:clip-rule "evenodd"
-                :d
-                "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                :fill-rule "evenodd"}]]])]
+            [:svg.h-6.w-6.text-red-500
+             {:view-box "0 0 20 20", :fill "var(--ls-error-color)"}
+             [:path
+              {:clip-rule "evenodd"
+               :d
+               "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+               :fill-rule "evenodd"}]])]
       [:div.ui__notifications-content
        {:style
         (when (or (= state "exiting")
@@ -279,8 +257,7 @@
            [:div.flex-shrink-0
             svg]
            [:div.ml-3.w-0.flex-1
-            [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}
-                                                                     :class color-class}
+            [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}}
              content]]
            [:div.ml-4.flex-shrink-0.flex
             [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150.notification-close-button
@@ -956,7 +933,7 @@
    (when-not (string/blank? class)
      (let [^js jsTablerIcons (gobj/get js/window "tablerIcons")]
        (if (or extension? font? (not jsTablerIcons))
-         [:i (merge {:class
+         [:span.ui__icon (merge {:class
                      (util/format
                       (str "%s-" class
                            (when (:class opts)
@@ -970,6 +947,33 @@
              [:span.ui__icon.ti
               {:class (str "ls-icon-" class)}
               (f (merge {:size 18} (r/map-keys->camel-case opts)))])))))))
+
+(defn button
+  [text & {:keys [background href class intent on-click small? large? title icon]
+           :or   {small? false large? false}
+           :as   option}]
+  (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center")
+        klass (if background (string/replace klass "indigo" background) klass)
+        klass (if small? (str klass ".px-2.py-1") klass)
+        klass (if large? (str klass ".text-base") klass)]
+    [:button.ui__button
+     (merge
+      {:type  "button"
+       :title title
+       :class (str (util/hiccup->class klass) " " class)}
+      (dissoc option :background :class :small? :large?)
+      (when href
+        {:on-click (fn []
+                     (util/open-url href)
+                     (when (fn? on-click) (on-click)))}))
+     (when icon (frontend.ui/icon icon {:class "mr-1"}))
+     text]))
+
+(rum/defc type-icon
+  [{:keys [name class title extension?]}]
+  [:.type-icon {:class class
+                :title title}
+   (icon name {:extension? extension?})])
 
 (rum/defc with-shortcut < rum/reactive
   < {:key-fn (fn [key pos] (str "shortcut-" key pos))}
@@ -1047,3 +1051,21 @@
                                                        (set-visible! in-view?))))})
            ref (.-ref inViewState)]
        (lazy-visible-inner visible? content-fn ref)))))
+
+(rum/defc portal
+  ([children]
+   (portal children {:attach-to (fn [] js/document.body)
+                     :prepend? false}))
+  ([children {:keys [attach-to prepend?]}]
+   (let [[portal-anchor set-portal-anchor] (rum/use-state nil)]
+     (rum/use-effect!
+      (fn []
+        (let [div (js/document.createElement "div")
+              attached (or (if (fn? attach-to) (attach-to) attach-to) js/document.body)]
+          (.setAttribute div "data-logseq-portal" (str (d/squuid)))
+          (if prepend? (.prepend attached div) (.append attached div))
+          (set-portal-anchor div)
+          #(.remove div)))
+      [])
+     (when portal-anchor
+       (rum/portal (rum/fragment children) portal-anchor)))))

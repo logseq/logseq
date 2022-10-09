@@ -93,11 +93,12 @@
 
 (defn decorate-binding [binding]
   (-> (if (string? binding) binding (str/join "+"  binding))
-      (str/replace "mod" (if util/mac? "cmd" "ctrl"))
+      (str/replace "mod" (if util/mac? "⌘" "ctrl"))
       (str/replace "alt" (if util/mac? "opt" "alt"))
       (str/replace "shift+/" "?")
       (str/replace "left" "←")
       (str/replace "right" "→")
+      (str/replace "shift" "⇧")
       (str/replace "open-square-bracket" "[")
       (str/replace "close-square-bracket" "]")
       (str/lower-case)))

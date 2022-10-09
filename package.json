@@ -67,7 +67,9 @@
         "cljs:build-electron": "clojure -A:cljs compile app electron",
         "cljs:lint": "clojure -M:clj-kondo --parallel --lint src --cache false",
         "ios:dev": "cross-env PLATFORM=ios gulp cap",
-        "android:dev": "cross-env PLATFORM=android gulp cap"
+        "android:dev": "cross-env PLATFORM=android gulp cap",
+        "tldraw:build": "cd tldraw && yarn",
+        "postinstall": "yarn tldraw:build"
     },
     "dependencies": {
         "@capacitor/android": "^4.0.0",

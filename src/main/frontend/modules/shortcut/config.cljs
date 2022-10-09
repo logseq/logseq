@@ -13,6 +13,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.export :as export-handler]
+            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.modules.shortcut.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
@@ -31,6 +32,7 @@
 ;; To add a new entry to this map, first add it here and then
 ;; a description for it in frontend.modules.shortcut.dicts/all-default-keyboard-shortcuts.
 ;; :inactive key is for commands that are not active for a given platform or feature condition
+;; Avoid using single letter shortcuts to allow chords that start with those characters
 (def ^:large-vars/data-var all-default-keyboard-shortcuts
   {:date-picker/complete         {:binding "enter"
                                   :fn      ui-handler/shortcut-complete}
@@ -104,6 +106,9 @@
 
    :editor/new-line              {:binding "shift+enter"
                                   :fn      editor-handler/keydown-new-line-handler}
+
+   :editor/new-whiteboard        {:binding "n w"
+                                  :fn      #(whiteboard-handler/create-new-whiteboard-and-redirect!)}
 
    :editor/follow-link           {:binding "mod+o"
                                   :fn      editor-handler/follow-link-under-cursor!}
@@ -336,6 +341,9 @@
    :go/all-graphs                  {:binding "g shift+g"
                                     :fn      route-handler/redirect-to-all-graphs}
 
+   :go/whiteboards                  {:binding "g w"
+                                     :fn      route-handler/redirect-to-whiteboard-dashboard!}
+
    :go/keyboard-shortcuts          {:binding "g s"
                                     :fn      #(route-handler/redirect! {:to :shortcut-setting})}
 
@@ -547,6 +555,7 @@
                           :go/flashcards
                           :go/graph-view
                           :go/all-graphs
+                          :go/whiteboards
                           :go/keyboard-shortcuts
                           :go/tomorrow
                           :go/next-journal
@@ -561,6 +570,7 @@
                           :editor/open-file-in-default-app
                           :editor/open-file-in-directory
                           :editor/copy-current-file
+                          :editor/new-whiteboard
                           :ui/toggle-wide-mode
                           :ui/select-theme-color
                           :ui/goto-plugins
@@ -613,6 +623,7 @@
     :go/all-pages
     :go/graph-view
     :go/all-graphs
+    :go/whiteboards
     :go/flashcards
     :go/tomorrow
     :go/next-journal
@@ -692,6 +703,7 @@
     :editor/insert-youtube-timestamp
     :editor/open-file-in-default-app
     :editor/open-file-in-directory
+    :editor/new-whiteboard
     :auto-complete/prev
     :auto-complete/next
     :auto-complete/complete
