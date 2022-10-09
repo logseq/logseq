@@ -2,6 +2,10 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <!-- Handle iOS indexedDB preloading. Ref: https://developer.apple.com/forums/thread/681201 -->
+  <script type="text/javascript">
+    window.indexedDB;
+  </script>
   <meta content="minimum-scale=1, initial-scale=1, maximum-scale=1, width=device-width, shrink-to-fit=no" name="viewport">
   <link rel="stylesheet" href="/static/css/tabler-icons.min.css">
   <link href="/static/css/style.css" rel="stylesheet" type="text/css">

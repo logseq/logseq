@@ -36,47 +36,47 @@
   }
 
   .asset-container {
-    display: inline-block;
-    position: relative;
+    @apply relative inline-block;
+
     margin-top: 0.5rem;
 
-    .ctl {
-      position: absolute;
-      top: 0;
-      right: 0;
-      padding: 5px;
-      z-index: 1;
-      display: none;
+    .asset-overlay {
+      @apply inset-0 absolute p-2;
 
-      > a {
-        padding: 3px;
-        border-radius: 4px;
-        opacity: 0.4;
-        user-select: none;
-        background: var(--ls-primary-background-color);
+      opacity: 0;
+      transition: opacity 300ms;
+      background-image: linear-gradient(var(--ls-primary-background-color), transparent);
+      pointer-events: none;
+    }
 
-        &.delete {
-          svg {
-            color: var(--ls-primary-text-color);
+    .asset-action-bar {
+      @apply top-0 left-0 w-full flex absolute items-start justify-between px-1;
 
-            opacity: 0.5;
-            font-weight: normal;
-          }
-        }
+      transition: opacity 300ms;
+      opacity: 0;
+      color: var(--ls-primary-text-color);
+    }
 
-        &:hover {
-          opacity: 1;
-        }
+    .asset-action-btn {
+      @apply m-1 p-1 rounded truncate;
 
-        &:active {
-          opacity: 1;
-        }
+      opacity: 0.8;
+      user-select: none;
+
+      &:hover,
+      &:active {
+        opacity: 1;
       }
     }
 
-    &:hover {
-      .ctl {
-        display: flex;
+    &:hover,
+    &:focus {
+      .asset-overlay {
+        opacity: 0.9;
+      }
+
+      .asset-action-bar {
+        opacity: 1;
       }
     }
   }
@@ -177,8 +177,9 @@
   min-width: 22px;
   min-height: 22px;
   padding: 2px;
-  color: initial;
+  color: var(--ls-secondary-text-color);
   user-select: none;
+  opacity: .4;
 
   .control-hide {
     display: none;
@@ -186,40 +187,40 @@
 }
 
 .block-left-menu {
-    background-color: var(--ls-secondary-background-color);
-    background: linear-gradient(90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%);
+  background-color: var(--ls-secondary-background-color);
+  background: linear-gradient(90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%);
 
-    .commands-button {
-        overflow: hidden;
-        max-width: 40px;
-        text-align: center;
-        margin: auto 0;
+  .commands-button {
+    overflow: hidden;
+    max-width: 40px;
+    text-align: center;
+    margin: auto 0;
 
-        .indent {
-            opacity: 30%;
-        }
+    .indent {
+      opacity: 30%;
     }
+  }
 }
 
 .block-right-menu {
-    background-color: var(--ls-secondary-background-color);
-    /* background: linear-gradient(-90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%); */
+  background-color: var(--ls-secondary-background-color);
+  /* background: linear-gradient(-90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%); */
 
-    .commands-button {
-        overflow: hidden;
-        text-align: center;
-        margin: auto 0;
+  .commands-button {
+    overflow: hidden;
+    text-align: center;
+    margin: auto 0;
 
-        .outdent {
-            margin: 0 12px;
-            opacity: 30%;
-        }
-
-        .more {
-            margin: 0 12px;
-            opacity: 30%;
-        }
+    .outdent {
+      margin: 0 12px;
+      opacity: 30%;
     }
+
+    .more {
+      margin: 0 12px;
+      opacity: 30%;
+    }
+  }
 }
 
 .block-ref {
@@ -279,16 +280,16 @@
   }
 
   &.is-doc {
-      &:before {
-          content: "[[📜";
-          opacity: .7;
-          margin-right: 4px;
-      }
+    &:before {
+      content: "[[📜";
+      opacity: .7;
+      margin-right: 4px;
+    }
 
-      &:after {
-          content: "]]";
-          opacity: .7;
-      }
+    &:after {
+      content: "]]";
+      opacity: .7;
+    }
   }
 }
 
@@ -618,7 +619,7 @@ a.cloze-revealed {
 }
 
 .page-property-key:hover {
-    background-color: var(--ls-selection-background-color);
+  background-color: var(--ls-selection-background-color);
 }
 
 .block-parents a {
@@ -636,24 +637,24 @@ a.cloze-revealed {
 }
 
 html.is-native-ios {
-    audio {
-        width: 100%;
-        max-width: 350px;
-    }
+  audio {
+    width: 100%;
+    max-width: 350px;
+  }
 }
 
 html:not(.is-mac) {
-    body[data-active-keystroke="Control"] {
-        .block-content {
-            cursor: pointer;
-        }
+  body[data-active-keystroke="Control"] {
+    .block-content {
+      cursor: pointer;
     }
+  }
 }
 
 html.is-mac {
-    body[data-active-keystroke="Meta"] {
-        .block-content {
-            cursor: pointer;
-        }
+  body[data-active-keystroke="Meta"] {
+    .block-content {
+      cursor: pointer;
     }
+  }
 }

@@ -37,7 +37,7 @@
     {:on-mouse-down (fn [e]
                       (util/stop e)
                       (editor-handler/indent-outdent indent?))}
-    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
+    (ui/icon icon {:size ui/icon-size})]])
 
 (rum/defc command
   [command-handler icon & [count? event?]]
@@ -50,7 +50,7 @@
                       (if event?
                         (command-handler e)
                         (command-handler)))}
-    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
+    (ui/icon icon {:size ui/icon-size})]])
 
 (rum/defc timestamp-submenu
   [parent-id]
@@ -71,7 +71,7 @@
                         (set-command-stats :calendar)
                         (let [target (gdom/getNextElementSibling (.-target event))]
                           (dom/add-class! target "show-submenu")))}
-      (ui/icon "calendar" {:style {:fontSize ui/icon-size}})
+      (ui/icon "calendar" {:size ui/icon-size})
       [:div.submenu.fixed.hidden.flex.flex-col.w-full.justify-evenly
        {:style {:bottom @util/keyboard-height}}
        (command-cp #(let [today (page-handler/get-page-ref-text (date/today))]

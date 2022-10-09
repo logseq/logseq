@@ -8,16 +8,17 @@
 
 ;; Keep same as main/frontend.util.url
 (def decode js/decodeURI)
-(def decode-param js/decodeURIComponent)
 
 (defn get-URL-decoded-params
   "Get decoded URL parameters from parsed js/URL.
-   `nil` for non-existing keys."
-  [^js parsed-url keys]
+   `nil` for non-existing keys.
+   URL.searchParams are already decoded:
+   https://developer.mozilla.org/en-US/docs/Web/API/URL/searchParams"
+  [^js/URL parsed-url keys]
   (let [params (.-searchParams parsed-url)]
     (map (fn [key]
            (when-let [value (.get params key)]
-             (decode-param value)))
+             value))
          keys)))
 
 (defn graph-identifier-error-handler
@@ -59,7 +60,7 @@
 
 (defn- x-callback-url-handler
   "win - a window used for fallback (main window is prefered)"
-  [^js win parsed-url]
+  [^js win ^js/URL parsed-url]
   (let [action (.-pathname parsed-url)]
     (cond
       (= action "/quickCapture")

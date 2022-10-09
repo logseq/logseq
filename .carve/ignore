@@ -4,7 +4,6 @@ electron.core/start
 electron.core/stop
 ;; repl fn
 electron.search/query
-frontend.blob/blob
 ;; Used by shadow-cljs
 frontend.core/stop
 ;; For repl
@@ -22,6 +21,9 @@ frontend.extensions.age-encryption/encrypt-with-user-passphrase
 frontend.extensions.age-encryption/decrypt-with-user-passphrase
 ;; Lazily loaded
 frontend.extensions.excalidraw/draw
+;; Lazily loaded
+frontend.extensions.tldraw/tldraw-app
+frontend.extensions.tldraw/generate-preview
 ;; Referenced in commented TODO
 frontend.extensions.pdf.utils/get-page-bounding
 ;; For repl

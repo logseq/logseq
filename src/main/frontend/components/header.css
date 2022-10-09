@@ -1,5 +1,6 @@
 .cp__header {
   @apply z-10;
+
   -webkit-app-region: drag;
 
   padding-top: var(--ls-headbar-inner-top-padding);
@@ -17,7 +18,8 @@
   white-space: nowrap;
 
   > .l {
-    @apply pl-4;
+    @apply pl-2;
+    
     width: var(--ls-left-sidebar-width);
     height: 100%;
     align-items: center;
@@ -38,17 +40,13 @@
     transform: translate3d(0, 0, 0);
   }
 
-  .it svg {
-    transform: scale(0.8);
-  }
-
   .button {
     display: flex;
     align-items: center;
     justify-content: center;
     opacity: .8;
 
-    .ti {
+    .ti, .tie {
       font-size: 20px;
     }
   }
@@ -107,7 +105,7 @@
   }
 
   .dropdown-wrapper {
-    .ti {
+    .ti, .tie {
       opacity: .9;
     }
   }
@@ -128,10 +126,6 @@
   > .l {
     padding-left: 78px;
   }
-}
-
-.cp__header .navigation svg {
-  transform: scale(0.7);
 }
 
 .is-electron.is-mac.is-fullscreen .cp__header > .l {
@@ -178,8 +172,14 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 15ch;
+  max-width: 20ch;
   height: 14px;
+
+  .ui__icon {
+    position: relative;
+    top: 5px;
+    right: -1px;
+  }
 }
 
 .button {
@@ -317,7 +317,7 @@ html.is-native-iphone {
   --ls-headbar-inner-top-padding: 36px;
 
   .left-sidebar-inner {
-    .new-page {
+    .create {
       padding-bottom: 32px;
     }
   }

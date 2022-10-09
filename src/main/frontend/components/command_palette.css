@@ -17,10 +17,12 @@
       transition: none;
       border: none;
       border-radius: unset !important;
+      background: none;
     }
 
     .chosen {
       background-color: var(--ls-quaternary-background-color);
+      color: var(--ls-secondary-text-color);
     }
 
     .command-results-wrap,
@@ -33,6 +35,27 @@
 
     .input-wrap {
       height: var(--palettle-input-height);
+    }
+
+    .recent-search {
+      > .wrap {
+        > div:last-child {
+          display: flex !important;
+          justify-items: center;
+        }
+      }
+    }
+
+    .cp__palette-input {
+      color: var(--ls-secondary-text-color);
+    }
+
+    .search-result {
+      @apply text-sm font-medium flex items-baseline;
+    }
+
+    .ui__icon {
+      font-size: 16px;
     }
   }
 
@@ -50,25 +73,25 @@
 }
 
 html.is-ios {
-    .cp__palette-main {
-        margin-bottom: 0px;
-    }
+  .cp__palette-main {
+    margin-bottom: 0;
+  }
 }
 
 .cards-review .cp__select {
-    &-main {
-        margin: 0;
-        @screen lg {
-            width: 240px;
-        }
+  &-main {
+    margin: 0;
+    @screen lg {
+      width: 240px;
     }
+  }
 
-    .input-wrap {
-        height: initial;
-    }
+  .input-wrap {
+    height: initial;
+  }
 
-    &-input {
-        padding: 16px;
-        font-size: 16px;
-    }
+  &-input {
+    padding: 16px;
+    font-size: 16px;
+  }
 }

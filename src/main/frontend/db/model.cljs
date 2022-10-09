@@ -8,17 +8,18 @@
             [datascript.core :as d]
             [frontend.config :as config]
             [frontend.date :as date]
-            [logseq.db.schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.text :as text]
-            [logseq.db.rules :refer [rules]]
+            [frontend.util.drawer :as drawer]
             [logseq.db.default :as default-db]
-            [frontend.util.drawer :as drawer]))
+            [logseq.db.rules :refer [rules]]
+            [logseq.db.schema :as db-schema]
+            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util :as gp-util]))
 
 ;; lazy loading
 
@@ -46,14 +47,16 @@
     :block/marker
     :block/priority
     :block/properties
+    :block/properties-text-values
     :block/pre-block?
     :block/scheduled
     :block/deadline
     :block/repeated?
     :block/created-at
     :block/updated-at
-    :block/file
+    ;; TODO: remove this in later releases
     :block/heading-level
+    :block/file
     {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
     {:block/_parent ...}])
 
@@ -62,15 +65,12 @@
   (when-let [repo (state/get-current-repo)]
     (->
      (react/q repo [:frontend.db.react/block id]
-       {:query-fn (fn [_]
-                    (db-utils/pull (butlast block-attrs) id))}
-       nil)
+              {:query-fn (fn [_]
+                           (db-utils/pull (butlast block-attrs) id))}
+              nil)
      react)))
 
-(defn get-original-name
-  [page-entity]
-  (or (:block/original-name page-entity)
-      (:block/name page-entity)))
+(def get-original-name util/get-page-original-name)
 
 (defn get-tag-pages
   [repo tag-name]
@@ -121,6 +121,16 @@
      [?page :block/name]]
    (conn/get-db repo)))
 
+(defn get-pages-with-file
+  "Return full file entity for calling file renaming"
+  [repo]
+  (d/q
+   '[:find (pull ?page [:block/name :block/properties :block/journal?]) (pull ?file [*])
+     :where
+     [?page :block/name ?page-name]
+     [?page :block/file ?file]]
+   (conn/get-db repo)))
+
 (defn get-page-alias
   [repo page-name]
   (when-let [db (and repo (conn/get-db repo))]
@@ -135,6 +145,7 @@
              distinct)))
 
 (defn get-alias-source-page
+  "return the source page (page-name) of an alias"
   [repo alias]
   (when-let [db (and repo (conn/get-db repo))]
     (let [alias (util/page-name-sanity-lc alias)
@@ -147,6 +158,8 @@
                       db
                       alias)
                  (db-utils/seq-flatten))]
+      ;; may be a case that a user added same alias into multiple pages.
+      ;; only return the first result for idiot-proof
       (when (seq pages)
         (some (fn [page]
                 (let [aliases (->> (get-in page [:block/properties :alias])
@@ -171,16 +184,13 @@
          ;; (sort-by last)
          (reverse))))
 
-(defn get-files-v2
+(defn get-files-entity
   [repo]
   (when-let [db (conn/get-db repo)]
     (->> (d/q
           '[:find ?file ?path
-            ;; ?modified-at
             :where
-            [?file :file/path ?path]
-            ;; [?file :file/last-modified-at ?modified-at]
-            ]
+            [?file :file/path ?path]]
           db)
          (seq)
          ;; (sort-by last)
@@ -1349,10 +1359,10 @@
 (defn get-all-properties
   []
   (let [properties (d/q
-                     '[:find [?p ...]
-                       :where
-                       [_ :block/properties ?p]]
-                     (conn/get-db))
+                    '[:find [?p ...]
+                      :where
+                      [_ :block/properties ?p]]
+                    (conn/get-db))
         properties (remove (fn [m] (empty? m)) properties)]
     (->> (map keys properties)
          (apply concat)
@@ -1365,13 +1375,13 @@
                (get properties property))]
     (->>
      (d/q
-       '[:find [?property-val ...]
-         :in $ ?pred
-         :where
-         [_ :block/properties ?p]
-         [(?pred $ ?p) ?property-val]]
-       (conn/get-db)
-       pred)
+      '[:find [?property-val ...]
+        :in $ ?pred
+        :where
+        [_ :block/properties ?p]
+        [(?pred $ ?p) ?property-val]]
+      (conn/get-db)
+      pred)
      (map (fn [x] (if (coll? x) x [x])))
      (apply concat)
      (map str)
@@ -1632,12 +1642,32 @@
 (defn get-macro-blocks
   [repo macro-name]
   (d/q
-    '[:find [(pull ?b [*]) ...]
-      :in $ ?macro-name
-      :where
-      [?b :block/type "macro"]
-      [?b :block/properties ?properties]
-      [(get ?properties :logseq.macro-name) ?name]
-      [(= ?name ?macro-name)]]
-    (conn/get-db repo)
-    macro-name))
+   '[:find [(pull ?b [*]) ...]
+     :in $ ?macro-name
+     :where
+     [?b :block/type "macro"]
+     [?b :block/properties ?properties]
+     [(get ?properties :logseq.macro-name) ?name]
+     [(= ?name ?macro-name)]]
+   (conn/get-db repo)
+   macro-name))
+
+(defn whiteboard-page?
+  [page-name]
+  (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page-name)])]
+    (or
+     (= "whiteboard" (:block/type page))
+     (when-let [file (:block/file page)]
+       (when-let [path (:file/path (db-utils/entity (:db/id file)))]
+         (gp-config/whiteboard? path))))))
+
+(defn get-all-whiteboards
+  [repo]
+  (->> (d/q
+        '[:find [(pull ?page [:block/name
+                              :block/created-at
+                              :block/updated-at]) ...]
+          :where
+          [?page :block/name]
+          [?page :block/type "whiteboard"]]
+        (conn/get-db repo))))

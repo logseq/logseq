@@ -12,6 +12,7 @@
         android:theme="@style/AppTheme">
 
         <activity
+            android:exported="true"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:name="com.logseq.app.MainActivity"
             android:label="@string/title_activity_main"

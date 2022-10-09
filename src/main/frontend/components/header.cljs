@@ -21,7 +21,9 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
-(rum/defc home-button []
+(rum/defc home-button
+  < {:key-fn #(identity "home-button")}
+  []
   (ui/with-shortcut :go/home "left"
     [:button.button.icon.inline
      {:title "Home"
@@ -29,29 +31,34 @@
                    (when (mobile-util/native-iphone?)
                      (state/set-left-sidebar-open! false))
                    (route-handler/redirect-to-home!))}
-     (ui/icon "home" {:style {:fontSize ui/icon-size}})]))
+     (ui/icon "home" {:size ui/icon-size})]))
 
 (rum/defc login < rum/reactive
+  < {:key-fn #(identity "login-button")}
   []
   (let [_ (state/sub :auth/id-token)
-        loading? (state/sub [:ui/loading? :login])]
+        loading? (state/sub [:ui/loading? :login])
+        sync-enabled? (file-sync-handler/enable-sync?)
+        logged? (user-handler/logged-in?)]
     (when-not (or config/publishing?
-                  (user-handler/logged-in?)
-                  (not (state/enable-sync?)))
+                  logged?
+                  (not sync-enabled?))
       [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
        [:span (t :login)]
        (when loading?
          [:span.ml-2 (ui/loading "")])])))
 
 (rum/defc left-menu-button < rum/reactive
+  < {:key-fn #(identity "left-menu-toggle-button")}
   [{:keys [on-click]}]
   (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
     [:button.#left-menu.cp__header-left-menu.button.icon
      {:title "Toggle left menu"
       :on-click on-click}
-      (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]))
+     (ui/icon "menu-2" {:size ui/icon-size})]))
 
 (rum/defc dropdown-menu < rum/reactive
+  < {:key-fn #(identity "repos-dropdown-menu")}
   [{:keys [current-repo t]}]
   (let [page-menu (page-menu/page-menu nil)
         page-menu-and-hr (when (seq page-menu)
@@ -61,7 +68,7 @@
        [:button.button.icon.toolbar-dots-btn
         {:on-click toggle-fn
          :title "More"}
-        (ui/icon "dots" {:style {:fontSize ui/icon-size}})])
+        (ui/icon "dots" {:size ui/icon-size})])
      (->>
       [(when (state/enable-editing?)
          {:title (t :settings)
@@ -104,18 +111,19 @@
      {})))
 
 (rum/defc back-and-forward
+  < {:key-fn #(identity "nav-history-buttons")}
   []
   [:div.flex.flex-row
 
    (ui/with-shortcut :go/backward "bottom"
      [:button.it.navigation.nav-left.button.icon
       {:title "Go back" :on-click #(js/window.history.back)}
-      (ui/icon "arrow-left" {:style {:fontSize ui/icon-size}})])
+      (ui/icon "arrow-left" {:size ui/icon-size})])
 
    (ui/with-shortcut :go/forward "bottom"
      [:button.it.navigation.nav-right.button.icon
       {:title "Go forward" :on-click #(js/window.history.forward)}
-      (ui/icon "arrow-right" {:style {:fontSize ui/icon-size}})])])
+      (ui/icon "arrow-right" {:size ui/icon-size})])])
 
 (rum/defc updater-tips-new-version
   [t]
@@ -155,7 +163,8 @@
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)
-                               (= (state/sub-default-home-page) (state/get-current-page)))]
+                               (= (state/sub-default-home-page) (state/get-current-page)))
+        sync-enabled? (file-sync-handler/enable-sync?)]
     [:div.cp__header#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -177,17 +186,17 @@
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))
                               (state/pub-event! [:go/search]))}
-              (ui/icon "search" {:style {:fontSize ui/icon-size}})]))])
+              (ui/icon "search" {:size ui/icon-size})]))])
       (when (mobile-util/native-platform?)
         (if (or (state/home?) custom-home-page?)
           left-menu
           (ui/with-shortcut :go/backward "bottom"
-            [:button.it.navigation.nav-left.button.icon
+            [:button.it.navigation.nav-left.button.icon.opacity-70
              {:title "Go back" :on-click #(js/window.history.back)}
-             (ui/icon "chevron-left" {:style {:fontSize 25}})])))]
+             (ui/icon "chevron-left" {:size 26})])))]
 
      [:div.r.flex
-      (when (and (not file-sync-handler/hiding-login&file-sync)
+      (when (and sync-enabled?
                  current-repo
                  (not (config/demo-graph? current-repo))
                  (user-handler/alpha-user?))
@@ -197,13 +206,11 @@
                  (not custom-home-page?))
         (home-button))
 
-      (when-not file-sync-handler/hiding-login&file-sync
+      (when sync-enabled?
         (login))
 
       (when plugin-handler/lsp-enabled?
         (plugins/hook-ui-items :toolbar))
-
-
 
       (when (util/electron?)
         (back-and-forward))

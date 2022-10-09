@@ -1,4 +1,5 @@
 (ns frontend.handler.command-palette
+  "System-component-like ns for command palette's functionality"
   (:require [cljs.spec.alpha :as s]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.spec :as spec]

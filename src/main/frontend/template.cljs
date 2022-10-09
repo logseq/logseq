@@ -1,4 +1,5 @@
 (ns frontend.template
+  "Provides template related functionality"
   (:require [clojure.string :as string]
             [frontend.date :as date]
             [frontend.state :as state]

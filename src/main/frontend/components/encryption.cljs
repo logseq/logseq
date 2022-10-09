@@ -51,10 +51,21 @@
   (fn [close-fn]
     (encryption-dialog-inner repo-url close-fn)))
 
+(rum/defc show-password-cp
+  [*show-password?]
+  [:div.flex.flex-row.items-center
+   [:label.px-1 {:for "show-password"}
+    (ui/checkbox {:checked?  @*show-password?
+                  :on-change (fn [e]
+                               (reset! *show-password? (util/echecked? e)))
+                  :id        "show-password"})
+    [:span.text-sm.ml-1.opacity-80.select-none.px-1 "Show password"]]])
+
 (rum/defcs ^:large-vars/cleanup-todo input-password-inner < rum/reactive
   (rum/local "" ::password)
   (rum/local "" ::pw-confirm)
   (rum/local false ::pw-confirm-focused?)
+  (rum/local false ::show-password?)
   {:will-mount (fn [state]
                  ;; try to close tour tips
                  (some->> (state/sub :file-sync/jstour-inst)
@@ -64,6 +75,7 @@
   (let [*password (get state ::password)
         *pw-confirm (get state ::pw-confirm)
         *pw-confirm-focused? (get state ::pw-confirm-focused?)
+        *show-password? (get state ::show-password?)
         *input-ref-0 (rum/create-ref)
         *input-ref-1 (rum/create-ref)
         remote-pw? (= type :input-pwd-remote)
@@ -130,7 +142,7 @@
 
     [:div.encryption-password.max-w-2xl.-mb-2
      [:div.cp__file-sync-related-normal-modal
-      [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "lock-access")]]
+      [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "lock-access" {:size 28})]]
 
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h1#modal-headline.text-2xl.font-bold.text-center
@@ -149,7 +161,7 @@
          [:div.folder-tip.flex.flex-col.items-center
           [:h3
            [:span.flex.space-x-2.leading-none.pb-1
-            (ui/icon "cloud-lock")
+            (ui/icon "cloud-lock" {:size 20})
             [:span GraphName]
             [:span.scale-75 (ui/icon "arrow-right")]
             [:span (ui/icon "folder")]]]
@@ -158,10 +170,10 @@
          [:div.input-hints.text-sm.py-2.px-3.rounded.mb-2.mt-2.flex.items-center
           (if-let [display-str (:fail set-remote-graph-pwd-result)]
             [:<>
-             [:span.scale-125.pr-1.text-red-600 (ui/icon "alert-circle" {:class "text-md mr-1"})]
-             [:span.text-red-600 display-str]]
+             [:span.flex.pr-1.text-error (ui/icon "alert-circle" {:class "text-md mr-1"})]
+             [:span.text-error display-str]]
             [:<>
-             [:span.scale-125.pr-1 (ui/icon "bulb" {:class "text-md mr-1"})]
+             [:span.flex.pr-1 (ui/icon "bulb" {:class "text-md mr-1"})]
              [:span "Please enter the password for this graph to continue syncing."]])]])
 
       ;; secure this remote graph
@@ -175,9 +187,9 @@
                     (not (string/blank? @*pw-confirm)))
               (if (or (not (pattern-ok?))
                       (not= @*password @*pw-confirm))
-                [:span.scale-125.pr-1.text-red-600 (ui/icon "alert-circle" {:class "text-md mr-1"})]
-                [:span.scale-125.pr-1.text-green-600 (ui/icon "circle-check" {:class "text-md mr-1"})])
-              [:span.scale-125.pr-1 (ui/icon "bulb" {:class "text-md mr-1"})])
+                [:span.flex.pr-1.text-error (ui/icon "alert-circle" {:class "text-md mr-1"})]
+                [:span.flex.pr-1.text-success (ui/icon "circle-check" {:class "text-md mr-1"})])
+              [:span.flex.pr-1 (ui/icon "bulb" {:class "text-md mr-1"})])
 
             (if (not (string/blank? @*password))
               (if-not (pattern-ok?)
@@ -213,7 +225,7 @@
                        :class (when (>= (int (:id pw-strength)) i) "active")} i])]]])]))
 
       [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-       {:type        "password"
+       {:type        (if @*show-password? "text" "password")
         :ref         *input-ref-0
         :placeholder "Password"
         :auto-focus  true
@@ -226,7 +238,7 @@
 
       (when init-graph-keys
         [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-         {:type        "password"
+         {:type        (if @*show-password? "text" "password")
           :ref         *input-ref-1
           :placeholder "Re-enter the password"
           :on-focus    #(reset! *pw-confirm-focused? true)
@@ -236,10 +248,12 @@
           :on-change   (fn [^js e]
                          (reset! *pw-confirm (util/evalue e)))}])
 
+      (show-password-cp *show-password?)
+
       (when init-graph-keys
         [:div.init-remote-pw-tips.space-x-4.pt-2.hidden.sm:flex
          [:div.flex-1.flex.items-center
-          [:span.px-3.scale-125 (ui/icon "key")]
+          [:span.px-3.flex (ui/icon "key")]
           [:p.dark:text-gray-100
            [:span "Please make sure you "]
            "remember the password you have set, "
@@ -248,7 +262,7 @@
            [:span "of the password."]]]
 
          [:div.flex-1.flex.items-center
-          [:span.px-3.scale-125 (ui/icon "lock")]
+          [:span.px-3.flex (ui/icon "lock")]
           [:p.dark:text-gray-100
            "If you lose your password, all of your data in the cloud can’t be decrypted. "
            [:span "You will still be able to access the local version of your graph."]]]])]
@@ -266,11 +280,11 @@
 (defn input-password
   ([repo-url close-fn] (input-password repo-url close-fn {:type :local}))
   ([repo-url close-fn opts]
-   (fn [_close-fn]
+   (fn [close-fn']
      (let [close-fn' (if (fn? close-fn)
                        #(do (close-fn %)
-                            (_close-fn))
-                       _close-fn)]
+                            (close-fn'))
+                       close-fn')]
        (input-password-inner repo-url close-fn' opts)))))
 
 (rum/defcs encryption-setup-dialog-inner
@@ -307,9 +321,11 @@
 (rum/defcs encryption-input-secret-inner <
   (rum/local "" ::secret)
   (rum/local false ::loading)
+  (rum/local false ::show-password?)
   [state _repo-url db-encrypted-secret close-fn]
   (let [secret (::secret state)
         loading (::loading state)
+        *show-password? (::show-password? state)
         on-click-fn (fn []
                       (reset! loading true)
                       (let [value @secret]
@@ -330,13 +346,15 @@
         "Enter your password"]]]
 
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-      {:type "password"
+      {:type (if @*show-password? "text" "password")
        :auto-focus true
        :on-change (fn [e]
                     (reset! secret (util/evalue e)))
        :on-key-down (fn [e]
                       (when (= (.-key e) "Enter")
                         (on-click-fn)))}]
+
+     (show-password-cp *show-password?)
 
      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
       [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto

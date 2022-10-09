@@ -111,9 +111,9 @@
 
        [:ul
         (for [[title label icon]
-              [["Graphics & Documents" "/assets" "artboard"]
+              [["Graphics & Documents" "/assets" "whiteboard"]
                ["Daily notes" "/journals" "calendar-plus"]
-               ["PAGES" "/pages" "file-text"]
+               ["PAGES" "/pages" "page"]
                []
                ["APP Internal" "/logseq" "tool"]
                ["Config File" "/logseq/config.edn"]]]

@@ -33,8 +33,8 @@
   (fn [close-fn]
     [:div
      [:div.sm:flex.items-center
-      [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-red-100.sm:mx-0.sm:h-10.sm:w-10
-       [:span.text-red-600.text-xl
+      [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-error.sm:mx-0.sm:h-10.sm:w-10
+       [:span.text-error.text-xl
         (ui/icon "alert-triangle")]]
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium
@@ -67,14 +67,14 @@
           contents? (= page-name "contents")
           properties (:block/properties page)
           public? (true? (:public properties))
-          favorites (:favorites (state/sub-graph-config))
+          favorites (:favorites (state/sub-config))
           favorited? (contains? (set (map util/page-name-sanity-lc favorites))
                                 page-name)
           developer-mode? (state/sub [:ui/developer-mode?])
           file-path (when (util/electron?) (page-handler/get-page-file-path))
           _ (state/sub :auth/id-token)
           file-sync-graph-uuid (and (user-handler/logged-in?)
-                                    (not file-sync-handler/hiding-login&file-sync)
+                                    (file-sync-handler/enable-sync?)
                                     (file-sync-handler/get-current-graph-uuid))]
       (when (and page (not block?))
         (->>

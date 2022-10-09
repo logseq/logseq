@@ -1,4 +1,6 @@
 (ns electron.handler
+  "This ns starts the event handling for the electron main process and defines
+  all the application-specific event types"
   (:require ["electron" :refer [ipcMain dialog app autoUpdater shell]]
             [cljs-bean.core :as bean]
             ["fs" :as fs]
@@ -14,6 +16,7 @@
             [promesa.core :as p]
             [clojure.string :as string]
             [electron.utils :as utils]
+            [electron.logger :as logger]
             [electron.state :as state]
             [clojure.core.async :as async]
             [electron.search :as search]
@@ -37,14 +40,14 @@
 (defn- readdir
   [dir]
   (->> (tree-seq
-        (fn [^js f]
-          (.isDirectory (fs/statSync f) ()))
-        (fn [d]
-          (let [files (fs/readdirSync d (clj->js {:withFileTypes true}))]
+        (fn [^js fpath]
+          (.isDirectory (fs/statSync fpath)))
+        (fn [dir]
+          (let [files (fs/readdirSync dir (clj->js {:withFileTypes true}))]
             (->> files
                  (remove #(.isSymbolicLink ^js %))
                  (remove #(string/starts-with? (.-name ^js %) "."))
-                 (map #(.join path d (.-name %))))))
+                 (map #(.join path dir (.-name %))))))
         dir)
        (doall)
        (vec)))
@@ -52,18 +55,26 @@
 (defmethod handle :readdir [_window [_ dir]]
   (readdir dir))
 
-(defmethod handle :unlink [_window [_ repo path]]
-  (if (plugin/dotdir-file? path)
+(defmethod handle :listdir [_window [_ dir flat?]]
+  (when (and dir (fs-extra/pathExistsSync dir))
+    (js-utils/deepReadDir dir (if (boolean? flat?) flat? true))))
+
+(defmethod handle :unlink [_window [_ repo-dir path]]
+  (if (or (plugin/dotdir-file? path)
+          (plugin/assetsdir-file? path))
     (fs/unlinkSync path)
     (try
-      (let [file-name   (-> (string/replace path (str repo "/") "")
-                           (string/replace "/" "_")
-                           (string/replace "\\" "_"))
-           recycle-dir (str repo "/logseq/.recycle")
-           _           (fs-extra/ensureDirSync recycle-dir)
-           new-path    (str recycle-dir "/" file-name)]
-        (fs/renameSync path new-path))
-      (catch :default _e
+      (logger/info ::unlink {:path path})
+      (let [file-name   (-> (string/replace path (str repo-dir "/") "")
+                            (string/replace "/" "_")
+                            (string/replace "\\" "_"))
+            recycle-dir (str repo-dir "/logseq/.recycle")
+            _           (fs-extra/ensureDirSync recycle-dir)
+            new-path    (str recycle-dir "/" file-name)]
+        (fs/renameSync path new-path)
+        (logger/debug ::unlink "recycle to" new-path))
+      (catch :default e
+        (logger/error ::unlink path e)
         nil))))
 
 (defonce Diff (google-diff.))
@@ -76,6 +87,7 @@
   (when (and (string? db-content)
              (string? new-content)
              (string-some-deleted? db-content new-content))
+    (logger/info ::backup "backup db file" path)
     (backup-file/backup-file repo :backup-dir path (path/extname path) db-content)))
 
 (defmethod handle :addVersionFile [_window [_ repo path content]]
@@ -108,11 +120,11 @@
       (fs/writeFileSync path content)
       (fs/statSync path)
       (catch :default e
+        (logger/warn ::write-file path e)
         (let [backup-path (try
                             (backup-file/backup-file repo :backup-dir path (path/extname path) content)
                             (catch :default e
-                              (println "Backup file failed")
-                              (js/console.dir e)))]
+                              (logger/error ::write-file "backup file failed:" e)))]
           (utils/send-to-renderer window "notification" {:type "error"
                                                          :payload (str "Write to the file " path
                                                                        " failed, "
@@ -123,13 +135,14 @@
                                                                               ".")))}))))))
 
 (defmethod handle :rename [_window [_ old-path new-path]]
+  (logger/info ::rename "from" old-path "to" new-path)
   (fs/renameSync old-path new-path))
 
 (defmethod handle :stat [_window [_ path]]
   (fs/statSync path))
 
 (defonce allowed-formats
-  #{:org :markdown :md :edn :json :js :css :excalidraw})
+  #{:org :markdown :md :edn :json :js :css :excalidraw :tldr})
 
 (defn get-ext
   [p]
@@ -159,12 +172,15 @@
     (p/resolved (first result))))
 
 (defmethod handle :openDir [^js _window _messages]
+  (logger/info ::open-dir "open folder selection dialog")
   (p/let [path (open-dir-dialog)]
+    (logger/debug ::open-dir {:path path})
     (if path
       (p/resolved (bean/->js (get-files path)))
       (p/rejected (js/Error "path empty")))))
 
 (defmethod handle :getFiles [_window [_ path]]
+  (logger/debug ::get-files {:path path})
   (get-files path))
 
 (defn- sanitize-graph-name
@@ -220,8 +236,8 @@
         (when-let [sync-meta (and (not (string/blank? root))
                                   (.toString (.readFileSync fs txid-path)))]
           (reader/read-string sync-meta))))
-    (catch js/Error _e
-      (js/console.debug "[read txid meta] #" root (.-message _e)))))
+    (catch :default e
+      (js/console.debug "[read txid meta] #" root (.-message e)))))
 
 (defmethod handle :inflateGraphsInfo [_win [_ graphs]]
   (if (seq graphs)
@@ -276,7 +292,6 @@
   (search/truncate-blocks-table! repo)
   ;; unneeded serialization
   (search/upsert-blocks! repo (bean/->js data))
-  (search/write-search-version! repo)
   [])
 
 (defmethod handle :transact-blocks [_window [_ repo data]]
@@ -303,11 +318,12 @@
       (let [path (path/join path dir)]
         (try
           (fs-extra/removeSync path)
-          (catch js/Error e
-            (js/console.error e)))))
+          (catch :default e
+            (logger/error "Clear cache:" e)))))
     (utils/send-to-renderer window "redirect" {:payload {:to :home}})))
 
 (defmethod handle :clearCache [window _]
+  (logger/info ::clear-cache)
   (search/close!)
   (clear-cache! window)
   (search/ensure-search-dir!))
@@ -328,7 +344,7 @@
 (defmethod handle :httpFetchJSON [_win [_ url options]]
   (p/let [res (utils/fetch url options)
           json (.json res)]
-         json))
+    json))
 
 (defmethod handle :getUserDefaultPlugins []
   (utils/get-ls-default-plugins))
@@ -338,7 +354,7 @@
                  (try
                    (and (fs-extra/pathExistsSync url)
                         (fs-extra/pathExistsSync (path/join url "package.json")))
-                   (catch js/Error _e false)))))
+                   (catch :default _e false)))))
 
 (defmethod handle :relaunchApp []
   (.relaunch app) (.quit app))
@@ -362,8 +378,10 @@
 
 (defmethod handle :getAssetsFiles [^js win [_ {:keys [exts]}]]
   (when-let [graph-path (state/get-window-graph-path win)]
-    (p/let [^js files (js-utils/getAllFiles (.join path graph-path "assets") (clj->js exts))]
-           files)))
+    (when-let [assets-path (.join path graph-path "assets")]
+      (when (fs-extra/pathExistsSync assets-path)
+        (p/let [^js files (js-utils/getAllFiles assets-path (clj->js exts))]
+          files)))))
 
 (defn close-watcher-when-orphaned!
   "When it's the last window for the directory, close the watcher."
@@ -407,7 +425,7 @@
 
 (def *request-abort-signals (atom {}))
 
-(defmethod handle :httpRequest [_ [_ _req-id opts]]
+(defmethod handle :httpRequest [_ [_ req-id opts]]
   (let [{:keys [url abortable method data returnType headers]} opts]
     (when-let [[method type] (and (not (string/blank? url))
                                   [(keyword (string/upper-case (or method "GET")))
@@ -420,7 +438,7 @@
                                     {:body (js/JSON.stringify (bean/->js data))})
 
                                   (when-let [^js controller (and abortable (AbortController.))]
-                                    (swap! *request-abort-signals assoc _req-id controller)
+                                    (swap! *request-abort-signals assoc req-id controller)
                                     {:signal (.-signal controller)}))))
           (p/then (fn [^js res]
                     (case type
@@ -441,14 +459,15 @@
              ;; TODO: handle special cases
              (throw e)))
           (p/finally
-           (fn []
-             (swap! *request-abort-signals dissoc _req-id)))))))
+            (fn []
+              (swap! *request-abort-signals dissoc req-id)))))))
 
-(defmethod handle :httpRequestAbort [_ [_ _req-id]]
-  (when-let [^js controller (get @*request-abort-signals _req-id)]
+(defmethod handle :httpRequestAbort [_ [_ req-id]]
+  (when-let [^js controller (get @*request-abort-signals req-id)]
     (.abort controller)))
 
 (defmethod handle :quitAndInstall []
+  (logger/info ::quick-and-install)
   (.quitAndInstall autoUpdater))
 
 (defmethod handle :graphUnlinked [^js _win [_ repo]]
@@ -471,18 +490,22 @@
         windows (win/get-graph-all-windows dir)]
     (> (count windows) 1)))
 
-(defmethod handle :addDirWatcher [^js _window [_ dir]]
+(defmethod handle :addDirWatcher [^js _window [_ dir options]]
   ;; receive dir path (not repo / graph) from frontend
   ;; Windows on same dir share the same watcher
   ;; Only close file watcher when:
   ;;    1. there is no one window on the same dir
   ;;    2. reset file watcher to resend `add` event on window refreshing
   (when dir
-    (watcher/watch-dir! dir)))
+    (logger/debug ::watch-dir {:path dir})
+    (watcher/watch-dir! dir options)
+    nil))
 
 (defmethod handle :unwatchDir [^js _window [_ dir]]
   (when dir
-    (watcher/close-watcher! dir)))
+    (logger/debug ::unwatch-dir {:path dir})
+    (watcher/close-watcher! dir)
+    nil))
 
 (defn open-new-window!
   "Persist db first before calling! Or may break db persistency"
@@ -493,6 +516,7 @@
     win))
 
 (defmethod handle :openNewWindow [_window [_]]
+  (logger/info ::open-new-window)
   (open-new-window!)
   nil)
 
@@ -501,15 +525,10 @@
     (f window graph-name)
     (state/set-state! :window/once-graph-ready nil)))
 
-(defmethod handle :searchVersionChanged?
-  [^js _win [_ graph]]
-  (search/version-changed? graph))
-
-
 (defmethod handle :reloadWindowPage [^js win]
+  (logger/warn ::reload-window-page)
   (when-let [web-content (.-webContents win)]
     (.reload web-content)))
-
 
 (defmethod handle :setHttpsAgent [^js _win [_ opts]]
   (utils/set-fetch-agent opts))
@@ -545,9 +564,6 @@
 (defmethod handle :delete-remote-files [_ args]
   (apply rsapi/delete-remote-files (rest args)))
 
-(defmethod handle :update-remote-file [_ args]
-  (apply rsapi/update-remote-file (rest args)))
-
 (defmethod handle :update-remote-files [_ args]
   (apply rsapi/update-remote-files (rest args)))
 
@@ -563,8 +579,11 @@
 (defmethod handle :decrypt-with-passphrase [_ args]
   (apply rsapi/decrypt-with-passphrase (rest args)))
 
+(defmethod handle :cancel-all-requests [_ args]
+  (apply rsapi/cancel-all-requests (rest args)))
+
 (defmethod handle :default [args]
-  (println "Error: no ipc handler for: " (bean/->js args)))
+  (logger/error "Error: no ipc handler for:" args))
 
 (defn broadcast-persist-graph!
   "Receive graph-name (not graph path)
@@ -602,11 +621,15 @@
              (fn [^js event args-js]
                (try
                  (let [message (bean/->clj args-js)]
+                   ;; Be careful with the return values of `handle` defmethods.
+                   ;; Values that are not non-JS objects will cause this
+                   ;; exception -
+                   ;; https://www.electronjs.org/docs/latest/breaking-changes#behavior-changed-sending-non-js-objects-over-ipc-now-throws-an-exception
                    (bean/->js (handle (or (utils/get-win-from-sender event) window) message)))
-                 (catch js/Error e
+                 (catch :default e
                    (when-not (contains? #{"mkdir" "stat"} (nth args-js 0))
-                     (println "IPC error: " {:event event
-                                             :args args-js}
-                              e))
+                     (logger/error "IPC error: " {:event event
+                                                  :args args-js}
+                                   e))
                    e))))
     #(.removeHandler ipcMain main-channel)))

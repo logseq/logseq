@@ -1,4 +1,5 @@
 (ns frontend.rum
+  "Utility fns for rum"
   (:require [clojure.string :as s]
             [clojure.set :as set]
             [clojure.walk :as w]
@@ -33,6 +34,7 @@
                     x))
                 data)))
 
+;; TODO: Replace this with rum's built in rum.core/adapt-class
 ;; adapted from https://github.com/tonsky/rum/issues/20
 (defn adapt-class
   ([react-class]
@@ -95,3 +97,40 @@
          #(rum/set-ref! *mounted false))
        [])
     #(rum/deref *mounted)))
+
+(defn use-bounding-client-rect
+  "Returns the bounding client rect for a given dom node
+   You can manually change the tick value, if you want to force refresh the value, you can manually change the tick value"
+  ([] (use-bounding-client-rect nil))
+  ([tick]
+   (let [[ref set-ref] (rum/use-state nil)
+         [rect set-rect] (rum/use-state nil)]
+     (rum/use-effect!
+      (if ref
+        (fn []
+          (let [update-rect #(set-rect (. ref getBoundingClientRect))
+                updator (fn [entries]
+                          (when (.-contentRect (first (js->clj entries))) (update-rect)))
+                observer (js/ResizeObserver. updator)]
+            (update-rect)
+            (.observe observer ref)
+            #(.disconnect observer)))
+        #())
+      [ref tick])
+     [set-ref rect])))
+
+(defn use-click-outside
+  "Returns a function that can be used to register a callback
+   that will be called when the user clicks outside the given dom node"
+  [handler]
+  (let [[ref set-ref] (rum/use-state nil)]
+    (rum/use-effect!
+     (fn []
+       (let [listener (fn [e]
+                        (when (and ref
+                                   (not (.. ref (contains (.-target e)))))
+                          (handler e)))]
+         (js/document.addEventListener "click" listener)
+         #(.removeEventListener js/document "click" listener)))
+     [ref])
+    set-ref))

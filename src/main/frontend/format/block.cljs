@@ -1,16 +1,19 @@
 (ns frontend.format.block
   "Block code needed by app but not graph-parser"
-  (:require [clojure.string :as string]
-            [logseq.graph-parser.block :as gp-block]
+  (:require ["@sentry/react" :as Sentry]
+            [cljs-time.format :as tf]
+            [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.format :as format]
-            [frontend.state :as state]
             [frontend.handler.notification :as notification]
-            ["@sentry/react" :as Sentry]
+            [frontend.state :as state]
+            [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.mldoc :as gp-mldoc]))
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [lambdaisland.glogi :as log]))
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
@@ -25,6 +28,7 @@ and handles unexpected failure."
                               :db (db/get-db (state/get-current-repo))
                               :date-formatter (state/get-date-formatter)})
     (catch :default e
+      (log/error :exception e)
       (Sentry/captureException e)
       (notification/show! "An unexpected error occurred during block extraction." :error)
       [])))
@@ -35,6 +39,29 @@ and handles unexpected failure."
    (page-name->map original-page-name with-id? true))
   ([original-page-name with-id? with-timestamp?]
    (gp-block/page-name->map original-page-name with-id? (db/get-db (state/get-current-repo)) with-timestamp? (state/get-date-formatter))))
+
+(defn- normalize-as-percentage
+  ([block]
+   (some->> block
+            str
+            (re-matches #"(-?\d+\.?\d*)%")
+            second
+            (#(/ % 100)))))
+
+(defn- normalize-as-date
+  ([block]
+   (some->> block
+            str
+            date/valid?
+            (tf/unparse date/custom-formatter))))
+
+(defn normalize-block
+  "Normalizes supported formats such as dates and percentages."
+  ([block]
+   (->> [normalize-as-percentage normalize-as-date identity]
+        (map #(% block))
+        (remove nil?)
+        (first))))
 
 (defn parse-block
   ([block]
@@ -74,7 +101,7 @@ and handles unexpected failure."
                body (vec (if title (rest ast) ast))
                body (drop-while gp-property/properties-ast? body)
                result (cond->
-                        (if (seq body) {:block/body body} {})
+                       (if (seq body) {:block/body body} {})
                         title
                         (assoc :block/title title))]
            (state/add-block-ast-cache! block-uuid content result)

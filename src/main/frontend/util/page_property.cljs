@@ -1,4 +1,4 @@
-(ns frontend.util.page-property
+(ns ^:no-doc frontend.util.page-property
   (:require [clojure.string :as string]
             [frontend.db :as db]
             [frontend.modules.outliner.core :as outliner-core]

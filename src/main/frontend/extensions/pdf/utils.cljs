@@ -3,7 +3,7 @@
             [cljs-bean.core :as bean]
             [frontend.util :as util]
             ["/frontend/extensions/pdf/utils" :as js-utils]
-            [frontend.db :as front-db]
+            [frontend.db :as db]
             [frontend.loader :refer [load]]
             [clojure.string :as string]))
 
@@ -115,7 +115,7 @@
     (mapv #(if (map? %) % (bean/->clj %)) its)))
 
 (defn gen-uuid []
-  (front-db/new-block-id))
+  (db/new-block-id))
 
 (defn js-load$
   [url]
@@ -173,13 +173,13 @@
   []
   (try
     (js-invoke js/window.lsPdfViewer "nextPage")
-    (catch js/Error _e nil)))
+    (catch :default _e nil)))
 
 (defn prev-page
   []
   (try
     (js-invoke js/window.lsPdfViewer "previousPage")
-    (catch js/Error _e nil)))
+    (catch :default _e nil)))
 
 (comment
  (fix-selection-text-breakline "this is a\ntest paragraph")

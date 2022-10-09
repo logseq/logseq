@@ -1,8 +1,7 @@
 {:paths ["src"]
  :deps
  ;; External deps should be kept in sync with https://github.com/logseq/nbb-logseq/blob/main/bb.edn
- {frankiesardo/linked {:mvn/version "1.3.0"}
-  com.andrewmcveigh/cljs-time {:git/url "https://github.com/logseq/cljs-time" ;; fork
+ {com.andrewmcveigh/cljs-time {:git/url "https://github.com/logseq/cljs-time" ;; fork
                                :sha     "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
   ;; local dep
   logseq/db {:local/root "../db"}
@@ -20,5 +19,5 @@
                       org.clojure/clojurescript {:mvn/version "1.11.54"}}
          :main-opts ["-m" "cljs-test-runner.main"]}
 
-  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.05.31"}}
+  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.09.08"}}
               :main-opts  ["-m" "clj-kondo.main"]}}}

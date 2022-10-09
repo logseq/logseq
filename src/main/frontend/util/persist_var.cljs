@@ -1,4 +1,6 @@
 (ns frontend.util.persist-var
+  "System-component-like ns that provides an atom-like abstraction over an edn
+  file"
   (:require [frontend.config :as config]
             [frontend.state :as state]
             [frontend.fs :as fs]
@@ -27,36 +29,43 @@
 
   ILoad
   (-load [_]
-    (when-not (config/demo-graph?)
+    (if (config/demo-graph?)
+      (p/resolved nil)
       (let [repo (state/get-current-repo)
             dir (config/get-repo-dir repo)
             path (load-path location)]
-        (p/let [stat (p/catch (fs/stat dir path)
-                              (constantly nil))
-                content (when stat
-                          (p/catch
-                           (fs/read-file dir path)
-                           (constantly nil)))]
-          (when-let [content (and (some? content)
-                                  (try (cljs.reader/read-string content)
-                                       (catch js/Error e
-                                         (println (util/format "load persist-var failed: %s"  (load-path location)))
-                                         (js/console.dir e))))]
-            (swap! *value (fn [o]
-                            (-> o
-                                (assoc-in [repo :loaded?] true)
-                                (assoc-in [repo :value] content)))))))))
+        (p/let [file-exists? (fs/file-exists? dir path)]
+          (when file-exists?
+            (-> (p/chain (fs/stat dir path)
+                         (fn [stat]
+                           (when stat
+                             (fs/read-file dir path)))
+                         (fn [content]
+                           (when (not-empty content)
+                             (try (cljs.reader/read-string content)
+                                  (catch :default e
+                                    (println (util/format "read persist-var failed: %s" (load-path location)))
+                                    (js/console.dir e)))))
+                         (fn [value]
+                           (when (some? value)
+                             (swap! *value (fn [o]
+                                             (-> o
+                                                 (assoc-in [repo :loaded?] true)
+                                                 (assoc-in [repo :value] value)))))))
+                (p/catch (fn [e]
+                           (println (util/format "load persist-var failed: %s: %s" (load-path location) e))))))))))
   (-loaded? [_]
     (get-in @*value [(state/get-current-repo) :loaded?]))
 
   ISave
   (-save [_]
-    (when-not (config/demo-graph?)
+    (if (config/demo-graph?)
+      (p/resolved nil)
       (let [path (load-path location)
             repo (state/get-current-repo)
             content (str (get-in @*value [repo :value]))
             dir (config/get-repo-dir repo)]
-        (fs/write-file! repo dir path content nil))))
+        (fs/write-file! repo dir path content {:skip-compare? true}))))
 
   IDeref
   (-deref [_this]

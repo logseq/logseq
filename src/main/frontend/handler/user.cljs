@@ -1,4 +1,5 @@
 (ns frontend.handler.user
+  "Provides user related handler fns like login and logout"
   (:require [frontend.config :as config]
             [frontend.handler.config :as config-handler]
             [frontend.state :as state]
@@ -7,7 +8,6 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [cljs-http.client :as http]
-            [lambdaisland.glogi :as log]
             [cljs.core.async :as async :refer [go go-loop <! timeout]]))
 
 (defn set-preferred-format!
@@ -46,6 +46,11 @@
    tc/from-long
    (t/before? (-> 1 t/hours t/from-now))))
 
+(defn- almost-expired-or-expired?
+  [parsed-jwt]
+  (or (almost-expired? parsed-jwt)
+      (expired? parsed-jwt)))
+
 (defn email []
   (some->
    (state/get-auth-id-token)
@@ -68,11 +73,11 @@
 
 (defn- set-token-to-localstorage!
   ([id-token access-token]
-   (log/info :debug "set-token-to-localstorage!")
+   (prn :debug "set-token-to-localstorage!")
    (js/localStorage.setItem "id-token" id-token)
    (js/localStorage.setItem "access-token" access-token))
   ([id-token access-token refresh-token]
-   (log/info :debug "set-token-to-localstorage!")
+   (prn :debug "set-token-to-localstorage!")
    (js/localStorage.setItem "id-token" id-token)
    (js/localStorage.setItem "access-token" access-token)
    (js/localStorage.setItem "refresh-token" refresh-token)))
@@ -105,18 +110,20 @@
     (when-let [refresh-token (state/get-auth-refresh-token)]
       (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_refresh_token?refresh_token=" refresh-token)
                                {:with-credentials? false}))]
-        (if (= 400 (:status resp))
-          ;; invalid refresh_token
-          (do
-            (clear-tokens)
-            false)
-          (do
-            (->
-             resp
-             (as-> $ (and (http/unexceptional-status? (:status $)) $))
-             :body
-             (as-> $ (set-tokens! (:id_token $) (:access_token $))))
-            true))))))
+
+        (cond
+          ;; e.g. api return 500, server internal error
+          ;; we shouldn't clear tokens if they aren't expired yet
+          ;; the `refresh-tokens-loop` will retry soon
+          (and (not (http/unexceptional-status? (:status resp)))
+               (not (-> (state/get-auth-id-token) parse-jwt expired?)))
+          nil                           ; do nothing
+
+          (not (http/unexceptional-status? (:status resp)))
+          (clear-tokens)
+
+          :else                         ; ok
+          (set-tokens! (:id_token (:body resp)) (:access_token (:body resp))))))))
 
 (defn restore-tokens-from-localstorage
   "restore id-token, access-token, refresh-token from localstorage,
@@ -165,7 +172,7 @@
     (when (state/get-auth-refresh-token)
       (let [id-token (state/get-auth-id-token)]
         (when (or (nil? id-token)
-                  (-> id-token (parse-jwt) (almost-expired?)))
+                  (-> id-token (parse-jwt) (almost-expired-or-expired?)))
           (debug/pprint (str "refresh tokens... " (tc/to-string(t/now))))
           (<! (<refresh-id-token&access-token)))))
     (when-not stop-refresh

@@ -176,13 +176,13 @@
           simulation                                                                (layout! nodes-js links-js)]
       (doseq [node nodes-js]
         (try (.addNode graph (.-id node) node)
-          (catch js/Error e
+          (catch :default e
             (js/console.error e))))
       (doseq [link links-js]
         (let [source (.-id (.-source link))
               target (.-id (.-target link))]
           (try (.addEdge graph source target link)
-            (catch js/Error e
+            (catch :default e
               (js/console.error e)))))
       (when-let [container-ref (:ref state)]
         (let [pixi-graph (new (.-PixiGraph Pixi-Graph)
@@ -199,6 +199,6 @@
             (register-handlers-fn pixi-graph))
           (set-up-listeners! pixi-graph)
           (.on simulation "tick" (tick! pixi-graph graph nodes-js links-js)))))
-    (catch js/Error e
+    (catch :default e
       (js/console.error e)))
   state)

@@ -115,7 +115,7 @@
       margin: 0;
     }
 
-    i.ti {
+    i:is(.ti, .tie) {
       font-size: 16px;
       display: inline-block;
       position: relative;
@@ -132,13 +132,15 @@
     }
 
     .r {
-      font-size: 14px;
+      @apply text-base space-x-2;
 
       a.button {
         color: var(--ls-primary-text-color);
         margin-top: 1px;
         height: unset;
         padding: 4px;
+        display: flex;
+        align-items: center;
 
         &.active {
           opacity: 1;
@@ -275,6 +277,7 @@ a.page-title {
   margin-left: -8px;
   transition: none;
   display: block;
+  color: inherit;
 }
 
 html.is-native-android,
@@ -325,9 +328,7 @@ html.is-native-ios {
   .cp__all_pages {
     .actions > .r {
       position: relative;
-      padding: 15px 0;
-      padding-right: 10px;
-      padding-bottom: 25px;
+      padding: 15px 10px 25px 0;
       justify-content: space-between;
 
       .paginates {
@@ -361,11 +362,6 @@ html.is-native-ios {
   .control-hide {
     display: none;
   }
- }
-
- .text-2xs {
-  font-size: 0.625rem; /* 10px */
-  line-height: 0.875rem; /* 14px */
  }
 
  .toned-down {

@@ -15,7 +15,7 @@
     (.ensureFileSync fs cfg-path)
     (let [body (.toString (.readFileSync fs cfg-path))]
       (if (seq body) (reader/read-string body) {}))
-    (catch js/Error e
+    (catch :default e
       (js/console.error :cfg-error e)
       {})))
 
@@ -23,7 +23,7 @@
   [cfg]
   (try
     (.writeFileSync fs cfg-path (pr-str cfg)) cfg
-    (catch js/Error e
+    (catch :default e
       (js/console.error :cfg-error e))))
 
 (defn set-item!

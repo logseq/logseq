@@ -1,4 +1,5 @@
 (ns frontend.util.clock
+  "Provides clock related functionality used by tasks"
   (:require [frontend.state :as state]
             [frontend.util.drawer :as drawer]
             [frontend.util :as util]
@@ -20,15 +21,17 @@
         seconds (mod seconds 60)]
     (util/format "%02d:%02d:%02d" hours minutes seconds)))
 
-(defn minutes->days:hours:minutes
-  [minutes]
-  (let [days (quot (quot minutes 60) 24)
-        hours (quot (- minutes (* days 60 24)) 60)
-        minutes (mod minutes 60)]
-    (util/format "%s%s%s"
+(defn seconds->days:hours:minutes:seconds
+  [seconds]
+  (let [days (quot (quot seconds 3600) 24)
+        hours (quot seconds 3600)
+        minutes (quot (- seconds (* hours 3600)) 60)
+        seconds (mod seconds 60)]
+    (util/format "%s%s%s%s"
                  (if (zero? days) "" (str days "d"))
                  (if (zero? hours) "" (str hours "h"))
-                 (if (zero? minutes) "" (str minutes "m")))))
+                 (if (zero? minutes) "" (str minutes "m"))
+                 (if (zero? seconds) "" (str seconds "s")))))
 
 (def support-seconds?
   (get (state/get-config)
@@ -77,7 +80,7 @@
               (str clock-in-log "\n")
               (str clock-out-log "\n"))))))
      content)
-    (catch js/Error _e
+    (catch :default _e
       content)))
 
 (defn clock-summary
@@ -102,4 +105,4 @@
                   (string/replace #"\s+minutes?$" "m")))
             (if zero-minutes?
               seconds
-              duration-in-minutes)))))))
+              (* 60 duration-in-minutes))))))))

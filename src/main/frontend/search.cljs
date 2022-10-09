@@ -1,4 +1,6 @@
 (ns frontend.search
+  "Provides search functionality for a number of features including Cmd-K
+  search. Most of these fns depend on the search protocol"
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [logseq.graph-parser.config :as gp-config]
@@ -96,7 +98,7 @@
       (when-not (string/blank? q)
         (protocol/query engine q option)))))
 
-(defn transact-blocks!
+(defn- transact-blocks!
   [repo data]
   (when-let [engine (get-engine repo)]
     (protocol/transact-blocks! engine data)))
@@ -237,7 +239,8 @@
                 blocks-to-add (->> (filter (fn [block]
                                              (contains? blocks-to-add-set (:db/id block)))
                                            blocks-result)
-                                   (map search-db/block->index))
+                                   (map search-db/block->index)
+                                   (remove nil?))
                 blocks-to-remove-set (->> (remove :added blocks)
                                           (map :e)
                                           (set))]
@@ -268,8 +271,3 @@
   [repo]
   (when-let [engine (get-engine repo)]
     (protocol/remove-db! engine)))
-
-(defn cache-stale?
-  [repo]
-  (when-let [engine (get-engine repo)]
-    (protocol/cache-stale? engine repo)))

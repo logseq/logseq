@@ -1,6 +1,6 @@
 (ns frontend.modules.shortcut.core
   (:require [clojure.string :as str]
-            [frontend.handler.config :as config]
+            [frontend.handler.config :as config-handler]
             [frontend.handler.notification :as notification]
             [frontend.modules.shortcut.data-helper :as dh]
             [frontend.modules.shortcut.config :as shortcut-config]
@@ -66,7 +66,7 @@
            (try
              (log/debug :shortcut/register-shortcut {:id id :binding k})
              (.registerShortcut handler (util/keyname id) (dh/normalize-user-keyname k))
-             (catch js/Object e
+             (catch :default e
                (log/error :shortcut/register-shortcut {:id      id
                                                        :binding k
                                                        :error   e})
@@ -224,9 +224,9 @@
      (let [k (first args)
            keystroke (str/trim @local)]
        (when-not (empty? keystroke)
-         (config/set-config! :shortcuts (merge
-                                         (:shortcuts (state/get-config))
-                                         {k keystroke}))))
+         (config-handler/set-config! :shortcuts (merge
+                                                 (:shortcuts (state/get-config))
+                                                 {k keystroke}))))
 
      (when-let [^js handler (::key-record-handler state)]
        (.dispose handler))

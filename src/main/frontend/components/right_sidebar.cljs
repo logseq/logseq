@@ -90,7 +90,9 @@
     (when-let [page-name (if (integer? db-id)
                            (:block/name (db/entity db-id))
                            db-id)]
-      [[:a.page-title {:href     (rfe/href :page {:name page-name})
+      [[:a.page-title {:href     (if (db-model/whiteboard-page? page-name)
+                                   (rfe/href :whiteboard {:name page-name})
+                                   (rfe/href :page {:name page-name}))
                        :on-click (fn [e]
                                    (when (gobj/get e "shiftKey")
                                      (.preventDefault e)))}
@@ -157,8 +159,19 @@
     (get-page match)))
 
 (rum/defc sidebar-resizer
-  []
-  (let [el-ref (rum/use-ref nil)]
+  [sidebar-open? sidebar-id handler-position]
+  (let [el-ref (rum/use-ref nil)
+        min-ratio 0.1
+        max-ratio 0.7
+        keyboard-step 5
+        add-resizing-class #(.. js/document.documentElement -classList (add "is-resizing-buf"))
+        remove-resizing-class #(.. js/document.documentElement -classList (remove "is-resizing-buf"))
+        set-width! (fn [ratio element]
+                     (when (and el-ref element)
+                       (let [width (str (* ratio 100) "%")]
+                         (#(.setProperty (.-style element) "width" width)
+                          (.setAttribute (rum/deref el-ref) "aria-valuenow" ratio)
+                          (ui-handler/persist-right-sidebar-width!)))))]
     (rum/use-effect!
      (fn []
        (when-let [el (and (fn? js/window.interact) (rum/deref el-ref))]
@@ -169,23 +182,53 @@
                 {:move
                  (fn [^js/MouseEvent e]
                    (let [width js/document.documentElement.clientWidth
-                         offset (.-left (.-rect e))
-                         right-el-ratio (- 1 (.toFixed (/ offset width) 6))
-                         right-el-ratio (cond
-                                          (< right-el-ratio 0.2) 0.2
-                                          (> right-el-ratio 0.7) 0.7
-                                          :else right-el-ratio)
-                         right-el (js/document.getElementById "right-sidebar")]
-                     (when right-el
-                       (let [width (str (* right-el-ratio 100) "%")]
-                         (.setProperty (.-style right-el) "width" width)
-                         (ui-handler/persist-right-sidebar-width!)))))}}))
+                         sidebar-el (js/document.getElementById sidebar-id)
+                         offset (.-pageX e)
+                         ratio (.toFixed (/ offset width) 6)
+                         ratio (if (= handler-position :west) (- 1 ratio) ratio)
+                         cursor-class (str "cursor-" (first (name handler-position)) "-resize")]
+                     (if (= (.getAttribute el "data-expanded") "true")
+                       (cond
+                         (< ratio (/ min-ratio 2))
+                         (state/hide-right-sidebar!)
+
+                         (< ratio min-ratio)
+                         (.. js/document.documentElement -classList (add cursor-class))
+
+                         (and (< ratio max-ratio) sidebar-el)
+                         (when sidebar-el
+                           (#(.. js/document.documentElement -classList (remove cursor-class))
+                            (set-width! ratio sidebar-el)))
+                         :else
+                         #(.. js/document.documentElement -classList (remove cursor-class)))
+                       (when (> ratio (/ min-ratio 2)) (state/open-right-sidebar!)))))}}))
              (.styleCursor false)
-             (.on "dragstart" #(.. js/document.documentElement -classList (add "is-resizing-buf")))
-             (.on "dragend" #(.. js/document.documentElement -classList (remove "is-resizing-buf")))))
+             (.on "dragstart" add-resizing-class)
+             (.on "dragend" remove-resizing-class)
+             (.on "keydown" (fn [e]
+                              (when-let [sidebar-el (js/document.getElementById sidebar-id)]
+                                (let [width js/document.documentElement.clientWidth
+                                      keyboard-step (case (.-code e)
+                                                      "ArrowLeft" (- keyboard-step)
+                                                      "ArrowRight" keyboard-step
+                                                      0)
+                                      offset (+ (.-x (.getBoundingClientRect sidebar-el)) keyboard-step)
+                                      ratio (.toFixed (/ offset width) 6)
+                                      ratio (if (= handler-position :west) (- 1 ratio) ratio)]
+                                  (when (and (> ratio min-ratio) (< ratio max-ratio) (not (zero? keyboard-step)))
+                                    ((add-resizing-class)
+                                     (set-width! ratio sidebar-el)))))))
+             (.on "keyup" remove-resizing-class)))
        #())
      [])
-    [:span.resizer {:ref el-ref}]))
+    [:.resizer {:ref el-ref
+                :role "separator"
+                :aria-orientation "vertical"
+                :aria-label (t :right-side-bar/separator)
+                :aria-valuemin (* min-ratio 100)
+                :aria-valuemax (* max-ratio 100)
+                :tabIndex "0"
+                :data-expanded sidebar-open?}]))
 
 (rum/defcs sidebar-inner <
   (rum/local false ::anim-finished?)
@@ -196,7 +239,6 @@
   (let [*anim-finished? (get state ::anim-finished?)]
     [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
 
-     (sidebar-resizer)
      [:div.cp__right-sidebar-scrollable
       [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.px-2.h-12
        [:div.cp__right-sidebar-settings.hide-scrollbar.gap-1 {:key "right-sidebar-settings"}
@@ -241,5 +283,6 @@
         repo (state/sub :git/current-repo)]
     [:div#right-sidebar.cp__right-sidebar.h-screen
      {:class (if sidebar-open? "open" "closed")}
+     (sidebar-resizer sidebar-open? "right-sidebar" :west)
      (when sidebar-open?
        (sidebar-inner repo t blocks))]))

@@ -79,7 +79,7 @@
          [:th.text-right]]]
        [:tbody
         (map (fn [[k {:keys [binding]}]]
-               [:tr {:key k}
+               [:tr {:key (str k)}
                 [:td.text-left (t (dh/decorate-namespace k))]
                 (shortcut-col k binding configurable? (t (dh/decorate-namespace k)))])
           (dh/binding-by-category name))]]])))

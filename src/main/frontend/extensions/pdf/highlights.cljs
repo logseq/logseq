@@ -940,7 +940,6 @@
   [url initial-hls ^js pdf-document ops]
 
   ;;(dd "==== render pdf-viewer ====")
-
   (let [*el-ref (rum/create-ref)
         [state, set-state!] (rum/use-state {:viewer nil :bus nil :link nil :el nil})
         [ano-state, set-ano-state!] (rum/use-state {:loaded-pages []})

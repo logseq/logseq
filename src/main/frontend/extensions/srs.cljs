@@ -558,7 +558,7 @@
               count (count result)]
           (reset! cards-total count)
           count)))
-    (catch js/Error e
+    (catch :default e
       (js/console.error e) 0)))
 
 (declare cards)

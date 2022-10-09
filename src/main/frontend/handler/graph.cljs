@@ -1,4 +1,5 @@
 (ns frontend.handler.graph
+  "Provides util handler fns for graph view"
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [frontend.db :as db]

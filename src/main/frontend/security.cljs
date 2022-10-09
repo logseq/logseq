@@ -1,4 +1,5 @@
 (ns frontend.security
+  "Provide security focused fns like preventing XSS attacks"
   (:require [clojure.walk :as walk]
             [frontend.util :as util]))
 

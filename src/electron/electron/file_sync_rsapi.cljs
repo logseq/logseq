@@ -1,10 +1,15 @@
 (ns electron.file-sync-rsapi
-  (:require ["@logseq/rsapi" :as rsapi]))
+  (:require ["@logseq/rsapi" :as rsapi]
+            [electron.window :as window]
+            [cljs-bean.core :as bean]))
 
 (defn key-gen [] (rsapi/keygen))
 
-(defn set-env [env private-key public-key]
-  (rsapi/setEnv env private-key public-key))
+(defn set-env [graph-uuid env private-key public-key]
+  (rsapi/setEnv graph-uuid env private-key public-key))
+
+(defn set-progress-callback [callback]
+  (rsapi/setProgressCallback callback))
 
 (defn get-local-files-meta [graph-uuid base-path file-paths]
   (rsapi/getLocalFilesMeta graph-uuid base-path (clj->js file-paths)))
@@ -27,20 +32,29 @@
 (defn delete-remote-files [graph-uuid base-path file-paths txid token]
   (rsapi/deleteRemoteFiles graph-uuid base-path (clj->js file-paths) txid token))
 
-(defn update-remote-file [graph-uuid base-path file-path txid token]
-  (rsapi/updateRemoteFile graph-uuid base-path file-path txid token))
-
 (defn update-remote-files [graph-uuid base-path file-paths txid token]
   (rsapi/updateRemoteFiles graph-uuid base-path (clj->js file-paths) txid token true))
 
-(defn encrypt-fnames [fnames]
-  (mapv rsapi/encryptFname fnames))
+(defn encrypt-fnames [graph-uuid fnames]
+  (rsapi/encryptFnames graph-uuid (clj->js fnames)))
 
-(defn decrypt-fnames [fnames]
-  (mapv rsapi/decryptFname fnames))
+(defn decrypt-fnames [graph-uuid fnames]
+  (rsapi/decryptFnames graph-uuid (clj->js fnames)))
 
 (defn encrypt-with-passphrase [passphrase data]
   (rsapi/ageEncryptWithPassphrase passphrase data))
 
 (defn decrypt-with-passphrase [passphrase data]
   (rsapi/ageDecryptWithPassphrase passphrase data))
+
+(defn cancel-all-requests []
+  (rsapi/cancelAllRequests))
+
+(defonce progress-notify-chan "file-sync-progress")
+(set-progress-callback (fn [error progress-info]
+                         (when-not error
+                           (doseq [^js win (window/get-all-windows)]
+                             (when-not (.isDestroyed win)
+                               (.. win -webContents
+                                   (send progress-notify-chan (bean/->js progress-info))))))))
+                                   

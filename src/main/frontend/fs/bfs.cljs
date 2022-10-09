@@ -1,4 +1,4 @@
-(ns frontend.fs.bfs
+(ns ^:no-doc frontend.fs.bfs
   (:require [frontend.fs.protocol :as protocol]
             [frontend.util :as util]
             [promesa.core :as p]))
@@ -34,7 +34,7 @@
     nil)
   (get-files [_this _path-or-handle _ok-handler]
     nil)
-  (watch-dir! [_this _dir]
+  (watch-dir! [_this _dir _options]
     nil)
   (unwatch-dir! [_this _dir]
     nil))

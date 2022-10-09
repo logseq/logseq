@@ -588,7 +588,6 @@
   color: var(--ls-primary-text-color);
   border-radius: 4px;
   text-align: center;
-  will-change: transform;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--ls-quaternary-background-color);
@@ -625,7 +624,6 @@
 
 .tippy-tooltip [x-circle] {
   position: absolute;
-  will-change: transform;
   background-color: var(--ls-quaternary-background-color);
   border-radius: 50%;
   width: 130%;

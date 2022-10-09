@@ -38,7 +38,7 @@ import {
 import Debug from 'debug'
 import * as CSS from 'csstype'
 import EventEmitter from 'eventemitter3'
-import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
+import { IAsyncStorage, LSPluginFileStorage } from './modules/LSPlugin.Storage'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 import { LSPluginRequest } from './modules/LSPlugin.Request'
 
@@ -311,8 +311,18 @@ const db: Partial<IDBProxy> = {
 }
 
 const git: Partial<IGitProxy> = {}
+
 const ui: Partial<IUIProxy> = {}
-const assets: Partial<IAssetsProxy> = {}
+
+const assets: Partial<IAssetsProxy> = {
+  makeSandboxStorage(
+    this: LSPluginUser
+  ): IAsyncStorage {
+    return new LSPluginFileStorage(
+      this, { assets: true }
+    )
+  }
+}
 
 type uiState = {
   key?: number

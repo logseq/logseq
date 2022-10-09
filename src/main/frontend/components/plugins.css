@@ -55,7 +55,7 @@
         margin-right: 5px;
         background: transparent;
 
-        .ti {
+        .ti, .tie {
           margin-right: 3px;
         }
 
@@ -67,7 +67,7 @@
     }
 
     .control-tabs {
-      .ti {
+      .ti, .tie {
         margin-right: 4px;
       }
       .ui__dropdown-trigger {
@@ -231,6 +231,11 @@
           opacity: .8;
         }
       }
+
+      a {
+        color: var(--ls-primary-text-color);
+        opacity: .7;
+      }
     }
 
     > .l {
@@ -273,7 +278,7 @@
           position: relative;
           z-index: var(--ls-z-index-level-1);
 
-          .ti {
+          .ti, .tie {
             font-size: 16px;
           }
 
@@ -322,7 +327,7 @@
                 }
               }
 
-              .ti {
+              .ti, .tie {
                 font-size: 12px;
               }
             }
@@ -804,7 +809,7 @@
         font-size: 13px;
         position: relative;
 
-        div[data-injected-ui] .ti {
+        div[data-injected-ui] :is(.ti, .tie) {
           position: relative;
           bottom: -1px;
         }

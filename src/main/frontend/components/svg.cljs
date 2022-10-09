@@ -59,8 +59,7 @@
 (def folder (hero-icon "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"))
 (def settings-sm [:svg {:viewBox "0 0 20 20", :fill "currentColor", :height "20", :width "20"}
                   [:path {:fill-rule "evenodd", :d "M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z", :clip-rule "evenodd"}]])
-(def trash-sm [:svg {:viewBox "0 0 20 20", :fill "currentColor", :height "16", :width "16"}
-               [:path {:fill-rule "evenodd", :d "M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z", :clip-rule "evenodd"}]])
+
 (def external-link
   [:svg {:fill   "none", :view-box "0 0 24 24", :height "21", :width "21"
          :stroke "currentColor"}
@@ -71,7 +70,7 @@
      :d               "M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"}]])
 (rum/defc note
   []
-  [:svg.h-8.w-8.svg-shadow.note
+  [:svg.h-8.w-8.note
    {:view-box "0 0 512 512"
     :fill     "currentColor"}
    [:path
@@ -89,20 +88,18 @@
 
 (rum/defc important
   []
-  [:svg.h-8.w-8.svg-shadow.important
+  [:svg.h-8.w-8.important
    {:view-box "0 0 512 512"
-    :fill     "currentColor"
-    :color    "#bf0000"}
+    :fill     "var(--ls-error-color)"}
    [:path
     {:d
      "M504 256c0 136.997-111.043 248-248 248S8 392.997 8 256C8 119.083 119.043 8 256 8s248 111.083 248 248zm-248 50c-25.405 0-46 20.595-46 46s20.595 46 46 46 46-20.595 46-46-20.595-46-46-46zm-43.673-165.346l7.418 136c.347 6.364 5.609 11.346 11.982 11.346h48.546c6.373 0 11.635-4.982 11.982-11.346l7.418-136c.375-6.874-5.098-12.654-11.982-12.654h-63.383c-6.884 0-12.356 5.78-11.981 12.654z"}]])
 
 (rum/defc caution
   []
-  [:svg.h-8.w-8.svg-shadow.caution
+  [:svg.h-8.w-8.caution
    {:view-box "0 0 384 512"
-    :fill     "currentColor"
-    :color    "#bf3400"}
+    :fill     "var(--ls-warning-color)"}
    [:path
     {:d
      "M216 23.86c0-23.8-30.65-32.77-44.15-13.04C48 191.85 224 200 224 288c0 35.63-29.11 64.46-64.85 63.99-35.17-.45-63.15-29.77-63.15-64.94v-85.51c0-21.7-26.47-32.23-41.43-16.5C27.8 213.16 0 261.33 0 320c0 105.87 86.13 192 192 192s192-86.13 192-192c0-170.29-168-193-168-296.14z"}]])
@@ -111,11 +108,10 @@
   ([]
    (warning nil))
   ([opts]
-   [:svg.h-8.w-8.svg-shadow.warning
+   [:svg.h-8.w-8.warning
     (merge
       {:view-box "0 0 576 512"
-       :fill     "currentColor"
-       :color    "#bf6900"}
+       :fill     "var(--ls-warning-color)"}
       opts)
     [:path
      {:d
@@ -357,16 +353,6 @@
     [:line {:x1 "12" :y1 "5" :x2 "12" :y2 "19"}]
     [:line {:x1 "16" :y1 "15" :x2 "12" :y2 "19"}]
     [:line {:x1 "8" :y1 "15" :x2 "12" :y2 "19"}]]))
-
-(defn maximize
-  ([] (maximize 16))
-  ([size]
-   [:svg.icon {:width size :height size :viewBox "0 0 24 24" :stroke-width "2" :stroke "currentColor" :fill "none" :stroke-linecap "round" :stroke-linejoin "round"}
-    [:path {:stroke "none" :d "M0 0h24v24H0z" :fill "none"}]
-    [:path {:d "M4 8v-2a2 2 0 0 1 2 -2h2"}]
-    [:path {:d "M4 16v2a2 2 0 0 0 2 2h2"}]
-    [:path {:d "M16 4h2a2 2 0 0 1 2 2v2"}]
-    [:path {:d "M16 20h2a2 2 0 0 0 2 -2v-2"}]]))
 
 (defn help-circle
   ([] (help-circle 16))

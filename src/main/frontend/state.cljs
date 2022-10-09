@@ -1,21 +1,24 @@
 (ns frontend.state
+  "Provides main application state, fns associated to set and state based rum
+  cursors"
   (:require [cljs-bean.core :as bean]
             [cljs.core.async :as async]
-            [clojure.string :as string]
             [cljs.spec.alpha :as s]
+            [clojure.string :as string]
             [dommy.core :as dom]
-            [medley.core :as medley]
             [electron.ipc :as ipc]
+            [frontend.mobile.util :as mobile-util]
             [frontend.storage :as storage]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [promesa.core :as p]
-            [rum.core :as rum]
             [logseq.graph-parser.config :as gp-config]
-            [frontend.mobile.util :as mobile-util]))
+            [medley.core :as medley]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
+;; Stores main application state
 (defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
         current-graph  (let [graph (storage/get :git/current-repo)]
@@ -230,19 +233,25 @@
 
      ;; file-sync
      :file-sync/jstour-inst                   nil
-     :file-sync/remote-graphs               {:loading false :graphs nil}
-     :file-sync/sync-manager                nil
-     :file-sync/sync-state-manager          nil
-     :file-sync/sync-state                  nil
-     :file-sync/sync-uploading-files        nil
-     :file-sync/sync-downloading-files      nil
      :file-sync/onboarding-state            (or (storage/get :file-sync/onboarding-state)
                                                 {:welcome false})
+     :file-sync/remote-graphs               {:loading false :graphs nil}
+     :file-sync/set-remote-graph-password-result {}
+
+     ;; graph-uuid -> {:graphs-txid {}
+     ;;                :file-sync/sync-manager {}
+     ;;                :file-sync/sync-state {}
+     ;;                ;; {file-path -> payload}
+     ;;                :file-sync/progress {}
+     ;;                :file-sync/start-time {}
+     ;;                :file-sync/last-synced-at {}}
+     :file-sync/graph-state                 {:current-graph-uuid nil
+                                             ;; graph-uuid -> ...
+                                             }
 
      :encryption/graph-parsing?             false
 
      :ui/loading?                           {}
-     :file-sync/set-remote-graph-password-result {}
      :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
 
      :file/rename-event-chan                (async/chan 100)
@@ -250,6 +259,9 @@
      :graph/importing                       nil
      :graph/importing-state                 {}
      })))
+
+;; Block ast state
+;; ===============
 
 ;; block uuid -> {content(String) -> ast}
 (def blocks-ast-cache (atom {}))
@@ -267,68 +279,56 @@
   (when (and block-uuid content)
     (get-in @blocks-ast-cache [block-uuid content])))
 
-(defn sub
-  [ks]
-  (if (coll? ks)
-    (util/react (rum/cursor-in state ks))
-    (util/react (rum/cursor state ks))))
-
-(defn get-route-match
-  []
-  (:route-match @state))
-
-(defn get-current-route
-  []
-  (get-in (get-route-match) [:data :name]))
-
-(defn home?
-  []
-  (= :home (get-current-route)))
-
-(defn setups-picker?
-  []
-  (= :repo-add (get-current-route)))
-
-(defn get-current-page
-  []
-  (when (= :page (get-current-route))
-    (get-in (get-route-match)
-            [:path-params :name])))
-
-(defn route-has-p?
-  []
-  (get-in (get-route-match) [:query-params :p]))
-
-(defn set-state!
-  [path value]
-  (if (vector? path)
-    (swap! state assoc-in path value)
-    (swap! state assoc path value)))
-
-(defn update-state!
-  [path f]
-  (if (vector? path)
-    (swap! state update-in path f)
-    (swap! state update path f)))
-
-(defn get-current-repo
-  []
-  (or (:git/current-repo @state)
-      (when-not (mobile-util/native-platform?)
-        "local")))
+;; User configuration getters under :config (and sometimes :me)
+;; ========================================
+;; TODO: Refactor default config values to be data driven. Currently they are all
+;;  buried in getters
+;; TODO: Refactor our access to be more data driven. Currently each getter
+;;  (re-)fetches get-current-repo needlessly
+;; TODO: Add consistent validation. Only a few config options validate at get time
 
 (def default-config
   "Default config for a repo-specific, user config"
   {:feature/enable-search-remove-accents? true
-   :default-arweave-gateway "https://arweave.net"})
+   :default-arweave-gateway "https://arweave.net"
+
+   ;; For flushing the settings of old versions. Don't bump this value.
+   :file/name-format :legacy})
+
+;; State that most user config is dependent on
+(declare get-current-repo)
+
+(defn merge-configs
+  "Merges user configs in given orders. All values are overriden except for maps
+  which are merged."
+  [& configs]
+  (apply merge-with
+    (fn merge-config [current new]
+      (if (and (map? current) (map? new))
+        (merge current new)
+        new))
+    configs))
 
 (defn get-config
-  "User config for the given repo or current repo if none given"
+  "User config for the given repo or current repo if none given. All config fetching
+should be done through this fn in order to get global config and config defaults"
   ([]
    (get-config (get-current-repo)))
   ([repo-url]
-   (merge default-config
-          (get-in @state [:config repo-url]))))
+   (merge-configs
+    default-config
+    (get-in @state [:config ::global-config])
+    (get-in @state [:config repo-url]))))
+
+(defonce publishing? (atom nil))
+
+(defn publishing-enable-editing?
+  []
+  (and @publishing? (:publishing/enable-editing? (get-config))))
+
+(defn enable-editing?
+  []
+  (or (not @publishing?) (:publishing/enable-editing? (get-config))))
 
 (defn get-arweave-gateway
   []
@@ -342,10 +342,6 @@
   (merge
     built-in-macros
     (:macros (get-config))))
-
-(defn sub-config
-  []
-  (sub :config))
 
 (defn get-custom-css-link
   []
@@ -367,83 +363,9 @@
         value (if (some? value) value (:all-pages-public? (get-config)))]
     (true? value)))
 
-(defn enable-grammarly?
-  []
-  (true? (:feature/enable-grammarly?
-           (get (sub-config) (get-current-repo)))))
-
-;; (defn store-block-id-in-file?
-;;   []
-;;   (true? (:block/store-id-in-file? (get-config))))
-
-(defn scheduled-deadlines-disabled?
-  []
-  (true? (:feature/disable-scheduled-and-deadline-query?
-           (get (sub-config) (get-current-repo)))))
-
-(defn enable-timetracking?
-  []
-  (not (false? (:feature/enable-timetracking?
-                 (get (sub-config) (get-current-repo))))))
-
-(defn enable-journals?
-  ([]
-   (enable-journals? (get-current-repo)))
-  ([repo]
-   (not (false? (:feature/enable-journals?
-                 (get (sub-config) repo))))))
-
-(defn enable-flashcards?
-  ([]
-   (enable-flashcards? (get-current-repo)))
-  ([repo]
-   (not (false? (:feature/enable-flashcards?
-                 (get (sub-config) repo))))))
-
-(defn user-groups
-  []
-  (set (get-in @state [:user/info :UserGroups])))
-
-(defn enable-sync?
-  []
-  (sub :feature/enable-sync?))
-
-(defn export-heading-to-list?
-  []
-  (not (false? (:export/heading-to-list?
-                 (get (sub-config) (get-current-repo))))))
-
-(defn enable-git-auto-push?
-  [repo]
-  (not (false? (:git-auto-push
-                 (get (sub-config) repo)))))
-
-(defn enable-block-timestamps?
-  []
-  (true? (:feature/enable-block-timestamps?
-           (get (sub-config) (get-current-repo)))))
-
-(defn sub-graph-config
-  []
-  (get (sub-config) (get-current-repo)))
-
-(defn sub-graph-config-settings
-  []
-  (:graph/settings (sub-graph-config)))
-
-;; Enable by default
-(defn show-brackets?
-  []
-  (not (false? (:ui/show-brackets?
-                 (get (sub-config) (get-current-repo))))))
-
 (defn get-default-home
   []
   (:default-home (get-config)))
-
-(defn sub-default-home-page
-  []
-  (get-in (sub-config) [(get-current-repo) :default-home :page] ""))
 
 (defn custom-home-page?
   []
@@ -488,6 +410,13 @@
       (:journals-directory (get-config repo)))
     "journals"))
 
+(defn get-whiteboards-directory
+  []
+  (or
+   (when-let [repo (get-current-repo)]
+     (:whiteboards-directory (get-config repo)))
+   "whiteboards"))
+
 (defn org-mode-file-link?
   [repo]
   (:org-mode/insert-file-link? (get-config repo)))
@@ -514,11 +443,256 @@
     "LATER"
     "TODO"))
 
-(defn page-name-order
-  "Decide whether to use file name or :title as page name. If it returns \"file\", use the file
-  name unless it is missing."
+(defn get-filename-format
+  ([] (get-filename-format (get-current-repo)))
+  ([repo]
+   (:file/name-format (get-config repo))))
+
+(defn get-date-formatter
   []
-  (:page-name-order (get-config)))
+  (gp-config/get-date-formatter (get-config)))
+
+(defn shortcuts []
+  (:shortcuts (get-config)))
+
+(defn get-commands
+  []
+  (:commands (get-config)))
+
+(defn get-scheduled-future-days
+  []
+  (let [days (:scheduled/future-days (get-config))]
+    (or (when (int? days) days) 0)))
+
+(defn get-start-of-week
+  []
+  (or (:start-of-week (get-config))
+      (get-in @state [:me :settings :start-of-week])
+      6))
+
+(defn get-ref-open-blocks-level
+  []
+  (or
+    (when-let [value (:ref/default-open-blocks-level (get-config))]
+      (when (integer? value)
+        value))
+    2))
+
+(defn get-linked-references-collapsed-threshold
+  []
+  (or
+    (when-let [value (:ref/linked-references-collapsed-threshold (get-config))]
+      (when (integer? value)
+        value))
+    100))
+
+(defn get-export-bullet-indentation
+  []
+  (case (get (get-config) :export/bullet-indentation :tab)
+    :eight-spaces
+    "        "
+    :four-spaces
+    "    "
+    :two-spaces
+    "  "
+    :tab
+    "\t"))
+
+(defn enable-search-remove-accents?
+  []
+  (:feature/enable-search-remove-accents? (get-config)))
+
+;; State cursor fns for use with rum components
+;; ============================================
+
+(declare document-mode?)
+
+(defn sub
+  "Creates a rum cursor, https://github.com/tonsky/rum#cursors, for use in rum components.
+Similar to re-frame subscriptions"
+  [ks]
+  (if (coll? ks)
+    (util/react (rum/cursor-in state ks))
+    (util/react (rum/cursor state ks))))
+
+(defn sub-config
+  "Sub equivalent to get-config which should handle all sub user-config access"
+  ([] (sub-config (get-current-repo)))
+  ([repo]
+   (let [config (sub :config)]
+     (merge-configs default-config
+                    (get config ::global-config)
+                    (get config repo)))))
+
+(defn enable-grammarly?
+  []
+  (true? (:feature/enable-grammarly? (sub-config))))
+
+(defn scheduled-deadlines-disabled?
+  []
+  (true? (:feature/disable-scheduled-and-deadline-query? (sub-config))))
+
+(defn enable-timetracking?
+  []
+  (not (false? (:feature/enable-timetracking? (sub-config)))))
+
+(defn enable-journals?
+  ([]
+   (enable-journals? (get-current-repo)))
+  ([repo]
+   (not (false? (:feature/enable-journals? (sub-config repo))))))
+
+(defn enable-flashcards?
+  ([]
+   (enable-flashcards? (get-current-repo)))
+  ([repo]
+   (not (false? (:feature/enable-flashcards? (sub-config repo))))))
+
+(defn enable-sync?
+  []
+  (sub :feature/enable-sync?))
+
+(defn enable-whiteboards?
+  ([]
+   (enable-whiteboards? (get-current-repo)))
+  ([repo]
+   (and
+    (util/electron?)
+    ((resolve 'frontend.handler.user/alpha-user?)) ;; using resolve to avoid circular dependency
+    (:feature/enable-whiteboards? (sub-config repo)))))
+
+(defn export-heading-to-list?
+  []
+  (not (false? (:export/heading-to-list? (sub-config)))))
+
+(defn enable-git-auto-push?
+  [repo]
+  (not (false? (:git-auto-push (sub-config repo)))))
+
+(defn enable-block-timestamps?
+  []
+  (true? (:feature/enable-block-timestamps? (sub-config))))
+
+(defn graph-settings
+  []
+  (:graph/settings (sub-config)))
+
+;; Enable by default
+(defn show-brackets?
+  []
+  (not (false? (:ui/show-brackets? (sub-config)))))
+
+(defn sub-default-home-page
+  []
+  (get-in (sub-config) [:default-home :page] ""))
+
+(defn sub-edit-content
+  [id]
+  (sub [:editor/content id]))
+
+(defn- get-selected-block-ids
+  [blocks]
+  (->> blocks
+       (keep #(when-let [id (dom/attr % "blockid")]
+                (uuid id)))
+       (distinct)))
+
+(defn sub-block-selected?
+  [block-uuid]
+  (rum/react
+   (rum/derived-atom [state] [::select-block block-uuid]
+     (fn [state]
+       (contains? (set (get-selected-block-ids (:selection/blocks state)))
+                  block-uuid)))))
+
+(defn block-content-max-length
+  [repo]
+  (or (:block/content-max-length (sub-config repo)) 10000))
+
+(defn mobile?
+  []
+  (or (util/mobile?) (mobile-util/native-platform?)))
+
+(defn enable-tooltip?
+  []
+  (if (mobile?)
+    false
+    (get (sub-config) :ui/enable-tooltip? true)))
+
+(defn show-command-doc?
+  []
+  (get (sub-config) :ui/show-command-doc? true))
+
+(defn logical-outdenting?
+  []
+  (:editor/logical-outdenting? (sub-config)))
+
+(defn enable-encryption?
+  [repo]
+  (:feature/enable-encryption? (sub-config repo)))
+
+(defn doc-mode-enter-for-new-line?
+  []
+  (and (document-mode?)
+       (not (:shortcut/doc-mode-enter-for-new-block? (get-config)))))
+
+(defn user-groups
+  []
+  (set (sub [:user/info :UserGroups])))
+
+;; State mutation helpers
+;; ======================
+
+(defn set-state!
+  [path value]
+  (if (vector? path)
+    (swap! state assoc-in path value)
+    (swap! state assoc path value))
+  nil)
+
+(defn update-state!
+  [path f]
+  (if (vector? path)
+    (swap! state update-in path f)
+    (swap! state update path f))
+  nil)
+
+;; State getters and setters
+;; =========================
+;; These fns handle any key except :config.
+;; Some state is also stored in local storage and/or sent to electron's main process
+
+(defn get-route-match
+  []
+  (:route-match @state))
+
+(defn get-current-route
+  []
+  (get-in (get-route-match) [:data :name]))
+
+(defn home?
+  []
+  (= :home (get-current-route)))
+
+(defn setups-picker?
+  []
+  (= :repo-add (get-current-route)))
+
+(defn get-current-page
+  []
+  (when (= :page (get-current-route))
+    (get-in (get-route-match)
+            [:path-params :name])))
+
+(defn route-has-p?
+  []
+  (get-in (get-route-match) [:query-params :p]))
+
+(defn get-current-repo
+  []
+  (or (:git/current-repo @state)
+      (when-not (mobile-util/native-platform?)
+        "local")))
 
 (defn get-remote-repos
   []
@@ -570,9 +744,8 @@
   [repo]
   (swap! state update-in [:me :repos]
          (fn [repos]
-           (->> (remove #(= (:url repo)
-                            (:url %))
-                        repos)
+           (->> (remove #(or (= (:url repo) (:url %))
+                             (= (:GraphUUID repo) (:GraphUUID %))) repos)
                 (util/distinct-by :url)))))
 
 (defn set-timestamp-block!
@@ -610,10 +783,6 @@
 (defn get-edit-content
   []
   (get (:editor/content @state) (get-edit-input-id)))
-
-(defn sub-edit-content
-  []
-  (sub [:editor/content (get-edit-input-id)]))
 
 (defn get-cursor-range
   []
@@ -668,13 +837,16 @@
     (do
       (set-editor-action! nil)
       (set-editor-action-data! nil))))
+
 (defn get-editor-show-input
   []
   (when (= (get-editor-action) :input)
     (get @state :editor/action-data)))
+
 (defn set-editor-show-commands!
   []
   (when-not (get-editor-action) (set-editor-action! :commands)))
+
 (defn set-editor-show-block-commands!
   []
   (when-not (get-editor-action) (set-editor-action! :block-commands)))
@@ -729,24 +901,9 @@
   []
   (:selection/blocks @state))
 
-(defn- get-selected-block-ids
-  [blocks]
-  (->> blocks
-       (keep #(when-let [id (dom/attr % "blockid")]
-                (uuid id)))
-       (distinct)))
-
 (defn get-selection-block-ids
   []
   (get-selected-block-ids (get-selection-blocks)))
-
-(defn sub-block-selected?
-  [block-uuid]
-  (rum/react
-   (rum/derived-atom [state] [::select-block block-uuid]
-     (fn [state]
-       (contains? (set (get-selected-block-ids (:selection/blocks state)))
-                  block-uuid)))))
 
 (defn get-selection-start-block-or-first
   []
@@ -877,20 +1034,6 @@
       {:last-edit-block edit-block
        :container       (gobj/get container "id")
        :pos             (cursor/pos (gdom/getElement edit-input-id))})))
-
-(defonce publishing? (atom nil))
-
-(defn publishing-enable-editing?
-  []
-  (and @publishing? (:publishing/enable-editing? (get-config))))
-
-(defn enable-editing?
-  []
-  (or (not @publishing?) (:publishing/enable-editing? (get-config))))
-
-(defn block-content-max-length
-  [repo]
-  (or (:block/content-max-length (get (sub-config) repo)) 5000))
 
 (defn clear-edit!
   []
@@ -1044,21 +1187,9 @@
   [value]
   (set-state! :today value))
 
-(defn get-date-formatter
-  []
-  (gp-config/get-date-formatter (get-config)))
-
-(defn shortcuts []
-  (get-in @state [:config (get-current-repo) :shortcuts]))
-
 (defn get-me
   []
   (:me @state))
-
-(defn deprecated-logged?
-  "Whether the user has logged in."
-  []
-  false)
 
 (defn set-db-restoring!
   [value]
@@ -1189,11 +1320,6 @@
   []
   (get @state :document/mode?))
 
-(defn doc-mode-enter-for-new-line?
-  []
-  (and (document-mode?)
-       (not (:shortcut/doc-mode-enter-for-new-block? (sub-graph-config)))))
-
 (defn toggle-document-mode!
   []
   (let [mode (document-mode?)]
@@ -1210,27 +1336,14 @@
     (set-state! :ui/shortcut-tooltip? (not mode))
     (storage/set :ui/shortcut-tooltip? (not mode))))
 
-(defn mobile?
-  []
-  (or (util/mobile?) (mobile-util/native-platform?)))
-
-(defn enable-tooltip?
-  []
-  (if (mobile?)
-    false
-    (get (get (sub-config) (get-current-repo))
-         :ui/enable-tooltip?
-         true)))
-
-(defn show-command-doc?
-  []
-  (get (get (sub-config) (get-current-repo))
-       :ui/show-command-doc?
-       true))
-
 (defn set-config!
   [repo-url value]
-  (set-state! [:config repo-url] value))
+  (when value (set-state! [:config repo-url] value)))
+
+(defn set-global-config!
+  [value]
+  ;; Placed under :config so cursors can work seamlessly
+  (when value (set-config! ::global-config value)))
 
 (defn get-wide-mode?
   []
@@ -1243,10 +1356,6 @@
 (defn set-online!
   [value]
   (set-state! :network/online? value))
-
-(defn get-commands
-  []
-  (:commands (get-config)))
 
 (defn get-plugins-commands
   []
@@ -1298,11 +1407,15 @@
         (set-state! [:plugin/installed-hooks hook-or-all] (disj coll pid))))
     true))
 
-
-(defn get-scheduled-future-days
+(defn active-tldraw-app
   []
-  (let [days (:scheduled/future-days (get-config))]
-    (or (when (int? days) days) 0)))
+  ^js js/window.tln)
+
+(defn tldraw-editing-logseq-block?
+  []
+  (when-let [app (active-tldraw-app)]
+    (and (= 1 (.. app -selectedShapesArray -length))
+         (= (.. app -editingShape) (.. app -selectedShapesArray (at 0))))))
 
 (defn set-graph-syncing?
   [value]
@@ -1352,11 +1465,32 @@
            :or {diff 1000}}]
   (when repo
     (or
-      (when-let [last-time (get-in @state [:editor/last-input-time repo])]
-        (let [now (util/time-ms)]
-          (>= (- now last-time) diff)))
-      ;; not in editing mode
-      (not (get-edit-input-id)))))
+     (when-let [last-time (get-in @state [:editor/last-input-time repo])]
+       (let [now (util/time-ms)]
+         (>= (- now last-time) diff)))
+     ;; not in editing mode
+     ;; Is this a good idea to put whiteboard check here?
+     (not (get-edit-input-id)))))
+
+(defn whiteboard-page-idle?
+  "Check if whiteboard page is idle.
+   - when current tool is select and idle
+     - and whiteboard page is updated longer than 1000 seconds
+   - when current tool is other tool and idle
+     - and whiteboard page is updated longer than 3000 seconds"
+  [repo whiteboard-page & {:keys [select-idle-ms tool-idle-ms]
+                           :or {select-idle-ms 1000
+                                tool-idle-ms 3000}}]
+  (when repo
+    (if-let [tldraw-app (active-tldraw-app)]
+      (let [last-time (:block/updated-at whiteboard-page)
+            now (util/time-ms)
+            ellapsed (- now last-time)
+            select-idle (.. tldraw-app (isIn "select.idle"))
+            tool-idle (.. tldraw-app -selectedTool (isIn "idle"))]
+        (or (and select-idle (>= ellapsed select-idle-ms))
+            (and (not select-idle) tool-idle (>= ellapsed tool-idle-ms))))
+      true)))
 
 (defn set-nfs-refreshing!
   [value]
@@ -1426,30 +1560,6 @@
   []
   @editor-op)
 
-(defn get-start-of-week
-  []
-  (or
-    (when-let [repo (get-current-repo)]
-      (get-in @state [:config repo :start-of-week]))
-    (get-in @state [:me :settings :start-of-week])
-    6))
-
-(defn get-ref-open-blocks-level
-  []
-  (or
-    (when-let [value (:ref/default-open-blocks-level (get-config))]
-      (when (integer? value)
-        value))
-    2))
-
-(defn get-linked-references-collapsed-threshold
-  []
-  (or
-    (when-let [value (:ref/linked-references-collapsed-threshold (get-config))]
-      (when (integer? value)
-        value))
-    100))
-
 (defn get-events-chan
   []
   (:system/events @state))
@@ -1500,26 +1610,9 @@
   [value]
   (set-state! :block/component-editing-mode? value))
 
-(defn logical-outdenting?
-  []
-  (:editor/logical-outdenting?
-    (get (sub-config) (get-current-repo))))
-
 (defn get-editor-args
   []
   (:editor/args @state))
-
-(defn get-export-bullet-indentation
-  []
-  (case (get (get-config) :export/bullet-indentation :tab)
-    :eight-spaces
-    "        "
-    :four-spaces
-    "    "
-    :two-spaces
-    "  "
-    :tab
-    "\t"))
 
 (defn set-page-blocks-cp!
   [value]
@@ -1719,17 +1812,41 @@
 (defn get-auth-refresh-token []
   (:auth/refresh-token @state))
 
-(defn set-file-sync-manager [v]
-  (set-state! :file-sync/sync-manager v))
-(defn set-file-sync-state [graph v]
+(defn set-file-sync-manager [graph-uuid v]
+  (when (and graph-uuid v)
+    (set-state! [:file-sync/graph-state graph-uuid :file-sync/sync-manager] v)))
+
+(defn get-file-sync-manager [graph-uuid]
+  (get-in @state [:file-sync/graph-state graph-uuid :file-sync/sync-manager]))
+
+(defn clear-file-sync-state! [graph-uuid]
+  (set-state! [:file-sync/graph-state graph-uuid] nil))
+
+(defn clear-file-sync-progress! [graph-uuid]
+  (set-state! [:file-sync/graph-state
+               graph-uuid
+               :file-sync/progress]
+              nil))
+
+(defn set-file-sync-state [graph-uuid v]
   (when v (s/assert :frontend.fs.sync/sync-state v))
-  (set-state! [:file-sync/sync-state graph] v))
+  (set-state! [:file-sync/graph-state graph-uuid :file-sync/sync-state] v))
 
-(defn get-file-sync-manager []
-  (:file-sync/sync-manager @state))
+(defn get-file-sync-state
+  [graph-uuid]
+  (get-in @state [:file-sync/graph-state graph-uuid :file-sync/sync-state]))
 
-(defn get-file-sync-state [repo]
-  (get-in @state [:file-sync/sync-state repo]))
+(defn sub-file-sync-state
+  [graph-uuid]
+  (sub [:file-sync/graph-state graph-uuid :file-sync/sync-state]))
+
+(defn get-current-file-sync-graph-uuid
+  []
+  (get-in @state [:file-sync/graph-state :current-graph-uuid]))
+
+(defn sub-current-file-sync-graph-uuid
+  []
+  (sub [:file-sync/graph-state :current-graph-uuid]))
 
 (defn reset-parsing-state!
   []
@@ -1746,29 +1863,23 @@
     (when (every? not-empty (vals agent-opts))
       (str (:protocol agent-opts) "://" (:host agent-opts) ":" (:port agent-opts)))))
 
-(defn enable-encryption?
-  [repo]
-  (:feature/enable-encryption?
-   (get (sub-config) repo)))
-
 (defn set-mobile-app-state-change
   [is-active?]
   (set-state! :mobile/app-state-change
               {:is-active? is-active?
                :timestamp (inst-ms (js/Date.))}))
 
-(defn get-sync-graph-by-uuid
+(defn get-sync-graph-by-id
   [graph-uuid]
   (when graph-uuid
-    (first (filter #(= graph-uuid (:GraphUUID %))(get-repos)))))
+    (let [graph (first (filter #(= graph-uuid (:GraphUUID %))
+                               (get-repos)))]
+      (when (:url graph)
+        graph))))
 
 (defn unlinked-dir?
   [dir]
   (contains? (:file/unlinked-dirs @state) dir))
-
-(defn enable-search-remove-accents?
-  []
-  (:feature/enable-search-remove-accents? (get-config)))
 
 (defn get-file-rename-event-chan
   []

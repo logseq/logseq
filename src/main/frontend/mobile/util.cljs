@@ -1,6 +1,7 @@
 (ns frontend.mobile.util
   (:require ["@capacitor/core" :refer [Capacitor registerPlugin]]
             ["@capacitor/splash-screen" :refer [SplashScreen]]
+            ["@logseq/capacitor-file-sync" :refer [FileSync]]
             [clojure.string :as string]
             [promesa.core :as p]))
 
@@ -24,14 +25,11 @@
 (defonce folder-picker (registerPlugin "FolderPicker"))
 (when (native-ios?)
   (defonce ios-utils (registerPlugin "Utils"))
-  (defonce ios-file-container (registerPlugin "FileContainer"))
-  (defonce file-sync (registerPlugin "FileSync")))
+  (defonce ios-file-container (registerPlugin "FileContainer")))
 
-(when (native-android?)
-  (defonce file-sync (registerPlugin "FileSync")))
-
-;; NOTE: both iOS and android share the same FsWatcher API
+;; NOTE: both iOS and android share the same API
 (when (native-platform?)
+  (defonce file-sync FileSync)
   (defonce fs-watcher (registerPlugin "FsWatcher")))
 
 (defn hide-splash []

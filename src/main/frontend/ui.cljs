@@ -1,35 +1,39 @@
 (ns frontend.ui
-  (:require [clojure.string :as string]
-            [frontend.components.svg :as svg]
-            [frontend.context.i18n :refer [t]]
-            [frontend.handler.notification :as notification-handler]
-            [frontend.mixins :as mixins]
-            [frontend.modules.shortcut.core :as shortcut]
-            [frontend.rum :as r]
-            [frontend.state :as state]
-            [frontend.ui.date-picker]
-            [frontend.util :as util]
-            [frontend.util.cursor :as cursor]
-            [frontend.handler.plugin :as plugin-handler]
-            [cljs-bean.core :as bean]
-            [goog.dom :as gdom]
-            [frontend.modules.shortcut.config :as shortcut-config]
-            [frontend.modules.shortcut.data-helper :as shortcut-helper]
-            [promesa.core :as p]
-            [goog.object :as gobj]
-            [lambdaisland.glogi :as log]
-            [medley.core :as medley]
-            [electron.ipc :as ipc]
+  "Main ns for reusable components"
+  (:require ["@logseq/react-tweet-embed" :as react-tweet-embed]
+            ["react-intersection-observer" :as react-intersection-observer]
             ["react-resize-context" :as Resize]
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
-            ["@logseq/react-tweet-embed" :as react-tweet-embed]
-            ["react-intersection-observer" :as react-intersection-observer]
-            [rum.core :as rum]
+            [camel-snake-kebab.core :as csk]
+            [cljs-bean.core :as bean]
+            [clojure.string :as string]
+            [datascript.core :as d]
+            [electron.ipc :as ipc]
+            [frontend.components.svg :as svg]
+            [frontend.context.i18n :refer [t]]
             [frontend.db-mixins :as db-mixins]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
-            [goog.functions :refer [debounce]]))
+            [frontend.modules.shortcut.config :as shortcut-config]
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.modules.shortcut.data-helper :as shortcut-helper]
+            [frontend.rum :as r]
+            [frontend.state :as state]
+            [frontend.storage :as storage]
+            [frontend.ui.date-picker]
+            [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
+            [goog.dom :as gdom]
+            [goog.functions :refer [debounce]]
+            [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
+            [medley.core :as medley]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -46,7 +50,15 @@
        (util/safari?)
        (js/window.scrollTo 0 0)))
 
-(defonce icon-size (if (mobile-util/native-platform?) 23 20))
+(defonce icon-size (if (mobile-util/native-platform?) 26 20))
+
+(def block-background-colors
+  ["gray"
+   "red"
+   "yellow"
+   "green"
+   "blue"
+   "purple"])
 
 (rum/defc ls-textarea
   < rum/reactive
@@ -85,14 +97,14 @@
     (textarea props)))
 
 (rum/defc dropdown-content-wrapper
-  < {:did-mount    (fn [_state]
+  < {:did-mount    (fn [state]
                      (let [k    (inc (count (state/sub :modal/dropdowns)))
-                           args (:rum/args _state)]
+                           args (:rum/args state)]
                        (state/set-state! [:modal/dropdowns k] (second args))
-                       (assoc _state ::k k)))
-     :will-unmount (fn [_state]
-                     (state/update-state! :modal/dropdowns #(dissoc % (::k _state)))
-                     _state)}
+                       (assoc state ::k k)))
+     :will-unmount (fn [state]
+                     (state/update-state! :modal/dropdowns #(dissoc % (::k state)))
+                     state)}
   [dropdown-state _close-fn content class]
   (let [class (or class
                   (util/hiccup->class "origin-top-right.absolute.right-0.mt-2"))]
@@ -141,98 +153,90 @@
 
 (rum/defc menu-link
   [options child shortcut]
-  [:a.flex.justify-between.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
-   options
-   [:span child]
-   (when shortcut
-     [:span.ml-1 (render-keyboard-shortcut shortcut)])])
+  (if (:only-child? options)
+    [:div.menu-link
+     (dissoc options :only-child?) child]
+    [:a.flex.justify-between.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
+     options
+     [:span child]
+     (when shortcut
+       [:span.ml-1 (render-keyboard-shortcut shortcut)])]))
 
 (rum/defc dropdown-with-links
-  [content-fn links {:keys [links-header links-footer] :as opts}]
+  [content-fn links
+   {:keys [outer-header outer-footer links-header links-footer] :as opts}]
+
   (dropdown
    content-fn
    (fn [{:keys [close-fn]}]
-     [:.menu-links-wrapper
-      (when links-header links-header)
+     (let [links-children
+           (let [links (if (fn? links) (links) links)
+                 links (remove nil? links)]
+             (for [{:keys [options title icon key hr hover-detail item _as-link?]} links]
+               (let [new-options
+                           (merge options
+                                  (cond->
+                                    {:title    hover-detail
+                                     :on-click (fn [e]
+                                                 (when-not (false? (when-let [on-click-fn (:on-click options)]
+                                                                     (on-click-fn e)))
+                                                   (close-fn)))}
+                                    key
+                                    (assoc :key key)))
+                     child (if hr
+                             nil
+                             (or item
+                                 [:div.flex.items-center
+                                  (when icon icon)
+                                  [:div.title-wrap {:style {:margin-right "8px"
+                                                            :margin-left  "4px"}} title]]))]
+                 (if hr
+                   [:hr.menu-separator {:key "dropdown-hr"}]
+                   (rum/with-key
+                    (menu-link new-options child nil)
+                    title)))))
 
-      (for [{:keys [options title icon key hr hover-detail item _as-link?]} (if (fn? links) (links) links)]
-        (let [new-options
-              (merge options
-                     (cond->
-                       {:title    hover-detail
-                        :on-click (fn [e]
-                                    (when-not (false? (when-let [on-click-fn (:on-click options)]
-                                                        (on-click-fn e)))
-                                      (close-fn)))}
-                       key
-                       (assoc :key key)))
-              child (if hr
-                      nil
-                      (or item
-                          [:div.flex.items-center
-                           (when icon icon)
-                           [:div {:style {:margin-right "8px"
-                                          :margin-left  "4px"}} title]]))]
-          (if hr
-            [:hr.menu-separator {:key "dropdown-hr"}]
-            (rum/with-key
-              (menu-link new-options child nil)
-              title))))
-      (when links-footer links-footer)])
+           wrapper-children
+           [:.menu-links-wrapper
+            (when links-header links-header)
+            links-children
+            (when links-footer links-footer)]]
+
+       (if (or outer-header outer-footer)
+         [:.menu-links-outer
+          outer-header wrapper-children outer-footer]
+         wrapper-children)))
    opts))
-
-(defn button
-  [text & {:keys [background href class intent on-click small? large? title]
-           :or   {small? false large? false}
-           :as   option}]
-  (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center")
-        klass (if background (string/replace klass "indigo" background) klass)
-        klass (if small? (str klass ".px-2.py-1") klass)
-        klass (if large? (str klass ".text-base") klass)]
-    [:button.ui__button
-     (merge
-      {:type  "button"
-       :title title
-       :class (str (util/hiccup->class klass) " " class)}
-      (dissoc option :background :class :small? :large?)
-      (when href
-        {:on-click (fn []
-                     (util/open-url href)
-                     (when (fn? on-click) (on-click)))}))
-     text]))
 
 (rum/defc notification-content
   [state content status uid]
   (when (and content status)
-    (let [[color-class svg]
+    (let [svg
           (case status
             :success
-            ["text-gray-900 dark:text-gray-300 "
-             [:svg.h-6.w-6.text-green-400
-              {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
-              [:path
-               {:d               "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                :stroke-width    "2"
-                :stroke-linejoin "round"
-                :stroke-linecap  "round"}]]]
+            [:svg.h-6.w-6.text-green-400
+             {:stroke "var(--ls-success-color)", :viewBox "0 0 24 24", :fill "none"}
+             [:path
+              {:d               "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+               :stroke-width    "2"
+               :stroke-linejoin "round"
+               :stroke-linecap  "round"}]]
             :warning
-            ["text-gray-900 dark:text-gray-300 "
-             [:svg.h-6.w-6.text-yellow-500
-              {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
-              [:path
-               {:d               "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                :stroke-width    "2"
-                :stroke-linejoin "round"
-                :stroke-linecap  "round"}]]]
+            [:svg.h-6.w-6.text-yellow-500
+             {:stroke "var(--ls-warning-color)", :viewBox "0 0 24 24", :fill "none"}
+             [:path
+              {:d               "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+               :stroke-width    "2"
+               :stroke-linejoin "round"
+               :stroke-linecap  "round"}]]
 
-            ["text-red-500"
-             [:svg.h-6.w-6.text-red-500
-              {:view-box "0 0 20 20", :fill "currentColor"}
-              [:path
-               {:clip-rule "evenodd"
-                :d
-                "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                :fill-rule "evenodd"}]]])]
+            [:svg.h-6.w-6.text-red-500
+             {:view-box "0 0 20 20", :fill "var(--ls-error-color)"}
+             [:path
+              {:clip-rule "evenodd"
+               :d
+               "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+               :fill-rule "evenodd"}]])]
       [:div.ui__notifications-content
        {:style
         (when (or (= state "exiting")
@@ -252,13 +256,12 @@
            [:div.flex-shrink-0
             svg]
            [:div.ml-3.w-0.flex-1
-            [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}
-                                                                     :class color-class}
+            [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}}
              content]]
            [:div.ml-4.flex-shrink-0.flex
             [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150.notification-close-button
              {:on-click (fn []
-                          (notification-handler/clear! uid))}
+                          (notification/clear! uid))}
              [:svg.h-5.w-5
               {:fill "currentColor", :view-Box "0 0 20 20"}
               [:path
@@ -287,8 +290,8 @@
   (let [time-fn (fn []
                   (try
                     (util/time-ago input)
-                    (catch js/Error _e
-                      (js/console.error _e)
+                    (catch :default e
+                      (js/console.error e)
                       input)))
         [time set-time] (rum/use-state (time-fn))]
 
@@ -337,7 +340,12 @@
     (when (mobile-util/native-iphone-without-notch?) (.add cl "is-native-iphone-without-notch"))
     (when (mobile-util/native-ipad?) (.add cl "is-native-ipad"))
     (when (util/electron?)
-      (js/window.apis.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen"))
+      (doseq [[event function]
+              [["persist-zoom-level" #(storage/set :zoom-level %)]
+               ["restore-zoom-level" #(when-let [zoom-level (storage/get :zoom-level)] (js/window.apis.setZoomLevel zoom-level))]
+               ["full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")]]]
+        (.on js/window.apis event function))
+
       (p/then (ipc/ipc :getAppBaseInfo) #(let [{:keys [isFullScreen]} (js->clj % :keywordize-keys true)]
                                            (and isFullScreen (.add cl "is-fullscreen")))))))
 
@@ -362,11 +370,11 @@
   []
   (let [^js schemaMedia (js/window.matchMedia "(prefers-color-scheme: dark)")]
     (try (.addEventListener schemaMedia "change" state/sync-system-theme!)
-         (catch js/Error _error
+         (catch :default _error
            (.addListener schemaMedia state/sync-system-theme!)))
     (state/sync-system-theme!)
     #(try (.removeEventListener schemaMedia "change" state/sync-system-theme!)
-          (catch js/Error _error
+          (catch :default _error
             (.removeListener schemaMedia state/sync-system-theme!)))))
 
 (defn set-global-active-keystroke [val]
@@ -602,8 +610,8 @@
       [:div.ui__confirm-modal
        {:class (str "is-" tag)}
        [:div.sm:flex.sm:items-start
-        [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-red-100.sm:mx-0.sm:h-10.sm:w-10
-         [:svg.h-6.w-6.text-red-600
+        [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-error.sm:mx-0.sm:h-10.sm:w-10
+         [:svg.h-6.w-6.text-error
           {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
           [:path
            {:d
@@ -741,7 +749,7 @@
                       nil)]
       [:div.flex.flex-row.admonitionblock.align-items {:class type}
        [:div.pr-4.admonition-icon.flex.flex-col.justify-center
-        {:title (string/upper-case type)} (icon)]
+        {:title (string/capitalize type)} (icon)]
        [:div.ml-4.text-lg
         content]])))
 
@@ -759,7 +767,7 @@
   < {:did-catch
      (fn [state error _info]
        (log/error :exception error)
-       (notification-handler/show!
+       (notification/show!
         (str "Error caught by UI!\n " error)
         :error)
        (assoc state ::error error))}
@@ -774,7 +782,7 @@
   [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui
    section-attrs
    [:div.flex.justify-between.items-center.px-1
-    [:h5.text-red-600.pb-1 title]
+    [:h5.text-error.pb-1 title]
     [:a.text-xs.opacity-50.hover:opacity-80
      {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
       :target "_blank"} "report issue"]]
@@ -887,7 +895,7 @@
                                   (html)
                                   [:div.px-2.py-1
                                    html]))
-                              (catch js/Error e
+                              (catch :default e
                                 (log/error :exception e)
                                 [:div])))
                           [:div {:key "tippy"} ""])))
@@ -914,17 +922,59 @@
              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
              :on-tweet-load-success #(reset! *loading? false)})]]))
 
+(def get-adapt-icon-class
+  (memoize (fn [klass] (r/adapt-class klass))))
+
 (defn icon
   ([class] (icon class nil))
-  ([class {:keys [extension?] :as opts}]
-   [:i (merge {:class (util/format
-                       (str "%s-" class
-                            (when (:class opts)
-                              (str " " (string/trim (:class opts)))))
-                       (if extension? "tie tie" "ti ti"))}
-              (dissoc opts :class :extension?))]))
+  ([class {:keys [extension? font?] :as opts}]
+   (when-not (string/blank? class)
+     (let [^js jsTablerIcons (gobj/get js/window "tablerIcons")]
+       (if (or extension? font? (not jsTablerIcons))
+         [:span.ui__icon (merge {:class
+                     (util/format
+                      (str "%s-" class
+                           (when (:class opts)
+                             (str " " (string/trim (:class opts)))))
+                      (if extension? "tie tie" "ti ti"))}
+                    (dissoc opts :class :extension?))]
+
+         ;; tabler svg react
+         (when-let [klass (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase class)))]
+           (let [f (get-adapt-icon-class klass)]
+             [:span.ui__icon.ti
+              {:class (str "ls-icon-" class)}
+              (f (merge {:size 18} (r/map-keys->camel-case opts)))])))))))
+
+(defn button
+  [text & {:keys [background href class intent on-click small? large? title icon]
+           :or   {small? false large? false}
+           :as   option}]
+  (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center")
+        klass (if background (string/replace klass "indigo" background) klass)
+        klass (if small? (str klass ".px-2.py-1") klass)
+        klass (if large? (str klass ".text-base") klass)]
+    [:button.ui__button
+     (merge
+      {:type  "button"
+       :title title
+       :class (str (util/hiccup->class klass) " " class)}
+      (dissoc option :background :class :small? :large?)
+      (when href
+        {:on-click (fn []
+                     (util/open-url href)
+                     (when (fn? on-click) (on-click)))}))
+     (when icon (frontend.ui/icon icon {:class "mr-1"}))
+     text]))
+
+(rum/defc type-icon
+  [{:keys [name class title extension?]}]
+  [:.type-icon {:class class
+                :title title}
+   (icon name {:extension? extension?})])
 
 (rum/defc with-shortcut < rum/reactive
+  < {:key-fn (fn [key pos] (str "shortcut-" key pos))}
   [shortcut-key position content]
   (let [tooltip? (state/sub :ui/shortcut-tooltip?)]
     (if tooltip?
@@ -999,3 +1049,21 @@
                                                        (set-visible! in-view?))))})
            ref (.-ref inViewState)]
        (lazy-visible-inner visible? content-fn ref)))))
+
+(rum/defc portal
+  ([children]
+   (portal children {:attach-to (fn [] js/document.body)
+                     :prepend? false}))
+  ([children {:keys [attach-to prepend?]}]
+   (let [[portal-anchor set-portal-anchor] (rum/use-state nil)]
+     (rum/use-effect!
+      (fn []
+        (let [div (js/document.createElement "div")
+              attached (or (if (fn? attach-to) (attach-to) attach-to) js/document.body)]
+          (.setAttribute div "data-logseq-portal" (str (d/squuid)))
+          (if prepend? (.prepend attached div) (.append attached div))
+          (set-portal-anchor div)
+          #(.remove div)))
+      [])
+     (when portal-anchor
+       (rum/portal (rum/fragment children) portal-anchor)))))

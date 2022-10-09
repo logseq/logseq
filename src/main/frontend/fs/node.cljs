@@ -1,4 +1,5 @@
 (ns frontend.fs.node
+  "Implementation of fs protocol for desktop"
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.config :as config]
@@ -124,7 +125,7 @@
     (open-dir))
   (get-files [_this path-or-handle _ok-handler]
     (ipc/ipc "getFiles" path-or-handle))
-  (watch-dir! [_this dir]
-    (ipc/ipc "addDirWatcher" dir))
+  (watch-dir! [_this dir options]
+    (ipc/ipc "addDirWatcher" dir options))
   (unwatch-dir! [_this dir]
     (ipc/ipc "unwatchDir" dir)))

@@ -1,4 +1,6 @@
-platform :ios, '12.0'
+require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
+
+platform :ios, '13.0'
 use_frameworks!
 
 # workaround to avoid Xcode caching of Pods that requires
@@ -18,6 +20,7 @@ def capacitor_pods
   pod 'CapacitorShare', :path => '../../node_modules/@capacitor/share'
   pod 'CapacitorSplashScreen', :path => '../../node_modules/@capacitor/splash-screen'
   pod 'CapacitorStatusBar', :path => '../../node_modules/@capacitor/status-bar'
+  pod 'LogseqCapacitorFileSync', :path => '../../node_modules/@logseq/capacitor-file-sync'
   pod 'CapacitorVoiceRecorder', :path => '../../node_modules/capacitor-voice-recorder'
   pod 'SendIntent', :path => '../../node_modules/send-intent'
 end
@@ -25,7 +28,9 @@ end
 target 'Logseq' do
   capacitor_pods
   # Add your Pods here
-  pod 'AWSMobileClient'
-  pod 'AWSS3'
-  pod 'AgeEncryption', :podspec => './LogseqSpecs/AgeEncryption.podspec'
+end
+
+
+post_install do |installer|
+  assertDeploymentTarget(installer)
 end

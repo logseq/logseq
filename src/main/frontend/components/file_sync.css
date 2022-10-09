@@ -1,9 +1,11 @@
+:root {
+  --ls-color-file-sync-error: var(--ls-error-color);
+  --ls-color-file-sync-pending: var(--color-yellow-500);
+  --ls-color-file-sync-idle: var(--ls-success-color);
+}
+
 .cp__file-sync {
   &-indicator {
-    --ls-color-file-sync-error: #ff0000;
-    --ls-color-file-sync-pending: #ffbb4d;
-    --ls-color-file-sync-idle: #04b404;
-
     a.cloud {
       position: relative;
       opacity: 1 !important;
@@ -68,12 +70,14 @@
       width: 90vw;
       position: fixed;
       right: 5vw;
-      border-radius: 4px;
 
       .head-ctls {
         position: absolute;
-        top: 2px;
-        right: 5px;
+        right: 10px;
+        transform: translateY(8px);
+      }
+
+      .cp__file-sync-indicator-progress-pane {
       }
 
       @screen md {
@@ -101,20 +105,21 @@
           padding: 0 !important;
           user-select: none;
           pointer-events: none;
+          margin-top: 5px;
 
           &:hover {
             background-color: unset !important;
           }
         }
-      }
 
-      i.ti {
-        transform: translate(0);
-        margin-right: 5px;
+        i.ti {
+          transform: translate(0);
+          margin-right: 5px;
+        }
       }
 
       .files-history.is-first, .file-item.is-first {
-        margin-top: 30px;
+        margin-top: 40px;
         position: relative;
 
         &:before {
@@ -142,11 +147,131 @@
       }
     }
 
+    .menu-links-outer {
+      @apply py-0;
+    }
+
     .menu-links-wrapper {
       padding: 4px 0;
-      max-height: 60vh !important;
+      max-height: calc(70vh - 120px) !important;
       overflow-y: auto;
+
+      .title-wrap {
+        flex: 1;
+      }
     }
+
+    &.is-enabled-progress-pane {
+      .head-ctls {
+        display: none;
+      }
+
+      .menu-links-outer {
+        &.is-list-active {
+          .menu-links-wrapper, .head-ctls {
+            display: block !important;
+          }
+
+          .menu-links-wrapper {
+            overflow-y: auto;
+          }
+        }
+      }
+
+      .menu-links-wrapper {
+        @apply p-0 hidden overflow-hidden;
+
+        > .menu-link:last-child {
+          padding-bottom: 16px;
+        }
+      }
+    }
+  }
+
+  &-indicator-progress-pane {
+    @apply px-4 pt-4 pb-3 w-full overflow-hidden;
+
+    -webkit-font-smoothing: antialiased;
+    background-color: var(--ls-quaternary-background-color);
+
+    .ti {
+      @apply translate-y-0;
+    }
+
+    > .a {
+      @apply flex justify-between text-gray-200;
+
+      > .al {
+        @apply flex text-base flex-1 w-0.5 items-center space-x-2 font-semibold;
+
+        > strong {
+          @apply flex items-center justify-center font-extralight text-gray-800;
+
+          background-color: var(--ls-color-file-sync-pending);
+          border-radius: 4px;
+          height: 24px;
+          width: 24px;
+
+          &.is-no-active {
+            background-color: var(--ls-color-file-sync-idle);
+          }
+        }
+
+        > span {
+          @apply w-full overflow-hidden overflow-ellipsis pr-2;
+        }
+      }
+
+      > .ar {
+        @apply relative;
+
+        top: -4px;
+      }
+    }
+
+    > .b {
+      @apply flex items-center justify-between pt-2 pb-3 text-sm;
+
+      .bl {
+        @apply flex items-center leading-none pt-2;
+      }
+    }
+
+    > .c {
+      @apply flex items-center text-gray-200 relative;
+
+      top: -3px;
+
+      .cl {
+        @apply text-sm leading-6 flex flex-1 items-center overflow-hidden;
+      }
+
+      .progress-bar {
+        @apply flex flex-1 items-center overflow-hidden relative;
+
+        height: 7px;
+        top: 1px;
+        border-radius: 4px;
+        background-color: var(--ls-secondary-background-color);
+
+        i {
+          transition: width .5s;
+          height: 100%;
+          width: 0;
+          border-radius: 4px;
+          background-color: var(--ls-link-text-color);
+        }
+      }
+    }
+  }
+
+  &-indicator-progress-pie {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 2px;
+    margin-bottom: -1px;
   }
 
   &-page-histories {
@@ -461,6 +586,18 @@ html[data-theme='light'] {
 
       > .input-hints {
         background-color: #e1e1e1;
+      }
+    }
+
+    &-indicator-progress-pane {
+      background-color: var(--ls-tertiary-background-color);
+
+      > .a, > .c {
+        @apply text-gray-700;
+      }
+
+      .progress-bar {
+        background-color: var(--ls-quaternary-background-color);
       }
     }
   }

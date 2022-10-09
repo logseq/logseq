@@ -1,4 +1,5 @@
 (ns frontend.handler.notification
+  "Provides notification related functionality"
   (:require [frontend.state :as state]
             [frontend.util :as util]))
 

@@ -1,5 +1,5 @@
 (ns logseq.graph-parser.block
-  "Block related code needed for graph-parser"
+  "Given mldoc ast, prepares block data in preparation for db transaction"
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -57,12 +57,13 @@
                   (and
                    (= typ "Search")
                    (not (contains? #{\# \* \/ \[} (first value)))
+                   ;; FIXME: use `gp-util/get-format` instead
                    (let [ext (some-> (gp-util/get-file-ext value) keyword)]
                      (when (and (not (string/starts-with? value "http:"))
                                 (not (string/starts-with? value "https:"))
                                 (not (string/starts-with? value "file:"))
                                 (not (gp-config/local-asset? value))
-                                (or (= ext :excalidraw)
+                                (or (#{:excalidraw :tldr} ext)
                                     (not (contains? supported-formats ext))))
                        value)))
 
@@ -146,99 +147,76 @@
 (defn- get-page-refs-from-property-names
   [properties {:property-pages/keys [enabled? excludelist]}]
   (if (contains? #{true nil} enabled?)
-    (some->> properties
-             (map (comp name first))
-             (remove string/blank?)
-             (remove (set (map name excludelist)))
-             ;; Remove built-in properties as we don't want pages
-             ;; created for them by default
-             (remove (set (map name (into (gp-property/editable-built-in-properties)
-                                          (gp-property/hidden-built-in-properties)))))
-             distinct)
+    (sequence
+     (comp (map (comp name first))
+           (remove string/blank?)
+           (remove (set (map name excludelist)))
+           ;; Remove built-in properties as we don't want pages
+           ;; created for them by default
+           (remove (into #{}
+                         (map name)
+                         (apply conj
+                                (gp-property/editable-built-in-properties)
+                                (gp-property/hidden-built-in-properties))))
+           (distinct))
+     properties)
     []))
 
-;; TODO: Use text/parse-property to determine refs rather than maintain this similar
-;; implementation to parse-property
 (defn- get-page-ref-names-from-properties
-  [format properties user-config]
+  [properties user-config]
   (let [page-refs (->>
                    properties
                    (remove (fn [[k _]]
                              (contains?
                               (set/union (apply disj
-                                           (gp-property/editable-built-in-properties)
-                                           gp-property/editable-linkable-built-in-properties)
+                                                (gp-property/editable-built-in-properties)
+                                                gp-property/editable-linkable-built-in-properties)
                                          (gp-property/hidden-built-in-properties))
                               (keyword k))))
+                   ;; get links ast
                    (map last)
-                   (map (fn [v]
-                          (cond
-                            (and (string? v)
-                                 (not (gp-mldoc/link? format v)))
-                            (let [v (string/trim v)
-                                  result (if (:rich-property-values? user-config)
-                                           (if (gp-util/wrapped-by-quotes? v)
-                                             []
-                                             (text/extract-page-refs-and-tags v))
-                                           (text/split-page-refs-without-brackets v {:un-brackets? false}))]
-                              (if (coll? result)
-                                (map text/page-ref-un-brackets! result)
-                                []))
-
-                            (coll? v)
-                            (map (fn [s]
-                                   (when-not (and (string? v)
-                                                  (gp-mldoc/link? format v))
-                                     (text/page-ref-un-brackets! s))) v)
-
-                            :else
-                            nil)))
-                   (apply concat))
+                   (mapcat (or (:extract-refs-from-property-value-fn user-config)
+                               text/extract-refs-from-mldoc-ast))
+                   ;; comma separated collections
+                   (concat (->> (map second properties)
+                                (filter coll?)
+                                (apply concat))))
         page-refs-from-property-names (get-page-refs-from-property-names properties user-config)]
     (->> (concat page-refs page-refs-from-property-names)
          (remove string/blank?)
          distinct)))
 
 (defn extract-properties
-  [format properties user-config]
+  [properties user-config]
   (when (seq properties)
     (let [properties (seq properties)
-          page-refs (get-page-ref-names-from-properties format properties user-config)
           *invalid-properties (atom #{})
           properties (->> properties
-                          (map (fn [[k v]]
-                                 (let [k (-> (string/lower-case (name k))
+                          (map (fn [[k v mldoc-ast]]
+                                 (let [k (if (or (keyword? k) (symbol? k))
+                                           (subs (str k) 1)
+                                           k)
+                                       k (-> (string/lower-case k)
                                              (string/replace " " "-")
-                                             (string/replace "_" "-")
-                                             (string/replace #"[\"|^|(|)|{|}]+" ""))]
+                                             (string/replace "_" "-"))]
                                    (if (gp-property/valid-property-name? (str ":" k))
-                                     (let [k (if (contains? #{"custom_id" "custom-id"} k)
-                                               "id"
-                                               k)
-                                           v (if (coll? v)
-                                               (remove string/blank? v)
-                                               (cond
-                                                 (string/blank? v)
-                                                 nil
-                                                 (and (= (keyword k) :file-path)
-                                                      (string/starts-with? v "file:"))
-                                                 v
-                                                 :else
-                                                 (text/parse-property format k v user-config)))
-                                           k (keyword k)
-                                           v (if (and
-                                                  (string? v)
-                                                  (contains? gp-property/editable-linkable-built-in-properties k))
-                                               (set [v])
-                                               v)
-                                           v (if (coll? v) (set v) v)]
-                                       [k v])
+                                     (let [k' (keyword
+                                               (if (contains? #{"custom_id" "custom-id"} k)
+                                                 "id"
+                                                 k))
+                                           v' (text/parse-property k v mldoc-ast user-config)]
+                                       [k' v' mldoc-ast v])
                                      (do (swap! *invalid-properties conj k)
                                          nil)))))
                           (remove #(nil? (second %))))
+          page-refs (get-page-ref-names-from-properties properties user-config)
+          properties-text-values (->> (map (fn [[k _v _refs original-text]] [k original-text]) properties)
+                                      (into {}))
+          properties (map (fn [[k v _]] [k v]) properties)
           properties' (into {} properties)]
       {:properties properties'
        :properties-order (map first properties)
+       :properties-text-values properties-text-values
        :invalid-properties @*invalid-properties
        :page-refs page-refs})))
 
@@ -433,7 +411,7 @@
       content
       (gp-property/->new-properties content))))
 
-(defn- get-custom-id-or-new-id
+(defn get-custom-id-or-new-id
   [properties]
   (or (when-let [custom-id (or (get-in properties [:properties :custom-id])
                                (get-in properties [:properties :custom_id])
@@ -444,8 +422,8 @@
       (d/squuid)))
 
 (defn get-page-refs-from-properties
-  [format properties db date-formatter user-config]
-  (let [page-refs (get-page-ref-names-from-properties format properties user-config)]
+  [properties db date-formatter user-config]
+  (let [page-refs (get-page-ref-names-from-properties properties user-config)]
     (map (fn [page] (page-name->map page true db true date-formatter)) page-refs)))
 
 (defn- with-page-block-refs
@@ -524,10 +502,9 @@
      ast)
     (mapv macro->block @*result)))
 
-(defn- with-pre-block-if-exists
+(defn with-pre-block-if-exists
   [blocks body pre-block-properties encoded-content {:keys [supported-formats db date-formatter user-config]}]
   (let [first-block (first blocks)
-        format (or (:block/format first-block) :markdown)
         first-block-start-pos (get-in first-block [:block/meta :start_pos])
 
         ;; Add pre-block
@@ -536,15 +513,22 @@
                  (cons
                   (merge
                    (let [content (utf8/substring encoded-content 0 first-block-start-pos)
-                         {:keys [properties properties-order invalid-properties]} pre-block-properties
+                         {:keys [properties properties-order properties-text-values invalid-properties]} pre-block-properties
                          id (get-custom-id-or-new-id {:properties properties})
-                         property-refs (->> (get-page-refs-from-properties format properties db date-formatter user-config)
+                         property-refs (->> (get-page-refs-from-properties
+                                             properties db date-formatter
+                                             (assoc user-config
+                                                    :extract-refs-from-property-value-fn
+                                                    (fn [refs]
+                                                      (when (coll? refs)
+                                                        refs))))
                                             (map :block/original-name))
                          block {:uuid id
                                 :content content
                                 :level 1
                                 :properties properties
                                 :properties-order (vec properties-order)
+                                :properties-text-values properties-text-values
                                 :invalid-properties invalid-properties
                                 :refs property-refs
                                 :pre-block? true
@@ -558,6 +542,15 @@
                  blocks)]
     (with-path-refs blocks)))
 
+(defn- with-heading-property
+  [properties markdown-heading? size level]
+  (let [properties (if markdown-heading?
+                     (assoc properties :heading size)
+                     properties)]
+    (if (true? (:heading properties))
+      (assoc properties :heading (min 6 level))
+      properties)))
+
 (defn- construct-block
   [block properties timestamps body encoded-content format pos-meta with-id? {:keys [block-pattern supported-formats db date-formatter]}]
   (let [id (get-custom-id-or-new-id properties)
@@ -568,21 +561,19 @@
         markdown-heading? (and (:size block) (= :markdown format))
         block (if markdown-heading?
                 (assoc block
-                       :type :heading
-                       :level (if unordered? (:level block) 1)
-                       :heading-level (or (:size block) 6))
+                       :level (if unordered? (:level block) 1))
                 block)
         block (cond->
-                (assoc block
-                       :uuid id
-                       :refs ref-pages-in-properties
-                       :format format
-                       :meta pos-meta)
-                (seq (:properties properties))
-                (assoc :properties (:properties properties))
-
-                (seq (:properties-order properties))
-                (assoc :properties-order (vec (:properties-order properties)))
+                (-> (assoc block
+                           :uuid id
+                           :refs ref-pages-in-properties
+                           :format format
+                           :meta pos-meta)
+                    (dissoc :size))
+                (or (seq (:properties properties)) markdown-heading?)
+                (assoc :properties (with-heading-property (:properties properties) markdown-heading? (:size block) (:level block))
+                       :properties-text-values (:properties-text-values properties)
+                       :properties-order (vec (:properties-order properties)))
 
                 (seq (:invalid-properties properties))
                 (assoc :invalid-properties (:invalid-properties properties)))
@@ -639,7 +630,7 @@
                   (recur headings (rest blocks) timestamps' properties body))
 
                 (gp-property/properties-ast? block)
-                (let [properties (extract-properties format (second block) user-config)]
+                (let [properties (extract-properties (second block) (assoc user-config :format format))]
                   (recur headings (rest blocks) timestamps properties body))
 
                 (heading-block? block)
@@ -661,7 +652,7 @@
   (let [[blocks other-blocks] (split-with
                                (fn [b]
                                  (not= "macro" (:block/type b)))
-                                blocks)
+                               blocks)
         result (loop [blocks (map (fn [block] (assoc block :block/level-spaces (:block/level block))) blocks)
                       parents [{:page/id page-id     ; db id or a map {:block/name "xxx"}
                                 :block/level 0

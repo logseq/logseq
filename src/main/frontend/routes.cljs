@@ -1,14 +1,16 @@
 (ns frontend.routes
-  (:require [frontend.components.home :as home]
-            [frontend.components.repo :as repo]
-            [frontend.components.file :as file]
+  "Defines routes for use with reitit router"
+  (:require [frontend.components.file :as file]
+            [frontend.components.home :as home]
+            [frontend.components.journal :as journal]
+            [frontend.components.onboarding.setups :as setups]
             [frontend.components.page :as page]
             [frontend.components.plugins :as plugins]
-            [frontend.components.journal :as journal]
+            [frontend.components.repo :as repo]
             [frontend.components.search :as search]
             [frontend.components.settings :as settings]
             [frontend.components.shortcut :as shortcut]
-            [frontend.components.onboarding.setups :as setups]
+            [frontend.components.whiteboard :as whiteboard]
             [frontend.extensions.zotero :as zotero]))
 
 ;; http://localhost:3000/#?anchor=fn.1
@@ -20,6 +22,14 @@
    ["/graphs"
     {:name :repos
      :view repo/repos}]
+
+   ["/whiteboard/:name"
+    {:name :whiteboard
+     :view whiteboard/whiteboard-route}]
+
+   ["/whiteboards"
+    {:name :whiteboards
+     :view whiteboard/whiteboard-dashboard}]
 
    ["/repo/add"
     {:name :repo-add

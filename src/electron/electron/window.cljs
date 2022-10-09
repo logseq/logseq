@@ -1,8 +1,9 @@
 (ns electron.window
   (:require ["electron-window-state" :as windowStateKeeper]
-            [electron.utils :refer [mac? win32? linux? dev? logger open] :as utils]
+            [electron.utils :refer [mac? win32? linux? dev? open] :as utils]
             [electron.configs :as cfgs]
             [electron.context-menu :as context-menu]
+            [electron.logger :as logger]
             ["electron" :refer [BrowserWindow app session shell] :as electron]
             ["path" :as path]
             ["url" :as URL]
@@ -110,7 +111,7 @@
 (defn- open-default-app!
   [url default-open]
   (let [URL (.-URL URL)
-        parsed-url (try (URL. url) (catch js/Error _ nil))]
+        parsed-url (try (URL. url) (catch :default _ nil))]
     (if (and parsed-url (contains? #{"https:" "http:" "mailto:"} (.-protocol parsed-url)))
       (.openExternal shell url)
       (when default-open (default-open url)))))
@@ -124,12 +125,12 @@
             (let [url (if (string/starts-with? url "file:")
                         (js/decodeURIComponent url) url)
                   url (if-not win32? (string/replace url "file://" "") url)]
-              (.. logger (info "new-window" url))
+              (logger/info "new-window" url)
               (if (some #(string/includes?
                           (.normalize path url)
                           (.join path (. app getAppPath) %))
                         ["index.html" "electron.html"])
-                (.info logger "pass-window" url)
+                (logger/info "pass-window" url)
                 (open-default-app! url open)))
             (.preventDefault e))
 
@@ -143,7 +144,9 @@
 
       (doto web-contents
         (.on "new-window" new-win-handler)
-        (.on "will-navigate" will-navigate-handler))
+        (.on "will-navigate" will-navigate-handler)
+        (.on "did-start-navigation" #(.send web-contents "persist-zoom-level" (.getZoomLevel web-contents)))
+        (.on "page-title-updated" #(.send web-contents "restore-zoom-level")))
 
       (doto win
         (.on "enter-full-screen" #(.send web-contents "full-screen" "enter"))

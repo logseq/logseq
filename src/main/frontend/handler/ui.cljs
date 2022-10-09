@@ -1,4 +1,4 @@
-(ns frontend.handler.ui
+(ns ^:no-doc frontend.handler.ui
   (:require [cljs-time.core :refer [plus days weeks]]
             [dommy.core :as dom]
             [frontend.util :as util]
@@ -13,7 +13,8 @@
             [goog.object :as gobj]
             [clojure.string :as string]
             [rum.core :as rum]
-            [electron.ipc :as ipc]))
+            [electron.ipc :as ipc]
+            [promesa.core :as p]))
 
 (defn- get-css-var-value
   [var-name]
@@ -154,16 +155,19 @@
           (when (or (not should-ask?)
                     (ask-allow))
             (load href #(do (js/console.log "[custom js]" href) (execed))))
-          (util/p-handle
-           (fs/read-file (if (util/electron?) "" (config/get-repo-dir (state/get-current-repo))) href)
-           #(when-let [scripts (and % (string/trim %))]
-              (when-not (string/blank? scripts)
-                (when (or (not should-ask?) (ask-allow))
-                  (try
-                    (js/eval scripts)
-                    (execed)
-                    (catch js/Error e
-                      (js/console.error "[custom js]" e))))))))))))
+          (let [dir (if (util/electron?) "" (config/get-repo-dir (state/get-current-repo)))]
+            (p/let [exists? (fs/file-exists? dir href)]
+              (when exists?
+                (util/p-handle
+                 (fs/read-file dir href)
+                 #(when-let [scripts (and % (string/trim %))]
+                    (when-not (string/blank? scripts)
+                      (when (or (not should-ask?) (ask-allow))
+                        (try
+                          (js/eval scripts)
+                          (execed)
+                          (catch :default e
+                            (js/console.error "[custom js]" e)))))))))))))))
 
 (defn toggle-wide-mode!
   []
@@ -298,9 +302,9 @@
 (defn open-new-window!
   "Open a new Electron window.
    No db cache persisting ensured. Should be handled by the caller."
-  ([_e]
-   (open-new-window! _e nil))
-  ([_e repo]
+  ([]
+   (open-new-window! nil))
+  ([repo]
    ;; TODO: find out a better way to open a new window with a different repo path. Using local storage for now
    ;; TODO: also write local storage with the current repo state, to make behavior consistent
    ;; then we can remove the `openNewWindowOfGraph` ipcMain call

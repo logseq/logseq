@@ -3,7 +3,7 @@ import * as CSS from 'csstype'
 import EventEmitter from 'eventemitter3'
 import { LSPluginCaller } from './LSPlugin.caller'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
-import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
+import { IAsyncStorage, LSPluginFileStorage } from './modules/LSPlugin.Storage'
 import { LSPluginRequest } from './modules/LSPlugin.Request'
 
 export type WithOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
@@ -169,6 +169,7 @@ export interface BlockEntity {
   unordered: boolean
   content: string
   page: IEntityID
+  properties?: Record<string, any>
 
   // optional fields in dummy page
   anchor?: string
@@ -196,9 +197,12 @@ export interface PageEntity {
   file?: IEntityID
   namespace?: IEntityID
   children?: Array<PageEntity>
+  properties?: Record<string, any>
   format?: 'markdown' | 'org'
   journalDay?: number
   updatedAt?: number
+
+  [key: string]: any
 }
 
 export type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
@@ -386,7 +390,7 @@ export interface IAppProxy {
   queryElementRect: (selector: string) => Promise<DOMRectReadOnly | null>
 
   /**
-   * @deprecated
+   * @deprecated Use `logseq.UI.showMsg` instead
    * @param content
    * @param status
    */
@@ -412,9 +416,9 @@ export interface IAppProxy {
 
   // hook events
   onCurrentGraphChanged: IUserHook
-  onGraphAfterIndexed: IUserHook<{repo: string}>
+  onGraphAfterIndexed: IUserHook<{ repo: string }>
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
-  onThemeChanged: IUserHook<Partial<{name: string, mode: string, pid: string, url: string}>>
+  onThemeChanged: IUserHook<Partial<{ name: string, mode: string, pid: string, url: string }>>
   onBlockRendererSlotted: IUserSlotHook<{ uuid: BlockUUID }>
 
   /**
@@ -786,7 +790,7 @@ export interface IAssetsProxy {
    * @added 0.0.2
    * @param exts
    */
-  listFilesOfCurrentGraph(exts: string | string[]): Promise<{
+  listFilesOfCurrentGraph(exts?: string | string[]): Promise<{
     path: string
     size: number
     accessTime: number
@@ -794,6 +798,12 @@ export interface IAssetsProxy {
     changeTime: number
     birthTime: number
   }>
+
+  /**
+   * @example https://github.com/logseq/logseq/pull/6488
+   * @added 0.0.10
+   */
+  makeSandboxStorage(): IAsyncStorage
 }
 
 export interface ILSPluginThemeManager {
@@ -963,6 +973,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   DB: IDBProxy
   Git: IGitProxy
   UI: IUIProxy
+  Assets: IAssetsProxy
 
   Request: LSPluginRequest
   FileStorage: LSPluginFileStorage

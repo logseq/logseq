@@ -15,7 +15,7 @@
 
   &-inner {
     @apply flex flex-col md:flex-row;
-    
+
     > aside {
       border-right: 0 solid var(--ls-quaternary-background-color);
       border-bottom: 1px solid var(--ls-quaternary-background-color);
@@ -41,10 +41,8 @@
             color: var(--ls-primary-text-color);
 
             > i {
-              width: 20px;
-              height: 20px;
               overflow: hidden;
-              opacity: .6;
+              opacity: .9;
             }
 
             > strong {
@@ -118,7 +116,7 @@
 
         &.app-updater {
           padding-top: 15px;
-          align-items: start;
+          align-items: flex-start;
 
 
           > .wrap {
@@ -288,33 +286,35 @@
       }
     }
   }
-}
 
-/* Styles for the category icon on the left of settings-modal */
-.cp__settings-inner > aside ul > li > a > i {
-  margin-right: 4px;
+  &-files-breaking-changed {
+    &[disabled] {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+  }
 }
 
 html.is-native-android,
 html.is-native-iphone,
 html.is-native-iphone-without-notch {
 
-    .cp__settings-inner {
-        > article {
-            padding-bottom: 0px;
-        }
-
-        .panel-wrap {
-            padding-bottom: 0px;
-        }
+  .cp__settings-inner {
+    > article {
+      padding-bottom: 0;
     }
+
+    .panel-wrap {
+      padding-bottom: 0;
+    }
+  }
 }
 
 svg.git {
-    margin-left: -4px;
-    transform: scale(0.9);
+  margin-left: -4px;
+  transform: scale(0.9);
 }
 
 svg.cmd {
-    margin-left: -1px;
+  margin-left: -1px;
 }

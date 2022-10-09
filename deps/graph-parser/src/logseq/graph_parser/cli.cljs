@@ -34,8 +34,7 @@ TODO: Fail fast when process exits 1"
     (mapv #(assoc % :file/content (slurp (:file/path %))) files)))
 
 (defn- read-config
-  "Commandline version of frontend.handler.common/read-config without graceful
-  handling of broken config. Config is assumed to be at $dir/logseq/config.edn "
+  "Reads repo-specific config from logseq/config.edn"
   [dir]
   (let [config-file (str dir "/" gp-config/app-name "/config.edn")]
     (if (fs/existsSync config-file)

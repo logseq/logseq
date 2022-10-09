@@ -29,6 +29,9 @@ project(':capacitor-splash-screen').projectDir = new File('../node_modules/@capa
 include ':capacitor-status-bar'
 project(':capacitor-status-bar').projectDir = new File('../node_modules/@capacitor/status-bar/android')
 
+include ':logseq-capacitor-file-sync'
+project(':logseq-capacitor-file-sync').projectDir = new File('../node_modules/@logseq/capacitor-file-sync/android')
+
 include ':capacitor-voice-recorder'
 project(':capacitor-voice-recorder').projectDir = new File('../node_modules/capacitor-voice-recorder/android')
 

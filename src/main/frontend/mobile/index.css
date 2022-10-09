@@ -45,7 +45,7 @@
         width: 120%;
         
         
-        .ti {
+        .ti, .tie {
             color: var(--ls-primary-text-color);
             font-size: 23px;
             opacity: 50%;

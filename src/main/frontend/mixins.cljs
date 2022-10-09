@@ -1,4 +1,5 @@
 (ns frontend.mixins
+  "Rum mixins for use in components"
   (:require [rum.core :as rum]
             [goog.dom :as dom]
             [frontend.util :refer [profile] :as util]
@@ -50,7 +51,7 @@
           (listen state js/window "visibilitychange"
                   (fn [e]
                     (on-hide state e :visibilitychange))))))
-    (catch js/Error _e
+    (catch :default _e
       ;; TODO: Unable to find node on an unmounted component.
       nil)))
 

@@ -102,4 +102,15 @@ html.is-resizing-buf {
   #right-sidebar {
     transition: none;
   }
+
+  * {
+    cursor: col-resize !important;
+    user-select: none;
+  }
+
+  &.cursor-w-resize {
+    * {
+      cursor: w-resize !important;
+    }
+  }
 }

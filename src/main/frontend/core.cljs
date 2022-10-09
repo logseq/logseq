@@ -1,4 +1,5 @@
 (ns frontend.core
+  "Entry ns for the mobile, browser and electron frontend apps"
   (:require [rum.core :as rum]
             [frontend.handler :as handler]
             [frontend.handler.plugin :as plugin-handler]
@@ -11,7 +12,9 @@
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]
             [logseq.api]
-            [frontend.fs.sync :as sync]))
+            [frontend.fs.sync :as sync]
+            [frontend.config :as config]
+            [frontend.util :as util]))
 
 (defn set-router!
   []
@@ -45,7 +48,9 @@
     (set-router!)
     (rum/mount (page/current-page) node)
     (display-welcome-message)
-    (persist-var/load-vars)))
+    (persist-var/load-vars)
+    (when (and config/dev? (util/electron?))
+      (js/setTimeout #(sync/sync-start) 1000))))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads
@@ -65,5 +70,6 @@
   ;; stop is called before any code is reloaded
   ;; this is controlled by :before-load in the config
   (handler/stop!)
-  (sync/<sync-stop)
+  (when (and config/dev? (util/electron?))
+    (sync/<sync-stop))
   (js/console.log "stop"))

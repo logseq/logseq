@@ -19,7 +19,7 @@
 
 (defn sub-zotero-config
   []
-  (:zotero/settings-v2 (get (state/sub-config) (state/get-current-repo))))
+  (:zotero/settings-v2 (state/sub-config)))
 
 (defn all-profiles []
   (let [profiles (-> (sub-zotero-config) keys set)

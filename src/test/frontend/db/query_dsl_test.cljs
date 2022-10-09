@@ -116,12 +116,6 @@ prop-d:: nada"}])
 (deftest block-property-queries
   (testing "block property tests with default config"
     (test-helper/with-config {}
-      (block-property-queries-test)))
-
-  (test-helper/start-test-db!) ;; reset db
-
-  (testing "block property tests with rich-property-values? config"
-    (test-helper/with-config {:rich-property-values? true}
       (block-property-queries-test))))
 
 (defn- page-property-queries-test
@@ -187,12 +181,6 @@ prop-d:: nada"}])
 (deftest page-property-queries
   (testing "page property tests with default config"
     (test-helper/with-config {}
-      (page-property-queries-test)))
-
-  (test-helper/start-test-db!) ;; reset db
-
-  (testing "page property tests with rich-property-values? config"
-    (test-helper/with-config {:rich-property-values? true}
       (page-property-queries-test))))
 
 (deftest task-queries
@@ -235,10 +223,10 @@ prop-d:: nada"}])
 
   (is (= 1
          (count (dsl-query "(and (task todo) (sample 1))")))
-      "Correctly limits results")
-  (is (= 2
-         (count (dsl-query "(and (task todo) (sample blarg))")))
-      "Non-integer arg is ignored"))
+      "Correctly limits block results")
+  (is (= 1
+         (count (dsl-query "(and (page-property foo) (sample 1))")))
+      "Correctly limits page results"))
 
 (deftest priority-queries
   (load-test-files [{:file/path "pages/page1.md"
@@ -310,15 +298,15 @@ prop-d:: nada"}])
   (load-test-files
    [{:file/path "pages/page1.md"
      :file/content "---
-tags: [[page-tag-1]], page-tag-2
+tags: [[page-tag-1]], [[page-tag-2]]
 ---"}
     {:file/path "pages/page2.md"
      :file/content "---
-tags: page-tag-2, [[page-tag-3]]
+tags: [[page-tag-2]], [[page-tag-3]]
 ---"}
     {:file/path "pages/page3.md"
      :file/content "---
-tags: other
+tags: [[other]]
 ---"}])
 
   (are [x y] (= (set y) (set (map :block/name (dsl-query x))))
@@ -447,76 +435,30 @@ tags: other
          (map :block/content
               (dsl-query "(and [[Parent page]] (not [[Child page]]))")))))
 
-(defn- load-test-files-with-timestamps
-  []
-  (let [files [{:file/path "journals/2020_12_26.md"
-                :file/content "---
-title: Dec 26th, 2020
----
-- DONE 26-b1
+(deftest between-queries
+  (load-test-files [{:file/path "journals/2020_12_26.md"
+                     :file/content "- DONE 26-b1
 created-at:: 1608968448113
-last-modified-at:: 1608968448113
 - LATER 26-b2-modified-later
 created-at:: 1608968448114
-last-modified-at:: 1608968448120
 - DONE 26-b3
 created-at:: 1608968448115
-last-modified-at:: 1608968448115
-"}
-               {:file/path "journals/2020_12_27.md"
-                :file/content "---
-title: Dec 27th, 2020
----
-- NOW b1
-created-at:: 1609052958714
-last-modified-at:: 1609052958714
-- LATER b2-modified-later
-created-at:: 1609052959376
-last-modified-at:: 1609052974285
-- b3
-created-at:: 1609052959954
-last-modified-at:: 1609052959954
-- b4
-created-at:: 1609052961569
-last-modified-at:: 1609052961569
-- b5
-created-at:: 1609052963089
-last-modified-at:: 1609052963089"}
-               {:file/path "journals/2020_12_28.md"
-                :file/content "---
-title: Dec 28th, 2020
----
-- 28-b1
-created-at:: 1609084800000
-last-modified-at:: 1609084800000
-- 28-b2-modified-later
-created-at:: 1609084800001
-last-modified-at:: 1609084800020
-- 28-b3
-created-at:: 1609084800002
-last-modified-at:: 1609084800002"}]]
-    (load-test-files files)))
-
-(deftest between-queries
-  (load-test-files-with-timestamps)
+- 26-b4
+created-at:: 1608968448116
+"}])
 
   (are [x y] (= (count (dsl-query x)) y)
        "(and (task now later done) (between [[Dec 26th, 2020]] tomorrow))"
-       5
+       3
 
        ;; between with journal pages
-       "(and (task now later done) (between [[Dec 27th, 2020]] [[Dec 28th, 2020]]))"
-       2
+       "(and (task now later done) (between [[Dec 26th, 2020]] [[Dec 27th, 2020]]))"
+       3
 
        ;; ;; between with created-at
        ;; "(and (task now later done) (between created-at [[Dec 26th, 2020]] tomorrow))"
-       ;; 5
-
-       ;; ;; between with last-modified-at
-       ;; "(and (task now later done) (between last-modified-at [[Dec 26th, 2020]] tomorrow))"
-       ;; 5
-       )
-  )
+       ;; 3
+       ))
 
 (deftest custom-query-test
   (load-test-files [{:file/path "pages/page1.md"
@@ -533,63 +475,63 @@ last-modified-at:: 1609084800002"}]]
          (map :block/content (custom-query {:query (list 'and '(task later) "b")})))
       "Query with rule that can't be derived from the form itself"))
 
-#_(deftest sort-by-queries
-    (load-test-files-with-timestamps)
-    ;; (testing "sort-by (created-at defaults to desc)"
-    ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (dsl-query "(and (task now later done)
-    ;;                              (sort-by created-at))")
-    ;;                     (map #(get-in % [:block/properties "created-at"])))]
-    ;;     (is (= result
-    ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
+(deftest sort-by-queries
+  (load-test-files [{:file/path "journals/2020_02_25.md"
+                     :file/content "rating:: 10"}
+                    {:file/path "journals/2020_12_26.md"
+                     :file/content "rating:: 8
+- DONE 26-b1
+created-at:: 1608968448113
+fruit:: plum
+- LATER 26-b2-modified-later
+created-at:: 1608968448114
+fruit:: apple
+- DONE 26-b3 has no fruit to test sorting of absent property value
+created-at:: 1608968448115
+- 26-b4
+created-at:: 1608968448116
+"}])
 
-    ;; (testing "sort-by (created-at desc)"
-    ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (dsl-query "(and (todo now later done)
-    ;;                              (sort-by created-at desc))")
-    ;;                     (map #(get-in % [:block/properties "created-at"])))]
-    ;;     (is (= result
-    ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
+  (testing "sort-by user block property fruit"
+    (let [result (->> (dsl-query "(and (task now later done) (sort-by fruit))")
+                      (map #(get-in % [:block/properties :fruit])))]
+      (is (= ["plum" "apple" nil]
+             result)
+          "sort-by correctly defaults to desc"))
 
-    ;; (testing "sort-by (created-at asc)"
-    ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (dsl-query "(and (todo now later done)
-    ;;                              (sort-by created-at asc))")
-    ;;                     (map #(get-in % [:block/properties "created-at"])))]
-    ;;     (is (= result
-    ;;            '(1608968448113 1608968448114 1608968448115 1609052958714 1609052959376)))))
+    (let [result (->> (dsl-query "(and (task now later done) (sort-by fruit desc))")
+                      (map #(get-in % [:block/properties :fruit])))]
+      (is (= ["plum" "apple" nil]
+             result)
+          "sort-by desc"))
 
-    ;; (testing "sort-by (last-modified-at defaults to desc)"
-    ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (dsl-query "(and (todo now later done)
-    ;;                              (sort-by last-modified-at))")
-    ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
-    ;;     (is (= result
-    ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
+    (let [result (->> (dsl-query "(and (task now later done) (sort-by fruit asc))")
+                      (map #(get-in % [:block/properties :fruit])))]
+      (is (= ["apple" "plum" nil]
+             result)
+          "sort-by asc")))
 
-    ;; (testing "sort-by (last-modified-at desc)"
-    ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (dsl-query "(and (todo now later done)
-    ;;                              (sort-by last-modified-at desc))")
-    ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
-    ;;     (is (= result
-    ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
+  (testing "sort-by hidden, built-in block property created-at"
+    (let [result (->> (dsl-query "(and (task now later done) (sort-by created-at desc))")
+                      (map #(get-in % [:block/properties :created-at])))]
+      (is (= [1608968448115 1608968448114 1608968448113]
+             result))
+      "sorted-by desc")
 
-    ;; (testing "sort-by (last-modified-at desc)"
-    ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (dsl-query "(and (todo now later done)
-    ;;                              (sort-by last-modified-at asc))")
-    ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
-    ;;     (is (= result
-    ;;            '(1608968448113 1608968448115 1608968448120 1609052958714 1609052974285)))))
-    )
+    (let [result (->> (dsl-query "(and (todo now later done) (sort-by created-at asc))")
+                      (map #(get-in % [:block/properties :created-at])))]
+      (is (= [1608968448113 1608968448114 1608968448115]
+             result)
+          "sorted-by asc")))
 
-#_(cljs.test/run-tests)
+  (testing "user page property rating"
+    (is (= [10 8]
+           (->> (dsl-query "(and (page-property rating) (sort-by rating))")
+                (map #(get-in % [:block/properties :rating])))))))
 
 (comment
  (require '[clojure.pprint :as pprint])
  (test-helper/start-test-db!)
- (load-test-files-with-timestamps)
 
  (query-dsl/query test-db "(task done)")
 

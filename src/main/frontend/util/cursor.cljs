@@ -1,4 +1,4 @@
-(ns frontend.util.cursor
+(ns ^:no-doc frontend.util.cursor
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.util :as util]
@@ -39,8 +39,8 @@
                  (util/nth-safe pos)
                  mock-char-pos
                  (assoc :rect rect))
-         (catch :default _e
-           (js/console.log "index error" _e)
+         (catch :default e
+           (js/console.log "index error" e)
            {:pos pos
             :rect rect
             :left js/Number.MAX_SAFE_INTEGER

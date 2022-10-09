@@ -1,4 +1,5 @@
 (ns frontend.debug
+  "Fns that are useful for debugging"
   (:require [cljs.pprint :as pprint]
             [frontend.state :as state]))
 

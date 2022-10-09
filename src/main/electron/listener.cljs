@@ -1,10 +1,13 @@
 (ns electron.listener
+  "System-component-like ns that defines listeners by event name to receive ipc
+  messages from electron's main process"
   (:require [frontend.state :as state]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.handler.route :as route-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.config :as config]
             [clojure.string :as string]
             [cljs-bean.core :as bean]
@@ -45,8 +48,13 @@
                      (fn [data]
                        (let [{:keys [type payload]} (bean/->clj data)]
                          (watcher-handler/handle-changed! type payload)
-                         (when config/enable-file-sync?
+                         (when (file-sync-handler/enable-sync?)
                            (sync/file-watch-handler type payload)))))
+
+  (js/window.apis.on "file-sync-progress"
+                     (fn [data]
+                       (let [payload (bean/->clj data)]
+                         (state/set-state! [:file-sync/graph-state (:graphUUID payload) :file-sync/progress (:file payload)] payload))))
 
   (js/window.apis.on "notification"
                      (fn [data]
@@ -165,7 +173,7 @@
                      ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage
                      ;; No db cache persisting ensured. Should be handled by the caller
                      (fn [repo]
-                       (ui-handler/open-new-window! nil repo))))
+                       (ui-handler/open-new-window! repo))))
 
 (defn listen!
   []

@@ -1,4 +1,5 @@
 (ns frontend.util
+  "Main ns for utility fns. This ns should be split up into more focused namespaces"
   #?(:clj (:refer-clojure :exclude [format]))
   #?(:cljs (:require-macros [frontend.util]))
   #?(:cljs (:require
@@ -39,8 +40,13 @@
        (-write writer (str "\"" (.toString sym) "\"")))))
 
 #?(:cljs (defonce ^js node-path utils/nodePath))
-#?(:cljs (defn app-scroll-container-node []
-           (gdom/getElement "main-content-container")))
+#?(:cljs (defn app-scroll-container-node
+           ([]
+            (gdom/getElement "main-content-container"))
+           ([el]
+            (if (.closest el "#main-content-container")
+              (app-scroll-container-node)
+              (gdom/getElementByClass "sidebar-item-list")))))
 
 #?(:cljs
    (defn safe-re-find
@@ -568,12 +574,12 @@
      ([input text start end]
       (try
         (.setRangeText input text start end)
-        (catch js/Error _e
+        (catch :default _e
           nil)))
      ([input text start end select-mode]
       (try
         (.setRangeText input text start end select-mode)
-        (catch js/Error _e
+        (catch :default _e
           nil)))))
 
 #?(:cljs
@@ -587,7 +593,7 @@
            (let [^js splitter (GraphemeSplitter.)
                  ^js input (.splitGraphemes splitter input)]
              (- current-pos (.-length (.pop input))))
-           (catch js/Error e
+           (catch :default e
              (js/console.error e)
              (dec current-pos))))
        (dec current-pos))))
@@ -603,7 +609,7 @@
            (let [^js splitter (GraphemeSplitter.)
                  ^js input (.splitGraphemes splitter input)]
              (+ current-pos (.-length (.shift input))))
-           (catch js/Error e
+           (catch :default e
              (js/console.error e)
              (inc current-pos))))
        (inc current-pos))))
@@ -880,7 +886,7 @@
      [path]
      (try
        (js/window.apis.isAbsolutePath path)
-       (catch js/Error _
+       (catch :default _
          (utils/win32 path)))))
 
 (defn default-content-with-title
@@ -904,24 +910,6 @@
      [string]
      (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
 
-(def windows-reserved-chars #"[:\\*\\?\"<>|]+")
-
-#?(:cljs
-   (do
-     (defn include-windows-reserved-chars?
-      [s]
-       (safe-re-find windows-reserved-chars s))
-
-     (defn create-title-property?
-       [s]
-       (and (string? s)
-            (or (include-windows-reserved-chars? s)
-                (string/includes? s "_")
-                (string/includes? s "/")
-                (string/includes? s ".")
-                (string/includes? s "%")
-                (string/includes? s "#"))))))
-
 #?(:cljs
    (defn search-normalize
      "Normalize string for searching (loose)"
@@ -930,19 +918,6 @@
       (if remove-accents?
         (removeAccents  normalize-str)
         normalize-str))))
-
-#?(:cljs
-   (defn file-name-sanity
-     "Sanitize page-name for file name (strict), for file writing."
-     [page-name]
-     (some-> page-name
-             gp-util/page-name-sanity
-             ;; for android filesystem compatiblity
-             (string/replace #"[\\#|%]+" url-encode)
-             ;; Windows reserved path characters
-             (string/replace windows-reserved-chars url-encode)
-             (string/replace #"/" url-encode)
-             (string/replace "*" "%2A"))))
 
 #?(:cljs
    (def page-name-sanity-lc
@@ -1000,12 +975,13 @@
     [col1 col2]))
 
 ;; fs
-(defn get-file-ext
-  [file]
-  (and
-   (string? file)
-   (string/includes? file ".")
-   (some-> (last (string/split file #"\.")) string/lower-case)))
+#?(:cljs
+   (defn get-file-ext
+     [file]
+     (and
+      (string? file)
+      (string/includes? file ".")
+      (some-> (gp-util/path->file-ext file) string/lower-case))))
 
 (defn get-dir-and-basename
   [path]
@@ -1299,7 +1275,7 @@
              header-height (-> (gdom/getElementByClass "cp__header")
                                .-clientHeight)
 
-             main-node   (app-scroll-container-node)
+             main-node   (app-scroll-container-node el)
              scroll-top  (.-scrollTop main-node)
 
              current-pos (get-selection-start el)
@@ -1325,7 +1301,7 @@
 
            (< cursor-y header-height)
            (let [_ (.scrollIntoView el true)
-                 main-node (app-scroll-container-node)
+                 main-node (app-scroll-container-node el)
                  scroll-top (.-scrollTop main-node)]
              (set! (.-scrollTop main-node) (- scroll-top (/ vw-height 4))))
 
