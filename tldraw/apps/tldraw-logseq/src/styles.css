@@ -23,7 +23,7 @@
 }
 
 .tl-menu-item {
-  @apply flex items-center px-4 py-1 text-sm !important;
+  @apply flex items-center pl-10 pr-4 py-1 text-sm relative !important;
 
   min-width: 220px;
   all: unset;
@@ -38,6 +38,10 @@
   &:focus {
     cursor: pointer;
     background-color: var(--ls-primary-background-color) !important;
+  }
+
+  .tl-menu-icon {
+    @apply absolute left-4 text-base opacity-50;
   }
 }
 
