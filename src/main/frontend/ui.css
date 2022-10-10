@@ -312,7 +312,7 @@ html.is-mobile {
 }
 
 .form-select {
-  @apply block w-full pl-3 pr-10 py-2 text-base leading-6
+  @apply block w-full pl-3 pr-10 py-2 text-base leading-6 rounded
   border-gray-300 focus:outline-none sm:text-sm sm:leading-5;
 
   background-color: var(--ls-primary-background-color, transparent);
@@ -327,7 +327,7 @@ html.is-mobile {
 
 .form-input {
   @apply block w-full pl-2
-  sm:text-sm sm:leading-5;
+  sm:text-sm sm:leading-5 rounded;
 
   border-width: 1px;
   border-color: var(--ls-border-color);
