@@ -577,7 +577,6 @@ Similar to re-frame subscriptions"
    (enable-whiteboards? (get-current-repo)))
   ([repo]
    (and
-    (util/electron?)
     ((resolve 'frontend.handler.user/alpha-user?)) ;; using resolve to avoid circular dependency
     (:feature/enable-whiteboards? (sub-config repo)))))
 
