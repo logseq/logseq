@@ -694,7 +694,7 @@
          [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]
          [:div.mt-1.sm:mt-0.sm:col-span-2
           (if logged-in?
-            [:div 
+            [:div
               (user-handler/email)
               [:p (ui/button (t :logout) {:class "p-1"
                                           :icon "logout"
@@ -746,8 +746,8 @@
                       (not (file-sync-handler/synced-file-graph? current-repo)))
                  [:git "git" (t :settings-page/tab-version-control) (ui/icon "history")])
 
-               (when (util/electron?)
-                 [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
+               ;; (when (util/electron?)
+               ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
 
                [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb")]
                [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature" {:extension? true})]
