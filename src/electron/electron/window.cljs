@@ -112,9 +112,11 @@
   [url default-open]
   (let [URL (.-URL URL)
         parsed-url (try (URL. url) (catch :default _ nil))]
-    (if (and parsed-url (contains? #{"https:" "http:" "mailto:"} (.-protocol parsed-url)))
-      (.openExternal shell url)
-      (when default-open (default-open url)))))
+    (when parsed-url
+      (condp contains? (.-protocol parsed-url)
+        #{"https:" "http:" "mailto:"} (.openExternal shell url)
+        #{"file:"} (when (empty? (.-host parsed-url)) (default-open url))
+        nil))))
 
 (defn setup-window-listeners!
   [^js win]
