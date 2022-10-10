@@ -2,7 +2,7 @@
   (:require [clojure.string :as string]
             [frontend.components.svg :as svg]
             [frontend.components.plugins :as plugins]
-            ;; [frontend.components.assets :as assets]
+            [frontend.components.assets :as assets]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.storage :as storage]
@@ -785,8 +785,8 @@
          :git
          (settings-git)
 
-         ;; :assets
-         ;; (assets/settings-content)
+         :assets
+         (assets/settings-content)
 
          :advanced
          (settings-advanced current-repo)
