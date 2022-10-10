@@ -1937,7 +1937,7 @@
           (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})])
           (when (and
                  (or config/publishing? (util/electron?))
-                 (not= block-type :default))
+                 (not (#{:default :whiteboard-shape} block-type)))
             (let [area? (= :area (keyword (:hl-type properties)))]
               [:div.prefix-link
                {:on-mouse-down (fn [^js e]
