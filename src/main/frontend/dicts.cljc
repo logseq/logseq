@@ -3,7 +3,8 @@
   #?(:cljs (:require [shadow.resource :as rc])))
 
 (def ^:large-vars/data-var dicts
-  {:en {:tutorial/text #?(:cljs (rc/inline "tutorial-en.md")
+  {:en {:accessibility/skip-to-main-content "Skip to main content"
+        :tutorial/text #?(:cljs (rc/inline "tutorial-en.md")
                           :default "tutorial-en.md")
         :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-en.md")
                                  :default "dummy-notes-en.md")
