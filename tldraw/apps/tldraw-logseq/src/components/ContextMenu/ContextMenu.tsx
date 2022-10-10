@@ -100,7 +100,7 @@ export const ContextMenu = observer(function ContextMenu({
                 className="tl-menu-item"
                 onClick={() => runAndTransition(app.packIntoRectangle)}
               >
-                Pack shapes into rectangle
+                Pack into rectangle
               </ReactContextMenu.Item>
               <ReactContextMenu.Separator className="menu-separator" />
             </ReactContextMenu.Item>
