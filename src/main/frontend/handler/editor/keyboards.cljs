@@ -1,4 +1,4 @@
-(ns frontend.handler.editor.keyboards
+(ns ^:no-doc frontend.handler.editor.keyboards
   (:require [frontend.handler.editor :as editor-handler]
             [frontend.mixins :as mixins]
             [frontend.state :as state]

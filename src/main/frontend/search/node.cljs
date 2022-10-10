@@ -1,4 +1,5 @@
 (ns frontend.search.node
+  "NodeJS implementation of search protocol"
   (:require [cljs-bean.core :as bean]
             [electron.ipc :as ipc]
             [frontend.search.db :as search-db]
@@ -16,9 +17,6 @@
                 {:block/uuid uuid
                  :block/content content
                  :block/page page})) result)))
-  (cache-stale? [_this repo]
-    ;; only FTS require cache validating
-    (ipc/ipc "searchVersionChanged?" repo))
   (rebuild-blocks-indice! [_this]
     (let [indice (search-db/build-blocks-indice repo)]
       (ipc/ipc "rebuild-blocks-indice" repo indice)))

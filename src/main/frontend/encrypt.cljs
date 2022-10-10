@@ -1,4 +1,5 @@
 (ns frontend.encrypt
+  "Encryption related fns for use with encryption feature and file sync"
   (:require [logseq.graph-parser.utf8 :as utf8]
             [frontend.db.utils :as db-utils]
             [frontend.util :as util]

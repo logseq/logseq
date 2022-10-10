@@ -38,7 +38,7 @@ import {
 import Debug from 'debug'
 import * as CSS from 'csstype'
 import EventEmitter from 'eventemitter3'
-import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
+import { IAsyncStorage, LSPluginFileStorage } from './modules/LSPlugin.Storage'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 import { LSPluginRequest } from './modules/LSPlugin.Request'
 
@@ -69,6 +69,7 @@ function registerSimpleCommand(
     desc?: string
     palette?: boolean
     keybinding?: SimpleCommandKeybinding
+    extras?: Record<string, any>
   },
   action: SimpleCommandCallback
 ) {
@@ -76,7 +77,7 @@ function registerSimpleCommand(
     return false
   }
 
-  const { key, label, desc, palette, keybinding } = opts
+  const { key, label, desc, palette, keybinding, extras } = opts
   const eventKey = `SimpleCommandHook${key}${++registeredCmdUid}`
 
   this.Editor['on' + eventKey](action)
@@ -85,7 +86,7 @@ function registerSimpleCommand(
     method: 'register-plugin-simple-command',
     args: [
       this.baseInfo.id,
-      [{ key, label, type, desc, keybinding }, ['editor/hook', eventKey]],
+      [{ key, label, type, desc, keybinding, extras}, ['editor/hook', eventKey]],
       palette,
     ],
   })
@@ -243,15 +244,14 @@ const editor: Partial<IEditorProxy> = {
 
   registerBlockContextMenuItem(
     this: LSPluginUser,
-    tag: string,
+    label: string,
     action: BlockCommandCallback
   ) {
     if (typeof action !== 'function') {
       return false
     }
 
-    const key = tag + '_' + this.baseInfo.id
-    const label = tag
+    const key = label + '_' + this.baseInfo.id
     const type = 'block-context-menu-item'
 
     registerSimpleCommand.call(
@@ -260,6 +260,30 @@ const editor: Partial<IEditorProxy> = {
       {
         key,
         label,
+      },
+      action
+    )
+  },
+
+  registerHighlightContextMenuItem(
+    this: LSPluginUser,
+    label: string,
+    action: SimpleCommandCallback,
+    opts?: { clearSelection: boolean }) {
+    if (typeof action !== 'function') {
+      return false
+    }
+
+    const key = label + '_' + this.baseInfo.id
+    const type = 'highlight-context-menu-item'
+
+    registerSimpleCommand.call(
+      this,
+      type,
+      {
+        key,
+        label,
+        extras: opts
       },
       action
     )
@@ -311,8 +335,18 @@ const db: Partial<IDBProxy> = {
 }
 
 const git: Partial<IGitProxy> = {}
+
 const ui: Partial<IUIProxy> = {}
-const assets: Partial<IAssetsProxy> = {}
+
+const assets: Partial<IAssetsProxy> = {
+  makeSandboxStorage(
+    this: LSPluginUser
+  ): IAsyncStorage {
+    return new LSPluginFileStorage(
+      this, { assets: true }
+    )
+  }
+}
 
 type uiState = {
   key?: number

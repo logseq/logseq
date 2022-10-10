@@ -1,4 +1,6 @@
 (ns frontend.search
+  "Provides search functionality for a number of features including Cmd-K
+  search. Most of these fns depend on the search protocol"
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [logseq.graph-parser.config :as gp-config]
@@ -269,8 +271,3 @@
   [repo]
   (when-let [engine (get-engine repo)]
     (protocol/remove-db! engine)))
-
-(defn cache-stale?
-  [repo]
-  (when-let [engine (get-engine repo)]
-    (protocol/cache-stale? engine repo)))

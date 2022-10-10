@@ -22,44 +22,49 @@
   (let [route-match (first (:rum/args state))]
     (get-in route-match [:parameters :path :path])))
 
-(rum/defc files < rum/reactive
+(rum/defc files-all < rum/reactive
+  []
+  (when-let [current-repo (state/sub :git/current-repo)]
+    (let [files (db/get-files current-repo)
+          mobile? (util/mobile?)]
+      [:table.table-auto
+       [:thead
+        [:tr
+         [:th (t :file/name)]
+         (when-not mobile?
+           [:th (t :file/last-modified-at)])
+         (when-not mobile?
+           [:th ""])]]
+       [:tbody
+        (for [[file modified-at] files]
+          (let [file-id file]
+            [:tr {:key file-id}
+             [:td
+              (let [href (if (gp-config/draw? file)
+                           (rfe/href :draw nil {:file (string/replace file (str gp-config/default-draw-directory "/") "")})
+                           (rfe/href :file {:path file-id}))]
+                [:a {:href href}
+                 file])]
+             (when-not mobile?
+               [:td [:span.text-gray-500.text-sm
+                     (if (zero? modified-at)
+                       (t :file/no-data)
+                       (date/get-date-time-string
+                        (t/to-default-time-zone (tc/to-date-time modified-at))))]])
+
+             (when-not mobile?
+               [:td [:a.text-sm
+                     {:on-click (fn [_e]
+                                  (export-handler/download-file! file))}
+                     [:span (t :download)]]])]))]])))
+
+(rum/defc files
   []
   [:div.flex-1.overflow-hidden
    [:h1.title
     (t :all-files)]
-   (when-let [current-repo (state/sub :git/current-repo)]
-     (let [files (db/get-files current-repo)
-           mobile? (util/mobile?)]
-       [:table.table-auto
-        [:thead
-         [:tr
-          [:th (t :file/name)]
-          (when-not mobile?
-            [:th (t :file/last-modified-at)])
-          (when-not mobile?
-            [:th ""])]]
-        [:tbody
-         (for [[file modified-at] files]
-           (let [file-id file]
-             [:tr {:key file-id}
-              [:td
-               (let [href (if (gp-config/draw? file)
-                            (rfe/href :draw nil {:file (string/replace file (str gp-config/default-draw-directory "/") "")})
-                            (rfe/href :file {:path file-id}))]
-                 [:a {:href href}
-                  file])]
-              (when-not mobile?
-                [:td [:span.text-gray-500.text-sm
-                      (if (zero? modified-at)
-                        (t :file/no-data)
-                        (date/get-date-time-string
-                         (t/to-default-time-zone (tc/to-date-time modified-at))))]])
-
-              (when-not mobile?
-                [:td [:a.text-sm
-                      {:on-click (fn [_e]
-                                   (export-handler/download-file! file))}
-                      [:span (t :download)]]])]))]]))])
+   (files-all)
+   ])
 
 (rum/defcs file < rum/reactive
   {:did-mount (fn [state]

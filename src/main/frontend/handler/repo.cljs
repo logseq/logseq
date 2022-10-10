@@ -1,4 +1,5 @@
 (ns frontend.handler.repo
+  "System-component-like ns that manages user's repos/graphs"
   (:refer-clojure :exclude [clone])
   (:require [clojure.string :as string]
             [frontend.config :as config]
@@ -27,6 +28,7 @@
             [frontend.db.persist :as db-persist]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser :as graph-parser]
+            [logseq.graph-parser.config :as gp-config]
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
@@ -163,7 +165,7 @@
                            (remove nil?))]
              (when (seq metadata)
                (db/transact! repo metadata {:new-graph? true}))))))
-     (catch js/Error e
+     (catch :default e
        (log/error :exception e)))))
 
 (defn update-pages-metadata!
@@ -190,12 +192,17 @@
                                              :from-disk? true
                                              :skip-db-transact? skip-db-transact?}
                                             (when (some? verbose) {:verbose verbose}))))
+    (state/set-parsing-state! (fn [m]
+                                (update m :finished inc)))
+    @*file-tx
     (catch :default e
+      (println "Parse and load file failed: " (str (:file/path file)))
+      (js/console.error e)
       (state/set-parsing-state! (fn [m]
-                                  (update m :failed-parsing-files conj [(:file/path file) e])))))
-  (state/set-parsing-state! (fn [m]
-                              (update m :finished inc)))
-  @*file-tx)
+                                  (update m :failed-parsing-files conj [(:file/path file) e])))
+      (state/set-parsing-state! (fn [m]
+                                  (update m :finished inc)))
+      nil)))
 
 (defn- after-parse
   [repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan]
@@ -208,6 +215,9 @@
   (when re-render?
     (ui-handler/re-render-root! re-render-opts))
   (state/pub-event! [:graph/added repo-url opts])
+  (let [parse-errors (get-in @state/state [:graph/parsing-state repo-url :failed-parsing-files])]
+    (when (seq parse-errors)
+      (state/pub-event! [:file/parse-and-load-error repo-url parse-errors])))
   (state/reset-parsing-state!)
   (state/set-loading-files! repo-url false)
   (async/offer! graph-added-chan true))
@@ -239,17 +249,24 @@
       (async/go-loop [tx []]
         (if-let [item (async/<! chan)]
           (let [[idx file] item
+                whiteboard? (gp-config/whiteboard? (:file/path file))
                 yield-for-ui? (or (not large-graph?)
                                   (zero? (rem idx 10))
-                                  (<= (- total idx) 10))]
+                                  (<= (- total idx) 10)
+                                  whiteboard?)]
             (state/set-parsing-state! (fn [m]
                                         (assoc m :current-parsing-file (:file/path file))))
 
             (when yield-for-ui? (async/<! (async/timeout 1)))
 
-            (let [result (parse-and-load-file! repo-url file (select-keys opts [:new-graph? :verbose]))
-                  tx' (concat tx result)
-                  tx' (if (zero? (rem (inc idx) 100))
+            (let [opts' (select-keys opts [:new-graph? :verbose])
+                  ;; whiteboards might have conflicting block IDs so that db transaction could be failed
+                  opts' (if whiteboard?
+                          (assoc opts' :skip-db-transact? false)
+                          opts')
+                  result (parse-and-load-file! repo-url file opts')
+                  tx' (if whiteboard? tx (concat tx result))
+                  tx' (if (or whiteboard? (zero? (rem (inc idx) 100)))
                         (do (db/transact! repo-url tx' {:from-disk? true})
                             [])
                         tx')]
@@ -359,8 +376,9 @@
                         (when (= (state/get-current-repo) url)
                           (state/set-current-repo! (:url (first (state/get-repos)))))))]
     (when (or (config/local-db? url) (= url "local"))
-      (p/let [_ (idb/clear-local-db! url)] ; clear file handles
-        (delete-db-f)))))
+      (-> (p/let [_ (idb/clear-local-db! url)] ; clear file handles
+            )
+          (p/finally delete-db-f)))))
 
 (defn start-repo-db-if-not-exists!
   [repo]
@@ -430,6 +448,7 @@
 (defn re-index!
   [nfs-rebuild-index! ok-handler]
   (when-let [repo (state/get-current-repo)]
+    (state/reset-parsing-state!)
     (let [dir (config/get-repo-dir repo)]
       (when-not (state/unlinked-dir? dir)
        (route-handler/redirect-to-home!)
@@ -458,6 +477,9 @@
        (on-success)))
     (p/catch (fn [error]
                (js/console.error error)
+               (state/pub-event! [:instrument {:type :db/persist-failed
+                                               :payload {:error-str (str error)
+                                                         :error error}}])
                (when on-error
                  (on-error)))))))
 
@@ -468,7 +490,7 @@
      step 1. [In HERE]  a window         ---broadcastPersistGraph---->   electron
      step 2.            electron         ---------persistGraph------->   window holds the graph
      step 3.            window w/ graph  --broadcastPersistGraphDone->   electron
-     step 4. [In HERE]  a window         <---broadcastPersistGraph----   electron"
+     step 4. [In HERE]  a window         <--broadcastPersistGraph-----   electron"
   [graph]
   (p/let [_ (ipc/ipc "broadcastPersistGraph" graph)] ;; invoke for chaining promise
     nil))
@@ -533,6 +555,6 @@
     repos'))
 
 (defn graph-ready!
-  "Call electron that the graph is loaded."
+  ;; FIXME: Call electron that the graph is loaded, an ugly implementation for redirect to page when graph is restored
   [graph]
   (ipc/ipc "graphReady" graph))

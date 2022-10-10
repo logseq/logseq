@@ -53,12 +53,15 @@
        (vec)))
 
 (defmethod handle :readdir [_window [_ dir]]
-  (let [entries (readdir dir)]
-    (js/console.log entries)
-    entries))
+  (readdir dir))
+
+(defmethod handle :listdir [_window [_ dir flat?]]
+  (when (and dir (fs-extra/pathExistsSync dir))
+    (js-utils/deepReadDir dir (if (boolean? flat?) flat? true))))
 
 (defmethod handle :unlink [_window [_ repo-dir path]]
-  (if (plugin/dotdir-file? path)
+  (if (or (plugin/dotdir-file? path)
+          (plugin/assetsdir-file? path))
     (fs/unlinkSync path)
     (try
       (logger/info ::unlink {:path path})
@@ -67,7 +70,7 @@
                             (string/replace "\\" "_"))
             recycle-dir (str repo-dir "/logseq/.recycle")
             _           (fs-extra/ensureDirSync recycle-dir)
-            new-path    (str recycle-dir "/" file-name)] 
+            new-path    (str recycle-dir "/" file-name)]
         (fs/renameSync path new-path)
         (logger/debug ::unlink "recycle to" new-path))
       (catch :default e
@@ -139,7 +142,7 @@
   (fs/statSync path))
 
 (defonce allowed-formats
-  #{:org :markdown :md :edn :json :js :css :excalidraw})
+  #{:org :markdown :md :edn :json :js :css :excalidraw :tldr})
 
 (defn get-ext
   [p]
@@ -233,7 +236,7 @@
         (when-let [sync-meta (and (not (string/blank? root))
                                   (.toString (.readFileSync fs txid-path)))]
           (reader/read-string sync-meta))))
-    (catch js/Error e
+    (catch :default e
       (js/console.debug "[read txid meta] #" root (.-message e)))))
 
 (defmethod handle :inflateGraphsInfo [_win [_ graphs]]
@@ -289,7 +292,6 @@
   (search/truncate-blocks-table! repo)
   ;; unneeded serialization
   (search/upsert-blocks! repo (bean/->js data))
-  (search/write-search-version! repo)
   [])
 
 (defmethod handle :transact-blocks [_window [_ repo data]]
@@ -316,7 +318,7 @@
       (let [path (path/join path dir)]
         (try
           (fs-extra/removeSync path)
-          (catch js/Error e
+          (catch :default e
             (logger/error "Clear cache:" e)))))
     (utils/send-to-renderer window "redirect" {:payload {:to :home}})))
 
@@ -352,7 +354,7 @@
                  (try
                    (and (fs-extra/pathExistsSync url)
                         (fs-extra/pathExistsSync (path/join url "package.json")))
-                   (catch js/Error _e false)))))
+                   (catch :default _e false)))))
 
 (defmethod handle :relaunchApp []
   (.relaunch app) (.quit app))
@@ -376,8 +378,10 @@
 
 (defmethod handle :getAssetsFiles [^js win [_ {:keys [exts]}]]
   (when-let [graph-path (state/get-window-graph-path win)]
-    (p/let [^js files (js-utils/getAllFiles (.join path graph-path "assets") (clj->js exts))]
-      files)))
+    (when-let [assets-path (.join path graph-path "assets")]
+      (when (fs-extra/pathExistsSync assets-path)
+        (p/let [^js files (js-utils/getAllFiles assets-path (clj->js exts))]
+          files)))))
 
 (defn close-watcher-when-orphaned!
   "When it's the last window for the directory, close the watcher."
@@ -521,10 +525,6 @@
     (f window graph-name)
     (state/set-state! :window/once-graph-ready nil)))
 
-(defmethod handle :searchVersionChanged?
-  [^js _win [_ graph]]
-  (search/version-changed? graph))
-
 (defmethod handle :reloadWindowPage [^js win]
   (logger/warn ::reload-window-page)
   (when-let [web-content (.-webContents win)]
@@ -579,6 +579,9 @@
 (defmethod handle :decrypt-with-passphrase [_ args]
   (apply rsapi/decrypt-with-passphrase (rest args)))
 
+(defmethod handle :cancel-all-requests [_ args]
+  (apply rsapi/cancel-all-requests (rest args)))
+
 (defmethod handle :default [args]
   (logger/error "Error: no ipc handler for:" args))
 
@@ -623,7 +626,7 @@
                    ;; exception -
                    ;; https://www.electronjs.org/docs/latest/breaking-changes#behavior-changed-sending-non-js-objects-over-ipc-now-throws-an-exception
                    (bean/->js (handle (or (utils/get-win-from-sender event) window) message)))
-                 (catch js/Error e
+                 (catch :default e
                    (when-not (contains? #{"mkdir" "stat"} (nth args-js 0))
                      (logger/error "IPC error: " {:event event
                                                   :args args-js}

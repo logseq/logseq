@@ -1,4 +1,5 @@
 (ns frontend.handler.page
+  "Provides util handler fns for pages"
   (:require [cljs.reader :as reader]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -28,12 +29,14 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.property :as property]
+            [frontend.util.fs :as fs-util]
             [frontend.util.page-property :as page-property]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile-util]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.text :as text]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
@@ -41,6 +44,7 @@
             [frontend.format.block :as block]
             [goog.functions :refer [debounce]]))
 
+;; FIXME: add whiteboard
 (defn- get-directory
   [journal?]
   (if journal?
@@ -51,6 +55,7 @@
   [journal? title]
   (when-let [s (if journal?
                  (date/journal-title->default title)
+                 ;; legacy in org-mode format, don't escape slashes except bug reported
                  (gp-util/page-name-sanity (string/lower-case title)))]
     ;; Win10 file path has a length limit of 260 chars
     (gp-util/safe-subs s 0 200)))
@@ -76,8 +81,7 @@
    (let [p (common-handler/get-page-default-properties title)
          ps (merge p properties)
          content (page-property/insert-properties format "" ps)
-         refs (gp-block/get-page-refs-from-properties format
-                                                      properties
+         refs (gp-block/get-page-refs-from-properties properties
                                                       (db/get-db (state/get-current-repo))
                                                       (state/get-date-formatter)
                                                       (state/get-config))]
@@ -95,17 +99,17 @@
 (defn- create-title-property?
   [journal? page-name]
   (and (not journal?)
-       (util/create-title-property? page-name)))
+       (fs-util/create-title-property? page-name)))
 
-(defn- build-page-tx [format properties page journal?]
+(defn- build-page-tx [format properties page journal? whiteboard?]
   (when (:block/uuid page)
-    (let [page-entity [:block/uuid (:block/uuid page)]
-          create-title? (create-title-property? journal?
-                                                (or
-                                                 (:block/original-name page)
-                                                 (:block/name page)))
-          page (if (seq properties) (assoc page :block/properties properties) page)
-          page-empty? (db/page-empty? (state/get-current-repo) (:block/name page))]
+    (let [page-entity   [:block/uuid (:block/uuid page)]
+          title         (util/get-page-original-name page)
+          create-title? (create-title-property? journal? title)
+          page          (merge page
+                               (when (seq properties) {:block/properties properties})
+                               (when whiteboard? {:block/type "whiteboard"}))
+          page-empty?   (db/page-empty? (state/get-current-repo) (:block/name page))]
       (cond
         (not page-empty?)
         [page]
@@ -129,14 +133,17 @@
    :uuid                - when set, use this uuid instead of generating a new one."
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid]
+  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid whiteboard?]
            :or   {redirect?           true
                   create-first-block? true
                   format              nil
                   properties          nil
                   split-namespace?    true
                   uuid                nil}}]
-   (let [title      (string/trim title)
+   (let [title      (-> (string/trim title)
+                        (text/page-ref-un-brackets!)
+                        ;; remove `#` from tags
+                        (string/replace #"^#+" ""))
          title      (gp-util/remove-boundary-slashes title)
          page-name  (util/page-name-sanity-lc title)
          repo       (state/get-current-repo)
@@ -154,11 +161,11 @@
              txs      (->> pages
                            ;; for namespace pages, only last page need properties
                            drop-last
-                           (mapcat #(build-page-tx format nil % journal?))
+                           (mapcat #(build-page-tx format nil % journal? whiteboard?))
                            (remove nil?)
                            (remove (fn [m]
                                      (some? (db/entity [:block/name (:block/name m)])))))
-             last-txs (build-page-tx format properties (last pages) journal?)
+             last-txs (build-page-tx format properties (last pages) journal? whiteboard?)
              txs      (concat txs last-txs)]
          (when (seq txs)
            (db/transact! txs)))
@@ -185,32 +192,42 @@
             (p/catch (fn [error] (js/console.error error))))))))
 
 (defn- compute-new-file-path
-  [old-path new-name]
+  "Construct the full path given old full path and the file sanitized body.
+   Ext. included in the `old-path`."
+  [old-path new-file-name-body]
   (let [result (string/split old-path "/")
-        file-name (gp-util/page-name-sanity new-name true)
         ext (last (string/split (last result) "."))
-        new-file (str file-name "." ext)
+        new-file (str new-file-name-body "." ext)
         parts (concat (butlast result) [new-file])]
     (string/join "/" parts)))
 
 (defn rename-file!
-  "emit file-rename events to :file/rename-event-chan"
-  [file new-name ok-handler]
-  (let [repo (state/get-current-repo)
-        file (db/pull (:db/id file))
-        old-path (:file/path file)
-        new-path (compute-new-file-path old-path new-name)]
+  "emit file-rename events to :file/rename-event-chan
+   force-fs? - when true, rename file event the db transact is failed."
+  ([file new-file-name-body ok-handler]
+   (rename-file! file new-file-name-body ok-handler false))
+  ([file new-file-name-body ok-handler force-fs?]
+   (let [repo (state/get-current-repo)
+         file (db/pull (:db/id file))
+         old-path (:file/path file)
+         new-path (compute-new-file-path old-path new-file-name-body)
+         transact #(db/transact! repo [{:db/id (:db/id file)
+                                        :file/path new-path}])]
     ;; update db
-    (db/transact! repo [{:db/id (:db/id file)
-                         :file/path new-path}])
-    (->
-     (p/let [_ (state/offer-file-rename-event-chan! {:repo repo
-                                                     :old-path old-path
-                                                     :new-path new-path})
-             _ (fs/rename! repo old-path new-path)]
-       (ok-handler))
-     (p/catch (fn [error]
-                (println "file rename failed: " error))))))
+     (if force-fs?
+       (try (transact) ;; capture error and continue FS rename if failed
+            (catch :default e
+              (log/error :rename-file e)))
+       (transact)) ;; interrupted if failed
+
+     (->
+      (p/let [_ (state/offer-file-rename-event-chan! {:repo repo
+                                                      :old-path old-path
+                                                      :new-path new-path})
+              _ (fs/rename! repo old-path new-path)]
+        (ok-handler))
+      (p/catch (fn [error]
+                 (println "file rename failed: " error)))))))
 
 (defn- replace-page-ref!
   "Unsanitized names"
@@ -411,7 +428,7 @@
   "Only accepts unsanitized page names"
   [old-name new-name redirect?]
   (let [old-page-name       (util/page-name-sanity-lc old-name)
-        new-file-name       (util/file-name-sanity new-name)
+        new-file-name-body  (fs-util/file-name-sanity new-name) ;; w/o file extension
         new-page-name       (util/page-name-sanity-lc new-name)
         repo                (state/get-current-repo)
         page                (db/pull [:block/name old-page-name])]
@@ -420,14 +437,16 @@
             file                (:block/file page)
             journal?            (:block/journal? page)
             properties-block    (:data (outliner-tree/-get-down (outliner-core/block page)))
+            properties-content  (:block/content properties-block)
             properties-block-tx (when (and properties-block
-                                           (string/includes? (util/page-name-sanity-lc (:block/content properties-block))
+                                           properties-content
+                                           (string/includes? (util/page-name-sanity-lc properties-content)
                                                              old-page-name))
-                                  (let [front-matter? (and (property/front-matter? (:block/content properties-block))
+                                  (let [front-matter? (and (property/front-matter? properties-content)
                                                            (= :markdown (:block/format properties-block)))]
                                     {:db/id         (:db/id properties-block)
                                      :block/content (property/insert-property (:block/format properties-block)
-                                                                              (:block/content properties-block)
+                                                                              properties-content
                                                                               :title
                                                                               new-name
                                                                               front-matter?)}))
@@ -439,13 +458,11 @@
 
         (d/transact! (db/get-db repo false) page-txs)
 
-        ;; If page name changed after sanitization
-        (when (or (util/create-title-property? new-page-name)
-                  (not= (gp-util/page-name-sanity new-name false) new-name))
+        (when (fs-util/create-title-property? new-page-name)
           (page-property/add-property! new-page-name :title new-name))
 
         (when (and file (not journal?))
-          (rename-file! file new-file-name (fn [] nil)))
+          (rename-file! file new-file-name-body (fn [] nil)))
 
         (rename-update-refs! page old-original-name new-name)
 
@@ -453,7 +470,7 @@
 
       ;; Redirect to the newly renamed page
       (when redirect?
-        (route-handler/redirect! {:to          :page
+        (route-handler/redirect! {:to          (if (= "whiteboard" (:block/type page)) :whiteboard :page)
                                   :push        false
                                   :path-params {:name new-page-name}}))
 
@@ -695,7 +712,7 @@
   (let [properties (db/get-page-properties page-name)
         properties-str (get properties :filters "{}")]
     (try (reader/read-string properties-str)
-         (catch js/Error e
+         (catch :default e
            (log/error :syntax/filters e)))))
 
 (defn save-filter!

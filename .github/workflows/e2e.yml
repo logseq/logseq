@@ -80,10 +80,10 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
 
-      # NOTE: require the app to be build in debug mode
+      # NOTE: require the app to be build with DEV-RELEASE flag
       - name: Prepare E2E test build
         run: |
-          yarn gulp:build && clojure -M:cljs release app electron --debug
+          yarn gulp:build && clojure -M:cljs release app electron --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true}}" --debug
 
       # NOTE: should include .shadow-cljs if in dev mode(compile)
       - name: Create Archive for build

@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [frontend.components.svg :as svg]
             [frontend.components.plugins :as plugins]
+            ;; [frontend.components.assets :as assets]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.storage :as storage]
@@ -28,7 +29,8 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.components.conversion :as conversion-component]))
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
@@ -195,7 +197,7 @@
          enabled?
          (fn []
            (state/set-state! [:electron/user-cfgs :spell-check] (not enabled?))
-           (p/then (ipc/ipc "userAppCfgs" :spell-check (not enabled?))
+           (p/then (ipc/ipc :userAppCfgs :spell-check (not enabled?))
                    #(when (js/confirm (t :relaunch-confirm-to-work))
                       (js/logseq.api.relaunch))))
          true)]]]))
@@ -212,7 +214,7 @@
          enabled?
          (fn []
            (state/set-state! [:electron/user-cfgs :git/disable-auto-commit?] enabled?)
-           (ipc/ipc "userAppCfgs" :git/disable-auto-commit? enabled?))
+           (ipc/ipc :userAppCfgs :git/disable-auto-commit? enabled?))
          true)]]]))
 
 (rum/defcs git-auto-commit-seconds < rum/reactive
@@ -232,7 +234,7 @@
                                      (< 0 value (inc 600)))
                               (do
                                 (state/set-state! [:electron/user-cfgs :git/auto-commit-seconds] value)
-                                (ipc/ipc "userAppCfgs" :git/auto-commit-seconds value))
+                                (ipc/ipc :userAppCfgs :git/auto-commit-seconds value))
                               (when-let [elem (gobj/get event "target")]
                                 (notification/show!
                                  [:div "Invalid value! Must be a number between 1 and 600."]
@@ -246,7 +248,7 @@
             (t :settings-page/auto-updater)
             enabled?
             #((state/set-state! [:electron/user-cfgs :auto-update] (not enabled?))
-              (ipc/ipc "userAppCfgs" :auto-update (not enabled?))))))
+              (ipc/ipc :userAppCfgs :auto-update (not enabled?))))))
 
 (defn language-row [t preferred-language]
   (let [on-change (fn [e]
@@ -416,7 +418,8 @@
              (config-handler/set-config! :feature/enable-encryption? value)
              (when value
                (state/close-modal!)
-               (js/setTimeout (fn [] (state/pub-event! [:graph/ask-for-re-index (atom false)]))
+               ;; FIXME: Don't send the `(atom false)` ! Should check multi-window! or internal status error happens
+               (js/setTimeout (fn [] (state/pub-event! [:graph/ask-for-re-index (atom false) nil]))
                               100)))
           [:p.text-sm.opacity-50 "⚠️ This feature is experimental! "
            [:span "You can use "]
@@ -537,6 +540,14 @@
    {:left-label (t :settings-page/network-proxy)
     :action (user-proxy-settings agent-opts)}))
 
+(defn filename-format-row []
+  (row-with-button-action
+   {:left-label (t :settings-page/filename-format)
+    :button-label (t :settings-page/edit-setting)
+    :on-click #(state/set-sub-modal!
+                (fn [_] (conversion-component/files-breaking-changed))
+                {:id :filename-format-panel :center? true})}))
+
 (rum/defcs settings-general < rum/reactive
   [_state current-repo]
   (let [preferred-language (state/sub [:preferred-language])
@@ -604,7 +615,7 @@
      [:p (t :settings-page/git-confirm)])])
 
 (rum/defc settings-advanced < rum/reactive
-  []
+  [current-repo]
   (let [instrument-disabled? (state/sub :instrument/disabled?)
         developer-mode? (state/sub [:ui/developer-mode?])
         https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])]
@@ -613,6 +624,7 @@
      (usage-diagnostics-row t instrument-disabled?)
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
+     (when (and (util/electron?) (not (config/demo-graph? current-repo))) (filename-format-row))
      (clear-cache-row t)
 
      (ui/admonition
@@ -630,8 +642,21 @@
 
 (defn sync-switcher-row [enabled?]
   (row-with-button-action
-   {:left-label (str (t :settings-page/sync) " 🔐")
+   {:left-label (t :settings-page/sync)
     :action (sync-enabled-switcher enabled?)}))
+
+(rum/defc whiteboards-enabled-switcher
+  [enabled?]
+  (ui/toggle enabled?
+             (fn []
+               (let [value (not enabled?)]
+                 (config-handler/set-config! :feature/enable-whiteboards? value)))
+             true))
+
+(defn whiteboards-switcher-row [enabled?]
+  (row-with-button-action
+   {:left-label (t :settings-page/enable-whiteboards)
+    :action (whiteboards-enabled-switcher enabled?)}))
 
 (rum/defc settings-features < rum/reactive
   []
@@ -639,7 +664,9 @@
         enable-journals? (state/enable-journals? current-repo)
         enable-encryption? (state/enable-encryption? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
-        enable-sync? (state/enable-sync?)]
+        enable-sync? (state/enable-sync?)
+        enable-whiteboards? (state/enable-whiteboards? current-repo)
+        logged-in? (user-handler/logged-in?)]
     [:div.panel-wrap.is-features.mb-8
      (journal-row enable-journals?)
      (when (not enable-journals?)
@@ -661,10 +688,28 @@
      (encryption-row enable-encryption?)
 
      (when-not web-platform?
-       [:div
+       [:<>
         [:hr]
-        [:h2.mb-4 "Alpha test (sponsors only)"]
-        (sync-switcher-row enable-sync?)])]))
+        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]
+         [:div.mt-1.sm:mt-0.sm:col-span-2
+          (if logged-in?
+            [:div
+              (user-handler/email)
+              [:p (ui/button (t :logout) {:class "p-1"
+                                          :icon "logout"
+                                          :on-click user-handler/logout})]]
+            [:div
+             (ui/button (t :login) {:class "p-1"
+                                    :icon "login"
+                                    :on-click (fn []
+                                                (state/close-settings!)
+                                                (js/window.open config/LOGIN-URL))})
+             [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])]]
+        [:div.flex.flex-col.gap-4
+         {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
+         (sync-switcher-row enable-sync?)
+         (whiteboards-switcher-row enable-whiteboards?)]])]))
 
 (rum/defcs settings
   < (rum/local [:general :general] ::active)
@@ -693,15 +738,20 @@
       [:aside.md:w-64 {:style {:min-width "10rem"}}
        [:ul.settings-menu
         (for [[label id text icon]
-              [[:general "general" (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
-               [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
+              [[:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
+               [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
+
                (when (and
                       (util/electron?)
                       (not (file-sync-handler/synced-file-graph? current-repo)))
-                 [:git "git" (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
-               [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]
-               [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature" {:style {:font-size 18}
-                                                                                             :extension? true})]
+                 [:git "git" (t :settings-page/tab-version-control) (ui/icon "history")])
+
+               ;; (when (util/electron?)
+               ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
+
+               [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb")]
+               [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature" {:extension? true})]
+
                (when plugins-of-settings
                  [:plugins-setting "plugins" (t :settings-of-plugins) (ui/icon "puzzle")])]]
 
@@ -735,8 +785,11 @@
          :git
          (settings-git)
 
+         ;; :assets
+         ;; (assets/settings-content)
+
          :advanced
-         (settings-advanced)
+         (settings-advanced current-repo)
 
          :features
          (settings-features)

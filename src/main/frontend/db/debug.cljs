@@ -1,4 +1,4 @@
-(ns frontend.db.debug
+(ns ^:no-doc frontend.db.debug
   (:require [frontend.db.utils :as db-utils]
             [frontend.db :as db]
             [datascript.core :as d]

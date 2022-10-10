@@ -1,4 +1,4 @@
-(ns frontend.handler.mobile.swipe
+(ns ^:no-doc frontend.handler.mobile.swipe
   (:require [cljs-bean.core :as bean]
             [frontend.state :as state]
             [frontend.util :as util]

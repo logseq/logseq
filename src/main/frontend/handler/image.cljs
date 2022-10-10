@@ -1,4 +1,4 @@
-(ns frontend.handler.image
+(ns ^:no-doc frontend.handler.image
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.fs :as fs]
@@ -49,7 +49,7 @@
              (fn [error]
                (println "Can't read local image file: ")
                (js/console.dir error))))))
-      (catch js/Error _e
+      (catch :default _e
         nil))))
 
 (defn request-presigned-url

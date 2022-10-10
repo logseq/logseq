@@ -1,4 +1,5 @@
 (ns frontend.config
+  "App config and fns built on top of configuration"
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [frontend.mobile.util :as mobile-util]
@@ -75,16 +76,40 @@
 (def markup-formats
   #{:org :md :markdown :asciidoc :adoc :rst})
 
-(defn doc-formats
-  []
+(def doc-formats
   #{:doc :docx :xls :xlsx :ppt :pptx :one :pdf :epub})
 
-(def audio-formats #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
+(def image-formats
+  #{:png :jpg :jpeg :bmp :gif :webp :svg})
+
+(def audio-formats
+  #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
+
+(def video-formats
+  #{:mp4 :webm :mov})
 
 (def media-formats (set/union (gp-config/img-formats) audio-formats))
 
 (def html-render-formats
   #{:adoc :asciidoc})
+
+(defn extname-of-supported?
+  ([input] (extname-of-supported?
+            input
+            [image-formats doc-formats audio-formats
+             video-formats markup-formats html-render-formats]))
+  ([input formats]
+   (when-let [input (some->
+                     (cond-> input
+                       (and (string? input)
+                            (not (string/blank? input)))
+                       (string/replace-first "." ""))
+                     (util/safe-lower-case)
+                     (keyword))]
+     (some
+      (fn [s]
+        (contains? s input))
+      formats))))
 
 (def mobile?
   (when-not util/node-test?
@@ -231,6 +256,7 @@
 
 (defonce default-journals-directory "journals")
 (defonce default-pages-directory "pages")
+(defonce default-whiteboards-directory "whiteboards")
 
 (defn get-pages-directory
   []
@@ -239,6 +265,10 @@
 (defn get-journals-directory
   []
   (or (state/get-journals-directory) default-journals-directory))
+
+(defn get-whiteboards-directory
+  []
+  (or (state/get-whiteboards-directory) default-whiteboards-directory))
 
 (defonce local-repo "local")
 
@@ -418,6 +448,12 @@
 
     (string/replace
      source "../assets" (util/format "%s://%s/assets" protocol (get-repo-dir (state/get-current-repo))))))
+
+(defn get-current-repo-assets-root
+  []
+  (when-let [repo-root (and (local-db? (state/get-current-repo))
+                            (get-repo-dir (state/get-current-repo)))]
+    (util/node-path.join repo-root "assets")))
 
 (defn get-custom-js-path
   ([]

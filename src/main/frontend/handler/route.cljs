@@ -1,4 +1,4 @@
-(ns frontend.handler.route
+(ns ^:no-doc frontend.handler.route
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -39,6 +39,10 @@
   []
   (redirect! {:to :repos}))
 
+(defn redirect-to-whiteboard-dashboard!
+  []
+  (redirect! {:to :whiteboards}))
+
 (defn redirect-to-page!
   "Must ensure `page-name` is dereferenced (not an alias), or it will create a wrong new page with that name (#3511)."
   ([page-name]
@@ -48,13 +52,22 @@
    (recent-handler/add-page-to-recent! (state/get-current-repo) page-name
                                        click-from-recent?)
    (let [m (cond->
-             {:to :page
-              :path-params {:name (str page-name)}}
+            {:to :page
+             :path-params {:name (str page-name)}}
              anchor
              (assoc :query-params {:anchor anchor})
              push
              (assoc :push push))]
      (redirect! m))))
+
+(defn redirect-to-whiteboard!
+  ([name]
+   (redirect-to-whiteboard! name nil))
+  ([name {:keys [block-id]}]
+   (recent-handler/add-page-to-recent! (state/get-current-repo) name false)
+   (redirect! {:to :whiteboard
+               :path-params {:name (str name)}
+               :query-params (merge {:block-id block-id})})))
 
 (defn get-title
   [name path-params]

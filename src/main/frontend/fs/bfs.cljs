@@ -1,4 +1,4 @@
-(ns frontend.fs.bfs
+(ns ^:no-doc frontend.fs.bfs
   (:require [frontend.fs.protocol :as protocol]
             [frontend.util :as util]
             [promesa.core :as p]))

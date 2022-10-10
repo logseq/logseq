@@ -24,7 +24,7 @@
                               :throwOnError false
                               :strict false}))
 
-      (catch js/Error e
+      (catch :default e
         (js/console.error e)))))
 
 (defn- load-and-render!

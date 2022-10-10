@@ -1,4 +1,5 @@
 (ns frontend.search.browser
+  "Browser implementation of search protocol"
   (:require [cljs-bean.core :as bean]
             [frontend.search.db :as search-db :refer [indices]]
             [frontend.search.protocol :as protocol]
@@ -37,7 +38,6 @@
   (rebuild-blocks-indice! [_this]
     (let [indice (search-db/make-blocks-indice! repo)]
       (p/promise indice)))
-  (cache-stale? [_this _repo] (p/promise false)) ;; fuse.js doesn't have cache
   (transact-blocks! [_this {:keys [blocks-to-remove-set
                                   blocks-to-add]}]
     (swap! search-db/indices update-in [repo :blocks]

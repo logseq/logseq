@@ -111,6 +111,11 @@ const common = {
       })
     })
 
+    cp.execSync(`rm -rf ios/App/App/public/static/out`, {
+      stdio: 'inherit'
+    })
+
+
     cp.execSync(`npx cap run ${mode} --external`, {
       stdio: 'inherit',
       env: Object.assign(process.env, {

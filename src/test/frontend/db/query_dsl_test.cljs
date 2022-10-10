@@ -116,12 +116,6 @@ prop-d:: nada"}])
 (deftest block-property-queries
   (testing "block property tests with default config"
     (test-helper/with-config {}
-      (block-property-queries-test)))
-
-  (test-helper/start-test-db!) ;; reset db
-
-  (testing "block property tests with rich-property-values? config"
-    (test-helper/with-config {:rich-property-values? true}
       (block-property-queries-test))))
 
 (defn- page-property-queries-test
@@ -187,12 +181,6 @@ prop-d:: nada"}])
 (deftest page-property-queries
   (testing "page property tests with default config"
     (test-helper/with-config {}
-      (page-property-queries-test)))
-
-  (test-helper/start-test-db!) ;; reset db
-
-  (testing "page property tests with rich-property-values? config"
-    (test-helper/with-config {:rich-property-values? true}
       (page-property-queries-test))))
 
 (deftest task-queries
@@ -310,15 +298,15 @@ prop-d:: nada"}])
   (load-test-files
    [{:file/path "pages/page1.md"
      :file/content "---
-tags: [[page-tag-1]], page-tag-2
+tags: [[page-tag-1]], [[page-tag-2]]
 ---"}
     {:file/path "pages/page2.md"
      :file/content "---
-tags: page-tag-2, [[page-tag-3]]
+tags: [[page-tag-2]], [[page-tag-3]]
 ---"}
     {:file/path "pages/page3.md"
      :file/content "---
-tags: other
+tags: [[other]]
 ---"}])
 
   (are [x y] (= (set y) (set (map :block/name (dsl-query x))))

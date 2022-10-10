@@ -1,4 +1,5 @@
 (ns frontend.handler.external
+  "Fns related to import from external services"
   (:require [clojure.edn :as edn]
             [clojure.walk :as walk]
             [frontend.external :as external]
@@ -11,9 +12,10 @@
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
             [frontend.format.block :as block]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.date-time-util :as date-time-util]
-            [frontend.handler.page :as page]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.editor :as editor]
             [frontend.handler.notification :as notification]
             [frontend.util :as util]
@@ -79,13 +81,14 @@
   [data finished-ok-handler]
   #_:clj-kondo/ignore
   (when-let [repo (state/get-current-repo)]
-    (let [[headers parsed-blocks] (mldoc/opml->edn data)
+    (let [config (gp-mldoc/default-config :markdown)
+          [headers parsed-blocks] (mldoc/opml->edn config data)
           parsed-blocks (->>
                          (block/extract-blocks parsed-blocks "" :markdown {})
                          (mapv editor/wrap-parse-block))
           page-name (:title headers)]
       (when (not (db/page-exists? page-name))
-        (page/create! page-name {:redirect? false}))
+        (page-handler/create! page-name {:redirect? false}))
       (let [page-block (db/entity [:block/name (util/page-name-sanity-lc page-name)])
             children (:block/_parent page-block)
             blocks (db/sort-by-left children page-block)
@@ -113,13 +116,13 @@
   [{:keys [uuid title children] :as tree}]
   (let [has-children? (seq children)
         page-format (some-> tree (:children) (first) (:format))]
-    (try (page/create! title {:redirect?  false
-                              :format     page-format
-                              :uuid       uuid})
-         (catch js/Error e
-           (notification/show! (str "Error happens when creating page " title ":\n"
-                                    e
-                                    "\nSkipped and continue the remaining import.") :error)))
+    (try (page-handler/create! title {:redirect?  false
+                                      :format     page-format
+                                      :uuid       uuid})
+      (catch :default e
+        (notification/show! (str "Error happens when creating page " title ":\n"
+                                 e
+                                 "\nSkipped and continue the remaining import.") :error)))
     (when has-children?
       (let [page-block  (db/entity [:block/name (util/page-name-sanity-lc title)])
             first-child (first (:block/_left page-block)) ]
@@ -128,7 +131,7 @@
                                        {:target-block first-child
                                         :sibling?     true
                                         :keep-uuid?   true})
-             (catch js/Error e
+             (catch :default e
                (notification/show! (str "Error happens when creating block content of page " title "\n"
                                         e
                                         "\nSkipped and continue the remaining import.") :error))))))

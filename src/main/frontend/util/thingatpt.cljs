@@ -1,4 +1,4 @@
-(ns frontend.util.thingatpt
+(ns ^:no-doc frontend.util.thingatpt
   (:require [clojure.string :as string]
             [frontend.state :as state]
             [frontend.util.cursor :as cursor]

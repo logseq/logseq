@@ -1,5 +1,6 @@
 (ns logseq.graph-parser.mldoc-test
   (:require [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.text :as text]
             [clojure.string :as string]
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [logseq.graph-parser.cli :as gp-cli]
@@ -51,41 +52,40 @@
           {:start_pos 0, :end_pos 15}]
          (first (gp-mldoc/->edn "```
 : hello
-```" md-config {})))
+```" md-config)))
       "Basic src example")
 
   (is (= [["Src"
-            {:lines ["  hello" "\n" "  world" "\n"],
-             :pos_meta {:start_pos 7, :end_pos 25},
-             :full_content "```\nhello\nworld\n```"}]
-           {:start_pos 1, :end_pos 29}]
+           {:lines ["  hello" "\n" "  world" "\n"],
+            :pos_meta {:start_pos 7, :end_pos 25},
+            :full_content "```\nhello\nworld\n```"}]
+          {:start_pos 1, :end_pos 29}]
          (second (gp-mldoc/->edn "
   ```
   hello
   world
   ```
-" md-config {})))
+" md-config)))
       "Src example with leading whitespace"))
 
+(defn- get-properties
+  [x]
+  (->> (gp-mldoc/->edn x md-config)
+       ffirst second
+       (map (fn [[k v ast]]
+              [(keyword k) (text/parse-property k v ast {})]))
+       (into {})))
+
 (deftest md-properties-test
-  (are [x y] (= [["Properties" y] nil]
-                (first (gp-mldoc/->edn x md-config {})))
+  (are [x y] (= y (get-properties x))
 
-       ;; comma separates values
-       "property:: foo, bar"
-       {:property #{"foo" "bar"}}
+    ;; reference values
+    "property:: [[foo]], [[bar]]"
+    {:property #{"foo" "bar"}}
 
-       ;; alias property
-       "alias:: foo,, bar"
-       {:alias ["foo" "bar"]}
-
-       ;; tags property
-       "tags:: foo,bar,foo"
-       {:tags ["foo" "bar"]}
-
-       ;; title property
-       "title:: comma, is ok"
-       {:title "comma, is ok"}))
+    ;; comma separated
+    "tags:: foo, bar, foo"
+    {:tags #{"foo" "bar"}}))
 
 (deftest name-definition-test
   (is (= [["List"
@@ -96,11 +96,11 @@
              :ordered false}]]
           {:start_pos 0, :end_pos 17}]
          (first (gp-mldoc/->edn "term
-: definition" md-config {})))))
+: definition" md-config)))))
 
 (defn- parse-properties
   [text]
-  (->> (gp-mldoc/->edn text (gp-mldoc/default-config :org) {})
+  (->> (gp-mldoc/->edn text (gp-mldoc/default-config :org))
        (filter #(= "Properties" (ffirst %)))
        ffirst
        second))
@@ -110,7 +110,7 @@
   (testing "just title"
     (let [content "#+TITLE:   some title   "
           props (parse-properties content)]
-      (is (= "some title   " (:title props)))))
+      (is (= "some title   " (second (first props))))))
 
   (testing "filetags"
     (let [content "#+FILETAGS:   :tag1:tag2:@tag:
@@ -122,7 +122,7 @@ body"
 
 (deftest ^:integration test->edn
   (let [graph-dir "test/docs"
-        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir)
+        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.6.7")
         files (gp-cli/build-graph-files graph-dir)
         asts-by-file (->> files
                           (map (fn [{:file/keys [path content]}]
@@ -130,8 +130,7 @@ body"
                                                 :org :markdown)]
                                    [path
                                     (gp-mldoc/->edn content
-                                                    (gp-mldoc/default-config format)
-                                                    {})])))
+                                                    (gp-mldoc/default-config format))])))
                           (into {}))]
     (is (= {"CommentBlock" 1,
             "Custom" 41,
@@ -143,8 +142,8 @@ body"
             "Hiccup" 15,
             "List" 37,
             "Paragraph" 417,
-            "Properties" 104,
-            "Property_Drawer" 188,
+            "Properties" 91,
+            "Property_Drawer" 201,
             "Quote" 9,
             "Raw_Html" 12,
             "Src" 56,

@@ -120,6 +120,7 @@
 
 ;; TODO: extract code for `ls-dir-files` and `reload-dir!`
 (defn ^:large-vars/cleanup-todo ls-dir-files-with-handler!
+  "Read files from directory and setup repo (for the first time setup a repo)"
   ([ok-handler] (ls-dir-files-with-handler! ok-handler nil))
   ([ok-handler {:keys [empty-dir?-or-pred dir-result-fn]}]
    (let [path-handles (atom {})
@@ -172,6 +173,7 @@
                                                                 (contains? #{config/app-name
                                                                              gp-config/default-draw-directory
                                                                              (config/get-journals-directory)
+                                                                             (config/get-whiteboards-directory)
                                                                              (config/get-pages-directory)}
                                                                            last-part)))))
                                                    (into {})))))
@@ -203,7 +205,6 @@
                                     (state/add-repo! {:url repo :nfs? true})
                                     (state/set-loading-files! repo false)
                                     (when ok-handler (ok-handler {:url repo}))
-                                    (fs/watch-dir! dir-name)
                                     (db/persist-if-idle! repo))))))))
                 (p/catch (fn [error]
                            (log/error :nfs/load-files-error repo)

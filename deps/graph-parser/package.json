@@ -6,7 +6,7 @@
     "@logseq/nbb-logseq": "^0.7.133"
   },
   "dependencies": {
-    "mldoc": "^1.3.9"
+    "mldoc": "^1.4.9"
   },
   "scripts": {
     "test": "nbb-logseq -cp src:test:../db/src -m logseq.graph-parser.nbb-test-runner/run-tests"

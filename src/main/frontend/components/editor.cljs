@@ -1,6 +1,5 @@
 (ns frontend.components.editor
   (:require [clojure.string :as string]
-            [goog.string :as gstring]
             [frontend.commands :as commands
              :refer [*first-command-group *matched-block-commands *matched-commands]]
             [frontend.components.block :as block]
@@ -12,9 +11,9 @@
             [frontend.db.model :as db-model]
             [frontend.extensions.zotero :as zotero]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
-            [frontend.handler.paste :as paste-handler]
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.paste :as paste-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
@@ -22,9 +21,10 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.keycode :as keycode]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.property :as gp-property]
             [goog.dom :as gdom]
+            [goog.string :as gstring]
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.util :as gp-util]
             [promesa.core :as p]
             [react-draggable]
             [rum.core :as rum]))
@@ -149,7 +149,10 @@
               :item-render (fn [page-name chosen?]
                              [:div.preview-trigger-wrapper
                               (block/page-preview-trigger
-                               {:children        [:div (search/highlight-exact-query page-name q)]
+                               {:children
+                                [:div.flex
+                                 (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
+                                 (search/highlight-exact-query page-name q)]
                                 :open?           chosen?
                                 :manual?         true
                                 :fixed-position? true
@@ -484,7 +487,7 @@
    (fn [state]
      (when-not (:editor/on-paste? @state/state)
        (try (editor-handler/handle-last-input)
-            (catch js/Error _e
+            (catch :default _e
               nil)))
      (state/set-state! :editor/on-paste? false)
      state)}
@@ -568,7 +571,7 @@
 
 (rum/defcs box < rum/reactive
   {:init (fn [state]
-           (assoc state ::heading-level (:heading-level (first (:rum/args state)))
+           (assoc state
                   ::id (str (random-uuid))))
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))

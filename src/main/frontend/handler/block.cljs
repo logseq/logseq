@@ -1,4 +1,4 @@
-(ns frontend.handler.block
+(ns ^:no-doc frontend.handler.block
   (:require
    [clojure.set :as set]
    [clojure.string :as string]
@@ -234,7 +234,7 @@
 
             :else
             nil))
-        (catch js/Error e
+        (catch :default e
           (js/console.error e))
         (finally
           (reset! *show-left-menu? false)

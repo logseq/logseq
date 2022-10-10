@@ -1,4 +1,5 @@
 (ns frontend.fs.capacitor-fs
+  "Implementation of fs protocol for mobile"
   (:require ["@capacitor/filesystem" :refer [Encoding Filesystem]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
@@ -222,7 +223,11 @@
           path
 
           :else
-          (str dir "/" path))))
+          (let [encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" path))
+                path' (cond-> path
+                        (not encoded-chars?)
+                        (js/encodeURI path))]
+            (str dir "/" path')))))
 
 (defn- local-container-path?
   "Check whether `path' is logseq's container `localDocumentsPath' on iOS"

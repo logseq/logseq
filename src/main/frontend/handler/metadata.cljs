@@ -1,4 +1,5 @@
 (ns frontend.handler.metadata
+  "System-component-like ns that manages writing to pages-metadata.edn"
   (:require [cljs.reader :as reader]
             [cljs.pprint]
             [clojure.string :as string]
@@ -23,7 +24,7 @@
         (let [metadata-str (or file-content default-metadata-str)
               metadata (try
                          (reader/read-string metadata-str)
-                         (catch js/Error e
+                         (catch :default e
                            (println "Parsing metadata.edn failed: ")
                            (js/console.dir e)
                            {}))
@@ -84,3 +85,12 @@
 (defn update-properties!
   [properties-tx]
   (set-metadata! :block/properties #(handler-properties! % properties-tx)))
+
+(defn run-set-page-metadata-job!
+  []
+  (js/setInterval
+   (fn []
+     (when-let [repo (state/get-current-repo)]
+       (when (state/input-idle? repo :diff 3000)
+         (set-pages-metadata! repo))))
+   (* 1000 60 10)))

@@ -1,4 +1,5 @@
 (ns frontend.core
+  "Entry ns for the mobile, browser and electron frontend apps"
   (:require [rum.core :as rum]
             [frontend.handler :as handler]
             [frontend.handler.plugin :as plugin-handler]

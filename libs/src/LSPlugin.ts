@@ -3,7 +3,7 @@ import * as CSS from 'csstype'
 import EventEmitter from 'eventemitter3'
 import { LSPluginCaller } from './LSPlugin.caller'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
-import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
+import { IAsyncStorage, LSPluginFileStorage } from './modules/LSPlugin.Storage'
 import { LSPluginRequest } from './modules/LSPlugin.Request'
 
 export type WithOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
@@ -169,6 +169,7 @@ export interface BlockEntity {
   unordered: boolean
   content: string
   page: IEntityID
+  properties?: Record<string, any>
 
   // optional fields in dummy page
   anchor?: string
@@ -196,9 +197,12 @@ export interface PageEntity {
   file?: IEntityID
   namespace?: IEntityID
   children?: Array<PageEntity>
+  properties?: Record<string, any>
   format?: 'markdown' | 'org'
   journalDay?: number
   updatedAt?: number
+
+  [key: string]: any
 }
 
 export type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
@@ -210,7 +214,7 @@ export type SlashCommandActionCmd =
   | 'editor/clear-current-slash'
   | 'editor/restore-saved-cursor'
 export type SlashCommandAction = [cmd: SlashCommandActionCmd, ...args: any]
-export type SimpleCommandCallback = (e: IHookEvent) => void
+export type SimpleCommandCallback<E = any> = (e: IHookEvent & E) => void
 export type BlockCommandCallback = (
   e: IHookEvent & { uuid: BlockUUID }
 ) => Promise<void>
@@ -412,9 +416,9 @@ export interface IAppProxy {
 
   // hook events
   onCurrentGraphChanged: IUserHook
-  onGraphAfterIndexed: IUserHook<{repo: string}>
+  onGraphAfterIndexed: IUserHook<{ repo: string }>
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
-  onThemeChanged: IUserHook<Partial<{name: string, mode: string, pid: string, url: string}>>
+  onThemeChanged: IUserHook<Partial<{ name: string, mode: string, pid: string, url: string }>>
   onBlockRendererSlotted: IUserSlotHook<{ uuid: BlockUUID }>
 
   /**
@@ -483,13 +487,27 @@ export interface IEditorProxy extends Record<string, any> {
   ) => unknown
 
   /**
-   * register a custom command in the block context menu (triggered by right clicking the block dot)
-   * @param tag - displayed name of command
+   * register a custom command in the block context menu (triggered by right-clicking the block dot)
+   * @param label - displayed name of command
    * @param action - can be a single callback function to run when the command is called
    */
   registerBlockContextMenuItem: (
-    tag: string,
+    label: string,
     action: BlockCommandCallback
+  ) => unknown
+
+  /**
+   * Current it's only available for pdf viewer
+   * @param label - displayed name of command
+   * @param action - callback for the clickable item
+   * @param opts - clearSelection: clear highlight selection when callback invoked
+   */
+  registerHighlightContextMenuItem: (
+    label: string,
+    action: SimpleCommandCallback,
+    opts?: {
+      clearSelection: boolean
+    }
   ) => unknown
 
   // block related APIs
@@ -786,7 +804,7 @@ export interface IAssetsProxy {
    * @added 0.0.2
    * @param exts
    */
-  listFilesOfCurrentGraph(exts: string | string[]): Promise<{
+  listFilesOfCurrentGraph(exts?: string | string[]): Promise<{
     path: string
     size: number
     accessTime: number
@@ -794,6 +812,12 @@ export interface IAssetsProxy {
     changeTime: number
     birthTime: number
   }>
+
+  /**
+   * @example https://github.com/logseq/logseq/pull/6488
+   * @added 0.0.10
+   */
+  makeSandboxStorage(): IAsyncStorage
 }
 
 export interface ILSPluginThemeManager {
@@ -963,6 +987,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   DB: IDBProxy
   Git: IGitProxy
   UI: IUIProxy
+  Assets: IAssetsProxy
 
   Request: LSPluginRequest
   FileStorage: LSPluginFileStorage

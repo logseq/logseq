@@ -1,8 +1,9 @@
 (ns frontend.handler.search
+  "Provides util handler fns for search"
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.handler.notification :as notification-handler]
+            [frontend.handler.notification :as notification]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -30,6 +31,8 @@
        (property/remove-built-in-properties format)))
 
 (defn search
+  ([q]
+   (search (state/get-current-repo) q))
   ([repo q]
    (search repo q {:limit 20}))
   ([repo q {:keys [page-db-id limit more?]
@@ -49,7 +52,8 @@
                          {:pages (search/page-search q)
                           :files (search/file-search q)}))
                search-key (if more? :search/more-result :search/result)]
-           (swap! state/state assoc search-key result)))))))
+           (swap! state/state assoc search-key result)
+           result))))))
 
 (defn open-find-in-page!
   []
@@ -118,18 +122,6 @@
    (println "Starting to rebuild search indices!")
    (p/let [_ (search/rebuild-indices!)]
      (when notice?
-       (notification-handler/show!
+       (notification/show!
         "Search indices rebuilt successfully!"
         :success)))))
-
-(defn rebuild-indices-when-stale!
-  ([]
-   (rebuild-indices-when-stale! (state/get-current-repo)))
-  ([repo]
-   (p/let [cache-stale? (search/cache-stale? repo)]
-     (when cache-stale?
-       (js/console.log "cache stale: " repo)
-       (p/let [_ (search/rebuild-indices! repo)]
-         (notification-handler/show!
-          "Stale search cache detected. Search indices rebuilt successfully!"
-          :success))))))

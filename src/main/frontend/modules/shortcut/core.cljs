@@ -66,7 +66,7 @@
            (try
              (log/debug :shortcut/register-shortcut {:id id :binding k})
              (.registerShortcut handler (util/keyname id) (dh/normalize-user-keyname k))
-             (catch js/Object e
+             (catch :default e
                (log/error :shortcut/register-shortcut {:id      id
                                                        :binding k
                                                        :error   e})

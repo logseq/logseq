@@ -18,15 +18,15 @@
                            (clj->js (merge {:stdio "inherit"} opts))))
 
 (defn clone-docs-repo-if-not-exists
-  [dir]
+  [dir branch]
   (when-not (.existsSync fs dir)
-    (sh ["git" "clone" "--depth" "1" "-b" "v0.6.7" "-c" "advice.detachedHead=false"
+    (sh ["git" "clone" "--depth" "1" "-b" branch "-c" "advice.detachedHead=false"
          "https://github.com/logseq/docs" dir] {})))
 
 
 ;; Fns for common test assertions
 ;; ==============================
-(defn- get-top-block-properties
+(defn get-top-block-properties
   [db]
   (->> (d/q '[:find (pull ?b [*])
               :where
@@ -39,7 +39,7 @@
        (filter #(>= (val %) 5))
        (into {})))
 
-(defn- get-all-page-properties
+(defn get-all-page-properties
   [db]
   (->> (d/q '[:find (pull ?b [*])
               :where
@@ -51,7 +51,7 @@
        (apply merge-with +)
        (into {})))
 
-(defn- get-block-format-counts
+(defn get-block-format-counts
   [db]
   (->> (d/q '[:find (pull ?b [*]) :where [?b :block/format]] db)
        (map first)
@@ -84,7 +84,7 @@
         "Journal page count on disk equals count in db")
 
     (is (= {"CANCELED" 2 "DONE" 6 "LATER" 4 "NOW" 5}
-           (->> (d/q '[:find (pull ?b [*]) :where [?b :block/marker] ]
+           (->> (d/q '[:find (pull ?b [*]) :where [?b :block/marker]]
                      db)
                 (map first)
                 (group-by :block/marker)
@@ -92,7 +92,7 @@
                 (into {})))
         "Task marker counts")
 
-    (is (= {:markdown 3143 :org 460}
+    (is (= {:markdown 3143 :org 460} ;; 2 pages for namespaces are not parsed
            (get-block-format-counts db))
         "Block format counts")
 
@@ -100,7 +100,7 @@
             :updated-at 47 :created-at 47
             :card-last-score 6 :card-repeats 6 :card-next-schedule 6
             :card-last-interval 6 :card-ease-factor 6 :card-last-reviewed 6
-            :alias 6 :logseq.macro-arguments 94 :logseq.macro-name 94}
+            :alias 6 :logseq.macro-arguments 94 :logseq.macro-name 94 :heading 64}
            (get-top-block-properties db))
         "Counts for top block properties")
 
@@ -115,10 +115,9 @@
             :block/priority 4
             :block/deadline 1
             :block/collapsed? 22
-            :block/heading-level 60
             :block/repeated? 1}
            (->> [:block/scheduled :block/priority :block/deadline :block/collapsed?
-                 :block/heading-level :block/repeated?]
+                 :block/repeated?]
                 (map (fn [attr]
                        [attr
                         (ffirst (d/q [:find (list 'count '?b) :where ['?b attr]]
@@ -132,6 +131,7 @@
                 set))
         "Has correct namespaces")))
 
+;; TODO update me to the number of the latest version of doc when namespace is updated
 (defn docs-graph-assertions
   "These are common assertions that should pass in both graph-parser and main
   logseq app. It is important to run these in both contexts to ensure that the
@@ -142,7 +142,7 @@
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
     (is (= 211 (count files)) "Correct file count")
-    (is (= 41776 (count (d/datoms db :eavt))) "Correct datoms count")
+    (is (= 42006 (count (d/datoms db :eavt))) "Correct datoms count")
 
     (is (= 3600
            (ffirst

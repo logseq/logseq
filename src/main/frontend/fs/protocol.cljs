@@ -1,4 +1,4 @@
-(ns frontend.fs.protocol
+(ns ^:no-doc frontend.fs.protocol
   ;; namespace local config to suppress 'new-path' of 'rename!'. clj-kondo's bug?
   {:clj-kondo/config {:linters {:private-call {:level :off}}}})
 

@@ -48,7 +48,7 @@
      db/pull
      block)))
 
-(defn- block-with-timestamps
+(defn block-with-timestamps
   [block]
   (let [updated-at (util/time-ms)
         block (cond->
@@ -212,6 +212,7 @@
                       (let [id (:db/id (:block/page block))]
                         [[:db/retract id :block/properties]
                          [:db/retract id :block/properties-order]
+                         [:db/retract id :block/properties-text-values]
                          [:db/retract id :block/alias]
                          [:db/retract id :block/tags]])))]
       (swap! txs-state concat txs page-tx)

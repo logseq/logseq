@@ -115,7 +115,7 @@
       margin: 0;
     }
 
-    i.ti {
+    i:is(.ti, .tie) {
       font-size: 16px;
       display: inline-block;
       position: relative;
@@ -133,7 +133,7 @@
 
     .r {
       @apply text-base space-x-2;
-      
+
       a.button {
         color: var(--ls-primary-text-color);
         margin-top: 1px;
@@ -277,6 +277,7 @@ a.page-title {
   margin-left: -8px;
   transition: none;
   display: block;
+  color: inherit;
 }
 
 html.is-native-android,
@@ -361,11 +362,6 @@ html.is-native-ios {
   .control-hide {
     display: none;
   }
- }
-
- .text-2xs {
-  font-size: 0.625rem; /* 10px */
-  line-height: 0.875rem; /* 14px */
  }
 
  .toned-down {

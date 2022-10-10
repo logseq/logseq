@@ -1,4 +1,5 @@
 (ns frontend.publishing
+  "Entry ns for publishing build. Handles primary publishing app behaviors"
   (:require [frontend.state :as state]
             [datascript.core :as d]
             [frontend.db :as db]

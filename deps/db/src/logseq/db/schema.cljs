@@ -14,6 +14,9 @@
 
    :recent/pages {}
 
+   ;; :block/type is a string type of the current block
+   ;; "whiteboard" for whiteboards
+   ;; "macros" for macro
    :block/type {}
    :block/uuid {:db/unique :db.unique/identity}
    :block/parent {:db/valueType :db.type/ref
@@ -52,16 +55,15 @@
    ;; "A", "B", "C"
    :block/priority {}
 
-   ;; block key value properties
+   ;; map, key -> set of refs in property value or full text if none are found
    :block/properties {}
    ;; vector
    :block/properties-order {}
+   ;; map, key -> original property value's content
+   :block/properties-text-values {}
 
    ;; first block that's not a heading or unordered list
    :block/pre-block? {}
-
-   ;; heading's level (the block must be a heading)
-   :block/heading-level {}
 
    ;; scheduled day
    :block/scheduled {}
@@ -114,10 +116,10 @@
     :block/deadline
     :block/repeated?
     :block/pre-block?
-    :block/heading-level
     :block/type
     :block/properties
     :block/properties-order
+    :block/properties-text-values
     :block/invalid-properties
     :block/created-at
     :block/updated-at
@@ -136,6 +138,7 @@
     :block/content
     :block/properties
     :block/properties-order
+    :block/properties-text-values
     :block/invalid-properties
     :block/alias
     :block/tags})

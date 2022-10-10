@@ -1,4 +1,5 @@
 (ns frontend.handler.shell
+  "Git related handler fns"
   (:require [electron.ipc :as ipc]
             [clojure.string :as string]
             [logseq.graph-parser.util :as gp-util]

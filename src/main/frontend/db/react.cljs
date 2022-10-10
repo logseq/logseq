@@ -348,7 +348,7 @@
                        (if (and custom? (not custom-query?))
                          (async/put! (state/get-reactive-custom-queries-chan) [f query])
                          (f)))
-                     (catch js/Error e
+                     (catch :default e
                        (js/console.error e)))))))))))))
 
 (defn set-key-value
@@ -378,7 +378,7 @@
             (do
               (async/<! (async/timeout 2000))
               (async/put! chan [f query])))
-          (catch js/Error error
+          (catch :default error
             (let [type :custom-query/failed]
               (js/console.error (str type "\n" query))
               (js/console.error error)))))
