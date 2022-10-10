@@ -199,9 +199,9 @@
     (db-utils/transact! [tx])
     uuid))
 
-(defn inside-portal
+(defn inside-portal?
   [target]
-  (dom/closest target ".tl-logseq-cp-container"))
+  (some? (dom/closest target ".tl-logseq-cp-container")))
 
 (defn closest-shape
   [target]
