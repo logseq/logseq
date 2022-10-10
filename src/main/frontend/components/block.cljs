@@ -540,7 +540,7 @@
        (:db/id page-entity)
        :page))
 
-    (whiteboard-handler/inside-portal (.-target e))
+    (whiteboard-handler/inside-portal? (.-target e))
     (whiteboard-handler/add-new-block-portal-shape!
      page-name
      (whiteboard-handler/closest-shape (.-target e)))
@@ -894,7 +894,7 @@
                      (:db/id block)
                      :block-ref)
 
-                    (whiteboard-handler/inside-portal (.-target e))
+                    (whiteboard-handler/inside-portal? (.-target e))
                     (whiteboard-handler/add-new-block-portal-shape!
                      (:block/uuid block)
                      (whiteboard-handler/closest-shape (.-target e)))
@@ -1661,7 +1661,7 @@
        :block)
       (util/stop e))
 
-    (whiteboard-handler/inside-portal (.-target e))
+    (whiteboard-handler/inside-portal? (.-target e))
     (do (whiteboard-handler/add-new-block-portal-shape!
          uuid
          (whiteboard-handler/closest-shape (.-target e)))
@@ -3219,23 +3219,32 @@
     (let [{:keys [lines language]} options
           attr (when language
                  {:data-lang language})
-          code (apply str lines)]
+          code (apply str lines)
+          [inside-portal? set-inside-portal?] (rum/use-state nil)]
       (cond
         html-export?
         (highlight/html-export attr code)
 
         :else
         (let [language (if (contains? #{"edn" "clj" "cljc" "cljs"} language) "clojure" language)]
-          (if (:slide? config)
-            (highlight/highlight (str (random-uuid))
-                                 {:class (str "language-" language)
-                                  :data-lang language}
-                                 code)
-            [:div
-             (lazy-editor/editor config (str (d/squuid)) attr code options)
-             (let [options (:options options)]
-               (when (and (= language "clojure") (contains? (set options) ":results"))
-                 (sci/eval-result code)))]))))))
+          [:div {:ref (fn [el]
+                        (println "(whiteboard-handler/inside-portal el)" (whiteboard-handler/inside-portal? el))
+                        (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))}
+           (cond
+             (nil? inside-portal?) nil
+
+             (or (:slide? config) inside-portal?)
+             (highlight/highlight (str (random-uuid))
+                                  {:class (str "language-" language)
+                                   :data-lang language}
+                                  code)
+
+             :else
+             [:<>
+              (lazy-editor/editor config (str (d/squuid)) attr code options)
+              (let [options (:options options)]
+                (when (and (= language "clojure") (contains? (set options) ":results"))
+                  (sci/eval-result code)))])])))))
 
 (defn ^:large-vars/cleanup-todo markup-element-cp
   [{:keys [html-export?] :as config} item]
