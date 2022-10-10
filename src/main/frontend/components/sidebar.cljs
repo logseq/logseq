@@ -52,7 +52,7 @@
     [:div.header.items-center.mb-1
      {:on-click (fn [^js/MouseEvent _e]
                   (state/toggle-navigation-item-collapsed! class))}
-     [:div.font-medium.fade-link name]
+     [:div.font-medium name]
      [:span
       [:a.more svg/arrow-down-v2]]]
     [:div.bd child]]])
@@ -439,7 +439,7 @@
          [:div.mt-20
           [:div.ls-center
            (ui/loading (t :loading))]]
-         
+
          :else
          [:div
           {:class (if margin-less-pages? "" (util/hiccup->class "mx-auto.pb-24"))

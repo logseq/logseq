@@ -8,10 +8,6 @@ html[data-theme=light] {
       --ls-page-inline-code-bg-color: var(--ls-quaternary-background-color);
       --ls-page-blockquote-bg-color: var(--ls-quaternary-background-color);
     }
-
-    .cp__right-sidebar-topbar button {
-      opacity: 1;
-    }
   }
 }
 
@@ -21,6 +17,17 @@ html[data-theme=light] {
 }
 
 
-html[data-theme='light'] a.toggle:hover {
+html[data-theme=light] a.toggle:hover {
   color: var(--ls-primary-text-color);
+}
+
+.cp__header a, .cp__header button, .cp__right-sidebar-topbar button {
+    opacity: 1;
+    color: var(--ls-header-button-background);
+}
+
+html[data-theme=dark] {
+    .cp__header a, .cp__header button, .cp__right-sidebar-topbar button {
+        opacity: 0.7;
+    }
 }
