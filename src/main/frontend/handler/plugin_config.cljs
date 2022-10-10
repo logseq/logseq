@@ -1,6 +1,7 @@
 (ns frontend.handler.plugin-config
-  "This ns is a system component that encapsulate the global plugin.edn.
-This component depends on TODO"
+  "This system component encapsulates the global plugin.edn and depends on the
+  global-config component. This component is only enabled? if both the
+  global-config and plugin components are enabled"
   (:require [frontend.handler.global-config :as global-config-handler]
             ["path" :as path]
             [promesa.core :as p]
@@ -8,24 +9,26 @@ This component depends on TODO"
             [frontend.fs :as fs]
             [frontend.state :as state]
             [frontend.handler.notification :as notification]
-            [electron.ipc :as ipc]
+            [frontend.handler.common.plugin :as plugin-common-handler]
             [clojure.edn :as edn]
             [clojure.set :as set]
             [clojure.pprint :as pprint]
             [malli.core :as m]
             [malli.error :as me]
             [frontend.schema.handler.plugin-config :as plugin-config-schema]
+            [cljs-bean.core :as bean]
             [lambdaisland.glogi :as log]))
 
-(defn- plugin-config-path
+(defn plugin-config-path
   []
-  (path/join @global-config-handler/root-dir "plugins.edn"))
+  (path/join (global-config-handler/global-config-dir) "plugins.edn"))
 
 (def common-plugin-keys
   "Vec of plugin keys to store in plugins.edn and to compare with installed-plugins state"
   (->> plugin-config-schema/Plugin rest (mapv first)))
 
 (defn add-or-update-plugin
+  "Adds or updates a plugin from plugin.edn"
   [{:keys [id] :as plugin}]
   (p/let [content (fs/read-file "" (plugin-config-path))
           updated-content (-> content
@@ -37,6 +40,7 @@ This component depends on TODO"
          (fs/write-file! nil "" (plugin-config-path) updated-content {:skip-compare? true})))
 
 (defn remove-plugin
+  "Removes a plugin from plugin.edn"
   [plugin-id]
   (p/let [content (fs/read-file "" (plugin-config-path))
           updated-content (-> content rewrite/parse-string (rewrite/dissoc (keyword plugin-id)) str)]
@@ -54,13 +58,18 @@ This component depends on TODO"
   "Given installed plugins state and plugins from plugins.edn,
 returns map of plugins to install and uninstall"
   [installed-plugins edn-plugins]
+  ;; :name is removed from comparison because it isn't used for reproducible builds
+  ;; and is just for display purposes
   (let [installed-plugins-set (->> installed-plugins
                                    vals
-                                   (map #(assoc (select-keys % common-plugin-keys)
-                                                :id (keyword (:id %))))
+                                   (map #(-> (select-keys % common-plugin-keys)
+                                             (assoc :id (keyword (:id %)))
+                                             (dissoc :name)))
                                    set)
         edn-plugins-set (->> edn-plugins
-                             (map (fn [[k v]] (assoc v :id k)))
+                             (map (fn [[k v]] (-> v
+                                                  (assoc :id k)
+                                                  (dissoc :name))))
                              set)]
     (if (= installed-plugins-set edn-plugins-set)
       {}
@@ -89,34 +98,36 @@ returns map of plugins to install and uninstall"
                            :error)
        (log/error :unexpected-error e)))))
 
-;; TODO: Extract from handler.plugin
-(defn installed?
-  [id]
-  (and (contains? (:plugin/installed-plugins @state/state) (keyword id))
-       (get-in @state/state [:plugin/installed-plugins (keyword id) :iir])))
-
-(defn install-marketplace-plugin
-  [{:keys [id] :as mft}]
-  ; (prn :IN {:k1 (:plugin/installing @state/state)
-  ;           :k2 (installed? id)})
-  ;; TODO:
-  (when-not (and (:plugin/installing @state/state)
-                 (installed? id))
-    (p/create
-     (fn [resolve]
-       (state/set-state! :plugin/installing mft)
-       (ipc/ipc :installMarketPlugin mft)
-       (resolve id)))))
-
-(defn update-plugins
+(defn replace-plugins
+  "Replaces current plugins given plugins to install and uninstall"
   [plugins]
   (log/info :uninstall-plugins (:uninstall plugins))
   (doseq [plugin (:uninstall plugins)]
-    (js/LSPluginCore.unregister (name (:id plugin))))
+    (plugin-common-handler/unregister-plugin (name (:id plugin))))
   (log/info :install-plugins (:install plugins))
   (doseq [plugin (:install plugins)]
-    (install-marketplace-plugin plugin)))
+    (plugin-common-handler/install-marketplace-plugin plugin)))
+
+(defn setup-install-listener!
+  "Sets up a listener for the lsp-installed event to update plugins.edn"
+  []
+  (let [listener (fn listener [_ e]
+                   (when-let [{:keys [status payload only-check]} (bean/->clj e)]
+                     (when (and (= status "completed") (not only-check))
+                       (let [{:keys [name title theme]} payload
+                             ;; Same defaults as plugin/setup-install-listener!
+                             name (or title name "Untitled")]
+                         (add-or-update-plugin
+                          (assoc payload
+                                 :version (:installed-version payload)
+                                 ;; Manual install doesn't have theme field but
+                                 ;; plugin.edn requires this field
+                                 :theme (if (some? theme) theme false)
+                                 :name name))))))]
+    (js/window.apis.addListener "lsp-installed" listener)))
 
 (defn start
+  "This component has just one reponsibility on start, to create a plugins.edn
+  if none exists"
   []
   (create-plugin-config-file-if-not-exists))

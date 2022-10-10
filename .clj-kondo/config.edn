@@ -43,12 +43,15 @@
              frontend.handler.extract extract
              frontend.handler.common common-handler
              frontend.handler.common.file file-common-handler
+             frontend.handler.common.plugin plugin-common-handler
              frontend.handler.config config-handler
              frontend.handler.events events
              frontend.handler.global-config global-config-handler
              frontend.handler.ui ui-handler
              frontend.handler.notification notification
              frontend.handler.page page-handler
+             frontend.handler.plugin plugin-handler
+             frontend.handler.plugin-config plugin-config-handler
              frontend.handler.repo repo-handler
              frontend.handler.repo-config repo-config-handler
              frontend.handler.search search-handler

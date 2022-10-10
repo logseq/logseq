@@ -5,7 +5,8 @@
             [frontend.context.i18n :refer [t]]
             [frontend.ui :as ui]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.plugin-config :as plugin-config]
+            [frontend.handler.plugin-config :as plugin-config-handler]
+            [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.search :as search]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
@@ -199,7 +200,7 @@
     [:a.btn
      {:class    (util/classnames [{:disabled   (or installed? installing-or-updating?)
                                    :installing installing-or-updating?}])
-      :on-click #(plugin-handler/install-marketplace-plugin item)}
+      :on-click #(plugin-common-handler/install-marketplace-plugin item)}
      (if installed?
        (t :plugin/installed)
        (if installing-or-updating?
@@ -224,8 +225,8 @@
                     {:title      (t :plugin/delete-alert name)
                      :on-confirm (fn [_ {:keys [close-fn]}]
                                    (close-fn)
-                                   (plugin-handler/unregister-plugin id)
-                                   (plugin-config/remove-plugin id))})]
+                                   (plugin-common-handler/unregister-plugin id)
+                                   (plugin-config-handler/remove-plugin id))})]
                (state/set-sub-modal! confirm-fn {:center? true}))}
        (t :plugin/uninstall)]]]
 
@@ -548,7 +549,7 @@
                  :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}]
 
                [{:title   [:span.flex.items-center (ui/icon "arrow-down-circle") (t :plugin/install-from-file)]
-                 :options {:on-click plugin-config/open-sync-modal}}]
+                 :options {:on-click plugin-config-handler/open-sync-modal}}]
 
                (when (state/developer-mode?)
                  [{:hr true}
@@ -822,7 +823,7 @@
       [:div.pt-5
        (ui/button [:span "Install"]
                   :on-click #(do
-                               (plugin-config/update-plugins plugins)
+                               (plugin-config-handler/replace-plugins plugins)
                                (state/close-sub-modal! "ls-plugins-from-file-modal")))]]
      ;; all done
      [:div.py-4 [:strong.text-xl "\uD83C\uDF89 All synced!"]])])

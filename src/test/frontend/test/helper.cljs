@@ -16,6 +16,8 @@
   (conn/destroy-all!))
 
 (defn load-test-files
+  "Given a collection of file maps, loads them into the current test-db.
+This can be called in synchronous contexts as no async fns should be invoked"
   [files]
   (repo-handler/parse-files-and-load-to-db!
    test-db
@@ -24,6 +26,14 @@
    {:re-render? false :verbose false :refresh? true}))
 
 (defn create-tmp-dir
-  []
-  (when-not (fs-node/existsSync "tmp") (fs-node/mkdirSync "tmp"))
-  (fs-node/mkdtempSync (path/join "tmp" "unit-test-")))
+  "Creates a temporary directory under tmp/. If a subdir is given, creates an
+  additional subdirectory under the newly created temp directory."
+  ([] (create-tmp-dir nil))
+  ([subdir]
+   (when-not (fs-node/existsSync "tmp") (fs-node/mkdirSync "tmp"))
+   (let [dir (fs-node/mkdtempSync (path/join "tmp" "unit-test-"))]
+     (if subdir
+       (do
+         (fs-node/mkdirSync (path/join dir subdir))
+         (path/join dir subdir))
+       dir))))
