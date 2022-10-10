@@ -3228,7 +3228,6 @@
         :else
         (let [language (if (contains? #{"edn" "clj" "cljc" "cljs"} language) "clojure" language)]
           [:div {:ref (fn [el]
-                        (println "(whiteboard-handler/inside-portal el)" (whiteboard-handler/inside-portal? el))
                         (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))}
            (cond
              (nil? inside-portal?) nil
