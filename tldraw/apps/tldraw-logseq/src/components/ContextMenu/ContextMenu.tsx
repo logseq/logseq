@@ -96,6 +96,13 @@ export const ContextMenu = observer(function ContextMenu({
                 </Button>
               </div>
               <ReactContextMenu.Separator className="menu-separator" />
+              <ReactContextMenu.Item
+                className="tl-menu-item"
+                onClick={() => runAndTransition(app.packIntoRectangle)}
+              >
+                Pack shapes into rectangle
+              </ReactContextMenu.Item>
+              <ReactContextMenu.Separator className="menu-separator" />
             </ReactContextMenu.Item>
           )}
           {app.selectedShapes?.size > 0 && (
