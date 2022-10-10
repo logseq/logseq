@@ -301,7 +301,7 @@ blockquote {
   font-size: 1rem;
 }
 
-input {
+input[type=text], input[type=password] {
   color: var(--ls-primary-text-color);
   background: transparent;
 }
