@@ -14,6 +14,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.export :as export-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.handler.plugin-config :as plugin-config]
             [frontend.modules.shortcut.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
@@ -408,6 +409,10 @@
                                      :inactive (not plugin-handler/lsp-enabled?)
                                      :fn      plugin-handler/goto-plugins-dashboard!}
 
+   :ui/install-plugins-from-file    {:binding false
+                                     :inactive (not plugin-handler/lsp-enabled?)
+                                     ;; TODO: Remove dev convenience
+                                     :fn      (fn [] (plugin-config/open-sync-modal))}
 
    :editor/toggle-open-blocks       {:binding "t o"
                                      :fn      editor-handler/toggle-open!}
@@ -574,6 +579,7 @@
                           :ui/toggle-wide-mode
                           :ui/select-theme-color
                           :ui/goto-plugins
+                          :ui/install-plugins-from-file
                           :editor/toggle-open-blocks
                           :ui/toggle-cards
                           :git/commit])

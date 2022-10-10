@@ -31,15 +31,15 @@
 ;; Get the latest release: /repos/{owner}/{repo}/releases/latest
 ;; Zipball https://api.github.com/repos/{owner}/{repo}/zipball
 
-(defn fetch-latest-release-asset
-  [{:keys [repo theme]}]
+(defn- fetch-release-asset
+  [{:keys [repo theme]} url-suffix]
   (p/catch
     (p/let [repo (some-> repo (string/trim) (string/replace #"^/+(.+?)/+$" "$1"))
             api #(str "https://api.github.com/repos/" repo "/" %)
-            endpoint (api "releases/latest")
+            endpoint (api url-suffix)
             ^js res (fetch endpoint)
             res (.json res)
-            _ (debug "[Release Latest] " endpoint)
+            _ (debug "[Release URL] " endpoint)
             res (bean/->clj res)
             version (:tag_name res)
             asset (first (filter #(string/ends-with? (:name %) ".zip") (:assets res)))]
@@ -55,6 +55,16 @@
     (fn [^js e]
       (debug e)
       (throw (js/Error. [:release-channel-issue (.-message e)])))))
+
+(defn fetch-latest-release-asset
+  "Fetches latest release, normally when user clicks to install or update a plugin"
+  [item]
+  (fetch-release-asset item "releases/latest"))
+
+(defn fetch-specific-release-asset
+  "Fetches a specific release asset, normally when installing specific versions from plugins.edn"
+  [{:keys [version] :as item}]
+  (fetch-release-asset item (str "releases/tags/" version)))
 
 (defn download-asset-zip
   [{:keys [id repo title author description effect sponsors]} dl-url dl-version dot-extract-to]
@@ -130,64 +140,70 @@
       (emit :lsp-installed {:status :error :payload e})
       (throw e))))
 
+;; repo is a github repo, not a logseq repo
 (defn install-or-update!
-  [{:keys [version repo only-check] :as item}]
-  (when repo
+  [{:keys [version repo only-check plugin-action] :as item}]
+  (if repo
     (let [coerced-version (and version (. semver coerce version))
-          updating? (and version (. semver valid coerced-version))]
+          updating? (and version (. semver valid coerced-version)
+                         (not= plugin-action "install"))]
 
       (debug (if updating? "Updating:" "Installing:") repo)
 
       (-> (p/create
-            (fn [resolve _reject]
-              ;;(reset! *installing-or-updating item)
-              ;; get releases
-              (-> (p/let [[asset latest-version notes] (fetch-latest-release-asset item)
+           (fn [resolve _reject]
+             ;;(reset! *installing-or-updating item)
+             ;; get releases
+             (-> (p/let [[asset latest-version notes]
+                         (if (= plugin-action "install")
+                           (fetch-specific-release-asset item)
+                           (fetch-latest-release-asset item))
 
-                          _ (debug "[Release Asset] #" latest-version " =>" (:url asset))
+                         _ (debug "[Release Asset] #" latest-version " =>" (:url asset))
 
-                          ;; compare latest version
-                          _ (when-let [coerced-latest-version
-                                       (and updating? latest-version
-                                            (. semver coerce latest-version))]
+                         ;; compare latest version
+                         _ (when-let [coerced-latest-version
+                                      (and updating? latest-version
+                                           (. semver coerce latest-version))]
 
-                              (debug "[Updating Latest?] " version " > " latest-version)
+                             (debug "[Updating Latest?] " version " > " latest-version)
 
-                              (if (. semver lt coerced-version coerced-latest-version)
-                                (debug "[Updating Latest] " latest-version)
-                                (throw (js/Error. :no-new-version))))
+                             (if (. semver lt coerced-version coerced-latest-version)
+                               (debug "[Updating Latest] " latest-version)
+                               (throw (js/Error. :no-new-version))))
 
-                          dl-url (if-not (string? asset)
-                                   (:browser_download_url asset) asset)
+                         dl-url (if-not (string? asset)
+                                  (:browser_download_url asset) asset)
 
-                          _ (when-not dl-url
-                              (debug "[Download URL Error]" asset)
-                              (throw (js/Error. [:release-asset-not-found (js/JSON.stringify asset)])))
+                         _ (when-not dl-url
+                             (debug "[Download URL Error]" asset)
+                             (throw (js/Error. [:release-asset-not-found (js/JSON.stringify asset)])))
 
-                          dest (.join path cfgs/dot-root "plugins" (:id item))
-                          _ (when-not only-check (download-asset-zip item dl-url latest-version dest))
-                          _ (debug (str "[" (if only-check "Checked" "Updated") "DONE]") latest-version)]
+                         dest (.join path cfgs/dot-root "plugins" (:id item))
+                         _ (when-not only-check (download-asset-zip item dl-url latest-version dest))
+                         _ (debug (str "[" (if only-check "Checked" "Updated") "DONE]") latest-version)]
 
+                        (emit :lsp-installed
+                              {:status     :completed
+                               :only-check only-check
+                               :payload    (if only-check
+                                             (assoc item :latest-version latest-version :latest-notes notes)
+                                             (assoc item :zip dl-url :dst dest :installed-version latest-version))})
+
+                        (resolve nil))
+
+                 (p/catch
+                  (fn [^js e]
                     (emit :lsp-installed
-                          {:status     :completed
+                          {:status     :error
                            :only-check only-check
-                           :payload    (if only-check
-                                         (assoc item :latest-version latest-version :latest-notes notes)
-                                         (assoc item :zip dl-url :dst dest :installed-version latest-version))})
-
-                    (resolve nil))
-
-                  (p/catch
-                    (fn [^js e]
-                      (emit :lsp-installed
-                            {:status     :error
-                             :only-check only-check
-                             :payload    (assoc item :error-code (.-message e))})
-                      (debug e))
-                    (resolve nil)))))
+                           :payload    (assoc item :error-code (.-message e))})
+                    (debug e))
+                  (resolve nil)))))
 
           (p/finally
-            (fn []))))))
+           (fn []))))
+    (debug "Skip install because no repo was given for: " item)))
 
 (defn uninstall!
   [id]

@@ -212,7 +212,11 @@
                                (p/then
                                 (js/LSPluginCore.register (bean/->js {:key id :url dst}))
                                 (fn [] (when theme (js/setTimeout #(select-a-plugin-theme id) 300))))
-                               (plugin-config/add-or-update-plugin name (:installed-version payload))
+                               (plugin-config/add-or-update-plugin
+                                {:id id
+                                 :name (:name payload)
+                                 :version (:installed-version payload)
+                                 :repo (:repo payload)})
                                (notification/show!
                                 (str (t :plugin/installed) (t :plugins) ": " name) :success)))))
 

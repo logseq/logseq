@@ -355,6 +355,9 @@
 (defmethod handle :go/plugins-waiting-lists [_]
   (plugin/open-waiting-updates-modal!))
 
+(defmethod handle :go/plugins-from-file [[_ plugins]]
+  (plugin/open-plugins-from-file-modal! plugins))
+
 (defmethod handle :go/plugins-settings [[_ pid nav? title]]
   (if pid
     (do
