@@ -9,7 +9,8 @@
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]))
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]
+            [frontend.handler.editor :as editor-handler]))
 
 (defn shape->block [shape page-name idx]
   (let [properties {:ls-type :whiteboard-shape
@@ -150,6 +151,7 @@
                                   [(.-minX bounds) (+ 64 (.-maxY bounds))]
                                   [(+ 64 (.-maxX bounds)) (.-minY bounds)]))))
         shape (->logseq-portal-shape block-uuid point)]
+    (when (uuid? block-uuid) (editor-handler/set-blocks-id! [block-uuid]))
     (.createShapes api (clj->js shape))
     (when link?
       (.createNewLineBinding api source-shape (:id shape)))))
@@ -197,9 +199,9 @@
     (db-utils/transact! [tx])
     uuid))
 
-(defn inside-portal
+(defn inside-portal?
   [target]
-  (dom/closest target ".tl-logseq-cp-container"))
+  (some? (dom/closest target ".tl-logseq-cp-container")))
 
 (defn closest-shape
   [target]

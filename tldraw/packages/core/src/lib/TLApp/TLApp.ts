@@ -417,6 +417,21 @@ export class TLApp<
     return this
   }
 
+  packIntoRectangle = (shapes: S[] = this.selectedShapesArray): this => {
+    if (shapes.length < 2) return this
+
+    const deltaMap = Object.fromEntries(
+      BoundsUtils.getPackedDistributions(shapes).map(d => [d.id, d])
+    )
+
+    shapes.forEach(shape => {
+      if (deltaMap[shape.id]) shape.update({ point: deltaMap[shape.id].next })
+    })
+
+    this.persist()
+    return this
+  }
+
   /* --------------------- Assets --------------------- */
 
   @observable assets: Record<string, TLAsset> = {}

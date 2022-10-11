@@ -223,6 +223,8 @@ export function usePaste() {
             allSelectedBlocks && allSelectedBlocks?.length > 1
               ? allSelectedBlocks.map(b => b.uuid)
               : [text]
+          // ensure all uuid in blockUUIDs is persisted
+          window.logseq?.api?.set_blocks_id?.(blockUUIDs)
           const tasks = blockUUIDs.map(uuid => tryCreateLogseqPortalShapesFromString(`((${uuid}))`))
           const newShapes = (await Promise.all(tasks)).flat().filter(isNonNullable)
           return newShapes.map((s, idx) => {

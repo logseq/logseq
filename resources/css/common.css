@@ -103,6 +103,7 @@ html[data-theme='dark'] {
   --ls-warning-text-color: var(--color-yellow-100);
   --ls-warning-background-color: var(--color-yellow-900);
   --ls-focus-ring-color: rgba(18, 98, 119, 0.5);
+  --ls-header-button-background: #dee4ea;
   --color-level-1: var(--ls-secondary-background-color);
   --color-level-2: var(--ls-tertiary-background-color);
   --color-level-3: var(--ls-quaternary-background-color);
@@ -135,7 +136,7 @@ html[data-theme='light'] {
   --ls-menu-hover-color: var(--ls-a-chosen-bg);
   --ls-primary-text-color: #433f38;
   --ls-secondary-text-color: #161e2e;
-  --ls-title-text-color: var(--ls-primary-text-color);
+  --ls-title-text-color: var(--ls-header-button-background);
   --ls-link-text-color: #106ba3;
   --ls-link-text-hover-color: #1a537c;
   --ls-link-ref-text-color: #106ba3;
@@ -177,6 +178,7 @@ html[data-theme='light'] {
   --ls-warning-text-color: var(--color-yellow-800);
   --ls-warning-background-color: var(--color-yellow-100);
   --ls-focus-ring-color: rgba(66, 133, 244, 0.5);
+  --ls-header-button-background: rgba(15, 20, 25, 1);
   --color-level-1: var(--ls-secondary-background-color);
   --color-level-2: var(--ls-tertiary-background-color);
   --color-level-3: var(--ls-quaternary-background-color);
@@ -517,8 +519,9 @@ i.ti {
 h1.title {
   margin-bottom: 1.5rem;
   color: var(--ls-title-text-color, #222);
+  font-family: -apple-system, system-ui, var(--ls-font-family), sans-serif;
   font-size: var(--ls-page-title-size, 36px);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .title .page-icon {

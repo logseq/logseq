@@ -102,7 +102,7 @@
                                          (when (= "Enter" (util/ekey e))
                                            (handler-fn)))
                          :on-click handler-fn}
-       [:span.opacity-50
+       [:span.opacity-70
         "Click here to edit..."]]]]))
 
 (rum/defc add-button
