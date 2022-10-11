@@ -173,14 +173,27 @@
           [:div.flex.flex-row.justify-between.flex-1.px-1
            (for [i (range 1 7)]
              (ui/button
-              (str "H" i)
+              ""
+              :icon (str "h-" i)
               :class "to-heading-button"
               :on-click (fn [_e]
                           (editor-handler/set-heading! block-id format i))
               :intent "link"
               :small? true))
            (ui/button
-            "H-"
+            ""
+            :icon "h-auto"
+            :icon-props {:extension? true}
+            :class "to-heading-button"
+            :title (t :auto-heading)
+            :on-click (fn [_e]
+                        (editor-handler/set-heading! block-id :org true))
+            :intent "link"
+            :small? true)
+           (ui/button
+            ""
+            :icon "heading-off"
+            :icon-props {:extension? true}
             :class "to-heading-button"
             :title (t :remove-heading)
             :on-click (fn [_e]

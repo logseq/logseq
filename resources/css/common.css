@@ -510,7 +510,7 @@ i.ti {
 }
 
 .to-heading-button {
-  @apply px-1 !important;
+  @apply px-1 text-lg !important;
 }
 
 /** endregion **/
