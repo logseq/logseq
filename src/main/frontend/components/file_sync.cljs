@@ -323,7 +323,7 @@
   [_state]
   (let [_                       (state/sub :auth/id-token)
         online?                 (state/sub :network/online?)
-        enabled-progress-panel? (or (util/electron?) (mobile-util/native-ios?))
+        enabled-progress-panel? true
         current-repo            (state/get-current-repo)
         creating-remote-graph?  (state/sub [:ui/loading? :graph/create-remote?])
         current-graph-id        (state/sub-current-file-sync-graph-uuid)
@@ -387,7 +387,7 @@
                                                        (if (= (:url r) current-repo)
                                                          (dissoc r :GraphUUID :GraphName :remote?)
                                                          r))
-                                                  (state/get-repos)))
+                                                     (state/get-repos)))
                                                (create-remote-graph-fn))
 
                                            (second @graphs-txid) ; sync not started yet
@@ -427,12 +427,7 @@
           (cond-> []
             synced-file-graph?
             (concat
-             (if (and no-active-files? idle?)
-               [(when-not (or (util/electron?) (mobile-util/native-ios?))
-                  {:item     [:div.flex.justify-center.w-full.py-2
-                              [:span.opacity-60 "Everything is synced!"]]
-                   :as-link? false})]
-
+             (when-not (and no-active-files? idle?)
                (cond
                  need-password?
                  [{:title   [:div.file-item
@@ -503,17 +498,16 @@
           ;; options
           {:outer-header
            [:<>
-            (when (or (util/electron?) (mobile-util/native-ios?))
-              (indicator-progress-pane
-               sync-state sync-progress
-               {:idle?            idle?
-                :syncing?         syncing?
-                :need-password?   need-password?
-                :full-sync?       full-syncing?
-                :online?          online?
-                :queuing?         queuing?
-                :no-active-files? no-active-files?
-                :history-files?   (seq history-files)}))
+            (indicator-progress-pane
+             sync-state sync-progress
+             {:idle?            idle?
+              :syncing?         syncing?
+              :need-password?   need-password?
+              :full-sync?       full-syncing?
+              :online?          online?
+              :queuing?         queuing?
+              :no-active-files? no-active-files?
+              :history-files?   (seq history-files)})
 
             (when (and
                    (not enabled-progress-panel?)
