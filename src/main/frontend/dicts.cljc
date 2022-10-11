@@ -338,6 +338,7 @@
         :dark "Dark"
         :remove-background "Remove background"
         :remove-heading "Remove heading"
+        :auto-heading "Auto heading"
         :open "Open"
         :open-a-directory "Open a local directory"
         :user/delete-account "Delete account"
