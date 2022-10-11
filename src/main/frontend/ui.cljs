@@ -59,7 +59,8 @@
    "yellow"
    "green"
    "blue"
-   "purple"])
+   "purple"
+   "pink"])
 
 (rum/defc ls-textarea
   < rum/reactive
@@ -949,7 +950,7 @@
               (f (merge {:size 18} (r/map-keys->camel-case opts)))])))))))
 
 (defn button
-  [text & {:keys [background href class intent on-click small? large? title icon]
+  [text & {:keys [background href class intent on-click small? large? title icon icon-props]
            :or   {small? false large? false}
            :as   option}]
   (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center")
@@ -966,7 +967,7 @@
         {:on-click (fn []
                      (util/open-url href)
                      (when (fn? on-click) (on-click)))}))
-     (when icon (frontend.ui/icon icon {:class "mr-1"}))
+     (when icon (frontend.ui/icon icon (merge icon-props {:class (when-not (empty? text) "mr-1")})))
      text]))
 
 (rum/defc type-icon
