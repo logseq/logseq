@@ -6,10 +6,10 @@
 (defn marker-pattern [format]
   (re-pattern
    (str "^" (if (= format :markdown) "(#+\\s+)?" "(\\*+\\s+)?")
-        "(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS)?\\s?")))
+        "(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|IN-PROGRESS)?\\s?")))
 
 (def bare-marker-pattern
-  #"(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS){1}\s+")
+  #"(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|IN-PROGRESS){1}\s+")
 
 (defn add-or-update-marker
   [content format marker]
