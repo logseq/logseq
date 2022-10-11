@@ -81,11 +81,23 @@
 (defn ^:export get_state_from_store
   [^js path]
   (when-let [path (if (string? path) [path] (bean/->clj path))]
-    (->> path
-         (map #(if (string/starts-with? % "@")
-                 (subs % 1)
-                 (keyword %)))
-         (get-in @state/state))))
+    (some->> path
+             (map #(if (string/starts-with? % "@")
+                     (subs % 1)
+                     (keyword %)))
+             (get-in @state/state)
+             (normalize-keyword-for-json)
+             (bean/->js))))
+
+(defn ^:export set_state_from_store
+  [^js path ^js value]
+  (when-let [path (if (string? path) [path] (bean/->clj path))]
+    (some->> path
+             (map #(if (string/starts-with? % "@")
+                     (subs % 1)
+                     (keyword %)))
+             (into [])
+             (#(state/set-state! % (bean/->clj value))))))
 
 (defn ^:export get_app_info
   ;; get app base info
@@ -400,6 +412,13 @@
     (if (= flag "toggle")
       (state/toggle-sidebar-open?!)
       (state/set-state! :ui/sidebar-open? (boolean flag)))
+    nil))
+
+(def ^:export clear_right_sidebar_blocks
+  (fn [^js opts]
+    (state/clear-sidebar-blocks!)
+    (when-let [opts (and opts (bean/->clj opts))]
+      (and (:closeSidebar opts) (state/hide-right-sidebar!)))
     nil))
 
 (def ^:export push_state

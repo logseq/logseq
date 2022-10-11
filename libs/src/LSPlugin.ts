@@ -352,6 +352,7 @@ export interface IAppProxy {
    * @param path
    */
   getStateFromStore: <T = any>(path: string | Array<string>) => Promise<T>
+  setStateFromStore: (path: string | Array<string>, value: any) => Promise<void>
 
   // native
   relaunch: () => Promise<void>
@@ -403,6 +404,7 @@ export interface IAppProxy {
   setFullScreen: (flag: boolean | 'toggle') => void
   setLeftSidebarVisible: (flag: boolean | 'toggle') => void
   setRightSidebarVisible: (flag: boolean | 'toggle') => void
+  clearRightSidebarBlocks: (opts?: { closeSidebar: boolean }) => void
 
   registerUIItem: (
     type: 'toolbar' | 'pagebar',
