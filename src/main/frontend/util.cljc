@@ -48,7 +48,9 @@
            ([el]
             (if (.closest el "#main-content-container")
               (app-scroll-container-node)
-              (gdom/getElementByClass "sidebar-item-list")))))
+              (or
+               (gdom/getElementByClass "sidebar-item-list")
+               (app-scroll-container-node))))))
 
 #?(:cljs
    (defn safe-re-find
