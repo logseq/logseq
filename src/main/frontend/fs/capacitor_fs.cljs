@@ -111,14 +111,16 @@
       (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
 
 (def backup-dir "logseq/bak")
+(def version-file-dir "logseq/version-files/local")
+
 (defn- get-backup-dir
-  [repo-dir path ext]
+  [repo-dir path bak-dir ext]
   (let [relative-path (-> path
                           (string/replace (re-pattern (str "^" (gstring/regExpEscape repo-dir)))
                                           "")
                           (string/replace (re-pattern (str "(?i)" (gstring/regExpEscape (str "." ext)) "$"))
                                           ""))]
-    (util/safe-path-join repo-dir (str backup-dir "/" relative-path))))
+    (util/safe-path-join repo-dir (str bak-dir "/" relative-path))))
 
 (defn- truncate-old-versioned-files!
   "reserve the latest 6 version files"
@@ -130,10 +132,18 @@
             (.deleteFile Filesystem (clj->js {:path (:uri file)})))
           old-versioned-files)))
 
+;; TODO: move this to FS protocol
 (defn backup-file
-  [repo-dir path content ext]
-  (let [backup-dir (get-backup-dir repo-dir path ext)
-        new-path (str backup-dir "/" (string/replace (.toISOString (js/Date.)) ":" "_") "." ext)]
+  "backup CONTENT under DIR :backup-dir or :version-file-dir
+  :backup-dir = `backup-dir`
+  :version-file-dir = `version-file-dir`"
+  [repo dir path content]
+  {:pre [(contains? #{:backup-dir :version-file-dir} dir)]}
+  (let [ext (util/get-file-ext path)
+        dir (case dir
+               :backup-dir (get-backup-dir repo path backup-dir ext)
+               :version-file-dir (get-backup-dir repo path version-file-dir ext))
+        new-path (util/safe-path-join dir (str (string/replace (.toISOString (js/Date.)) ":" "_") "." ext))]
     (<write-file-with-utf8 new-path content)
     (truncate-old-versioned-files! backup-dir)))
 
@@ -191,7 +201,7 @@
                  mtime (-> (js->clj stat :keywordize-keys true)
                            :mtime)]
            (when-not contents-matched?
-             (backup-file repo-dir path disk-content ext))
+             (backup-file repo-dir :backup-dir path disk-content))
            (db/set-file-last-modified-at! repo path mtime)
            (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
                              (encrypt/decrypt content)
