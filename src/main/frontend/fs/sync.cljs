@@ -29,7 +29,8 @@
             [medley.core :refer [dedupe-by]]
             [rum.core :as rum]
             [promesa.core :as p]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.fs.capacitor-fs :as capacitor-fs]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -660,7 +661,8 @@
   (<delete-remote-files [this graph-uuid base-path filepaths local-txid] "return err or txid")
   (<encrypt-fnames [this graph-uuid fnames])
   (<decrypt-fnames [this graph-uuid fnames])
-  (<cancel-all-requests [this]))
+  (<cancel-all-requests [this])
+  (<add-new-version [this repo path content]))
 
 (defprotocol IRemoteAPI
   (<user-info [this] "user info")
@@ -806,7 +808,10 @@
                                                (ex-info "decrypt-failed" {:fnames fnames} (ex-cause r))
                                                (js->clj r)))))
   (<cancel-all-requests [_]
-    (p->c (ipc/ipc "cancel-all-requests"))))
+    (p->c (ipc/ipc "cancel-all-requests")))
+
+  (<add-new-version [_this repo path content]
+    (p->c (ipc/ipc "addVersionFile" (config/get-local-dir repo) path content))))
 
 (deftype ^:large-vars/cleanup-todo CapacitorAPI [^:mutable graph-uuid' ^:mutable private-key ^:mutable public-key']
   IToken
@@ -937,7 +942,9 @@
             (ex-info "decrypt-failed" {:fnames fnames} (ex-cause r))
             (get (js->clj r) "value")))))
   (<cancel-all-requests [_]
-    (p->c (.cancelAllRequests mobile-util/file-sync))))
+    (p->c (.cancelAllRequests mobile-util/file-sync)))
+  (<add-new-version [_this repo path content]
+    (p->c (capacitor-fs/backup-file repo :version-file-dir path content))))
 
 (def rsapi (cond
              (util/electron?)
@@ -951,6 +958,10 @@
 
              :else
              nil))
+
+(defn add-new-version-file
+  [repo path content]
+  (<add-new-version rsapi repo path content))
 
 (defn <rsapi-cancel-all-requests []
   (go
@@ -1310,11 +1321,6 @@
             (swap! *get-graph-encrypt-keys-memoize-cache conj [graph-uuid r]))
           r))))
 
-(defn add-new-version-file
-  [repo path content]
-  ;; TODO @leizhe mobile implementation
-  (ipc/ipc "addVersionFile" (config/get-local-dir repo) path content))
-
 (defn- is-journals-or-pages?
   [filetxn]
   (let [rel-path (relative-path filetxn)]
@@ -1455,7 +1461,7 @@
               r (<! (<with-pause update-local-files-ch *paused))]
           (doseq [[filetxn origin-db-content] txn->db-content-vec]
             (when (<! (need-add-version-file? filetxn origin-db-content))
-              (add-new-version-file repo (relative-path filetxn) origin-db-content)
+              (<! (<add-new-version rsapi repo (relative-path filetxn) origin-db-content))
               (put-sync-event! {:event :created-local-version-file
                                 :data {:graph-uuid graph-uuid
                                        :repo repo
