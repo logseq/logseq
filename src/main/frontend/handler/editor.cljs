@@ -2017,7 +2017,8 @@
    (when-let [db-id (if (integer? db-id)
                       db-id
                       (:db/id (db-model/get-template-by-name (name db-id))))]
-     (let [repo (state/get-current-repo)
+     (let [journal? (:block/journal? target)
+           repo (state/get-current-repo)
            target (or target (state/get-edit-block))
            block (db/entity db-id)
            format (:block/format block)
@@ -2060,12 +2061,14 @@
                          :else
                          true)]
          (outliner-tx/transact!
-          {:outliner-op :insert-blocks}
-          (save-current-block!)
-          (let [result (outliner-core/insert-blocks! blocks'
-                                                     target
-                                                     (assoc opts :sibling? sibling?'))]
-            (edit-last-block-after-inserted! result))))))))
+           {:outliner-op :insert-blocks
+            :created-from-journal-template? journal?}
+           (save-current-block!)
+           (let [result (outliner-core/insert-blocks! blocks'
+                                                      target
+                                                      (assoc opts
+                                                             :sibling? sibling?'))]
+             (edit-last-block-after-inserted! result))))))))
 
 (defn template-on-chosen-handler
   [element-id]
