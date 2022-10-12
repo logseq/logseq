@@ -18,11 +18,11 @@
 
 (defn global-config-dir
   []
-  (path/join @root-dir "config"))
+  (when @root-dir (path/join @root-dir "config")))
 
 (defn global-config-path
   []
-  (path/join @root-dir "config" "config.edn"))
+  (when @root-dir (path/join @root-dir "config" "config.edn")))
 
 (defn- set-global-config-state!
   [content]
@@ -34,21 +34,21 @@
 
 (defn- create-global-config-file-if-not-exists
   [repo-url]
-  (let [config-dir (global-config-dir)
-        config-path (global-config-path)]
-    (p/let [_ (fs/mkdir-if-not-exists config-dir)
-            file-exists? (fs/create-if-not-exists repo-url config-dir config-path default-content)]
-           (when-not file-exists?
-             (file-common-handler/reset-file! repo-url config-path default-content)
-             (set-global-config-state! default-content)))))
+  (when-let [config-dir (global-config-dir)]
+    (let [config-path (global-config-path)]
+      (p/let [_ (fs/mkdir-if-not-exists config-dir)
+              file-exists? (fs/create-if-not-exists repo-url config-dir config-path default-content)]
+        (when-not file-exists?
+          (file-common-handler/reset-file! repo-url config-path default-content)
+          (set-global-config-state! default-content))))))
 
 (defn restore-global-config!
   "Sets global config state from config file"
   []
-  (let [config-dir (global-config-dir)
-        config-path (global-config-path)]
-    (p/let [config-content (fs/read-file config-dir config-path)]
-      (set-global-config-state! config-content))))
+  (when-let [config-dir (global-config-dir)]
+    (let [config-path (global-config-path)]
+      (p/let [config-content (fs/read-file config-dir config-path)]
+        (set-global-config-state! config-content)))))
 
 (defn start
   "This component has four responsibilities on start:

@@ -97,7 +97,8 @@
         write-file! (if from-disk?
                       #(p/resolved nil)
                       #(let [path-dir (if (and
-                                            (config/global-config-enabled?)
+                                           (config/global-config-enabled?)
+                                           (global-config-handler/global-config-dir)
                                             (= (path/dirname path) (global-config-handler/global-config-dir)))
                                         (global-config-handler/global-config-dir)
                                         (config/get-repo-dir repo))]

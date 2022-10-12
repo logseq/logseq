@@ -341,7 +341,8 @@
                                            (swap! path-handles assoc path handle))))
                          new-local-files (-> (->db-files mobile-native? electron? dir-name local-files-result)
                                              (remove-ignore-files dir-name nfs?))
-                         new-global-files (if (config/global-config-enabled?)
+                         new-global-files (if (and (config/global-config-enabled?)
+                                                   (global-config-handler/global-config-dir))
                                             (p/let [global-files-result (fs/get-files
                                                                           (global-config-handler/global-config-dir)
                                                                           (constantly nil))
