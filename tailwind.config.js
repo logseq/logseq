@@ -1,7 +1,7 @@
 const colors = require('tailwindcss/colors')
 
-function exposeColorsToCssVars({ addBase, theme }) {
-  function extractColorVars(colorObj, colorGroup = '') {
+function exposeColorsToCssVars ({ addBase, theme }) {
+  function extractColorVars (colorObj, colorGroup = '') {
     return Object.keys(colorObj).reduce((vars, colorKey) => {
       const value = colorObj[colorKey]
 
@@ -70,7 +70,7 @@ module.exports = {
       current: 'currentColor',
       black: colors.black,
       white: colors.white,
-      gray: colors.trueGray,
+      gray: colors.neutral,
       green: colors.green,
       blue: colors.blue,
       indigo: {
