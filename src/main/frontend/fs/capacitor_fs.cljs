@@ -125,12 +125,14 @@
 (defn- truncate-old-versioned-files!
   "reserve the latest 6 version files"
   [dir]
-  (p/let [files (readdir dir)
-          files (js->clj files :keywordize-keys true)
-          old-versioned-files (drop 6 (reverse (sort-by :mtime files)))]
-    (mapv (fn [file]
-            (.deleteFile Filesystem (clj->js {:path (:uri file)})))
-          old-versioned-files)))
+  (->
+   (p/let [files (readdir dir)
+           files (js->clj files :keywordize-keys true)
+           old-versioned-files (drop 6 (reverse (sort-by :mtime files)))]
+     (mapv (fn [file]
+             (.deleteFile Filesystem (clj->js {:path (:uri file)})))
+           old-versioned-files))
+   (p/catch (fn [_]))))
 
 ;; TODO: move this to FS protocol
 (defn backup-file
@@ -139,13 +141,14 @@
   :version-file-dir = `version-file-dir`"
   [repo dir path content]
   {:pre [(contains? #{:backup-dir :version-file-dir} dir)]}
-  (let [ext (util/get-file-ext path)
+  (let [repo-dir (config/get-local-dir repo)
+        ext (util/get-file-ext path)
         dir (case dir
-               :backup-dir (get-backup-dir repo path backup-dir ext)
-               :version-file-dir (get-backup-dir repo path version-file-dir ext))
-        new-path (util/safe-path-join dir (str (string/replace (.toISOString (js/Date.)) ":" "_") "." ext))]
+              :backup-dir (get-backup-dir repo-dir path backup-dir ext)
+              :version-file-dir (get-backup-dir repo-dir path version-file-dir ext))
+        new-path (util/safe-path-join dir (str (string/replace (.toISOString (js/Date.)) ":" "_") "." (mobile-util/platform) "." ext))]
     (<write-file-with-utf8 new-path content)
-    (truncate-old-versioned-files! backup-dir)))
+    (truncate-old-versioned-files! dir)))
 
 (defn backup-file-handle-changed!
   [repo-dir file-path content]
