@@ -825,11 +825,18 @@
   `page-id` could be either a string or a db/id."
   [repo page-id]
   (when-let [db (conn/get-db repo)]
-    (let [page-id (if (string? page-id)
-                    [:block/name (util/safe-page-name-sanity-lc page-id)]
-                    page-id)
-          page (d/entity db page-id)]
-      (nil? (:block/_left page)))))
+    (try
+      (let [page-id (if (string? page-id)
+                      [:block/name (util/safe-page-name-sanity-lc page-id)]
+                      page-id)
+            page (d/entity db page-id)]
+        (nil? (:block/_left page)))
+      (catch :default e
+        (when (string/includes? (ex-message e) "Lookup ref attribute should be marked as :db/unique: [:block/name")
+          ;; old db schema
+          (state/pub-event! [:notification/show
+                             {:content "It seems that the current graph is outdated, please re-index it."
+                              :status :error}]))))))
 
 (defn page-empty-or-dummy?
   [repo page-id]
