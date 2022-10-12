@@ -120,7 +120,8 @@
 (s/def ::graph-has-been-deleted #(= {:graph-has-been-deleted true} %))
 
 (s/def ::sync-local->remote!-result
-  (s/or :succ ::succ-map
+  (s/or :stop ::stop-map
+        :succ ::succ-map
         :pause ::pause-map
         :need-sync-remote ::need-sync-remote
         :graph-has-been-deleted ::graph-has-been-deleted
@@ -1505,7 +1506,7 @@
             :else
             (let [latest-txid (apply max (map #(.-txid ^FileTxn %) filetxns))]
               ;; update local-txid
-              (when *txid
+              (when (and *txid (number? latest-txid))
                 (reset! *txid latest-txid)
                 (<! (<update-graphs-txid! latest-txid graph-uuid user-uuid repo)))
               (recur (next filetxns-partitions*)))))))))
@@ -2133,7 +2134,7 @@
               {:succ true}
               (do
                 (put-sync-event! {:event :start
-                                  :data  {:type :full-remote->local
+                                  :data  {:type       :full-remote->local
                                           :graph-uuid graph-uuid
                                           :full-sync? true
                                           :epoch      (tc/to-epoch (t/now))}})
@@ -2168,7 +2169,7 @@
                                                             '()
                                                             (reverse diff-txns))]
                         (put-sync-event! {:event :start
-                                          :data  {:type :remote->local
+                                          :data  {:type       :remote->local
                                                   :graph-uuid graph-uuid
                                                   :full-sync? false
                                                   :epoch      (tc/to-epoch (t/now))}})
@@ -2195,24 +2196,31 @@
                 (sync-stop-when-api-flying? remote-all-files-meta-or-exp)
                 (decrypt-exp? remote-all-files-meta-or-exp))
           (do (put-sync-event! {:event :exception-decrypt-failed
-                                :data {:graph-uuid graph-uuid
-                                       :exp remote-all-files-meta-or-exp
-                                       :epoch (tc/to-epoch (t/now))}})
+                                :data  {:graph-uuid graph-uuid
+                                        :exp        remote-all-files-meta-or-exp
+                                        :epoch      (tc/to-epoch (t/now))}})
               {:stop true})
-          (let [remote-all-files-meta remote-all-files-meta-or-exp
-                local-all-files-meta  (<! local-all-files-meta-c)
-                diff-remote-files     (diff-file-metadata-sets remote-all-files-meta local-all-files-meta)
-                recent-10-days-range  ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %)) (t/today))
+          (let [remote-all-files-meta   remote-all-files-meta-or-exp
+                local-all-files-meta    (<! local-all-files-meta-c)
+                diff-remote-files       (diff-file-metadata-sets remote-all-files-meta local-all-files-meta)
+                recent-10-days-range    ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %)) (t/today))
                 sorted-diff-remote-files
-                                      (sort-by
-                                       (sort-file-metadata-fn :recent-days-range recent-10-days-range) > diff-remote-files)
-                latest-txid           (:TXId (<! (<get-remote-graph remoteapi nil graph-uuid)))]
-            (println "[full-sync(remote->local)]" (count sorted-diff-remote-files) "files need to sync")
-            (swap! *sync-state #(sync-state-reset-full-remote->local-files % sorted-diff-remote-files))
-            (<! (.sync-files-remote->local!
-                 this (map (juxt relative-path -checksum)
-                           sorted-diff-remote-files)
-                 latest-txid))))))))
+                (sort-by
+                 (sort-file-metadata-fn :recent-days-range recent-10-days-range) > diff-remote-files)
+                remote-graph-info-or-ex (<! (<get-remote-graph remoteapi nil graph-uuid))
+                latest-txid             (:TXId remote-graph-info-or-ex)]
+            (if (or (instance? ExceptionInfo remote-graph-info-or-ex) (nil? latest-txid))
+              (do (put-sync-event! {:event :get-remote-graph-failed
+                                    :data {:graph-uuid graph-uuid
+                                           :exp remote-graph-info-or-ex
+                                           :epoch (tc/to-epoch (t/now))}})
+                  {:stop true})
+              (do (println "[full-sync(remote->local)]" (count sorted-diff-remote-files) "files need to sync")
+                  (swap! *sync-state #(sync-state-reset-full-remote->local-files % sorted-diff-remote-files))
+                  (<! (.sync-files-remote->local!
+                       this (map (juxt relative-path -checksum)
+                                 sorted-diff-remote-files)
+                       latest-txid))))))))))
 
 (defn- <file-changed?
   "return true when file changed compared with remote"
@@ -2394,10 +2402,17 @@
 
               (need-reset-local-txid? r*) ;; TODO: this cond shouldn't be true,
               ;; but some potential bugs cause local-txid > remote-txid
-              (let [remote-txid (:TXId (<! (<get-remote-graph remoteapi nil graph-uuid)))]
-                (<! (<update-graphs-txid! remote-txid graph-uuid user-uuid repo))
-                (reset! *txid remote-txid)
-                {:succ true})
+              (let [remote-graph-info-or-ex (<! (<get-remote-graph remoteapi nil graph-uuid))
+                    remote-txid (:TXId remote-graph-info-or-ex)]
+                (if (or (instance? ExceptionInfo remote-graph-info-or-ex) (nil? remote-txid))
+                  (do (put-sync-event! {:event :get-remote-graph-failed
+                                        :data {:graph-uuid graph-uuid
+                                               :exp remote-graph-info-or-ex
+                                               :epoch (tc/to-epoch (t/now))}})
+                      {:stop true})
+                  (do (<! (<update-graphs-txid! remote-txid graph-uuid user-uuid repo))
+                      (reset! *txid remote-txid)
+                      {:succ true})))
 
               (graph-has-been-deleted? r*)
               (do (println :graph-has-been-deleted r*)
@@ -2486,13 +2501,13 @@
                 {:stop true}
                 (if (empty? es-partitions)
                   {:succ true}
-                  (let [{:keys [succ need-sync-remote graph-has-been-deleted unknown] :as r}
+                  (let [{:keys [succ need-sync-remote graph-has-been-deleted unknown stop] :as r}
                         (<! (<sync-local->remote! this (first es-partitions)))]
                     (s/assert ::sync-local->remote!-result r)
                     (cond
                       succ
                       (recur (next es-partitions))
-                      (or need-sync-remote graph-has-been-deleted unknown) r)))))))))))
+                      (or need-sync-remote graph-has-been-deleted unknown stop) r)))))))))))
 
 ;;; ### put all stuff together
 
@@ -2766,13 +2781,13 @@
                 @*paused?              {:pause true}
                 (empty? es-partitions) {:succ true}
                 :else
-                (let [{:keys [succ need-sync-remote graph-has-been-deleted pause unknown] :as r}
+                (let [{:keys [succ need-sync-remote graph-has-been-deleted pause unknown stop] :as r}
                       (<! (<sync-local->remote! local->remote-syncer (first es-partitions)))]
                   (s/assert ::sync-local->remote!-result r)
                   (cond
                     succ
                     (recur (next es-partitions))
-                    (or need-sync-remote graph-has-been-deleted unknown pause) r))))]
+                    (or need-sync-remote graph-has-been-deleted unknown pause stop) r))))]
         (cond
           succ
           (do (put-sync-event! {:event :finished-local->remote
@@ -2933,6 +2948,7 @@
           ;; prevent to get older repo dir and current graph-uuid.
           _                           (<! (p->c (persist-var/-load graphs-txid)))
           [user-uuid graph-uuid txid] @graphs-txid
+          txid                        (or txid 0)
           repo                        (state/get-current-repo)]
       (when (and (graph-sync-off? repo) @network-online-cursor)
         (when (and user-uuid graph-uuid txid
