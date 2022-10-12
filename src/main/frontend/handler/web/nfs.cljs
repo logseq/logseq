@@ -342,7 +342,8 @@
                          new-local-files (-> (->db-files mobile-native? electron? dir-name local-files-result)
                                              (remove-ignore-files dir-name nfs?))
                          new-global-files (if (and (config/global-config-enabled?)
-                                                   (global-config-handler/global-config-dir))
+                                                   ;; Hack until we better understand failure in frontend.handler.file/alter-file
+                                                   (global-config-handler/global-config-dir-exists?))
                                             (p/let [global-files-result (fs/get-files
                                                                           (global-config-handler/global-config-dir)
                                                                           (constantly nil))

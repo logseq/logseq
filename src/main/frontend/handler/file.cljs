@@ -98,8 +98,9 @@
                       #(p/resolved nil)
                       #(let [path-dir (if (and
                                            (config/global-config-enabled?)
-                                           (global-config-handler/global-config-dir)
-                                            (= (path/dirname path) (global-config-handler/global-config-dir)))
+                                           ;; Hack until we better understand failure in error handler
+                                           (global-config-handler/global-config-dir-exists?)
+                                           (= (path/dirname path) (global-config-handler/global-config-dir)))
                                         (global-config-handler/global-config-dir)
                                         (config/get-repo-dir repo))]
                          (fs/write-file! repo path-dir path content
@@ -136,13 +137,22 @@
                          (state/pub-event! [:shortcut/refresh]))))
                    (fn [error]
                      (when (and (config/global-config-enabled?)
+                                ;; Global-config not started correctly but don't
+                                ;; know root cause yet
+                                ;; https://sentry.io/organizations/logseq/issues/3587411237/events/4b5da8b8e58b4f929bd9e43562213d32/events/?cursor=0%3A0%3A1&project=5311485&statsPeriod=14d
+                                (global-config-handler/global-config-dir-exists?)
                                 (= path (global-config-handler/global-config-path)))
                        (state/pub-event! [:notification/show
-                                         {:content (str "Failed to write to file " path)
-                                          :status :error}]))
+                                          {:content (str "Failed to write to file " path)
+                                           :status :error}]))
 
                      (println "Write file failed, path: " path ", content: " content)
-                     (log/error :write/failed error)))
+                     (log/error :write/failed error)
+                     (state/pub-event! [:instrument {:type :write-file/failed-for-alter-file
+                                                     :payload {:path path
+                                                               :content-length (count content)
+                                                               :error-str (str error)
+                                                               :error error}}])))
     result))
 
 (defn set-file-content!
