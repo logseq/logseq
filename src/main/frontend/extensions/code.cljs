@@ -173,7 +173,7 @@
 
         (:file-path config)
         (let [path (:file-path config)
-              content (db/get-file path)]
+              content (or (db/get-file path) "")]
           (when (and
                  (not (string/blank? value))
                  (not= (string/trim value) (string/trim content)))
