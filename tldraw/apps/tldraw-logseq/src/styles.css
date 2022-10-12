@@ -45,6 +45,14 @@
   }
 }
 
+#tl-zoom {
+  @apply w-auto !important;
+}
+
+#zoomPopup .tl-menu-item {
+  @apply pl-4 !important;
+}
+
 .tl-menu-button-row {
   @apply flex justify-between px-4 py-1;
 }
