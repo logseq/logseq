@@ -663,10 +663,11 @@
                                  :ls-hl-colored ls-block-hl-colored?}])}
 
       [:button#skip-to-main
-       {:on-key-up (fn [e]
-                        (when (= (.-key e) "Enter")
-                          (ui/focus-element (ui/main-node))))}
-       "Skip to main content"]
+       {:on-click #(ui/focus-element (ui/main-node))
+        :on-key-up (fn [e]
+                     (when (= (.-key e) "Enter")
+                       (ui/focus-element (ui/main-node))))}
+       (t :accessibility/skip-to-main-content)]
       [:div.#app-container
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
