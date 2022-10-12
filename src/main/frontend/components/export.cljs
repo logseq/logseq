@@ -69,7 +69,7 @@
           :html (export/export-blocks-as-html current-repo root-block-ids)
           (export/export-blocks-as-markdown current-repo root-block-ids text-indent-style (into [] text-remove-options)))]
     [:div.export.resize
-     [:div
+     [:div.flex
       {:class "mb-2"}
       (ui/button "Text"
                  :class "mr-4 w-20"
