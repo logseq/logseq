@@ -2118,8 +2118,9 @@
   (<sync-local->remote-all-files! [this] "compare all local files to remote ones, sync when not equal.
   if local-txid != remote-txid, return {:need-sync-remote true}"))
 
-(defrecord Remote->LocalSyncer [user-uuid graph-uuid base-path repo *txid *sync-state remoteapi
-                                ^:mutable local->remote-syncer *stopped *paused]
+(defrecord ^:large-vars/cleanup-todo
+    Remote->LocalSyncer [user-uuid graph-uuid base-path repo *txid *sync-state remoteapi
+                         ^:mutable local->remote-syncer *stopped *paused]
   Object
   (set-local->remote-syncer! [_ s] (set! local->remote-syncer s))
   (sync-files-remote->local!
