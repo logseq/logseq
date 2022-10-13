@@ -23,7 +23,7 @@
       (is (= file-name' file-name))
       (is (= file-name'' file-name)))))
 
-(deftest ^:focus page-name-sanitization-tests
+(deftest page-name-sanitization-tests
   (test-page-name "Some.Content!")
   (test-page-name "More _/_ Con tents")
   (test-page-name "More _________/________ Con tents")
