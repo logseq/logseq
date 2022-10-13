@@ -23,7 +23,7 @@
 }
 
 .tl-menu-item {
-  @apply flex items-center px-4 py-1 text-sm !important;
+  @apply flex items-center pl-10 pr-4 py-1 text-sm relative !important;
 
   min-width: 220px;
   all: unset;
@@ -39,6 +39,18 @@
     cursor: pointer;
     background-color: var(--ls-primary-background-color) !important;
   }
+
+  .tl-menu-icon {
+    @apply absolute left-4 text-base opacity-50;
+  }
+}
+
+#tl-zoom {
+  @apply w-auto !important;
+}
+
+#zoomPopup .tl-menu-item {
+  @apply pl-4 !important;
 }
 
 .tl-menu-button-row {
@@ -650,7 +662,7 @@ button.tl-select-input-trigger {
 
   height: 40px;
   flex-shrink: 0;
-  background: transparent;
+  background: linear-gradient(0deg, transparent, var(--ls-tertiary-background-color));
   color: var(--ls-title-text-color);
   border-top-left-radius: 8px;
   border-top-right-radius: 8px;
@@ -748,10 +760,6 @@ html[data-theme='light'] {
     border: 1px solid rgba(42, 123, 253, 0.5);
     color: var(--ls-secondary-text-color);
   }
-
-  .tl-logseq-portal-header {
-    backdrop-filter: brightness(0.9);
-  }
 }
 
 html[data-theme='dark'] {
@@ -759,10 +767,6 @@ html[data-theme='dark'] {
     background: linear-gradient(0deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), #338fff;
     border: 1px solid #338fff;
     color: var(--ls-secondary-text-color);
-  }
-
-  .tl-logseq-portal-header {
-    backdrop-filter: brightness(1.2);
   }
 }
 

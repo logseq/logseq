@@ -131,17 +131,9 @@
                                      (#(js->clj % :keywordize-keys true))
                                      ((juxt :dir :name))
                                      (apply path/join base-path))
-            version-file-paths* (<! (p->c (fs/readdir version-files-dir)))]
-        (when-not (instance? ExceptionInfo version-file-paths*)
-          (let [version-file-paths
-                (filterv
-                 ;; filter dir
-                 (fn [dir-or-file]
-                   (-> (path/parse dir-or-file)
-                       (js->clj :keywordize-keys true)
-                       :ext
-                       seq))
-                 (js->clj (<! (p->c (fs/readdir version-files-dir)))))]
+            version-file-paths (<! (p->c (fs/readdir version-files-dir :path-only? true)))]
+        (when-not (instance? ExceptionInfo version-file-paths)
+          (when (seq version-file-paths)
             (mapv
              (fn [path]
                (let [create-time

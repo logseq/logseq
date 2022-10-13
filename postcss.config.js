@@ -1,8 +1,9 @@
-module.exports = (ctx) => ({
-  plugins: [
-    require('postcss-nested')({}),
-    require('postcss-import-ext-glob')({}),
-    require('postcss-import')({}),
-    require('tailwindcss')('tailwind.config.js'),
-  ],
-})
+module.exports = {
+  plugins: {
+    'postcss-import-ext-glob': {},
+    'postcss-import': {},
+    'tailwindcss/nesting': 'postcss-nested',
+    tailwindcss: {},
+    ...(process.env.NODE_ENV === 'production' ? { cssnano: {} } : {})
+  }
+}

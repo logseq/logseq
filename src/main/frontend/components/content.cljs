@@ -97,8 +97,8 @@
 
 (rum/defc template-checkbox
   [template-including-parent?]
-  [:div.flex.flex-row
-   [:span.text-medium.mr-2 "Including the parent block in the template?"]
+  [:div.flex.flex-row.w-auto.items-center
+   [:p.text-medium.mr-2 "Including the parent block in the template?"]
    (ui/toggle template-including-parent?
               #(swap! *template-including-parent? not))])
 
@@ -121,27 +121,29 @@
     (if @edit?
       (do
         (state/clear-edit!)
-        [:div.px-4.py-2 {:on-click (fn [e] (util/stop e))}
-         [:p "What's the template's name?"]
-         [:input#new-template.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-          {:auto-focus true
-           :on-change (fn [e]
-                        (reset! input (util/evalue e)))}]
-         (when has-children?
-           (template-checkbox template-including-parent?))
-         (ui/button "Submit"
-                    :on-click (fn []
-                                (let [title (string/trim @input)]
-                                  (when (not (string/blank? title))
-                                    (if (page-handler/template-exists? title)
-                                      (notification/show!
-                                       [:p "Template already exists!"]
-                                       :error)
-                                      (do
-                                        (editor-handler/set-block-property! block-id :template title)
-                                        (when (false? template-including-parent?)
-                                          (editor-handler/set-block-property! block-id :template-including-parent false))
-                                        (state/hide-custom-context-menu!)))))))])
+        [:<>
+         [:div.px-4.py-2.text-sm {:on-click (fn [e] (util/stop e))}
+          [:p "What's the template's name?"]
+          [:input#new-template.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
+           {:auto-focus true
+            :on-change (fn [e]
+                         (reset! input (util/evalue e)))}]
+          (when has-children?
+            (template-checkbox template-including-parent?))
+          (ui/button "Submit"
+                     :on-click (fn []
+                                 (let [title (string/trim @input)]
+                                   (when (not (string/blank? title))
+                                     (if (page-handler/template-exists? title)
+                                       (notification/show!
+                                        [:p "Template already exists!"]
+                                        :error)
+                                       (do
+                                         (editor-handler/set-block-property! block-id :template title)
+                                         (when (false? template-including-parent?)
+                                           (editor-handler/set-block-property! block-id :template-including-parent false))
+                                         (state/hide-custom-context-menu!)))))))]
+         [:hr.menu-separator]])
       (ui/menu-link
        {:key "Make a Template"
         :on-click (fn [e]

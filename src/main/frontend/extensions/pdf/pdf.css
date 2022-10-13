@@ -107,6 +107,9 @@ input::-webkit-inner-spin-button {
             width: 35px;
             text-align: right;
             padding-right: 4px;
+            height: 18px;
+            border: none;
+            background: transparent;
           }
         }
 

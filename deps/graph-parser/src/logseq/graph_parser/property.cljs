@@ -28,10 +28,6 @@
    (contains? #{"Property_Drawer" "Properties"}
               (first block))))
 
-(def markers
-  #{"now" "later" "todo" "doing" "done" "wait" "waiting"
-    "canceled" "cancelled" "started" "in-progress"})
-
 ;; Built-in properties are properties that logseq uses for its features. Most of
 ;; these properties are hidden from the user but a few like the editable ones
 ;; are visible for the user to edit.
@@ -61,8 +57,9 @@
      :created-at :updated-at :last-modified-at :created_at :last_modified_at
      :query-table :query-properties :query-sort-by :query-sort-desc :ls-type
      :hl-type :hl-page :hl-stamp :hl-color :logseq.macro-name :logseq.macro-arguments
-     :logseq.tldraw.page :logseq.tldraw.shape}
-   (set (map keyword markers))
+     :logseq.tldraw.page :logseq.tldraw.shape
+     ; task markers
+     :todo :doing :now :later :done}
    @built-in-extended-properties))
 
 (defonce properties-start ":PROPERTIES:")

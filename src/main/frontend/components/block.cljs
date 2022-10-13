@@ -2494,7 +2494,7 @@
 (rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
 
 (defn breadcrumb
-  [config repo block-id {:keys [show-page? indent? level-limit _navigating-block]
+  [config repo block-id {:keys [show-page? indent? end-separator? level-limit _navigating-block]
                          :or {show-page? true
                               level-limit 3}
                          :as opts}]
@@ -2541,7 +2541,7 @@
                           " my-2")
                         (when indent?
                           " ml-4")))}
-         breadcrumb]))))
+         breadcrumb (when end-separator? (breadcrumb-separator))]))))
 
 (defn- block-drag-over
   [event uuid top? block-id *move-to]

@@ -9,8 +9,9 @@
             [clojure.set :as set]))
 
 (defn updated-page-hook
-  [_tx-report page]
-  (file/sync-to-file page))
+  [tx-report page]
+  (when-not (get-in tx-report [:tx-meta :created-from-journal-template?])
+    (file/sync-to-file page)))
 
 ;; TODO: it'll be great if we can calculate the :block/path-refs before any
 ;; outliner transaction, this way we can group together the real outliner tx

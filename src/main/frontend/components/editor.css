@@ -25,6 +25,7 @@
     background: transparent;
     padding: 0;
     resize: none;
+    box-shadow: none;
   }
 }
 
