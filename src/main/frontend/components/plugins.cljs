@@ -640,7 +640,7 @@
        [:p.flex.justify-center.pt-20.opacity-50 (svg/offline 30)]
 
        @*fetching
-       [:p.flex.justify-center.pt-20 svg/loading]
+       [:p.flex.justify-center.py-20 svg/loading]
 
        @*error
        [:p.flex.justify-center.pt-20.opacity-50 "Remote error: " (.-message @*error)]
@@ -649,6 +649,7 @@
        [:div.cp__plugins-marketplace-cnt
         {:class (util/classnames [{:has-installing (boolean installing)}])}
         [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
+         ;; items list
          (for [item sorted-pkgs]
            (rum/with-key
              (let [pid  (keyword (:id item))
@@ -1030,7 +1031,8 @@
   []
   (state/set-modal!
    (fn [_close!]
-     (plugins-page))))
+     (plugins-page))
+   {:label "plugins-dashboard"}))
 
 (defn open-waiting-updates-modal!
   []
