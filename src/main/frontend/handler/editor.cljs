@@ -3095,7 +3095,7 @@
         (state/selection?)
         (select-up-down direction)
 
-        :else
+        (not (state/get-edit-input-id))
         (select-first-last direction)))
     nil))
 
