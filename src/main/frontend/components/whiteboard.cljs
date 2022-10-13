@@ -79,20 +79,10 @@
   ([page-name classname render-fn]
    (let [page-entity (model/get-page page-name)
          block-uuid (:block/uuid page-entity)
-         ref (rum/use-ref nil)
          refs-count (count (:block/_refs page-entity))
          [open-flag set-open-flag] (rum/use-state 0)
          open? (not= open-flag 0)
          d-open-flag (rum/use-memo #(util/debounce 200 set-open-flag) [])]
-     ;; TODO: move click outside to the utility? 
-     (rum/use-effect!
-      (let [listener (fn [e]
-                       (when (and (.-current ref)
-                                  (not (.contains (.-current ref) (.-target e))))
-                         (d-open-flag 0)))]
-        (.addEventListener js/document.body "mousedown" listener true)
-        #(.removeEventListener js/document.body "mousedown" listener))
-      [ref])
      (when (> refs-count 0)
        (dropdown
         [:div.flex.items-center.gap-2.whiteboard-page-refs-count

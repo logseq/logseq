@@ -29,7 +29,7 @@
 
 (rum/defc breadcrumb
   [props]
-  (block/breadcrumb {:preview? true} (state/get-current-repo) (uuid (gobj/get props "blockId")) nil))
+  (block/breadcrumb {:preview? true} (state/get-current-repo) (uuid (gobj/get props "blockId")) {:end-separator? true}))
 
 (rum/defc page-name-link
   [props]

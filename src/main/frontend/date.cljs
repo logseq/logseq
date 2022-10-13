@@ -108,14 +108,21 @@
   ([]
    (journal-name (tl/local-now)))
   ([date]
-   (date-time-util/format date (state/get-date-formatter))))
+   (let [formatter (state/get-date-formatter)]
+     (try
+      (date-time-util/format date formatter)
+      (catch :default e
+        (log/error :parse-journal-date {:message  "Failed to parse date to journal name."
+                                        :date date
+                                        :format formatter})
+        (throw e))))))
 
 (defn journal-name-s [s]
   (try
     (journal-name (tf/parse (tf/formatter "yyyy-MM-dd") s))
     (catch :default _e
-      (log/info :parse-journal-date {:message  "Unable to parse date to journal name, skipping."
-                                     :date-str s})
+      (log/error :parse-journal-date {:message  "Unable to parse date to journal name, skipping."
+                                      :date-str s})
       nil)))
 
 (defn today

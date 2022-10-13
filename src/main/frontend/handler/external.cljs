@@ -83,6 +83,8 @@
   (when-let [repo (state/get-current-repo)]
     (let [config (gp-mldoc/default-config :markdown)
           [headers parsed-blocks] (mldoc/opml->edn config data)
+          ;; add empty pos metadata
+          parsed-blocks (map (fn [b] [b {}]) parsed-blocks)
           parsed-blocks (->>
                          (block/extract-blocks parsed-blocks "" :markdown {})
                          (mapv editor/wrap-parse-block))

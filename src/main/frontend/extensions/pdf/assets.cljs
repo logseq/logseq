@@ -188,16 +188,17 @@
              wrap-props #(if-let [stamp (:image content)]
                            (assoc % :hl-type "area" :hl-stamp stamp) %)]
 
-         (editor-handler/api-insert-new-block!
-          text (merge {:page        (:block/name ref-page)
-                       :custom-uuid id
-                       :properties  (wrap-props
-                                     {:ls-type  "annotation"
-                                      :hl-page  page
-                                      :hl-color (:color properties)
-                                      ;; force custom uuid
-                                      :id       (str id)})}
-                      insert-opts)))))))
+         (when (string? text)
+           (editor-handler/api-insert-new-block!
+            text (merge {:page        (:block/name ref-page)
+                         :custom-uuid id
+                         :properties  (wrap-props
+                                       {:ls-type  "annotation"
+                                        :hl-page  page
+                                        :hl-color (:color properties)
+                                        ;; force custom uuid
+                                        :id       (str id)})}
+                        insert-opts))))))))
 
 (defn del-ref-block!
   [{:keys [id]}]

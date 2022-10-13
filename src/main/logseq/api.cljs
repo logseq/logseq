@@ -48,8 +48,8 @@
       (fn [a]
         (cond
           (keyword? a)
-          (cond-> (name a)  
-            camel-case? 
+          (cond-> (name a)
+            camel-case?
             (csk/->camelCase))
 
           (uuid? a) (str a)
@@ -431,12 +431,14 @@
   (fn [content]
     (when-let [input-id (state/get-edit-input-id)]
       (commands/simple-insert! input-id content {})
-      (.focus (gdom/getElement input-id)))))
+      (when-let [input (gdom/getElement input-id)]
+        (.focus input)))))
 
 (def ^:export restore_editing_cursor
   (fn []
     (when-let [input-id (state/get-edit-input-id)]
-      (.focus (gdom/getElement input-id)))))
+      (when-let [input (gdom/getElement input-id)]
+        (.focus input)))))
 
 (def ^:export get_editing_cursor_position
   (fn []

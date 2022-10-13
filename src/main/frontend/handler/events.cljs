@@ -640,7 +640,8 @@
   (when (db/get-db graph)
     (let [file (:block/file page-entity)]
       (when-let [path (:file/path file)]
-        (when (not= content (:file/content file))
+        (when (and (not= content (:file/content file))
+                   (:file/content file))
           (sync/add-new-version-file graph path (:file/content file)))
         (p/let [_ (file-handler/alter-file graph
                                            path

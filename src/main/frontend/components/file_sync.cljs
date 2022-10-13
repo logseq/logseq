@@ -617,10 +617,10 @@
               (ui/humanity-time-ago
                (or (:CreateTime version)
                    (:create-time version)) nil)]
-             [:small.opacity-50.translate-y-1
+             [:small.opacity-50.translate-y-1.flex.items-center.space-x-1
               (if local?
-                [:<> (ui/icon "git-commit") " local"]
-                [:<> (ui/icon "cloud") " remote"])]]])))]))
+                [:<> (ui/icon "git-commit") [:span "local"]]
+                [:<> (ui/icon "cloud") [:span "remote"]])]]])))]))
 
 (rum/defc pick-page-histories-for-sync
   [repo-url graph-uuid page-name page-entity]
