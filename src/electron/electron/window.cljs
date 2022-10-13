@@ -115,8 +115,7 @@
     (when parsed-url
       (condp contains? (.-protocol parsed-url)
         #{"https:" "http:" "mailto:"} (.openExternal shell url)
-        #{"file:"} (when (empty? (.-host parsed-url)) (default-open url))
-        nil))))
+        (default-open url)))))
 
 (defn setup-window-listeners!
   [^js win]
