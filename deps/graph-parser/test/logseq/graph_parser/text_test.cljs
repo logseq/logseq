@@ -101,7 +101,11 @@
   (testing "parse-property with quoted strings"
     (are [k v y] (= (parse-property k v {}) y)
          :tags "\"foo, bar\"" "\"foo, bar\""
-         :tags "\"[[foo]], [[bar]]\"" "\"[[foo]], [[bar]]\"")))
+         :tags "\"[[foo]], [[bar]]\"" "\"[[foo]], [[bar]]\""))
+  
+  (testing "parse title property with square bracket"
+    (are [k v y] (= (parse-property k v {}) y)
+      :title "[[Jan 11th, 2022]] 21:26" "\"[[Jan 11th, 2022]] 21:26\"")))
 
 
 #_(cljs.test/test-ns 'logseq.graph-parser.text-test)
