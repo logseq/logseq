@@ -4,9 +4,10 @@
             [electron.configs :as cfgs]
             [electron.context-menu :as context-menu]
             [electron.logger :as logger]
-            ["electron" :refer [BrowserWindow app session shell] :as electron]
+            ["electron" :refer [BrowserWindow app session shell dialog] :as electron]
             ["path" :as path]
             ["url" :as URL]
+            [promesa.core :as p]
             [electron.state :as state]
             [clojure.core.async :as async]
             [clojure.string :as string]))
@@ -24,23 +25,23 @@
   ([url]
    (let [win-state (windowStateKeeper (clj->js {:defaultWidth 980 :defaultHeight 700}))
          win-opts (cond->
-                    {:width                (.-width win-state)
-                     :height               (.-height win-state)
-                     :frame                true
-                     :titleBarStyle        "hiddenInset"
-                     :trafficLightPosition {:x 16 :y 16}
-                     :autoHideMenuBar      (not mac?)
-                     :webPreferences
-                     {:plugins                 true ; pdf
-                      :nodeIntegration         false
-                      :nodeIntegrationInWorker false
-                      :webSecurity             (not dev?)
-                      :contextIsolation        true
-                      :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
+                   {:width                (.-width win-state)
+                    :height               (.-height win-state)
+                    :frame                true
+                    :titleBarStyle        "hiddenInset"
+                    :trafficLightPosition {:x 16 :y 16}
+                    :autoHideMenuBar      (not mac?)
+                    :webPreferences
+                    {:plugins                 true ; pdf
+                     :nodeIntegration         false
+                     :nodeIntegrationInWorker false
+                     :webSecurity             (not dev?)
+                     :contextIsolation        true
+                     :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
                       ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
                       ;; to use `scollbar-gutter` after the feature is implemented in browsers.
-                      :enableBlinkFeatures     'OverlayScrollbars'
-                      :preload                 (path/join js/__dirname "js/preload.js")}}
+                     :enableBlinkFeatures     'OverlayScrollbars'
+                     :preload                 (path/join js/__dirname "js/preload.js")}}
                     linux?
                     (assoc :icon (path/join js/__dirname "icons/logseq.png")))
          win (BrowserWindow. (clj->js win-opts))]
@@ -53,8 +54,8 @@
                                    origin (.-origin urlObj)
                                    requestHeaders (.-requestHeaders details)]
                                (if (and
-                                     (.hasOwnProperty requestHeaders "referer")
-                                     (not-empty (.-referer requestHeaders)))
+                                    (.hasOwnProperty requestHeaders "referer")
+                                    (not-empty (.-referer requestHeaders)))
                                  (callback #js {:cancel         false
                                                 :requestHeaders requestHeaders})
                                  (do
@@ -108,6 +109,15 @@
                                          (not= (.-id win) (.-id window))))
                    windows))))
 
+(defn unknown-protocol-open!
+  [protocol url default-open]
+  (p/let [result (.showMessageBox dialog (clj->js {:title "Unknown protocol"
+                                                   :type "warning"
+                                                   :message (str url "\nYou are trying to open a() " protocol " url. Are you sure you want to continue?")
+                                                   :buttons ["Yes","No"]}))]
+    (when (zero? (.-response result))
+      (default-open url))))
+
 (defn- open-default-app!
   [url default-open]
   (let [URL (.-URL URL)
@@ -115,7 +125,8 @@
     (when parsed-url
       (condp contains? (.-protocol parsed-url)
         #{"https:" "http:" "mailto:"} (.openExternal shell url)
-        (default-open url)))))
+        #{"file:" "zotero:"} (when (empty? (.-host parsed-url)) (default-open url))
+        (unknown-protocol-open! (.-protocol parsed-url) url default-open)))))
 
 (defn setup-window-listeners!
   [^js win]
