@@ -113,7 +113,7 @@
   [protocol url default-open]
   (p/let [result (.showMessageBox dialog (clj->js {:title "Unknown protocol"
                                                    :type "warning"
-                                                   :message (str url "\nYou are trying to open a() " protocol " url. Are you sure you want to continue?")
+                                                   :message (str url "\nYou are trying to open a(n) " protocol " url. Are you sure you want to continue?")
                                                    :buttons ["Yes","No"]}))]
     (when (zero? (.-response result))
       (default-open url))))
