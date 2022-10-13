@@ -2234,9 +2234,11 @@
   [graph-uuid file-path-without-base-path base-path]
   {:pre [(string? file-path-without-base-path)]}
   (go
-    (let [remote-meta (first (<! (<get-remote-files-meta remoteapi graph-uuid [file-path-without-base-path])))
+    (let [remote-meta-or-exp (<! (<get-remote-files-meta remoteapi graph-uuid [file-path-without-base-path]))
           local-meta (first (<! (<get-local-files-meta rsapi graph-uuid base-path [file-path-without-base-path])))]
-      (not= remote-meta local-meta))))
+      (if (instance? ExceptionInfo remote-meta-or-exp)
+        false
+        (not= (first remote-meta-or-exp) local-meta)))))
 
 (defn- <filter-local-changes-pred
   "filter local-change events:
@@ -2410,12 +2412,12 @@
               (need-reset-local-txid? r*) ;; TODO: this cond shouldn't be true,
               ;; but some potential bugs cause local-txid > remote-txid
               (let [remote-graph-info-or-ex (<! (<get-remote-graph remoteapi nil graph-uuid))
-                    remote-txid (:TXId remote-graph-info-or-ex)]
+                    remote-txid             (:TXId remote-graph-info-or-ex)]
                 (if (or (instance? ExceptionInfo remote-graph-info-or-ex) (nil? remote-txid))
                   (do (put-sync-event! {:event :get-remote-graph-failed
-                                        :data {:graph-uuid graph-uuid
-                                               :exp remote-graph-info-or-ex
-                                               :epoch (tc/to-epoch (t/now))}})
+                                        :data  {:graph-uuid graph-uuid
+                                                :exp        remote-graph-info-or-ex
+                                                :epoch      (tc/to-epoch (t/now))}})
                       {:stop true})
                   (do (<! (<update-graphs-txid! remote-txid graph-uuid user-uuid repo))
                       (reset! *txid remote-txid)
@@ -2447,32 +2449,42 @@
             local-all-files-meta-c       (<get-local-all-files-meta rsapi graph-uuid base-path)
             deletion-logs-c              (<get-deletion-logs remoteapi graph-uuid @*txid)
             remote-all-files-meta-or-exp (<! remote-all-files-meta-c)
-            deletion-logs                (<! deletion-logs-c)]
-        (if (or (storage-exceed-limit? remote-all-files-meta-or-exp)
-                (sync-stop-when-api-flying? remote-all-files-meta-or-exp)
-                (decrypt-exp? remote-all-files-meta-or-exp))
-          (do (put-sync-event! {:event :exception-decrypt-failed
+            deletion-logs-or-exp         (<! deletion-logs-c)]
+        (cond
+          (or (storage-exceed-limit? remote-all-files-meta-or-exp)
+              (sync-stop-when-api-flying? remote-all-files-meta-or-exp)
+              (decrypt-exp? remote-all-files-meta-or-exp))
+          (do (put-sync-event! {:event :get-remote-all-files-failed
                                 :data  {:graph-uuid graph-uuid
                                         :exp        remote-all-files-meta-or-exp
                                         :epoch      (tc/to-epoch (t/now))}})
               {:stop true})
-          (let [remote-all-files-meta remote-all-files-meta-or-exp
-                local-all-files-meta  (<! local-all-files-meta-c)
+
+          (instance? ExceptionInfo deletion-logs-or-exp)
+          (do (put-sync-event! {:event :get-deletion-logs-failed
+                                :data  {:graph-uuid graph-uuid
+                                        :exp        deletion-logs-or-exp
+                                        :epoch      (tc/to-epoch (t/now))}})
+              {:stop true})
+
+          :else
+          (let [remote-all-files-meta  remote-all-files-meta-or-exp
+                local-all-files-meta   (<! local-all-files-meta-c)
                 {local-all-files-meta :keep delete-local-files :delete}
-                (filter-local-files-in-deletion-logs local-all-files-meta deletion-logs)
-                recent-10-days-range  ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %)) (t/today))
-                diff-local-files      (->> (diff-file-metadata-sets local-all-files-meta remote-all-files-meta)
-                                           (sort-by (sort-file-metadata-fn :recent-days-range recent-10-days-range) >))
+                (filter-local-files-in-deletion-logs local-all-files-meta deletion-logs-or-exp)
+                recent-10-days-range   ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %)) (t/today))
+                diff-local-files       (->> (diff-file-metadata-sets local-all-files-meta remote-all-files-meta)
+                                            (sort-by (sort-file-metadata-fn :recent-days-range recent-10-days-range) >))
                 change-events
-                                      (sequence
-                                       (comp
-                                        ;; convert to FileChangeEvent
-                                        (map #(->FileChangeEvent "change" base-path (.get-normalized-path ^FileMetadata %)
-                                                                 {:size (:size %)} (:etag %)))
-                                        (remove ignored?))
-                                       diff-local-files)
+                (sequence
+                 (comp
+                  ;; convert to FileChangeEvent
+                  (map #(->FileChangeEvent "change" base-path (.get-normalized-path ^FileMetadata %)
+                                           {:size (:size %)} (:etag %)))
+                  (remove ignored?))
+                 diff-local-files)
                 distinct-change-events (distinct-file-change-events change-events)
-                _ (swap! *sync-state #(sync-state-reset-full-local->remote-files % distinct-change-events))
+                _                      (swap! *sync-state #(sync-state-reset-full-local->remote-files % distinct-change-events))
                 change-events-partitions
                 (sequence
                  ;; partition FileChangeEvents
@@ -2482,7 +2494,7 @@
                      (count (flatten change-events-partitions)) "files need to sync and"
                      (count delete-local-files) "local files need to delete")
             (put-sync-event! {:event :start
-                              :data  {:type :full-local->remote
+                              :data  {:type       :full-local->remote
                                       :graph-uuid graph-uuid
                                       :full-sync? true
                                       :epoch      (tc/to-epoch (t/now))}})
@@ -2492,14 +2504,14 @@
                 (let [relative-p (relative-path f)]
                   (when-not (<! (<local-file-not-exist? graph-uuid rsapi base-path relative-p))
                     (let [fake-recent-remote->local-file-item {:remote->local-type :delete
-                                                               :checksum nil
-                                                               :path relative-p}]
+                                                               :checksum           nil
+                                                               :path               relative-p}]
                       (swap! *sync-state sync-state--add-recent-remote->local-files
                              [fake-recent-remote->local-file-item])
                       (<! (<delete-local-files rsapi graph-uuid base-path [(relative-path f)]))
                       (go (<! (timeout 5000))
-                        (swap! *sync-state sync-state--remove-recent-remote->local-files
-                               [fake-recent-remote->local-file-item])))))
+                          (swap! *sync-state sync-state--remove-recent-remote->local-files
+                                 [fake-recent-remote->local-file-item])))))
                 (recur fs)))
 
             ;; 2. upload local files
