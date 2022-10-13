@@ -50,6 +50,10 @@
       }
     }
 
+    .panels {
+      margin: 0 -32px -24px;
+    }
+
     .secondary-tabs {
       button {
         margin-right: 5px;
@@ -67,6 +71,8 @@
     }
 
     .control-tabs {
+      @apply px-6;
+
       .ti, .tie {
         margin-right: 4px;
       }
@@ -92,7 +98,7 @@
       &.contribute {
         position: absolute;
         top: -46px;
-        right: 0;
+        right: 20px;
         background: transparent;
         font-size: 12px;
         opacity: .8;
@@ -159,12 +165,10 @@
   }
 
   &-installed {
-    min-height: 60vh;
     padding-top: 5px;
   }
 
   &-marketplace {
-    min-height: 60vh;
     padding-top: 5px;
 
     &.has-installing {
@@ -177,11 +181,14 @@
   }
 
   &-item-lists {
-    @apply w-full grid grid-flow-row gap-3 pt-1;
+    @apply w-full grid grid-flow-row gap-3 pt-2 px-6 pb-8;
+
+    max-height: 56vh;
+    overflow-y: auto;
   }
 
   &-item-card {
-    @apply flex py-3 px-1 rounded-md;
+    @apply flex py-3 px-1 rounded-md border;
 
     background-color: var(--ls-secondary-background-color);
     height: 150px;
@@ -856,6 +863,12 @@ html[data-theme='dark'] {
     [data-injected-ui] {
       display: inline-flex;
     }
+  }
+}
+
+.ui__modal[label=plugins-dashboard] {
+  .panel-content {
+    overflow-y: hidden;
   }
 }
 
