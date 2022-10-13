@@ -5,7 +5,7 @@ const { ipcRenderer, contextBridge, shell, clipboard, webFrame } = require('elec
 const IS_MAC = process.platform === 'darwin'
 const IS_WIN32 = process.platform === 'win32'
 
-const ALLOWED_EXTERNAL_PROTOCOLS = ['https:', 'http:', 'mailto:']
+const ALLOWED_EXTERNAL_PROTOCOLS = ['https:', 'http:', 'mailto:', 'zotero:', 'file:']
 
 function getFilePathFromClipboard () {
   if (IS_WIN32) {
