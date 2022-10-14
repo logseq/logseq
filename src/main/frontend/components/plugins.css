@@ -883,7 +883,8 @@ html[data-theme='dark'] {
 
 .ui__modal[label=plugins-dashboard] {
   .panel-content {
-    overflow-y: hidden;
+    overflow-y: auto;
+    max-height: calc(56vh + 290px);
   }
 }
 
