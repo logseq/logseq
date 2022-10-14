@@ -3525,9 +3525,10 @@
 
 (defn set-heading!
   [block-id format heading]
-  (if (and (= format :markdown) (not (true? heading)))
+  (if (= format :markdown)
     (let [repo (state/get-current-repo)
           block (db/entity [:block/uuid block-id])
+          heading (if (true? heading) 2 heading)
           content' (commands/set-markdown-heading (:block/content block) heading)]
       (save-block! repo block-id content'))
     (do
