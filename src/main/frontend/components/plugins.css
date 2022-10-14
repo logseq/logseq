@@ -186,10 +186,12 @@
   }
 
   &-item-lists {
-    @apply w-full grid grid-flow-row gap-3 px-6 pb-8;
+    @apply w-full max-h-[56vh] overflow-y-auto;
 
-    max-height: 56vh;
-    overflow-y: auto;
+    &-inner {
+      @apply grid grid-flow-row gap-3 px-6
+      grid-cols-1 md:grid-cols-2 lg:grid-cols-3;
+    }
   }
 
   &-item-card {
