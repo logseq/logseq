@@ -434,7 +434,7 @@
    reload-market-fn agent-opts]
 
   (let [*search-ref (rum/create-ref)]
-    [:div.mb-2.flex.justify-between.control-tabs.relative
+    [:div.pb-3.flex.justify-between.control-tabs.relative
      [:div.flex.items-center.l
       (category-tabs t category #(reset! *category %))
 
@@ -469,7 +469,7 @@
         (ui/dropdown-with-links
          (fn [{:keys [toggle-fn]}]
            (ui/button
-            [:span (ui/icon "filter")]
+            (ui/icon "filter")
             :class (str (when-not (contains? #{:default} filter-by) "picked ") "sort-or-filter-by")
             :on-click toggle-fn
             :intent "link"))
@@ -512,7 +512,7 @@
         (ui/dropdown-with-links
          (fn [{:keys [toggle-fn]}]
            (ui/button
-            [:span (ui/icon "arrows-sort")]
+            (ui/icon "arrows-sort")
             :class (str (when-not (contains? #{:default :downloads} sort-by) "picked ") "sort-or-filter-by")
             :on-click toggle-fn
             :intent "link"))
@@ -534,7 +534,7 @@
       (ui/dropdown-with-links
        (fn [{:keys [toggle-fn]}]
          (ui/button
-          [:span (ui/icon "dots-vertical")]
+          (ui/icon "dots-vertical")
           :class "more-do"
           :on-click toggle-fn
           :intent "link"))
@@ -566,25 +566,40 @@
       ;; developer
       (panel-tab-developer)]]))
 
+(def plugin-items-list-mixins
+  {:did-mount
+   (fn [s]
+     (when-let [^js el (rum/dom-node s)]
+       (when-let [^js el-list (.querySelector el ".cp__plugins-item-lists")]
+         (when-let [^js cls (.-classList (.querySelector el ".control-tabs"))]
+           (.addEventListener
+            el-list "scroll"
+            #(if (> (.-scrollTop el-list) 1)
+               (.add cls "scrolled")
+               (.remove cls "scrolled"))))))
+     s)})
+
 (rum/defcs marketplace-plugins
   < rum/static rum/reactive
-  (rum/local false ::fetching)
-  (rum/local "" ::search-key)
-  (rum/local :plugins ::category)
-  (rum/local :downloads ::sort-by)                        ;; downloads / stars / letters / updates
-  (rum/local :default ::filter-by)
-  (rum/local nil ::error)
-  {:did-mount (fn [s]
-                (let [reload-fn (fn [force-refresh?]
-                                  (when-not @(::fetching s)
-                                    (reset! (::fetching s) true)
-                                    (reset! (::error s) nil)
-                                    (-> (plugin-handler/load-marketplace-plugins force-refresh?)
-                                        (p/then #(plugin-handler/load-marketplace-stats false))
-                                        (p/catch #(do (js/console.error %) (reset! (::error s) %)))
-                                        (p/finally #(reset! (::fetching s) false)))))]
-                  (reload-fn false)
-                  (assoc s ::reload (partial reload-fn true))))}
+    plugin-items-list-mixins
+    (rum/local false ::fetching)
+    (rum/local "" ::search-key)
+    (rum/local :plugins ::category)
+    (rum/local :downloads ::sort-by)  ;; downloads / stars / letters / updates
+    (rum/local :default ::filter-by)
+    (rum/local nil ::error)
+    {:did-mount
+     (fn [s]
+       (let [reload-fn (fn [force-refresh?]
+                         (when-not @(::fetching s)
+                           (reset! (::fetching s) true)
+                           (reset! (::error s) nil)
+                           (-> (plugin-handler/load-marketplace-plugins force-refresh?)
+                               (p/then #(plugin-handler/load-marketplace-stats false))
+                               (p/catch #(do (js/console.error %) (reset! (::error s) %)))
+                               (p/finally #(reset! (::fetching s) false)))))]
+         (reload-fn false)
+         (assoc s ::reload (partial reload-fn true))))}
   [state]
   (let [pkgs              (state/sub :plugin/marketplace-pkgs)
         stats             (state/sub :plugin/marketplace-stats)
@@ -658,20 +673,21 @@
          ;; items list
          (for [item sorted-pkgs]
            (rum/with-key
-             (let [pid  (keyword (:id item))
-                   stat (:stat item)]
-               (plugin-item-card t item
-                                 (get-in item [:settings :disabled]) true *search-key installing
-                                 (and installing (= (keyword (:id installing)) pid))
-                                 (contains? installed-plugins pid) stat nil))
-             (:id item)))]])]))
+            (let [pid  (keyword (:id item))
+                  stat (:stat item)]
+              (plugin-item-card t item
+                                (get-in item [:settings :disabled]) true *search-key installing
+                                (and installing (= (keyword (:id installing)) pid))
+                                (contains? installed-plugins pid) stat nil))
+            (:id item)))]])]))
 
 (rum/defcs installed-plugins
   < rum/static rum/reactive
-  (rum/local "" ::search-key)
-  (rum/local :default ::filter-by)                        ;; default / enabled / disabled / unpacked / update-available
-  (rum/local :default ::sort-by)
-  (rum/local :plugins ::category)
+    plugin-items-list-mixins
+    (rum/local "" ::search-key)
+    (rum/local :default ::filter-by)                        ;; default / enabled / disabled / unpacked / update-available
+    (rum/local :default ::sort-by)
+    (rum/local :plugins ::category)
   [state]
   (let [installed-plugins     (state/sub [:plugin/installed-plugins])
         installed-plugins     (vals installed-plugins)
@@ -729,12 +745,12 @@
      [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
       (for [item sorted-plugins]
         (rum/with-key
-          (let [pid (keyword (:id item))]
-            (plugin-item-card t item
-                              (get-in item [:settings :disabled]) false *search-key updating
-                              (and updating (= (keyword (:id updating)) pid))
-                              true nil (get coming-updates pid)))
-          (:id item)))]]))
+         (let [pid (keyword (:id item))]
+           (plugin-item-card t item
+                             (get-in item [:settings :disabled]) false *search-key updating
+                             (and updating (= (keyword (:id updating)) pid))
+                             true nil (get coming-updates pid)))
+         (:id item)))]]))
 
 (rum/defcs waiting-coming-updates
   < rum/reactive
@@ -966,7 +982,8 @@
       :tab-index "-1"}
      [:h1 (t :plugins)]
      (security-warning)
-     [:hr]
+
+     [:hr.my-4]
 
      [:div.tabs.flex.items-center.justify-center
       [:div.tabs-inner.flex.items-center

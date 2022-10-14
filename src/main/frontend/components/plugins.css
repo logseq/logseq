@@ -71,11 +71,16 @@
     }
 
     .control-tabs {
-      @apply px-6;
+      @apply px-6 transition-shadow;
+
+      &.scrolled {
+        box-shadow: 0 4px 6px -6px #ccc;
+      }
 
       .ti, .tie {
         margin-right: 4px;
       }
+
       .ui__dropdown-trigger {
         .ti-circle {
           visibility: hidden;
@@ -181,14 +186,14 @@
   }
 
   &-item-lists {
-    @apply w-full grid grid-flow-row gap-3 pt-2 px-6 pb-8;
+    @apply w-full grid grid-flow-row gap-3 px-6 pb-8;
 
     max-height: 56vh;
     overflow-y: auto;
   }
 
   &-item-card {
-    @apply flex py-3 px-1 rounded-md border;
+    @apply flex py-3 px-1 rounded-md;
 
     background-color: var(--ls-secondary-background-color);
     height: 150px;
