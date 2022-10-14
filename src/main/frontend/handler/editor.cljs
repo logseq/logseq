@@ -3094,7 +3094,8 @@
 
         (state/selection?)
         (select-up-down direction)
-
+        
+        ;; if there is an edit-input-id set, we are probably still on editing mode, that is not fully initialized
         (not (state/get-edit-input-id))
         (select-first-last direction)))
     nil))
