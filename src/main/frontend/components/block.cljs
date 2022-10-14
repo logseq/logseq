@@ -1907,7 +1907,7 @@
                       (<= heading-level 6)
                       heading-level)
                  (:heading properties))
-        heading (if (true? heading) (min level 6) heading)
+        heading (if (true? heading) (min (inc level) 6) heading)
         elem (if heading
                (keyword (str "h" heading
                              (when block-ref? ".inline")))
