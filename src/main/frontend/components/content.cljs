@@ -177,6 +177,7 @@
              (ui/button
               ""
               :icon (str "h-" i)
+              :title (t :heading i)
               :class "to-heading-button"
               :on-click (fn [_e]
                           (editor-handler/set-heading! block-id format i))
