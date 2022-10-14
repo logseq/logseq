@@ -213,6 +213,7 @@
    (fn [_error]
      (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
      (state/set-indexedb-support! false)))
+  (idb/start)
 
   (react/run-custom-queries-when-idle!)
 
