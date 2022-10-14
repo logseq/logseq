@@ -338,6 +338,7 @@
         :dark "Dark"
         :remove-background "Remove background"
         :remove-heading "Remove heading"
+        :heading "Heading {1}"
         :auto-heading "Auto heading"
         :open "Open"
         :open-a-directory "Open a local directory"
