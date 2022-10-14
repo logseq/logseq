@@ -16,6 +16,8 @@
             [frontend.handler.plugin :as plugin-handler]
             [clojure.string :as string]))
 
+(defonce PER-PAGE-SIZE 15)
+
 (rum/defcs installed-themes
   <
   (rum/local [] ::themes)
@@ -128,16 +130,20 @@
     [:strong.inline-flex.px-3 "Loading ..."]))
 
 (rum/defc category-tabs
-  [t category on-action]
+  [t total-nums category on-action]
 
   [:div.secondary-tabs.categories.flex
    (ui/button
-    [:span.flex.items-center (ui/icon "puzzle") (t :plugins)]
+    [:span.flex.items-center
+     (ui/icon "puzzle")
+     (t :plugins) (when (vector? total-nums) (str " (" (first total-nums) ")"))]
     :intent "logseq"
     :on-click #(on-action :plugins)
     :class (if (= category :plugins) "active" ""))
    (ui/button
-    [:span.flex.items-center (ui/icon "palette") (t :themes)]
+    [:span.flex.items-center
+     (ui/icon "palette")
+     (t :themes) (when (vector? total-nums) (str " (" (last total-nums) ")"))]
     :intent "logseq"
     :on-click #(on-action :themes)
     :class (if (= category :themes) "active" ""))])
@@ -266,8 +272,7 @@
 (defn get-open-plugin-readme-handler
   [url item repo]
   #(plugin-handler/open-readme!
-    url item (if repo remote-readme-display local-markdown-display))
-  )
+    url item (if repo remote-readme-display local-markdown-display)))
 
 (rum/defc plugin-item-card < rum/static
   [t {:keys [id name title version url description author icon iir repo sponsors] :as item}
@@ -426,14 +431,14 @@
 
 (rum/defc ^:large-vars/cleanup-todo panel-control-tabs < rum/static
   [search-key *search-key category *category
-   sort-by *sort-by filter-by *filter-by
+   sort-by *sort-by filter-by *filter-by total-nums
    selected-unpacked-pkg market? develop-mode?
    reload-market-fn agent-opts]
 
   (let [*search-ref (rum/create-ref)]
     [:div.pb-3.flex.justify-between.control-tabs.relative
      [:div.flex.items-center.l
-      (category-tabs t category #(reset! *category %))
+      (category-tabs t total-nums category #(reset! *category %))
 
       (when (and develop-mode? (not market?))
         [:div
@@ -595,6 +600,8 @@
     (rum/local :downloads ::sort-by)    ;; downloads / stars / letters / updates
     (rum/local :default ::filter-by)
     (rum/local nil ::error)
+    (rum/local nil ::cached-query-flag)
+    (rum/local 1 ::current-page)
     {:did-mount
      (fn [s]
        (let [reload-fn (fn [force-refresh?]
@@ -608,51 +615,69 @@
          (reload-fn false)
          (assoc s ::reload (partial reload-fn true))))}
   [state]
-  (let [pkgs              (state/sub :plugin/marketplace-pkgs)
-        stats             (state/sub :plugin/marketplace-stats)
-        installed-plugins (state/sub :plugin/installed-plugins)
-        installing        (state/sub :plugin/installing)
-        online?           (state/sub :network/online?)
-        develop-mode?     (state/sub :ui/developer-mode?)
-        agent-opts        (state/sub [:electron/user-cfgs :settings/agent])
-        *search-key       (::search-key state)
-        *category         (::category state)
-        *sort-by          (::sort-by state)
-        *filter-by        (::filter-by state)
-        *fetching         (::fetching state)
-        *error            (::error state)
-        filtered-pkgs     (when (seq pkgs)
-                            (if (= @*category :themes)
-                              (filter #(:theme %) pkgs)
-                              (filter #(not (:theme %)) pkgs)))
-        filtered-pkgs     (if (and (seq filtered-pkgs) (not= :default @*filter-by))
-                            (filter #(apply
-                                      (if (= :installed @*filter-by) identity not)
-                                      [(contains? installed-plugins (keyword (:id %)))])
-                                    filtered-pkgs)
-                            filtered-pkgs)
-        filtered-pkgs     (if-not (string/blank? @*search-key)
-                            (if-let [author (and (string/starts-with? @*search-key "@")
-                                                 (subs @*search-key 1))]
-                              (filter #(= author (:author %)) filtered-pkgs)
-                              (search/fuzzy-search
-                               filtered-pkgs @*search-key
-                               :limit 30
-                               :extract-fn :title))
-                            filtered-pkgs)
-        filtered-pkgs     (map #(if-let [stat (get stats (keyword (:id %)))]
-                                  (let [downloads (:total_downloads stat)
-                                        stars     (:stargazers_count stat)]
-                                    (assoc % :stat stat
-                                           :stars stars
-                                           :downloads downloads))
-                                  %) filtered-pkgs)
-        sorted-pkgs       (apply sort-by
-                                 (conj
-                                  (case @*sort-by
-                                    :letters [#(util/safe-lower-case (or (:title %) (:name %)))]
-                                    [@*sort-by #(compare %2 %1)])
-                                  filtered-pkgs))]
+  (let [pkgs               (state/sub :plugin/marketplace-pkgs)
+        stats              (state/sub :plugin/marketplace-stats)
+        installed-plugins  (state/sub :plugin/installed-plugins)
+        installing         (state/sub :plugin/installing)
+        online?            (state/sub :network/online?)
+        develop-mode?      (state/sub :ui/developer-mode?)
+        agent-opts         (state/sub [:electron/user-cfgs :settings/agent])
+        *search-key        (::search-key state)
+        *category          (::category state)
+        *sort-by           (::sort-by state)
+        *filter-by         (::filter-by state)
+        *cached-query-flag (::cached-query-flag state)
+        *current-page      (::current-page state)
+        *fetching          (::fetching state)
+        *error             (::error state)
+        theme-plugins      (filter #(:theme %) pkgs)
+        normal-plugins     (filter #(not (:theme %)) pkgs)
+        filtered-pkgs      (when (seq pkgs)
+                             (if (= @*category :themes) theme-plugins normal-plugins))
+        total-nums         [(count normal-plugins) (count theme-plugins)]
+        filtered-pkgs      (if (and (seq filtered-pkgs) (not= :default @*filter-by))
+                             (filter #(apply
+                                       (if (= :installed @*filter-by) identity not)
+                                       [(contains? installed-plugins (keyword (:id %)))])
+                                     filtered-pkgs)
+                             filtered-pkgs)
+        filtered-pkgs      (if-not (string/blank? @*search-key)
+                             (if-let [author (and (string/starts-with? @*search-key "@")
+                                                  (subs @*search-key 1))]
+                               (filter #(= author (:author %)) filtered-pkgs)
+                               (search/fuzzy-search
+                                filtered-pkgs @*search-key
+                                :limit 30
+                                :extract-fn :title))
+                             filtered-pkgs)
+        filtered-pkgs      (map #(if-let [stat (get stats (keyword (:id %)))]
+                                   (let [downloads (:total_downloads stat)
+                                         stars     (:stargazers_count stat)]
+                                     (assoc % :stat stat
+                                            :stars stars
+                                            :downloads downloads))
+                                   %) filtered-pkgs)
+        sorted-plugins     (apply sort-by
+                                  (conj
+                                   (case @*sort-by
+                                     :letters [#(util/safe-lower-case (or (:title %) (:name %)))]
+                                     [@*sort-by #(compare %2 %1)])
+                                   filtered-pkgs))
+
+        fn-query-flag      (fn [] (string/join "_" (map #(str @%) [*filter-by *sort-by *search-key *category])))
+        str-query-flag     (fn-query-flag)
+        _                  (when (not= str-query-flag @*cached-query-flag)
+                             (when-let [^js list-cnt (rum/ref-node state "list-ref")]
+                               (set! (.-scrollTop list-cnt) 0))
+                             (reset! *current-page 1))
+        _                  (reset! *cached-query-flag str-query-flag)
+
+        page-total-items   (count sorted-plugins)
+        sorted-plugins     (if-not (> page-total-items PER-PAGE-SIZE)
+                             sorted-plugins (take (* @*current-page PER-PAGE-SIZE) sorted-plugins))
+        load-more-pages!   #(when (> page-total-items PER-PAGE-SIZE)
+                              (when (< (* PER-PAGE-SIZE @*current-page) page-total-items)
+                                (reset! *current-page (inc @*current-page))))]
 
     [:div.cp__plugins-marketplace
 
@@ -660,7 +685,7 @@
       @*search-key *search-key
       @*category *category
       @*sort-by *sort-by @*filter-by *filter-by
-      nil true develop-mode? (::reload state)
+      total-nums nil true develop-mode? (::reload state)
       agent-opts)
 
      (cond
@@ -677,10 +702,10 @@
        [:div.cp__plugins-marketplace-cnt
         {:class (util/classnames [{:has-installing (boolean installing)}])}
         [:div.cp__plugins-item-lists
+         {:ref "list-ref"}
          [:div.cp__plugins-item-lists-inner
-
           ;; items list
-          (for [item sorted-pkgs]
+          (for [item sorted-plugins]
             (rum/with-key
              (let [pid  (keyword (:id item))
                    stat (:stat item)]
@@ -691,9 +716,8 @@
              (:id item)))]
 
          ;; items loader
-         (when (seq sorted-pkgs)
-           (lazy-items-loader nil))
-         ]])]))
+         (when (seq sorted-plugins)
+           (lazy-items-loader load-more-pages!))]])]))
 
 (rum/defcs installed-plugins
   < rum/static rum/reactive
@@ -719,10 +743,11 @@
         *cached-query-flag    (::cached-query-flag state)
         *current-page         (::current-page state)
         default-filter-by?    (= :default @*filter-by)
+        theme-plugins         (filter #(:theme %) installed-plugins)
+        normal-plugins        (filter #(not (:theme %)) installed-plugins)
         filtered-plugins      (when (seq installed-plugins)
-                                (if (= @*category :themes)
-                                  (filter #(:theme %) installed-plugins)
-                                  (filter #(not (:theme %)) installed-plugins)))
+                                (if (= @*category :themes) theme-plugins normal-plugins))
+        total-nums            [(count normal-plugins) (count theme-plugins)]
         filtered-plugins      (if-not default-filter-by?
                                 (filter (fn [it]
                                           (let [disabled (get-in it [:settings :disabled])]
@@ -758,12 +783,11 @@
                                 (reset! *current-page 1))
         _                     (reset! *cached-query-flag str-query-flag)
 
-        page-per-items        12
         page-total-items      (count sorted-plugins)
-        sorted-plugins        (if-not (> page-total-items page-per-items)
-                                sorted-plugins (take (* @*current-page page-per-items) sorted-plugins))
-        load-more-pages!      #(when (> page-total-items page-per-items)
-                                 (when (< (* page-per-items @*current-page) page-total-items)
+        sorted-plugins        (if-not (> page-total-items PER-PAGE-SIZE)
+                                sorted-plugins (take (* @*current-page PER-PAGE-SIZE) sorted-plugins))
+        load-more-pages!      #(when (> page-total-items PER-PAGE-SIZE)
+                                 (when (< (* PER-PAGE-SIZE @*current-page) page-total-items)
                                    (reset! *current-page (inc @*current-page))))]
 
     [:div.cp__plugins-installed
@@ -772,7 +796,7 @@
       @*category *category
       @*sort-by *sort-by
       @*filter-by *filter-by
-      selected-unpacked-pkg
+      total-nums selected-unpacked-pkg
       false develop-mode? nil
       agent-opts)
 
