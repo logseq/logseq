@@ -190,7 +190,7 @@
             :class "to-heading-button"
             :title (t :auto-heading)
             :on-click (fn [_e]
-                        (editor-handler/set-heading! block-id :org true))
+                        (editor-handler/set-heading! block-id format true))
             :intent "link"
             :small? true)
            (ui/button
