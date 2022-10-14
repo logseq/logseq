@@ -1985,6 +1985,7 @@
        (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})
        [:span.page-property-key.font-medium (name k)])
      [:span.mr-1 ":"]
+     [:div.page-property-value {:style {:display "inline"}}
      (cond
        (int? v)
        v
@@ -2008,7 +2009,7 @@
            (rum/with-key elem (str (random-uuid)))))
 
        :else
-       (inline-text config (:block/format block) (str v)))]))
+       (inline-text config (:block/format block) (str v)))]]))
 
 (def hidden-editable-page-properties
   "Properties that are hidden in the pre-block (page property)"
