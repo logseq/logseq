@@ -861,6 +861,14 @@ html[data-theme='dark'] {
   .lsp-frame-readme {
     background-color: #eeeeee;
   }
+
+  .cp__plugins-page {
+    .control-tabs {
+      &.scrolled {
+        box-shadow: 0 4px 6px -6px #666;
+      }
+    }
+  }
 }
 
 .block-content {
