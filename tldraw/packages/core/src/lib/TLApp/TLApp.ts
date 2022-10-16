@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { TLBounds } from '@tldraw/intersect'
 import { Vec } from '@tldraw/vec'
-import { action, computed, makeObservable, observable, transaction } from 'mobx'
+import { action, computed, makeObservable, observable, toJS, transaction } from 'mobx'
 import { GRID_SIZE } from '../../constants'
 import type {
   TLAsset,
@@ -474,17 +474,21 @@ export class TLApp<
 
   copy = () => {
     if (this.selectedShapesArray.length > 0 && !this.editingShape) {
-      const tldrawString = JSON.stringify({
-        type: 'logseq/whiteboard-shapes',
+      const jsonString = JSON.stringify({
         shapes: this.selectedShapesArray.map(shape => shape.serialized),
-        // pasting into other whiteboard may require this if any shape uses asset
+        // pasting into other whiteboard may require this if any shape uses the assets
         assets: this.getCleanUpAssets().filter(asset => {
           return this.selectedShapesArray.some(shape => shape.props.assetId === asset.id)
         }),
+        // convey the bindings to maintain the new links after pasting
+        bindings: toJS(this.currentPage.bindings),
       })
+      const tldrawString = `<whiteboard-tldr>${jsonString}</whiteboard-tldr>`
+      // FIXME: use `writeClipboard` in frontend.utils
       navigator.clipboard.write([
         new ClipboardItem({
-          'text/plain': new Blob([tldrawString], { type: 'text/plain' }),
+          'text/html': new Blob([tldrawString], { type: 'text/html' }),
+          // ??? what plain text should be used here?
         }),
       ])
     }
