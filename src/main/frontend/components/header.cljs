@@ -9,6 +9,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.handler :as handler]
             [frontend.handler.file-sync :as file-sync-handler]
+            [frontend.handler.publish :as publish-handler]
             [frontend.components.file-sync :as fs-sync]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
@@ -47,6 +48,19 @@
        [:span (t :login)]
        (when loading?
          [:span.ml-2 (ui/loading "")])])))
+
+(rum/defc publish < rum/reactive
+  < {:key-fn #(identity "publish-button")}
+  []
+  (let [_ (state/sub :auth/id-token)
+        loading? (state/sub [:ui/loading? :login])
+        sync-enabled? (file-sync-handler/enable-sync?)
+        logged? (user-handler/logged-in?)]
+    (when (and sync-enabled? logged?)
+      [:button.button.icon.inline
+       {:title "Publish"
+        :on-click publish-handler/publish}
+       (ui/icon "send" {:size ui/icon-size})])))
 
 (rum/defc left-menu-button < rum/reactive
   < {:key-fn #(identity "left-menu-toggle-button")}
@@ -209,7 +223,10 @@
       (when sync-enabled?
         (login))
 
-      (when config/lsp-enabled?
+      (when sync-enabled?
+        (publish))
+
+      (when plugin-handler/lsp-enabled?
         (plugins/hook-ui-items :toolbar))
 
       (when (util/electron?)
