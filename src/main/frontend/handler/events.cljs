@@ -743,7 +743,7 @@
   (state/pub-event! [:notification/show
                      {:content
                       [:div
-                       [:h2.title "Oops, those files are failed to imported to your graph:"]
+                       [:h2.title "Oops. These files failed to import to your graph:"]
                        [:ol.my-2
                         (for [[file error] parse-errors]
                           (let [data (ex-data error)]
