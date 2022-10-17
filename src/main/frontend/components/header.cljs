@@ -227,7 +227,7 @@
             (t :on-boarding/add-graph)])])
 
       (when config/publishing?
-        [:button.text-sm.font-medium.button {:href (rfe/href :graph)}
+        [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
          (t :graph)])
 
       (dropdown-menu {:t            t
