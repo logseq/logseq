@@ -65,18 +65,7 @@
                        @conn)
                   (map first)
                   (map :block/properties)))
-          "id as text has correct :block/properties"))
-
-    (let [conn (ldb/start-conn)]
-      (graph-parser/parse-file conn "foo.md" "- id:: [[628953c1-8d75-49fe-a648-f4c612109098]]" {})
-      (is (= [{:id #{"628953c1-8d75-49fe-a648-f4c612109098"}}]
-             (->> (d/q '[:find (pull ?b [*])
-                         :in $
-                         :where [?b :block/content] [(missing? $ ?b :block/name)]]
-                       @conn)
-                  (map first)
-                  (map :block/properties)))
-          "id as linked ref has correct :block/properties")))
+          "id as text has correct :block/properties")))
 
   (testing "unexpected failure during block extraction"
     (let [conn (ldb/start-conn)
