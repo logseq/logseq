@@ -999,10 +999,10 @@ left past the initial left edge) then swap points on that axis.
     const commonBounds = BoundsUtils.getCommonBounds(shapes.map(({ bounds }) => bounds))
     const origin = [commonBounds.minX, commonBounds.minY]
     const shapesPosOriginal: Record<string, number[]> = Object.fromEntries(
-      shapes.map(s => [s.id, s.bounds.minX, s.bounds.minY])
+      shapes.map(s => [s.id, [s.bounds.minX, s.bounds.minY]])
     )
     const entries = shapes
-      .filter(s => s.type !== 'line')
+      .filter(s => !(s.props.handles?.start?.bindingId || s.props.handles?.end?.bindingId))
       .map(shape => {
         const bounds = shape.getBounds()
         return {
