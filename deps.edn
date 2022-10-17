@@ -6,7 +6,7 @@
   datascript-transit/datascript-transit {:mvn/version "0.3.0"}
   ;; TODO: bump to mvn/version when released
   borkdude/rewrite-edn                  {:git/url "https://github.com/borkdude/rewrite-edn"
-                                         :sha "80f246139b1a43b6f2cbab329521d060ee7c1b7b"}
+                                         :sha     "80f246139b1a43b6f2cbab329521d060ee7c1b7b"}
   funcool/promesa                       {:mvn/version "4.0.2"}
   medley/medley                         {:mvn/version "1.4.0"}
   metosin/reitit-frontend               {:mvn/version "0.3.10"}
@@ -31,7 +31,7 @@
   instaparse/instaparse                 {:mvn/version "1.4.10"}
   org.clojars.mmb90/cljs-cache          {:mvn/version "0.1.4"}
   logseq/graph-parser                   {:local/root "deps/graph-parser"}
-  metosin/malli                         {:mvn/version "0.8.9"}}
+  metosin/malli                         {:mvn/version "0.9.1"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.54"}

@@ -1,7 +1,8 @@
 (ns frontend.handler.plugin-config
   "This system component encapsulates the global plugin.edn and depends on the
   global-config component. This component is only enabled? if both the
-  global-config and plugin components are enabled"
+  global-config and plugin components are enabled. plugin.edn is automatically updated
+when a plugin is installed, updated or removed"
   (:require [frontend.handler.global-config :as global-config-handler]
             ["path" :as path]
             [promesa.core :as p]
@@ -20,6 +21,7 @@
             [lambdaisland.glogi :as log]))
 
 (defn plugin-config-path
+  "Full path to plugins.edn"
   []
   (path/join (global-config-handler/global-config-dir) "plugins.edn"))
 
@@ -58,18 +60,13 @@
   "Given installed plugins state and plugins from plugins.edn,
 returns map of plugins to install and uninstall"
   [installed-plugins edn-plugins]
-  ;; :name is removed from comparison because it isn't used for reproducible builds
-  ;; and is just for display purposes
   (let [installed-plugins-set (->> installed-plugins
                                    vals
                                    (map #(-> (select-keys % common-plugin-keys)
-                                             (assoc :id (keyword (:id %)))
-                                             (dissoc :name)))
+                                             (assoc :id (keyword (:id %)))))
                                    set)
         edn-plugins-set (->> edn-plugins
-                             (map (fn [[k v]] (-> v
-                                                  (assoc :id k)
-                                                  (dissoc :name))))
+                             (map (fn [[k v]] (assoc v :id k)))
                              set)]
     (if (= installed-plugins-set edn-plugins-set)
       {}
@@ -77,7 +74,7 @@ returns map of plugins to install and uninstall"
                       (set/difference edn-plugins-set installed-plugins-set))
        :uninstall (vec (set/difference installed-plugins-set edn-plugins-set))})))
 
-(defn open-sync-modal
+(defn open-replace-plugins-modal
   []
   (state/pub-event! [:go/plugins])
   (p/catch
@@ -106,7 +103,9 @@ returns map of plugins to install and uninstall"
     (plugin-common-handler/unregister-plugin (name (:id plugin))))
   (log/info :install-plugins (:install plugins))
   (doseq [plugin (:install plugins)]
-    (plugin-common-handler/install-marketplace-plugin plugin)))
+    (plugin-common-handler/install-marketplace-plugin
+     ;; Add :name so that install notifications are readable
+     (assoc plugin :name (name (:id plugin))))))
 
 (defn setup-install-listener!
   "Sets up a listener for the lsp-installed event to update plugins.edn"
@@ -114,16 +113,14 @@ returns map of plugins to install and uninstall"
   (let [listener (fn listener [_ e]
                    (when-let [{:keys [status payload only-check]} (bean/->clj e)]
                      (when (and (= status "completed") (not only-check))
-                       (let [{:keys [name title theme]} payload
-                             ;; Same defaults as plugin/setup-install-listener!
-                             name (or title name "Untitled")]
+                       (let [{:keys [theme effect]} payload]
                          (add-or-update-plugin
                           (assoc payload
                                  :version (:installed-version payload)
+                                 :effect (boolean effect)
                                  ;; Manual install doesn't have theme field but
                                  ;; plugin.edn requires this field
-                                 :theme (if (some? theme) theme false)
-                                 :name name))))))]
+                                 :theme (boolean theme)))))))]
     (js/window.apis.addListener "lsp-installed" listener)))
 
 (defn start

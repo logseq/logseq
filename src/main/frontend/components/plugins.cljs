@@ -548,8 +548,8 @@
                [{:title   [:span.flex.items-center (ui/icon "world") (t :settings-page/network-proxy)]
                  :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}]
 
-               [{:title   [:span.flex.items-center (ui/icon "arrow-down-circle") (t :plugin/install-from-file)]
-                 :options {:on-click plugin-config-handler/open-sync-modal}}]
+               [{:title   [:span.flex.items-center (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
+                 :options {:on-click plugin-config-handler/open-replace-plugins-modal}}]
 
                (when (state/developer-mode?)
                  [{:hr true}
@@ -804,11 +804,10 @@
   < rum/reactive
   [plugins]
   [:div.cp__plugins-fom-file
-   [:h1.mb-4.text-2xl.p-1 "Install plugins from plugins.edn"]
+   [:h1.mb-4.text-2xl.p-1 (t :plugin.install-from-file/title)]
    (if (seq plugins)
      [:div
-      [:div.mb-2.text-xl (util/format "The following %s plugin(s) will replace your plugins:"
-                                      (count (:install plugins)))]
+      [:div.mb-2.text-xl (t :plugin.install-from-file/notice)]
       ;; lists
       [:ul
        (for [it (:install plugins)
@@ -817,16 +816,16 @@
           {:key k}
           [:label.flex-1
            {:for k}
-           [:strong.px-3 (str (:name it) " " (:version it))]]])]
+           [:strong.px-3 (str (name (:id it)) " " (:version it))]]])]
 
       ;; actions
       [:div.pt-5
-       (ui/button [:span "Install"]
+       (ui/button [:span (t :plugin/install)]
                   :on-click #(do
                                (plugin-config-handler/replace-plugins plugins)
                                (state/close-sub-modal! "ls-plugins-from-file-modal")))]]
      ;; all done
-     [:div.py-4 [:strong.text-xl "\uD83C\uDF89 All synced!"]])])
+     [:div.py-4 [:strong.text-xl (str "\uD83C\uDF89 " (t :plugin.install-from-file/success))]])])
 
 
 (defn open-select-theme!

@@ -76,8 +76,8 @@
                        {:response-transform
                         (fn [res]
                           (if (= 404 (.-status res))
-                            ;; Fall back to fetching the latest For these rare
-                            ;; cases, previous logseq versions did not store the
+                            ;; Fall back to fetching the latest for these rare
+                            ;; cases. Previous logseq versions did not store the
                             ;; plugin's git tag required to correctly install it
                             (let [repo' (some-> repo (string/trim) (string/replace #"^/+(.+?)/+$" "$1"))
                                   api #(str "https://api.github.com/repos/" repo' "/" %)]
@@ -158,8 +158,12 @@
       (emit :lsp-installed {:status :error :payload e})
       (throw e))))
 
-;; repo is a github repo, not a logseq repo
 (defn install-or-update!
+  "Default behavior is to install the latest version of a given repo. Item map
+  includes the following keys:
+* :only-check - When set to true, this only fetches the latest version without installing
+* :plugin-action - When set to 'install', installs the specific :version given
+* :repo - A github repo, not a logseq repo, e.g. user/repo"
   [{:keys [version repo only-check plugin-action] :as item}]
   (if repo
     (let [coerced-version (and version (. semver coerce version))

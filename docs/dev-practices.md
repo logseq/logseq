@@ -165,8 +165,10 @@ aren't readable.
 
 ## Data validation and generation
 
-We use both [spec](https://github.com/clojure/spec.alpha) and [malli](https://github.com/metosin/malli) for data validation and (and generation someday). malli has the advantage that its schema
-is data and can be used for additional purposes. See plugin-config for an example.
+We use both [spec](https://github.com/clojure/spec.alpha) and
+[malli](https://github.com/metosin/malli) for data validation and (and
+generation someday). malli has the advantage that its schema is data and can be
+used for additional purposes. See plugin-config for an example.
 
 Specs should go under `src/main/frontend/spec/` and be compatible with clojure
 and clojurescript. See `frontend.spec.storage` for an example.

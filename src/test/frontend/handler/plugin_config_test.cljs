@@ -32,7 +32,7 @@
 
 (deftest-async add-or-update-plugin
   (let [dir (create-global-config-dir)
-        plugin-to-add {:id :foo :name "Foo" :repo "some-user/foo" :version "v0.9.0"}
+        plugin-to-add {:id :foo :repo "some-user/foo" :version "v0.9.0"}
         body (pr-str (mg/generate plugin-config-schema/Plugins-edn {:size 10}))]
     (fs-node/writeFileSync (plugin-config-handler/plugin-config-path) body)
 
@@ -61,7 +61,7 @@
 
      (p/finally #(delete-global-config-dir dir)))))
 
-(deftest-async open-sync-modal-malformed-edn
+(deftest-async open-replace-plugins-modal-malformed-edn
   (let [dir (create-global-config-dir)
         error-message (atom nil)]
     (fs-node/writeFileSync (plugin-config-handler/plugin-config-path) "{:id {}")
@@ -70,12 +70,12 @@
       [notification/show! (fn [msg _] (reset! error-message msg))]
       (->
        (p/do!
-        (plugin-config-handler/open-sync-modal)
+        (plugin-config-handler/open-replace-plugins-modal)
         (is (string/starts-with? @error-message "Malformed plugins.edn")
             "User sees correct notification"))
        (p/finally #(delete-global-config-dir dir))))))
 
-(deftest-async open-sync-modal-invalid-edn
+(deftest-async open-replace-plugins-modal-invalid-edn
   (let [dir (create-global-config-dir)
         error-message (atom nil)]
     ;; Missing a couple plugin keys
@@ -86,7 +86,7 @@
       [notification/show! (fn [msg _] (reset! error-message msg))]
       (->
        (p/do!
-        (plugin-config-handler/open-sync-modal)
+        (plugin-config-handler/open-replace-plugins-modal)
         (is (string/starts-with? @error-message "Invalid plugins.edn")
             "User sees correct notification"))
        (p/finally #(delete-global-config-dir dir))))))

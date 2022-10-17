@@ -412,8 +412,7 @@
 
    :ui/install-plugins-from-file    {:binding false
                                      :inactive (not (config/plugin-config-enabled?))
-                                     ;; TODO: Remove dev convenience
-                                     :fn      (fn [] (plugin-config-handler/open-sync-modal))}
+                                     :fn       plugin-config-handler/open-replace-plugins-modal}
 
    :editor/toggle-open-blocks       {:binding "t o"
                                      :fn      editor-handler/toggle-open!}

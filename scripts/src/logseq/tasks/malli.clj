@@ -7,6 +7,7 @@
             [clojure.edn :as edn]))
 
 (defn validate-plugins-edn
+  "Validate a plugins.edn file"
   [file]
   (if-let [errors (->> file
                        slurp

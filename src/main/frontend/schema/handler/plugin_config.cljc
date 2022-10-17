@@ -4,10 +4,9 @@
 ; The plugin keys should not be changed between releases without a migration plan
 ; for existing config files
 (def Plugin
+  ":repo and :version determine the correct plugin to install. :theme and
+  :effect are needed for the install process to work correctly"
   [:map
-   [:name
-    [:and {:gen/fmap '(partial str "Name ")}
-     string?]]
    [:version
     [:and
      {:gen/fmap '(fn [_] (apply str (interpose "." (repeatedly 3 (fn [] (rand-int 10))))))}
@@ -15,6 +14,7 @@
    [:repo
     [:and {:gen/fmap '(partial str "github-user/")}
      string?]]
+   [:effect boolean?]
    [:theme boolean?]])
 
 (def Plugins-edn
