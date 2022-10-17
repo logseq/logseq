@@ -44,7 +44,7 @@ const safeParseJson = (json: string) => {
 const getWhiteboardsTldrFromText = (text: string) => {
   const innerText = text.match(/<whiteboard-tldr>(.*)<\/whiteboard-tldr>/)?.[1]
   if (innerText) {
-    return safeParseJson(innerText)
+    return safeParseJson(decodeURIComponent(innerText))
   }
 }
 
@@ -450,7 +450,7 @@ export function usePaste() {
           app.createShapes(allShapesToAdd)
         }
 
-        if (app.selectedShapesArray.length === 1 && allShapesToAdd.length === 1) {
+        if (app.selectedShapesArray.length === 1 && allShapesToAdd.length === 1 && !fromDrop) {
           const source = app.selectedShapesArray[0]
           const target = app.getShapeById(allShapesToAdd[0].id!)!
           app.createNewLineBinding(source, target)
