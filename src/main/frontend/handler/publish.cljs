@@ -11,38 +11,45 @@
             [cljs.core.async :as async :refer [go <!]]
             [frontend.handler.notification :as notification]))
 
+(defn- update-vals-uuid->str
+  [coll]
+  (mapv (fn [m]
+          (println m)
+          (update-vals m (fn [v] (if (uuid? v) (str v) v))))
+        coll))
+
 (defn publish
   []
-  (let [repo (state/get-current-repo)
-        page-name (or (state/get-current-page)
-                      (date/today))
-        block-page? (util/uuid-string? page-name)
-        block-uuid (when block-page? (uuid page-name))
-        page (if block-uuid
-               (db/pull [:block/uuid block-uuid])
-               (db/pull [:block/name (util/page-name-sanity-lc page-name)]))
-        blocks (if block-uuid
-                 (db/get-block-and-children repo block-uuid)
-                 (db/get-page-blocks-no-cache page-name))
-        ref-ids (->> (mapcat :block/refs blocks)
-                     (map :db/id)
-                     (set))
-        refs (db/pull-many '[*] ref-ids)
+  (let [repo         (state/get-current-repo)
+        page-name    (or (state/get-current-page)
+                         (date/today))
+        block-page?  (util/uuid-string? page-name)
+        block-uuid   (when block-page? (uuid page-name))
+        page         (if block-uuid
+                       (db/pull [:block/uuid block-uuid])
+                       (db/pull [:block/name (util/page-name-sanity-lc page-name)]))
+        blocks       (if block-uuid
+                       (db/get-block-and-children repo block-uuid)
+                       (db/get-page-blocks-no-cache page-name))
+        ref-ids      (->> (mapcat :block/refs blocks)
+                          (map :db/id)
+                          (set))
+        refs         (db/pull-many '[*] ref-ids)
         refed-blocks (->> (filter #(nil? (:block/name %)) refs)
                           (map (fn [b]
-                                 [(:block/uuid b) (db/get-block-and-children repo (:block/uuid b))]))
+                                 [(str (:block/uuid b)) (update-vals-uuid->str (db/get-block-and-children repo (:block/uuid b)))]))
                           (into {}))
-        body {:page-id (:db/id page)
-              :blocks (cons page blocks)
-              :refed-blocks refed-blocks
-              :refs refs}
+        body         {:page-id      (:db/id page)
+                      :blocks       (update-vals-uuid->str (cons page blocks))
+                      :refed-blocks refed-blocks
+                      :refs         (update-vals-uuid->str refs)}
         ;; TODO: refresh token if empty
-        token (state/get-auth-id-token)]
+        token        (state/get-auth-id-token)]
     (prn "Debug [PUBLISH] body: " body)
     (go
-      (let [result (<! (http/post (str "https://" config/API-DOMAIN "/publish/publish_upload" )
-                                  {:oauth-token token
-                                   :body (js/JSON.stringify (bean/->js body))
+      (let [result (<! (http/post (str "https://" config/API-DOMAIN "/publish/publish_upload")
+                                  {:oauth-token       token
+                                   :body              (js/JSON.stringify (bean/->js body))
                                    :with-credentials? false}))]
         (if (:success result)
           (prn "Publish successfully! URL: " (:body result))
@@ -51,5 +58,5 @@
             (notification/show!
              "Something is wrong, please try again."
              :error true)
-            (state/pub-event! [:instrument {:type :publish-failed
+            (state/pub-event! [:instrument {:type    :publish-failed
                                             :payload {:status (:status result)}}])))))))
