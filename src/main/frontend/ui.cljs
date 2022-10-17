@@ -950,17 +950,19 @@
               (f (merge {:size 18} (r/map-keys->camel-case opts)))])))))))
 
 (defn button
-  [text & {:keys [background href class intent on-click small? large? title icon icon-props]
+  [text & {:keys [background href class intent on-click small? large? title icon icon-props disabled?]
            :or   {small? false large? false}
            :as   option}]
   (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center")
         klass (if background (string/replace klass "indigo" background) klass)
         klass (if small? (str klass ".px-2.py-1") klass)
-        klass (if large? (str klass ".text-base") klass)]
+        klass (if large? (str klass ".text-base") klass)
+        klass (if disabled? (str klass "disabled:opacity-75") klass)]
     [:button.ui__button
      (merge
       {:type  "button"
        :title title
+       :disabled disabled?
        :class (str (util/hiccup->class klass) " " class)}
       (dissoc option :background :class :small? :large?)
       (when href
