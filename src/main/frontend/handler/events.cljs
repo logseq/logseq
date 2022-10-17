@@ -565,6 +565,7 @@
      (ui/button
       (t :yes)
       :autoFocus "on"
+      :class "ui__modal-enter"
       :large? true
       :on-click (fn []
                   (state/close-modal!)
