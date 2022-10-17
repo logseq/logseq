@@ -340,6 +340,7 @@
         :remove-heading "Remove heading"
         :heading "Heading {1}"
         :auto-heading "Auto heading"
+        :not-available-in-mode "Not available in {1} mode"
         :open "Open"
         :open-a-directory "Open a local directory"
         :user/delete-account "Delete account"

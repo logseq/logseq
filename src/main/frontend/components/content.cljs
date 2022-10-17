@@ -188,7 +188,10 @@
             :icon "h-auto"
             :icon-props {:extension? true}
             :class "to-heading-button"
-            :title (t :auto-heading)
+            :title (if (= format :markdown) 
+                     (str (t :auto-heading) " - " (t :not-available-in-mode format)) 
+                     (t :auto-heading))
+            :disabled (= format :markdown)
             :on-click (fn [_e]
                         (editor-handler/set-heading! block-id format true))
             :intent "link"
