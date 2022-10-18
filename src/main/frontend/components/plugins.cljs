@@ -591,7 +591,7 @@
     [:div {:ref (.-ref inViewState)}
      [:p.py-1.text-center.opacity-0 (when (.-inView inViewState) "·")]]))
 
-(rum/defcs marketplace-plugins
+(rum/defcs ^:large-vars/data-var marketplace-plugins
   < rum/static rum/reactive
     plugin-items-list-mixins
     (rum/local false ::fetching)
