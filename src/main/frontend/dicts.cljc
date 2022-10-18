@@ -1249,7 +1249,7 @@
            :right-side-bar/recent "最近"
            :right-side-bar/contents "目录"
            :right-side-bar/favorites "收藏"
-           :right-side-bar/page-graph "页面图谱："
+           :right-side-bar/page-graph "页面图谱"
            :right-side-bar/block-ref "块引用"
            :right-side-bar/graph-view "图谱视角"
            :right-side-bar/all-pages "全部页面"
