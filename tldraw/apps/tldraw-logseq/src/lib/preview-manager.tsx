@@ -24,7 +24,7 @@ export class PreviewManager {
   }
 
   load(snapshot: TLDocumentModel) {
-    const page = snapshot.pages.find(p => snapshot.currentPageId === p.id)
+    const page = snapshot.pages[0]
     this.pageId = page?.id
     this.assets = snapshot.assets
     this.shapes = page?.shapes.map(s => {
@@ -47,7 +47,7 @@ export class PreviewManager {
     commonBounds = BoundsUtils.expandBounds(commonBounds, SVG_EXPORT_PADDING)
 
     // make sure commonBounds is of ratio 4/3 (should we have another ratio setting?)
-    commonBounds = BoundsUtils.ensureRatio(commonBounds, 4 / 3)
+    commonBounds = viewport ? BoundsUtils.ensureRatio(commonBounds, 4 / 3) : commonBounds
 
     const translatePoint = (p: [number, number]): [string, string] => {
       return [(p[0] - commonBounds.minX).toFixed(2), (p[1] - commonBounds.minY).toFixed(2)]
