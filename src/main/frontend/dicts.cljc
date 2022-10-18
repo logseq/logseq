@@ -1253,7 +1253,7 @@
            :right-side-bar/recent "最近"
            :right-side-bar/contents "目录"
            :right-side-bar/favorites "收藏"
-           :right-side-bar/page-graph "页面图谱："
+           :right-side-bar/page-graph "页面图谱"
            :right-side-bar/block-ref "块引用"
            :right-side-bar/graph-view "图谱视角"
            :right-side-bar/all-pages "全部页面"
@@ -1508,8 +1508,8 @@
 
            :command-palette/prompt "输入指令"
 
-           :file-sync/other-user-graph "当前本地 graph 绑定在其他用户的远程 graph 上。因此无法启动同步。"
-           :file-sync/graph-deleted "当前远程 graph 已经删除"}
+           :file-sync/other-user-graph "当前本地图谱绑定在其他用户的远程图谱上。因此无法启动同步。"
+           :file-sync/graph-deleted "当前远程图谱已经删除"}
 
    :zh-Hant {:on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
              :on-boarding/add-graph "Add a graph"
