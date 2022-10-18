@@ -12,6 +12,7 @@
             [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.components.svg :as svg]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.notification :as notification]
@@ -32,7 +33,6 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
-            [frontend.config :as config]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -362,7 +362,7 @@
       style)))
 
 (defn apply-custom-theme-effect! [theme]
-  (when plugin-handler/lsp-enabled?
+  (when config/lsp-enabled?
     (when-let [custom-theme (state/sub [:ui/custom-theme (keyword theme)])]
       (when-let [url (:url custom-theme)]
         (js/LSPluginCore.selectTheme (bean/->js custom-theme)
@@ -942,7 +942,7 @@
                            (when (:class opts)
                              (str " " (string/trim (:class opts)))))
                       (if extension? "tie tie" "ti ti"))}
-                    (dissoc opts :class :extension?))]
+                    (dissoc opts :class :extension? :font?))]
 
          ;; tabler svg react
          (when-let [klass (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase class)))]

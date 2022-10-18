@@ -1,5 +1,5 @@
 (ns frontend.idb
-  "System-component-like ns that provides indexedDB functionality"
+  "This system component provides indexedDB functionality"
   (:require ["/frontend/idbkv" :as idb-keyval :refer [Store]]
             [clojure.string :as string]
             [frontend.config :as config]
@@ -13,12 +13,12 @@
 ;; To maintain backward compatibility
 
 
-(defonce store (Store. "localforage" "keyvaluepairs" 2))
+(def store (atom nil))
 
 (defn clear-idb!
   []
   (->
-   (p/let [_ (idb-keyval/clear store)
+   (p/let [_ (idb-keyval/clear @store)
            dbs (js/window.indexedDB.databases)]
      (doseq [db dbs]
        (js/window.indexedDB.deleteDatabase (gobj/get db "name"))))
@@ -32,26 +32,26 @@
 (defn remove-item!
   [key]
   (when key
-    (idb-keyval/del key store)))
+    (idb-keyval/del key @store)))
 
 (defn set-item!
   [key value]
   (when key
-    (idb-keyval/set key value store)))
+    (idb-keyval/set key value @store)))
 
 (defn set-batch!
   [items]
   (when (seq items)
-    (idb-keyval/setBatch (clj->js items) store)))
+    (idb-keyval/setBatch (clj->js items) @store)))
 
 (defn get-item
   [key]
   (when key
-    (idb-keyval/get key store)))
+    (idb-keyval/get key @store)))
 
 (defn get-keys
   []
-  (idb-keyval/keys store))
+  (idb-keyval/keys @store))
 
 (defn get-nfs-dbs
   []
@@ -67,3 +67,8 @@
       (when (seq ks)
         (p/all (map (fn [key]
                       (remove-item! key)) ks))))))
+
+(defn start
+  "This component's only responsibility is to create a Store object"
+  []
+  (reset! store (Store. "localforage" "keyvaluepairs" 2)))

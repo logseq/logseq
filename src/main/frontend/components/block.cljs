@@ -1503,7 +1503,7 @@
       (= name "embed")
       (macro-embed-cp config arguments)
 
-      (and plugin-handler/lsp-enabled? (= name "renderer"))
+      (and config/lsp-enabled? (= name "renderer"))
       (when-let [block-uuid (str (:block/uuid config))]
         (plugins/hook-ui-slot :macro-renderer-slotted (assoc options :uuid block-uuid)))
 

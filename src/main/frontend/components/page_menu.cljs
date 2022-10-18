@@ -12,7 +12,6 @@
             [frontend.util :as util]
             [frontend.util.url :as url-util]
             [frontend.handler.shell :as shell]
-            [frontend.handler.plugin :as plugin-handler]
             [frontend.mobile.util :as mobile-util]
             [electron.ipc :as ipc]
             [frontend.config :as config]
@@ -152,7 +151,7 @@
                        (fn []
                          (ipc/ipc "openFileBackupDir" (config/get-local-dir repo) file-path))}})
 
-          (when plugin-handler/lsp-enabled?
+          (when config/lsp-enabled?
             (for [[_ {:keys [label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
               {:title label
                :options {:on-click #(commands/exec-plugin-simple-command!

@@ -75,6 +75,10 @@
           visibility: hidden;
         }
       }
+
+      .dropdown-wrapper {
+          min-width: 14rem;
+      }
     }
 
     .ui__button {
