@@ -1,13 +1,9 @@
 ;; FIXME
-;; https://github.com/davidsantiago/hickory/issues/17
-;; hictory doesnt work in Node
-;; 2022.10.17 Fixed via frontend.extensions.hickory
-;; TODO fix the remaining cases
+;; this test is not focusable (unable to feed :node-test as reading feature?)
 (ns frontend.extensions.zotero.extractor-test
   (:require [clojure.edn :as edn]
             [clojure.test :as test :refer [deftest is testing]]
             [shadow.resource :as rc]
-            ;; [clojure.string :as str]
             [frontend.extensions.zotero.extractor :as extractor]))
 
 (def data
@@ -37,17 +33,20 @@
       (testing "skip when containing newline"
         (is (nil? (-> properties :extra))))))
 
-;;   (testing "another journal article"
-;;     (let [{:keys [page-name properties]}
-;;           (extractor/extract (:journal-article-sample-2 data))
-;;           authors (count (re-seq #"\[\[" (-> properties :authors)))
-;;           tags    (count (re-seq #"\[\[" (-> properties :tags)))]
+  (testing "another journal article"
+    (let [{:keys [_page-name properties]}
+          (extractor/extract (:journal-article-sample-2 data))
+          authors (count (-> properties :authors))
+          tags    (count (-> properties :tags))]
 
-;;       (testing "authors"
-;;         (is (= 8 authors)))
+      (testing "authors"
+        (is (= 8 authors)))
 
-;;       (testing "tags"
-;;         (is (= 17 tags)))))
+      (testing "tags"
+        (prn (-> properties :tags))
+        ;; tags split by `,` are counted into different tags
+        ;; https://github.com/logseq/logseq/commit/435c2110bcc2d30ed743ba31375450f1a705b00b
+        (is (= 20 tags)))))
 
   (testing "book"
     (let [{:keys [page-name properties]}
@@ -71,7 +70,8 @@
         (is (= "[[Mar 28th, 2011]]" (-> properties :date))))))
 
 ;; 2022.10.18. Should be deprecated since Hickory is invalid in Node test
+;; Skip until we find an alternative
 ;;   (testing "note"
 ;;     (let [result (extractor/extract (:note-sample-1 data))]
 ;;       (is (str/starts-with? result "This study shows"))))
-  )
+)
