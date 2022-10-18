@@ -158,14 +158,14 @@
       (let [format (:block/format block)]
         [:.menu-links-wrapper
          [:div.flex.flex-row.justify-between.py-1.px-2.items-center
-          [:div.flex.flex-row.justify-between.flex-1
+          [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
            (for [color ui/block-background-colors]
-             [:a.m-2.shadow-sm
+             [:a.shadow-sm
               {:title (t (keyword "color" color))
                :on-click (fn [_e]
                            (editor-handler/set-block-property! block-id "background-color" color))}
               [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
-           [:a.m-2.shadow-sm
+           [:a.shadow-sm
             {:title    (t :remove-background)
              :on-click (fn [_e]
                          (editor-handler/remove-block-property! block-id "background-color"))}
@@ -175,14 +175,31 @@
           [:div.flex.flex-row.justify-between.flex-1.px-1
            (for [i (range 1 7)]
              (ui/button
-              (str "H" i)
+              ""
+              :icon (str "h-" i)
+              :title (t :heading i)
               :class "to-heading-button"
               :on-click (fn [_e]
                           (editor-handler/set-heading! block-id format i))
               :intent "link"
               :small? true))
            (ui/button
-            "H-"
+            ""
+            :icon "h-auto"
+            :icon-props {:extension? true}
+            :class "to-heading-button"
+            :title (if (= format :markdown) 
+                     (str (t :auto-heading) " - " (t :not-available-in-mode format)) 
+                     (t :auto-heading))
+            :disabled (= format :markdown)
+            :on-click (fn [_e]
+                        (editor-handler/set-heading! block-id format true))
+            :intent "link"
+            :small? true)
+           (ui/button
+            ""
+            :icon "heading-off"
+            :icon-props {:extension? true}
             :class "to-heading-button"
             :title (t :remove-heading)
             :on-click (fn [_e]

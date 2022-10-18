@@ -59,7 +59,8 @@
    "yellow"
    "green"
    "blue"
-   "purple"])
+   "purple"
+   "pink"])
 
 (rum/defc ls-textarea
   < rum/reactive
@@ -639,7 +640,9 @@
        [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
         [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
          [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-          {:type     "button"
+          {:type     "button" 
+           :autoFocus "on"
+           :class "ui__modal-enter"
            :on-click #(and (fn? on-confirm)
                            (on-confirm % {:close-fn close-fn
                                           :sub-selected (and *sub-checkbox-selected @*sub-checkbox-selected)}))}
@@ -949,24 +952,26 @@
               (f (merge {:size 18} (r/map-keys->camel-case opts)))])))))))
 
 (defn button
-  [text & {:keys [background href class intent on-click small? large? title icon]
+  [text & {:keys [background href class intent on-click small? large? title icon icon-props disabled?]
            :or   {small? false large? false}
            :as   option}]
   (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center")
         klass (if background (string/replace klass "indigo" background) klass)
         klass (if small? (str klass ".px-2.py-1") klass)
-        klass (if large? (str klass ".text-base") klass)]
+        klass (if large? (str klass ".text-base") klass)
+        klass (if disabled? (str klass "disabled:opacity-75") klass)]
     [:button.ui__button
      (merge
       {:type  "button"
        :title title
+       :disabled disabled?
        :class (str (util/hiccup->class klass) " " class)}
       (dissoc option :background :class :small? :large?)
       (when href
         {:on-click (fn []
                      (util/open-url href)
                      (when (fn? on-click) (on-click)))}))
-     (when icon (frontend.ui/icon icon {:class "mr-1"}))
+     (when icon (frontend.ui/icon icon (merge icon-props {:class (when-not (empty? text) "mr-1")})))
      text]))
 
 (rum/defc type-icon

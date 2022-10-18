@@ -1883,7 +1883,7 @@
 (declare block-content)
 
 (defn build-block-title
-  [config {:block/keys [title marker pre-block? properties]
+  [config {:block/keys [title marker pre-block? properties level]
            :as t}]
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
@@ -1907,7 +1907,7 @@
                       (<= heading-level 6)
                       heading-level)
                  (:heading properties))
-        heading (if (true? heading) 2 heading)
+        heading (if (true? heading) (min (inc level) 6) heading)
         elem (if heading
                (keyword (str "h" heading
                              (when block-ref? ".inline")))
