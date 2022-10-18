@@ -301,7 +301,7 @@
                           (reset! *input-value (if untitled? "" old-name))
                           (reset! *edit? true))))}
        (when (not= icon "") [:span.page-icon icon])
-       [:div.page-title-sizer-wrapper.relative
+       [:div.page-title-sizer-wrapper.relative.w-full
         (when (rum/react *edit?)
           (page-title-editor {:*title-value *title-value
                               :*edit? *edit?
