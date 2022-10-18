@@ -1260,6 +1260,8 @@
            :right-side-bar/all-pages "全部页面"
            :right-side-bar/flashcards "记忆卡片"
            :right-side-bar/new-page "新页面"
+           :right-side-bar/separator "调整右侧边栏大小"
+           :right-side-bar/whiteboards "白板"
            :left-side-bar/journals "日志"
            :left-side-bar/new-page "新页面"
            :left-side-bar/nav-favorites "收藏页面"
@@ -1490,6 +1492,9 @@
            :white "亮色"
            :dark "暗黑"
            :remove-background "去除背景"
+           :remove-heading "移除 heading"
+           :heading "Heading {1}"
+           :auto-heading "自动转为 heading"
            :open "打开"
            :open-a-directory "打开本地文件夹"
            :new-whiteboard "新建白板"
@@ -1552,6 +1557,8 @@
            :color/red "红色"
            :color/yellow "黄色"
 
+           :whiteboard/link-whiteboard-or-block "链接白板/页面/块"
+
            :updater/new-version-install "新版本已经准备就绪，重启应用即可更新。"
            :updater/quit-and-install "现在安装"
 
@@ -1564,7 +1571,11 @@
            :command-palette/prompt "输入指令"
 
            :file-sync/other-user-graph "当前本地 graph 绑定在其他用户的远程 graph 上。因此无法启动同步。"
-           :file-sync/graph-deleted "当前远程 graph 已经删除"}
+           :file-sync/graph-deleted "当前远程 graph 已经删除"
+
+           :conversion/non-desktop "旧版本中的图谱目录需要转换为新格式。
+          请使用桌面端应用进行转换."
+           :conversion/write-filename-format "为传入的文件应用格式"}
 
    :zh-Hant {:on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
              :on-boarding/add-graph "Add a graph"
