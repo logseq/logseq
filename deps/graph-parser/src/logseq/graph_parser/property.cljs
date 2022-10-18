@@ -62,6 +62,48 @@
      :todo :doing :now :later :done}
    @built-in-extended-properties))
 
+(def built-in-property-types
+  "Types for built-in properties. Built-in properties whose values are to be
+  parsed by gp-text/parse-non-string-property-value should be added here"
+  {:template-including-parent :boolean
+   :public :boolean
+   :exclude-from-graph-view :boolean
+   :heading :boolean
+   :collapsed :boolean
+   :created-at :integer
+   :created_at :integer
+   :updated-at :integer
+   :last-modified-at :integer
+   :last_modified_at :integer
+   :query-table :boolean
+   :query-sort-desc :boolean
+   :hl-page :integer
+   :hl-stamp :integer
+   :todo :integer
+   :doing :integer
+   :now :integer
+   :later :integer
+   :done :integer})
+
+(assert (set/subset? (set (keys built-in-property-types))
+                     (set/union (hidden-built-in-properties)
+                                (editable-built-in-properties)))
+        "Keys of built-in-property-types must be valid built-in properties")
+
+(defn unparsed-built-in-properties
+  "Properties whose values will not be parsed by gp-text/parse-property"
+  []
+  (set/difference (set/union (hidden-built-in-properties)
+                             (editable-built-in-properties))
+                  ;; Most of these need to be auto-parsed as integers so exclude
+                  ;; them until we have ones that must be unparsed
+                  @built-in-extended-properties
+                  ;; Refs need to be parsed
+                  editable-linkable-built-in-properties
+                  ;; All these should be parsed by gp-text/parse-non-string-property-value
+                  (set (keys built-in-property-types))))
+
+
 (defonce properties-start ":PROPERTIES:")
 (defonce properties-end ":END:")
 (defonce properties-end-pattern
