@@ -1985,31 +1985,31 @@
        (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})
        [:span.page-property-key.font-medium (name k)])
      [:span.mr-1 ":"]
-     [:div.page-property-value {:style {:display "inline"}}
-     (cond
-       (int? v)
-       v
+     [:div.page-property-value.inline
+      (cond
+        (int? v)
+        v
 
-       (= k :file-path)
-       v
+        (= k :file-path)
+        v
 
-       date
-       date
+        date
+        date
 
-       (and (string? v) (gp-util/wrapped-by-quotes? v))
-       (gp-util/unquote-string v)
+        (and (string? v) (gp-util/wrapped-by-quotes? v))
+        (gp-util/unquote-string v)
 
-       (and property-separated-by-commas? (coll? v))
-       (let [v (->> (remove string/blank? v)
-                    (filter string?))
-             vals (for [v-item v]
-                    (page-cp config {:block/name v-item}))
-             elems (interpose (span-comma) vals)]
-         (for [elem elems]
-           (rum/with-key elem (str (random-uuid)))))
+        (and property-separated-by-commas? (coll? v))
+        (let [v (->> (remove string/blank? v)
+                     (filter string?))
+              vals (for [v-item v]
+                     (page-cp config {:block/name v-item}))
+              elems (interpose (span-comma) vals)]
+          (for [elem elems]
+            (rum/with-key elem (str (random-uuid)))))
 
-       :else
-       (inline-text config (:block/format block) (str v)))]]))
+        :else
+        (inline-text config (:block/format block) (str v)))]]))
 
 (def hidden-editable-page-properties
   "Properties that are hidden in the pre-block (page property)"
