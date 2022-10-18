@@ -87,6 +87,7 @@
   ([repo-url tx-data]
    (transact! repo-url tx-data nil))
   ([repo-url tx-data tx-meta]
+   (frontend.util/pprint tx-data)
    (when-not config/publishing?
      (let [tx-data (->> (gp-util/remove-nils tx-data)
                         (remove nil?))]
