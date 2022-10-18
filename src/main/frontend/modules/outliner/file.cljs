@@ -21,6 +21,8 @@
     :block/uuid
     :block/content
     :block/format
+    :block/created-at
+    :block/updated-at
     {:block/page      [:block/uuid]}
     {:block/left      [:block/uuid]}
     {:block/parent    [:block/uuid]}])
