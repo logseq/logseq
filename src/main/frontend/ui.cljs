@@ -160,7 +160,7 @@
      (dissoc options :only-child?) child]
     [:a.flex.justify-between.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
      options
-     [:span child]
+     [:span.w-full child]
      (when shortcut
        [:span.ml-1 (render-keyboard-shortcut shortcut)])]))
 
