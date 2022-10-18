@@ -5,10 +5,13 @@
  ;; for rum/defcs and _state.
  {all-components {:linters {:used-underscored-binding {:level :off}}}
   ;; false positive with match/match and _
-  frontend.handler.paste {:linters {:used-underscored-binding {:level :off}}}}
+  frontend.handler.paste {:linters {:used-underscored-binding {:level :off}}}
+  frontend.db {:linters {:aliased-namespace-symbol
+                         {:exclude [frontend.db.conn frontend.db.react logseq.db.default]}}}}
 
  :linters
- {:unresolved-symbol {:exclude [goog.DEBUG
+ {:aliased-namespace-symbol {:level :warning}
+  :unresolved-symbol {:exclude [goog.DEBUG
                                 goog.string.unescapeEntities
                                 ;; TODO:lint: Fix when fixing all type hints
                                 object]}
@@ -20,7 +23,10 @@
                              frontend.util/node-path.name]}
 
   :consistent-alias
-  {:aliases {datascript.core d
+  {:aliases {cljs.reader reader
+             cljs-time.core t
+             cljs-time.coerce tc
+             datascript.core d
              datascript.transit dt
              datascript.db ddb
              electron.ipc ipc
