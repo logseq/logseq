@@ -539,6 +539,11 @@
   []
   (state/pub-event! [:go/plugins]))
 
+(defn goto-plugins-settings!
+  []
+  (when-let [pl (first (seq (get-enabled-plugins-if-setting-schema)))]
+    (state/pub-event! [:go/plugins-settings (:id pl)])))
+
 (defn- get-user-default-plugins
   []
   (p/catch
