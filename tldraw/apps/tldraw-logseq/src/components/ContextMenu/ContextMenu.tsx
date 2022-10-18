@@ -7,6 +7,7 @@ import * as React from 'react'
 
 import * as ReactContextMenu from '@radix-ui/react-context-menu'
 import * as Separator from '@radix-ui/react-separator'
+import { toJS } from 'mobx'
 
 interface ContextMenuProps {
   children: React.ReactNode
@@ -235,7 +236,7 @@ export const ContextMenu = observer(function ContextMenu({
               {developerMode && (
                 <ReactContextMenu.Item
                   className="tl-menu-item"
-                  onClick={() => console.log(app.selectedShapesArray)}
+                  onClick={() => console.log(app.selectedShapesArray.map(s => toJS(s.serialized)))}
                 >
                   (Dev) Print shape props
                 </ReactContextMenu.Item>
