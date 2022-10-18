@@ -70,7 +70,10 @@
   (let [copied-blocks (state/get-copied-blocks)
         input (state/get-input)
         text (string/replace text "\r\n" "\n") ;; Fix for Windows platform
-        whiteboard-shape? (= "logseq/whiteboard-shapes" (gobj/get (try-parse-as-json text) "type"))
+        whiteboard-data (try-parse-as-json text)
+        whiteboard-shape? (and whiteboard-data
+                               (object? whiteboard-data)
+                               (= "logseq/whiteboard-shapes" (.-type whiteboard-data)))
         text (if whiteboard-shape?
                (block-ref/->block-ref (gobj/getValueByKeys (try-parse-as-json text) "shapes" 0 "id"))
                text)
