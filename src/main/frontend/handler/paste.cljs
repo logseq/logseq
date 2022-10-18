@@ -60,6 +60,8 @@
       nil)))
 
 (defn- try-parse-as-json
+  "Result is not only to be an Object.
+   Maybe JSON types like string, number, boolean, null, array"
   [text]
   (try (js/JSON.parse text)
        (catch :default _ #js{})))
