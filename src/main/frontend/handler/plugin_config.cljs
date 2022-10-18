@@ -84,7 +84,8 @@ returns map of plugins to install and uninstall"
             (do
               (notification/show! "Invalid plugins.edn provided. See javascript console for specific errors"
                                   :error)
-              (log/error :plugin-edn-errors errors))
+              (log/error :plugin-edn-errors errors)
+              (println "Invalid plugins.edn, errors: " errors))
             (let [plugins-to-change (determine-plugins-to-change
                                      (:plugin/installed-plugins @state/state)
                                      edn-plugins)]
