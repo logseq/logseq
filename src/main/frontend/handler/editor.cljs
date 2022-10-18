@@ -136,8 +136,7 @@
      (let [{:keys [selection-start selection-end format selection value edit-id input]} m
            cur-pos (cursor/pos input)
            empty-selection? (= selection-start selection-end)
-           selection-link? (and selection (or (util/starts-with? selection "http://")
-                                              (util/starts-with? selection "https://")))
+           selection-link? (and selection (gp-util/url? selection))
            [content forward-pos] (cond
                                    empty-selection?
                                    (config/get-empty-link-and-forward-pos format)
@@ -371,7 +370,6 @@
     (profile
      "Save block: "
      (let [block' (wrap-parse-block block)]
-       (util/pprint block')
        (outliner-tx/transact!
          {:outliner-op :save-block}
          (outliner-core/save-block! block'))
@@ -3096,8 +3094,9 @@
 
         (state/selection?)
         (select-up-down direction)
-
-        :else
+        
+        ;; if there is an edit-input-id set, we are probably still on editing mode, that is not fully initialized
+        (not (state/get-edit-input-id))
         (select-first-last direction)))
     nil))
 

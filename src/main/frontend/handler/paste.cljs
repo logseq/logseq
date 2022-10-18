@@ -71,12 +71,13 @@
 
 (defn- get-whiteboard-shape-refs-text
   [text]
-  (when-let [tldr (get-whiteboard-tldr-from-text text)]
-    (->> (gobj/get tldr "shapes")
-         (mapv (fn [shape]
-                 (let [shape-id (gobj/get shape "id")]
-                   (block-ref/->block-ref shape-id))))
-         (string/join "\n"))))
+  (let [tldr (get-whiteboard-tldr-from-text text)]
+    (when (and tldr (object? tldr))
+      (->> (gobj/get tldr "shapes")
+           (mapv (fn [shape]
+                   (let [shape-id (gobj/get shape "id")]
+                     (block-ref/->block-ref shape-id))))
+           (string/join "\n")))))
 
 (defn- paste-copied-blocks-or-text
   ;; todo: logseq/whiteboard-shapes is now text/html
