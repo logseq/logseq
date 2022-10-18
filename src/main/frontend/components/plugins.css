@@ -815,13 +815,25 @@
 
   .toolbar-plugins-manager {
     &-trigger {
-      .dropdown-wrapper {
+      .menu-links-wrapper {
         max-height: 80vh;
-        overflow-y: auto;
       }
 
       .menu-link {
         padding: 3px 5px;
+
+        &.extra-item {
+          padding: 4px 15px;
+          opacity: .8;
+
+          .title-wrap {
+            margin-left: 8px !important;
+          }
+
+          &:hover {
+            opacity: 1;
+          }
+        }
       }
 
       .item-wrap {

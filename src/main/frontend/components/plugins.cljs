@@ -978,21 +978,31 @@
       [:a.button (ui/icon "puzzle" {:size 20})]])
 
    ;; items
-   (for [[_ {:keys [key pinned?] :as opts} pid] items
-         :let [pkey (str (name pid) ":" key)]]
-     {:title   key
-      :item    [:div.flex.items-center.item-wrap
-                (ui-item-renderer pid :toolbar (assoc opts :prefix "pl-" :key (str "pl-" key)))
-                [:span.opacity-80 {:style {:padding-left "2px"}} key]
-                [:span.pin.flex.items-center.opacity-60
-                 {:class (util/classnames [{:pinned pinned?}])}
-                 (ui/icon (if pinned? "pinned" "pin"))]]
-      :options {:on-click (fn [^js e]
-                            (let [^js target (.-target e)
-                                  user-btn?  (boolean (.closest target "div[data-injected-ui]"))]
-                              (when-not user-btn?
-                                (plugin-handler/op-pinned-toolbar-item! pkey (if pinned? :remove :add))))
-                            false)}})
+   (concat
+    (for [[_ {:keys [key pinned?] :as opts} pid] items
+          :let [pkey (str (name pid) ":" key)]]
+      {:title   key
+       :item    [:div.flex.items-center.item-wrap
+                 (ui-item-renderer pid :toolbar (assoc opts :prefix "pl-" :key (str "pl-" key)))
+                 [:span.opacity-80 {:style {:padding-left "2px"}} key]
+                 [:span.pin.flex.items-center.opacity-60
+                  {:class (util/classnames [{:pinned pinned?}])}
+                  (ui/icon (if pinned? "pinned" "pin"))]]
+       :options {:on-click (fn [^js e]
+                             (let [^js target (.-target e)
+                                   user-btn?  (boolean (.closest target "div[data-injected-ui]"))]
+                               (when-not user-btn?
+                                 (plugin-handler/op-pinned-toolbar-item! pkey (if pinned? :remove :add))))
+                             false)}})
+    [{:hr true}
+     {:title   (t :plugins)
+      :options {:on-click #(plugin-handler/goto-plugins-dashboard!)
+                :class "extra-item mt-2"}
+      :icon    (ui/icon "apps")}
+     {:title   (t :settings)
+      :options {:on-click #(plugin-handler/goto-plugins-settings!)
+                :class "extra-item"}
+      :icon    (ui/icon "adjustments")}])
    {:trigger-class "toolbar-plugins-manager-trigger"}))
 
 (rum/defcs hook-ui-items < rum/reactive
