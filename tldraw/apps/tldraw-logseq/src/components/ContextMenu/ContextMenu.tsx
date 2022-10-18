@@ -8,8 +8,6 @@ import * as React from 'react'
 import * as ReactContextMenu from '@radix-ui/react-context-menu'
 import * as Separator from '@radix-ui/react-separator'
 
-const preventDefault = (e: Event) => e.stopPropagation()
-
 interface ContextMenuProps {
   children: React.ReactNode
   collisionRef: React.RefObject<HTMLDivElement>
@@ -26,6 +24,13 @@ export const ContextMenu = observer(function ContextMenu({
     f()
     app.transition('select')
   }
+
+  const developerMode = React.useMemo(() => {
+    return (
+      window?.logseq?.api?.get_state_from_store?.('ui/developer-mode?') ||
+      process.env.NODE_ENV === 'development'
+    )
+  }, [])
 
   return (
     <ReactContextMenu.Root>
@@ -226,6 +231,15 @@ export const ContextMenu = observer(function ContextMenu({
                   </span>
                 </div>
               </ReactContextMenu.Item>
+
+              {developerMode && (
+                <ReactContextMenu.Item
+                  className="tl-menu-item"
+                  onClick={() => console.log(app.selectedShapesArray)}
+                >
+                  (Dev) Print shape props
+                </ReactContextMenu.Item>
+              )}
             </>
           )}
         </div>
