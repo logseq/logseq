@@ -39,7 +39,7 @@
                           (map (fn [b]
                                  [(str (:block/uuid b)) (update-vals-uuid->str (db/get-block-and-children repo (:block/uuid b)))]))
                           (into {}))
-        body         {:page-id      (:db/id page)
+        body         {:page-id      (str (:block/uuid page))
                       :blocks       (update-vals-uuid->str (cons page blocks))
                       :refed-blocks refed-blocks
                       :refs         (update-vals-uuid->str refs)}
