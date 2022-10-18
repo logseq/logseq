@@ -136,22 +136,23 @@
 ;; Source: https://github.com/logseq/logseq/blob/1519e35e0c8308d8db90b2525bfe7a716c4cdf04/src/main/frontend/util.cljc#L930
 (defn legacy-dot-file-name-sanity
   [page-name]
-  (let [normalize (fn [s] (.normalize s "NFC"))
-        remove-boundary-slashes (fn [s] (when (string? s)
-                                          (let [s (if (= \/ (first s))
-                                                    (subs s 1)
-                                                    s)]
-                                            (if (= \/ (last s))
-                                              (subs s 0 (dec (count s)))
-                                              s))))
-        page (some-> page-name
-                     (remove-boundary-slashes)
-                      ;; Windows reserved path characters
-                     (string/replace #"[:\\*\\?\"<>|]+" "_")
-                      ;; for android filesystem compatiblity
-                     (string/replace #"[\\#|%]+" "_")
-                     (normalize))]
-    (string/replace page #"/" ".")))
+  (when (string? name)
+    (let [normalize (fn [s] (.normalize s "NFC"))
+          remove-boundary-slashes (fn [s] (when (string? s)
+                                            (let [s (if (= \/ (first s))
+                                                      (subs s 1)
+                                                      s)]
+                                              (if (= \/ (last s))
+                                                (subs s 0 (dec (count s)))
+                                                s))))
+          page (some-> page-name
+                       (remove-boundary-slashes)
+                       ;; Windows reserved path characters
+                       (string/replace #"[:\\*\\?\"<>|]+" "_")
+                       ;; for android filesystem compatiblity
+                       (string/replace #"[\\#|%]+" "_")
+                       (normalize))]
+      (string/replace page #"/" "."))))
 
 ;; Rule of dir-ver 0 (after 2022 May)
 ;; Source: https://github.com/logseq/logseq/blob/e7110eea6790eda5861fdedb6b02c2a78b504cd9/src/main/frontend/util.cljc#L927
@@ -175,10 +176,11 @@
   ([title]
    (file-name-sanity title (state/get-filename-format)))
   ([title file-name-format]
-   (case file-name-format
-     :triple-lowbar (tri-lb-file-name-sanity title)
-     :legacy-dot    (legacy-dot-file-name-sanity title) ;; The earliest file name rule (before May 2022). For file name check in the conversion logic only. Don't allow users to use this.
-     (legacy-url-file-name-sanity title))))
+   (when (string? title)
+     (case file-name-format
+       :triple-lowbar (tri-lb-file-name-sanity title)
+       :legacy-dot    (legacy-dot-file-name-sanity title) ;; The earliest file name rule (before May 2022). For file name check in the conversion logic only. Don't allow users to use this.
+       (legacy-url-file-name-sanity title)))))
 
 (defn create-title-property?
   [page-name]
