@@ -370,7 +370,6 @@
     (profile
      "Save block: "
      (let [block' (wrap-parse-block block)]
-       (util/pprint block')
        (outliner-tx/transact!
          {:outliner-op :save-block}
          (outliner-core/save-block! block'))
