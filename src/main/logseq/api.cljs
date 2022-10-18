@@ -21,6 +21,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.handler.command-palette :as palette-handler]
@@ -776,7 +777,7 @@
     (when-let [{:keys [repo id] :as mft} (bean/->clj manifest)]
       (if-not (and repo id)
         (throw (js/Error. "[required] :repo :id"))
-        (plugin-handler/install-marketplace-plugin mft)))))
+        (plugin-common-handler/install-marketplace-plugin mft)))))
 
 ;; db
 (defn ^:export q

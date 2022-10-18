@@ -355,6 +355,9 @@
 (defmethod handle :go/plugins-waiting-lists [_]
   (plugin/open-waiting-updates-modal!))
 
+(defmethod handle :go/plugins-from-file [[_ plugins]]
+  (plugin/open-plugins-from-file-modal! plugins))
+
 (defmethod handle :go/plugins-settings [[_ pid nav? title]]
   (if pid
     (do
@@ -743,7 +746,7 @@
   (state/pub-event! [:notification/show
                      {:content
                       [:div
-                       [:h2.title "Oops, those files are failed to imported to your graph:"]
+                       [:h2.title "Oops. These files failed to import to your graph:"]
                        [:ol.my-2
                         (for [[file error] parse-errors]
                           (let [data (ex-data error)]

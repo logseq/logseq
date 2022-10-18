@@ -35,15 +35,31 @@
       (def API-DOMAIN "api-dev.logseq.com")
       (def WS-URL "wss://ws-dev.logseq.com/file-sync?graphuuid=%s")))
 
-;; feature flags
+;; Feature flags
+;; =============
 
 (goog-define ENABLE-PLUGINS true)
 (defonce enable-plugins? ENABLE-PLUGINS)
 
 (swap! state/state assoc :plugin/enabled enable-plugins?)
 
+;; Desktop only as other platforms requires better understanding of their
+;; multi-graph workflows and optimal place for a "global" dir
+(def global-config-enabled? util/electron?)
+
+;; User level configuration for whether plugins are enabled
+(defonce lsp-enabled?
+         (and (util/electron?)
+              (state/lsp-enabled?-or-theme)))
+
+(defn plugin-config-enabled?
+  []
+  (and lsp-enabled? (global-config-enabled?)))
+
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
+
+;; ============
 
 (def app-name "logseq")
 (def website
@@ -288,10 +304,6 @@
 (def pages-metadata-file "pages-metadata.edn")
 
 (def config-default-content (rc/inline "config.edn"))
-
-;; Desktop only as other platforms requires better understanding of their
-;; multi-graph workflows and optimal place for a "global" dir
-(def global-config-enabled? util/electron?)
 
 (defonce idb-db-prefix "logseq-db/")
 (defonce local-db-prefix "logseq_local_")
