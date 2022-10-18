@@ -64,19 +64,30 @@
   (try (js/JSON.parse text)
        (catch :default _ #js{})))
 
+(defn- get-whiteboard-tldr-from-text
+  [text]
+  (when-let [matched-text (util/safe-re-find #"<whiteboard-tldr>(.*)</whiteboard-tldr>" text)]
+    (try-parse-as-json (js/decodeURIComponent (second matched-text)))))
+
+(defn- get-whiteboard-shape-refs-text
+  [text]
+  (let [tldr (get-whiteboard-tldr-from-text text)]
+    (when (and tldr (object? tldr))
+      (->> (gobj/get tldr "shapes")
+           (mapv (fn [shape]
+                   (let [shape-id (gobj/get shape "id")]
+                     (block-ref/->block-ref shape-id))))
+           (string/join "\n")))))
+
 (defn- paste-copied-blocks-or-text
+  ;; todo: logseq/whiteboard-shapes is now text/html
   [text e html]
   (util/stop e)
   (let [copied-blocks (state/get-copied-blocks)
         input (state/get-input)
+        input-id (state/get-edit-input-id)
         text (string/replace text "\r\n" "\n") ;; Fix for Windows platform
-        whiteboard-data (try-parse-as-json text)
-        whiteboard-shape? (and whiteboard-data
-                               (object? whiteboard-data)
-                               (= "logseq/whiteboard-shapes" (.-type whiteboard-data)))
-        text (if whiteboard-shape?
-               (block-ref/->block-ref (gobj/getValueByKeys (try-parse-as-json text) "shapes" 0 "id"))
-               text)
+        shape-refs-text (when-not (string/blank? html) (get-whiteboard-shape-refs-text html))
         internal-paste? (and
                          (seq (:copy/blocks copied-blocks))
                          ;; not copied from the external clipboard
@@ -88,6 +99,9 @@
           (editor-handler/paste-blocks blocks {})))
       (let [{:keys [value]} (editor-handler/get-selection-and-format)]
         (cond
+          (not (string/blank? shape-refs-text))
+          (commands/simple-insert! input-id shape-refs-text nil)
+
           (and (or (gp-util/url? text)
                    (and value (gp-util/url? (string/trim value))))
                (not (string/blank? (util/get-selected-text))))
@@ -95,7 +109,7 @@
 
           (and (block-ref/block-ref? text)
                (editor-handler/wrapped-by? input block-ref/left-parens block-ref/right-parens))
-          (commands/simple-insert! (state/get-edit-input-id) (block-ref/get-block-ref-id text) nil)
+          (commands/simple-insert! input-id (block-ref/get-block-ref-id text) nil)
 
           :else
           ;; from external
@@ -108,7 +122,6 @@
                                              nil)))]
                             (if (string/blank? result) nil result))
                 text (or html-text text)
-                input-id (state/get-edit-input-id)
                 replace-text-f (fn []
                                  (commands/delete-selection! input-id)
                                  (commands/simple-insert! input-id text nil))]
@@ -175,7 +188,7 @@
         (let [clipboard-data (gobj/get e "clipboardData")
               html (when-not raw-paste? (.getData clipboard-data "text/html"))
               text (.getData clipboard-data "text")]
-          (if-not (string/blank? text)
+          (if-not (and (string/blank? text) (string/blank? html))
             (paste-text-or-blocks-aux input e text html)
             (when id
               (let [_handled
