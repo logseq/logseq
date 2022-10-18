@@ -443,8 +443,6 @@
     (set-up-key-down! state format)
     (set-up-key-up! state input input-id)))
 
-(def starts-with? clojure.string/starts-with?)
-
 (defn get-editor-style-class
   "Get textarea css class according to it's content"
   [content format]
@@ -459,17 +457,17 @@
      (case format
        :markdown
        (cond
-         (starts-with? content "# ") "h1"
-         (starts-with? content "## ") "h2"
-         (starts-with? content "### ") "h3"
-         (starts-with? content "#### ") "h4"
-         (starts-with? content "##### ") "h5"
-         (starts-with? content "###### ") "h6"
-         (and (starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
+         (string/starts-with? content "# ") "h1"
+         (string/starts-with? content "## ") "h2"
+         (string/starts-with? content "### ") "h3"
+         (string/starts-with? content "#### ") "h4"
+         (string/starts-with? content "##### ") "h5"
+         (string/starts-with? content "###### ") "h6"
+         (and (string/starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
          :else "normal-block")
        ;; other formats
        (cond
-         (and (starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
+         (and (string/starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
          :else "normal-block")))))
 
 (defn editor-row-height-unchanged?
