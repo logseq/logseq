@@ -1537,7 +1537,7 @@
   [{:keys [html-export?] :as config} item]
   (match item
          [(:or "Plain" "Spaces") s]
-         s
+         (string/replace s " " " ")
 
          ["Superscript" l]
          (->elem :sup (map-inline config l))
