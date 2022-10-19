@@ -29,7 +29,7 @@
      [:span.col-span-3 desc]
      [:div.col-span-1.justify-end.tip.flex
       (when (and (keyword? id) (namespace id))
-        [:code.opacity-20.bg-transparent (namespace id)])
+        [:code.opacity-40.bg-transparent (namespace id)])
       (when-not (string/blank? first-shortcut)
         [:code.ml-1 first-shortcut])]]))
 

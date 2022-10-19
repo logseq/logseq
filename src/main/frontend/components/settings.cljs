@@ -726,7 +726,7 @@
   (let [current-repo (state/sub :git/current-repo)
         ;; enable-block-timestamps? (state/enable-block-timestamps?)
         _installed-plugins (state/sub :plugin/installed-plugins)
-        plugins-of-settings (and plugin-handler/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
+        plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
         *active (::active state)]
 
     [:div#settings.cp__settings-main

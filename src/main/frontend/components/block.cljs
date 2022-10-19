@@ -1503,7 +1503,7 @@
       (= name "embed")
       (macro-embed-cp config arguments)
 
-      (and plugin-handler/lsp-enabled? (= name "renderer"))
+      (and config/lsp-enabled? (= name "renderer"))
       (when-let [block-uuid (str (:block/uuid config))]
         (plugins/hook-ui-slot :macro-renderer-slotted (assoc options :uuid block-uuid)))
 
@@ -1985,30 +1985,31 @@
        (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})
        [:span.page-property-key.font-medium (name k)])
      [:span.mr-1 ":"]
-     (cond
-       (int? v)
-       v
+     [:div.page-property-value.inline
+      (cond
+        (int? v)
+        v
 
-       (= k :file-path)
-       v
+        (= k :file-path)
+        v
 
-       date
-       date
+        date
+        date
 
-       (and (string? v) (gp-util/wrapped-by-quotes? v))
-       (gp-util/unquote-string v)
+        (and (string? v) (gp-util/wrapped-by-quotes? v))
+        (gp-util/unquote-string v)
 
-       (and property-separated-by-commas? (coll? v))
-       (let [v (->> (remove string/blank? v)
-                    (filter string?))
-             vals (for [v-item v]
-                    (page-cp config {:block/name v-item}))
-             elems (interpose (span-comma) vals)]
-         (for [elem elems]
-           (rum/with-key elem (str (random-uuid)))))
+        (and property-separated-by-commas? (coll? v))
+        (let [v (->> (remove string/blank? v)
+                     (filter string?))
+              vals (for [v-item v]
+                     (page-cp config {:block/name v-item}))
+              elems (interpose (span-comma) vals)]
+          (for [elem elems]
+            (rum/with-key elem (str (random-uuid)))))
 
-       :else
-       (inline-text config (:block/format block) (str v)))]))
+        :else
+        (inline-text config (:block/format block) (str v)))]]))
 
 (def hidden-editable-page-properties
   "Properties that are hidden in the pre-block (page property)"

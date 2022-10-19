@@ -699,6 +699,11 @@ button.tl-select-input-trigger {
   flex-grow: 0;
 }
 
+.tl-image-shape-container {
+  @apply h-full w-full overflow-hidden flex items-center justify-center pointer-events-auto;
+  background-color: var(--ls-secondary-background-color);
+}
+
 .tl-html-container {
   @apply h-full w-full m-0 relative flex flex-col;
   user-select: text;

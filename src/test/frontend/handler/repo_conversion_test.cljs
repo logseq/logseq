@@ -121,8 +121,9 @@
         ;; only test file name parsing, don't consider title prop overriding
         rename-target (:target (#'conversion-handler/calc-rename-target-impl :legacy :triple-lowbar original-body nil))]
     (if rename-target
-      (do (prn "conversion triple-lowbar: " original-body " -> " rename-target)
-          (#'page-handler/compute-new-file-path path rename-target))
+      #_:clj-kondo/ignore
+      (do #_(prn "conversion triple-lowbar: " original-body " -> " rename-target)
+        (#'page-handler/compute-new-file-path path rename-target))
       path)))
 
 (defn- convert-graph-files-path

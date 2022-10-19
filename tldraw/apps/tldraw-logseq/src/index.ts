@@ -11,6 +11,7 @@ declare global {
         set_blocks_id?: (uuids: string[]) => void
         open_external_link?: (url: string) => void
         get_selected_blocks?: () => { uuid: string }[]
+        get_state_from_store?: (path: string) => any
       }
     }
   }

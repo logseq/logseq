@@ -5,6 +5,8 @@
             [frontend.context.i18n :refer [t]]
             [frontend.ui :as ui]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.plugin-config :as plugin-config-handler]
+            [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.search :as search]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
@@ -204,7 +206,7 @@
     [:a.btn
      {:class    (util/classnames [{:disabled   (or installed? installing-or-updating?)
                                    :installing installing-or-updating?}])
-      :on-click #(plugin-handler/install-marketplace-plugin item)}
+      :on-click #(plugin-common-handler/install-marketplace-plugin item)}
      (if installed?
        (t :plugin/installed)
        (if installing-or-updating?
@@ -229,7 +231,8 @@
                     {:title      (t :plugin/delete-alert name)
                      :on-confirm (fn [_ {:keys [close-fn]}]
                                    (close-fn)
-                                   (plugin-handler/unregister-plugin id))})]
+                                   (plugin-common-handler/unregister-plugin id)
+                                   (plugin-config-handler/remove-plugin id))})]
                (state/set-sub-modal! confirm-fn {:center? true}))}
        (t :plugin/uninstall)]]]
 
@@ -549,6 +552,9 @@
 
                [{:title   [:span.flex.items-center (ui/icon "world") (t :settings-page/network-proxy)]
                  :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}]
+
+               [{:title   [:span.flex.items-center (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
+                 :options {:on-click plugin-config-handler/open-replace-plugins-modal}}]
 
                (when (state/developer-mode?)
                  [{:hr true}
@@ -880,6 +886,34 @@
              (and (seq unchecked)
                   (= (count unchecked) (count updates)))))])]))
 
+(rum/defc plugins-from-file
+  < rum/reactive
+  [plugins]
+  [:div.cp__plugins-fom-file
+   [:h1.mb-4.text-2xl.p-1 (t :plugin.install-from-file/title)]
+   (if (seq plugins)
+     [:div
+      [:div.mb-2.text-xl (t :plugin.install-from-file/notice)]
+      ;; lists
+      [:ul
+       (for [it (:install plugins)
+             :let [k (str "lsp-it-" (name (:id it)))]]
+         [:li.flex.items-center
+          {:key k}
+          [:label.flex-1
+           {:for k}
+           [:strong.px-3 (str (name (:id it)) " " (:version it))]]])]
+
+      ;; actions
+      [:div.pt-5
+       (ui/button [:span (t :plugin/install)]
+                  :on-click #(do
+                               (plugin-config-handler/replace-plugins plugins)
+                               (state/close-sub-modal! "ls-plugins-from-file-modal")))]]
+     ;; all done
+     [:div.py-4 [:strong.text-xl (str "\uD83C\uDF89 " (t :plugin.install-from-file/success))]])])
+
+
 (defn open-select-theme!
   []
   (state/set-sub-modal! installed-themes))
@@ -1136,6 +1170,14 @@
    (fn [_close!]
      (waiting-coming-updates))
    {:center? true}))
+
+(defn open-plugins-from-file-modal!
+  [plugins]
+  (state/set-sub-modal!
+   (fn [_close!]
+     (plugins-from-file plugins))
+   {:center? true
+    :id "ls-plugins-from-file-modal"}))
 
 (defn open-focused-settings-modal!
   [title]

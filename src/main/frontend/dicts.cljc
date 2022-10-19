@@ -369,7 +369,7 @@
         :plugin/title "Title"
         :plugin/all "All"
         :plugin/unpacked "Unpacked"
-        :plugin/delete-alert "Are you sure uninstall plugin [{1}]?"
+        :plugin/delete-alert "Are you sure you want to uninstall the plugin [{1}]?"
         :plugin/open-settings "Open settings"
         :plugin/open-package "Open package"
         :plugin/load-unpacked "Load unpacked plugin"
@@ -380,6 +380,10 @@
         :plugin/marketplace-tips "If the plugin doesn't work correctly when first installed, try to restart Logseq."
         :plugin/up-to-date "It's up to date"
         :plugin/custom-js-alert "Found the custom.js file, is it allowed to execute? (If you don't understand the content of this file, it is recommended not to allow execution, which has certain security risks.)"
+        :plugin.install-from-file/menu-title "Install from plugins.edn"
+        :plugin.install-from-file/title "Install plugins from plugins.edn"
+        :plugin.install-from-file/notice "The following plugins will replace your plugins:"
+        :plugin.install-from-file/success "All plugins installed!"
 
         :pdf/copy-ref "Copy ref"
         :pdf/copy-text "Copy text"
@@ -1249,7 +1253,7 @@
            :right-side-bar/recent "最近"
            :right-side-bar/contents "目录"
            :right-side-bar/favorites "收藏"
-           :right-side-bar/page-graph "页面图谱："
+           :right-side-bar/page-graph "页面图谱"
            :right-side-bar/block-ref "块引用"
            :right-side-bar/graph-view "图谱视角"
            :right-side-bar/all-pages "全部页面"
@@ -1504,8 +1508,8 @@
 
            :command-palette/prompt "输入指令"
 
-           :file-sync/other-user-graph "当前本地 graph 绑定在其他用户的远程 graph 上。因此无法启动同步。"
-           :file-sync/graph-deleted "当前远程 graph 已经删除"}
+           :file-sync/other-user-graph "当前本地图谱绑定在其他用户的远程图谱上。因此无法启动同步。"
+           :file-sync/graph-deleted "当前远程图谱已经删除"}
 
    :zh-Hant {:on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
              :on-boarding/add-graph "Add a graph"

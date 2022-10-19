@@ -1,7 +1,8 @@
 (ns frontend.components.theme
   (:require [frontend.extensions.pdf.highlights :as pdf]
             [frontend.config :as config]
-            [frontend.handler.plugin :refer [lsp-enabled?] :as plugin-handler]
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.ui :as ui]
@@ -41,9 +42,12 @@
      [sidebar-open? restored-sidebar? sidebar-blocks-len])
 
     (rum/use-effect!
-     #(when lsp-enabled?
+     #(when config/lsp-enabled?
         (plugin-handler/setup-install-listener!)
-        (plugin-handler/load-plugin-preferences))
+        (plugin-config-handler/setup-install-listener!)
+        (plugin-handler/load-plugin-preferences)
+        (fn []
+          (js/window.apis.removeAllListeners "lsp-installed")))
      [])
 
     (rum/use-effect!

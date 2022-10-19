@@ -14,11 +14,13 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.export :as export-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.modules.shortcut.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
             [frontend.util :refer [mac?] :as util]
             [frontend.commands :as commands]
+            [frontend.config :as config]
             [electron.ipc :as ipc]
             [promesa.core :as p]
             [clojure.data :as data]
@@ -405,9 +407,12 @@
                                      :fn      plugin-handler/show-themes-modal!}
 
    :ui/goto-plugins                 {:binding "t p"
-                                     :inactive (not plugin-handler/lsp-enabled?)
+                                     :inactive (not config/lsp-enabled?)
                                      :fn      plugin-handler/goto-plugins-dashboard!}
 
+   :ui/install-plugins-from-file    {:binding false
+                                     :inactive (not (config/plugin-config-enabled?))
+                                     :fn       plugin-config-handler/open-replace-plugins-modal}
 
    :editor/toggle-open-blocks       {:binding "t o"
                                      :fn      editor-handler/toggle-open!}
@@ -574,6 +579,7 @@
                           :ui/toggle-wide-mode
                           :ui/select-theme-color
                           :ui/goto-plugins
+                          :ui/install-plugins-from-file
                           :editor/toggle-open-blocks
                           :ui/toggle-cards
                           :git/commit])

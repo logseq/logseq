@@ -23,7 +23,6 @@
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
@@ -302,7 +301,7 @@
                           (reset! *input-value (if untitled? "" old-name))
                           (reset! *edit? true))))}
        (when (not= icon "") [:span.page-icon icon])
-       [:div.page-title-sizer-wrapper.relative
+       [:div.page-title-sizer-wrapper.relative.w-full
         (when (rum/react *edit?)
           (page-title-editor {:*title-value *title-value
                               :*edit? *edit?
@@ -425,7 +424,7 @@
                 [:h1.title.ls-page-title (page-title page-name icon title format fmt-journal?)]])
              (when (not config/publishing?)
                [:div.flex.flex-row
-                (when plugin-handler/lsp-enabled?
+                (when config/lsp-enabled?
                   (plugins/hook-ui-slot :page-head-actions-slotted nil)
                   (plugins/hook-ui-items :pagebar))])])
           [:div

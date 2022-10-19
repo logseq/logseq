@@ -103,6 +103,14 @@ h1.title.whiteboard-dashboard-title {
   padding: 0;
 }
 
+input.tl-text-input {
+  border: none;
+
+  &:focus {
+    box-shadow: none;
+  }
+}
+
 /**
  * ???
  */
@@ -145,6 +153,13 @@ h1.title.whiteboard-dashboard-title {
   border-radius: 8px;
   border: 1px solid transparent;
   background: var(--ls-secondary-background-color);
+
+  .edit-input {
+    width: 100%;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+  }
 }
 
 .whiteboard-page-title:hover {
