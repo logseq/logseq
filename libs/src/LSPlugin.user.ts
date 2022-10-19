@@ -356,7 +356,11 @@ type uiState = {
 const KEY_MAIN_UI = 0
 
 /**
- * User plugin instance
+ * User plugin instance from global namespace `logseq`.
+ * @example
+ * ```ts
+ * logseq.UI.showMsg('Hello, Logseq')
+ * ```
  * @public
  */
 export class LSPluginUser
