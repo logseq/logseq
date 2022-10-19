@@ -226,7 +226,7 @@
       (when sync-enabled?
         (publish))
 
-      (when plugin-handler/lsp-enabled?
+      (when config/lsp-enabled?
         (plugins/hook-ui-items :toolbar))
 
       (when (util/electron?)
