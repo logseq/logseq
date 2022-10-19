@@ -6,6 +6,7 @@
             [clojure.walk :as walk]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [frontend.handler.notification :as notification]
+            [frontend.handler.common.plugin :as plugin-common-handler]
             [camel-snake-kebab.core :as csk]
             [frontend.state :as state]
             [medley.core :as medley]
@@ -16,11 +17,8 @@
             [lambdaisland.glogi :as log]
             [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
+            [frontend.config :as config]
             [frontend.format :as format]))
-
-(defonce lsp-enabled?
-         (and (util/electron?)
-              (state/lsp-enabled?-or-theme)))
 
 (defn- normalize-keyword-for-json
   [input]
@@ -111,25 +109,10 @@
             (util/fetch stats-url on-ok reject)))))
     (p/resolved nil)))
 
-(defn installed?
-  [id]
-  (and (contains? (:plugin/installed-plugins @state/state) (keyword id))
-       (get-in @state/state [:plugin/installed-plugins (keyword id) :iir])))
-
-(defn install-marketplace-plugin
-  [{:keys [id] :as mft}]
-  (when-not (and (:plugin/installing @state/state)
-                 (installed? id))
-    (p/create
-      (fn [resolve]
-        (state/set-state! :plugin/installing mft)
-        (ipc/ipc :installMarketPlugin mft)
-        (resolve id)))))
-
 (defn check-or-update-marketplace-plugin
   [{:keys [id] :as pkg} error-handler]
   (when-not (and (:plugin/installing @state/state)
-                 (not (installed? id)))
+                 (not (plugin-common-handler/installed? id)))
     (p/catch
       (p/then
         (do (state/set-state! :plugin/installing pkg)
@@ -197,22 +180,22 @@
                              name (or title name "Untitled")]
                          (if only-check
                            (state/consume-updates-coming-plugin payload false)
-                           (if (installed? id)
+                           (if (plugin-common-handler/installed? id)
                              (when-let [^js pl (get-plugin-inst id)] ;; update
                                (p/then
-                                 (.reload pl)
-                                 #(do
-                                    ;;(if theme (select-a-plugin-theme id))
-                                    (notification/show!
-                                      (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success)
-                                    (state/consume-updates-coming-plugin payload true))))
+                                (.reload pl)
+                                #(do
+                                   ;;(if theme (select-a-plugin-theme id))
+                                   (notification/show!
+                                    (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success)
+                                   (state/consume-updates-coming-plugin payload true))))
 
                              (do                            ;; register new
                                (p/then
-                                 (js/LSPluginCore.register (bean/->js {:key id :url dst}))
-                                 (fn [] (when theme (js/setTimeout #(select-a-plugin-theme id) 300))))
+                                (js/LSPluginCore.register (bean/->js {:key id :url dst}))
+                                (fn [] (when theme (js/setTimeout #(select-a-plugin-theme id) 300))))
                                (notification/show!
-                                 (str (t :plugin/installed) (t :plugins) ": " name) :success)))))
+                                (str (t :plugin/installed) (t :plugins) ": " name) :success)))))
 
                        :error
                        (let [error-code (keyword (string/replace (:error-code payload) #"^[\s\:\[]+" ""))
@@ -247,23 +230,15 @@
                    (js/setTimeout #(state/set-state! :plugin/installing nil) 512)
                    true)]
 
-    (js/window.apis.addListener channel listener)
-
-    ;; clear
-    (fn []
-      (js/window.apis.removeAllListeners channel))))
+    (js/window.apis.addListener channel listener)))
 
 (defn register-plugin
   [pl]
   (swap! state/state update-in [:plugin/installed-plugins] assoc (keyword (:id pl)) pl))
 
-(defn unregister-plugin
-  [id]
-  (js/LSPluginCore.unregister id))
-
 (defn host-mounted!
   []
-  (and lsp-enabled? (js/LSPluginCore.hostMounted)))
+  (and config/lsp-enabled? (js/LSPluginCore.hostMounted)))
 
 (defn register-plugin-slash-command
   [pid [cmd actions]]
@@ -464,7 +439,7 @@
 
 (defn hook-plugin
   [tag type payload plugin-id]
-  (when lsp-enabled?
+  (when config/lsp-enabled?
     (try
       (js-invoke js/LSPluginCore
                  (str "hook" (string/capitalize (name tag)))
@@ -701,6 +676,6 @@
 (defn setup!
   "setup plugin core handler"
   [callback]
-  (if (not lsp-enabled?)
+  (if (not config/lsp-enabled?)
     (callback)
     (init-plugins! callback)))

@@ -136,8 +136,7 @@
      (let [{:keys [selection-start selection-end format selection value edit-id input]} m
            cur-pos (cursor/pos input)
            empty-selection? (= selection-start selection-end)
-           selection-link? (and selection (or (util/starts-with? selection "http://")
-                                              (util/starts-with? selection "https://")))
+           selection-link? (and selection (gp-util/url? selection))
            [content forward-pos] (cond
                                    empty-selection?
                                    (config/get-empty-link-and-forward-pos format)
@@ -371,7 +370,6 @@
     (profile
      "Save block: "
      (let [block' (wrap-parse-block block)]
-       (util/pprint block')
        (outliner-tx/transact!
          {:outliner-op :save-block}
          (outliner-core/save-block! block'))
@@ -2017,7 +2015,8 @@
    (when-let [db-id (if (integer? db-id)
                       db-id
                       (:db/id (db-model/get-template-by-name (name db-id))))]
-     (let [repo (state/get-current-repo)
+     (let [journal? (:block/journal? target)
+           repo (state/get-current-repo)
            target (or target (state/get-edit-block))
            block (db/entity db-id)
            format (:block/format block)
@@ -2060,12 +2059,14 @@
                          :else
                          true)]
          (outliner-tx/transact!
-          {:outliner-op :insert-blocks}
-          (save-current-block!)
-          (let [result (outliner-core/insert-blocks! blocks'
-                                                     target
-                                                     (assoc opts :sibling? sibling?'))]
-            (edit-last-block-after-inserted! result))))))))
+           {:outliner-op :insert-blocks
+            :created-from-journal-template? journal?}
+           (save-current-block!)
+           (let [result (outliner-core/insert-blocks! blocks'
+                                                      target
+                                                      (assoc opts
+                                                             :sibling? sibling?'))]
+             (edit-last-block-after-inserted! result))))))))
 
 (defn template-on-chosen-handler
   [element-id]
@@ -3093,8 +3094,9 @@
 
         (state/selection?)
         (select-up-down direction)
-
-        :else
+        
+        ;; if there is an edit-input-id set, we are probably still on editing mode, that is not fully initialized
+        (not (state/get-edit-input-id))
         (select-first-last direction)))
     nil))
 
@@ -3525,6 +3527,7 @@
   (if (= format :markdown)
     (let [repo (state/get-current-repo)
           block (db/entity [:block/uuid block-id])
+          heading (if (true? heading) 2 heading)
           content' (commands/set-markdown-heading (:block/content block) heading)]
       (save-block! repo block-id content'))
     (do

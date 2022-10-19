@@ -14,7 +14,6 @@
             [frontend.db.migrate :as db-migrate]
             [frontend.namespaces :refer [import-vars]]
             [frontend.state :as state]
-            [frontend.config :as config]
             [frontend.util :as util]
             [promesa.core :as p]
             [electron.ipc :as ipc]))
@@ -122,9 +121,7 @@
   [repo conn]
   (d/listen! conn :persistence
              (fn [tx-report]
-               (when (and
-                      (not config/publishing?)
-                      (not (:new-graph? (:tx-meta tx-report)))) ; skip initial txs
+               (when (not (:new-graph? (:tx-meta tx-report))) ; skip initial txs
                  (if (util/electron?)
                    (when-not (:dbsync? (:tx-meta tx-report))
                      ;; sync with other windows if needed

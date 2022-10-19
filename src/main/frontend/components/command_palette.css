@@ -48,6 +48,11 @@
 
     .cp__palette-input {
       color: var(--ls-secondary-text-color);
+      border: none;
+
+      &:focus {
+        box-shadow: none;
+      }
     }
 
     .search-result {

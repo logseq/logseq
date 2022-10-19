@@ -75,12 +75,12 @@
           :options {:on-click state/open-settings!}
           :icon (ui/icon "settings")})
 
-       (when plugin-handler/lsp-enabled?
+       (when config/lsp-enabled?
          {:title (t :plugins)
           :options {:on-click #(plugin-handler/goto-plugins-dashboard!)}
           :icon (ui/icon "apps")})
 
-       (when plugin-handler/lsp-enabled?
+       (when config/lsp-enabled?
          {:title (t :themes)
           :options {:on-click #(plugins/open-select-theme!)}
           :icon (ui/icon "palette")})
@@ -209,7 +209,7 @@
       (when sync-enabled?
         (login))
 
-      (when plugin-handler/lsp-enabled?
+      (when config/lsp-enabled?
         (plugins/hook-ui-items :toolbar))
 
       (when (util/electron?)
@@ -227,7 +227,7 @@
             (t :on-boarding/add-graph)])])
 
       (when config/publishing?
-        [:button.text-sm.font-medium.button {:href (rfe/href :graph)}
+        [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
          (t :graph)])
 
       (dropdown-menu {:t            t

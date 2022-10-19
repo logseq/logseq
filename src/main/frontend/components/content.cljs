@@ -97,8 +97,8 @@
 
 (rum/defc template-checkbox
   [template-including-parent?]
-  [:div.flex.flex-row
-   [:span.text-medium.mr-2 "Including the parent block in the template?"]
+  [:div.flex.flex-row.w-auto.items-center
+   [:p.text-medium.mr-2 "Including the parent block in the template?"]
    (ui/toggle template-including-parent?
               #(swap! *template-including-parent? not))])
 
@@ -121,27 +121,29 @@
     (if @edit?
       (do
         (state/clear-edit!)
-        [:div.px-4.py-2 {:on-click (fn [e] (util/stop e))}
-         [:p "What's the template's name?"]
-         [:input#new-template.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-          {:auto-focus true
-           :on-change (fn [e]
-                        (reset! input (util/evalue e)))}]
-         (when has-children?
-           (template-checkbox template-including-parent?))
-         (ui/button "Submit"
-                    :on-click (fn []
-                                (let [title (string/trim @input)]
-                                  (when (not (string/blank? title))
-                                    (if (page-handler/template-exists? title)
-                                      (notification/show!
-                                       [:p "Template already exists!"]
-                                       :error)
-                                      (do
-                                        (editor-handler/set-block-property! block-id :template title)
-                                        (when (false? template-including-parent?)
-                                          (editor-handler/set-block-property! block-id :template-including-parent false))
-                                        (state/hide-custom-context-menu!)))))))])
+        [:<>
+         [:div.px-4.py-2.text-sm {:on-click (fn [e] (util/stop e))}
+          [:p "What's the template's name?"]
+          [:input#new-template.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
+           {:auto-focus true
+            :on-change (fn [e]
+                         (reset! input (util/evalue e)))}]
+          (when has-children?
+            (template-checkbox template-including-parent?))
+          (ui/button "Submit"
+                     :on-click (fn []
+                                 (let [title (string/trim @input)]
+                                   (when (not (string/blank? title))
+                                     (if (page-handler/template-exists? title)
+                                       (notification/show!
+                                        [:p "Template already exists!"]
+                                        :error)
+                                       (do
+                                         (editor-handler/set-block-property! block-id :template title)
+                                         (when (false? template-including-parent?)
+                                           (editor-handler/set-block-property! block-id :template-including-parent false))
+                                         (state/hide-custom-context-menu!)))))))]
+         [:hr.menu-separator]])
       (ui/menu-link
        {:key "Make a Template"
         :on-click (fn [e]
@@ -156,14 +158,14 @@
       (let [format (:block/format block)]
         [:.menu-links-wrapper
          [:div.flex.flex-row.justify-between.py-1.px-2.items-center
-          [:div.flex.flex-row.justify-between.flex-1
+          [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
            (for [color ui/block-background-colors]
-             [:a.m-2.shadow-sm
+             [:a.shadow-sm
               {:title (t (keyword "color" color))
                :on-click (fn [_e]
                            (editor-handler/set-block-property! block-id "background-color" color))}
               [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
-           [:a.m-2.shadow-sm
+           [:a.shadow-sm
             {:title    (t :remove-background)
              :on-click (fn [_e]
                          (editor-handler/remove-block-property! block-id "background-color"))}
@@ -173,14 +175,31 @@
           [:div.flex.flex-row.justify-between.flex-1.px-1
            (for [i (range 1 7)]
              (ui/button
-              (str "H" i)
+              ""
+              :icon (str "h-" i)
+              :title (t :heading i)
               :class "to-heading-button"
               :on-click (fn [_e]
                           (editor-handler/set-heading! block-id format i))
               :intent "link"
               :small? true))
            (ui/button
-            "H-"
+            ""
+            :icon "h-auto"
+            :icon-props {:extension? true}
+            :class "to-heading-button"
+            :title (if (= format :markdown) 
+                     (str (t :auto-heading) " - " (t :not-available-in-mode format)) 
+                     (t :auto-heading))
+            :disabled (= format :markdown)
+            :on-click (fn [_e]
+                        (editor-handler/set-heading! block-id format true))
+            :intent "link"
+            :small? true)
+           (ui/button
+            ""
+            :icon "heading-off"
+            :icon-props {:extension? true}
             :class "to-heading-button"
             :title (t :remove-heading)
             :on-click (fn [_e]

@@ -7,7 +7,7 @@
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.pdf.toolbar :refer [pdf-toolbar *area-dashed? *area-mode? *highlight-mode? *highlights-ctx*]]
             [frontend.handler.notification :as notification]
-            [frontend.handler.plugin :as plugin-handler]
+            [frontend.config :as config]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.commands :as commands]
             [frontend.rum :refer [use-atom]]
@@ -193,7 +193,7 @@
 
      (and id [:li.item {:data-action "del"} (t :delete)])
 
-     (when (and plugin-handler/lsp-enabled? text?)
+     (when (and config/lsp-enabled? text?)
        (for [[_ {:keys [key label extras] :as _cmd} action pid]
              (state/get-plugins-commands-with-type :highlight-context-menu-item)]
          [:li.item {:key         key
@@ -685,7 +685,7 @@
                                          :findController    (js/pdfjsViewer.PDFFindController.
                                                              #js {:linkService link-service :eventBus event-bus})
                                          :textLayerMode     2
-                                         :annotationMode    0 ;; disabled
+                                         :annotationMode    2
                                          :removePageBorders true})]
               (. link-service setDocument pdf-document)
               (. link-service setViewer viewer)

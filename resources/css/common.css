@@ -303,9 +303,10 @@ blockquote {
   font-size: 1rem;
 }
 
-input {
+input[type=text], input[type=password] {
   color: var(--ls-primary-text-color);
   background: transparent;
+  font-size: inherit;
 }
 
 summary {
@@ -510,7 +511,7 @@ i.ti {
 }
 
 .to-heading-button {
-  @apply px-1 !important;
+  @apply px-1 text-lg !important;
 }
 
 /** endregion **/

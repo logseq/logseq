@@ -53,8 +53,12 @@
   (protocol/mkdir-recur! (get-fs dir) dir))
 
 (defn readdir
-  [dir]
-  (protocol/readdir (get-fs dir) dir))
+  [dir & {:keys [path-only?]}]
+  (p/let [result (protocol/readdir (get-fs dir) dir)
+          result (bean/->clj result)]
+    (if (and path-only? (map? (first result)))
+      (map :uri result)
+      result)))
 
 (defn unlink!
   "Should move the path to logseq/recycle instead of deleting it."

@@ -70,7 +70,9 @@
          :closure-defines {frontend.util/NODETEST true}
          :devtools        {:enabled false}
          ;; disable :static-fns to allow for with-redefs and repl development
-         :compiler-options {:static-fns false}
+         :compiler-options {:static-fns false
+         ;; For custom conditional reading, see https://shadow-cljs.github.io/docs/UsersGuide.html#_conditional_reading
+                            :reader-features #{:node-test}}
          :main            frontend.test.frontend-node-test-runner/main}
 
   :publishing {:target        :browser

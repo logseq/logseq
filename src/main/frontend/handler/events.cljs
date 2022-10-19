@@ -355,6 +355,9 @@
 (defmethod handle :go/plugins-waiting-lists [_]
   (plugin/open-waiting-updates-modal!))
 
+(defmethod handle :go/plugins-from-file [[_ plugins]]
+  (plugin/open-plugins-from-file-modal! plugins))
+
 (defmethod handle :go/plugins-settings [[_ pid nav? title]]
   (if pid
     (do
@@ -565,6 +568,7 @@
      (ui/button
       (t :yes)
       :autoFocus "on"
+      :class "ui__modal-enter"
       :large? true
       :on-click (fn []
                   (state/close-modal!)
@@ -640,7 +644,8 @@
   (when (db/get-db graph)
     (let [file (:block/file page-entity)]
       (when-let [path (:file/path file)]
-        (when (not= content (:file/content file))
+        (when (and (not= content (:file/content file))
+                   (:file/content file))
           (sync/add-new-version-file graph path (:file/content file)))
         (p/let [_ (file-handler/alter-file graph
                                            path
@@ -742,7 +747,7 @@
   (state/pub-event! [:notification/show
                      {:content
                       [:div
-                       [:h2.title "Oops, those files are failed to imported to your graph:"]
+                       [:h2.title "Oops. These files failed to import to your graph:"]
                        [:ol.my-2
                         (for [[file error] parse-errors]
                           (let [data (ex-data error)]

@@ -139,6 +139,10 @@
       position: relative;
     }
 
+    &:hover {
+      background-color: var(--ls-tertiary-background-color);
+    }
+
     &.active, &:active {
       background-color: var(--ls-quaternary-background-color);
     }

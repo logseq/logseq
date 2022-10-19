@@ -238,7 +238,8 @@
                                           (when remote? [:span.pl-1 (ui/icon "cloud")])]]
                                   [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]))
             links-header (cond->
-                           {:modal-class (util/hiccup->class
+                           {:z-index 1000
+                            :modal-class (util/hiccup->class
                                            "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")}
                            (> (count repos) 1)              ; show switch to if there are multiple repos
                            (assoc :links-header [:div.font-medium.text-sm.opacity-60.px-4.pt-2.pb-1

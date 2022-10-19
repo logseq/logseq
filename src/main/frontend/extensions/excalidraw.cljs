@@ -89,7 +89,7 @@
         [:a.mr-2 {:on-click #(swap! *view-mode? not)}
          (util/format "View Mode (%s)" (if @*view-mode? "ON" "OFF"))]
         [:a.mr-2 {:on-click #(swap! *grid-mode? not)}
-         (util/format "Grid Mode (%s)" (if @*view-mode? "ON" "OFF"))]
+         (util/format "Grid Mode (%s)" (if @*grid-mode? "ON" "OFF"))]
         [:a.mr-2 {:on-click #(when-let [block (db/pull [:block/uuid block-uuid])]
                                (editor-handler/edit-block! block :max block-uuid))}
          "Edit Block"]]

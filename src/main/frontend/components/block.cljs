@@ -1503,7 +1503,7 @@
       (= name "embed")
       (macro-embed-cp config arguments)
 
-      (and plugin-handler/lsp-enabled? (= name "renderer"))
+      (and config/lsp-enabled? (= name "renderer"))
       (when-let [block-uuid (str (:block/uuid config))]
         (plugins/hook-ui-slot :macro-renderer-slotted (assoc options :uuid block-uuid)))
 
@@ -1883,7 +1883,7 @@
 (declare block-content)
 
 (defn build-block-title
-  [config {:block/keys [title marker pre-block? properties]
+  [config {:block/keys [title marker pre-block? properties level]
            :as t}]
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
@@ -1907,7 +1907,7 @@
                       (<= heading-level 6)
                       heading-level)
                  (:heading properties))
-        heading (if (true? heading) 2 heading)
+        heading (if (true? heading) (min (inc level) 6) heading)
         elem (if heading
                (keyword (str "h" heading
                              (when block-ref? ".inline")))
@@ -1985,30 +1985,31 @@
        (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})
        [:span.page-property-key.font-medium (name k)])
      [:span.mr-1 ":"]
-     (cond
-       (int? v)
-       v
+     [:div.page-property-value.inline
+      (cond
+        (int? v)
+        v
 
-       (= k :file-path)
-       v
+        (= k :file-path)
+        v
 
-       date
-       date
+        date
+        date
 
-       (and (string? v) (gp-util/wrapped-by-quotes? v))
-       (gp-util/unquote-string v)
+        (and (string? v) (gp-util/wrapped-by-quotes? v))
+        (gp-util/unquote-string v)
 
-       (and property-separated-by-commas? (coll? v))
-       (let [v (->> (remove string/blank? v)
-                    (filter string?))
-             vals (for [v-item v]
-                    (page-cp config {:block/name v-item}))
-             elems (interpose (span-comma) vals)]
-         (for [elem elems]
-           (rum/with-key elem (str (random-uuid)))))
+        (and property-separated-by-commas? (coll? v))
+        (let [v (->> (remove string/blank? v)
+                     (filter string?))
+              vals (for [v-item v]
+                     (page-cp config {:block/name v-item}))
+              elems (interpose (span-comma) vals)]
+          (for [elem elems]
+            (rum/with-key elem (str (random-uuid)))))
 
-       :else
-       (inline-text config (:block/format block) (str v)))]))
+        :else
+        (inline-text config (:block/format block) (str v)))]]))
 
 (def hidden-editable-page-properties
   "Properties that are hidden in the pre-block (page property)"
@@ -2494,7 +2495,7 @@
 (rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
 
 (defn breadcrumb
-  [config repo block-id {:keys [show-page? indent? level-limit _navigating-block]
+  [config repo block-id {:keys [show-page? indent? end-separator? level-limit _navigating-block]
                          :or {show-page? true
                               level-limit 3}
                          :as opts}]
@@ -2541,7 +2542,7 @@
                           " my-2")
                         (when indent?
                           " ml-4")))}
-         breadcrumb]))))
+         breadcrumb (when end-separator? (breadcrumb-separator))]))))
 
 (defn- block-drag-over
   [event uuid top? block-id *move-to]

@@ -263,8 +263,12 @@
     margin-bottom: 12px;
   }
 
-  > .edit-input {
+  .edit-input {
     width: 100%;
+    border: none;
+    box-shadow: none;
+    padding-left: 0;
+    padding-top: 5px;
   }
 
   &.editing {
