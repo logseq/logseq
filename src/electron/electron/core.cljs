@@ -88,7 +88,7 @@
 
 (defn- handle-export-publish-assets [_event html custom-css-path export-css-path repo-path asset-filenames output-path]
   (p/let [app-path (. app getAppPath)
-          asset-filenames (js->clj asset-filenames)
+          asset-filenames (->> (js->clj asset-filenames) (remove nil?))
           root-dir (or output-path (handler/open-dir-dialog))]
     (when root-dir
       (let [static-dir (path/join root-dir "static")
@@ -136,7 +136,7 @@
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" (str file ".map"))))
                               ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
-          
+
           (send-to-renderer
            :notification
            {:type "success"
@@ -215,7 +215,7 @@
                                             (p/let [graph-name (get-graph-name (state/get-graph-path))
                                                     _ (handler/broadcast-persist-graph! graph-name)]
                                               (handler/open-new-window!)))
-                                   :accelerator (if mac? 
+                                   :accelerator (if mac?
                                                   "CommandOrControl+N"
                                                   ;; Avoid conflict with `Control+N` shortcut to move down in the text editor on Windows/Linux
                                                   "Shift+CommandOrControl+N")}
