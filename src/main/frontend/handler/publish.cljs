@@ -9,7 +9,8 @@
             [cljs-bean.core :as bean]
             [cljs-http.client :as http]
             [cljs.core.async :as async :refer [go <!]]
-            [frontend.handler.notification :as notification]))
+            [frontend.handler.notification :as notification]
+            [clojure.string :as string]))
 
 (defn- update-vals-uuid->str
   [coll]
@@ -52,7 +53,16 @@
                                    :body              (js/JSON.stringify (bean/->js body))
                                    :with-credentials? false}))]
         (if (:success result)
-          (prn "Publish successfully! URL: " (:body result))
+          (when-let [url (get-in result [:body :url])]
+            (let [url' (string/replace url "https://logseq.io" "http://localhost:3000")]
+              (state/pub-event! [:notification/show
+                                 {:content [:span
+                                            "Congrats! The page has been published to "
+                                            [:a {:href url'
+                                                 :target "_blank"}
+                                             url']
+                                            "."]
+                                  :status :success}])))
           (do
             (prn "Publish failed" result)
             (notification/show!
