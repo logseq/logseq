@@ -10,10 +10,10 @@
             [clojure.walk :as walk]
             [logseq.graph-parser.block :as gp-block]
             [datascript.core :as d]
-            [frontend.test.helper :as helper]
+            [frontend.test.helper :as test-helper]
             [clojure.set :as set]))
 
-(def test-db helper/test-db)
+(def test-db test-helper/test-db)
 
 (use-fixtures :each
   fixtures/load-test-env
