@@ -191,9 +191,10 @@
 (rum/defc sync-now
   []
   (ui/button "Sync now"
-             :class "block cursor-pointer"
-             :small? true
-             :on-click #(async/offer! fs-sync/immediately-local->remote-chan true)))
+    :class "block cursor-pointer"
+    :small? true
+    :on-click #(async/offer! fs-sync/immediately-local->remote-chan true)
+    :style {:color "#ffffff"}))
 
 (def *last-calculated-time (atom nil))
 
