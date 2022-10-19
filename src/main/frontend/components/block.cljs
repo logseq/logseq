@@ -745,8 +745,9 @@
       (draw-component {:file file :block-uuid block-uuid}))))
 
 (rum/defc page-reference < rum/reactive
-  [html-export? s {:keys [nested-link? block-uuid id] :as config} label]
+  [html-export? s {:keys [nested-link? id] :as config} label]
   (let [show-brackets? (state/show-brackets?)
+        block-uuid (:block/uuid config)
         contents-page? (= "contents" (string/lower-case (str id)))]
     (if (string/ends-with? s ".excalidraw")
       [:div.draw {:on-click (fn [e]
