@@ -48,7 +48,6 @@
 
 (defn handle-changed!
   [type {:keys [dir path content stat global-dir] :as payload}]
-  (prn "===> File changed: " type dir path)
   (when dir
     (let [path (gp-util/path-normalize path)
           ;; Global directory events don't know their originating repo so we rely
