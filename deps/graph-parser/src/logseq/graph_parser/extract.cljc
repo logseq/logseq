@@ -259,6 +259,7 @@
             blocks (concat
                     (map (fn [block]
                            (assoc block
+                                  :block/format (or (:block/format page) :markdown)
                                   :block/page page-lookup
                                   :block/parent (or (:block/parent block) page-lookup)
                                   :block/path-refs (set (conj (:block/path-refs block) page-lookup)))) blocks)

@@ -54,13 +54,19 @@
       (async/put! (state/get-file-write-chan) [repo page-db-id])
       (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
             blocks (model/get-page-blocks-no-cache repo (:block/name page-block) {:pull-keys pull-keys})
-            blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)]
+            blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)
+            ext (some-> (db/entity repo (:db/id (:block/file page-block)))
+                        :file/path
+                        (util/get-file-ext))]
         (when-not (and (= 1 (count blocks))
                        (string/blank? (:block/content (first blocks)))
                        (nil? (:block/file page-block)))
-          (let [tree (tree/blocks->vec-tree repo blocks (:block/name page-block))]
+          (let [tree (if (or whiteboard? (= ext "edn"))
+                       blocks
+                       (tree/blocks->vec-tree repo blocks (:block/name page-block)))]
+            (util/pprint tree)
             (if page-block
-              (file/save-tree! page-block (if whiteboard? blocks tree))
+              (file/save-tree! page-block tree)
               (js/console.error (str "can't find page id: " page-db-id)))))))))
 
 (defn write-files!

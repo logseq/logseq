@@ -199,9 +199,11 @@
 
                           (= "edn" ext)
                           (let [{:keys [blocks refs]} (edn-transform-blocks page-block tree)]
-                            (pr-str {:page (remove-transit-ids page-block)
-                                     :blocks blocks
-                                     :refs refs}))
+                            (with-out-str
+                              (util/pprint
+                               {:page (remove-transit-ids page-block)
+                                :blocks blocks
+                                :refs refs})))
 
                           :else
                           (tree->file-content tree {:init-level init-level}))

@@ -24,9 +24,6 @@
  ;; Default is true, you can also toggle this via setting page
  :ui/enable-tooltip? true
 
- ;; Enable Block timestamp
- :feature/enable-block-timestamps? false
-
  ;; Enable remove accents when searching.
  ;; After toggle this option, please remember to rebuild your search index by press (cmd+c cmd+s).
  :feature/enable-search-remove-accents? true
@@ -284,7 +281,7 @@
  ;; Decide the way to escape the special characters in the page title.
  ;; Warning:
  ;;   This is a dangerous operation. If you want to change the setting,
- ;;   should access the setting `Filename format` and follow the instructions. 
+ ;;   should access the setting `Filename format` and follow the instructions.
  ;;   Or you have to rename all the affected files manually then re-index on all
  ;;   clients after the files are synced. Wrong handling may cause page titles
  ;;   containing special characters to be messy.

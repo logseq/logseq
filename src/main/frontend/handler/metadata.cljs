@@ -42,7 +42,8 @@
 
 (defn set-pages-metadata!
   [repo]
-  (when-not (state/unlinked-dir? (config/get-repo-dir repo))
+  (when (and (not (state/unlinked-dir? (config/get-repo-dir repo)))
+             (not= (state/get-preferred-file-format repo) :edn))
     (let [path (config/get-pages-metadata-path repo)
           all-pages (->> (db/get-all-pages repo)
                          (common-handler/fix-pages-timestamps)

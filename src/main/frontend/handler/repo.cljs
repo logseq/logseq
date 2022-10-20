@@ -40,27 +40,6 @@
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
 ;; 2. Git pulls the new change (fn: load-files)
 
-(defn create-contents-file
-  [repo-url]
-  (spec/validate :repos/url repo-url)
-  (p/let [repo-dir (config/get-repo-dir repo-url)
-          pages-dir (state/get-pages-directory)
-          [org-path md-path] (map #(str "/" pages-dir "/contents." %) ["org" "md"])
-          contents-file-exist? (some #(fs/file-exists? repo-dir %) [org-path md-path])]
-    (when-not contents-file-exist?
-      (let [format (state/get-preferred-format)
-            path (str pages-dir "/contents."
-                      (config/get-file-extension format))
-            file-path (str "/" path)
-            default-content (case (name format)
-                              "org" (rc/inline "contents.org")
-                              "markdown" (rc/inline "contents.md")
-                              "")]
-        (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir pages-dir))
-                file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
-          (when-not file-exists?
-            (file-common-handler/reset-file! repo-url path default-content)))))))
-
 (defn create-custom-theme
   [repo-url]
   (spec/validate :repos/url repo-url)
@@ -111,8 +90,7 @@
           page-exists? (db/entity repo-url [:block/name (util/page-name-sanity-lc title)])
           empty-blocks? (db/page-empty? repo-url (util/page-name-sanity-lc title))]
       (when (or empty-blocks? (not page-exists?))
-        (p/let [_ (nfs/check-directory-permission! repo-url)
-                _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-journals-directory)))
+        (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-journals-directory)))
                 file-exists? (fs/file-exists? repo-dir file-path)]
           (when-not file-exists?
             (p/let [_ (file-common-handler/reset-file! repo-url path content)]
@@ -131,9 +109,7 @@
      (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
              _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (str config/app-name "/" config/recycle-dir)))
              _ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir (config/get-journals-directory)))
-             _ (file-handler/create-metadata-file repo-url encrypted?)
              _ (repo-config-handler/create-config-file-if-not-exists repo-url)
-             _ (create-contents-file repo-url)
              _ (create-custom-theme repo-url)]
        (state/pub-event! [:page/create-today-journal repo-url])))))
 
@@ -401,7 +377,6 @@
                      tutorial (string/replace-first tutorial "$today" (date/today))]
                  (create-today-journal-if-not-exists repo {:content tutorial})))
              (repo-config-handler/create-config-file-if-not-exists repo)
-             (create-contents-file repo)
              (create-custom-theme repo)
              (state/set-db-restoring! false)
              (ui-handler/re-render-root!)))

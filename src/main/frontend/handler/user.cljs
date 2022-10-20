@@ -12,9 +12,11 @@
 
 (defn set-preferred-format!
   [format]
-  (when format
+  (when (and format (contains? #{:markdown :org} format))
     (config-handler/set-config! :preferred-format format)
-    (state/set-preferred-format! format)))
+    (state/set-preferred-format! format)
+    (config-handler/set-config! :preferred-file-format format)
+    (state/set-state! [:preferred-file-format] format)))
 
 (defn prefer-edn!
   []

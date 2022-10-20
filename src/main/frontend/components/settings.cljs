@@ -407,14 +407,6 @@
             (let [value (not enable-all-pages-public?)]
               (config-handler/set-config! :publishing/all-pages-public? value)))))
 
-;; (defn enable-block-timestamps-row [t enable-block-timestamps?]
-;;   (toggle "block timestamps"
-;;           (t :settings-page/enable-block-time)
-;;           enable-block-timestamps?
-;;           (fn []
-;;             (let [value (not enable-block-timestamps?)]
-;;               (config-handler/set-config! :feature/enable-block-timestamps? value)))))
-
 (defn encryption-row [enable-encryption?]
   (toggle "enable_encryption"
           (t :settings-page/enable-encryption)
@@ -572,7 +564,8 @@
 
 (rum/defcs settings-editor < rum/reactive
   [_state current-repo]
-  (let [preferred-format (state/get-preferred-format)
+  (let [preferred-format (or (state/get-preferred-file-format current-repo)
+                             (state/get-preferred-format))
         preferred-date-format (state/get-date-formatter)
         preferred-workflow (state/get-preferred-workflow)
         enable-timetracking? (state/enable-timetracking?)
@@ -587,7 +580,6 @@
      (file-format-row t preferred-format)
      (date-format-row t preferred-date-format)
      (workflow-row t preferred-workflow)
-     ;; (enable-block-timestamps-row t enable-block-timestamps?)
      (show-brackets-row t show-brackets?)
      (when (util/electron?) (switch-spell-check-row t))
      (outdenting-row t logical-outdenting?)
@@ -729,7 +721,6 @@
     rum/reactive
   [state]
   (let [current-repo (state/sub :git/current-repo)
-        ;; enable-block-timestamps? (state/enable-block-timestamps?)
         _installed-plugins (state/sub :plugin/installed-plugins)
         plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
         *active (::active state)]
