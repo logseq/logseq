@@ -99,7 +99,7 @@
                         :old-title "aa?#.bbb.ccc",
                         :changed-title "aa?#/bbb/ccc"}))
 
-(deftest rename-tests
+(deftest rename-tests-l2t
   ;; z: new title structure; x: old ver title; y: title property (if available)
   (are [x y z] (= z (#'conversion-handler/calc-rename-target-impl :legacy :triple-lowbar x y))
     "aaBBcc"      "aabbcc"        nil
@@ -137,6 +137,10 @@
                                        :target "adbcde___aks___sdf",
                                        :old-title "adbcde/aks/sdf",
                                        :changed-title "adbcde/aks/sdf"}
+    "aaa%2Fbbb%2Fccc" "aaa/bbb/ccc"  {:status :informal,
+                                      :target "aaa___bbb___ccc",
+                                      :old-title "aaa/bbb/ccc",
+                                      :changed-title "aaa/bbb/ccc"}
     "CON" "CON" {:status :informal,
                  :target "CON___",
                  :old-title "CON",
