@@ -55,7 +55,7 @@
                                             :update-db? false
                                             :update-status? false
                                             :finish-handler finish-handler}))
-    (let [journal-pages-tx (let [titles (filter date/valid-journal-title? titles)]
+    (let [journal-pages-tx (let [titles (filter date/normalize-journal-title titles)]
                              (map
                                (fn [title]
                                  (let [day (date/journal-title->int title)
