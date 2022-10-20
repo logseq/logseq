@@ -10,6 +10,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
@@ -47,6 +48,7 @@
 
 (defn handle-changed!
   [type {:keys [dir path content stat global-dir] :as payload}]
+  (prn "===> File changed: " type dir path)
   (when dir
     (let [path (gp-util/path-normalize path)
           ;; Global directory events don't know their originating repo so we rely
@@ -80,7 +82,8 @@
 
           (and (= "change" type)
                (not= (string/trim content) (string/trim db-content))
-               (not= path pages-metadata-path))
+               (not= path pages-metadata-path)
+               (not (gp-config/local-asset? (string/replace-first path dir ""))))
           (when-not (and
                      (string/includes? path (str "/" (config/get-journals-directory) "/"))
                      (or
