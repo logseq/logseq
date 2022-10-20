@@ -59,7 +59,7 @@ and handles unexpected failure."
   "Normalizes supported formats such as dates and percentages."
   ([block]
    (->> [normalize-as-percentage normalize-as-date identity]
-        (map #(% block))
+        (map #(% (if (set? block) (first block) block)))
         (remove nil?)
         (first))))
 
