@@ -81,6 +81,57 @@
                     (str prefix sep new-content)))]
     content))
 
+(defn- edn-transform-blocks
+  [page-block blocks]
+  (let [ref-keys [:block/refs
+                  :block/path-refs
+                  :block/left
+                  :block/parent
+                  :block/tags
+                  :block/alias
+                  :block/namespace
+                  :block/macros]
+        ref-ids (->>
+                 (mapcat (fn [block]
+                           (->>
+                            (select-keys block ref-keys)
+                            vals
+                            (mapcat (fn [ref] (if (map? ref)
+                                                [(:db/id ref)]
+                                                (map :db/id ref)))))) blocks)
+                 (remove nil?)
+                 (set))
+        refs (db/pull-many (state/get-current-repo)
+                           '[:db/id :block/uuid :block/name]
+                           ref-ids)
+        id->uuid (zipmap (map :db/id refs) (map :block/uuid refs))
+        refs-blocks (->> (map #(dissoc % :db/id) refs)
+                         (filter :block/name)
+                         (remove #(= (:block/uuid %) (:block/uuid page-block)))
+                         (vec))
+        blocks (mapv (fn [block]
+                       (let [b (dissoc block
+                                       :db/id :block/format :block/level :block/unordered
+                                       :block/journal? :block/journal-day :block/page)]
+                         (->>
+                          (reduce (fn [b k]
+                                    (update b k
+                                            (fn [refs]
+                                              (if (map? refs)
+                                                (when-not (= (:db/id refs) (:db/id page-block))
+                                                  [:block/uuid (get id->uuid (:db/id refs))])
+                                                (->>
+                                                 (remove (fn [ref] (= (:db/id page-block) (:db/id ref))) refs)
+                                                 (map (fn [item]
+                                                        [:block/uuid (get id->uuid (:db/id item))]))
+                                                 (set)))))) b ref-keys)
+                          (filter (fn [[_ v]]
+                                    (or (and (coll? v) (seq v))
+                                        (and (not (coll? v)) v))))
+                          (into {}))))
+                     blocks)]
+    {:blocks blocks
+     :refs refs-blocks}))
 
 (defn- tree->file-content-aux
   [tree {:keys [init-level] :as opts}]
@@ -140,17 +191,16 @@
     (if (and (string? file-path) (not-empty file-path))
       (let [ext (util/get-file-ext file-path)
             new-content (cond
+                          ;; TODO: treat as "edn" below too
                           (= "whiteboard" (:block/type page-block))
                           (pr-str {:blocks tree
                                    :pages (list (remove-transit-ids page-block))})
 
                           (= "edn" ext)
-                          (let [tree (map #(dissoc %
-                                                   :block/format
-                                                   :block/level
-                                                   :block/unordered) tree)]
-                            (pr-str {:page page-block
-                                     :blocks tree}))
+                          (let [{:keys [blocks refs]} (edn-transform-blocks page-block tree)]
+                            (pr-str {:page (remove-transit-ids page-block)
+                                     :blocks blocks
+                                     :refs refs}))
 
                           :else
                           (tree->file-content tree {:init-level init-level}))
