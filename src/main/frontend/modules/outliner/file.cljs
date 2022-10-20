@@ -55,11 +55,11 @@
       (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
             blocks (model/get-page-blocks-no-cache repo (:block/name page-block) {:pull-keys pull-keys})
             blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)
-            edn-file? (= :edn (:block/file-format page-block))]
+            edn? (= :edn (state/get-preferred-file-format repo))]
         (when-not (and (= 1 (count blocks))
                        (string/blank? (:block/content (first blocks)))
                        (nil? (:block/file page-block)))
-          (let [tree (if (or whiteboard? edn-file?)
+          (let [tree (if (or whiteboard? edn?)
                        blocks
                        (tree/blocks->vec-tree repo blocks (:block/name page-block)))]
             (if page-block
