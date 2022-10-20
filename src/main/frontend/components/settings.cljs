@@ -291,9 +291,14 @@
                     (let [format (-> (util/evalue e)
                                      (string/lower-case)
                                      keyword)]
-                      (user-handler/set-preferred-format! format)))}
-      (for [format (map name [:org :markdown])]
-        [:option {:key format :value format} (string/capitalize format)])]]]])
+                      (if (= format :edn)
+                        (user-handler/prefer-edn!)
+                        (user-handler/set-preferred-format! format))))}
+      (for [format (map name [:edn :markdown :org])]
+        [:option {:key format :value format}
+         (if (= format :edn)
+           "EDN"
+           (string/capitalize format))])]]]])
 
 (defn date-format-row [t preferred-date-format]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start

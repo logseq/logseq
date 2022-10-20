@@ -16,6 +16,13 @@
     (config-handler/set-config! :preferred-format format)
     (state/set-preferred-format! format)))
 
+(defn prefer-edn!
+  []
+  (config-handler/set-config! :preferred-format :markdown)
+  (state/set-preferred-format! :markdown)
+  (config-handler/set-config! :preferred-file-format :edn)
+  (state/set-state! [:preferred-file-format] :edn))
+
 (defn set-preferred-workflow!
   [workflow]
   (when workflow

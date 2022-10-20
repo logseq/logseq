@@ -25,7 +25,7 @@
                   :db/index true}
    :block/collapsed? {:db/index true}
 
-   ;; :markdown, :org
+   ;; :edn, :markdown, :org
    :block/format {}
 
    ;; belongs to which page

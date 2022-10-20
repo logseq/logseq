@@ -402,6 +402,12 @@ should be done through this fn in order to get global config and config defaults
 
        (get-in @state [:me :preferred_format] "markdown")))))
 
+(defn get-preferred-file-format
+  [repo]
+  (let [config (get-config repo)]
+    (or (:preferred-file-format config)
+        (get-preferred-format repo))))
+
 ;; TODO: consider adding a pane in Settings to set this through the GUI (rather
 ;; than having to go through the config.edn file)
 (defn get-editor-command-trigger

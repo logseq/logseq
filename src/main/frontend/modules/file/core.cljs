@@ -7,6 +7,7 @@
             [frontend.state :as state]
             [frontend.util.property :as property]
             [frontend.util.fs :as fs-util]
+            [frontend.util :as util]
             [frontend.handler.file :as file-handler]))
 
 (defn- indented-block-content
@@ -107,8 +108,7 @@
   [page ok-handler]
   (when-let [repo (state/get-current-repo)]
     (when (:block/name page)
-      (let [format (name (get page :block/format
-                              (state/get-preferred-format)))
+      (let [format (name (state/get-preferred-file-format repo))
             title (string/capitalize (:block/name page))
             whiteboard-page? (= "whiteboard" (:block/type page))
             format (if whiteboard-page? "edn" format)
@@ -138,9 +138,21 @@
         file-db-id (-> page-block :block/file :db/id)
         file-path (-> (db-utils/entity file-db-id) :file/path)]
     (if (and (string? file-path) (not-empty file-path))
-      (let [new-content (if (= "whiteboard" (:block/type page-block))
+      (let [ext (util/get-file-ext file-path)
+            new-content (cond
+                          (= "whiteboard" (:block/type page-block))
                           (pr-str {:blocks tree
                                    :pages (list (remove-transit-ids page-block))})
+
+                          (= "edn" ext)
+                          (let [tree (map #(dissoc %
+                                                   :block/format
+                                                   :block/level
+                                                   :block/unordered) tree)]
+                            (pr-str {:page page-block
+                                     :blocks tree}))
+
+                          :else
                           (tree->file-content tree {:init-level init-level}))
             files [[file-path new-content]]
             repo (state/get-current-repo)]

@@ -30,13 +30,17 @@
                :or   {pages []
                       blocks []
                       ast []}}
-              (cond (contains? gp-config/mldoc-support-formats format)
-                    (extract/extract file content extract-options')
+              (cond
+                (gp-config/whiteboard? file)
+                (extract/extract-whiteboard-edn file content extract-options')
 
-                    (gp-config/whiteboard? file)
-                    (extract/extract-whiteboard-edn file content extract-options')
+                (string/ends-with? file ".edn")
+                (gp-util/safe-read-string content)
 
-                    :else nil)
+                (contains? gp-config/mldoc-support-formats format)
+                (extract/extract file content extract-options')
+
+                :else nil)
               delete-blocks (delete-blocks-fn (first pages) file)
               block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
               block-refs-ids (->> (mapcat :block/refs blocks)
@@ -44,7 +48,7 @@
                                                          (= :block/uuid (first ref)))))
                                   (map (fn [ref] {:block/uuid (second ref)}))
                                   (seq))
-                   ;; To prevent "unique constraint" on datascript
+              ;; To prevent "unique constraint" on datascript
               block-ids (set/union (set block-ids) (set block-refs-ids))
               pages (extract/with-ref-pages pages blocks)
               pages-index (map #(select-keys % [:block/name]) pages)]
