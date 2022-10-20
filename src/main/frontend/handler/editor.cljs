@@ -1421,8 +1421,7 @@
         (assets-handler/resolve-asset-real-path-url (state/get-current-repo) path)
 
         (util/electron?)
-        (str "assets://"
-             (assets-handler/encode-to-protect-assets-schema-path full-path))
+        (str "assets://" full-path)
 
         (mobile-util/native-platform?)
         (mobile-util/convert-file-src full-path)
@@ -1448,8 +1447,7 @@
     (save-block! repo block content)
     (when (and local? delete-local?)
       ;; FIXME: should be relative to current block page path
-      (when-let [href (if (util/electron?)
-                        (assets-handler/decode-protected-assets-schema-path href)
+      (when-let [href (if (util/electron?) href
                         (second (re-find #"\((.+)\)$" full-text)))]
         (fs/unlink! repo
                     (config/get-repo-path
