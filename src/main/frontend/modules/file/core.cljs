@@ -8,7 +8,8 @@
             [frontend.util.property :as property]
             [frontend.util.fs :as fs-util]
             [frontend.util :as util]
-            [frontend.handler.file :as file-handler]))
+            [frontend.handler.file :as file-handler]
+            [frontend.version :as version]))
 
 (defn- indented-block-content
   [content spaces-tabs]
@@ -201,7 +202,9 @@
                           (let [{:keys [blocks refs]} (edn-transform-blocks page-block tree)]
                             (with-out-str
                               (util/pprint
-                               {:page (remove-transit-ids page-block)
+                               {:version version/edn-file-format-version
+                                :page (-> (remove-transit-ids page-block)
+                                          (assoc :block/file-format :edn))
                                 :blocks blocks
                                 :refs refs})))
 

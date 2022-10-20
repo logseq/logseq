@@ -25,8 +25,11 @@
                   :db/index true}
    :block/collapsed? {:db/index true}
 
-   ;; :edn, :markdown, :org
+   ;; :markdown, :org
    :block/format {}
+
+   ;; :edn
+   :block/file-format {}
 
    ;; belongs to which page
    :block/page {:db/valueType :db.type/ref

@@ -55,16 +55,13 @@
       (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
             blocks (model/get-page-blocks-no-cache repo (:block/name page-block) {:pull-keys pull-keys})
             blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)
-            ext (some-> (db/entity repo (:db/id (:block/file page-block)))
-                        :file/path
-                        (util/get-file-ext))]
+            edn-file? (= :edn (:block/file-format page-block))]
         (when-not (and (= 1 (count blocks))
                        (string/blank? (:block/content (first blocks)))
                        (nil? (:block/file page-block)))
-          (let [tree (if (or whiteboard? (= ext "edn"))
+          (let [tree (if (or whiteboard? edn-file?)
                        blocks
                        (tree/blocks->vec-tree repo blocks (:block/name page-block)))]
-            (util/pprint tree)
             (if page-block
               (file/save-tree! page-block tree)
               (js/console.error (str "can't find page id: " page-db-id)))))))))
