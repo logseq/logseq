@@ -247,6 +247,26 @@
     {:pages (list page-block)
      :blocks blocks}))
 
+;; TODO: validate data
+(defn extract-from-edn
+  "Extract blocks from given edn file."
+  [file content {:keys [verbose] :or {verbose true}}]
+  (let [_ (when verbose (println "Parsing start: " file))
+        {:keys [page blocks refs]} (gp-util/safe-read-string content)
+        page-id (:block/uuid page)]
+    (when page-id
+      (let [page-lookup [:block/uuid page-id]
+            blocks (concat
+                    (map (fn [block]
+                           (assoc block
+                                  :block/page page-lookup
+                                  :block/parent (or (:block/parent block) page-lookup)
+                                  :block/path-refs (set (conj (:block/path-refs block) page-lookup)))) blocks)
+                    refs)
+            _ (when verbose (println "Parsing finished: " file))]
+        {:pages [page]
+         :blocks blocks}))))
+
 (defn- with-block-uuid
   [pages]
   (->> (gp-util/distinct-by :block/name pages)

@@ -118,7 +118,8 @@
                                     (update b k
                                             (fn [refs]
                                               (if (map? refs)
-                                                (when-not (= (:db/id refs) (:db/id page-block))
+                                                (when (or (not= (:db/id refs) (:db/id page-block))
+                                                          (= k :block/left))
                                                   [:block/uuid (get id->uuid (:db/id refs))])
                                                 (->>
                                                  (remove (fn [ref] (= (:db/id page-block) (:db/id ref))) refs)

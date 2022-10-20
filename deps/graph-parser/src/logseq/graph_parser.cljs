@@ -35,7 +35,7 @@
                 (extract/extract-whiteboard-edn file content extract-options')
 
                 (string/ends-with? file ".edn")
-                (gp-util/safe-read-string content)
+                (extract/extract-from-edn file content extract-options')
 
                 (contains? gp-config/mldoc-support-formats format)
                 (extract/extract file content extract-options')
