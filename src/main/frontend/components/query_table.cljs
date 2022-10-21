@@ -39,9 +39,16 @@
     (:block/name item)
     (get-in item [:block/properties sort-by-column])))
 
+(defn- locale-compare
+  "Use locale specific comparison for strings and general comparison for others."
+  [x y]
+  (if (and (string? x) (string? y))
+    (.localeCompare x y (.language js/navigator))
+    (< x y)))
+
 (defn- sort-result [result {:keys [sort-by-column sort-desc?]}]
   (if (some? sort-by-column)
-    (let [comp (if sort-desc? > <)]
+    (let [comp (if sort-desc? #(locale-compare %2 %1) locale-compare)]
       (sort-by (fn [item]
                  (block/normalize-block (sort-by-fn sort-by-column item)))
                comp
