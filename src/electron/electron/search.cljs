@@ -1,4 +1,5 @@
 (ns electron.search
+  "Provides both page level and block level index"
   (:require ["path" :as path]
             ["fs-extra" :as fs]
             ["better-sqlite3" :as sqlite3]
@@ -31,25 +32,52 @@
   (when db
     (.prepare db sql)))
 
-(defn add-triggers!
+(defn add-blocks-fts-triggers!
+  "Table bindings of blocks tables and the blocks FTS virtual tables"
   [db]
-  (let [triggers ["CREATE TRIGGER IF NOT EXISTS blocks_ad AFTER DELETE ON blocks
-    BEGIN
-        DELETE from blocks_fts where rowid = old.id;
-    END;"
+  (let [triggers [;; add
+                  "CREATE TRIGGER IF NOT EXISTS blocks_ad AFTER DELETE ON blocks
+                  BEGIN
+                      DELETE from blocks_fts where rowid = old.id;
+                  END;"
+                  ;; insert
                   "CREATE TRIGGER IF NOT EXISTS blocks_ai AFTER INSERT ON blocks
-    BEGIN
-        INSERT INTO blocks_fts (rowid, uuid, content, page)
-        VALUES (new.id, new.uuid, new.content, new.page);
-    END;
-"
+                  BEGIN
+                      INSERT INTO blocks_fts (rowid, uuid, content, page)
+                      VALUES (new.id, new.uuid, new.content, new.page);
+                  END;"
+                  ;; update
                   "CREATE TRIGGER IF NOT EXISTS blocks_au AFTER UPDATE ON blocks
-    BEGIN
-        DELETE from blocks_fts where rowid = old.id;
-        INSERT INTO blocks_fts (rowid, uuid, content, page)
-        VALUES (new.id, new.uuid, new.content, new.page);
-    END;"
-                  ]]
+                  BEGIN
+                      DELETE from blocks_fts where rowid = old.id;
+                      INSERT INTO blocks_fts (rowid, uuid, content, page)
+                      VALUES (new.id, new.uuid, new.content, new.page);
+                  END;"]]
+    (doseq [trigger triggers]
+      (let [stmt (prepare db trigger)]
+        (.run ^object stmt)))))
+
+(defn add-pages-fts-triggers!
+  "Table bindings of pages tables and the pages FTS virtual tables"
+  [db]
+  (let [triggers [;; add
+                  "CREATE TRIGGER IF NOT EXISTS pages_ad AFTER DELETE ON pages
+                  BEGIN
+                      DELETE from pages_fts where rowid = old.id;
+                  END;"
+                  ;; insert
+                  "CREATE TRIGGER IF NOT EXISTS pages_ai AFTER INSERT ON pages
+                  BEGIN
+                      INSERT INTO pages_fts (rowid, uuid, content)
+                      VALUES (new.id, new.uuid, new.content);
+                  END;"
+                  ;; update
+                  "CREATE TRIGGER IF NOT EXISTS pages_au AFTER UPDATE ON pages
+                  BEGIN
+                      DELETE from pages_fts where rowid = old.id;
+                      INSERT INTO pages_fts (rowid, uuid, content)
+                      VALUES (new.id, new.uuid, new.content);
+                  END;"]]
     (doseq [trigger triggers]
       (let [stmt (prepare db trigger)]
         (.run ^object stmt)))))
@@ -66,6 +94,19 @@
 (defn create-blocks-fts-table!
   [db]
   (let [stmt (prepare db "CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(uuid, content, page)")]
+    (.run ^object stmt)))
+
+(defn create-pages-table!
+  [db]
+  (let [stmt (prepare db "CREATE TABLE IF NOT EXISTS pages (
+                        id INTEGER PRIMARY KEY,
+                        uuid TEXT NOT NULL,
+                        content TEXT NOT NULL)")]
+    (.run ^object stmt)))
+
+(defn create-pages-fts-table!
+  [db]
+  (let [stmt (prepare db "CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(uuid, content, page)")]
     (.run ^object stmt)))
 
 (defn get-search-dir
@@ -96,7 +137,10 @@
       (try (let [db (sqlite3 db-full-path nil)]
              (create-blocks-table! db)
              (create-blocks-fts-table! db)
-             (add-triggers! db)
+             (create-pages-table! db)
+             (create-pages-fts-table! db)
+             (add-blocks-fts-triggers! db)
+             (add-pages-fts-triggers! db)
              (swap! databases assoc db-sanitized-name db))
            (catch :default e
              (logger/error (str e ": " db-name))
@@ -111,6 +155,10 @@
       (doseq [db-name dbs]
         (open-db! db-name)))))
 
+(defn upsert-pages!
+  [repo page-ids]
+  (prn page-ids))
+
 (defn upsert-blocks!
   [repo blocks]
   (if-let [db (get-db repo)]
@@ -120,7 +168,9 @@
                                     (fn [blocks]
                                       (doseq [block blocks]
                                         (.run ^object insert block))))]
-      (insert-many blocks))
+      (insert-many blocks)
+      ;; TODO Junyi: when blocks are updated, update the page index on demand
+      (upsert-pages! repo blocks))
     (do
       (open-db! repo)
       (upsert-blocks! repo blocks))))
@@ -132,7 +182,9 @@
                    (string/join ", "))
           sql (str "DELETE from blocks WHERE id IN (" ids ")")
           stmt (prepare db sql)]
-      (.run ^object stmt))))
+      (.run ^object stmt))
+    ;; TODO Junyi: when blocks are updated, update the page index on demand
+    (upsert-pages! repo ids)))
 
 ;; (defn search-blocks-fts
 ;;   [q]
@@ -151,6 +203,37 @@
      :keywordize-keys true)))
 
 (defn search-blocks
+  [repo q {:keys [limit page]}]
+  (when-let [database (get-db repo)]
+    (when-not (string/blank? q)
+      (let [match-input (-> q
+                            (string/replace " and " " AND ")
+                            (string/replace " & " " AND ")
+                            (string/replace " or " " OR ")
+                            (string/replace " | " " OR ")
+                            (string/replace " not " " NOT "))
+            match-input (if (not= q match-input)
+                          (string/replace match-input "," "")
+                          (str "\"" match-input "\""))
+            non-match-input (str "%" (string/replace q #"\s+" "%") "%")
+            limit  (or limit 20)
+            select "select rowid, uuid, content, page from blocks_fts where "
+            pg-sql (if page "page = ? and" "")
+            match-sql (str select
+                           pg-sql
+                           " content match ? order by rank limit ?")
+            non-match-sql (str select
+                               pg-sql
+                               " content like ? limit ?")]
+        (->>
+         (concat
+          (search-blocks-aux database match-sql match-input page limit)
+          (search-blocks-aux database non-match-sql non-match-input page limit))
+         (distinct)
+         (take limit)
+         (vec))))))
+
+(defn search-pages-content
   [repo q {:keys [limit page]}]
   (when-let [database (get-db repo)]
     (when-not (string/blank? q)
