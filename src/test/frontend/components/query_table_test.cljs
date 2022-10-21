@@ -1,8 +1,12 @@
 (ns frontend.components.query-table-test
   (:require [clojure.test :refer [deftest testing are]]
+            [frontend.state :as state]
             [frontend.components.query-table :as query-table]))
 
 (deftest sort-result
+  ;; Define since it's not defined
+  (state/set-preferred-language! "en")
+
   (testing "sort by block content"
     (are [sort-state result sorted-result]
          (= (mapv #(hash-map :block/content %) sorted-result)
@@ -49,12 +53,18 @@
 
          {:sort-desc? false :sort-by-column :title}
          [{:title "abc"} {:title "cde"}]
-         [{:title "abc"} {:title "cde"}]
+         [{:title "abc"} {:title "cde"}]))
 
+  (testing "sort by string block property for specific locale"
+    (state/set-preferred-language! "zh-CN")
+    (are [sort-state result sorted-result]
+         (= (mapv #(hash-map :block/properties %) sorted-result)
+            (#'query-table/sort-result (mapv #(hash-map :block/properties %) result) sort-state))
          {:sort-desc? true :sort-by-column :title}
          [{:title "意志"} {:title "圆圈"}]
          [{:title "圆圈"} {:title "意志"}]
 
          {:sort-desc? false :sort-by-column :title}
          [{:title "圆圈"} {:title "意志"}]
-         [{:title "意志"} {:title "圆圈"}])))
+         [{:title "意志"} {:title "圆圈"}])
+    (state/set-preferred-language! "en")))
