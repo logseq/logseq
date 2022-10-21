@@ -49,4 +49,12 @@
 
          {:sort-desc? false :sort-by-column :title}
          [{:title "abc"} {:title "cde"}]
-         [{:title "abc"} {:title "cde"}])))
+         [{:title "abc"} {:title "cde"}]
+
+         {:sort-desc? true :sort-by-column :title}
+         [{:title "意志"} {:title "圆圈"}]
+         [{:title "圆圈"} {:title "意志"}]
+
+         {:sort-desc? false :sort-by-column :title}
+         [{:title "圆圈"} {:title "意志"}]
+         [{:title "意志"} {:title "圆圈"}])))
