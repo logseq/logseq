@@ -8,6 +8,7 @@
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
             [frontend.components.scheduled-deadlines :as scheduled]
+            [frontend.components.property :as property]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -24,6 +25,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
             [frontend.search :as search]
@@ -287,43 +289,50 @@
           old-name (or title page-name)]
       [:h1.page-title.flex.cursor-pointer.gap-1
        {:on-mouse-down (fn [e]
-                           (when (util/right-click? e)
-                             (state/set-state! :page-title/context {:page page-name})))
-          :on-click (fn [e]
-                      (.preventDefault e)
-                      (if (gobj/get e "shiftKey")
-                        (when-let [page (db/pull repo '[*] [:block/name page-name])]
-                          (state/sidebar-add-block!
-                           repo
-                           (:db/id page)
-                           :page))
-                        (when (and (not hls-page?) (not fmt-journal?))
-                          (reset! *input-value (if untitled? "" old-name))
-                          (reset! *edit? true))))}
+                         (when (util/right-click? e)
+                           (state/set-state! :page-title/context {:page page-name})))
+        :on-click (fn [e]
+                    (.preventDefault e)
+                    (if (gobj/get e "shiftKey")
+                      (when-let [page (db/pull repo '[*] [:block/name page-name])]
+                        (state/sidebar-add-block!
+                         repo
+                         (:db/id page)
+                         :page))
+                      (when (and (not hls-page?) (not fmt-journal?))
+                        (reset! *input-value (if untitled? "" old-name))
+                        (reset! *edit? true))))}
        (when (not= icon "") [:span.page-icon icon])
-       [:div.page-title-sizer-wrapper.relative.w-full
-        (when (rum/react *edit?)
-          (page-title-editor {:*title-value *title-value
-                              :*edit? *edit?
-                              :*input-value *input-value
-                              :title title
-                              :page-name page-name
-                              :old-name old-name
-                              :untitled? untitled?
-                              :whiteboard-page? whiteboard-page?}))
-        [:span.title.block
-         {:data-value (rum/react *input-value)
-          :data-ref page-name
-          :style {:opacity (when @*edit? 0)
-                  :pointer-events "none"
-                  :font-weight "inherit"
-                  :white-space "nowrap"
-                  :overflow "hidden"
-                  :text-overflow "ellipsis"
-                  :min-width "80px"}}
-         (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
-               untitled? [:span.opacity-50 (t :untitled)]
-               :else title)]]])))
+       [:div.flex.flex-1.flex-row.justify-between.items-center
+        [:div.page-title-sizer-wrapper.relative
+         (when (rum/react *edit?)
+           (page-title-editor {:*title-value *title-value
+                               :*edit? *edit?
+                               :*input-value *input-value
+                               :title title
+                               :page-name page-name
+                               :old-name old-name
+                               :untitled? untitled?
+                               :whiteboard-page? whiteboard-page?}))
+         [:span.title.block
+          {:data-value (rum/react *input-value)
+           :data-ref page-name
+           :style {:opacity (when @*edit? 0)
+                   :pointer-events "none"
+                   :font-weight "inherit"
+                   :white-space "nowrap"
+                   :overflow "hidden"
+                   :text-overflow "ellipsis"
+                   :min-width "80px"}}
+          (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
+                untitled? [:span.opacity-50 (t :untitled)]
+                :else title)]]
+        [:a.text-xl.fade-link
+         {:title "Toggle properties"
+          :on-click (fn [e]
+                      (util/stop e)
+                      (property-handler/toggle-properties page-name))}
+         ": :"]]])))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
@@ -385,18 +394,22 @@
                    (when-not (db/entity repo [:block/name page-name])
                      (let [m (block/page-name->map path-page-name true)]
                        (db/transact! repo [m])))
-                   (db/pull [:block/name page-name])))
-          {:keys [icon]} (:block/properties page)
+                   (db/pull-block (:db/id (db/entity [:block/name page-name])))))
+          entity (if block?
+                   (db/entity repo [:block/uuid block-id])
+                   page)
           page-name (:block/name page)
           page-original-name (:block/original-name page)
           title (or page-original-name page-name)
+          {:keys [icon]} (:block/properties page)
           icon (or icon "")
           today? (and
                   journal?
                   (= page-name (util/page-name-sanity-lc (date/journal-name))))
           *control-show? (::control-show? state)
           *all-collapsed? (::all-collapsed? state)
-          *current-block-page (::current-page state)]
+          *current-block-page (::current-page state)
+          properties-show? (state/sub [:ui/properties-show? page-name])]
       [:div.flex-1.page.relative
        (merge (if (seq (:block/tags page))
                 (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
@@ -427,6 +440,37 @@
                 (when config/lsp-enabled?
                   (plugins/hook-ui-slot :page-head-actions-slotted nil)
                   (plugins/hook-ui-items :pagebar))])])
+
+          (when properties-show?
+            (let [class? (= "logseq/class" (:block/type entity))]
+              [:div.p-2.mb-4
+               [:div.flex.flex-row.items-center.mb-2
+                [:div.mr-2 "Mark this page as a Class"]
+                (ui/toggle class?
+                           (fn []
+                             (if class?
+                               (db/transact! [[:db/retract (:db/id entity) :block/type]])
+                               (db/transact! [{:db/id (:db/id entity)
+                                               :block/type "logseq/class"}]))))]
+
+               [:div.flex.flex-row.items-center.mb-2
+                [:div.mr-2 "Inherit properties from other page(s): "]
+                (let [inherit-from (:block/inherit-from entity)]
+                  (if (seq inherit-from)
+                    [:ul
+                     (for [page inherit-from]
+                       [:li (:block/original-name (db/entity (:db/id page)))])]
+                    [:input.form-input.block.col-span-1
+                     {:placeholder "Page name"
+                      :on-blur (fn [e]
+                                 (let [page (util/evalue e)]
+                                   (when-not (string/blank? page)
+                                     (property-handler/inherit-page! (:db/id entity) page))))}]))]
+
+               [:div.font-medium.py-2 "Properties:"]
+
+               (property/properties entity)]))
+
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))
              (let [config {:id "block-parent"

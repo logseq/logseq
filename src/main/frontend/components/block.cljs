@@ -18,6 +18,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.components.query-table :as query-table]
             [frontend.components.svg :as svg]
+            [frontend.components.property :as property-component]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -49,6 +50,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
@@ -2771,6 +2773,16 @@
 
       (when @*show-right-menu?
         (block-right-menu config block edit?))]
+
+     (when-not collapsed?
+       (let [refs (->> (db/pull-many '[*] (map :db/id (:block/refs block)))
+                       (filter #(= "logseq/class" (:block/type %))))]
+         (when (seq refs)
+           (for [ref refs]
+             [:div.my-4 {:style {:margin-left 56}}
+              [:div.text-2xl.font-medium.mb-2 (:block/original-name ref)]
+              [:div
+               (property-component/properties ref)]]))))
 
      (block-children config block children collapsed?)
 

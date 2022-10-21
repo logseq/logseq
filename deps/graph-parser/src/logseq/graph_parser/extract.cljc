@@ -253,6 +253,7 @@
   [file content {:keys [verbose] :or {verbose true}}]
   (let [_ (when verbose (println "Parsing start: " file))
         {:keys [page blocks refs]} (gp-util/safe-read-string content)
+        _ (when verbose (println "Parsing finished: " file))
         page-id (:block/uuid page)]
     (when page-id
       (let [page-lookup [:block/uuid page-id]
@@ -264,8 +265,8 @@
                                   :block/parent (or (:block/parent block) page-lookup)
                                   :block/path-refs (set (conj (:block/path-refs block) page-lookup)))) blocks)
                     refs)
-            _ (when verbose (println "Parsing finished: " file))]
-        {:pages [page]
+            page' (assoc page :block/file [:file/path file])]
+        {:pages [page']
          :blocks blocks}))))
 
 (defn- with-block-uuid

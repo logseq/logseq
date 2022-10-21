@@ -91,7 +91,8 @@
                   :block/tags
                   :block/alias
                   :block/namespace
-                  :block/macros]
+                  :block/macros
+                  :block/inherit-from]
         ref-ids (->>
                  (mapcat (fn [block]
                            (->>
@@ -145,8 +146,8 @@
               content (if page? nil (transform-content f level opts))
               new-content
               (if-let [children (seq (:block/children f))]
-                     (cons content (tree->file-content-aux children {:init-level (inc level)}))
-                     [content])]
+                (cons content (tree->file-content-aux children {:init-level (inc level)}))
+                [content])]
           (conj! block-contents new-content)
           (recur r level))))))
 
@@ -183,7 +184,38 @@
         (db/transact! tx)
         (when ok-handler (ok-handler))))))
 
-(defn- remove-transit-ids [block] (dissoc block :db/id :block/file))
+(defn- remove-transit-ids
+  [block]
+  (let [block (dissoc block :db/id :block/file)
+        ref-keys [:block/namespace :block/inherit-from :block/tags :block/alias]
+        ref-ids (->>
+                 (select-keys block ref-keys)
+                 vals
+                 (mapcat (fn [ref] (if (map? ref)
+                                     [(:db/id ref)]
+                                     (map :db/id ref))))
+                 (remove nil?)
+                 (set))
+        refs (db/pull-many (state/get-current-repo)
+                           '[:db/id :block/uuid]
+                           ref-ids)
+        id->uuid (zipmap (map :db/id refs) (map :block/uuid refs))]
+    (->>
+     (reduce (fn [b k]
+               (update b k
+                       (fn [refs]
+                         (if (map? refs)
+                           [:block/uuid (get id->uuid (:db/id refs))]
+                           (->> refs
+                                (map (fn [item]
+                                       [:block/uuid (get id->uuid (:db/id item))]))
+                                (set))))))
+             block
+             ref-keys)
+     (filter (fn [[_ v]]
+               (or (and (coll? v) (seq v))
+                   (and (not (coll? v)) v))))
+     (into {}))))
 
 (defn save-tree-aux!
   [page-block tree]
@@ -203,8 +235,7 @@
                             (with-out-str
                               (util/pprint
                                {:version version/edn-file-format-version
-                                :page (-> (remove-transit-ids page-block)
-                                          (assoc :block/file-format :edn))
+                                :page (remove-transit-ids page-block)
                                 :blocks blocks
                                 :refs refs})))
 

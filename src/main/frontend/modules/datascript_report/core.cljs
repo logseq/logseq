@@ -1,6 +1,7 @@
 (ns frontend.modules.datascript-report.core
   (:require [clojure.set :as set]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [frontend.state :as state]))
 
 (def keys-of-deleted-entity 1)
 
@@ -28,8 +29,16 @@
                   (let [block-entity
                         (get-entity-from-db-after-or-before db-before db-after x)
                         page-entity
-                        (when-let [page-id (-> block-entity :block/page :db/id)]
-                          (get-entity-from-db-after-or-before db-before db-after page-id))]
+                        (or
+                         (when-let [page-id (-> block-entity :block/page :db/id)]
+                           (get-entity-from-db-after-or-before db-before db-after page-id))
+                         (and
+                          (= :edn (state/get-preferred-file-format (state/get-current-repo)))
+                          (or
+                           (contains? #{"logseq/property" "logseq/class"} (:block/type block-entity))
+                           (and (:block/name block-entity)
+                                (seq (:block/properties block-entity))))
+                          block-entity))]
                     (cond-> acc
                       (some? block-entity)
                       (update :blocks conj block-entity)

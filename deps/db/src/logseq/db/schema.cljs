@@ -28,9 +28,6 @@
    ;; :markdown, :org
    :block/format {}
 
-   ;; :edn
-   :block/file-format {}
-
    ;; belongs to which page
    :block/page {:db/valueType :db.type/ref
                 :db/index true}
@@ -65,6 +62,12 @@
    ;; map, key -> original property value's content
    :block/properties-text-values {}
 
+   ;; inherit properties from other pages
+   :block/inherit-from {:db/valueType :db.type/ref
+                        :db/cardinality :db.cardinality/many}
+
+   ;; TODO: EDN version doesn't need this, we probably need multiple schemas for
+   ;; different formats
    ;; first block that's not a heading or unordered list
    :block/pre-block? {}
 

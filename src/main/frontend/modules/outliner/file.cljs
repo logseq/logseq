@@ -58,7 +58,9 @@
             edn? (= :edn (state/get-preferred-file-format repo))]
         (when-not (and (= 1 (count blocks))
                        (string/blank? (:block/content (first blocks)))
-                       (nil? (:block/file page-block)))
+                       (if (= (state/get-preferred-file-format repo) :edn)
+                         false
+                         (nil? (:block/file page-block))))
           (let [tree (if (or whiteboard? edn?)
                        blocks
                        (tree/blocks->vec-tree repo blocks (:block/name page-block)))]
