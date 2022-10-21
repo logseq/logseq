@@ -6,7 +6,7 @@
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
-            ["@logseq-sprocketc/logseq-ui/dist/esm" :refer [Switch]]
+            ["@logseq-sprocketc/logseq-ui" :refer [Switch]]
             [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
@@ -37,13 +37,15 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
+;; UI Lib Components
+(def switch (r/adapt-class Switch))
+
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
 (def resize-provider (r/adapt-class (gobj/get Resize "ResizeProvider")))
 (def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
-(def switch (r/adapt-class Switch))
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
 (def useInView (gobj/get react-intersection-observer "useInView"))
 
