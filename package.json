@@ -89,7 +89,7 @@
         "@capacitor/status-bar": "^4.0.0",
         "@excalidraw/excalidraw": "0.12.0",
         "@kanru/rage-wasm": "^0.3.0",
-        "@logseq-sprocketc/logseq-ui": "0.0.3",
+        "@logseq-sprocketc/logseq-ui": "^0.0.4",
         "@logseq/capacitor-file-sync": "0.0.12",
         "@logseq/react-tweet-embed": "1.3.1-1",
         "@sentry/react": "^6.18.2",

@@ -647,12 +647,8 @@
 
 (rum/defc whiteboards-enabled-switcher
   [enabled?]
-  (ui/switch {:checked enabled?})
-  #_(ui/toggle enabled?
-             (fn []
-               (let [value (not enabled?)]
-                 (config-handler/set-config! :feature/enable-whiteboards? value)))
-             true))
+  (ui/switch {:checked enabled?
+              :on-click #(config-handler/set-config! :feature/enable-whiteboards? (not enabled?))}))
 
 (defn whiteboards-switcher-row [enabled?]
   (row-with-button-action

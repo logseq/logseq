@@ -482,10 +482,10 @@
   resolved "https://registry.yarnpkg.com/@kanru/rage-wasm/-/rage-wasm-0.3.0.tgz#de96b1fda1f781ff401d43b50d0f95b7338c4399"
   integrity sha512-2LMRS27nNJPqFNpRQL7kXG0kgBeIPo63KM6u0Xu6Es5XIS7LP4MFtdHkCg8Pt7IhMM7GuOa2YnzAZgKBxE1lcw==
 
-"@logseq-sprocketc/logseq-ui@0.0.3":
-  version "0.0.3"
-  resolved "https://npm.pkg.github.com/download/@logseq-sprocketc/logseq-ui/0.0.3/e793715d6e7853ed56fcbf2d1cf6a5360a50f940#e793715d6e7853ed56fcbf2d1cf6a5360a50f940"
-  integrity sha512-SqD+a2+a05bQu97jxsQ9YYFp2bWKF23bmJL0VlsGgmo3H1COiTP1RY5MkjMCqH9gQ2jAhVu9YVEGO0e5b8jECQ==
+"@logseq-sprocketc/logseq-ui@^0.0.4":
+  version "0.0.4"
+  resolved "https://npm.pkg.github.com/download/@logseq-sprocketc/logseq-ui/0.0.4/d951df88ba31f76dbc50a1b6408a10ec8496b024#d951df88ba31f76dbc50a1b6408a10ec8496b024"
+  integrity sha512-67pzPCsU9YA8v4xvfTCiYKZZsjDNQcerhlGB4RYeK1QmIYdpXSatWJx5alECo1GauyUgssTjtB0RO4EMIWkM4w==
   dependencies:
     react "17.0.2"
     react-dom "17.0.2"
