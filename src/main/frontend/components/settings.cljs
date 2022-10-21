@@ -647,7 +647,8 @@
 
 (rum/defc whiteboards-enabled-switcher
   [enabled?]
-  (ui/toggle enabled?
+  (ui/switch {:checked enabled?})
+  #_(ui/toggle enabled?
              (fn []
                (let [value (not enabled?)]
                  (config-handler/set-config! :feature/enable-whiteboards? value)))
