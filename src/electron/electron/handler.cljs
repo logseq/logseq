@@ -295,12 +295,22 @@
   [])
 
 (defmethod handle :transact-blocks [_window [_ repo data]]
-  (let [{:keys [blocks-to-remove-set blocks-to-add]} data]
+  (let [{:keys [blocks-to-remove-set blocks-to-add]} data
+        affected-pages-by-removal (when (seq blocks-to-remove-set)
+                                    ;; Be careful about Side Effect! Execution order matters!
+                                    ;; Should query before blocks are deleted in 
+                                    (search/get-page-by-block-ids repo blocks-to-remove-set))
+        affected-pages (->> (map :page blocks-to-add)
+                            (concat affected-pages-by-removal)
+                            distinct)]
     (when (seq blocks-to-remove-set)
       (search/delete-blocks! repo blocks-to-remove-set))
     (when (seq blocks-to-add)
       ;; unneeded serialization
-      (search/upsert-blocks! repo (bean/->js blocks-to-add)))))
+      (search/upsert-blocks! repo (bean/->js blocks-to-add)))
+    (when (seq affected-pages)
+      ;; TODO Junyi: update pages
+      (prn "affected-pages: " affected-pages))))
 
 (defmethod handle :truncate-blocks [_window [_ repo]]
   (search/truncate-blocks-table! repo))

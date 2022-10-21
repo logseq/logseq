@@ -5,7 +5,8 @@
             ["better-sqlite3" :as sqlite3]
             [clojure.string :as string]
             ["electron" :refer [app]]
-            [electron.logger :as logger]))
+            [electron.logger :as logger]
+            [cljs-bean.core :as bean]))
 
 (defonce databases (atom nil))
 
@@ -155,6 +156,30 @@
       (doseq [db-name dbs]
         (open-db! db-name)))))
 
+(defn- clj-list->sql
+  "Turn clojure list into SQL list
+   '(1 2 3 4)
+   ->
+   \"('1','2','3','4')\""
+  [ids]
+  (str "(" (->> (map (fn [id] (str "'" id "'")) ids)
+                (string/join ", ")) ")"))
+
+(defn get-page-by-block-ids
+  "Return a clojure list of the page ids that contains the provided block ids (distinct)"
+  [repo block-ids]
+  (if-let [db (get-db repo)]
+    ;; TODO: what if a CONFLICT on uuid
+    (let [sql   (str "SELECT DISTINCT page from blocks WHERE id IN " (clj-list->sql block-ids))
+          _ (prn sql) ;; TODO Junyi
+          query (prepare db sql)]
+      (->> (.all ^object query)
+           bean/->clj
+           (map :page)))
+    (do
+      (open-db! repo)
+      (get-page-by-block-ids repo block-ids))))
+
 (defn upsert-pages!
   [repo page-ids]
   (prn page-ids))
@@ -168,9 +193,7 @@
                                     (fn [blocks]
                                       (doseq [block blocks]
                                         (.run ^object insert block))))]
-      (insert-many blocks)
-      ;; TODO Junyi: when blocks are updated, update the page index on demand
-      (upsert-pages! repo blocks))
+      (insert-many blocks))
     (do
       (open-db! repo)
       (upsert-blocks! repo blocks))))
@@ -178,9 +201,7 @@
 (defn delete-blocks!
   [repo ids]
   (when-let [db (get-db repo)]
-    (let [ids (->> (map (fn [id] (str "'" id "'")) ids)
-                   (string/join ", "))
-          sql (str "DELETE from blocks WHERE id IN (" ids ")")
+    (let [sql (str "DELETE from blocks WHERE id IN " (clj-list->sql ids))
           stmt (prepare db sql)]
       (.run ^object stmt))
     ;; TODO Junyi: when blocks are updated, update the page index on demand
