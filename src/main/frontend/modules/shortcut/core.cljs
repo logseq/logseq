@@ -98,6 +98,10 @@
                :or   {set-global-keys? true
                       prevent-default? false
                       skip-installed? false}}]
+  (when-let [install-id (ffirst (filter (fn [[id m]]
+                                          (= handler-id (:group m))) @*installed))]
+    (uninstall-shortcut! install-id))
+
   (let [shortcut-map (dh/shortcut-map handler-id state)
         handler      (new KeyboardShortcutHandler js/window)]
     ;; set arrows enter, tab to global
@@ -178,11 +182,14 @@
 (defn refresh!
   "Always use this function to refresh shortcuts"
   []
-  (log/info :shortcut/refresh @*installed)
-  (doseq [id (keys @*installed)]
-    (uninstall-shortcut! id))
-  (install-shortcuts!)
-  (state/pub-event! [:shortcut-handler-refreshed]))
+  (when-not (:ui/shortcut-handler-refreshing? @state/state)
+    (state/set-state! :ui/shortcut-handler-refreshing? true)
+    (log/info :shortcut/refresh @*installed)
+    (doseq [id (keys @*installed)]
+      (uninstall-shortcut! id))
+    (install-shortcuts!)
+    (state/pub-event! [:shortcut-handler-refreshed])
+    (state/set-state! :ui/shortcut-handler-refreshing? false)))
 
 (defn- name-with-meta [e]
   (let [ctrl    (.-ctrlKey e)
