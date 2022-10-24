@@ -2645,6 +2645,7 @@
           (.schedule this next-state nil nil)))))
 
   (pause [this]
+    (<! (<rsapi-cancel-all-requests))
     (put-sync-event! {:event :pause
                       :data  {:graph-uuid graph-uuid
                               :epoch      (tc/to-epoch (t/now))}})

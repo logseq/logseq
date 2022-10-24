@@ -8,7 +8,8 @@
             [frontend.util :as util]
             [goog.events :as events]
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
-            [lambdaisland.glogi :as log])
+            [lambdaisland.glogi :as log]
+            [goog.functions :refer [debounce]])
   (:import [goog.events KeyCodes KeyHandler KeyNames]
            [goog.ui KeyboardShortcutHandler]))
 
@@ -93,11 +94,12 @@
 (defn install-shortcut!
   [handler-id {:keys [set-global-keys?
                       prevent-default?
-                      skip-installed?
                       state]
                :or   {set-global-keys? true
-                      prevent-default? false
-                      skip-installed? false}}]
+                      prevent-default? false}}]
+  (when-let [install-id (get-handler-by-id handler-id)]
+    (uninstall-shortcut! install-id))
+
   (let [shortcut-map (dh/shortcut-map handler-id state)
         handler      (new KeyboardShortcutHandler js/window)]
     ;; set arrows enter, tab to global
@@ -124,8 +126,7 @@
 
       (.listen handler EventType/SHORTCUT_TRIGGERED f)
 
-      (when-not skip-installed?
-        (swap! *installed merge data))
+      (swap! *installed merge data)
 
       install-id)))
 
@@ -175,14 +176,20 @@
      (listen-all)
      state)})
 
-(defn refresh!
+(defn refresh-internal!
   "Always use this function to refresh shortcuts"
   []
-  (log/info :shortcut/refresh @*installed)
-  (doseq [id (keys @*installed)]
-    (uninstall-shortcut! id))
-  (install-shortcuts!)
-  (state/pub-event! [:shortcut-handler-refreshed]))
+  (when-not (:ui/shortcut-handler-refreshing? @state/state)
+    (state/set-state! :ui/shortcut-handler-refreshing? true)
+    (log/info :shortcut/refresh @*installed)
+
+    (doseq [id (keys @*installed)]
+      (uninstall-shortcut! id))
+    (install-shortcuts!)
+    (state/pub-event! [:shortcut-handler-refreshed])
+    (state/set-state! :ui/shortcut-handler-refreshing? false)))
+
+(def refresh! (debounce refresh-internal! 1000))
 
 (defn- name-with-meta [e]
   (let [ctrl    (.-ctrlKey e)

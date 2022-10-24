@@ -71,5 +71,6 @@
   ;; this is controlled by :before-load in the config
   (handler/stop!)
   (when (and config/dev? (util/electron?))
+
     (sync/<sync-stop))
   (js/console.log "stop"))
