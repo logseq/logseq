@@ -72,7 +72,7 @@ const LogseqTypeTag = ({
 
 const LogseqPortalShapeHeader = observer(
   ({ type, children }: { type: 'P' | 'B'; children: React.ReactNode }) => {
-    return <div className="tl-logseq-portal-header">{children}</div>
+    return <div className={`tl-logseq-portal-header tl-logseq-portal-header-${type === "P" ? "page" : "block"}`}>{children}</div>
   }
 )
 

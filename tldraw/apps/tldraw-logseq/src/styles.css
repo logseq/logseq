@@ -662,18 +662,25 @@ button.tl-select-input-trigger {
 
   height: 40px;
   flex-shrink: 0;
-  background: linear-gradient(0deg, transparent, var(--ls-tertiary-background-color));
+
   color: var(--ls-title-text-color);
   border-top-left-radius: 8px;
   border-top-right-radius: 8px;
+  background: var(--ls-tertiary-background-color);
   padding: 0 1rem;
   gap: 0.5em;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
 
+  &.tl-logseq-portal-header-block {
+    background: linear-gradient(0deg, transparent, var(--ls-tertiary-background-color));
+  }
+
+
   .page-ref {
     color: var(--ls-title-text-color);
+    background: var(--ls-tertiary-background-color));
   }
 
   .breadcrumb {
