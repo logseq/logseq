@@ -29,18 +29,25 @@
                            :block/properties {:ls-type :whiteboard-page
                                               :logseq.tldraw.page (dissoc tldr-data :shapes)}}
                           (when page-entity (select-keys page-entity [:block/created-at])))
-        page-block (outliner/block-with-timestamps page-block)
         ;; todo: use get-paginated-blocks instead?
         existing-blocks (model/get-page-blocks-no-cache (state/get-current-repo)
                                                         page-name
                                                         {:pull-keys '[:db/id
                                                                       :block/uuid
                                                                       :block/properties [:ls-type]
+                                                                      :block/created-at
+                                                                      :block/updated-at
                                                                       {:block/parent [:block/uuid]}]})
+        id->block (zipmap (map :block/uuid existing-blocks) existing-blocks)
         shapes (:shapes tldr-data)
         ;; we should maintain the order of the shapes in the page
         ;; bring back/forward is depending on this ordering
-        blocks (map-indexed (fn [idx shape] (shape->block shape page-name idx)) shapes)
+        blocks (map-indexed
+                (fn [idx shape]
+                  (let [block (shape->block shape page-name idx)]
+                    (merge block
+                           (select-keys (id->block (:block/uuid block))
+                                        [:block/created-at :block/updated-at])))) shapes)
         block-ids (->> shapes
                        (map (fn [shape] (when (= (:blockType shape) "B")
                                           (uuid (:pageId shape)))))
@@ -50,15 +57,17 @@
         ;; delete blocks when all of the following are false
         ;; - the block is not in the new blocks list
         ;; - the block's parent is not in the new block list
-        ;; - the block is not a shape block 
+        ;; - the block is not a shape block
         delete-blocks (filterv (fn [block]
                                  (not
                                   (or (block-ids (:block/uuid block))
                                       (block-ids (:block/uuid (:block/parent block)))
                                       (not (gp-whiteboard/shape-block? block)))))
                                existing-blocks)
-        delete-blocks-tx (mapv (fn [s] [:db/retractEntity (:db/id s)]) delete-blocks)]
-    (concat [page-block] blocks delete-blocks-tx)))
+        delete-blocks-tx (mapv (fn [s] [:db/retractEntity (:db/id s)]) delete-blocks)
+        page-and-blocks (->> (cons page-block blocks)
+                             (map outliner/block-with-timestamps))]
+    (concat page-and-blocks delete-blocks-tx)))
 
 (defn- get-whiteboard-clj [page-name]
   (when (model/page-exists? page-name)
@@ -147,7 +156,7 @@
         api (.-api app)
         point (-> (.getShapeById app source-shape)
                   (.-bounds)
-                  ((fn [bounds] (if bottom? 
+                  ((fn [bounds] (if bottom?
                                   [(.-minX bounds) (+ 64 (.-maxY bounds))]
                                   [(+ 64 (.-maxX bounds)) (.-minY bounds)]))))
         shape (->logseq-portal-shape block-uuid point)]

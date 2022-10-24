@@ -48,7 +48,7 @@
 (rum/defc shortcut-col [k binding configurable? action-name]
   (let [conflict?         (dh/potential-conflict? k)
         displayed-binding (dh/binding-for-display k binding)
-        disabled?         (clojure.string/includes? displayed-binding "system default")]
+        disabled?         (str/includes? displayed-binding "system default")]
     (if (not configurable?)
       [:td.text-right displayed-binding]
       [:td.text-right

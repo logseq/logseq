@@ -751,13 +751,13 @@
 #?(:cljs
    (defn react
      [ref]
-     (if rum.core/*reactions*
+     (if rum/*reactions*
        (rum/react ref)
        @ref)))
 
 (defn time-ms
   []
-  #?(:cljs (tc/to-long (cljs-time.core/now))))
+  #?(:cljs (tc/to-long (t/now))))
 
 ;; Returns the milliseconds representation of the provided time, in the local timezone.
 ;; For example, if you run this function at 10pm EDT in the EDT timezone on May 31st,
@@ -1033,25 +1033,25 @@
 
 ;; TODO: profile and profileEnd
 
-;; Copy from hiccup
+;; Copy from hiccup but tweaked for publish usage
 (defn escape-html
   "Change special characters into HTML character entities."
   [text]
   (-> text
-      (string/replace "&"  "&amp;")
-      (string/replace "<"  "&lt;")
-      (string/replace ">"  "&gt;")
-      (string/replace "\"" "&quot;")
-      (string/replace "'" "&apos;")))
+      (string/replace "&"  "logseq____&amp;")
+      (string/replace "<"  "logseq____&lt;")
+      (string/replace ">"  "logseq____&gt;")
+      (string/replace "\"" "logseq____&quot;")
+      (string/replace "'" "logseq____&apos;")))
 
 (defn unescape-html
   [text]
   (-> text
-      (string/replace "&amp;" "&")
-      (string/replace "&lt;" "<")
-      (string/replace "&gt;" ">")
-      (string/replace "&quot;" "\"")
-      (string/replace "&apos;" "'")))
+      (string/replace "logseq____&amp;" "&")
+      (string/replace "logseq____&lt;" "<")
+      (string/replace "logseq____&gt;" ">")
+      (string/replace "logseq____&quot;" "\"")
+      (string/replace "logseq____&apos;" "'")))
 
 (comment
   (= (get-relative-path "journals/2020_11_18.org" "pages/grant_ideas.org")

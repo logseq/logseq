@@ -284,13 +284,14 @@
   (let [conn (ldb/start-conn)
         properties {"foo" "valid"
                     "[[foo]]" "invalid"
-                    "some,prop" "invalid"}
+                    "some,prop" "invalid"
+                    "#blarg" "invalid"}
         body (str (gp-property/->block-content properties)
                   "\n- " (gp-property/->block-content properties))]
     (graph-parser/parse-file conn "foo.md" body {})
 
     (is (= [{:block/properties {:foo "valid"}
-             :block/invalid-properties #{"[[foo]]" "some,prop"}}]
+             :block/invalid-properties #{"[[foo]]" "some,prop" "#blarg"}}]
            (->> (d/q '[:find (pull ?b [*])
                        :in $
                        :where
@@ -303,7 +304,7 @@
         "Has correct (in)valid block properties")
 
     (is (= [{:block/properties {:foo "valid"}
-             :block/invalid-properties #{"[[foo]]" "some,prop"}}]
+             :block/invalid-properties #{"[[foo]]" "some,prop" "#blarg"}}]
            (->> (d/q '[:find (pull ?b [*])
                        :in $
                        :where [?b :block/properties] [?b :block/name]]

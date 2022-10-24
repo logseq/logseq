@@ -88,6 +88,7 @@
     (let [[db asset-filenames]           (if (state/all-pages-public?)
                                            (db/clean-export! db)
                                            (db/filter-only-public-pages-and-blocks db))
+          asset-filenames (remove nil? asset-filenames)
           db-str       (db/db->string db)
           state        (select-keys @state/state
                                     [:ui/theme

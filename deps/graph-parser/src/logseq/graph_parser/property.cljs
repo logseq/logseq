@@ -17,9 +17,11 @@
 
 (defn valid-property-name?
   [s]
-  [:pre (string? s)]
+  {:pre [(string? s)]}
   (and (gp-util/valid-edn-keyword? s)
-       (not (re-find #"[\"|^|(|)|{|}]+" s))))
+       (not (re-find #"[\"|^|(|)|{|}]+" s))
+       ;; Disallow tags as property names
+       (not (re-find #"^:#" s))))
 
 (defn properties-ast?
   [block]

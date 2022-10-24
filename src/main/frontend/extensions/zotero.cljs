@@ -328,8 +328,8 @@
 
      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
       [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
-       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-720.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type "button"
+       (ui/button
+         "Submit"
          :class "ui__modal-enter"
          :on-click (fn []
                      (let [profile-name (str/trim @input)]
@@ -337,8 +337,7 @@
                          (p/let [_ (setting/add-profile profile-name)
                                  _ (setting/set-profile profile-name)]
                            (reset! profile* profile-name)))
-                       (state/close-modal!)))}
-        "Submit"]]
+                       (state/close-modal!))))]
       [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
        [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
         {:type "button"
@@ -348,10 +347,10 @@
 (rum/defc zotero-profile-selector <
   rum/reactive
   [profile*]
-  [:div.row
-   [:label.mr-32 {:for "profile-select"} "Choose a profile:"]
-   [:span.justify-evenly
-    [:select
+  [:div.flex.flex-row.mb-4.items-center
+   [:label.title.mr-32 {:for "profile-select"} "Choose a profile:"]
+   [:div.flex.flex-row.ml-4
+    [:select.ml-1
      {:value @profile*
       :on-change
       (fn [e]
