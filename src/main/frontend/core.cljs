@@ -14,7 +14,8 @@
             [logseq.api]
             [frontend.fs.sync :as sync]
             [frontend.config :as config]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.modules.shortcut.core :as shortcut]))
 
 (defn set-router!
   []
@@ -47,6 +48,7 @@
   (when-let [node (.getElementById js/document "root")]
     (set-router!)
     (rum/mount (page/current-page) node)
+    (shortcut/refresh!)
     (display-welcome-message)
     (persist-var/load-vars)
     (when (and config/dev? (util/electron?))
@@ -71,5 +73,6 @@
   ;; this is controlled by :before-load in the config
   (handler/stop!)
   (when (and config/dev? (util/electron?))
+
     (sync/<sync-stop))
   (js/console.log "stop"))

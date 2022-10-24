@@ -93,13 +93,10 @@
 (defn install-shortcut!
   [handler-id {:keys [set-global-keys?
                       prevent-default?
-                      skip-installed?
                       state]
                :or   {set-global-keys? true
-                      prevent-default? false
-                      skip-installed? false}}]
-  (when-let [install-id (ffirst (filter (fn [[id m]]
-                                          (= handler-id (:group m))) @*installed))]
+                      prevent-default? false}}]
+  (when-let [install-id (get-handler-by-id handler-id)]
     (uninstall-shortcut! install-id))
 
   (let [shortcut-map (dh/shortcut-map handler-id state)
@@ -128,8 +125,7 @@
 
       (.listen handler EventType/SHORTCUT_TRIGGERED f)
 
-      (when-not skip-installed?
-        (swap! *installed merge data))
+      (swap! *installed merge data)
 
       install-id)))
 
