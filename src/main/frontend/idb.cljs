@@ -17,12 +17,13 @@
 
 (defn clear-idb!
   []
-  (->
-   (p/let [_ (idb-keyval/clear @store)
-           dbs (js/window.indexedDB.databases)]
-     (doseq [db dbs]
-       (js/window.indexedDB.deleteDatabase (gobj/get db "name"))))
-   (p/catch (fn [_e]))))
+  (when @store
+    (->
+     (p/let [_ (idb-keyval/clear @store)
+             dbs (js/window.indexedDB.databases)]
+       (doseq [db dbs]
+         (js/window.indexedDB.deleteDatabase (gobj/get db "name"))))
+     (p/catch (fn [_e])))))
 
 (defn clear-local-storage-and-idb!
   []
@@ -31,27 +32,28 @@
 
 (defn remove-item!
   [key]
-  (when key
+  (when (and key @store)
     (idb-keyval/del key @store)))
 
 (defn set-item!
   [key value]
-  (when key
+  (when (and key @store)
     (idb-keyval/set key value @store)))
 
 (defn set-batch!
   [items]
-  (when (seq items)
+  (when (and (seq items) @store)
     (idb-keyval/setBatch (clj->js items) @store)))
 
 (defn get-item
   [key]
-  (when key
+  (when (and key @store)
     (idb-keyval/get key @store)))
 
 (defn get-keys
   []
-  (idb-keyval/keys @store))
+  (when @store
+    (idb-keyval/keys @store)))
 
 (defn get-nfs-dbs
   []

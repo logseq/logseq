@@ -796,43 +796,51 @@
    (defn get-prev-block-non-collapsed
      [block]
      (when-let [blocks (get-blocks-noncollapse)]
-       (when-let [index (.indexOf blocks block)]
-         (let [idx (dec index)]
-           (when (>= idx 0)
-             (nth-safe blocks idx)))))))
+       (let [block-id (.-id block)
+             block-ids (mapv #(.-id %) blocks)]
+         (when-let [index (.indexOf block-ids block-id)]
+           (let [idx (dec index)]
+             (when (>= idx 0)
+               (nth-safe blocks idx))))))))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed-non-embed
      [block]
      (when-let [blocks (->> (get-blocks-noncollapse)
                             remove-embeded-blocks)]
-       (when-let [index (.indexOf blocks block)]
-         (let [idx (dec index)]
-           (when (>= idx 0)
-             (nth-safe blocks idx)))))))
+       (let [block-id (.-id block)
+             block-ids (mapv #(.-id %) blocks)]
+         (when-let [index (.indexOf block-ids block-id)]
+          (let [idx (dec index)]
+            (when (>= idx 0)
+              (nth-safe blocks idx))))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed
      [block]
      (when-let [blocks (get-blocks-noncollapse)]
-       (when-let [index (.indexOf blocks block)]
-         (let [idx (inc index)]
-           (when (>= (count blocks) idx)
-             (nth-safe blocks idx)))))))
+       (let [block-id (.-id block)
+             block-ids (mapv #(.-id %) blocks)]
+         (when-let [index (.indexOf block-ids block-id)]
+          (let [idx (inc index)]
+            (when (>= (count blocks) idx)
+              (nth-safe blocks idx))))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed-skip
      [block]
      (when-let [blocks (get-blocks-noncollapse)]
-       (when-let [index (.indexOf blocks block)]
-         (loop [idx (inc index)]
-           (when (>= (count blocks) idx)
-             (let [block (nth-safe blocks idx)
-                   nested? (->> (array-seq (gdom/getElementsByClass "selected"))
-                                (some (fn [dom] (.contains dom block))))]
-               (if nested?
-                 (recur (inc idx))
-                 block))))))))
+       (let [block-id (.-id block)
+             block-ids (mapv #(.-id %) blocks)]
+         (when-let [index (.indexOf block-ids block-id)]
+          (loop [idx (inc index)]
+            (when (>= (count blocks) idx)
+              (let [block (nth-safe blocks idx)
+                    nested? (->> (array-seq (gdom/getElementsByClass "selected"))
+                                 (some (fn [dom] (.contains dom block))))]
+                (if nested?
+                  (recur (inc idx))
+                  block)))))))))
 
 (defn rand-str
   [n]
