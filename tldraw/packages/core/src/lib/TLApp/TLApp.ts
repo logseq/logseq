@@ -17,7 +17,7 @@ import type {
   TLSubscriptionEventName,
 } from '../../types'
 import { AlignType, DistributeType } from '../../types'
-import { BoundsUtils, createNewLineBinding, isNonNullable, KeyUtils } from '../../utils'
+import { BoundsUtils, createNewLineBinding, isNonNullable, KeyUtils, uniqueId } from '../../utils'
 import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
 import { TLApi } from '../TLApi'
 import { TLCursors } from '../TLCursors'
@@ -69,7 +69,8 @@ export class TLApp<
   }
 
   keybindingRegistered = false
-
+  uuid = uniqueId()
+  
   static id = 'app'
   static initial = 'select'
 
