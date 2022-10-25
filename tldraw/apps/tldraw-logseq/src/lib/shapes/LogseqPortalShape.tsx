@@ -152,7 +152,7 @@ const CircleButton = ({
   }, [active])
 
   return (
-    <div
+    <button
       data-active={active}
       data-recently-changed={recentlyChanged}
       style={style}
@@ -163,7 +163,7 @@ const CircleButton = ({
         {otherIcon && <TablerIcon name={otherIcon} />}
         <TablerIcon name={icon} />
       </div>
-    </div>
+    </button>
   )
 }
 
