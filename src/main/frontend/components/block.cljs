@@ -604,76 +604,6 @@
                                                         " page-name-in-block: " page-name-in-block))]
            (if tag? (str "#" s) s))))]))
 
-(rum/defc page-preview-trigger
-  [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open? manual?] :as config} page-name]
-  (let [*tippy-ref (rum/create-ref)
-        page-name (util/page-name-sanity-lc page-name)
-        whiteboard-page? (model/whiteboard-page? page-name)
-        redirect-page-name (or (model/get-redirect-page-name page-name (:block/alias? config))
-                               page-name)
-        page-original-name (model/get-page-original-name redirect-page-name)
-        _  #_:clj-kondo/ignore (rum/defc html-template []
-                                 (let [*el-popup (rum/use-ref nil)]
-
-                                   (rum/use-effect!
-                                    (fn []
-                                      (let [el-popup (rum/deref *el-popup)
-                                            cb (fn [^js e]
-                                                 (when-not (:editor/editing? @state/state)
-                                           ;; Esc
-                                                   (and (= e.which 27)
-                                                        (when-let [tp (rum/deref *tippy-ref)]
-                                                          (.hideTooltip tp)))))]
-
-                                        (js/setTimeout #(.focus el-popup))
-                                        (.addEventListener el-popup "keyup" cb)
-                                        #(.removeEventListener el-popup "keyup" cb)))
-                                    [])
-
-                                   (when redirect-page-name
-                                     [:div.tippy-wrapper.overflow-y-auto.p-4.outline-none
-                                      {:ref   *el-popup
-                                       :tab-index -1
-                                       :style {:width          600
-                                               :text-align     "left"
-                                               :font-weight    500
-                                               :max-height     600
-                                               :padding-bottom 64}}
-                                      (if (and (string? page-original-name) (string/includes? page-original-name "/"))
-                                        [:div.my-2
-                                         (->>
-                                          (for [page (string/split page-original-name #"/")]
-                                            (when (and (string? page) page)
-                                              (page-reference false page {} nil)))
-                                          (interpose [:span.mx-2.opacity-30 "/"]))]
-                                        [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
-                                                                 page-original-name
-                                                                 [:span
-                                                                  [:span.text-sm.mr-2 "Alias:"]
-                                                                  page-original-name])])
-                                      (let [page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
-                                        (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name {:redirect? false})
-                                        (let [page-blocks-cp (state/get-page-blocks-cp)
-                                              tldraw-preview (state/get-component :whiteboard/tldraw-preview)]
-                                          (if whiteboard-page?
-                                            (tldraw-preview page-name)
-                                            (page-blocks-cp (state/get-current-repo) page {:sidebar? sidebar? :preview? true}))))])))]
-
-    (if (or (not manual?) open?)
-      (ui/tippy {:ref             *tippy-ref
-                 :in-editor?      true
-                 :html            html-template
-                 :interactive     true
-                 :delay           [1000, 100]
-                 :fixed-position? fixed-position?
-                 :position        (or tippy-position "top")
-                 :distance        (or tippy-distance 10)
-                 :popperOptions   {:modifiers {:preventOverflow
-                                               {:enabled           true
-                                                :boundariesElement "viewport"}}}}
-                children)
-      children)))
-
 (rum/defc page-cp
   "Accepts {:block/name sanitized / unsanitized page-name}"
   [{:keys [html-export? redirect-page-name label children contents-page? preview?] :as config} page]
@@ -697,10 +627,6 @@
         (:breadcrumb? config)
         (or (:block/original-name page)
             (:block/name page))
-
-        (and (not (util/mobile?))
-             (not preview?))
-        (page-preview-trigger (assoc config :children inner) page-name)
 
         :else
         inner))))

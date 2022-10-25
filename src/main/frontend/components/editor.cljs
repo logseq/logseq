@@ -2,7 +2,6 @@
   (:require [clojure.string :as string]
             [frontend.commands :as commands
              :refer [*first-command-group *matched-block-commands *matched-commands]]
-            [frontend.components.block :as block]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
@@ -147,18 +146,9 @@
              {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
               :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
               :item-render (fn [page-name chosen?]
-                             [:div.preview-trigger-wrapper
-                              (block/page-preview-trigger
-                               {:children
-                                [:div.flex
-                                 (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
-                                 (search/highlight-exact-query page-name q)]
-                                :open?           chosen?
-                                :manual?         true
-                                :fixed-position? true
-                                :tippy-distance  24
-                                :tippy-position  (if sidebar? "left" "right")}
-                               page-name)])
+                             [:div.flex
+                              (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
+                              (search/highlight-exact-query page-name q)])
               :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
               :class       "black"})))))))
 
