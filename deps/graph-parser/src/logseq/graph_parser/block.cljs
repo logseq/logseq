@@ -68,11 +68,6 @@
                        value)))
 
                   (and
-                   (= typ "Complex")
-                   (= (:protocol value) "file")
-                   (:link value))
-
-                  (and
                    (= typ "File")
                    (second (first (:label (second block)))))))
 
@@ -320,7 +315,7 @@
   (let [refs (->> (concat tags refs [marker priority])
                   (remove string/blank?)
                   (distinct))
-        refs (atom refs)]
+        *refs (atom refs)]
     (walk/prewalk
      (fn [form]
        ;; skip custom queries
@@ -328,29 +323,29 @@
                       (= (first form) "Custom")
                       (= (second form) "query"))
          (when-let [page (get-page-reference form supported-formats)]
-           (swap! refs conj page))
+           (swap! *refs conj page))
          (when-let [tag (get-tag form)]
            (let [tag (text/page-ref-un-brackets! tag)]
              (when (gp-util/tag-valid? tag)
-               (swap! refs conj tag))))
+               (swap! *refs conj tag))))
          form))
      (concat title body))
-    (let [refs (remove string/blank? @refs)
-          children-pages (->> (mapcat (fn [p]
+    (swap! *refs #(remove string/blank? %))
+    (let [children-pages (->> @*refs
+                              (mapcat (fn [p]
                                         (let [p (if (map? p)
                                                   (:block/original-name p)
                                                   p)]
                                           (when (string? p)
                                             (let [p (or (text/get-nested-page-name p) p)]
                                               (when (text/namespace-page? p)
-                                                (gp-util/split-namespace-pages p))))))
-                                      refs)
+                                                (gp-util/split-namespace-pages p)))))))
                               (remove string/blank?)
                               (distinct))
-          refs (->> (distinct (concat refs children-pages))
-                    (remove nil?))
-          refs (map (fn [ref] (page-name->map ref with-id? db true date-formatter)) refs)]
-      (assoc block :refs refs))))
+          refs' (->> (distinct (concat @*refs children-pages))
+                     (remove nil?)
+                     (map (fn [ref] (page-name->map ref with-id? db true date-formatter))))]
+      (assoc block :refs refs'))))
 
 (defn- with-block-refs
   [{:keys [title body] :as block}]
