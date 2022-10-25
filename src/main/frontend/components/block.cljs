@@ -2776,7 +2776,7 @@
 
      (when-not collapsed?
        (let [refs (->> (db/pull-many '[*] (map :db/id (:block/refs block)))
-                       (filter #(= "logseq/class" (:block/type %))))]
+                       (filter #(= "logseq/structured-page" (:block/type %))))]
          (when (seq refs)
            (for [ref refs]
              [:div.my-4 {:style {:margin-left 56}}

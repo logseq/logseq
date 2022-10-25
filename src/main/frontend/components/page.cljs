@@ -442,32 +442,34 @@
                   (plugins/hook-ui-items :pagebar))])])
 
           (when properties-show?
-            (let [class? (= "logseq/class" (:block/type entity))]
+            (let [class? (= "logseq/structured-page" (:block/type entity))]
               [:div.p-2.mb-4
-               [:div.flex.flex-row.items-center.mb-2
-                [:div.mr-2 "Mark this page as a Class"]
-                (ui/toggle class?
-                           (fn []
-                             (if class?
-                               (db/transact! [[:db/retract (:db/id entity) :block/type]])
-                               (db/transact! [{:db/id (:db/id entity)
-                                               :block/type "logseq/class"}]))))]
                [:div.font-medium.py-2 "Properties:"]
 
                (property/properties entity)
 
-               [:div.flex.flex-row.items-center.mt-2
+               [:div.mt-4
                 [:div.mr-2 "Parent page: "]
                 (if (:block/namespace entity)
                   (component-block/page-cp
                    {}
                    (db/entity (:db/id (:block/namespace entity))))
-                  [:input.form-input.block.col-span-1
-                   {:placeholder "Page name"
+                  [:input.form-input.block.mt-1
+                   {:style {:width 173} ; TODO: better form layout
+                    :placeholder "Page name"
                     :on-blur (fn [e]
                                (let [page (util/evalue e)]
                                  (when-not (string/blank? page)
-                                   (property-handler/set-namespace! (:db/id entity) page))))}])]]))
+                                   (property-handler/set-namespace! (:db/id entity) page))))}])]
+
+               [:div.flex.flex-row.items-center.mt-4
+                [:div.mr-2 "Set as Structured Page?"]
+                (ui/toggle class?
+                           (fn []
+                             (if class?
+                               (db/transact! [[:db/retract (:db/id entity) :block/type]])
+                               (db/transact! [{:db/id (:db/id entity)
+                                               :block/type "logseq/structured-page"}]))))]]))
 
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))

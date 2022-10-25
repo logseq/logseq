@@ -35,7 +35,7 @@
                          (and
                           (= :edn (state/get-preferred-file-format (state/get-current-repo)))
                           (or
-                           (contains? #{"logseq/property" "logseq/class"} (:block/type block-entity))
+                           (contains? #{"logseq/property" "logseq/structured-page"} (:block/type block-entity))
                            (and (:block/name block-entity)
                                 (seq (:block/properties block-entity))))
                           block-entity))]

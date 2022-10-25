@@ -8,7 +8,8 @@
 (defn properties
   [entity]
   (let [namespace (:block/namespace entity)
-        namespace-properties (when namespace (:block/properties namespace))
+        namespace-properties (when namespace
+                               (:block/properties (db/entity (:db/id namespace))))
         properties (merge
                     namespace-properties
                     (:block/properties entity))]
