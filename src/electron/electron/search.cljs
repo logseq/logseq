@@ -5,8 +5,7 @@
             ["better-sqlite3" :as sqlite3]
             [clojure.string :as string]
             ["electron" :refer [app]]
-            [electron.logger :as logger]
-            [cljs-bean.core :as bean]))
+            [electron.logger :as logger]))
 
 (defonce databases (atom nil))
 
@@ -165,24 +164,26 @@
   (str "(" (->> (map (fn [id] (str "'" id "'")) ids)
                 (string/join ", ")) ")"))
 
-(defn get-page-by-block-ids
-  "Return a clojure list of the page ids that contains the provided block ids (distinct)"
-  [repo block-ids]
+(defn upsert-pages!
+  [repo pages]
   (if-let [db (get-db repo)]
     ;; TODO: what if a CONFLICT on uuid
-    (let [sql   (str "SELECT DISTINCT page from blocks WHERE id IN " (clj-list->sql block-ids))
-          _ (prn sql) ;; TODO Junyi
-          query (prepare db sql)]
-      (->> (.all ^object query)
-           bean/->clj
-           (map :page)))
+    (let [insert (prepare db "INSERT INTO pages (id, uuid, content) VALUES (@id, @uuid, @content) ON CONFLICT (id) DO UPDATE SET content = @content")
+          insert-many (.transaction ^object db
+                                    (fn [pages]
+                                      (doseq [page pages]
+                                        (.run ^object insert page))))]
+      (insert-many pages))
     (do
       (open-db! repo)
-      (get-page-by-block-ids repo block-ids))))
+      (upsert-pages! repo pages))))
 
-(defn upsert-pages!
-  [repo page-ids]
-  (prn page-ids))
+(defn delete-pages!
+  [repo ids]
+  (when-let [db (get-db repo)]
+    (let [sql (str "DELETE from blocks WHERE id IN " (clj-list->sql ids))
+          stmt (prepare db sql)]
+      (.run ^object stmt))))
 
 (defn upsert-blocks!
   [repo blocks]
@@ -203,9 +204,7 @@
   (when-let [db (get-db repo)]
     (let [sql (str "DELETE from blocks WHERE id IN " (clj-list->sql ids))
           stmt (prepare db sql)]
-      (.run ^object stmt))
-    ;; TODO Junyi: when blocks are updated, update the page index on demand
-    (upsert-pages! repo ids)))
+      (.run ^object stmt))))
 
 ;; (defn search-blocks-fts
 ;;   [q]
@@ -295,6 +294,16 @@
                         "delete from blocks_fts;")]
       (.run ^object stmt))))
 
+(defn truncate-pages-table!
+  [repo]
+  (when-let [database (get-db repo)]
+    (let [stmt (prepare database
+                        "delete from pages;")
+          _ (.run ^object stmt)
+          stmt (prepare database
+                        "delete from pages_fts;")]
+      (.run ^object stmt))))
+
 (defn delete-db!
   [repo]
   (when-let [database (get-db repo)]
@@ -309,9 +318,3 @@
   (when-let [database (get-db repo)]
     (let [stmt (prepare database sql)]
       (.all ^object stmt))))
-
-(comment
-  (def repo (first (keys @databases)))
-  (query repo
-         "select * from blocks_fts")
-  (delete-db! repo))

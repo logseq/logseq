@@ -10,6 +10,7 @@
             [frontend.search.agency :as search-agency]
             [frontend.search.db :as search-db :refer [indices]]
             [frontend.search.protocol :as protocol]
+            [frontend.modules.datascript-report.core :as ds-report]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.property :as property]
@@ -100,6 +101,12 @@
   (when-let [engine (get-engine repo)]
     (protocol/transact-blocks! engine data)))
 
+;; TODO Junyi: Plug-in the call
+(defn- transact-pages!
+  [repo data]
+  (when-let [engine (get-engine repo)]
+    (protocol/transact-pages! engine data)))
+
 (defn exact-matched?
   "Check if two strings points toward same search result"
   [q match]
@@ -124,7 +131,7 @@
            q (clean-str q)]
        (when-not (string/blank? q)
          (let [indice (or (get-in @indices [repo :pages])
-                          (search-db/make-pages-indice!))
+                          (search-db/make-pages-title-indice!))
                result (->> (.search indice q (clj->js {:limit limit}))
                            (bean/->clj))]
            ;; TODO: add indexes for highlights
@@ -191,13 +198,15 @@
            (let [result (fuzzy-search result q :limit limit)]
              (vec result))))))))
 
+;; TODO merge with logic in `invoke-hooks` when feature and test is sufficient
 (defn sync-search-indice!
   [repo tx-report]
   (let [data (:tx-data tx-report)
         datoms (filter
                 (fn [datom]
                   (contains? #{:block/name :block/content} (:a datom)))
-                data)]
+                data)
+        diff-pages (:pages (ds-report/get-blocks-and-pages tx-report))]
     (when (seq datoms)
       (let [datoms (group-by :a datoms)
             pages (:block/name datoms)
@@ -251,10 +260,10 @@
   ([repo]
    (when repo
      (when-let [engine (get-engine repo)]
-       (let [pages (search-db/make-pages-indice!)]
+       (let [page-titles (search-db/make-pages-title-indice!)]
          (p/let [blocks (protocol/rebuild-blocks-indice! engine)]
-           (let [result {:pages pages
-                         :blocks blocks}]
+           (let [result {:pages         page-titles ;; TODO: rename key to :page-titles
+                         :blocks        blocks}]
              (swap! indices assoc repo result)
              indices)))))))
 

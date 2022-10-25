@@ -29,6 +29,16 @@
        (remove nil?)
        (bean/->js)))
 
+;; TODO Junyi: Finalize index code
+(defn build-pages-indice
+  ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection
+  #_:clj-kondo/ignore
+  [repo]
+  (->> (db/get-all-page-contents)
+       (map page->index)
+       (remove nil?)
+       (bean/->js)))
+
 (defn make-blocks-indice!
   [repo]
   (let [blocks (build-blocks-indice repo)
@@ -46,9 +56,11 @@
   [p] {:name (util/search-normalize p (state/enable-search-remove-accents?))
        :original-name p})
 
-(defn make-pages-indice!
-  "Build a page indice from scratch.
-   Incremental page indice is implemented in frontend.search.sync-search-indice!"
+(defn make-pages-title-indice!
+  "Build a page title indice from scratch.
+   Incremental page title indice is implemented in frontend.search.sync-search-indice!
+   Rename from the page indice since 10.25.2022, since this is only used for page title search.
+   From now on, page indice is talking about page content search."
   []
   (when-let [repo (state/get-current-repo)]
     (let [pages (->> (db/get-pages (state/get-current-repo))

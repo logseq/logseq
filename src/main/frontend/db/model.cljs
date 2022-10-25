@@ -1528,6 +1528,7 @@
             assets (get-assets datoms)]
         [@(d/conn-from-datoms datoms db-schema/schema) assets]))))
 
+;; Deprecated?
 (defn delete-blocks
   [repo-url files _delete-page?]
   (when (seq files)

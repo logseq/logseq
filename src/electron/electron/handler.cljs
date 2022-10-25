@@ -285,38 +285,42 @@
   (async/put! state/persistent-dbs-chan true)
   true)
 
+;; Search related IPCs
 (defmethod handle :search-blocks [_window [_ repo q opts]]
   (search/search-blocks repo q opts))
 
-(defmethod handle :rebuild-blocks-indice [_window [_ repo data]]
+(defmethod handle :rebuild-indice [_window [_ repo block-data page-data]]
   (search/truncate-blocks-table! repo)
   ;; unneeded serialization
-  (search/upsert-blocks! repo (bean/->js data))
+  (search/upsert-blocks! repo (bean/->js block-data))
+  (search/truncate-pages-table! repo)
+  (search/upsert-pages! repo (bean/->js page-data))
   [])
 
 (defmethod handle :transact-blocks [_window [_ repo data]]
-  (let [{:keys [blocks-to-remove-set blocks-to-add]} data
-        affected-pages-by-removal (when (seq blocks-to-remove-set)
-                                    ;; Be careful about Side Effect! Execution order matters!
-                                    ;; Should query before blocks are deleted in 
-                                    (search/get-page-by-block-ids repo blocks-to-remove-set))
-        affected-pages (->> (map :page blocks-to-add)
-                            (concat affected-pages-by-removal)
-                            distinct)]
+  (let [{:keys [blocks-to-remove-set blocks-to-add]} data]
     (when (seq blocks-to-remove-set)
       (search/delete-blocks! repo blocks-to-remove-set))
     (when (seq blocks-to-add)
       ;; unneeded serialization
-      (search/upsert-blocks! repo (bean/->js blocks-to-add)))
-    (when (seq affected-pages)
-      ;; TODO Junyi: update pages
-      (prn "affected-pages: " affected-pages))))
+      (search/upsert-blocks! repo (bean/->js blocks-to-add)))))
 
-(defmethod handle :truncate-blocks [_window [_ repo]]
-  (search/truncate-blocks-table! repo))
+(defmethod handle :transact-pages [_window [_ repo data]]
+  (let [{:keys [pages-to-remove-set pages-to-add]} data]
+    (when (seq pages-to-remove-set)
+      (search/delete-pages! repo pages-to-remove-set))
+    (when (seq pages-to-add)
+      ;; unneeded serialization
+      (search/upsert-pages! repo (bean/->js pages-to-add)))))
+
+(defmethod handle :truncate-indice [_window [_ repo]]
+  (search/truncate-blocks-table! repo)
+  (search/truncate-pages-table! repo))
 
 (defmethod handle :remove-db [_window [_ repo]]
   (search/delete-db! repo))
+;; ^^^^
+;; Search related IPCs End
 
 (defn clear-cache!
   [window]

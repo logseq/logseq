@@ -18,11 +18,14 @@
                  :block/content content
                  :block/page page})) result)))
   (rebuild-blocks-indice! [_this]
-    (let [indice (search-db/build-blocks-indice repo)]
-      (ipc/ipc "rebuild-blocks-indice" repo indice)))
+    (let [blocks-indice (search-db/build-blocks-indice repo)
+          pages-indice  (search-db/build-pages-indice repo)]
+      (ipc/ipc "rebuild-indice" repo blocks-indice pages-indice)))
   (transact-blocks! [_this data]
     (ipc/ipc "transact-blocks" repo (bean/->js data)))
   (truncate-blocks! [_this]
-    (ipc/ipc "truncate-blocks" repo))
+    (ipc/ipc "truncate-indice" repo)) 
+  (transact-pages! [_this data]
+    (ipc/ipc "transact-pages" repo (bean/->js data)))
   (remove-db! [_this]
     (ipc/ipc "remove-db" repo)))
