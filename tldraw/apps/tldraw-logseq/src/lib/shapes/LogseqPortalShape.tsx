@@ -887,7 +887,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   validateProps = (props: Partial<LogseqPortalShapeProps>) => {
     if (props.size !== undefined) {
       const scale = levelToScale[this.props.scaleLevel ?? 'md']
-      props.size[0] = Math.max(props.size[0], 240 * scale)
+      props.size[0] = Math.max(props.size[0], 60 * scale)
       props.size[1] = Math.max(props.size[1], HEADER_HEIGHT * scale)
     }
     return withClampedStyles(this, props)
