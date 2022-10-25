@@ -282,7 +282,10 @@
   (rum/local false ::edit?)
   (rum/local "" ::input-value)
   {:init (fn [state]
-           (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
+           (let [page (first (:rum/args state))
+                 title (or (:block/original-name page)
+                           (:block/name page))]
+             (assoc state ::title-value (atom title))))}
   [state page]
   (let [page-name (:block/name page)
         title (or (:block/original-name page) page-name)

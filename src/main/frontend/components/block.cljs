@@ -629,7 +629,18 @@
             (:block/name page))
 
         :else
-        inner))))
+        (ui/tippy {:html [:div
+                          [:a.fade-link.text-sm.font-medium
+                           {:on-click (fn []
+                                        (state/set-state! [:ui/properties-show? (:block/name page-entity)] true)
+                                        (state/sidebar-add-block!
+                                         (state/get-current-repo)
+                                         (:db/id page-entity)
+                                         :page))}
+                           "Configure"]]
+                   :class "tippy-hover"
+                   :interactive true}
+         inner)))))
 
 (rum/defc asset-reference
   [config title path]
