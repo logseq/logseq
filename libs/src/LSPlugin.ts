@@ -368,6 +368,9 @@ export interface IAppProxy {
 
   // graph
   getCurrentGraph: () => Promise<AppGraphInfo | null>
+  getCurrentGraphConfigs: () => Promise<any>
+  getCurrentGraphFavorites: () => Promise<Array<string> | null>
+  getCurrentGraphRecent: () => Promise<Array<string> | null>
 
   // router
   pushState: (
