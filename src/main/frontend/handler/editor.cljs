@@ -507,9 +507,10 @@
          :sidebar? sidebar?
          :format format
          :id id
-         :block (merge
-                 (or block (db/pull [:block/uuid (:block/uuid block)]))
-                 {:editing-property block})
+         :block (cond->
+                  (or block (db/pull [:block/uuid (:block/uuid block)]))
+                  (:editing-property block)
+                  (assoc :editing-property block))
          :block-id block-id
          :block-parent-id block-parent-id
          :node node
