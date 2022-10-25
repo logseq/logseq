@@ -26,14 +26,14 @@
           :block/properties (assoc (:block/properties block)
                                    property-uuid "")}]))))
 
-(defn inherit-page!
+(defn set-namespace!
   [page-db-id page-name]
   (let [page-name (util/page-name-sanity-lc page-name)
         page (db/entity [:block/name page-name])]
     (when page
       (db/transact! (state/get-current-repo)
         [{:db/id page-db-id
-          :block/inherit-from (:db/id page)}]))))
+          :block/namespace (:db/id page)}]))))
 
 (defn set-property-schema!
   [entity key]

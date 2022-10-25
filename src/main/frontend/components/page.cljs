@@ -452,24 +452,22 @@
                                (db/transact! [[:db/retract (:db/id entity) :block/type]])
                                (db/transact! [{:db/id (:db/id entity)
                                                :block/type "logseq/class"}]))))]
-
-               [:div.flex.flex-row.items-center.mb-2
-                [:div.mr-2 "Inherit properties from other page(s): "]
-                (let [inherit-from (:block/inherit-from entity)]
-                  (if (seq inherit-from)
-                    [:ul
-                     (for [page inherit-from]
-                       [:li (:block/original-name (db/entity (:db/id page)))])]
-                    [:input.form-input.block.col-span-1
-                     {:placeholder "Page name"
-                      :on-blur (fn [e]
-                                 (let [page (util/evalue e)]
-                                   (when-not (string/blank? page)
-                                     (property-handler/inherit-page! (:db/id entity) page))))}]))]
-
                [:div.font-medium.py-2 "Properties:"]
 
-               (property/properties entity)]))
+               (property/properties entity)
+
+               [:div.flex.flex-row.items-center.mt-2
+                [:div.mr-2 "Parent page: "]
+                (if (:block/namespace entity)
+                  (component-block/page-cp
+                   {}
+                   (db/entity (:db/id (:block/namespace entity))))
+                  [:input.form-input.block.col-span-1
+                   {:placeholder "Page name"
+                    :on-blur (fn [e]
+                               (let [page (util/evalue e)]
+                                 (when-not (string/blank? page)
+                                   (property-handler/set-namespace! (:db/id entity) page))))}])]]))
 
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))

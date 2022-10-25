@@ -91,8 +91,7 @@
                   :block/tags
                   :block/alias
                   :block/namespace
-                  :block/macros
-                  :block/inherit-from]
+                  :block/macros]
         ref-ids (->>
                  (mapcat (fn [block]
                            (->>
@@ -187,7 +186,7 @@
 (defn- remove-transit-ids
   [block]
   (let [block (dissoc block :db/id :block/file)
-        ref-keys [:block/namespace :block/inherit-from :block/tags :block/alias]
+        ref-keys [:block/namespace :block/tags :block/alias]
         ref-ids (->>
                  (select-keys block ref-keys)
                  vals

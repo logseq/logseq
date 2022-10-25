@@ -7,8 +7,11 @@
 
 (defn properties
   [entity]
-  (let [properties (:block/properties entity)
-        inherited-from-pages (:block/inherit-from entity)]
+  (let [namespace (:block/namespace entity)
+        namespace-properties (when namespace (:block/properties namespace))
+        properties (merge
+                    namespace-properties
+                    (:block/properties entity))]
     [:div.ls-properties-area
      [:div
       (for [[k v] properties]
@@ -16,16 +19,6 @@
           [:div.grid.grid-cols-4.gap-4
            [:div.property-key.col-span-1 key]
            [:div.property-value.col-span-2 v]]))]
-
-     (for [page inherited-from-pages]
-       (let [page (db/entity (:db/id page))]
-         [:div.inherited-properties.py-4
-          [:div.text-2xl.py-2 (str "Inherited from: " (:block/original-name page))]
-          (for [[k v] (:block/properties page)]
-            (let [key (:block/original-name (db/entity [:block/uuid k]))]
-              [:div.grid.grid-cols-4.gap-4
-               [:div.property-key.col-span-1 key]
-               [:div.property-value.col-span-2 v]]))]))
 
      [:div.ls-property-add.grid.grid-cols-4.gap-4
       [:input.form-input.block.col-span-1
