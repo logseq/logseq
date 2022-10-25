@@ -170,6 +170,7 @@ export class TLApp<
         keys: ['del', 'backspace'],
         fn: () => {
           this.api.deleteShapes()
+          this.selectedTool.transition('idle')
         },
       },
     ]
@@ -323,7 +324,6 @@ export class TLApp<
     this.setSelectedShapes(this.selectedShapesArray.filter(shape => !ids.has(shape.id)))
     const removedShapes = this.currentPage.removeShapes(...shapes)
     if (removedShapes) this.notify('delete-shapes', removedShapes)
-    this.selectedTool.transition('idle')
     this.persist()
     return this
   }
