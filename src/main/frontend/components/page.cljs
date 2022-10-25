@@ -446,34 +446,38 @@
                   (plugins/hook-ui-items :pagebar)]))])
 
           (when properties-show?
-            (let [class? (= "logseq/structured-page" (:block/type entity))]
-              [:div.p-2.mb-4
-               [:div.font-medium.py-2 "Properties:"]
+            (let [structured-page? (= "logseq/structured-page" (:block/type entity))
+                  property? (= "logseq/property" (:block/type entity))]
+              (if property?
+                [:div "TBD set property schema"]
+                [:div.p-2.mb-4
+                 [:div.font-medium.py-2 "Properties:"]
 
-               (property/properties entity)
+                 (property/properties entity {:page-cp component-block/page-cp
+                                              :inline-text component-block/inline-text})
 
-               [:div.mt-4
-                [:div.mr-2 "Parent page: "]
-                (if (:block/namespace entity)
-                  (component-block/page-cp
-                   {}
-                   (db/entity (:db/id (:block/namespace entity))))
-                  [:input.form-input.block.mt-1
-                   {:style {:width 173} ; TODO: better form layout
-                    :placeholder "Page name"
-                    :on-blur (fn [e]
-                               (let [page (util/evalue e)]
-                                 (when-not (string/blank? page)
-                                   (property-handler/set-namespace! (:db/id entity) page))))}])]
+                 [:div.mt-4
+                  [:div.mr-2 "Parent page: "]
+                  (if (:block/namespace entity)
+                    (component-block/page-cp
+                     {}
+                     (db/entity (:db/id (:block/namespace entity))))
+                    [:input.form-input.block.mt-1
+                     {:style {:width 173} ; TODO: better form layout
+                      :placeholder "Page name"
+                      :on-blur (fn [e]
+                                 (let [page (util/evalue e)]
+                                   (when-not (string/blank? page)
+                                     (property-handler/set-namespace! (:db/id entity) page))))}])]
 
-               [:div.flex.flex-row.items-center.mt-4
-                [:div.mr-2 "Set as Structured Page?"]
-                (ui/toggle class?
-                           (fn []
-                             (if class?
-                               (db/transact! [[:db/retract (:db/id entity) :block/type]])
-                               (db/transact! [{:db/id (:db/id entity)
-                                               :block/type "logseq/structured-page"}]))))]]))
+                 [:div.flex.flex-row.items-center.mt-4
+                  [:div.mr-2 "Set as Structured Page?"]
+                  (ui/toggle structured-page?
+                             (fn []
+                               (if structured-page?
+                                 (db/transact! [[:db/retract (:db/id entity) :block/type]])
+                                 (db/transact! [{:db/id (:db/id entity)
+                                                 :block/type "logseq/structured-page"}]))))]])))
 
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))

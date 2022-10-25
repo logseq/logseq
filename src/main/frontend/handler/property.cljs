@@ -40,8 +40,10 @@
   )
 
 (defn add-property-value!
-  [entity key value]
-  )
+  [entity property-id property-value]
+  (db/transact! (state/get-current-repo)
+    [{:block/uuid (:block/uuid entity)
+      :block/properties (assoc (:block/properties entity) property-id property-value)}]))
 
 (defn delete-property!
   []

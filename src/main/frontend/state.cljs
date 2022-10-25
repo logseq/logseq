@@ -408,6 +408,11 @@ should be done through this fn in order to get global config and config defaults
     (or (:preferred-file-format config)
         (get-preferred-format repo))))
 
+(defn edn-graph?
+  "Whether the current graph is using the EDN format."
+  []
+  (= :edn (get-preferred-file-format (get-current-repo))))
+
 ;; TODO: consider adding a pane in Settings to set this through the GUI (rather
 ;; than having to go through the config.edn file)
 (defn get-editor-command-trigger

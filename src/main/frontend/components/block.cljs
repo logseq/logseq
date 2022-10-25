@@ -572,7 +572,8 @@
     [:a
      {:tabIndex "0"
       :class (cond-> (if tag? "tag" "page-ref")
-               (:property? config)
+               (or (:property? config)
+                   (= (:block/type page-entity) "logseq/property"))
                (str " page-property-key block-property"))
       :data-ref page-name
       :on-mouse-down (fn [e] (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?))
@@ -1638,11 +1639,12 @@
                   (:block/uuid child)))))]]))))
 
 (defn- block-content-empty?
-  [{:block/keys [properties title body]}]
+  [{:block/keys [properties title body type]}]
   (and
    (or
     (empty? properties)
-    (property/properties-hidden? properties))
+    (and (not (state/edn-graph?))
+         (property/properties-hidden? properties)))
 
    (empty? title)
 
@@ -2230,16 +2232,18 @@
         (when-let [scheduled-ast (block-handler/get-scheduled-ast block)]
           (timestamp-cp block "SCHEDULED" scheduled-ast)))
 
-      (when-let [invalid-properties (:block/invalid-properties block)]
-        (invalid-properties-cp invalid-properties))
+      (when-not (state/edn-graph?)
+        (when-let [invalid-properties (:block/invalid-properties block)]
+          (invalid-properties-cp invalid-properties)))
 
-      (when (and (seq properties)
-                 (let [hidden? (property/properties-hidden? properties)]
-                   (not hidden?))
-                 (not (and block-ref? (or (seq title) (seq body))))
-                 (not (:slide? config))
-                 (not= block-type :whiteboard-shape))
-        (properties-cp config block))
+      (when-not (state/edn-graph?)
+        (when (and (seq properties)
+                   (let [hidden? (property/properties-hidden? properties)]
+                     (not hidden?))
+                   (not (and block-ref? (or (seq title) (seq body))))
+                   (not (:slide? config))
+                   (not= block-type :whiteboard-shape))
+          (properties-cp config block)))
 
       (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
         (when (and (not block-ref-with-title?)
@@ -2715,11 +2719,9 @@
        (let [refs (->> (db/pull-many '[*] (map :db/id (:block/refs block)))
                        (filter #(= "logseq/structured-page" (:block/type %))))]
          (when (seq refs)
-           (for [ref refs]
-             [:div.my-4 {:style {:margin-left 56}}
-              [:div.text-2xl.font-medium.mb-2 (:block/original-name ref)]
-              [:div
-               (property-component/properties ref)]]))))
+           [:div.py-1 {:style {:margin-left 56}}
+            (property-component/composed-properties block refs {:page-cp page-cp
+                                                                :inline-text inline-text})])))
 
      (block-children config block children collapsed?)
 

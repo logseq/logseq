@@ -22,6 +22,7 @@
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.assets :as assets-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.idb :as idb]
             [frontend.image :as image]
             [frontend.mobile.util :as mobile-util]
@@ -506,7 +507,9 @@
          :sidebar? sidebar?
          :format format
          :id id
-         :block (or (db/pull [:block/uuid (:block/uuid block)]) block)
+         :block (merge
+                 (or block (db/pull [:block/uuid (:block/uuid block)]))
+                 {:editing-property block})
          :block-id block-id
          :block-parent-id block-parent-id
          :node node
@@ -1240,13 +1243,20 @@
 
 (defn save-block-aux!
   [block value opts]
-  (let [value (string/trim value)]
-    ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
-    ;; maybe we shouldn't save the block/file in "will-unmount" event?
-    (save-block-if-changed! block value
-                            (merge
-                             {:init-properties (:block/properties block)}
-                             opts))))
+  (let [entity (db/entity [:block/uuid (:block/uuid block)])
+        property (:editing-property block)]
+    (when (:db/id entity)
+      (let [value (string/trim value)]
+        (if property
+          (property-handler/add-property-value! entity
+                                                (:block/uuid property)
+                                                value)
+          ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
+          ;; maybe we shouldn't save the block/file in "will-unmount" event?
+          (save-block-if-changed! block value
+                                  (merge
+                                   {:init-properties (:block/properties block)}
+                                   opts)))))))
 
 (defn save-block!
   ([repo block-or-uuid content]
@@ -1255,9 +1265,8 @@
                  (db-model/query-block-by-uuid block-or-uuid) block-or-uuid)
          format (:block/format block)]
      (save-block! {:block block :repo repo :format format} content)))
-  ([{:keys [block repo] :as _state} value]
-   (when (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
-     (save-block-aux! block value {}))))
+  ([{:keys [block] :as state} value]
+   (save-block-aux! block value {})))
 
 (defn save-current-block!
   "skip-properties? if set true, when editing block is likely be properties, skip saving"
@@ -1272,7 +1281,8 @@
            (let [input-id (state/get-edit-input-id)
                  block (state/get-edit-block)
                  db-block (when-let [block-id (:block/uuid block)]
-                            (db/pull [:block/uuid block-id]))
+                            (some-> (db/pull [:block/uuid block-id])
+                                    (assoc :editing-property (:editing-property block))))
                  elem (and input-id (gdom/getElement input-id))
                  db-content (:block/content db-block)
                  db-content-without-heading (and db-content

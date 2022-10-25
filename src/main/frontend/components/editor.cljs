@@ -367,7 +367,7 @@
                (when set-default-width?
                  {:width max-width})
                (let [^js/HTMLElement editor
-                     (js/document.querySelector ".editor-wrapper")]
+                     (js/document.querySelector ".editor-inner")]
                  (if (<= (.-clientWidth editor) (+ left (if set-default-width? max-width 500)))
                    {:right 0}
                    {:left (if (or (nil? y-diff) (and y-diff (= y-diff 0))) left 0)})))]
