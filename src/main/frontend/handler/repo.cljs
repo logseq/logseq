@@ -405,7 +405,6 @@
      (global-config-handler/restore-global-config!))
     ;; Don't have to unlisten the old listener, as it will be destroyed with the conn
    (db/listen-and-persist! repo)
-   (state/pub-event! [:shortcut/refresh])
    (ui-handler/add-style-if-exists!)
    (state/set-db-restoring! false)))
 

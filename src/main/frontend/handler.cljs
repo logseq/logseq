@@ -97,7 +97,6 @@
             (p/finally
               (fn []
                 ;; install after config is restored
-                (shortcut/unlisten-all)
                 (shortcut/refresh!)
 
                 (cond
