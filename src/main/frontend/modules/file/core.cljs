@@ -99,7 +99,8 @@
                             vals
                             (mapcat (fn [ref] (if (map? ref)
                                                 [(:db/id ref)]
-                                                (map :db/id ref)))))) blocks)
+                                                (map :db/id ref))))))
+                         (cons page-block blocks))
                  (remove nil?)
                  (set))
         refs (db/pull-many (state/get-current-repo)

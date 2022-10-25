@@ -257,17 +257,16 @@
         page-id (:block/uuid page)]
     (when page-id
       (let [page-lookup [:block/uuid page-id]
-            blocks (concat
-                    (map (fn [block]
-                           (assoc block
-                                  :block/format (or (:block/format page) :markdown)
-                                  :block/page page-lookup
-                                  :block/parent (or (:block/parent block) page-lookup)
-                                  :block/path-refs (set (conj (:block/path-refs block) page-lookup)))) blocks)
-                    refs)
+            blocks (map (fn [block]
+                          (assoc block
+                                 :block/format (or (:block/format page) :markdown)
+                                 :block/page page-lookup
+                                 :block/parent (or (:block/parent block) page-lookup)
+                                 :block/path-refs (set (conj (:block/path-refs block) page-lookup)))) blocks)
             page' (assoc page :block/file [:file/path file])]
         {:pages [page']
-         :blocks blocks}))))
+         :blocks blocks
+         :refs refs}))))
 
 (defn- with-block-uuid
   [pages]
