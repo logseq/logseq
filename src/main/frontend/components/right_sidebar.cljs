@@ -90,13 +90,15 @@
     (when-let [page-name (if (integer? db-id)
                            (:block/name (db/entity db-id))
                            db-id)]
-      [[:a.page-title {:href     (if (db-model/whiteboard-page? page-name)
-                                   (rfe/href :whiteboard {:name page-name})
-                                   (rfe/href :page {:name page-name}))
-                       :on-click (fn [e]
-                                   (when (gobj/get e "shiftKey")
-                                     (.preventDefault e)))}
-        (db-model/get-page-original-name page-name)]
+      [[:div.flex.flex-1.flex-row.justify-between.items-center.mr-2
+        [:a.page-title {:href     (if (db-model/whiteboard-page? page-name)
+                                    (rfe/href :whiteboard {:name page-name})
+                                    (rfe/href :page {:name page-name}))
+                        :on-click (fn [e]
+                                    (when (gobj/get e "shiftKey")
+                                      (.preventDefault e)))}
+         (db-model/get-page-original-name page-name)]
+        (page/page-configure-button page-name)]
        [:div.ml-2
         (page-cp repo page-name)]])
 
@@ -129,11 +131,11 @@
          (let [[title component] item]
            [:div.flex.flex-col
             [:div.flex.flex-row.justify-between
-             [:div.flex.flex-row.justify-center
+             [:div.flex.flex-1.flex-row.items-center
               {:on-click #(state/sidebar-block-toggle-collapse! db-id)}
               [:a.opacity-50.hover:opacity-100.flex.items-center.pr-1
                (ui/rotating-arrow collapse?)]
-              [:div.ml-1.font-medium
+              [:div.ml-1.font-medium.flex.flex-1
                title]]
              (close #(state/sidebar-remove-block! idx))]
             [:div {:class (if collapse? "hidden" "initial")}

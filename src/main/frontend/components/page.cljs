@@ -269,64 +269,73 @@
        :on-focus (fn []
                    (when untitled? (reset! *title-value "")))}]]))
 
+(rum/defc page-configure-button
+  [page-name]
+  [:a.text-xl.fade-link.inline
+   {:title "Toggle properties"
+    :on-click (fn [e]
+                (util/stop e)
+                (property-handler/toggle-properties page-name))}
+   ": :"])
+
 (rum/defcs page-title < rum/reactive
   (rum/local false ::edit?)
   (rum/local "" ::input-value)
   {:init (fn [state]
            (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
-  [state page-name icon title _format fmt-journal?]
-  (when title
-    (let [*title-value (get state ::title-value)
-          *edit? (get state ::edit?)
-          *input-value (get state ::input-value)
-          repo (state/get-current-repo)
-          hls-page? (pdf-assets/hls-file? title)
-          whiteboard-page? (model/whiteboard-page? page-name)
-          untitled? (and whiteboard-page? (parse-uuid page-name)) ;; normal page cannot be untitled right?
-          title (if hls-page?
-                  [:a.asset-ref (pdf-assets/fix-local-asset-pagename title)]
-                  (if fmt-journal? (date/journal-title->custom-format title) title))
-          old-name (or title page-name)]
-      [:h1.page-title.flex.cursor-pointer.gap-1.w-full
-       {:on-mouse-down (fn [e]
-                         (when (util/right-click? e)
-                           (state/set-state! :page-title/context {:page page-name})))
-        :on-click (fn [e]
-                    (.preventDefault e)
-                    (if (gobj/get e "shiftKey")
-                      (when-let [page (db/pull repo '[*] [:block/name page-name])]
-                        (state/sidebar-add-block!
-                         repo
-                         (:db/id page)
-                         :page))
-                      (when (and (not hls-page?) (not fmt-journal?))
-                        (reset! *input-value (if untitled? "" old-name))
-                        (reset! *edit? true))))}
-       (when (not= icon "") [:span.page-icon icon])
-       [:div.flex.flex-1.flex-row.justify-between.items-center
-        [:div.page-title-sizer-wrapper.relative
-         (when (rum/react *edit?)
-           (page-title-editor {:*title-value *title-value
-                               :*edit? *edit?
-                               :*input-value *input-value
-                               :title title
-                               :page-name page-name
-                               :old-name old-name
-                               :untitled? untitled?
-                               :whiteboard-page? whiteboard-page?}))
-         [:span.title.block
-          {:data-value (rum/react *input-value)
-           :data-ref page-name
-           :style {:opacity (when @*edit? 0)}}
-          (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
-                untitled? [:span.opacity-50 (t :untitled)]
-                :else title)]]
-        [:a.text-xl.fade-link.inline
-         {:title "Toggle properties"
-          :on-click (fn [e]
-                      (util/stop e)
-                      (property-handler/toggle-properties page-name))}
-         ": :"]]])))
+  [state page]
+  (let [page-name (:block/name page)
+        title (or (:block/original-name page) page-name)
+        {:keys [icon]} (:block/properties page)
+        icon (or icon "")]
+    (when title
+     (let [*title-value (get state ::title-value)
+           *edit? (get state ::edit?)
+           *input-value (get state ::input-value)
+           repo (state/get-current-repo)
+           fmt-journal? (boolean (date/journal-title->int page-name))
+           hls-page? (pdf-assets/hls-file? title)
+           whiteboard-page? (model/whiteboard-page? page-name)
+           untitled? (and whiteboard-page? (parse-uuid page-name)) ;; normal page cannot be untitled right?
+           title (if hls-page?
+                   [:a.asset-ref (pdf-assets/fix-local-asset-pagename title)]
+                   (if fmt-journal? (date/journal-title->custom-format title) title))
+           old-name (or title page-name)]
+       [:h1.page-title.flex.cursor-pointer.gap-1.w-full
+        {:on-mouse-down (fn [e]
+                          (when (util/right-click? e)
+                            (state/set-state! :page-title/context {:page page-name})))
+         :on-click (fn [e]
+                     (.preventDefault e)
+                     (if (gobj/get e "shiftKey")
+                       (when-let [page (db/pull repo '[*] [:block/name page-name])]
+                         (state/sidebar-add-block!
+                          repo
+                          (:db/id page)
+                          :page))
+                       (when (and (not hls-page?) (not fmt-journal?))
+                         (reset! *input-value (if untitled? "" old-name))
+                         (reset! *edit? true))))}
+        (when (not= icon "") [:span.page-icon icon])
+        [:div.flex.flex-1.flex-row.justify-between.items-center
+         [:div.page-title-sizer-wrapper.relative
+          (when (rum/react *edit?)
+            (page-title-editor {:*title-value *title-value
+                                :*edit? *edit?
+                                :*input-value *input-value
+                                :title title
+                                :page-name page-name
+                                :old-name old-name
+                                :untitled? untitled?
+                                :whiteboard-page? whiteboard-page?}))
+          [:span.title.block
+           {:data-value (rum/react *input-value)
+            :data-ref page-name
+            :style {:opacity (when @*edit? 0)}}
+           (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
+                 untitled? [:span.opacity-50 (t :untitled)]
+                 :else title)]]
+         (page-configure-button page-name)]]))))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
@@ -395,8 +404,6 @@
           page-name (:block/name page)
           page-original-name (:block/original-name page)
           title (or page-original-name page-name)
-          {:keys [icon]} (:block/properties page)
-          icon (or icon "")
           today? (and
                   journal?
                   (= page-name (util/page-name-sanity-lc (date/journal-name))))
@@ -428,7 +435,7 @@
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when-not whiteboard?
                [:div.flex-1.flex-row.w-full
-                [:h1.title.ls-page-title (page-title page-name icon title format fmt-journal?)]])
+                [:h1.title.ls-page-title (page-title page)]])
              (when (not config/publishing?)
                (when config/lsp-enabled?
                  [:div.flex.flex-row

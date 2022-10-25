@@ -1008,7 +1008,7 @@ Similar to re-frame subscriptions"
                                             (cons [repo db-id block-type])
                                             (distinct))))
       (open-right-sidebar!)
-      (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scrollable")]
+      (when-let [elem (gdom/getElementByClass "sidebar-item-list")]
         (util/scroll-to elem 0)))))
 
 (defn sidebar-remove-block!
