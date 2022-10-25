@@ -17,6 +17,7 @@
             [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -381,7 +382,7 @@
                             {:keys [block block-ref]} (state/sub :block-ref/context)
                             {:keys [page]} (state/sub :page-title/context)]
                         ;; TODO: Find a better way to handle this on whiteboards
-                        (when-not (.closest target ".logseq-tldraw")
+                        (when-not (whiteboard-handler/inside-portal? target)
                           (cond
                             page
                             (do
