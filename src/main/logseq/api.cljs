@@ -13,6 +13,7 @@
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.utils :as db-utils]
+            [frontend.db.react :as db-react]
             [frontend.db.query-react :as query-react]
             [frontend.fs :as fs]
             [frontend.handler.dnd :as editor-dnd-handler]
@@ -129,6 +130,20 @@
     (some-> (state/get-config)
             (normalize-keyword-for-json)
             (bean/->js))))
+
+(def ^:export get_current_graph_favorites
+  (fn []
+    (some->> (:favorites (state/get-config))
+             (remove string/blank?)
+             (filter string?)
+             (bean/->js))))
+
+(def ^:export get_current_graph_recent
+  (fn []
+    (some->> (db-react/sub-key-value :recent/pages)
+             (remove string/blank?)
+             (filter string?)
+             (bean/->js))))
 
 (def ^:export get_current_graph
   (fn []
