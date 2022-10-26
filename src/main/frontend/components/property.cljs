@@ -51,15 +51,14 @@
                        (when-not (string/blank? k)
                          (property-handler/add-property! (:db/id entity) k)
                          (reset! *new-property? false))))}]]
-       ;; [:div.flex-1.flex-col.rounded-sm
-       ;;  {:on-click (fn []
-       ;;               (reset! *new-property? true))}
-       ;;  [:div.flex.flex-row
-       ;;   [:div.block {:style {:height      20
-       ;;                        :width       20}}
-       ;;    [:a.add-button-link.block
-       ;;     (ui/icon "circle-plus")]]]]
-       )]))
+       [:div.flex-1.flex-col.rounded-sm
+        {:on-click (fn []
+                     (reset! *new-property? true))}
+        [:div.flex.flex-row
+         [:div.block {:style {:height      20
+                              :width       20}}
+          [:a.add-button-link.block
+           (ui/icon "circle-plus")]]]])]))
 
 (defn properties
   [entity block-components-m]
