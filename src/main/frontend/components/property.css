@@ -2,3 +2,7 @@
   cursor: text;
   min-height: 24px;
 }
+
+.ls-properties-area .add-button-link {
+    opacity: 0.5;
+}

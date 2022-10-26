@@ -1702,7 +1702,7 @@
          '[:find [?name ...]
            :where
            [?page :block/type ?t]
-           [(= ?t "logseq/structured-tag")]
+           [(= ?t "tag")]
            [?page :block/original-name ?name]]
          (conn/get-db repo))
        distinct))

@@ -446,8 +446,8 @@
                   (plugins/hook-ui-items :pagebar)]))])
 
           (when properties-show?
-            (let [structured-tag? (= "logseq/structured-tag" (:block/type entity))
-                  property? (= "logseq/property" (:block/type entity))]
+            (let [structured-tag? (= "tag" (:block/type entity))
+                  property? (= "property" (:block/type entity))]
               (if property?
                 [:div "TBD set property schema"]
                 [:div.p-2.mb-4

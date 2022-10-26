@@ -90,8 +90,7 @@
                   :block/parent
                   :block/tags
                   :block/alias
-                  :block/namespace
-                  :block/macros]
+                  :block/namespace]
         ref-ids (->>
                  (mapcat (fn [block]
                            (->>
@@ -104,11 +103,14 @@
                  (remove nil?)
                  (set))
         refs (db/pull-many (state/get-current-repo)
-                           '[:db/id :block/uuid :block/name]
+                           '[:db/id :block/uuid :block/name :block/type
+                             :db/ident]
                            ref-ids)
         id->uuid (zipmap (map :db/id refs) (map :block/uuid refs))
         refs-blocks (->> (map #(dissoc % :db/id) refs)
-                         (filter :block/name)
+                         (filter #(or (:block/name %)
+                                      ;; for macros
+                                      (:block/type %)))
                          (remove #(= (:block/uuid %) (:block/uuid page-block)))
                          (vec))
         blocks (mapv (fn [block]

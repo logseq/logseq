@@ -573,7 +573,7 @@
      {:tabIndex "0"
       :class (cond-> (if tag? "tag" "page-ref")
                (or (:property? config)
-                   (= (:block/type page-entity) "logseq/property"))
+                   (= (:block/type page-entity) "property"))
                (str " page-property-key block-property"))
       :data-ref page-name
       :on-mouse-down (fn [e] (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?))
@@ -2698,11 +2698,10 @@
         (block-right-menu config block edit?))]
 
      (when-not collapsed?
-       (let [refs (->> (db/pull-many '[*] (map :db/id (:block/refs block)))
-                       (filter #(= "logseq/structured-tag" (:block/type %))))]
-         (when (seq refs)
+       (let [tags (db/pull-many '[*] (map :db/id (:block/tags block)))]
+         (when (seq tags)
            [:div {:style {:margin-left 46}}
-            (property-component/composed-properties block refs {:page-cp page-cp
+            (property-component/composed-properties block tags {:page-cp page-cp
                                                                 :inline-text inline-text})])))
 
      (block-children config block children collapsed?)

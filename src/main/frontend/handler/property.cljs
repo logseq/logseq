@@ -16,14 +16,14 @@
         property (db/entity [:block/name key-name])]
     (when-not (and property
                    (or
-                    (= (:block/type property) "logseq/structured-tag")
+                    (= (:block/type property) "tag")
                     (= (:db/id property) (:db/id block))))
       (let [property-uuid (db/new-block-id)]
         (db/transact! (state/get-current-repo)
           [
            ;; property
            {:block/uuid property-uuid
-            :block/type "logseq/property"
+            :block/type "property"
             :block/original-name key
             :block/name key-name}
 

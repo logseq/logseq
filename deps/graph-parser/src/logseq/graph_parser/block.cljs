@@ -84,12 +84,17 @@
                     (= "Macro" (first block)))
                (let [{:keys [name arguments]} (second block)
                      argument (string/join ", " arguments)]
-                   (when (= name "embed")
-                     (text/page-ref-un-brackets! argument)))
+                 (if (= name "embed")
+                   (text/page-ref-un-brackets! argument)
+                   {:type "macro"
+                    :name name
+                    :arguments arguments}))
 
                :else
                nil)]
-    (when page (or (block-ref/get-block-ref-id page) page))))
+    (when page (or (and (string? page)
+                        (block-ref/get-block-ref-id page))
+                   page))))
 
 (defn- get-block-reference
   [block]
@@ -252,12 +257,14 @@
   "Convert journal file name to user' custom date format"
   [original-page-name date-formatter]
   (when original-page-name
-    (let [page-name (gp-util/page-name-sanity-lc original-page-name)
-          day (date-time-util/journal-title->int page-name (date-time-util/safe-journal-title-formatters date-formatter))]
-     (if day
-       (let [original-page-name (date-time-util/int->journal-title day date-formatter)]
-         [original-page-name (gp-util/page-name-sanity-lc original-page-name) day])
-       [original-page-name page-name day]))))
+    (let [page-name (gp-util/page-name-sanity-lc original-page-name)]
+      (if date-formatter
+        (let [day (date-time-util/journal-title->int page-name (date-time-util/safe-journal-title-formatters date-formatter))]
+          (if day
+            (let [original-page-name (date-time-util/int->journal-title day date-formatter)]
+              [original-page-name (gp-util/page-name-sanity-lc original-page-name) day])
+            [original-page-name page-name day]))
+        [original-page-name page-name nil]))))
 
 ;; TODO: refactor
 (defn page-name->map
@@ -347,10 +354,23 @@
                                                   (distinct))
                               col (->> (distinct (concat col children-pages))
                                        (remove nil?))]
-                          (map (fn [item]
-                                 (cond-> (page-name->map item with-id? db true date-formatter)
-                                   tag?
-                                   (assoc :block/type "logseq/structured-tag"))) col)))]
+                          (mapcat
+                           (fn [item]
+                             (let [macro? (and (map? item)
+                                               (= "macro" (:type item)))
+                                   item-name (if macro? (str "macro." (:name item) " " (string/join " " (:arguments item))) item)
+                                   ref-page (cond-> (page-name->map item-name with-id? db true date-formatter)
+                                              tag?
+                                              (assoc :block/type "tag")
+
+                                              macro?
+                                              (assoc :block/type "macro"
+                                                     :block/properties {:logseq.macro-name (:name item)
+                                                                        :logseq.macro-arguments (:arguments item)}))]
+                               (if macro?
+                                 [(page-name->map "cards" with-id? db true date-formatter)
+                                  ref-page]
+                                 [ref-page]))) col)))]
       (assoc block
              :refs (ref->map-fn refs false)
              :tags (ref->map-fn structured-tags true)))))
@@ -475,27 +495,6 @@
                (conj acc (assoc block :block/path-refs path-ref-pages))
                parents)))))
 
-(defn- macro->block
-  "macro: {:name \"\" arguments [\"\"]}"
-  [macro]
-  {:db/ident (str (:name macro) " " (string/join " " (:arguments macro)))
-   :block/type "macro"
-   :block/properties {:logseq.macro-name (:name macro)
-                      :logseq.macro-arguments (:arguments macro)}})
-
-(defn extract-macros-from-ast
-  [ast]
-  (let [*result (atom #{})]
-    (walk/postwalk
-     (fn [f]
-       (if (and (vector? f) (= (first f) "Macro"))
-         (do
-           (swap! *result conj (second f))
-           nil)
-         f))
-     ast)
-    (mapv macro->block @*result)))
-
 (defn with-pre-block-if-exists
   [blocks body pre-block-properties encoded-content {:keys [supported-formats db date-formatter user-config]}]
   (let [first-block (first blocks)
@@ -527,7 +526,6 @@
                                 :refs property-refs
                                 :pre-block? true
                                 :unordered true
-                                :macros (extract-macros-from-ast body)
                                 :body body}
                          block (with-page-block-refs block false supported-formats db date-formatter)]
                      (block-keywordize block))
@@ -600,7 +598,7 @@
     `with-id?`: If `with-id?` equals to true, all the referenced pages will have new db ids.
     `format`: content's format, it could be either :markdown or :org-mode.
     `options`: Options supported are :user-config, :block-pattern :supported-formats,
-               :extract-macros, :date-formatter and :db"
+               :date-formatter and :db"
   [blocks content with-id? format {:keys [user-config] :as options}]
   {:pre [(seq blocks) (string? content) (boolean? with-id?) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)
@@ -628,9 +626,8 @@
                   (recur headings (rest blocks) timestamps properties body))
 
                 (heading-block? block)
-                (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
-                      block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))]
-                  (recur (conj headings block'') (rest blocks) {} {} []))
+                (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)]
+                  (recur (conj headings block') (rest blocks) {} {} []))
 
                 :else
                 (recur headings (rest blocks) timestamps properties (conj body block))))
