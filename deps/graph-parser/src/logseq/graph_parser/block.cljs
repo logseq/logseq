@@ -87,11 +87,6 @@
                    (when (= name "embed")
                      (text/page-ref-un-brackets! argument)))
 
-               (and (vector? block)
-                    (= "Tag" (first block)))
-               (let [text (get-tag block)]
-                 (text/page-ref-un-brackets! text))
-
                :else
                nil)]
     (when page (or (block-ref/get-block-ref-id page) page))))
@@ -320,7 +315,8 @@
   (let [refs (->> (concat tags refs [marker priority])
                   (remove string/blank?)
                   (distinct))
-        refs (atom refs)]
+        refs (atom refs)
+        structured-tags (atom #{})]
     (walk/prewalk
      (fn [form]
        ;; skip custom queries
@@ -332,25 +328,32 @@
          (when-let [tag (get-tag form)]
            (let [tag (text/page-ref-un-brackets! tag)]
              (when (gp-util/tag-valid? tag)
-               (swap! refs conj tag))))
+               (swap! refs conj tag)
+               (swap! structured-tags conj tag))))
          form))
      (concat title body))
-    (let [refs (remove string/blank? @refs)
-          children-pages (->> (mapcat (fn [p]
-                                        (let [p (if (map? p)
-                                                  (:block/original-name p)
-                                                  p)]
-                                          (when (string? p)
-                                            (let [p (or (text/get-nested-page-name p) p)]
-                                              (when (text/namespace-page? p)
-                                                (gp-util/split-namespace-pages p))))))
-                                      refs)
-                              (remove string/blank?)
-                              (distinct))
-          refs (->> (distinct (concat refs children-pages))
-                    (remove nil?))
-          refs (map (fn [ref] (page-name->map ref with-id? db true date-formatter)) refs)]
-      (assoc block :refs refs))))
+    (let [ref->map-fn (fn [col tag?]
+                        (let [col (remove string/blank? @col)
+                              children-pages (->> (mapcat (fn [p]
+                                                            (let [p (if (map? p)
+                                                                      (:block/original-name p)
+                                                                      p)]
+                                                              (when (string? p)
+                                                                (let [p (or (text/get-nested-page-name p) p)]
+                                                                  (when (text/namespace-page? p)
+                                                                    (gp-util/split-namespace-pages p))))))
+                                                          col)
+                                                  (remove string/blank?)
+                                                  (distinct))
+                              col (->> (distinct (concat col children-pages))
+                                       (remove nil?))]
+                          (map (fn [item]
+                                 (cond-> (page-name->map item with-id? db true date-formatter)
+                                   tag?
+                                   (assoc :block/type "logseq/structured-tag"))) col)))]
+      (assoc block
+             :refs (ref->map-fn refs false)
+             :tags (ref->map-fn structured-tags true)))))
 
 (defn- with-block-refs
   [{:keys [title body] :as block}]
@@ -384,14 +387,6 @@
            (block-keywordize (gp-util/remove-nils block))
            block))
        blocks))
-
-(defn- block-tags->pages
-  [{:keys [tags] :as block}]
-  (if (seq tags)
-    (assoc block :tags (map (fn [tag]
-                              (let [tag (text/page-ref-un-brackets! tag)]
-                                [:block/name (gp-util/page-name-sanity-lc tag)])) tags))
-    block))
 
 (defn- get-block-content
   [utf8-content block format meta block-pattern]
@@ -431,7 +426,6 @@
   (some-> block
           (with-page-refs with-id? supported-formats db date-formatter)
           with-block-refs
-          block-tags->pages
           (update :refs (fn [col] (remove nil? col)))))
 
 (defn- with-path-refs

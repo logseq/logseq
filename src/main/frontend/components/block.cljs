@@ -1806,22 +1806,6 @@
       :html (set-priority block priority)}
      (priority-text priority))))
 
-(defn block-tags-cp
-  [{:block/keys [pre-block? tags] :as _block}]
-  (when (and (not pre-block?)
-             (seq tags))
-    (->elem
-     :span
-     {:class "block-tags"}
-     (mapv (fn [tag]
-             (when-let [page (db/entity (:db/id tag))]
-               (let [tag (:block/name page)]
-                 [:a.tag.mx-1 {:data-ref tag
-                               :key (str "tag-" (:db/id tag))
-                               :href (rfe/href :page {:name tag})}
-                  (str "#" tag)])))
-           tags))))
-
 (declare block-content)
 
 (defn build-block-title
@@ -1840,7 +1824,6 @@
                         (marker-switch t))
         marker-cp (marker-cp t)
         priority (priority-cp t)
-        tags (block-tags-cp t)
         bg-color (:background-color properties)
         ;; `heading-level` is for backward compatiblity, will remove it in later releases
         heading-level (:block/heading-level t)
@@ -1902,8 +1885,7 @@
                (when (and area? (:hl-stamp properties))
                  (pdf-assets/area-display t))])))
 
-         [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])
-       [tags])))))
+         [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]]))))))
 
 (rum/defc span-comma
   []

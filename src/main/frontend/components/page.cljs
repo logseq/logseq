@@ -468,16 +468,7 @@
                       :on-blur (fn [e]
                                  (let [page (util/evalue e)]
                                    (when-not (string/blank? page)
-                                     (property-handler/set-namespace! (:db/id entity) page))))}])]
-
-                 [:div.flex.flex-row.items-center.mt-4
-                  [:div.mr-2 "Set as Structured tag?"]
-                  (ui/toggle structured-tag?
-                             (fn []
-                               (if structured-tag?
-                                 (db/transact! [[:db/retract (:db/id entity) :block/type]])
-                                 (db/transact! [{:db/id (:db/id entity)
-                                                 :block/type "logseq/structured-tag"}]))))]])))
+                                     (property-handler/set-namespace! (:db/id entity) page))))}])]])))
 
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))

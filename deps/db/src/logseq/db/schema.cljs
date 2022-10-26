@@ -38,7 +38,7 @@
    :block/path-refs {:db/valueType   :db.type/ref
                      :db/cardinality :db.cardinality/many}
 
-   ;; for pages
+   ;; structured tags
    :block/tags {:db/valueType :db.type/ref
                 :db/cardinality :db.cardinality/many}
 
@@ -59,7 +59,9 @@
    :block/properties {}
    ;; vector
    :block/properties-order {}
+
    ;; map, key -> original property value's content
+   ;; TODO: remove this for EDN graphs
    :block/properties-text-values {}
 
    ;; TODO: EDN version doesn't need this, we probably need multiple schemas for
