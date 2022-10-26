@@ -2701,7 +2701,7 @@
        (let [refs (->> (db/pull-many '[*] (map :db/id (:block/refs block)))
                        (filter #(= "logseq/structured-tag" (:block/type %))))]
          (when (seq refs)
-           [:div.py-1 {:style {:margin-left 56}}
+           [:div {:style {:margin-left 46}}
             (property-component/composed-properties block refs {:page-cp page-cp
                                                                 :inline-text inline-text})])))
 

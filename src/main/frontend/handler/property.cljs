@@ -12,8 +12,12 @@
   [block-db-id key]
   (let [block (db/pull block-db-id)
         key (string/trim key)
-        key-name (util/page-name-sanity-lc key)]
-    (when-not (= (:block/type block) "logseq/structured-tag")
+        key-name (util/page-name-sanity-lc key)
+        property (db/entity [:block/name key-name])]
+    (when-not (and property
+                   (or
+                    (= (:block/type property) "logseq/structured-tag")
+                    (= (:db/id property) (:db/id block))))
       (let [property-uuid (db/new-block-id)]
         (db/transact! (state/get-current-repo)
           [
