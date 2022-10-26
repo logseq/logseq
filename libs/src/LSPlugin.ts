@@ -289,6 +289,18 @@ export type ExternalCommandType =
 
 export type UserProxyTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets'
 
+export type SearchIndiceInitStatus = boolean
+
+export interface IPluginSearchServiceHooks {
+  name: string
+
+  onQuery: (graph: string, key: string, opts: {}) => Promise<any>
+  onIndiceInit: (graph: string, blocks: any) => Promise<SearchIndiceInitStatus>
+  onIndiceReset: (graph: string) => Promise<void>
+  onBlocksChanged: (graph: string, changes: { added: Array<any>, removed: Array<any> }) => Promise<void>
+  onGraphRemoved: (graph: string, opts?: {}) => Promise<any>
+}
+
 /**
  * App level APIs
  */
@@ -301,6 +313,9 @@ export interface IAppProxy {
 
   getUserInfo: () => Promise<AppUserInfo | null>
   getUserConfigs: () => Promise<AppUserConfigs>
+
+  // services
+  registerSearchService<T extends IPluginSearchServiceHooks>(s: T): void
 
   // commands
   registerCommand: (
