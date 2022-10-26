@@ -654,7 +654,7 @@
              :delay [1000, 100]
              :class "tippy-hover"
              :interactive true}
-            [:a.mt-1.ml-2.block.opacity-60.hover:opacity-100
+            [:a.ml-2.block.opacity-60.hover:opacity-100.flex
              {:on-mouse-down (fn [e]
                                (util/stop e)
                                (swap! *random-mode? not))}
