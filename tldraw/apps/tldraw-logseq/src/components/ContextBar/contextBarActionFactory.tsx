@@ -57,7 +57,7 @@ const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 type ShapeType = Shape['props']['type']
 
 export const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
-  'logseq-portal': ['Edit', 'LogseqPortalViewMode', 'ScaleLevel', 'OpenPage', 'AutoResizing'],
+  'logseq-portal': ['Swatch', 'Edit', 'LogseqPortalViewMode', 'ScaleLevel', 'OpenPage', 'AutoResizing'],
   youtube: ['YoutubeLink'],
   iframe: ['IFrameSource'],
   box: ['Swatch', 'NoFill', 'StrokeType'],
