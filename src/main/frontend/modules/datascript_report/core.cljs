@@ -38,7 +38,8 @@
                            (contains? #{"logseq/property" "logseq/structured-tag"} (:block/type block-entity))
                            (and (:block/name block-entity)
                                 (seq (:block/properties block-entity))))
-                          block-entity))]
+                          block-entity))
+                        page-entity (or page-entity nil)]
                     (cond-> acc
                       (some? block-entity)
                       (update :blocks conj block-entity)
