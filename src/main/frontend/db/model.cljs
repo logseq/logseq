@@ -785,6 +785,8 @@
         react)))))
 
 (defn get-page-blocks-no-cache
+  "Return blocks of the designated page, without using cache.
+   page - name / title of the page"
   ([page]
    (get-page-blocks-no-cache (state/get-current-repo) page nil))
   ([repo-url page]

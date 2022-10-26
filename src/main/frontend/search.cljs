@@ -206,7 +206,7 @@
                 (fn [datom]
                   (contains? #{:block/name :block/content} (:a datom)))
                 data)
-        diff-pages (:pages (ds-report/get-blocks-and-pages tx-report))]
+        updated-pages (:pages (ds-report/get-blocks-and-pages tx-report))]
     (when (seq datoms)
       (let [datoms (group-by :a datoms)
             pages (:block/name datoms)
@@ -252,7 +252,16 @@
                                           (set))]
             (transact-blocks! repo
                               {:blocks-to-remove-set blocks-to-remove-set
-                               :blocks-to-add blocks-to-add})))))))
+                               :blocks-to-add        blocks-to-add})))))
+    (when (seq updated-pages) ;; when move op happens, no :block/content provided
+      (let [affected-pages   (-> (map :block/name updated-pages)
+                               distinct)
+            pages-to-add-set (filter db/page-exists? affected-pages)
+            pages-to-add     (->> (map search-db/page->index pages-to-add-set)
+                                  (remove nil?))
+            pages-to-remove-set (remove db/page-exists? affected-pages)]
+        (transact-pages! repo {:pages-to-remove-set pages-to-remove-set
+                               :pages-to-add        pages-to-add})))))
 
 (defn rebuild-indices!
   ([]

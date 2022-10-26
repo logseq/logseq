@@ -51,6 +51,7 @@
                  (doseq [block blocks-to-add]
                    (.add indice (bean/->js block)))))
              indice)))
+  (transact-pages! [_this _data] nil) ;; Page index is not available with fuse.js until sufficient performance benchmarking
   (truncate-blocks! [_this]
     (swap! indices assoc-in [repo :blocks] nil))
   (remove-db! [_this]

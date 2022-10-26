@@ -20,6 +20,12 @@
        :page page
        :content content})))
 
+;; TODO Junyi: Finalize index code
+(defn page->index
+  "Convert a page name to the index for searching (page content level)"
+  [page-name]
+  :no-op)
+
 (defn build-blocks-indice
   ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection
   #_:clj-kondo/ignore
@@ -29,12 +35,9 @@
        (remove nil?)
        (bean/->js)))
 
-;; TODO Junyi: Finalize index code
-(defn build-pages-indice
-  ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection
-  #_:clj-kondo/ignore
+(defn build-pages-indice 
   [repo]
-  (->> (db/get-all-page-contents)
+  (->> (db/get-all-pages repo)
        (map page->index)
        (remove nil?)
        (bean/->js)))
