@@ -1695,3 +1695,14 @@
           [?page :block/name]
           [?page :block/type "whiteboard"]]
         (conn/get-db repo))))
+
+(defn get-all-structured-tags
+  [repo]
+  (->> (d/q
+         '[:find [?name ...]
+           :where
+           [?page :block/type ?t]
+           [(= ?t "logseq/structured-tag")]
+           [?page :block/original-name ?name]]
+         (conn/get-db repo))
+       distinct))

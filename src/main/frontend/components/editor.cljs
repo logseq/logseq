@@ -116,7 +116,10 @@
                      (gp-util/safe-subs edit-content pos current-pos))
                    "")
                 matched-pages (when-not (string/blank? q)
-                                (editor-handler/get-matched-pages q))
+                                (if (and (= action :page-search-hashtag)
+                                         (state/edn-graph?))
+                                  (editor-handler/get-matched-structured-tags q)
+                                  (editor-handler/get-matched-pages q)))
                 matched-pages (cond
                                 (contains? (set (map util/page-name-sanity-lc matched-pages))
                                            (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched

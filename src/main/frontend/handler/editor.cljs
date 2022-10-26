@@ -1612,6 +1612,12 @@
       (remove (fn [p] (= (util/page-name-sanity-lc p) editing-page)) pages)
       pages)))
 
+(defn get-matched-structured-tags
+  "Return matched structured tags"
+  [q]
+  (let [tags (db-model/get-all-structured-tags (state/get-current-repo))]
+    (search/fuzzy-search tags q :limit 100)))
+
 (defn get-matched-blocks
   [q block-id]
   ;; remove current block

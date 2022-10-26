@@ -53,7 +53,9 @@
               block-ids (set/union (set block-ids) (set block-refs-ids))
               pages (extract/with-ref-pages pages blocks)
               pages-index (map #(select-keys % [:block/name]) pages)]
-          ;; does order matter?
+          (frontend.util/pprint {:pages pages
+                                 :blocks blocks
+                                 :refs refs})
           {:tx (concat file-content refs pages-index delete-blocks pages block-ids blocks)
            :ast ast})
         tx (concat tx [(cond-> {:file/path file

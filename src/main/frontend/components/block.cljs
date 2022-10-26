@@ -2717,7 +2717,7 @@
 
      (when-not collapsed?
        (let [refs (->> (db/pull-many '[*] (map :db/id (:block/refs block)))
-                       (filter #(= "logseq/structured-page" (:block/type %))))]
+                       (filter #(= "logseq/structured-tag" (:block/type %))))]
          (when (seq refs)
            [:div.py-1 {:style {:margin-left 56}}
             (property-component/composed-properties block refs {:page-cp page-cp

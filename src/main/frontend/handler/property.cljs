@@ -13,18 +13,19 @@
   (let [block (db/pull block-db-id)
         key (string/trim key)
         key-name (util/page-name-sanity-lc key)]
-    (let [property-uuid (db/new-block-id)]
-      (db/transact! (state/get-current-repo)
-        [
-         ;; property
-         {:block/uuid property-uuid
-          :block/type "logseq/property"
-          :block/original-name key
-          :block/name key-name}
+    (when-not (= (:block/type block) "logseq/structured-tag")
+      (let [property-uuid (db/new-block-id)]
+        (db/transact! (state/get-current-repo)
+          [
+           ;; property
+           {:block/uuid property-uuid
+            :block/type "logseq/property"
+            :block/original-name key
+            :block/name key-name}
 
-         {:block/uuid (:block/uuid block)
-          :block/properties (assoc (:block/properties block)
-                                   property-uuid "")}]))))
+           {:block/uuid (:block/uuid block)
+            :block/properties (assoc (:block/properties block)
+                                     property-uuid "")}])))))
 
 (defn set-namespace!
   [page-db-id page-name]

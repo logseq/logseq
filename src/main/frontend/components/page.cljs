@@ -446,7 +446,7 @@
                   (plugins/hook-ui-items :pagebar)]))])
 
           (when properties-show?
-            (let [structured-page? (= "logseq/structured-page" (:block/type entity))
+            (let [structured-tag? (= "logseq/structured-tag" (:block/type entity))
                   property? (= "logseq/property" (:block/type entity))]
               (if property?
                 [:div "TBD set property schema"]
@@ -471,13 +471,13 @@
                                      (property-handler/set-namespace! (:db/id entity) page))))}])]
 
                  [:div.flex.flex-row.items-center.mt-4
-                  [:div.mr-2 "Set as Structured Page?"]
-                  (ui/toggle structured-page?
+                  [:div.mr-2 "Set as Structured tag?"]
+                  (ui/toggle structured-tag?
                              (fn []
-                               (if structured-page?
+                               (if structured-tag?
                                  (db/transact! [[:db/retract (:db/id entity) :block/type]])
                                  (db/transact! [{:db/id (:db/id entity)
-                                                 :block/type "logseq/structured-page"}]))))]])))
+                                                 :block/type "logseq/structured-tag"}]))))]])))
 
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))
