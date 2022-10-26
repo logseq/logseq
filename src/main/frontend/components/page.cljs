@@ -239,7 +239,7 @@
                     :else
                     (state/set-modal! (confirm-fn)))
                   (util/stop e))]
-    [:span.absolute.inset-0
+    [:span.absolute.inset-0.edit-input-wrapper
      {:class (util/classnames [{:editing @*edit?}])}
      [:input.edit-input
       {:type          "text"
@@ -285,7 +285,7 @@
                   [:a.asset-ref (pdf-assets/fix-local-asset-pagename title)]
                   (if fmt-journal? (date/journal-title->custom-format title) title))
           old-name (or title page-name)]
-      [:h1.page-title.flex.cursor-pointer.gap-1
+      [:h1.page-title.flex.cursor-pointer.gap-1.w-full
        {:on-mouse-down (fn [e]
                            (when (util/right-click? e)
                              (state/set-state! :page-title/context {:page page-name})))
@@ -301,7 +301,7 @@
                           (reset! *input-value (if untitled? "" old-name))
                           (reset! *edit? true))))}
        (when (not= icon "") [:span.page-icon icon])
-       [:div.page-title-sizer-wrapper.relative.w-full
+       [:div.page-title-sizer-wrapper.relative
         (when (rum/react *edit?)
           (page-title-editor {:*title-value *title-value
                               :*edit? *edit?
@@ -314,13 +314,7 @@
         [:span.title.block
          {:data-value (rum/react *input-value)
           :data-ref page-name
-          :style {:opacity (when @*edit? 0)
-                  :pointer-events "none"
-                  :font-weight "inherit"
-                  :white-space "nowrap"
-                  :overflow "hidden"
-                  :text-overflow "ellipsis"
-                  :min-width "80px"}}
+          :style {:opacity (when @*edit? 0)}}
          (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
                untitled? [:span.opacity-50 (t :untitled)]
                :else title)]]])))
@@ -420,13 +414,13 @@
                                    (page-mouse-leave e *control-show?))}
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when-not whiteboard?
-               [:div.flex-1.flex-row
+               [:div.flex-1.flex-row.w-full
                 [:h1.title.ls-page-title (page-title page-name icon title format fmt-journal?)]])
              (when (not config/publishing?)
-               [:div.flex.flex-row
-                (when config/lsp-enabled?
+               (when config/lsp-enabled?
+                 [:div.flex.flex-row
                   (plugins/hook-ui-slot :page-head-actions-slotted nil)
-                  (plugins/hook-ui-items :pagebar))])])
+                  (plugins/hook-ui-items :pagebar)]))])
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))
              (let [config {:id "block-parent"

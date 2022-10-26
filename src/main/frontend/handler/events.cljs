@@ -134,7 +134,6 @@
        (state/set-current-repo! graph)
        ;; load config
        (repo-config-handler/restore-repo-config! graph)
-       (st/refresh!)
        (when-not (= :draw (state/get-current-route))
          (route-handler/redirect-to-home!))
        (when-let [dir-name (config/get-repo-dir graph)]
@@ -557,7 +556,6 @@
 
 (defn- refresh-cb []
   (page-handler/create-today-journal!)
-  (st/refresh!)
   (file-sync-restart!))
 
 (defmethod handle :graph/ask-for-re-fresh [_]

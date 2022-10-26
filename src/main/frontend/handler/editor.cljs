@@ -2438,6 +2438,13 @@
       (.preventDefault e)
       (keydown-new-line))))
 
+(defn- scroll-to-block
+  [block]
+  (when block
+    (when-not (util/element-visible? block)
+      (.scrollIntoView block #js {:behavior "smooth"
+                                  :block "center"}))))
+
 (defn- select-first-last
   "Select first or last block in viewpoint"
   [direction]
@@ -2445,7 +2452,7 @@
         block (->> (util/get-blocks-noncollapse)
                    (f))]
     (when block
-      (.scrollIntoView block #js {:behavior "smooth" :block "center"})
+      (scroll-to-block block)
       (state/exit-editing-and-set-selected-blocks! [block]))))
 
 (defn- select-up-down [direction]
@@ -2458,7 +2465,7 @@
             :down util/get-next-block-non-collapsed)
         sibling-block (f selected)]
     (when (and sibling-block (dom/attr sibling-block "blockid"))
-      (.scrollIntoView sibling-block #js {:behavior "smooth" :block "center"})
+      (scroll-to-block sibling-block)
       (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
 
 (defn- move-cross-boundrary-up-down
@@ -3092,7 +3099,7 @@
 
         (state/selection?)
         (select-up-down direction)
-        
+
         ;; if there is an edit-input-id set, we are probably still on editing mode, that is not fully initialized
         (not (state/get-edit-input-id))
         (select-first-last direction)))
