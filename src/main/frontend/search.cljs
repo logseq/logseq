@@ -257,7 +257,7 @@
       (let [affected-pages   (-> (map :block/name updated-pages)
                                distinct)
             pages-to-add-set (filter db/page-exists? affected-pages)
-            pages-to-add     (->> (map search-db/page->index pages-to-add-set)
+            pages-to-add     (->> (map (partial search-db/page->index repo) pages-to-add-set)
                                   (remove nil?))
             pages-to-remove-set (remove db/page-exists? affected-pages)]
         (transact-pages! repo {:pages-to-remove-set pages-to-remove-set

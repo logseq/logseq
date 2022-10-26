@@ -2,6 +2,8 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.db :as db]
+            [frontend.modules.outliner.tree :as outliner-tree]
+            [frontend.modules.file.core :as file-core]
             [frontend.state :as state]
             [frontend.util :as util]
             ["fuse.js" :as fuse]))
@@ -13,18 +15,22 @@
 (defn block->index
   "Convert a block to the index for searching"
   [{:block/keys [uuid page content] :as block}]
-  (when-let [content (util/search-normalize content (state/enable-search-remove-accents?))]
-    (when-not (> (count content) (state/block-content-max-length (state/get-current-repo)))
-      {:id (:db/id block)
-       :uuid (str uuid)
-       :page page
-       :content content})))
+  (when-not (> (count content) (state/block-content-max-length (state/get-current-repo)))
+    {:id (:db/id block)
+     :uuid (str uuid)
+     :page page
+     :content (util/search-normalize content (state/enable-search-remove-accents?))}))
 
 ;; TODO Junyi: Finalize index code
 (defn page->index
   "Convert a page name to the index for searching (page content level)"
-  [page-name]
-  :no-op)
+  [repo page-name]
+  (when-let [content (-> (db/get-page-blocks-no-cache repo page-name)
+                         (outliner-tree/blocks->vec-tree page-name)
+                         (file-core/tree->file-content {:init-level 1}))]
+    (when-not (> (count content) (* (state/block-content-max-length repo) 10))
+      {:page-name page-name
+       :content (util/search-normalize content (state/enable-search-remove-accents?))})))
 
 (defn build-blocks-indice
   ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection
@@ -38,7 +44,7 @@
 (defn build-pages-indice 
   [repo]
   (->> (db/get-all-pages repo)
-       (map page->index)
+       (map (partial page->index repo))
        (remove nil?)
        (bean/->js)))
 
