@@ -152,7 +152,7 @@ const CircleButton = ({
   }, [active])
 
   return (
-    <div
+    <button
       data-active={active}
       data-recently-changed={recentlyChanged}
       style={style}
@@ -163,7 +163,7 @@ const CircleButton = ({
         {otherIcon && <TablerIcon name={otherIcon} />}
         <TablerIcon name={icon} />
       </div>
-    </div>
+    </button>
   )
 }
 
@@ -181,7 +181,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     // collapsedHeight is the height before collapsing
     collapsedHeight: 0,
     stroke: 'var(--ls-primary-text-color)',
-    fill: 'var(--ls-secondary-background-color)',
+    fill: 'transparent',
     noFill: false,
     borderRadius: 8,
     strokeWidth: 2,
@@ -661,7 +661,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
   PortalComponent = observer(({}: TLComponentProps) => {
     const {
-      props: { pageId },
+      props: { pageId, fill },
     } = this
     const { renderers } = React.useContext(LogseqContext)
     const app = useApp<Shape>()
@@ -707,6 +707,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         ref={cpRefContainer}
         className="tl-logseq-cp-container"
         style={{
+          background: `var(--ls-highlight-color-${fill})`,
           overflow: this.props.isAutoResizing ? 'visible' : 'auto',
         }}
       >
@@ -838,8 +839,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 data-portal-selected={portalSelected}
                 data-editing={isEditing}
                 style={{
-                  background: this.props.compact ? 'transparent' : fill,
-                  color: stroke,
                   width: `calc(100% / ${scaleRatio})`,
                   height: `calc(100% / ${scaleRatio})`,
                   transform: `scale(${scaleRatio})`,

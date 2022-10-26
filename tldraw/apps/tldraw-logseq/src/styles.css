@@ -647,6 +647,7 @@ button.tl-select-input-trigger {
   opacity: 1;
   user-select: text;
   transform-origin: top left;
+  background: var(--ls-secondary-background-color);
 
   &[data-collapsed='true'][data-editing='false'] {
     @apply overflow-hidden;
@@ -850,8 +851,10 @@ html[data-theme='dark'] {
 }
 
 .tl-popover-content {
-  border-radius: 4px;
-  padding: 20px;
+  @apply rounded-sm;
+
+  padding: 4px;
+  width: 160px;
   background-color: var(--ls-secondary-background-color);
   z-index: 100000;
 }
@@ -861,12 +864,15 @@ html[data-theme='dark'] {
 }
 
 .tl-color-palette {
-  @apply flex;
+  @apply flex flex-wrap;
 }
 
 .tl-color-drip {
+  @apply rounded-sm;
+
   width: 30px;
   height: 30px;
-  margin: 2px;
+  margin: 4px;
   border: 1px solid var(--ls-secondary-border-color);
+  color: var(--ls-secondary-text-color);
 }

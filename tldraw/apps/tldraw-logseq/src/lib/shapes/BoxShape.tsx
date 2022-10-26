@@ -65,7 +65,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
           strokeWidth={strokeWidth}
           stroke={noFill ? fill : stroke}
           strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
-          fill={noFill ? 'none' : fill}
+          fill={noFill ? 'none' : `var(--color-${fill}-500)`}
         />
       </SVGContainer>
     )

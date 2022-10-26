@@ -330,21 +330,17 @@ const SwatchAction = observer(() => {
   const shapes = filterShapeByAction<
     BoxShape | PolygonShape | EllipseShape | LineShape | PencilShape | TextShape
   >(app.selectedShapesArray, 'Swatch')
-  const handleChange = React.useMemo(() => {
-    let latestValue = ''
-    const handler: React.ChangeEventHandler<HTMLInputElement> = e => {
-      shapes.forEach(s => {
-        s.update({ fill: latestValue, stroke: latestValue })
-      })
-      app.persist()
-    }
-    return debounce(handler, 100, e => {
-      latestValue = e.target.value
+
+  const handleClick = React.useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    const color = e.target.getAttribute("data-color")
+    shapes.forEach(s => {
+      s.update({ fill: color, stroke: color })
     })
+    app.persist()
   }, [])
 
   const value = shapes[0].props.noFill ? shapes[0].props.stroke : shapes[0].props.fill
-  return <ColorInput title="Color Picker" value={value} onChange={handleChange} />
+  return <ColorInput title="Color Picker" value={value} onClick={handleClick} />
 })
 
 const StrokeTypeAction = observer(() => {

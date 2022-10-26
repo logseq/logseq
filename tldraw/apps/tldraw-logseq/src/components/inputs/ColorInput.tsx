@@ -2,7 +2,7 @@ import * as React from 'react'
 import * as Popover from '@radix-ui/react-popover';
 import { TablerIcon } from '../icons'
 
-interface ColorInputProps extends React.InputHTMLAttributes<HTMLInputElement> {}
+interface ColorInputProps extends React.InputHTMLAttributes<HTMLButtonElement> {}
 
 enum HighlightColor {
   Gray = 'gray',
@@ -12,9 +12,10 @@ enum HighlightColor {
   Blue = 'blue',
   Purple = 'purple',
   Pink = 'pink',
+  None = 'transparent',
 }
 
-export function ColorInput({ value, onChange, ...rest }: ColorInputProps) {
+export function ColorInput({ value, onClick, ...rest }: ColorInputProps) {
   const ref = React.useRef<HTMLDivElement>(null)
   const [computedValue, setComputedValue] = React.useState(value)
 
@@ -31,12 +32,10 @@ export function ColorInput({ value, onChange, ...rest }: ColorInputProps) {
 
   return (
     <Popover.Root>
-      <Popover.Trigger asChild>
+      <Popover.Trigger>
         <div className="input" ref={ref}>
           <div className="color-input-wrapper">
-            <button
-              className={`bg-${computedValue}-500)`}
-            />
+            <button className={`bg-${value}-500`} />
           </div>
         </div>
       </Popover.Trigger>
@@ -48,19 +47,18 @@ export function ColorInput({ value, onChange, ...rest }: ColorInputProps) {
           arrowPadding={10}
         >
           <div className={"tl-color-palette"}>
-            {Object.values(HighlightColor).map(value =>
+            {Object.values(HighlightColor).map(color =>
               <button
-                className={`tl-color-drip bg-${value}-500`}
-                onClick={()=>{
-                  setComputedValue(value)
+                className={`tl-color-drip bg-${color}-500`}
+                data-color={color}
+                onClick={(e)=>{
+                  // setComputedValue(value)
+                  onClick?.(e)
                 }}
-              />
+              >
+                {(color === "transparent") && <TablerIcon name="droplet-off" />}
+              </button>
             )}
-            <button
-                className="tl-color-drip"
-            >
-              <TablerIcon name="text" />
-            </button>
           </div>
           <Popover.Arrow className="tl-popover-arrow" />
         </Popover.Content>
