@@ -180,6 +180,7 @@
      :plugin/installed-ui-items             {}
      :plugin/installed-resources            {}
      :plugin/installed-hooks                {}
+     :plugin/installed-services             {}
      :plugin/simple-commands                {}
      :plugin/selected-theme                 nil
      :plugin/selected-unpacked-pkg          nil
@@ -1408,6 +1409,35 @@ Similar to re-frame subscriptions"
       (set-state!
         [:plugin/installed-resources (keyword pid) (keyword type) key] resource)
       resource)))
+
+(defn get-plugin-services
+  [pid type]
+  (when-let [installed (and pid (:plugin/installed-services @state))]
+    (some->> (seq (get installed (keyword pid)))
+             (filterv #(= type (:type %))))))
+
+(defn install-plugin-service
+  ([pid type name] (install-plugin-service pid type name nil))
+  ([pid type name opts]
+   (when-let [pid (and pid type name (keyword pid))]
+     (let [exists (get-plugin-services pid type)]
+       (when (or (not exists) (not (some #(= name (:name %)) exists)))
+         (update-state! [:plugin/installed-services pid]
+                        #(conj (vec %) {:pid pid :type type :name name :opts opts})))))))
+
+(defn uninstall-plugin-service
+  [pid type-or-all]
+  (when-let [pid (keyword pid)]
+    (when-let [installed (get (:plugin/installed-services @state) pid)]
+      (set-state!
+       [:plugin/installed-services pid]
+       (if (or (true? type-or-all) (nil? type-or-all)) nil
+         (filterv #(not= type-or-all (:type %)) installed))))))
+
+(defn get-all-plugin-services-with-type
+  [type]
+  (when-let [installed (vals (:plugin/installed-services @state))]
+    (mapcat (fn [s] (filter #(= (keyword type) (:type %)) s)) installed)))
 
 (defn install-plugin-hook
   [pid hook]
