@@ -103,14 +103,11 @@
                  (remove nil?)
                  (set))
         refs (db/pull-many (state/get-current-repo)
-                           '[:db/id :block/uuid :block/name :block/type
-                             :db/ident]
+                           '[:db/id :block/uuid :block/name]
                            ref-ids)
         id->uuid (zipmap (map :db/id refs) (map :block/uuid refs))
         refs-blocks (->> (map #(dissoc % :db/id) refs)
-                         (filter #(or (:block/name %)
-                                      ;; for macros
-                                      (:block/type %)))
+                         (filter :block/name)
                          (remove #(= (:block/uuid %) (:block/uuid page-block)))
                          (vec))
         blocks (mapv (fn [block]
