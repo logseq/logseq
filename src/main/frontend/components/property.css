@@ -3,6 +3,23 @@
   min-height: 24px;
 }
 
-.ls-properties-area .add-button-link {
-    opacity: 0.5;
+.ls-properties-area {
+    .add-button-link {
+        opacity: 0.5;
+    }
+
+    tr:nth-child(even), tr:nth-child(even) {
+        background: none;
+    }
+}
+
+.ls-property-add input.form-input {
+    padding-left: 0;
+    border-radius: 0;
+    border: none;
+    border-bottom: 1px solid;
+}
+
+.ls-property-add input.form-input:focus {
+    box-shadow: none;
 }

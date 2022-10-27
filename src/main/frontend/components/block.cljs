@@ -574,7 +574,7 @@
       :class (cond-> (if tag? "tag" "page-ref")
                (or (:property? config)
                    (= (:block/type page-entity) "property"))
-               (str " page-property-key block-property"))
+               (str " property-key"))
       :data-ref page-name
       :on-mouse-down (fn [e] (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?))
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
@@ -1907,9 +1907,9 @@
     [:div
      (if property-pages-enabled?
        (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})
-       [:span.page-property-key.font-medium (name k)])
+       [:span.property-key.font-medium (name k)])
      [:span.mr-1 ":"]
-     [:div.page-property-value.inline
+     [:div.property-value.inline
       (cond
         (int? v)
         v

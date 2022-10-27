@@ -613,12 +613,12 @@ a.cloze-revealed {
   text-underline-position: under;
 }
 
-.page-property-key {
-  @apply font-medium whitespace-nowrap;
-  color: var(--ls-secondary-text-color);
+.property-key {
+  @apply text-sm font-medium whitespace-nowrap;
+  color: var(--ls-primary-text-color);
 }
 
-.page-property-key:hover {
+.property-key:hover {
   background-color: var(--ls-selection-background-color);
 }
 

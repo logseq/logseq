@@ -4,9 +4,34 @@
             [clojure.string :as string]
             [frontend.handler.property :as property-handler]
             [frontend.db :as db]
+            [frontend.mixins :as mixins]
             [rum.core :as rum]
             [frontend.state :as state]
             [goog.dom :as gdom]))
+
+(defn- add-property
+  [entity k *new-property?]
+  (when-not (string/blank? k)
+    (property-handler/add-property! (:db/id entity) k)
+    (reset! *new-property? false)))
+
+(rum/defc property-input
+  [entity *new-property?]
+  [:div.ls-property-add.grid.grid-cols-4.gap-4
+   [:input#add-property.form-input.block.col-span-1.focus:outline-none
+    {:placeholder "Property key"
+     :auto-focus true
+     :on-blur (fn [e]
+                (add-property entity (util/evalue e) *new-property?))
+     :on-key-down (fn [e]
+                    (case (util/ekey e)
+                      "Enter"
+                      (add-property entity (util/evalue e) *new-property?)
+
+                      "Escape"
+                      (reset! *new-property? false)
+
+                      nil))}]])
 
 (rum/defcs properties-area <
   (rum/local false ::new-property?)
@@ -42,22 +67,14 @@
                           (inline-text {} :markdown (str v)))]))]]))))]])
 
      (if @*new-property?
-       [:div.ls-property-add.grid.grid-cols-4.gap-4
-        [:input.form-input.block.col-span-1
-         {:placeholder "Property key"
-          :auto-focus true
-          :on-blur (fn [e]
-                     (let [k (util/evalue e)]
-                       (when-not (string/blank? k)
-                         (property-handler/add-property! (:db/id entity) k)
-                         (reset! *new-property? false))))}]]
+       (property-input entity *new-property?)
        [:div.flex-1.flex-col.rounded-sm
         {:on-click (fn []
                      (reset! *new-property? true))}
         [:div.flex.flex-row
          [:div.block {:style {:height      20
                               :width       20}}
-          [:a.add-button-link.block
+          [:a.add-button-link.block {:style {:margin-left -4}}
            (ui/icon "circle-plus")]]]])]))
 
 (defn properties
