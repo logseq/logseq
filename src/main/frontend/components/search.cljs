@@ -22,45 +22,8 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [reitit.frontend.easy :as rfe]
-            [frontend.modules.shortcut.core :as shortcut]))
-
-(defn highlight-exact-query
-  [content q]
-  (if (or (string/blank? content) (string/blank? q))
-    content
-    (when (and content q)
-      (let [q-words (string/split q #" ")
-            lc-content (util/search-normalize content (state/enable-search-remove-accents?))
-            lc-q (util/search-normalize q (state/enable-search-remove-accents?))]
-        (if (and (string/includes? lc-content lc-q)
-                 (not (util/safe-re-find #" " q)))
-          (let [i (string/index-of lc-content lc-q)
-                [before after] [(subs content 0 i) (subs content (+ i (count q)))]]
-            [:div
-             (when-not (string/blank? before)
-               [:span before])
-             [:mark.p-0.rounded-none (subs content i (+ i (count q)))]
-             (when-not (string/blank? after)
-               [:span after])])
-          (let [elements (loop [words q-words
-                                content content
-                                result []]
-                           (if (and (seq words) content)
-                             (let [word (first words)
-                                   lc-word (util/search-normalize word (state/enable-search-remove-accents?))
-                                   lc-content (util/search-normalize content (state/enable-search-remove-accents?))]
-                               (if-let [i (string/index-of lc-content lc-word)]
-                                 (recur (rest words)
-                                        (subs content (+ i (count word)))
-                                        (vec
-                                         (concat result
-                                                 [[:span (subs content 0 i)]
-                                                  [:mark.p-0.rounded-none (subs content i (+ i (count word)))]])))
-                                 (recur nil
-                                        content
-                                        result)))
-                             (conj result [:span content])))]
-            [:p {:class "m-0"} elements]))))))
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.components.search.highlight :as highlight]))
 
 (rum/defc search-result-item
   [icon content]
@@ -81,7 +44,7 @@
                           (clojure.core/uuid uuid)
                           {:indent? false})])
      [:div {:class "font-medium" :key "content"}
-      (highlight-exact-query content q)]]))
+      (highlight/highlight-exact-query content q)]]))
 
 (defonce search-timeout (atom nil))
 
@@ -223,12 +186,12 @@
         (search-result-item {:name (if (model/whiteboard-page? data) "whiteboard" "page")
                              :extension? true
                              :title (t (if (model/whiteboard-page? data) :search-item/whiteboard :search-item/page))}
-                            (highlight-exact-query data search-q))]
+                            (highlight/highlight-exact-query data search-q))]
 
        :file
        (search-result-item {:name "file"
                             :title (t :search-item/file)}
-                           (highlight-exact-query data search-q))
+                           (highlight/highlight-exact-query data search-q))
 
        :block
        (let [{:block/keys [page uuid]} data  ;; content here is normalized

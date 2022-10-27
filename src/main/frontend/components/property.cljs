@@ -4,10 +4,13 @@
             [clojure.string :as string]
             [frontend.handler.property :as property-handler]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.mixins :as mixins]
             [rum.core :as rum]
             [frontend.state :as state]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [frontend.search :as search]
+            [frontend.components.search.highlight :as highlight]))
 
 (defn- add-property
   [entity k *new-property?]
@@ -15,23 +18,39 @@
     (property-handler/add-property! (:db/id entity) k)
     (reset! *new-property? false)))
 
-(rum/defc property-input
-  [entity *new-property?]
-  [:div.ls-property-add.grid.grid-cols-4.gap-4
-   [:input#add-property.form-input.block.col-span-1.focus:outline-none
-    {:placeholder "Property key"
-     :auto-focus true
-     :on-blur (fn [e]
-                (add-property entity (util/evalue e) *new-property?))
-     :on-key-down (fn [e]
-                    (case (util/ekey e)
-                      "Enter"
-                      (add-property entity (util/evalue e) *new-property?)
+(rum/defc search-item-render
+  [search-q content]
+  [:div.font-medium
+   (highlight/highlight-exact-query content search-q)])
 
-                      "Escape"
-                      (reset! *new-property? false)
+(rum/defcs property-input < (rum/local nil ::q)
+  [state entity *new-property?]
+  (let [*q (::q state)
+        result (when-not (string/blank? @*q)
+                 (search/property-search @*q))]
+    [:div
+     [:div.ls-property-add.grid.grid-cols-4.gap-4
+      [:input#add-property.form-input.block.col-span-1.focus:outline-none
+       {:placeholder "Property key"
+        :auto-focus true
+        :on-change (fn [e]
+                     (reset! *q (util/evalue e)))
+        :on-blur (fn [e]
+                   (add-property entity (util/evalue e) *new-property?))
+        :on-key-down (fn [e]
+                       (case (util/ekey e)
+                         "Enter"
+                         (add-property entity (util/evalue e) *new-property?)
 
-                      nil))}]])
+                         "Escape"
+                         (reset! *new-property? false)
+
+                         nil))}]]
+     (ui/auto-complete
+      result
+      {:class "search-results"
+       :on-chosen #(add-property entity % *new-property?)
+       :item-render #(search-item-render @*q %)})]))
 
 (rum/defcs properties-area <
   (rum/local false ::new-property?)

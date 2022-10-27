@@ -5,6 +5,7 @@
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
+            [frontend.components.search.highlight :as highlight]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
@@ -151,7 +152,7 @@
               :item-render (fn [page-name chosen?]
                              [:div.flex
                               (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
-                              (search/highlight-exact-query page-name q)])
+                              (highlight/highlight-exact-query page-name q)])
               :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
               :class       "black"})))))))
 

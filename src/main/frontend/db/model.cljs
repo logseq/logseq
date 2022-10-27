@@ -1371,11 +1371,14 @@
                       :where
                       [_ :block/properties ?p]]
                     (conn/get-db))
-        properties (remove (fn [m] (empty? m)) properties)]
-    (->> (map keys properties)
-         (apply concat)
-         distinct
-         sort)))
+        properties (remove (fn [m] (empty? m)) properties)
+        ids (->> (map keys properties)
+                 (apply concat)
+                 distinct
+                 (filter uuid?))]
+    (->> (db-utils/pull-many '[:block/original-name] (map (fn [id] [:block/uuid id]) ids))
+         (map :block/original-name)
+         (remove nil?))))
 
 (defn get-property-values
   [property]
