@@ -56,9 +56,8 @@
         :block/properties (assoc (:block/properties entity) property-id property-value)}])))
 
 (defn delete-property!
-  []
-  )
-
-(defn rename-property!
-  []
-  )
+  [entity property-id]
+  (when (and entity (uuid? property-id))
+    (db/transact! (state/get-current-repo)
+     [{:block/uuid (:block/uuid entity)
+       :block/properties (dissoc (:block/properties entity) property-id)}])))

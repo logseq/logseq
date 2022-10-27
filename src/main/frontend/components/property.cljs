@@ -57,6 +57,21 @@
        :on-chosen #(add-property entity % *new-property?)
        :item-render #(search-item-render @*q %)})]))
 
+(rum/defcs property-key < (rum/local false ::show-close?)
+  [state entity k page-cp property-id]
+  (let [*show-close? (::show-close? state)]
+    [:div.relative
+     {:on-mouse-over (fn [_] (reset! *show-close? true))
+      :on-mouse-out (fn [_] (reset! *show-close? false))}
+     (page-cp {} {:block/name k})
+     (when @*show-close?
+       [:div.absolute.top-0.right-0
+        [:a.fade-link.fade-in.py-2.px-1
+         {:title "Remove the property from this page"
+          :on-click (fn [_e]
+                      (property-handler/delete-property! entity property-id))}
+         (ui/icon "x")]])]))
+
 (rum/defcs properties-area <
   (rum/local false ::new-property?)
   rum/reactive
@@ -69,12 +84,12 @@
         [:tbody
          (for [[k v] properties]
            (when-let [property (db/pull [:block/uuid k])]
-             (when-let [property-key (:block/original-name property)]
-               (let [editor-id (str "property-" (:db/id entity) "-" property-key)
+             (when-let [k' (:block/original-name property)]
+               (let [editor-id (str "property-" (:db/id entity) "-" k')
                      editing? (state/sub [:editor/editing? editor-id])]
                  [:tr
                   [:td.property-key.p-0 {:style {:width 160}} ;FIXME: auto responsive
-                   (page-cp {} {:block/name property-key})]
+                   (property-key entity k' page-cp k)]
 
                   [:td.property-value.p-0
                    (let [block (assoc entity :editing-property property)
