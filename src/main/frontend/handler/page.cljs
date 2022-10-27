@@ -464,6 +464,11 @@
         (when (and file (not journal?))
           (rename-file! file new-file-name-body (fn [] nil)))
 
+
+        (let [home (get (state/get-config) :default-home {})]
+          (when (= old-page-name (string/lower-case (get home :page "")))
+            (config-handler/set-config! :default-home (assoc home :page new-name))))
+
         (rename-update-refs! page old-original-name new-name)
 
         (outliner-file/sync-to-file page))
