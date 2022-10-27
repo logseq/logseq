@@ -2,8 +2,6 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.modules.outliner.tree :as outliner-tree]
-            [frontend.modules.file.core :as file-core]
             [frontend.state :as state]
             [frontend.util :as util]
             ["fuse.js" :as fuse]))
@@ -12,25 +10,33 @@
 
 (defonce indices (atom nil))
 
+(defn- sanitize
+  [content]
+  (util/search-normalize content (state/enable-search-remove-accents?)))
+
+(defn- max-len
+  []
+  (state/block-content-max-length (state/get-current-repo)))
+
 (defn block->index
   "Convert a block to the index for searching"
   [{:block/keys [uuid page content] :as block}]
-  (when-not (> (count content) (state/block-content-max-length (state/get-current-repo)))
+  (when-not (> (count content) (max-len))
     {:id (:db/id block)
      :uuid (str uuid)
      :page page
-     :content (util/search-normalize content (state/enable-search-remove-accents?))}))
+     :content (sanitize content)}))
 
-;; TODO Junyi: Finalize index code
 (defn page->index
-  "Convert a page name to the index for searching (page content level)"
-  [repo page-name]
-  (when-let [content (-> (db/get-page-blocks-no-cache repo page-name)
-                         (outliner-tree/blocks->vec-tree page-name)
-                         (file-core/tree->file-content {:init-level 1}))]
-    (when-not (> (count content) (* (state/block-content-max-length repo) 10))
-      {:page-name page-name
-       :content (util/search-normalize content (state/enable-search-remove-accents?))})))
+  "Convert a page name to the index for searching (page content level)
+   Generate index based on the DB content AT THE POINT OF TIME"
+  [{:block/keys [uuid name file] :as page}]
+  (when-let [content (:file/content file)]
+    (when-not (> (count content) (* (max-len) 10))
+      {:id   (:db/id page)
+       :uuid (str uuid)
+       :name name
+       :content (sanitize content)})))
 
 (defn build-blocks-indice
   ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection
@@ -44,7 +50,7 @@
 (defn build-pages-indice 
   [repo]
   (->> (db/get-all-pages repo)
-       (map (partial page->index repo))
+       (map #(page->index (db/get-page %)))
        (remove nil?)
        (bean/->js)))
 

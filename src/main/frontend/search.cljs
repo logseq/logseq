@@ -15,7 +15,8 @@
             [frontend.util :as util]
             [frontend.util.property :as property]
             [goog.object :as gobj]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [clojure.set :as set]))
 
 (defn get-engine
   [repo]
@@ -198,70 +199,101 @@
            (let [result (fuzzy-search result q :limit limit)]
              (vec result))))))))
 
-;; TODO merge with logic in `invoke-hooks` when feature and test is sufficient
-(defn sync-search-indice!
-  [repo tx-report]
+(defn- get-pages-from-datoms-impl
+  [pages]
+  (let [pages-result (db/pull-many '[:db/id :block/name :block/original-name] (set (map :e pages)))
+        pages-to-add-set (->> (filter :added pages)
+                              (map :e)
+                              (set))
+        pages-to-add (->> (filter (fn [page]
+                                    (contains? pages-to-add-set (:db/id page))) pages-result)
+                          (map (fn [p] (or (:block/original-name p)
+                                           (:block/name p))))
+                          (map search-db/original-page-name->index))
+        pages-to-remove-set (->> (remove :added pages)
+                                 (map :v))]
+    {:pages-to-add        pages-to-add
+     :pages-to-remove-set pages-to-remove-set}))
+
+(defn- get-blocks-from-datoms-impl
+  [blocks]
+  (when (seq blocks)
+    (let [blocks-result (->> (db/pull-many '[:db/id :block/uuid :block/format :block/content :block/page] (set (map :e blocks)))
+                             (map (fn [b] (assoc b :block/page (get-in b [:block/page :db/id])))))
+          blocks-to-add-set (->> (filter :added blocks)
+                                 (map :e)
+                                 (set))
+          blocks-to-add (->> (filter (fn [block]
+                                       (contains? blocks-to-add-set (:db/id block)))
+                                     blocks-result)
+                             (map search-db/block->index)
+                             (remove nil?))
+          blocks-to-remove-set (->> (remove :added blocks)
+                                    (map :e)
+                                    (set))]
+      {:blocks-to-remove-set blocks-to-remove-set
+       :blocks-to-add        blocks-to-add})))
+
+(defn- get-direct-blocks-and-pages 
+  [tx-report]
   (let [data (:tx-data tx-report)
         datoms (filter
                 (fn [datom]
                   (contains? #{:block/name :block/content} (:a datom)))
-                data)
-        updated-pages (:pages (ds-report/get-blocks-and-pages tx-report))]
+                data)]
     (when (seq datoms)
       (let [datoms (group-by :a datoms)
-            pages (:block/name datoms)
-            blocks (:block/content datoms)]
-        (when (seq pages)
-          (let [pages-result (db/pull-many '[:db/id :block/name :block/original-name] (set (map :e pages)))
-                pages-to-add-set (->> (filter :added pages)
-                                      (map :e)
-                                      (set))
-                pages-to-add (->> (filter (fn [page]
-                                            (contains? pages-to-add-set (:db/id page))) pages-result)
-                                  (map (fn [p] (or (:block/original-name p)
-                                                   (:block/name p))))
-                                  (map search-db/original-page-name->index))
-                pages-to-remove-set (->> (remove :added pages)
-                                         (map :v))]
-            (swap! search-db/indices update-in [repo :pages]
-                   (fn [indice]
-                     (when indice
-                       (doseq [page-name pages-to-remove-set]
-                         (.remove indice
-                                  (fn [page]
-                                    (= (util/safe-page-name-sanity-lc page-name)
-                                       (util/safe-page-name-sanity-lc (gobj/get page "original-name"))))))
-                       (when (seq pages-to-add)
-                         (doseq [page pages-to-add]
-                           (.add indice (bean/->js page)))))
-                     indice))))
+            blocks (:block/content datoms)
+            pages (:block/name datoms)]
+        (merge (get-blocks-from-datoms-impl blocks)
+               (get-pages-from-datoms-impl pages))))))
 
-        (when (seq blocks)
-          (let [blocks-result (->> (db/pull-many '[:db/id :block/uuid :block/format :block/content :block/page] (set (map :e blocks)))
-                                   (map (fn [b] (assoc b :block/page (get-in b [:block/page :db/id])))))
-                blocks-to-add-set (->> (filter :added blocks)
-                                       (map :e)
-                                       (set))
-                blocks-to-add (->> (filter (fn [block]
-                                             (contains? blocks-to-add-set (:db/id block)))
-                                           blocks-result)
-                                   (map search-db/block->index)
-                                   (remove nil?))
-                blocks-to-remove-set (->> (remove :added blocks)
-                                          (map :e)
-                                          (set))]
-            (transact-blocks! repo
-                              {:blocks-to-remove-set blocks-to-remove-set
-                               :blocks-to-add        blocks-to-add})))))
-    (when (seq updated-pages) ;; when move op happens, no :block/content provided
-      (let [affected-pages   (-> (map :block/name updated-pages)
-                               distinct)
-            pages-to-add-set (filter db/page-exists? affected-pages)
-            pages-to-add     (->> (map (partial search-db/page->index repo) pages-to-add-set)
-                                  (remove nil?))
-            pages-to-remove-set (remove db/page-exists? affected-pages)]
-        (transact-pages! repo {:pages-to-remove-set pages-to-remove-set
-                               :pages-to-add        pages-to-add})))))
+(defn- verify-pull
+  "Confirm that the page id & name are up-to-date"
+  [page-name page-id]
+  (when-let [page-entity (db/get-page page-name)]
+    (when (= (:db/id page-entity) page-id)
+      page-entity)))
+
+;; TODO merge with logic in `invoke-hooks` when feature and test is sufficient
+(defn sync-search-indice!
+  [repo tx-report]
+  (let [{:keys [pages-to-add pages-to-remove-set
+                blocks-to-add blocks-to-remove-set]} (get-direct-blocks-and-pages tx-report) ;; directly modified block & pages
+        updated-pages (:pages (ds-report/get-blocks-and-pages tx-report))] ;; affected pages with modified children blocks
+    
+    ;; update page title indice
+    (when (or (seq pages-to-add) (seq pages-to-remove-set))
+      (swap! search-db/indices update-in [repo :pages]
+             (fn [indice]
+               (when indice
+                 (doseq [page-name pages-to-remove-set]
+                   (.remove indice
+                            (fn [page]
+                              (= (util/safe-page-name-sanity-lc page-name)
+                                 (util/safe-page-name-sanity-lc (gobj/get page "original-name"))))))
+                 (when (seq pages-to-add)
+                   (doseq [page pages-to-add]
+                     (.add indice (bean/->js page)))))
+               indice)))
+    
+    ;; update block indice
+    (when (or (seq blocks-to-add) (seq blocks-to-remove-set))
+      (transact-blocks! repo
+                        {:blocks-to-remove-set blocks-to-remove-set
+                         :blocks-to-add        blocks-to-add}))
+    
+    ;; update page indice
+    (when (or (seq pages-to-add) (seq pages-to-remove-set) (seq updated-pages)) ;; when move op happens, no :block/content provided
+      ;; (let [pages-to-add-set (set/union (-> (map :db/id pages-to-add) set)
+      ;;                                   (-> (map :db/id updated-pages) set))
+      ;;       pages-to-add     (->> (map (fn [page-id] (db/entity)) updated-pages)
+      ;;                             (remove nil?))
+      ;;       pages-to-remove-set (remove db/page-exists? affected-pages)]
+      ;;   (transact-pages! repo {:pages-to-remove-set pages-to-remove-set
+      ;;                          :pages-to-add        pages-to-add}))
+      nil
+      )))
 
 (defn rebuild-indices!
   ([]
