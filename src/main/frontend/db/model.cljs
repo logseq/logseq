@@ -1372,8 +1372,16 @@
                       [_ :block/properties ?p]]
                     (conn/get-db))
         properties (remove (fn [m] (empty? m)) properties)
+        property-block-ids (d/q
+                          '[:find [?id ...]
+                            :where
+                            [?p :block/type ?t]
+                            [(= ?t "property")]
+                            [?p :block/uuid ?id]]
+                          (conn/get-db))
         ids (->> (map keys properties)
                  (apply concat)
+                 (concat property-block-ids)
                  distinct
                  (filter uuid?))]
     (->> (db-utils/pull-many '[:block/original-name] (map (fn [id] [:block/uuid id]) ids))

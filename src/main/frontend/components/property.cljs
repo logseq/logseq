@@ -11,7 +11,8 @@
             [goog.dom :as gdom]
             [frontend.search :as search]
             [frontend.components.search.highlight :as highlight]
-            [frontend.components.svg :as svg]))
+            [frontend.components.svg :as svg]
+            [frontend.modules.shortcut.core :as shortcut]))
 
 (defn- add-property
   [entity k *new-property?]
@@ -24,7 +25,9 @@
   [:div.font-medium
    (highlight/highlight-exact-query content search-q)])
 
-(rum/defcs property-input < (rum/local nil ::q)
+(rum/defcs property-input <
+  (shortcut/disable-all-shortcuts)
+  (rum/local nil ::q)
   [state entity *new-property?]
   (let [*q (::q state)
         result (when-not (string/blank? @*q)
@@ -38,15 +41,15 @@
                      (reset! *q (util/evalue e)))
         :on-blur (fn [_e]
                    (add-property entity @*q *new-property?))
-        :on-key-down (fn [e]
-                       (case (util/ekey e)
-                         "Enter"
-                         (add-property entity @*q *new-property?)
+        :on-key-up (fn [e]
+                     (case (util/ekey e)
+                       "Enter"
+                       (add-property entity @*q *new-property?)
 
-                         "Escape"
-                         (reset! *new-property? false)
+                       "Escape"
+                       (reset! *new-property? false)
 
-                         nil))}]
+                       nil))}]
       [:a.close.ml-2 {:on-mouse-down #(do
                                         (reset! *q nil)
                                         (reset! *new-property? false))}
@@ -113,7 +116,8 @@
         [:div.flex.flex-row
          [:div.block {:style {:height      20
                               :width       20}}
-          [:a.add-button-link.block {:style {:margin-left -4}}
+          [:a.add-button-link.block {:title "Add another property"
+                                     :style {:margin-left -4}}
            (ui/icon "circle-plus")]]]])]))
 
 (defn properties

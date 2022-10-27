@@ -451,8 +451,6 @@
               (if property?
                 [:div "TBD set property schema"]
                 [:div.p-2.mb-4
-                 [:div.font-medium.py-2 "Properties:"]
-
                  (property/properties entity {:page-cp component-block/page-cp
                                               :inline-text component-block/inline-text})
 
