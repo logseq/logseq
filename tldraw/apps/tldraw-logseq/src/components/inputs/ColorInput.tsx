@@ -1,21 +1,12 @@
 import * as React from 'react'
 import * as Popover from '@radix-ui/react-popover';
 import { TablerIcon } from '../icons'
-
-interface ColorInputProps extends React.InputHTMLAttributes<HTMLButtonElement> {}
-
-enum HighlightColor {
-  Gray = 'gray',
-  Red = 'red',
-  Yellow = 'yellow',
-  Green = 'green',
-  Blue = 'blue',
-  Purple = 'purple',
-  Pink = 'pink',
-  None = 'transparent',
+import { HighlightColor } from '@tldraw/core'
+interface ColorInputProps extends React.InputHTMLAttributes<HTMLButtonElement> {
+  setColor: (value: HighlightColor) => void
 }
 
-export function ColorInput({ value, onClick, ...rest }: ColorInputProps) {
+export function ColorInput({ value, setColor, ...rest }: ColorInputProps) {
   const ref = React.useRef<HTMLDivElement>(null)
   const [computedValue, setComputedValue] = React.useState(value)
 
@@ -34,9 +25,9 @@ export function ColorInput({ value, onClick, ...rest }: ColorInputProps) {
     <Popover.Root>
       <Popover.Trigger>
         <div className="input" ref={ref}>
-          <div className="color-input-wrapper">
-            <button className={`bg-${value}-500`} />
-          </div>
+          <button className={`tl-color-drip mx-1`}>
+            <div className={`tl-color-bg bg-${value}-500`}></div>
+          </button>
         </div>
       </Popover.Trigger>
       <Popover.Anchor />
@@ -49,14 +40,12 @@ export function ColorInput({ value, onClick, ...rest }: ColorInputProps) {
           <div className={"tl-color-palette"}>
             {Object.values(HighlightColor).map(color =>
               <button
-                className={`tl-color-drip bg-${color}-500`}
-                data-color={color}
-                onClick={(e)=>{
-                  // setComputedValue(value)
-                  onClick?.(e)
-                }}
+                className={`tl-color-drip  m-1${color === value ? " active" : ""}`}
+                onClick={()=>setColor(color)}
               >
-                {(color === "transparent") && <TablerIcon name="droplet-off" />}
+                {(color === "transparent") ?
+                  <TablerIcon name="droplet-off" /> :
+                  <div className={`tl-color-bg bg-${color}-500`}></div>}
               </button>
             )}
           </div>

@@ -1,4 +1,4 @@
-import { debounce, Decoration, isNonNullable } from '@tldraw/core'
+import { Decoration, isNonNullable, HighlightColor } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import React from 'react'
@@ -331,8 +331,7 @@ const SwatchAction = observer(() => {
     BoxShape | PolygonShape | EllipseShape | LineShape | PencilShape | TextShape
   >(app.selectedShapesArray, 'Swatch')
 
-  const handleClick = React.useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-    const color = e.target.getAttribute("data-color")
+  const handleSetColor = React.useCallback((color: HighlightColor) => {
     shapes.forEach(s => {
       s.update({ fill: color, stroke: color })
     })
@@ -340,7 +339,7 @@ const SwatchAction = observer(() => {
   }, [])
 
   const value = shapes[0].props.noFill ? shapes[0].props.stroke : shapes[0].props.fill
-  return <ColorInput title="Color Picker" value={value} onClick={handleClick} />
+  return <ColorInput title="Color Picker" value={value} setColor={handleSetColor} />
 })
 
 const StrokeTypeAction = observer(() => {
