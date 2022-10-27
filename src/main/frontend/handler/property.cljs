@@ -14,10 +14,12 @@
         key (string/trim key)
         key-name (util/page-name-sanity-lc key)
         property (db/entity [:block/name key-name])]
-    (when-not (and property
-                   (or
-                    (= (:block/type property) "tag")
-                    (= (:db/id property) (:db/id block))))
+    (when-not (or
+               (= (:block/name block) key-name)
+               (and property
+                    (or
+                     (= (:block/type property) "tag")
+                     (= (:db/id property) (:db/id block)))))
       (let [property-uuid (db/new-block-id)]
         (db/transact! (state/get-current-repo)
           [
@@ -46,9 +48,12 @@
 
 (defn add-property-value!
   [entity property-id property-value]
-  (db/transact! (state/get-current-repo)
-    [{:block/uuid (:block/uuid entity)
-      :block/properties (assoc (:block/properties entity) property-id property-value)}]))
+  (when-not (or
+             (= property-id (:block/uuid entity))
+             (string/blank? property-value))
+    (db/transact! (state/get-current-repo)
+      [{:block/uuid (:block/uuid entity)
+        :block/properties (assoc (:block/properties entity) property-id property-value)}])))
 
 (defn delete-property!
   []
