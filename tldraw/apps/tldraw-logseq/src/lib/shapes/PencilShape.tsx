@@ -85,8 +85,8 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
     point: [0, 0],
     points: [],
     isComplete: false,
-    stroke: 'var(--tl-foreground, #000)',
-    fill: 'var(--tl-foreground, #000)',
+    stroke: '',
+    fill: '',
     noFill: true,
     strokeType: 'line',
     strokeWidth: 2,
@@ -131,8 +131,8 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
         strokeWidth={strokeWidth / 2}
         strokeLinejoin="round"
         strokeLinecap="round"
-        stroke={stroke}
-        fill={stroke}
+        stroke={stroke ? `var(--color-${stroke}-500)` : "var(--ls-primary-text-color, #000)"}
+        fill={stroke ? `var(--color-${stroke}-500)` : "var(--ls-primary-text-color, #000)"}
         strokeDasharray={strokeType === 'dashed' ? '12 4' : undefined}
       />
     )

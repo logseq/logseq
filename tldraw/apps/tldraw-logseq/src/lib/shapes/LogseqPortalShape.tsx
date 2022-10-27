@@ -71,8 +71,8 @@ const LogseqTypeTag = ({
 }
 
 const LogseqPortalShapeHeader = observer(
-  ({ type, children }: { type: 'P' | 'B'; children: React.ReactNode }) => {
-    return <div className="tl-logseq-portal-header">{children}</div>
+  ({ type, fill, children }: { type: 'P' | 'B'; fill: string; children: React.ReactNode }) => {
+    return <div className="tl-logseq-portal-header" style={{background: `var(--ls-highlight-color-${fill})`}}>{children}</div>
   }
 )
 
@@ -181,7 +181,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     // collapsedHeight is the height before collapsing
     collapsedHeight: 0,
     stroke: 'var(--ls-primary-text-color)',
-    fill: 'transparent',
+    fill: '',
     noFill: false,
     borderRadius: 8,
     strokeWidth: 2,
@@ -842,14 +842,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                   width: `calc(100% / ${scaleRatio})`,
                   height: `calc(100% / ${scaleRatio})`,
                   transform: `scale(${scaleRatio})`,
-                  // @ts-expect-error ???
-                  '--ls-primary-background-color': !fill?.startsWith('var') ? fill : undefined,
-                  '--ls-primary-text-color': !stroke?.startsWith('var') ? stroke : undefined,
-                  '--ls-title-text-color': !stroke?.startsWith('var') ? stroke : undefined,
                 }}
               >
                 {!this.props.compact && !targetNotFound && (
-                  <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'}>
+                  <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'} fill={fill}>
                     {this.props.blockType === 'P' ? (
                       <PageNameLink pageName={pageId} />
                     ) : (

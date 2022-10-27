@@ -24,7 +24,7 @@ export class HighlighterShape extends TLDrawShape<HighlighterShapeProps> {
     point: [0, 0],
     points: [],
     isComplete: false,
-    stroke: '#ffcc00',
+    stroke: '',
     fill: '#ffcc00',
     noFill: true,
     strokeType: 'line',
@@ -48,7 +48,7 @@ export class HighlighterShape extends TLDrawShape<HighlighterShapeProps> {
         <path
           d={pointsPath}
           strokeWidth={strokeWidth * 16}
-          stroke={stroke}
+          stroke={stroke ? `var(--color-${stroke}-500)` : "var(--ls-secondary-background-color)"}
           fill="none"
           pointerEvents="all"
           strokeLinejoin="round"

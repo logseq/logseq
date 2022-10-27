@@ -21,7 +21,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
     size: [100, 100],
     borderRadius: 2,
     stroke: '#000000',
-    fill: 'var(--ls-secondary-background-color)',
+    fill: '',
     noFill: false,
     strokeType: 'line',
     strokeWidth: 2,
@@ -65,7 +65,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
           strokeWidth={strokeWidth}
           stroke={noFill ? fill : stroke}
           strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
-          fill={noFill ? 'none' : `var(--color-${fill}-500)`}
+          fill={noFill ? 'none' : fill ? `var(--color-${fill}-500)` : "var(--ls-primary-background-color)"}
         />
       </SVGContainer>
     )

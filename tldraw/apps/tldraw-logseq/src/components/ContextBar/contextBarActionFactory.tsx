@@ -1,4 +1,4 @@
-import { Decoration, isNonNullable, HighlightColor } from '@tldraw/core'
+import { Decoration, isNonNullable, Color } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import React from 'react'
@@ -331,7 +331,7 @@ const SwatchAction = observer(() => {
     BoxShape | PolygonShape | EllipseShape | LineShape | PencilShape | TextShape
   >(app.selectedShapesArray, 'Swatch')
 
-  const handleSetColor = React.useCallback((color: HighlightColor) => {
+  const handleSetColor = React.useCallback((color: Color) => {
     shapes.forEach(s => {
       s.update({ fill: color, stroke: color })
     })

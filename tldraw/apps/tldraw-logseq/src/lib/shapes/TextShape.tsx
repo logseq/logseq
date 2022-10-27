@@ -54,7 +54,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     padding: 4,
     fontFamily: "var(--ls-font-family), 'Helvetica Neue', Helvetica, Arial, sans-serif",
     borderRadius: 0,
-    stroke: 'var(--tl-foreground, #000)',
+    stroke: '',
     fill: '#ffffff',
     noFill: true,
     strokeType: 'line',
@@ -192,7 +192,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
             fontWeight,
             padding,
             lineHeight,
-            color: stroke,
+            color: `var(--tl-text-color-${stroke ? stroke : "default"})`,
           }}
         >
           {isEditing ? (

@@ -30,8 +30,8 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       start: { id: 'start', canBind: true, point: [0, 0] },
       end: { id: 'end', canBind: true, point: [1, 1] },
     },
-    stroke: 'var(--ls-primary-text-color, #000)',
-    fill: 'var(--ls-secondary-background-color)',
+    stroke: '',
+    fill: '',
     noFill: true,
     strokeType: 'line',
     strokeWidth: 1,
@@ -161,7 +161,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       <>
         <Arrow
           style={{
-            stroke,
+            stroke: stroke ? `var(--color-${stroke}-500)` : "var(--ls-primary-text-color, #000)",
             fill,
             strokeWidth,
             strokeType,

@@ -3,7 +3,7 @@ import type { TLShape, TLApp } from '../lib'
 import type { TLEventMap } from './TLEventMap'
 import type { TLHandle } from './TLHandle'
 
-export enum HighlightColor {
+export enum Color {
   Gray = 'gray',
   Red = 'red',
   Yellow = 'yellow',
@@ -11,7 +11,7 @@ export enum HighlightColor {
   Blue = 'blue',
   Purple = 'purple',
   Pink = 'pink',
-  None = 'transparent',
+  Default = '',
 }
 
 export enum AlignType {

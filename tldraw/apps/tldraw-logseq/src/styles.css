@@ -12,6 +12,31 @@
   --shadow-large: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 
   backface-visibility: hidden;
+
+  --tl-text-color-default: var(--ls-primary-text-color);
+}
+
+.dark-theme,
+html[data-theme='dark'] {
+  --tl-text-color-gray: var(--color-gray-400);
+  --tl-text-color-red: var(--color-red-400);
+  --tl-text-color-yellow: var(--color-yellow-400);
+  --tl-text-color-green: var(--color-green-400);
+  --tl-text-color-blue: var(--color-blue-400);
+  --tl-text-color-purple: var(--color-purple-400);
+  --tl-text-color-pink: var(--color-pink-400);
+}
+
+.white-theme,
+.light-theme,
+html[data-theme='light'] {
+  --tl-text-color-gray: var(--color-gray-600);
+  --tl-text-color-red: var(--color-red-600);
+  --tl-text-color-yellow: var(--color-yellow-600);
+  --tl-text-color-green: var(--color-green-600);
+  --tl-text-color-blue: var(--color-blue-600);
+  --tl-text-color-purple: var(--color-purple-600);
+  --tl-text-color-pink: var(--color-pink-600);
 }
 
 .logseq-tldraw-wrapper {
@@ -636,6 +661,7 @@ button.tl-select-input-trigger {
   left: 0;
   overscroll-behavior: none;
   opacity: 1;
+  overflow: hidden;
   user-select: text;
   transform-origin: top left;
   background: var(--ls-secondary-background-color);
@@ -861,7 +887,7 @@ html[data-theme='dark'] {
 }
 
 .tl-color-drip {
-  @apply rounded;
+  @apply rounded text-sm;
 
   width: 30px;
   height: 30px;
