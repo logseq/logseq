@@ -441,7 +441,7 @@
                                             (search-handler/search (state/get-current-repo) value opts)
                                             (search-handler/search (state/get-current-repo) value)))
                                         timeout))))))}]]
-      [:div.search-results-wrap
+      [:div.search-results-wrap.border.border-red-500
        (if (seq search-result)
          (search-auto-complete search-result search-q false)
          (recent-search-and-pages in-page-search?))]]]))

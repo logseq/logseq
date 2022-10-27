@@ -53,6 +53,7 @@
      :search/mode                           :global
      :search/result                         nil
      :search/graph-filters                  []
+     :search/engines                        {}
 
      ;; modals
      :modal/dropdowns                       {}
