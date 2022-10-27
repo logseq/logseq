@@ -10,7 +10,8 @@
             [frontend.state :as state]
             [goog.dom :as gdom]
             [frontend.search :as search]
-            [frontend.components.search.highlight :as highlight]))
+            [frontend.components.search.highlight :as highlight]
+            [frontend.components.svg :as svg]))
 
 (defn- add-property
   [entity k *new-property?]
@@ -29,23 +30,27 @@
         result (when-not (string/blank? @*q)
                  (search/property-search @*q))]
     [:div
-     [:div.ls-property-add.grid.grid-cols-4.gap-4
+     [:div.ls-property-add.grid.grid-cols-4.gap-4.flex.flex-row.items-center
       [:input#add-property.form-input.block.col-span-1.focus:outline-none
        {:placeholder "Property key"
         :auto-focus true
         :on-change (fn [e]
                      (reset! *q (util/evalue e)))
-        :on-blur (fn [e]
-                   (add-property entity (util/evalue e) *new-property?))
+        :on-blur (fn [_e]
+                   (add-property entity @*q *new-property?))
         :on-key-down (fn [e]
                        (case (util/ekey e)
                          "Enter"
-                         (add-property entity (util/evalue e) *new-property?)
+                         (add-property entity @*q *new-property?)
 
                          "Escape"
                          (reset! *new-property? false)
 
-                         nil))}]]
+                         nil))}]
+      [:a.close.ml-2 {:on-mouse-down #(do
+                                        (reset! *q nil)
+                                        (reset! *new-property? false))}
+       svg/close]]
      (ui/auto-complete
       result
       {:class "search-results"
