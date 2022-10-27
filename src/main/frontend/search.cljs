@@ -105,6 +105,7 @@
 ;; TODO Junyi: Plug-in the call
 (defn- transact-pages!
   [repo data]
+  (prn "transact pages!" data)
   (when-let [engine (get-engine repo)]
     (protocol/transact-pages! engine data)))
 
@@ -211,9 +212,12 @@
                                            (:block/name p))))
                           (map search-db/original-page-name->index))
         pages-to-remove-set (->> (remove :added pages)
-                                 (map :v))]
+                                 (map :v))
+        pages-to-remove-id-set (->> (remove :added pages)
+                                    (map :e))]
     {:pages-to-add        pages-to-add
-     :pages-to-remove-set pages-to-remove-set}))
+     :pages-to-remove-set pages-to-remove-set
+     :pages-to-remove-id-set pages-to-remove-id-set}))
 
 (defn- get-blocks-from-datoms-impl
   [blocks]
@@ -249,19 +253,21 @@
                (get-pages-from-datoms-impl pages))))))
 
 (defn- verify-pull
-  "Confirm that the page id & name are up-to-date"
-  [page-name page-id]
-  (when-let [page-entity (db/get-page page-name)]
-    (when (= (:db/id page-entity) page-id)
-      page-entity)))
+  "Confirm that the page id & name of a page entity are up-to-date
+   Return a full page entity"
+  [partial-page] 
+  (when-let [id (:db/id partial-page)]
+    (when-let [page-entity (db/entity id)]
+      (when (:block/name page-entity) ;; confirm it's a page entity
+        page-entity))))
 
 ;; TODO merge with logic in `invoke-hooks` when feature and test is sufficient
 (defn sync-search-indice!
   [repo tx-report]
-  (let [{:keys [pages-to-add pages-to-remove-set
+  (let [{:keys [pages-to-add pages-to-remove-set pages-to-remove-id-set
                 blocks-to-add blocks-to-remove-set]} (get-direct-blocks-and-pages tx-report) ;; directly modified block & pages
         updated-pages (:pages (ds-report/get-blocks-and-pages tx-report))] ;; affected pages with modified children blocks
-    
+
     ;; update page title indice
     (when (or (seq pages-to-add) (seq pages-to-remove-set))
       (swap! search-db/indices update-in [repo :pages]
@@ -276,24 +282,31 @@
                    (doseq [page pages-to-add]
                      (.add indice (bean/->js page)))))
                indice)))
-    
+
     ;; update block indice
     (when (or (seq blocks-to-add) (seq blocks-to-remove-set))
       (transact-blocks! repo
                         {:blocks-to-remove-set blocks-to-remove-set
                          :blocks-to-add        blocks-to-add}))
-    
+
     ;; update page indice
-    (when (or (seq pages-to-add) (seq pages-to-remove-set) (seq updated-pages)) ;; when move op happens, no :block/content provided
-      ;; (let [pages-to-add-set (set/union (-> (map :db/id pages-to-add) set)
-      ;;                                   (-> (map :db/id updated-pages) set))
-      ;;       pages-to-add     (->> (map (fn [page-id] (db/entity)) updated-pages)
-      ;;                             (remove nil?))
-      ;;       pages-to-remove-set (remove db/page-exists? affected-pages)]
-      ;;   (transact-pages! repo {:pages-to-remove-set pages-to-remove-set
-      ;;                          :pages-to-add        pages-to-add}))
-      nil
-      )))
+    (when (or (seq pages-to-add) (seq pages-to-remove-id-set) (seq updated-pages)) ;; when move op happens, no :block/content provided
+      (prn "pages-to-remove-id-set: " pages-to-remove-id-set)
+      (prn "pages-to-add: " pages-to-add) ;; TODO Junyi: handle db/id and the overlapping with remove id
+      (let [pages-to-add   (set/union updated-pages pages-to-add)
+            verified-pages (map verify-pull pages-to-add)
+            indice-pages   (map #(when % (search-db/page->index %)) verified-pages)
+            invalid-set    (->> (map (fn [updated indiced] ;; get id of pages without valid page index
+                                       (if indiced nil (:db/id updated)))
+                                     pages-to-add indice-pages)
+                                (remove nil?)
+                                set)
+            pages-to-add   (->> indice-pages
+                                (remove nil?)
+                                set)
+            pages-to-remove-set (set/union pages-to-remove-id-set invalid-set)]
+        (transact-pages! repo {:pages-to-remove-set pages-to-remove-set
+                               :pages-to-add        pages-to-add})))))
 
 (defn rebuild-indices!
   ([]
