@@ -1952,6 +1952,7 @@
 (def app-state-changed-cursor (rum/cursor state/state :mobile/app-state-change))
 (add-watch app-state-changed-cursor "sync"
            (fn [_ _ _ {:keys [is-active?]}]
+             (prn "is-active? " is-active?)
              (offer! pause-resume-chan is-active?)))
 
 (def recent-edited-chan
@@ -2645,7 +2646,7 @@
           (.schedule this next-state nil nil)))))
 
   (pause [this]
-    (<! (<rsapi-cancel-all-requests))
+    (go (<! (<rsapi-cancel-all-requests)))
     (put-sync-event! {:event :pause
                       :data  {:graph-uuid graph-uuid
                               :epoch      (tc/to-epoch (t/now))}})
