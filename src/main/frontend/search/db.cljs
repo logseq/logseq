@@ -4,7 +4,8 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.util :as util]
-            ["fuse.js" :as fuse]))
+            ["fuse.js" :as fuse]
+            [frontend.db.utils :as db-util]))
 
 ;; Notice: When breaking changes happen, bump version in src/electron/electron/search.cljs
 
@@ -30,12 +31,13 @@
 (defn page->index
   "Convert a page name to the index for searching (page content level)
    Generate index based on the DB content AT THE POINT OF TIME"
-  [{:block/keys [uuid name file] :as page}]
-  (when-let [content (:file/content file)]
+  [{:block/keys [uuid _name] :as page}]
+  (when-let [content (some-> (:block/file page)
+                             (:file/content))]
+    (prn "content: " content)
     (when-not (> (count content) (* (max-len) 10))
       {:id   (:db/id page)
        :uuid (str uuid)
-       :name name
        :content (sanitize content)})))
 
 (defn build-blocks-indice
@@ -50,6 +52,7 @@
 (defn build-pages-indice 
   [repo]
   (->> (db/get-all-pages repo)
+       (map #(db/entity (:db/id %))) ;; get full file-content
        (map page->index)
        (remove nil?)
        (bean/->js)))

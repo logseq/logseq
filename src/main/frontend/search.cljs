@@ -16,7 +16,8 @@
             [frontend.util.property :as property]
             [goog.object :as gobj]
             [promesa.core :as p]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [frontend.modules.datascript-report.core :as db-report]))
 
 (defn get-engine
   [repo]
@@ -111,7 +112,7 @@
     (protocol/transact-blocks! engine data)))
 
 (defn- transact-pages!
-  [repo data]
+  [repo data] 
   (when-let [engine (get-engine repo)]
     (protocol/transact-pages! engine data)))
 
@@ -268,11 +269,11 @@
        (map :db/id)
        set))
 
-(defn- verify-pull
-  "Confirm that the page id & name of a page entity are up-to-date
-   Return a full page entity"
-  [page-id] 
-  (when-let [page-entity (db/entity page-id)]
+(defn- pull-page
+  "Return a page entity of the latest state from tx-report"
+  [tx-report page-id]
+  (when-let [page-entity (db-report/safe-pull (:db-after tx-report) '[:db/id :block/name :block/uuid
+                                                                      {:block/file [:db/id :file/content]}] page-id)]
     (when (:block/name page-entity) ;; confirm it's a page entity
       page-entity)))
 
@@ -306,7 +307,7 @@
     ;; update page indice
     (when (or (seq pages-to-add-id-set) (seq pages-to-remove-id-set) (seq updated-pages-id-set)) ;; when move op happens, no :block/content provided
       (let [pages-to-add-id-set   (set/union updated-pages-id-set pages-to-add-id-set)
-            verified-pages (map verify-pull pages-to-add-id-set)
+            verified-pages (map (partial pull-page tx-report) pages-to-add-id-set)
             indice-pages   (map #(when % (search-db/page->index %)) verified-pages)
             invalid-set    (->> (map (fn [updated indiced] ;; get id of pages without valid page index
                                        (if indiced nil (:db/id updated)))

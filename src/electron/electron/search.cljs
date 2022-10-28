@@ -181,7 +181,7 @@
 (defn delete-pages!
   [repo ids]
   (when-let [db (get-db repo)]
-    (let [sql (str "DELETE from blocks WHERE id IN " (clj-list->sql ids))
+    (let [sql (str "DELETE from pages WHERE id IN " (clj-list->sql ids))
           stmt (prepare db sql)]
       (.run ^object stmt))))
 
