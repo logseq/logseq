@@ -217,8 +217,12 @@
         full-upload-files      (:full-local->remote-files sync-state)
         full-download-files    (:full-remote->local-files sync-state)
         calc-progress-total    #(cond
-                                  uploading? (count full-upload-files)
-                                  downloading? (count full-download-files)
+                                  uploading? (if (zero? (count full-upload-files))
+                                               (count uploading-files)
+                                               (count full-upload-files))
+                                  downloading? (if (zero? (count full-download-files))
+                                                 (count downloading-files)
+                                                 (count full-download-files))
                                   :else 0)
         calc-progress-finished (fn []
                                  (let [current-sync-files (set
