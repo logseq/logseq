@@ -226,7 +226,8 @@
                        (str "file://" (js/encodeURI dir)))
                      dir)
         path       (some-> path (string/replace #"^/+" ""))
-        encode-url #(let [encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" path))]
+        encode-url #(let [encoded-chars?
+                          (and (string? %) (boolean (re-find #"(?i)%[0-9a-f]{2}" %)))]
                       (cond-> %
                         (not encoded-chars?)
                         (js/encodeURI path)))]
