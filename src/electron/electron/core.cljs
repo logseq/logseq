@@ -118,9 +118,9 @@
                            (fn [part]
                              (. fs copy (path/join app-path part) (path/join static-dir part)))
                            ["css" "fonts" "icons" "img" "js"])))
-                export-css (. fs readFile export-css-path)
+                export-css (if (fs/existsSync export-css-path) (. fs readFile export-css-path) "")
                 _ (. fs writeFile (path/join static-dir "css" "export.css")  export-css)
-                custom-css (. fs readFile custom-css-path)
+                custom-css (if (fs/existsSync custom-css-path) (. fs readFile custom-css-path) "")
                 _ (. fs writeFile (path/join static-dir "css" "custom.css") custom-css)
                 js-files ["main.js" "code-editor.js" "excalidraw.js" "tldraw.js"]
                 _ (p/all (map (fn [file]
