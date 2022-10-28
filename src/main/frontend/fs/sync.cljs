@@ -461,6 +461,15 @@
    (contains-path? (relative-path path))
    (boolean)))
 
+(defn- diffs->filetxns
+  []
+  (comp
+   (map diff->filetxns)
+   cat
+   (remove ignored?)
+   distinct-update-filetxns-xf
+   remove-deleted-filetxns-xf))
+
 (defn- diffs->partitioned-filetxns
   "transducer.
   1. diff -> `FileTxn` , see also `<get-diff`
@@ -1481,9 +1490,10 @@
               true
               r)))))))
 
+(declare sync-state-reset-full-remote->local-files)
 (defn apply-filetxns-partitions
   "won't call <update-graphs-txid! when *txid is nil"
-  [*sync-state user-uuid graph-uuid base-path filetxns-partitions repo *txid *stopped *paused]
+  [*sync-state user-uuid graph-uuid base-path filetxns-partitions repo *txid *stopped *paused full-sync?]
   (assert (some? *sync-state))
 
   (go-loop [filetxns-partitions* filetxns-partitions]
@@ -1495,6 +1505,8 @@
         (let [filetxns                        (first filetxns-partitions*)
               paths                           (map relative-path filetxns)
               recent-remote->local-file-items (filetxns=>recent-remote->local-files filetxns)
+              _ (when-not full-sync?
+                  (swap! *sync-state #(sync-state-reset-full-remote->local-files % recent-remote->local-file-items)))
               ;; update recent-remote->local-files
               _                               (swap! *sync-state sync-state--add-recent-remote->local-files
                                                      recent-remote->local-file-items)
@@ -2148,13 +2160,15 @@
                                           :epoch      (tc/to-epoch (t/now))}})
                 (<! (apply-filetxns-partitions
                      *sync-state user-uuid graph-uuid base-path partitioned-filetxns repo
-                     nil *stopped *paused))))]
+                     nil *stopped *paused true))))]
         (cond
           (instance? ExceptionInfo r) {:unknown r}
           @*stopped                   {:stop true}
           @*paused                    {:pause true}
           :else
-          (do (<! (<update-graphs-txid! latest-txid graph-uuid user-uuid repo))
+          (do
+            (swap! *sync-state #(sync-state-reset-full-remote->local-files % []))
+            (<! (<update-graphs-txid! latest-txid graph-uuid user-uuid repo))
               (reset! *txid latest-txid)
               {:succ true})))))
 
@@ -2176,18 +2190,21 @@
                                                             (completing (fn [r i] (conj r (reverse i)))) ;reverse
                                                             '()
                                                             (reverse diff-txns))]
+                        ;; (swap! *sync-state #(sync-state-reset-full-remote->local-files % files))
                         (put-sync-event! {:event :start
                                           :data  {:type       :remote->local
                                                   :graph-uuid graph-uuid
                                                   :full-sync? false
                                                   :epoch      (tc/to-epoch (t/now))}})
                         (if (empty? (flatten partitioned-filetxns))
-                          (do (<! (<update-graphs-txid! latest-txid graph-uuid user-uuid repo))
-                              (reset! *txid latest-txid)
-                              {:succ true})
+                          (do
+                            (swap! *sync-state #(sync-state-reset-full-remote->local-files % []))
+                            (<! (<update-graphs-txid! latest-txid graph-uuid user-uuid repo))
+                            (reset! *txid latest-txid)
+                            {:succ true})
                           (<! (apply-filetxns-partitions
                                *sync-state user-uuid graph-uuid base-path
-                               partitioned-filetxns repo *txid *stopped *paused)))))))))]
+                               partitioned-filetxns repo *txid *stopped *paused false)))))))))]
         (cond
           (instance? ExceptionInfo r)       {:unknown r}
           @*stopped                         {:stop true}
@@ -2703,11 +2720,13 @@
         (s/assert ::sync-local->remote-all-files!-result r)
         (cond
           succ
-          (do (put-sync-event! {:event :finished-local->remote
-                                :data  {:graph-uuid graph-uuid
-                                        :full-sync? true
-                                        :epoch      (tc/to-epoch (t/now))}})
-              (.schedule this ::idle nil nil))
+          (do
+            (swap! *sync-state #(sync-state-reset-full-local->remote-files % []))
+            (put-sync-event! {:event :finished-local->remote
+                              :data  {:graph-uuid graph-uuid
+                                      :full-sync? true
+                                      :epoch      (tc/to-epoch (t/now))}})
+            (.schedule this ::idle nil nil))
           need-sync-remote
           (do (util/drain-chan ops-chan)
               (>! ops-chan {:remote->local true})
@@ -2811,12 +2830,14 @@
                     (or need-sync-remote graph-has-been-deleted unknown pause stop) r))))]
         (cond
           succ
-          (do (put-sync-event! {:event :finished-local->remote
-                                :data  {:graph-uuid         graph-uuid
-                                        :full-sync?         false
-                                        :file-change-events distincted-local-changes
-                                        :epoch              (tc/to-epoch (t/now))}})
-              (.schedule this ::idle nil nil))
+          (do
+            (swap! *sync-state #(sync-state-reset-full-local->remote-files % []))
+            (put-sync-event! {:event :finished-local->remote
+                              :data  {:graph-uuid         graph-uuid
+                                      :full-sync?         false
+                                      :file-change-events distincted-local-changes
+                                      :epoch              (tc/to-epoch (t/now))}})
+            (.schedule this ::idle nil nil))
 
           need-sync-remote
           (do (util/drain-chan ops-chan)
