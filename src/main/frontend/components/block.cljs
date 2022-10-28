@@ -2716,7 +2716,7 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
-        selected? (state/sub-block-selected? uuid)]
+        selected? (when-not slide? (state/sub-block-selected? uuid))]
     [:div.ls-block
      (cond->
        {:id block-id
@@ -2728,7 +2728,7 @@
                     (when (and card? (not review-cards?)) " shadow-md")
                     (when selected? " selected noselect"))
         :blockid (str uuid)
-        :haschild (str has-child?)}
+        :haschild (str (boolean has-child?))}
 
        level
        (assoc :level level)
