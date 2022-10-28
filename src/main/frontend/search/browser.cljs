@@ -35,6 +35,7 @@
   protocol/Engine
   (query [_this q option]
     (p/promise (search-blocks repo q option)))
+  (query-page [_this _q _opt] nil) ;; Page index is not available with fuse.js until sufficient performance benchmarking
   (rebuild-blocks-indice! [_this]
     (let [indice (search-db/make-blocks-indice! repo)]
       (p/promise indice)))

@@ -97,15 +97,21 @@
       (when-not (string/blank? q)
         (protocol/query engine q option)))))
 
+(defn page-content-search
+  [repo q option]
+  (when-let [engine (get-engine repo)]
+    (let [q (util/search-normalize q (state/enable-search-remove-accents?))
+          q (if (util/electron?) q (escape-str q))]
+      (when-not (string/blank? q)
+        (protocol/query-page engine q option)))))
+
 (defn- transact-blocks!
   [repo data]
   (when-let [engine (get-engine repo)]
     (protocol/transact-blocks! engine data)))
 
-;; TODO Junyi: Plug-in the call
 (defn- transact-pages!
   [repo data]
-  (prn "transact pages!" data)
   (when-let [engine (get-engine repo)]
     (protocol/transact-pages! engine data)))
 
@@ -214,9 +220,11 @@
         pages-to-remove-set (->> (remove :added pages)
                                  (map :v))
         pages-to-remove-id-set (->> (remove :added pages)
-                                    (map :e))]
+                                    (map :e)
+                                    set)]
     {:pages-to-add        pages-to-add
      :pages-to-remove-set pages-to-remove-set
+     :pages-to-add-id-set pages-to-add-set
      :pages-to-remove-id-set pages-to-remove-id-set}))
 
 (defn- get-blocks-from-datoms-impl
@@ -252,22 +260,28 @@
         (merge (get-blocks-from-datoms-impl blocks)
                (get-pages-from-datoms-impl pages))))))
 
+(defn- get-indirect-pages
+  "Return the set of pages that will have content updated" 
+  [tx-report] 
+  (->> (ds-report/get-blocks-and-pages tx-report)
+       :pages
+       (map :db/id)
+       set))
+
 (defn- verify-pull
   "Confirm that the page id & name of a page entity are up-to-date
    Return a full page entity"
-  [partial-page] 
-  (when-let [id (:db/id partial-page)]
-    (when-let [page-entity (db/entity id)]
-      (when (:block/name page-entity) ;; confirm it's a page entity
-        page-entity))))
+  [page-id] 
+  (when-let [page-entity (db/entity page-id)]
+    (when (:block/name page-entity) ;; confirm it's a page entity
+      page-entity)))
 
 ;; TODO merge with logic in `invoke-hooks` when feature and test is sufficient
 (defn sync-search-indice!
   [repo tx-report]
-  (let [{:keys [pages-to-add pages-to-remove-set pages-to-remove-id-set
+  (let [{:keys [pages-to-add pages-to-remove-set pages-to-add-id-set pages-to-remove-id-set
                 blocks-to-add blocks-to-remove-set]} (get-direct-blocks-and-pages tx-report) ;; directly modified block & pages
-        updated-pages (:pages (ds-report/get-blocks-and-pages tx-report))] ;; affected pages with modified children blocks
-
+        updated-pages-id-set (get-indirect-pages tx-report)] ;; affected pages with modified children blocks
     ;; update page title indice
     (when (or (seq pages-to-add) (seq pages-to-remove-set))
       (swap! search-db/indices update-in [repo :pages]
@@ -290,11 +304,9 @@
                          :blocks-to-add        blocks-to-add}))
 
     ;; update page indice
-    (when (or (seq pages-to-add) (seq pages-to-remove-id-set) (seq updated-pages)) ;; when move op happens, no :block/content provided
-      (prn "pages-to-remove-id-set: " pages-to-remove-id-set)
-      (prn "pages-to-add: " pages-to-add) ;; TODO Junyi: handle db/id and the overlapping with remove id
-      (let [pages-to-add   (set/union updated-pages pages-to-add)
-            verified-pages (map verify-pull pages-to-add)
+    (when (or (seq pages-to-add-id-set) (seq pages-to-remove-id-set) (seq updated-pages-id-set)) ;; when move op happens, no :block/content provided
+      (let [pages-to-add-id-set   (set/union updated-pages-id-set pages-to-add-id-set)
+            verified-pages (map verify-pull pages-to-add-id-set)
             indice-pages   (map #(when % (search-db/page->index %)) verified-pages)
             invalid-set    (->> (map (fn [updated indiced] ;; get id of pages without valid page index
                                        (if indiced nil (:db/id updated)))

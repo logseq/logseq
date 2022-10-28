@@ -17,6 +17,13 @@
                 {:block/uuid uuid
                  :block/content content
                  :block/page page})) result)))
+  (query-page [_this q opts]
+    (p/let [result (ipc/ipc "search-pages" repo q opts)
+            result (bean/->clj result)]
+      (keep (fn [{:keys [content uuid]}]
+              (when-not (> (count content) (* 10 (state/block-content-max-length repo)))
+                {:block/uuid uuid
+                 :block/content content})) result)))
   (rebuild-blocks-indice! [_this]
     (let [blocks-indice (search-db/build-blocks-indice repo)
           pages-indice  (search-db/build-pages-indice repo)]
@@ -24,7 +31,7 @@
   (transact-blocks! [_this data]
     (ipc/ipc "transact-blocks" repo (bean/->js data)))
   (truncate-blocks! [_this]
-    (ipc/ipc "truncate-indice" repo)) 
+    (ipc/ipc "truncate-indice" repo))
   (transact-pages! [_this data]
     (ipc/ipc "transact-pages" repo (bean/->js data)))
   (remove-db! [_this]

@@ -289,6 +289,9 @@
 (defmethod handle :search-blocks [_window [_ repo q opts]]
   (search/search-blocks repo q opts))
 
+(defmethod handle :search-pages [_window [_ repo q opts]]
+  (search/search-pages repo q opts))
+
 (defmethod handle :rebuild-indice [_window [_ repo block-data page-data]]
   (search/truncate-blocks-table! repo)
   ;; unneeded serialization
@@ -299,6 +302,7 @@
 
 (defmethod handle :transact-blocks [_window [_ repo data]]
   (let [{:keys [blocks-to-remove-set blocks-to-add]} data]
+    ;; Order matters! Same id will delete then upsert sometimes.
     (when (seq blocks-to-remove-set)
       (search/delete-blocks! repo blocks-to-remove-set))
     (when (seq blocks-to-add)
@@ -307,6 +311,7 @@
 
 (defmethod handle :transact-pages [_window [_ repo data]]
   (let [{:keys [pages-to-remove-set pages-to-add]} data]
+    ;; Order matters! Same id will delete then upsert sometimes.
     (when (seq pages-to-remove-set)
       (search/delete-pages! repo pages-to-remove-set))
     (when (seq pages-to-add)

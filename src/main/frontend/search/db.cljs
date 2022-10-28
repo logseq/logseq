@@ -50,7 +50,7 @@
 (defn build-pages-indice 
   [repo]
   (->> (db/get-all-pages repo)
-       (map #(page->index (db/get-page %)))
+       (map page->index)
        (remove nil?)
        (bean/->js)))
 

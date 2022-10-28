@@ -223,6 +223,7 @@
      :keywordize-keys true)))
 
 (defn search-blocks
+  ":page - the page to specificly search on"
   [repo q {:keys [limit page]}]
   (when-let [database (get-db repo)]
     (when-not (string/blank? q)
@@ -253,8 +254,15 @@
          (take limit)
          (vec))))))
 
-(defn search-pages-content
-  [repo q {:keys [limit page]}]
+(defn- search-pages-aux
+  [database sql input limit]
+  (let [stmt (prepare database sql)]
+    (js->clj
+     (.all ^object stmt  input limit)
+     :keywordize-keys true)))
+
+(defn search-pages
+  [repo q {:keys [limit]}]
   (when-let [database (get-db repo)]
     (when-not (string/blank? q)
       (let [match-input (-> q
@@ -268,18 +276,15 @@
                           (str "\"" match-input "\""))
             non-match-input (str "%" (string/replace q #"\s+" "%") "%")
             limit  (or limit 20)
-            select "select rowid, uuid, content, page from blocks_fts where "
-            pg-sql (if page "page = ? and" "")
+            select "select rowid, uuid, content from pages_fts where "
             match-sql (str select
-                           pg-sql
                            " content match ? order by rank limit ?")
             non-match-sql (str select
-                               pg-sql
                                " content like ? limit ?")]
         (->>
          (concat
-          (search-blocks-aux database match-sql match-input page limit)
-          (search-blocks-aux database non-match-sql non-match-input page limit))
+          (search-pages-aux database match-sql match-input limit)
+          (search-pages-aux database non-match-sql non-match-input limit))
          (distinct)
          (take limit)
          (vec))))))
