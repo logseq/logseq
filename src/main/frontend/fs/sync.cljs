@@ -461,15 +461,6 @@
    (contains-path? (relative-path path))
    (boolean)))
 
-(defn- diffs->filetxns
-  []
-  (comp
-   (map diff->filetxns)
-   cat
-   (remove ignored?)
-   distinct-update-filetxns-xf
-   remove-deleted-filetxns-xf))
-
 (defn- diffs->partitioned-filetxns
   "transducer.
   1. diff -> `FileTxn` , see also `<get-diff`
