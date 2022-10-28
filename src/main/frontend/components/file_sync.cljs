@@ -764,7 +764,7 @@
     [:br]
     "to our users, we need a little more time to test it. That’s why we decided to first roll it out only to our "
     [:br]
-    "charitable OpenCollective sponsors. We can notify you once it becomes available for you."]
+    "charitable OpenCollective sponsors and backers. We can notify you once it becomes available for you."]
 
    [:div.pt-6.flex.justify-end.space-x-2
     (ui/button "Close" :on-click close-fn :background "gray" :class "opacity-60")]])
