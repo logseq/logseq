@@ -83,7 +83,7 @@
         (map? result)
         (do
           (state/set-state! :user/info result)
-          (let [status (if (user-handler/alpha-user?) :welcome :unavailable)]
+          (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
               (async/<! (file-sync-handler/load-session-graphs))
               (p/let [repos (repo-handler/refresh-repos!)]
@@ -134,7 +134,6 @@
        (state/set-current-repo! graph)
        ;; load config
        (repo-config-handler/restore-repo-config! graph)
-       (st/refresh!)
        (when-not (= :draw (state/get-current-route))
          (route-handler/redirect-to-home!))
        (when-let [dir-name (config/get-repo-dir graph)]
@@ -557,7 +556,6 @@
 
 (defn- refresh-cb []
   (page-handler/create-today-journal!)
-  (st/refresh!)
   (file-sync-restart!))
 
 (defmethod handle :graph/ask-for-re-fresh [_]

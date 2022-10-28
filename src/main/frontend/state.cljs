@@ -1006,7 +1006,7 @@ Similar to re-frame subscriptions"
                                             (cons [repo db-id block-type])
                                             (distinct))))
       (open-right-sidebar!)
-      (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scrollable")]
+      (when-let [elem (gdom/getElementByClass "sidebar-item-list")]
         (util/scroll-to elem 0)))))
 
 (defn sidebar-remove-block!
@@ -1429,7 +1429,8 @@ Similar to re-frame subscriptions"
 
 (defn active-tldraw-app
   []
-  ^js js/window.tln)
+  (when-let [tldraw-el (.closest js/document.activeElement ".logseq-tldraw[data-tlapp]")]
+    (gobj/get js/window.tlapps (.. tldraw-el -dataset -tlapp))))
 
 (defn tldraw-editing-logseq-block?
   []
@@ -1622,9 +1623,14 @@ Similar to re-frame subscriptions"
   [args]
   (set-state! :editor/args args))
 
+(defn whiteboard-active-but-not-editing-portal?
+  []
+  (and (active-tldraw-app) (not (tldraw-editing-logseq-block?))))
+
 (defn block-component-editing?
   []
-  (:block/component-editing-mode? @state))
+  (or (:block/component-editing-mode? @state)
+      (whiteboard-active-but-not-editing-portal?)))
 
 (defn set-block-component-editing-mode!
   [value]

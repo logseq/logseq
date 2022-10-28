@@ -482,10 +482,10 @@
   resolved "https://registry.yarnpkg.com/@kanru/rage-wasm/-/rage-wasm-0.3.0.tgz#de96b1fda1f781ff401d43b50d0f95b7338c4399"
   integrity sha512-2LMRS27nNJPqFNpRQL7kXG0kgBeIPo63KM6u0Xu6Es5XIS7LP4MFtdHkCg8Pt7IhMM7GuOa2YnzAZgKBxE1lcw==
 
-"@logseq/capacitor-file-sync@0.0.12":
-  version "0.0.12"
-  resolved "https://registry.yarnpkg.com/@logseq/capacitor-file-sync/-/capacitor-file-sync-0.0.12.tgz#26ab202d9925acaad42d38c58708c3adae39d79f"
-  integrity sha512-qYCvBI6XvaLbqYPxyqD02lRFoJ2MlOHX2Bp5+rDb1SGgfJW0kIstCTZ2B7Sb8tng7ZN1b6kb9fvLRGD2zviuMQ==
+"@logseq/capacitor-file-sync@0.0.13":
+  version "0.0.13"
+  resolved "https://registry.yarnpkg.com/@logseq/capacitor-file-sync/-/capacitor-file-sync-0.0.13.tgz#cf249fd2e091566b453212558137885a30869131"
+  integrity sha512-jtXgI0fx4IagqPO+frEvSIRddRe0W/DpmaoUJguKrQ9aIH+ebtbkActUQEDX7jxo4w3VtsYJn21+qLtnAAH1pQ==
 
 "@logseq/react-tweet-embed@1.3.1-1":
   version "1.3.1-1"
@@ -1599,10 +1599,10 @@ caniuse-lite@^1.0.0, caniuse-lite@^1.0.30001109, caniuse-lite@^1.0.30001370:
   resolved "https://registry.yarnpkg.com/caniuse-lite/-/caniuse-lite-1.0.30001393.tgz#1aa161e24fe6af2e2ccda000fc2b94be0b0db356"
   integrity sha512-N/od11RX+Gsk+1qY/jbPa0R6zJupEa0lxeBG598EbrtblxVCTJsQwbRBm6+V+rxpc5lHKdsXb9RY83cZIPLseA==
 
-capacitor-voice-recorder@2.1.0:
-  version "2.1.0"
-  resolved "https://registry.yarnpkg.com/capacitor-voice-recorder/-/capacitor-voice-recorder-2.1.0.tgz#142e7bfa62e88530279f478b79735a0dc68a7d1a"
-  integrity sha512-H0c/sUVD7cduVS5VqutKk00whyqXZUFi56ChRMl9Ke/LBU71HhHwzonPmheT8i9gQmgOaplc3TOpaKqckXb+3A==
+capacitor-voice-recorder@4.0.0:
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/capacitor-voice-recorder/-/capacitor-voice-recorder-4.0.0.tgz#41939aa21e68eb58301e781c217ad17dd48d2a34"
+  integrity sha512-J5RfSOnTFm0nOJlW46wSNUVY331SHF0jGc+pi5X0/6NsNM6tJPhZtg4dajIY0zPRR94eirE3Z/h6R+RW3EmSQg==
   dependencies:
     get-blob-duration "^1.2.0"
 
