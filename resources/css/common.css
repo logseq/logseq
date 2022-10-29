@@ -633,7 +633,7 @@ span.warning, div.warning:not(.admonitionblock), p.warning {
 }
 
 .bg-warning {
-  background: var(--ls-waring-background-color);
+  background: var(--ls-warning-background-color);
 }
 
 a.error,
