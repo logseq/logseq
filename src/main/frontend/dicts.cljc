@@ -1038,7 +1038,11 @@
         :user/delete-account-notice "Al uw gepubliceerde pagina's op logseq.com zullen worden verwijderd."
         :user/delete-your-account "Verwijder uw account"
         }
-   :fr {:help/about "A propos de Logseq"
+   :fr {:tutorial/text #?(:cljs (rc/inline "tutorial-fr.md")
+                          :default "tutorial-fr.md")
+        :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-fr.md")
+                                 :default "dummy-notes-fr.md")
+        :help/about "A propos de Logseq"
         :help/bug "Signaler une anomalie"
         :help/feature "Demander une fonctionnalité"
         :help/changelog "Journal des modifications"
