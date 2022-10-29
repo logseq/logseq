@@ -3089,9 +3089,15 @@
   (when (state/editing?)
     (keydown-backspace-handler false e)))
 
+(defn- slide-focused?
+  []
+  (some-> (first (dom/by-class "reveal"))
+          (dom/has-class? "focused")))
+
 (defn shortcut-up-down [direction]
   (fn [e]
-    (when-not (auto-complete?)
+    (when (and (not (auto-complete?))
+               (not (slide-focused?)))
       (util/stop e)
       (cond
         (state/editing?)

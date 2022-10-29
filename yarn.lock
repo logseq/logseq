@@ -1599,10 +1599,10 @@ caniuse-lite@^1.0.0, caniuse-lite@^1.0.30001109, caniuse-lite@^1.0.30001370:
   resolved "https://registry.yarnpkg.com/caniuse-lite/-/caniuse-lite-1.0.30001393.tgz#1aa161e24fe6af2e2ccda000fc2b94be0b0db356"
   integrity sha512-N/od11RX+Gsk+1qY/jbPa0R6zJupEa0lxeBG598EbrtblxVCTJsQwbRBm6+V+rxpc5lHKdsXb9RY83cZIPLseA==
 
-capacitor-voice-recorder@2.1.0:
-  version "2.1.0"
-  resolved "https://registry.yarnpkg.com/capacitor-voice-recorder/-/capacitor-voice-recorder-2.1.0.tgz#142e7bfa62e88530279f478b79735a0dc68a7d1a"
-  integrity sha512-H0c/sUVD7cduVS5VqutKk00whyqXZUFi56ChRMl9Ke/LBU71HhHwzonPmheT8i9gQmgOaplc3TOpaKqckXb+3A==
+capacitor-voice-recorder@4.0.0:
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/capacitor-voice-recorder/-/capacitor-voice-recorder-4.0.0.tgz#41939aa21e68eb58301e781c217ad17dd48d2a34"
+  integrity sha512-J5RfSOnTFm0nOJlW46wSNUVY331SHF0jGc+pi5X0/6NsNM6tJPhZtg4dajIY0zPRR94eirE3Z/h6R+RW3EmSQg==
   dependencies:
     get-blob-duration "^1.2.0"
 

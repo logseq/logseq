@@ -153,7 +153,7 @@
    By default it will be placed next to the given shape id"
   [block-uuid source-shape & {:keys [link? bottom?]}]
   (let [app (state/active-tldraw-app)
-        api (.-api app)
+        ^js api (.-api app)
         point (-> (.getShapeById app source-shape)
                   (.-bounds)
                   ((fn [bounds] (if bottom?

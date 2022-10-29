@@ -688,27 +688,37 @@
      (encryption-row enable-encryption?)
 
      (when-not web-platform?
+       [:div.mt-1.sm:mt-0.sm:col-span-2
+        [:hr]
+        (if logged-in?
+          [:div
+           (user-handler/email)
+           [:p (ui/button (t :logout) {:class "p-1"
+                                       :icon "logout"
+                                       :on-click user-handler/logout})]]
+          [:div
+           (ui/button (t :login) {:class "p-1"
+                                  :icon "login"
+                                  :on-click (fn []
+                                              (state/close-settings!)
+                                              (js/window.open config/LOGIN-URL))})
+           [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])])
+
+     (when-not web-platform?
+       [:<>
+        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
+        [:div.flex.flex-col.gap-4
+         {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
+         (sync-switcher-row enable-sync?)]])
+
+     (when-not web-platform?
        [:<>
         [:hr]
         [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]
-         [:div.mt-1.sm:mt-0.sm:col-span-2
-          (if logged-in?
-            [:div
-              (user-handler/email)
-              [:p (ui/button (t :logout) {:class "p-1"
-                                          :icon "logout"
-                                          :on-click user-handler/logout})]]
-            [:div
-             (ui/button (t :login) {:class "p-1"
-                                    :icon "login"
-                                    :on-click (fn []
-                                                (state/close-settings!)
-                                                (js/window.open config/LOGIN-URL))})
-             [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])]]
+         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]]
         [:div.flex.flex-col.gap-4
          {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-         (sync-switcher-row enable-sync?)
          (whiteboards-switcher-row enable-whiteboards?)]])]))
 
 (rum/defcs settings
@@ -750,7 +760,8 @@
                ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
 
                [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb")]
-               [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature" {:extension? true})]
+               [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature" {:extension? true
+                                                                                             :style {:margin-left 2}})]
 
                (when plugins-of-settings
                  [:plugins-setting "plugins" (t :settings-of-plugins) (ui/icon "puzzle")])]]

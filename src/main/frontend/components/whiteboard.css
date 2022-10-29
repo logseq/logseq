@@ -105,6 +105,7 @@ h1.title.whiteboard-dashboard-title {
 
 input.tl-text-input {
   border: none;
+  padding: 0;
 
   &:focus {
     box-shadow: none;

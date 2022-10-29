@@ -172,7 +172,7 @@
           (:GraphName graph)
           " to "
           (config/get-string-repo-dir (config/get-local-dir local)))
-     :warning)
+     :success)
     (init-graph (:GraphUUID graph))
     (state/close-modal!)))
 

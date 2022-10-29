@@ -313,7 +313,7 @@ html.is-native-ipad {
 }
 
 html.is-native-iphone {
-  --ls-headbar-inner-top-padding: 36px;
+  --ls-headbar-inner-top-padding: 38px;
 
   .left-sidebar-inner {
     .create {

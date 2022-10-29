@@ -219,27 +219,29 @@
                       (log/error :write-file-failed error)))))))))
 
 (defn get-file-path [dir path]
-  (let [dir (some-> dir (string/replace #"/+$" ""))
-        dir (if (and (not-empty dir) (string/starts-with? dir "/"))
-              (do
-                (js/console.trace "WARN: detect absolute path, use URL instead")
-                (str "file://" (js/encodeURI dir)))
-              dir)
-        path (some-> path (string/replace #"^/+" ""))]
-    (cond (nil? path)
-          dir
+  (let [dir        (some-> dir (string/replace #"/+$" ""))
+        dir        (if (and (not-empty dir) (string/starts-with? dir "/"))
+                     (do
+                       (js/console.trace "WARN: detect absolute path, use URL instead")
+                       (str "file://" (js/encodeURI dir)))
+                     dir)
+        path       (some-> path (string/replace #"^/+" ""))
+        encode-url #(let [encoded-chars?
+                          (and (string? %) (boolean (re-find #"(?i)%[0-9a-f]{2}" %)))]
+                      (cond-> %
+                        (not encoded-chars?)
+                        (js/encodeURI path)))]
+    (cond (string/blank? path)
+          (encode-url dir)
 
-          (nil? dir)
-          path
+          (string/blank? dir)
+          (encode-url path)
 
           (string/starts-with? path dir)
-          path
+          (encode-url path)
 
           :else
-          (let [encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" path))
-                path' (cond-> path
-                        (not encoded-chars?)
-                        (js/encodeURI path))]
+          (let [path' (encode-url path)]
             (str dir "/" path')))))
 
 (defn- local-container-path?
