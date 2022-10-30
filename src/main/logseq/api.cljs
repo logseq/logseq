@@ -385,6 +385,14 @@
           (js/console.debug :shortcut/unregister-shortcut cmd)
           (st/unregister-shortcut! (:handler-id cmd) (:id cmd)))))))
 
+(defn ^:export register_search_service
+  [pid name ^js opts]
+  (plugin-handler/register-plugin-search-service pid name (bean/->clj opts)))
+
+(defn ^:export unregister_search_services
+  [pid]
+  (plugin-handler/unregister-plugin-search-services pid))
+
 (def ^:export register_plugin_ui_item
   (fn [pid type ^js opts]
     (when-let [opts (bean/->clj opts)]

@@ -1,18 +1,29 @@
 (ns frontend.search.plugin
   "Plugin service implementation of search protocol"
   (:require [frontend.state :as state]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.search.db :as search-db]
-            [frontend.search.protocol :as protocol]))
+            [frontend.search.protocol :as protocol]
+            [cljs-bean.core :as bean]))
+
+(defn call-service!
+  [service event payload]
+  (when-let [^js pl (plugin-handler/get-plugin-inst (:pid service))]
+    (.call (.-caller pl)
+           (str "service:" event ":" (:name service))
+           (bean/->js (merge {:graph (state/get-current-repo)} payload)))))
 
 (deftype Plugin [service repo]
   protocol/Engine
 
   (query [_this q opts]
-    (prn "D:Search > Plugin Query: " service q opts))
+    (prn "D:Search > Plugin Query: " service q opts)
+    (call-service! service "search:query" (merge {:q q} opts)))
 
   (rebuild-blocks-indice! [_this]
-    (let [indice (search-db/build-blocks-indice repo)]
-      (prn "D:Search > Plugin initial indice!" indice))
+    (let [blocks (search-db/build-blocks-indice repo)]
+      (prn "D:Search > Plugin initial indice!")
+      (call-service! service "search:rebuildBlocksIndice" {:blocks blocks}))
     ())
 
   (transact-blocks! [_this data]

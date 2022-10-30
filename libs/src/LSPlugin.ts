@@ -293,6 +293,7 @@ export type SearchIndiceInitStatus = boolean
 
 export interface IPluginSearchServiceHooks {
   name: string
+  options?: Record<string, any>
 
   onQuery: (graph: string, key: string, opts: {}) => Promise<any>
   onIndiceInit: (graph: string, blocks: any) => Promise<SearchIndiceInitStatus>
