@@ -33,7 +33,7 @@
         result (when-not (string/blank? @*q)
                  (search/property-search @*q))]
     [:div
-     [:div.ls-property-add.grid.grid-cols-4.gap-4.flex.flex-row.items-center
+     [:div.ls-property-add.grid.grid-cols-4.flex.flex-row.items-center
       [:input#add-property.form-input.block.col-span-1.focus:outline-none
        {:placeholder "Property key"
         :auto-focus true
@@ -50,9 +50,9 @@
                        (reset! *new-property? false)
 
                        nil))}]
-      [:a.close.ml-2 {:on-mouse-down #(do
-                                        (reset! *q nil)
-                                        (reset! *new-property? false))}
+      [:a.close {:on-mouse-down #(do
+                                   (reset! *q nil)
+                                   (reset! *new-property? false))}
        svg/close]]
      (ui/auto-complete
       result

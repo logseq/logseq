@@ -8,7 +8,7 @@
         opacity: 0.5;
     }
 
-    tr:nth-child(even), tr:nth-child(even) {
+    tr:nth-child(even), tr:nth-child(odd) {
         background: none;
     }
 }

@@ -3245,7 +3245,9 @@
             (:outliner/block-title-collapse-enabled? (state/get-config))
             (block-with-title? (:block/format block)
                                (:block/content block)
-                               semantic?)))
+                               semantic?))
+           ;; Object block
+           (seq (:block/tags block)))
        false))))
 
 (defn all-blocks-with-level
