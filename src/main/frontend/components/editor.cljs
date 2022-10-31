@@ -13,6 +13,7 @@
             [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.handler.paste :as paste-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
@@ -254,27 +255,20 @@
 (rum/defc property-value-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id]
-  (let [property (:property (state/get-editor-action-data))
-        input (gdom/getElement id)]
-    (when (and input
-               (not (string/blank? property)))
+  (let [{:keys [property entity]} (state/get-editor-action-data)
+        input (gdom/getElement id)
+        property-entity (db/entity [:block/name (util/page-name-sanity-lc property)])]
+    (when (and entity property-entity input)
       (let [current-pos (cursor/pos input)
             edit-content (state/sub [:editor/content id])
-            start-idx (string/last-index-of (subs edit-content 0 current-pos)
-                                            gp-property/colons)
-            q (or
-               (when (>= current-pos (+ start-idx 2))
-                 (subs edit-content (+ start-idx 2) current-pos))
-               "")
-            q (string/triml q)
+            q (string/triml (or edit-content ""))
             matched-values (editor-handler/get-matched-property-values property q)
-            non-exist-handler (fn [_state]
-                                ((editor-handler/property-value-on-chosen-handler id q) nil))]
+            non-exist-handler #(property-handler/add-property-value! entity (:block/uuid property-entity) q)]
         (ui/auto-complete
          matched-values
-         {:on-chosen (editor-handler/property-value-on-chosen-handler id q)
+         {:on-chosen #(property-handler/add-property-value! entity (:block/uuid property-entity) q)
           :on-enter non-exist-handler
-          :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property value: " q)]
+          :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new value: " q)]
           :header [:div.px-4.py-2.text-sm.font-medium "Matched property values: "]
           :item-render (fn [property-value] property-value)
           :class       "black"})))))

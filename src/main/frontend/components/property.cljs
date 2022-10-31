@@ -90,6 +90,7 @@
                     (js/setTimeout
                      (fn []
                        (state/set-editor-action-data! {:property (:block/original-name property)
+                                                       :entity entity
                                                        :pos 0})
                        (state/set-editor-action! :property-value-search))
                      100)))
