@@ -8,7 +8,3 @@
   (when (state/developer-mode?)
     (doseq [x xs]
       (pprint/pprint x))))
-
-(defn debug!
-  []
-  (js* "debugger;"))
