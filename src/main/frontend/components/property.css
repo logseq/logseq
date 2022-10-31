@@ -13,13 +13,13 @@
     }
 }
 
-.ls-property-add input.form-input {
+input.simple-input {
     padding-left: 0;
     border-radius: 0;
     border: none;
     border-bottom: 1px solid;
 }
 
-.ls-property-add input.form-input:focus {
+input.simple-input:focus {
     box-shadow: none;
 }

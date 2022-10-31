@@ -640,7 +640,7 @@
        [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
         [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
          [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-          {:type     "button" 
+          {:type     "button"
            :autoFocus "on"
            :class "ui__modal-enter"
            :on-click #(and (fn? on-confirm)
@@ -800,7 +800,7 @@
 
 (rum/defc select
   [options on-change class]
-  [:select.mt-1.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-1.sm:ml-4.w-12.sm:w-20
+  [:select.mt-1.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.w-12.sm:w-20
    {:class     (or class "form-select")
     :style     {:padding "0 0 0 6px"}
     :on-change (fn [e]

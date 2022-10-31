@@ -1,4 +1,5 @@
 (ns frontend.handler.property
+  "Block properties handler."
   (:require [frontend.state :as state]
             [frontend.db :as db]
             [frontend.util :as util]

@@ -9,6 +9,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.scheduled-deadlines :as scheduled]
             [frontend.components.property :as property]
+            [frontend.components.property.schema :as property-schema]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -448,25 +449,27 @@
           (when properties-show?
             (let [structured-tag? (= "tag" (:block/type entity))
                   property? (= "property" (:block/type entity))]
-              (if property?
-                [:div "TBD set property schema"]
-                [:div.p-2.mb-4
-                 (property/properties entity {:page-cp component-block/page-cp
-                                              :inline-text component-block/inline-text})
+              [:div.p-2.mb-4
+               (if property?
+                 (property-schema/schema entity)
+                 [:div
+                  (property/properties entity {:page-cp component-block/page-cp
+                                               :inline-text component-block/inline-text})
 
-                 [:div.mt-4
-                  [:div.mr-2 "Parent page: "]
-                  (if (:block/namespace entity)
-                    (component-block/page-cp
-                     {}
-                     (db/entity (:db/id (:block/namespace entity))))
-                    [:input.form-input.block.mt-1
-                     {:style {:width 173} ; TODO: better form layout
-                      :placeholder "Page name"
-                      :on-blur (fn [e]
-                                 (let [page (util/evalue e)]
-                                   (when-not (string/blank? page)
-                                     (property-handler/set-namespace! (:db/id entity) page))))}])]])))
+                  [:div.mt-4
+                   [:div.mr-2 "Parent page: "]
+                   (if (:block/namespace entity)
+                     (component-block/page-cp
+                      {}
+                      (db/entity (:db/id (:block/namespace entity))))
+                     [:input.form-input.block.mt-1
+                      {:style {:width 173} ; TODO: better form layout
+                       :placeholder "Page name"
+                       :on-blur (fn [e]
+                                  (let [page (util/evalue e)]
+                                    (when-not (string/blank? page)
+                                      (property-handler/set-namespace! (:db/id entity) page))))}])]])]
+              ))
 
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))

@@ -1,4 +1,5 @@
 (ns frontend.components.property
+  "Block properties management."
   (:require [frontend.ui :as ui]
             [frontend.util :as util]
             [clojure.string :as string]
@@ -34,7 +35,7 @@
                  (search/property-search @*q))]
     [:div
      [:div.ls-property-add.grid.grid-cols-4.flex.flex-row.items-center
-      [:input#add-property.form-input.block.col-span-1.focus:outline-none
+      [:input#add-property.form-input.simple-input.block.col-span-1.focus:outline-none
        {:placeholder "Property key"
         :auto-focus true
         :on-change (fn [e]
