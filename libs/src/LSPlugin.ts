@@ -295,7 +295,15 @@ export interface IPluginSearchServiceHooks {
   name: string
   options?: Record<string, any>
 
-  onQuery: (graph: string, key: string, opts: {}) => Promise<any>
+  onQuery: (graph: string, key: string, opts: {}) =>
+    Promise<{
+      graph: string,
+      key: string,
+      blocks?: Array<{ uuid: BlockIdentity, content: string, page?: EntityID }>,
+      pages?: Array<any>,
+      files?: Array<any>
+    }>
+
   onIndiceInit: (graph: string, blocks: any) => Promise<SearchIndiceInitStatus>
   onIndiceReset: (graph: string) => Promise<void>
   onBlocksChanged: (graph: string, changes: { added: Array<any>, removed: Array<any> }) => Promise<void>

@@ -7,18 +7,23 @@
             [cljs-bean.core :as bean]))
 
 (defn call-service!
-  [service event payload]
-  (when-let [^js pl (plugin-handler/get-plugin-inst (:pid service))]
-    (.call (.-caller pl)
-           (str "service:" event ":" (:name service))
-           (bean/->js (merge {:graph (state/get-current-repo)} payload)))))
+  ([service event payload] (call-service! service event payload false))
+  ([service event payload reply?]
+   (when-let [^js pl (plugin-handler/get-plugin-inst (:pid service))]
+     (let [{:keys [pid name]} service
+           hookEvent (str "service:" event ":" name)]
+       (.call (.-caller pl) hookEvent (bean/->js (merge {:graph (state/get-current-repo)} payload)))
+       (when reply?
+         (.once (.-caller pl) (str hookEvent ":reply")
+                (fn [^js e]
+                  (state/update-plugin-search-engine pid name #(assoc % :result (bean/->clj e))))))))))
 
 (deftype Plugin [service repo]
   protocol/Engine
 
   (query [_this q opts]
     (prn "D:Search > Plugin Query: " service q opts)
-    (call-service! service "search:query" (merge {:q q} opts)))
+    (call-service! service "search:query" (merge {:q q} opts) true))
 
   (rebuild-blocks-indice! [_this]
     (let [blocks (search-db/build-blocks-indice repo)]

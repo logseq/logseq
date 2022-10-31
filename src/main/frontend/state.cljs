@@ -1452,6 +1452,15 @@ Similar to re-frame subscriptions"
   []
   (:search/engines @state))
 
+(defn update-plugin-search-engine
+  [pid name f]
+  (when-let [pid (keyword pid)]
+    (set-state! :search/engines
+                (update-vals (get-all-plugin-search-engines)
+                             #(if (and (= pid (:pid %)) (= name (:name %)))
+                                (f %) %)))))
+
+
 (defn install-plugin-hook
   [pid hook]
   (when-let [pid (keyword pid)]
