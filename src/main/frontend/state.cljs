@@ -1422,23 +1422,35 @@ Similar to re-frame subscriptions"
   ([pid type name opts]
    (when-let [pid (and pid type name (keyword pid))]
      (let [exists (get-plugin-services pid type)]
-       (when (or (not exists) (not (some #(= name (:name %)) exists)))
-         (update-state! [:plugin/installed-services pid]
-                        #(conj (vec %) {:pid pid :type type :name name :opts opts})))))))
+       (when-let [service (and (or (not exists) (not (some #(= name (:name %)) exists)))
+                               {:pid pid :type type :name name :opts opts})]
+         (update-state! [:plugin/installed-services pid] #(conj (vec %) service))
+
+         ;; search engines state for results
+         (when (= type :search)
+           (set-state! [:search/engines (str pid name)] service)))))))
 
 (defn uninstall-plugin-service
   [pid type-or-all]
   (when-let [pid (keyword pid)]
     (when-let [installed (get (:plugin/installed-services @state) pid)]
-      (set-state!
-       [:plugin/installed-services pid]
-       (if (or (true? type-or-all) (nil? type-or-all)) nil
-         (filterv #(not= type-or-all (:type %)) installed))))))
+      (let [remove-all? (or (true? type-or-all) (nil? type-or-all))
+            remains     (if remove-all? nil (filterv #(not= type-or-all (:type %)) installed))
+            removed     (if remove-all? installed (filterv #(= type-or-all (:type %)) installed))]
+        (set-state! [:plugin/installed-services pid] remains)
+
+        ;; search engines state for results
+        (when-let [removed' (seq (filter #(= :search (:type %)) removed))]
+          (update-state! :search/engines #(apply dissoc % (mapv (fn [{:keys [pid name]}] (str pid name)) removed'))))))))
 
 (defn get-all-plugin-services-with-type
   [type]
   (when-let [installed (vals (:plugin/installed-services @state))]
     (mapcat (fn [s] (filter #(= (keyword type) (:type %)) s)) installed)))
+
+(defn get-all-plugin-search-engines
+  []
+  (:search/engines @state))
 
 (defn install-plugin-hook
   [pid hook]

@@ -442,6 +442,12 @@
                                             (search-handler/search (state/get-current-repo) value)))
                                         timeout))))))}]]
       [:div.search-results-wrap.border.border-red-500
+       [:div.search-results-services-tabs.py-2.px-4.flex.space-x-2
+        (ui/button "Default" :background "green")
+
+        (for [[k _] (state/get-all-plugin-search-engines)]
+          (ui/button (str "Plugin: " k) :background "gray"))]
+       
        (if (seq search-result)
          (search-auto-complete search-result search-q false)
          (recent-search-and-pages in-page-search?))]]]))
