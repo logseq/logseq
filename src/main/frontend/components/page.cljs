@@ -304,7 +304,7 @@
                    [:a.asset-ref (pdf-assets/fix-local-asset-pagename title)]
                    (if fmt-journal? (date/journal-title->custom-format title) title))
            old-name (or title page-name)]
-       [:h1.page-title.flex.cursor-pointer.gap-1.w-full
+       [:h1.page-title.flex.cursor-pointer.gap-1
         {:on-mouse-down (fn [e]
                           (when (util/right-click? e)
                             (state/set-state! :page-title/context {:page page-name})))
@@ -321,7 +321,7 @@
                          (reset! *edit? true))))}
         (when (not= icon "") [:span.page-icon icon])
         [:div.flex.flex-1.flex-row.justify-between.items-center
-         [:div.page-title-sizer-wrapper.relative
+         [:div.page-title-sizer-wrapper.flex.flex-1.relative
           (when (rum/react *edit?)
             (page-title-editor {:*title-value *title-value
                                 :*edit? *edit?

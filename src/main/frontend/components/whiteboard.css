@@ -162,8 +162,6 @@ input.tl-text-input {
   }
 
   .page-title-sizer-wrapper {
-    width: 98%;
-
     > .title {
       @apply whitespace-nowrap min-w-[80px];
     }

@@ -61,13 +61,13 @@
        :item-render #(search-item-render @*q %)})]))
 
 (rum/defcs property-key < (rum/local false ::show-close?)
-  [state entity k page-cp property-id]
+  [state entity k page-cp property-id ref-property?]
   (let [*show-close? (::show-close? state)]
     [:div.relative
      {:on-mouse-over (fn [_] (reset! *show-close? true))
       :on-mouse-out (fn [_] (reset! *show-close? false))}
      (page-cp {} {:block/name k})
-     (when @*show-close?
+     (when (and @*show-close? (not ref-property?))
        [:div.absolute.top-0.right-0
         [:a.fade-link.fade-in.py-2.px-1
          {:title "Remove the property from this page"
@@ -78,9 +78,10 @@
 (rum/defcs properties-area <
   (rum/local false ::new-property?)
   rum/reactive
-  [state entity properties {:keys [page-cp inline-text]}]
+  [state entity properties refs-properties {:keys [page-cp inline-text]}]
   (let [*new-property? (::new-property? state)
-        editor-box (state/get-component :editor/box)]
+        editor-box (state/get-component :editor/box)
+        ref-keys (set (keys refs-properties))]
     [:div.ls-properties-area
      (when (seq properties)
        [:table.table-auto.m-0
@@ -89,10 +90,11 @@
            (when-let [property (db/pull [:block/uuid k])]
              (when-let [k' (:block/original-name property)]
                (let [editor-id (str "property-" (:db/id entity) "-" k')
-                     editing? (state/sub [:editor/editing? editor-id])]
+                     editing? (state/sub [:editor/editing? editor-id])
+                     ref-property? (contains? ref-keys k)]
                  [:tr
                   [:td.property-key.p-0 {:style {:width 160}} ;FIXME: auto responsive
-                   (property-key entity k' page-cp k)]
+                   (property-key entity k' page-cp k ref-property?)]
 
                   [:td.property-value.p-0
                    (let [block (assoc entity :editing-property property)
@@ -128,22 +130,18 @@
         properties (merge
                     namespace-properties
                     (:block/properties entity))]
-    (properties-area entity properties block-components-m)))
+    (properties-area entity properties namespace-properties block-components-m)))
 
-(defn composed-properties
+(rum/defc composed-properties < rum/reactive
   [entity refs block-components-m]
   (let [namespaces (map :block/namespace (distinct refs))
-        namespace-properties (->>
-                              namespaces
-                              (map
-                                (fn [namespace]
-                                  (:block/properties (db/entity (:db/id namespace))))))
         refs-properties (map
                           (fn [ref]
-                            (:block/properties (db/entity (:db/id ref))))
-                          refs)
-        property-maps (concat namespace-properties
-                              refs-properties
+                            (:block/properties
+                             (db/pull-block (:db/id ref))))
+                          (concat namespaces refs))
+        property-maps (concat refs-properties
                               [(:block/properties entity)])
-        properties (apply merge property-maps)]
-    (properties-area entity properties block-components-m)))
+        properties (apply merge property-maps)
+        refs-properties' (apply merge refs-properties)]
+    (properties-area entity properties refs-properties' block-components-m)))

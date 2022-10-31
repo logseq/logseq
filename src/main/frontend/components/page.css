@@ -291,8 +291,6 @@ a.page-title {
 }
 
 .page-title-sizer-wrapper {
-  @apply w-full;
-
   :empty::before {
     content: '\200b';
   }
