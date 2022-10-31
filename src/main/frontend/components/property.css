@@ -1,14 +1,11 @@
-.property-value {
-    @apply px-1 rounded-sm;
-}
-
-.property-value:hover {
-  background: var(--ls-secondary-background-color);
-}
-
 .property-value-content {
+  @apply px-1 rounded-sm;
   cursor: text;
   min-height: 24px;
+}
+
+.property-value-content:hover {
+    background: var(--ls-secondary-background-color);
 }
 
 .ls-properties-area {
@@ -19,10 +16,14 @@
     tr:nth-child(even), tr:nth-child(odd) {
         background: none;
     }
+
+    .editor-inner {
+        @apply px-1;
+    }
 }
 
 input.simple-input {
-    padding-left: 0;
+    @apply px-1;
     border-radius: 0;
     border: none;
     border-bottom: 1px solid;

@@ -33,6 +33,7 @@
                   [{:label "Any" :value "any"}
                    {:label "Number" :value "number"}
                    {:label "Date" :value "date"}
+                   {:label "Checkbox" :value "checkbox"}
                    {:label "Url" :value "url"}
                    {:label "Object" :value "object"}])]
     (property-item

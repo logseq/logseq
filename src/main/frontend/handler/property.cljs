@@ -62,11 +62,15 @@
 (defn- extract-refs
   [entity properties]
   (let [property-values (->>
-                         (map (fn [v]
-                                (if (coll? v)
-                                  v
-                                  [v]))
-                           (vals properties))
+                         properties
+                         (map (fn [[k v]]
+                                (let [schema (:block/property-schema (db/pull [:block/uuid k]))
+                                      object? (= (:type schema) "object")
+                                      f (if object? page-ref/->page-ref identity)]
+                                  (->> (if (coll? v)
+                                         v
+                                         [v])
+                                       (map f)))))
                          (apply concat)
                          (filter string?))
         block-text (string/join " "
@@ -111,7 +115,7 @@
       "url" (if (gp-util/url? value)
               [true value]
               [false "invalid URL"])
-      "object" (let [page-name (page-ref/get-page-name value)]
+      "object" (if-let [page-name (page-ref/get-page-name value)]
                  [true page-name]
                  [false "invalid Object"]))))
 
@@ -120,11 +124,22 @@
   (when (not= property-id (:block/uuid entity))
     (when-let [property (db/pull [:block/uuid property-id])]
       (let [schema (:block/property-schema property)
-            [success? property-value-or-error] (validate schema property-value)]
+            [success? property-value-or-error] (validate schema property-value)
+            multiple-values? (:multiple-values? schema)
+            object? (= "object" (:type schema))]
         (if success?
           (let [properties (:block/properties entity)
-                properties' (assoc properties property-id property-value-or-error)
-                refs (extract-refs entity properties')]
+                property-value (get properties property-id)
+                value (if multiple-values?
+                        (conj (if (coll? property-value) (set property-value) #{property-value}) property-value-or-error)
+                        property-value-or-error)
+                refs (extract-refs entity (assoc properties property-id value))
+                value (if (and multiple-values? object?)
+                        (->> (map util/page-name-sanity-lc value)
+                             (remove string/blank?)
+                             (set))
+                        value)
+                properties' (assoc properties property-id value)]
             (outliner-tx/transact!
               {:outliner-op :save-block}
               (outliner-core/save-block!

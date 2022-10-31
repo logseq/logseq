@@ -13,7 +13,8 @@
             [frontend.search :as search]
             [frontend.components.search.highlight :as highlight]
             [frontend.components.svg :as svg]
-            [frontend.modules.shortcut.core :as shortcut]))
+            [frontend.modules.shortcut.core :as shortcut]
+            [medley.core :as medley]))
 
 (defn- add-property
   [entity k *new-property?]
@@ -71,27 +72,85 @@
      (when (and @*show-close? (not ref-property?))
        [:div.absolute.top-0.right-0
         [:a.fade-link.fade-in.py-2.px-1
-         {:title "Remove the property from this page"
+         {:title "Remove this property"
           :on-click (fn [_e]
                       (property-handler/delete-property! entity property-id))}
          (ui/icon "x")]])]))
 
-(rum/defc property-value < rum/reactive
-  [entity property k v k' {:keys [inline-text editor-box]}]
+(rum/defcs property-value < rum/reactive
+  [state entity property k v k' {:keys [inline-text editor-box page-cp]}]
   (let [block (assoc entity :editing-property property)
         dom-id (str "ls-property-" k)
         editor-id (str "property-" (:db/id entity) "-" k')
-        editing? (state/sub [:editor/editing? editor-id])]
-    (if editing?
+        editing? (state/sub [:editor/editing? editor-id])
+        schema (:block/property-schema property)
+        edit-fn (fn [editor-id id v]
+                  (let [cursor-range (util/caret-range (gdom/getElement (or id dom-id)))]
+                    (state/set-editing! editor-id v block cursor-range)
+                    (js/setTimeout
+                     (fn []
+                       (state/set-editor-action-data! {:property (:block/original-name property)
+                                                       :pos 0})
+                       (state/set-editor-action! :property-value-search))
+                     100)))
+        multiple-values? (:multiple-values? schema)
+        type (:type schema)
+        object? (= type "object")]
+    (cond
+      multiple-values?
+      (let [v' (if (coll? v) v (when v [v]))
+            editor-id' (str editor-id (count v'))
+            new-editing? (state/sub [:editor/editing? editor-id'])]
+        [:div.flex.flex-1.flex-col
+         [:div.flex.flex-1.flex-col
+          (for [[idx item] (medley/indexed v')]
+            (let [dom-id' (str dom-id "-" idx)
+                  editor-id' (str editor-id idx)
+                  editing? (state/sub [:editor/editing? editor-id'])]
+              (if editing?
+                (editor-box {:format :markdown
+                             :block block} editor-id' {})
+                [:div.flex.flex-1.property-value-content
+                 {:id dom-id'
+                  :on-click (fn [] (edit-fn editor-id' dom-id' item))}
+                 (if object?
+                   (page-cp {} {:block/name (util/page-name-sanity-lc item)})
+                   (inline-text {} :markdown (str v)))])))
+
+          (let [fv (first v')]
+            (when (and (not new-editing?)
+                       fv
+                       (or (and (string? fv) (not (string/blank? fv)))
+                           (and (not (string? fv)) (some? fv))))
+             [:div.rounded-sm.ml-1
+              {:on-click (fn []
+                           (edit-fn (str editor-id (count v')) nil ""))}
+              [:div.flex.flex-row
+               [:div.block {:style {:height      20
+                                    :width       20}}
+                [:a.add-button-link.block {:title "Add another value"
+                                           :style {:margin-left -4}}
+                 (ui/icon "circle-plus")]]]]))]
+         (when new-editing?
+           (editor-box {:format :markdown
+                        :block block} editor-id' {}))])
+
+      editing?
       (editor-box {:format :markdown
                    :block block} editor-id {})
+
+      :else
       [:div.flex.flex-1.property-value-content
        {:id dom-id
         :on-click (fn []
-                    (let [cursor-range (util/caret-range (gdom/getElement dom-id))]
-                      (state/set-editing! editor-id (str v) block cursor-range)))}
-       (when-not (string/blank? (str v))
-         (inline-text {} :markdown (str v)))])))
+                    (edit-fn editor-id nil v))}
+       (cond
+         (and (= type "date") (string/blank? v))
+         [:div "TBD (date icon)"]
+
+         :else
+         (when-not (string/blank? (str v))
+           (inline-text {} :markdown (str v))))])))
 
 (rum/defcs properties-area <
   (rum/local false ::new-property?)
@@ -99,34 +158,36 @@
   [state entity properties refs-properties {:keys [page-cp inline-text]}]
   (let [*new-property? (::new-property? state)
         editor-box (state/get-component :editor/box)
-        ref-keys (set (keys refs-properties))]
+        ref-keys (set (keys refs-properties))
+        page? (:block/name entity)]
     [:div.ls-properties-area
      (when (seq properties)
-       [:table.table-auto.m-0
-        [:tbody
-         (for [[k v] properties]
-           (when-let [property (db/pull [:block/uuid k])]
-             (when-let [k' (:block/original-name property)]
-               (let [ref-property? (contains? ref-keys k)]
-                 [:tr
-                  [:td.property-key.p-0 {:style {:width 160}} ;FIXME: auto responsive
-                   (property-key entity k' page-cp k ref-property?)]
+       [:div
+        (for [[k v] properties]
+          (when-let [property (db/pull [:block/uuid k])]
+            (when-let [k' (:block/original-name property)]
+              (let [ref-property? (contains? ref-keys k)]
+                [:div.grid.grid-cols-4.gap-1
+                 [:div.property-key.col-span-1
+                  (property-key entity k' page-cp k ref-property?)]
 
-                  [:td.property-value.p-0
-                   (property-value entity property k v k' {:inline-text inline-text
-                                                           :editor-box editor-box})]]))))]])
+                 [:div.col-span-3
+                  (property-value entity property k v k' {:page-cp page-cp
+                                                          :inline-text inline-text
+                                                          :editor-box editor-box})]]))))])
 
-     (if @*new-property?
-       (property-input entity *new-property?)
-       [:div.flex-1.flex-col.rounded-sm
-        {:on-click (fn []
-                     (reset! *new-property? true))}
-        [:div.flex.flex-row
-         [:div.block {:style {:height      20
-                              :width       20}}
-          [:a.add-button-link.block {:title "Add another property"
-                                     :style {:margin-left -4}}
-           (ui/icon "circle-plus")]]]])]))
+     (when page?
+       (if @*new-property?
+         (property-input entity *new-property?)
+         [:div.flex-1.flex-col.rounded-sm
+          {:on-click (fn []
+                       (reset! *new-property? true))}
+          [:div.flex.flex-row
+           [:div.block {:style {:height      20
+                                :width       20}}
+            [:a.add-button-link.block {:title "Add another property"
+                                       :style {:margin-left -4}}
+             (ui/icon "circle-plus")]]]]))]))
 
 (defn properties
   [entity block-components-m]
