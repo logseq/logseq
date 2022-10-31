@@ -64,6 +64,9 @@
    ;; TODO: remove this for EDN graphs
    :block/properties-text-values {}
 
+   ;; block property schema
+   :block/property-schema {}
+
    ;; TODO: EDN version doesn't need this, we probably need multiple schemas for
    ;; different formats
    ;; first block that's not a heading or unordered list

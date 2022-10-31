@@ -248,6 +248,7 @@
         :settings-page/sync "Sync"
         :settings-page/enable-whiteboards "Whiteboards"
         :schema/type "Schema type"
+        :schema/number-range "Number range"
         :schema/multiple-values "Multiple values?"
         :schema/description "Description"
         :logseq "Logseq"

@@ -48,9 +48,13 @@
         [{:db/id page-db-id
           :block/namespace (:db/id page)}]))))
 
+;; TODO spec
 (defn set-property-schema!
-  [entity key]
-  )
+  [entity key value]
+  (let [schema (assoc (:block/property-schema entity) key value)]
+    (db/transact! (state/get-current-repo)
+      [{:db/id (:db/id entity)
+        :block/property-schema schema}])))
 
 (defn- extract-refs
   [entity properties]
