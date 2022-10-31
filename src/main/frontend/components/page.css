@@ -291,8 +291,14 @@ a.page-title {
 }
 
 .page-title-sizer-wrapper {
+  @apply w-full;
+
+  :empty::before {
+    content: '\200b';
+  }
+
   > .title {
-    @apply pointer-events-none overflow-hidden overflow-ellipsis;
+    @apply w-full pointer-events-none overflow-hidden overflow-ellipsis;
   }
 
   .edit-input {

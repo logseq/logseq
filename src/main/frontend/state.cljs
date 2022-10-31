@@ -1436,7 +1436,8 @@ Similar to re-frame subscriptions"
 
 (defn active-tldraw-app
   []
-  ^js js/window.tln)
+  (when-let [tldraw-el (.closest js/document.activeElement ".logseq-tldraw[data-tlapp]")]
+    (gobj/get js/window.tlapps (.. tldraw-el -dataset -tlapp))))
 
 (defn tldraw-editing-logseq-block?
   []
@@ -1629,9 +1630,14 @@ Similar to re-frame subscriptions"
   [args]
   (set-state! :editor/args args))
 
+(defn whiteboard-active-but-not-editing-portal?
+  []
+  (and (active-tldraw-app) (not (tldraw-editing-logseq-block?))))
+
 (defn block-component-editing?
   []
-  (:block/component-editing-mode? @state))
+  (or (:block/component-editing-mode? @state)
+      (whiteboard-active-but-not-editing-portal?)))
 
 (defn set-block-component-editing-mode!
   [value]

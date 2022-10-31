@@ -68,11 +68,6 @@
                        value)))
 
                   (and
-                   (= typ "Complex")
-                   (= (:protocol value) "file")
-                   (:link value))
-
-                  (and
                    (= typ "File")
                    (second (first (:label (second block)))))))
 
@@ -322,7 +317,7 @@
   (let [refs (->> (concat tags refs [marker priority])
                   (remove string/blank?)
                   (distinct))
-        refs (atom refs)
+        *refs (atom refs)
         structured-tags (atom #{})]
     (walk/prewalk
      (fn [form]
@@ -331,16 +326,16 @@
                       (= (first form) "Custom")
                       (= (second form) "query"))
          (when-let [page (get-page-reference form supported-formats)]
-           (swap! refs conj page))
+           (swap! *refs conj page))
          (when-let [tag (get-tag form)]
            (let [tag (text/page-ref-un-brackets! tag)]
              (when (gp-util/tag-valid? tag)
-               (swap! refs conj tag)
-               (swap! structured-tags conj tag))))
+               (swap! *refs conj tag)
+               (swap! *structured-tags conj tag))))
          form))
      (concat title body))
-    (let [ref->map-fn (fn [col tag?]
-                        (let [col (remove string/blank? @col)
+    (let [ref->map-fn (fn [*col tag?]
+                        (let [col (remove string/blank? @*col)
                               children-pages (->> (mapcat (fn [p]
                                                             (let [p (if (map? p)
                                                                       (:block/original-name p)
@@ -372,8 +367,9 @@
                                   ref-page]
                                  [ref-page]))) col)))]
       (assoc block
-             :refs (ref->map-fn refs false)
-             :tags (ref->map-fn structured-tags true)))))
+             :refs (ref->map-fn *refs false)
+             :tags (ref->map-fn *structured-tags true)))))
+
 
 (defn- with-block-refs
   [{:keys [title body] :as block}]

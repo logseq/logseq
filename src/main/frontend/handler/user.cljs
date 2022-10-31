@@ -192,7 +192,10 @@
   (or config/dev?
       (contains? (state/user-groups) "alpha-tester")))
 
-(comment
-  (defn beta-user?
-   []
-   (contains? (state/user-groups) "beta-tester")))
+(defn beta-user?
+  []
+  (contains? (state/user-groups) "beta-tester"))
+
+(defn alpha-or-beta-user?
+  []
+  (or (alpha-user?) (beta-user?)))
