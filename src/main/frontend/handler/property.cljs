@@ -7,8 +7,11 @@
             [clojure.string :as string]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.transaction :as outliner-tx]))
+            [frontend.modules.outliner.transaction :as outliner-tx]
+            [frontend.handler.notification :as notification]))
 
 (defn toggle-properties
   [id]
@@ -80,18 +83,57 @@
             [:block/uuid (uuid %)]
             (block/page-name->map % true)) refs')))
 
+(defn validate
+  "Check whether the `value` validate against the `schema`."
+  [schema value]
+  (if (string/blank? value)
+    [true value]
+    (case (:type schema)
+      "any" [true value]
+      "number" (when-let [n (parse-double value)]
+                 (let [[min-n max-n] [(:min schema) (:max schema)]
+                       min-result (if min-n (>= n min-n) true)
+                       max-result (if max-n (<= n max-n) true)]
+                   (cond
+                     (and min-result max-result)
+                     [true value]
+
+                     (false? min-result)
+                     [false (str "the min value is " min-n)]
+
+                     (false? max-result)
+                     [false (str "the max value is " max-n)])))
+      "date" (if-let [result (js/Date. value)]
+               (if (not= (str result) "invalid Date")
+                 [true value]
+                 [false "invalid date"])
+               [false "invalid date"])
+      "url" (if (gp-util/url? value)
+              [true value]
+              [false "invalid URL"])
+      "object" (let [page-name (page-ref/get-page-name value)]
+                 [true page-name]
+                 [false "invalid Object"]))))
+
 (defn add-property-value!
   [entity property-id property-value]
   (when (not= property-id (:block/uuid entity))
-    (let [properties (:block/properties entity)
-          properties' (assoc properties property-id property-value)
-          refs (extract-refs entity properties')]
-      (outliner-tx/transact!
-        {:outliner-op :save-block}
-        (outliner-core/save-block!
-         {:block/uuid (:block/uuid entity)
-          :block/properties properties'
-          :block/refs refs})))))
+    (when-let [property (db/pull [:block/uuid property-id])]
+      (let [schema (:block/property-schema property)
+            [success? property-value-or-error] (validate schema property-value)]
+        (if success?
+          (let [properties (:block/properties entity)
+                properties' (assoc properties property-id property-value-or-error)
+                refs (extract-refs entity properties')]
+            (outliner-tx/transact!
+              {:outliner-op :save-block}
+              (outliner-core/save-block!
+               {:block/uuid (:block/uuid entity)
+                :block/properties properties'
+                :block/refs refs})))
+          (notification/show!
+           (str (:block/original-name property) ": " property-value-or-error)
+           :warning))))))
 
 (defn delete-property!
   [entity property-id]

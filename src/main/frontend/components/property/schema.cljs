@@ -30,13 +30,11 @@
                   (fn [item] (if (= schema-type (:value item))
                                (assoc item :selected true)
                                item))
-                  [{:label "Text" :value "text"}
+                  [{:label "Any" :value "any"}
                    {:label "Number" :value "number"}
                    {:label "Date" :value "date"}
-                   {:label "Choice" :value "choice"}
                    {:label "Url" :value "url"}
-                   {:label "Object" :value "object"}
-                   {:label "Any" :value "any"}])]
+                   {:label "Object" :value "object"}])]
     (property-item
      (t :schema/type)
      (ui/select options
