@@ -2,7 +2,12 @@
   (:require [frontend.state :as state]
             [frontend.db :as db]
             [frontend.util :as util]
-            [clojure.string :as string]))
+            [frontend.format.block :as block]
+            [clojure.string :as string]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.block :as gp-block]
+            [frontend.modules.outliner.core :as outliner-core]
+            [frontend.modules.outliner.transaction :as outliner-tx]))
 
 (defn toggle-properties
   [id]
@@ -46,18 +51,53 @@
   [entity key]
   )
 
+(defn- extract-refs
+  [entity properties]
+  (let [property-values (->>
+                         (map (fn [v]
+                                (if (coll? v)
+                                  v
+                                  [v]))
+                           (vals properties))
+                         (apply concat)
+                         (filter string?))
+        block-text (string/join " "
+                                (cons
+                                 (:block/content entity)
+                                 property-values))
+        ast-refs (gp-mldoc/get-references block-text (gp-mldoc/default-config :markdown))
+        refs (map #(or (gp-block/get-page-reference % #{})
+                       (gp-block/get-block-reference %)) ast-refs)
+        refs' (->> refs
+                   (remove string/blank?)
+                   distinct)]
+    (map #(if (util/uuid-string? %)
+            [:block/uuid (uuid %)]
+            (block/page-name->map % true)) refs')))
+
 (defn add-property-value!
   [entity property-id property-value]
   (when-not (or
              (= property-id (:block/uuid entity))
              (string/blank? property-value))
-    (db/transact! (state/get-current-repo)
-      [{:block/uuid (:block/uuid entity)
-        :block/properties (assoc (:block/properties entity) property-id property-value)}])))
+    (let [properties (:block/properties entity)
+          properties' (assoc properties property-id property-value)
+          refs (extract-refs entity properties')]
+      (outliner-tx/transact!
+        {:outliner-op :save-block}
+        (outliner-core/save-block!
+         {:block/uuid (:block/uuid entity)
+          :block/properties properties'
+          :block/refs refs})))))
 
 (defn delete-property!
   [entity property-id]
   (when (and entity (uuid? property-id))
-    (db/transact! (state/get-current-repo)
-     [{:block/uuid (:block/uuid entity)
-       :block/properties (dissoc (:block/properties entity) property-id)}])))
+    (let [properties' (dissoc (:block/properties entity) property-id)
+          refs (extract-refs entity properties')]
+      (outliner-tx/transact!
+        {:outliner-op :save-block}
+        (outliner-core/save-block!
+         {:block/uuid (:block/uuid entity)
+          :block/properties properties'
+          :block/refs refs})))))

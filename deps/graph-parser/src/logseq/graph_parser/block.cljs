@@ -34,7 +34,7 @@
                   "")))
          (string/join))))
 
-(defn- get-page-reference
+(defn get-page-reference
   [block supported-formats]
   (let [page (cond
                (and (vector? block) (= "Link" (first block)))
