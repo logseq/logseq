@@ -20,7 +20,7 @@
   --ls-wb-stroke-color-pink: var(--color-pink-500, pink);
   --ls-wb-stroke-color-default: var(--ls-secondary-border-color);
   --ls-wb-text-color-default: var(--ls-secondary-text-color);
-  --ls-wb-background-color-default: var(--ls-secondary-background-color);
+  --ls-wb-background-color-default: var(--ls-tertiary-background-color);
 
   backface-visibility: hidden;
 }
@@ -896,7 +896,7 @@ html[data-theme='dark'] {
 }
 
 .tl-popover-content {
-  @apply rounded-sm;
+  @apply rounded-sm drop-shadow-md;
 
   padding: 4px;
   width: 160px;
@@ -917,7 +917,7 @@ html[data-theme='dark'] {
 
   width: 30px;
   height: 30px;
-  padding: 4px;
+  padding: 3px;
   border: 1px solid var(--ls-secondary-border-color);
   color: var(--ls-secondary-text-color);
 
@@ -925,11 +925,66 @@ html[data-theme='dark'] {
     padding: 0;
 
     .tl-color-bg {
-      border: 4px solid var(--ls-selection-background-color);
+      border: 3px solid var(--ls-selection-background-color);
     }
   }
 }
 
 .tl-color-bg {
   @apply w-full h-full rounded-sm;
+}
+
+.tl-slider-root {
+  @apply relative flex items-center w-full;
+
+  user-select: none;
+  touch-action: none;
+  background-color: var(--ls-secondary-background-color);
+
+  &[data-orientation="horizontal"] {
+    height: 20px;
+  }
+
+  &[data-orientation="vertical"] {
+    flex-direction: column;
+    width: 20px;
+    height: 100%;
+  }
+}
+
+.tl-slider-track {
+  @apply relative grow rounded-sm w-full;
+
+  background: linear-gradient(90deg, transparent, var(--ls-tertiary-background-color));
+  border: 1px solid var(--ls-secondary-border-color);
+
+  &[data-orientation="horizontal"] {
+    height: 10px;
+  }
+
+  &[data-orientation="vertical"] {
+    width: 10px;
+  }
+}
+
+.tl-slider-range {
+  @apply absolute h-full rounded-sm;
+
+}
+
+.tl-slider-thumb {
+  @apply block rounded-sm;
+
+  width: 8px;
+  height: 14px;
+  background-color: var(--ls-secondary-background-color);
+  border: 1px solid var(--ls-border-color);
+
+  &:hover {
+    background-color: var(--ls-tertiary-background-color);
+  }
+
+  &:focus {
+    box-shadow: 0 0 0 1px var(--color-selectedStroke);
+  }
 }

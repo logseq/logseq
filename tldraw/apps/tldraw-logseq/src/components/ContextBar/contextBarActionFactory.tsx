@@ -338,8 +338,15 @@ const SwatchAction = observer(() => {
     app.persist()
   }, [])
 
-  const value = shapes[0].props.noFill ? shapes[0].props.stroke : shapes[0].props.fill
-  return <ColorInput title="Color Picker" value={value} setColor={handleSetColor} />
+  const handleSetOpacity = React.useCallback((opacity: number) => {
+    shapes.forEach(s => {
+      s.update({ opacity: opacity })
+    })
+    app.persist()
+  }, [])
+
+  const color = shapes[0].props.noFill ? shapes[0].props.stroke : shapes[0].props.fill
+  return <ColorInput title="Color Picker" color={color} opacity={shapes[0].props.opacity} setOpacity={handleSetOpacity} setColor={handleSetColor} />
 })
 
 const StrokeTypeAction = observer(() => {

@@ -1,13 +1,16 @@
 import * as React from 'react'
 import * as Popover from '@radix-ui/react-popover';
+import * as Slider from '@radix-ui/react-slider';
 import { TablerIcon } from '../icons'
 import { Color } from '@tldraw/core'
 interface ColorInputProps extends React.InputHTMLAttributes<HTMLButtonElement> {
-  value: string
+  color: string
+  opacity: number
   setColor: (value: string) => void
+  setOpacity: (value: number) => void
 }
 
-export function ColorInput({ value, setColor, ...rest }: ColorInputProps) {
+export function ColorInput({ color, opacity, setColor, setOpacity, ...rest }: ColorInputProps) {
   const ref = React.useRef<HTMLDivElement>(null)
 
   function renderColor(color: string) {
@@ -20,11 +23,13 @@ export function ColorInput({ value, setColor, ...rest }: ColorInputProps) {
 
   return (
     <Popover.Root>
+
       <Popover.Trigger>
-        <button className={`tl-color-drip mx-1`}>
-          {renderColor(value)}
+        <button className="tl-color-drip mx-1">
+          {renderColor(color)}
         </button>
       </Popover.Trigger>
+
       <Popover.Portal>
         <Popover.Content
           className="tl-popover-content"
@@ -32,16 +37,27 @@ export function ColorInput({ value, setColor, ...rest }: ColorInputProps) {
           sideOffset={15}
         >
           <div className={"tl-color-palette"}>
-            {Object.values(Color).map(color =>
+            {Object.values(Color).map(value =>
               <button
-                className={`tl-color-drip m-1${color === value ? " active" : ""}`}
-                onClick={()=>setColor(color)}
+                className={`tl-color-drip m-1${value === color ? " active" : ""}`}
+                onClick={()=>setColor(value)}
               >
-                {renderColor(color)}
+                {renderColor(value)}
               </button>
             )}
           </div>
+
+          <div className="m-1">
+            <Slider.Root defaultValue={[opacity]} onValueCommit={(value)=>setOpacity(value[0])} max={1} step={0.1} aria-label="Opacity" className="tl-slider-root">
+              <Slider.Track className="tl-slider-track">
+                <Slider.Range className="tl-slider-range" />
+              </Slider.Track>
+              <Slider.Thumb className="tl-slider-thumb" />
+            </Slider.Root>
+          </div>
+
           <Popover.Arrow className="tl-popover-arrow" />
+
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
