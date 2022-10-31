@@ -318,7 +318,7 @@
                   (remove string/blank?)
                   (distinct))
         *refs (atom refs)
-        structured-tags (atom #{})]
+        *structured-tags (atom #{})]
     (walk/prewalk
      (fn [form]
        ;; skip custom queries
