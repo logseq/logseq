@@ -1,6 +1,6 @@
 import Vec from '@tldraw/vec'
-import type { TLEventMap } from '../../types'
-import { BoundsUtils } from '../../utils'
+import type { TLAsset, TLBinding, TLEventMap } from '../../types'
+import { BoundsUtils, uniqueId } from '../../utils'
 import type { TLShape, TLShapeModel } from '../shapes'
 import type { TLApp } from '../TLApp'
 
@@ -194,5 +194,110 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
 
   createNewLineBinding = (source: S | string, target: S | string) => {
     return this.app.createNewLineBinding(source, target)
+  }
+
+  getClonedShapesFromTldrString = (text: string, point: number[]) => {
+    const safeParseJson = (json: string) => {
+      try {
+        return JSON.parse(json)
+      } catch {
+        return null
+      }
+    }
+
+    const getWhiteboardsTldrFromText = (text: string) => {
+      const innerText = text.match(/<whiteboard-tldr>(.*)<\/whiteboard-tldr>/)?.[1]
+      if (innerText) {
+        return safeParseJson(decodeURIComponent(innerText))
+      }
+    }
+
+    try {
+      let assetsToClone: TLAsset[] = []
+      const bindingsToCreate: TLBinding[] = []
+      const data = getWhiteboardsTldrFromText(text)
+
+      const shapes = data.shapes as TLShapeModel[]
+      assetsToClone = data.assets as TLAsset[]
+      const commonBounds = BoundsUtils.getCommonBounds(
+        shapes.map(shape => ({
+          minX: shape.point?.[0] ?? point[0],
+          minY: shape.point?.[1] ?? point[1],
+          width: shape.size?.[0] ?? 4,
+          height: shape.size?.[1] ?? 4,
+          maxX: (shape.point?.[0] ?? point[0]) + (shape.size?.[0] ?? 4),
+          maxY: (shape.point?.[1] ?? point[1]) + (shape.size?.[1] ?? 4),
+        }))
+      )
+
+      const bindings = data.bindings as Record<string, TLBinding>
+      const shapesToCreate = shapes.map(shape => {
+        return {
+          ...shape,
+          id: uniqueId(),
+          point: [
+            point[0] + shape.point![0] - commonBounds.minX,
+            point[1] + shape.point![1] - commonBounds.minY,
+          ],
+        }
+      })
+
+      // Try to rebinding the shapes to the new assets
+      shapesToCreate
+        .flatMap(s => Object.values(s.handles ?? {}))
+        .forEach(h => {
+          if (!h.bindingId) {
+            return
+          }
+          // try to bind the new shape
+          const binding = bindings[h.bindingId]
+          if (binding) {
+            // if the copied binding from/to is in the source
+            const oldFromIdx = shapes.findIndex(s => s.id === binding.fromId)
+            const oldToIdx = shapes.findIndex(s => s.id === binding.toId)
+            if (binding && oldFromIdx !== -1 && oldToIdx !== -1) {
+              const newBinding: TLBinding = {
+                ...binding,
+                id: uniqueId(),
+                fromId: shapesToCreate[oldFromIdx].id,
+                toId: shapesToCreate[oldToIdx].id,
+              }
+              bindingsToCreate.push(newBinding)
+              h.bindingId = newBinding.id
+            } else {
+              h.bindingId = undefined
+            }
+          } else {
+            console.warn('binding not found', h.bindingId)
+          }
+        })
+
+      return {
+        shapes: shapesToCreate as S['props'][],
+        assets: assetsToClone,
+        bindings: bindingsToCreate,
+      }
+    } catch (err) {
+      console.log(err)
+    }
+    return null
+  }
+
+  addClonedShapes = (shapes: S[] | TLShapeModel[], assets: TLAsset[], bindings: TLBinding[]) => {
+    if (assets.length > 0) {
+      this.app.createAssets(assets)
+    }
+    if (shapes.length > 0) {
+      this.app.createShapes(shapes)
+    }
+    this.app.currentPage.updateBindings(Object.fromEntries(bindings.map(b => [b.id, b])))
+    this.app.selectedTool.transition('idle') // clears possible editing states
+  }
+
+  addClonedShapesFromTldrString = (text: string, point: number[]) => {
+    const data = this.getClonedShapesFromTldrString(text, point)
+    if (data) {
+      this.addClonedShapes(data.shapes, data.assets, data.bindings)
+    }
   }
 }

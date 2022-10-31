@@ -44,7 +44,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     parentId: 'page',
     type: 'text',
     point: [0, 0],
-    size: [100, 100],
+    size: [0, 0],
     isSizeLocked: true,
     text: '',
     lineHeight: 1.2,
@@ -169,13 +169,9 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     }, [isEditing, onEditingEnd])
 
     React.useLayoutEffect(() => {
-      const { fontFamily, fontSize, fontWeight, lineHeight, padding } = this.props
-      const [width, height] = getTextLabelSize(
-        text,
-        { fontFamily, fontSize, fontWeight, lineHeight },
-        padding
-      )
-      this.update({ size: [width, height] })
+      if (this.props.size[0] === 0 || this.props.size[1] === 0) {
+        this.onResetBounds()
+      }
     }, [])
 
     return (

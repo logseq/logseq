@@ -702,7 +702,10 @@ button.tl-select-input-trigger {
 
 .tl-image-shape-container {
   @apply h-full w-full overflow-hidden flex items-center justify-center pointer-events-auto;
-  background-color: var(--ls-secondary-background-color);
+
+  &[data-asset-loaded="false"] {
+    background-color: var(--ls-secondary-background-color);
+  }
 }
 
 .tl-html-container {
