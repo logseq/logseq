@@ -1,3 +1,5 @@
+import { Color } from '@tldraw/core'
+
 let melm: any
 
 function getMeasurementDiv() {
@@ -12,13 +14,9 @@ function getMeasurementDiv() {
   return div
 }
 
-export function getComputedColor(color: string) {
-  if (color?.toString().startsWith('var')) {
-    const varName = /var\((.*)\)/.exec(color.toString())?.[1]
-    if (varName) {
-      const [v, d] = varName.split(',').map(s => s.trim())
-      return getComputedStyle(getMeasurementDiv()).getPropertyValue(v).trim() ?? d ?? '#000'
-    }
+export function getComputedColor(color: string, type: string): string {
+  if (Object.values(Color).includes(color)) {
+    return `var(--ls-wb-${type}-color-${color ? color : "default"})`;
   }
 
   return color

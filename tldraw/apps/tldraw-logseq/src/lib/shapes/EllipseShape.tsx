@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { TLEllipseShapeProps, TLEllipseShape } from '@tldraw/core'
+import { TLEllipseShapeProps, TLEllipseShape, Color } from '@tldraw/core'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import { CustomStyleProps, withClampedStyles } from './style-props'
+import { getComputedColor } from '../color'
 
 export interface EllipseShapeProps extends TLEllipseShapeProps, CustomStyleProps {
   type: 'ellipse'
@@ -18,8 +19,8 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
     type: 'ellipse',
     point: [0, 0],
     size: [100, 100],
-    stroke: '#000000',
-    fill: 'var(--ls-secondary-background-color)',
+    stroke: '',
+    fill: '',
     noFill: false,
     strokeType: 'line',
     strokeWidth: 2,
@@ -51,9 +52,9 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
           rx={Math.max(0.01, (w - strokeWidth) / 2)}
           ry={Math.max(0.01, (h - strokeWidth) / 2)}
           strokeWidth={strokeWidth}
-          stroke={noFill ? fill : stroke}
+          stroke={getComputedColor(stroke, "stroke")}
           strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
-          fill={noFill ? 'none' : fill}
+          fill={noFill ? 'none' : getComputedColor(fill, "background")}
         />
       </SVGContainer>
     )
@@ -105,9 +106,9 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
           rx={Math.max(0.01, (w - strokeWidth) / 2)}
           ry={Math.max(0.01, (h - strokeWidth) / 2)}
           strokeWidth={strokeWidth}
-          stroke={noFill ? fill : stroke}
+          stroke={getComputedColor(stroke, "stroke")}
           strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
-          fill={noFill ? 'none' : fill}
+          fill={noFill ? 'none' : getComputedColor(fill, "background")}
         />
       </g>
     )

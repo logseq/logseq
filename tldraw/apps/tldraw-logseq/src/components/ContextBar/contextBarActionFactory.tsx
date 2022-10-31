@@ -331,7 +331,7 @@ const SwatchAction = observer(() => {
     BoxShape | PolygonShape | EllipseShape | LineShape | PencilShape | TextShape
   >(app.selectedShapesArray, 'Swatch')
 
-  const handleSetColor = React.useCallback((color: Color) => {
+  const handleSetColor = React.useCallback((color: string) => {
     shapes.forEach(s => {
       s.update({ fill: color, stroke: color })
     })

@@ -4,6 +4,7 @@ import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import { computed, makeObservable } from 'mobx'
 import { CustomStyleProps, withClampedStyles } from './style-props'
+import { getComputedColor } from '../color'
 
 export interface HighlighterShapeProps extends TLDrawShapeProps, CustomStyleProps {
   type: 'highlighter'
@@ -25,11 +26,11 @@ export class HighlighterShape extends TLDrawShape<HighlighterShapeProps> {
     points: [],
     isComplete: false,
     stroke: '',
-    fill: '#ffcc00',
+    fill: '',
     noFill: true,
     strokeType: 'line',
     strokeWidth: 2,
-    opacity: 1,
+    opacity: 0.5,
   }
 
   @computed get pointsPath() {
@@ -44,16 +45,16 @@ export class HighlighterShape extends TLDrawShape<HighlighterShapeProps> {
     } = this
 
     return (
-      <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
+      <SVGContainer {...events} opacity={isErasing ? 0.2 : 1}>
         <path
           d={pointsPath}
           strokeWidth={strokeWidth * 16}
-          stroke={stroke ? `var(--color-${stroke}-500)` : "var(--ls-secondary-background-color)"}
+          stroke={getComputedColor(stroke, "stroke")}
           fill="none"
           pointerEvents="all"
           strokeLinejoin="round"
           strokeLinecap="round"
-          opacity={0.5}
+          opacity={opacity}
         />
       </SVGContainer>
     )

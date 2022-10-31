@@ -3,16 +3,18 @@ import * as Popover from '@radix-ui/react-popover';
 import { TablerIcon } from '../icons'
 import { Color } from '@tldraw/core'
 interface ColorInputProps extends React.InputHTMLAttributes<HTMLButtonElement> {
-  value: Color
-  setColor: (value: Color) => void
+  value: string
+  setColor: (value: string) => void
 }
 
 export function ColorInput({ value, setColor, ...rest }: ColorInputProps) {
   const ref = React.useRef<HTMLDivElement>(null)
 
-  function renderColor(color: Color) {
+  function renderColor(color: string) {
     return color ?
-      <div className={`tl-color-bg bg-${color}-500`}></div> :
+      <div className="tl-color-bg" style={{backgroundColor: color}}>
+        <div className={`w-full h-full bg-${color}-500`}></div>
+      </div> :
       <div className={"tl-color-bg"}><TablerIcon name="color-swatch" /></div>
   }
 
@@ -32,7 +34,7 @@ export function ColorInput({ value, setColor, ...rest }: ColorInputProps) {
           <div className={"tl-color-palette"}>
             {Object.values(Color).map(color =>
               <button
-                className={`tl-color-drip  m-1${color === value ? " active" : ""}`}
+                className={`tl-color-drip m-1${color === value ? " active" : ""}`}
                 onClick={()=>setColor(color)}
               >
                 {renderColor(color)}

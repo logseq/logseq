@@ -3,6 +3,7 @@ import { TLPolygonShape, TLPolygonShapeProps } from '@tldraw/core'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import { CustomStyleProps, withClampedStyles } from './style-props'
+import { getComputedColor } from '../color'
 
 interface PolygonShapeProps extends TLPolygonShapeProps, CustomStyleProps {
   type: 'polygon'
@@ -20,8 +21,8 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
     sides: 3,
     ratio: 1,
     isFlippedY: false,
-    stroke: '#000000',
-    fill: 'var(--ls-secondary-background-color)',
+    stroke: '',
+    fill: '',
     noFill: false,
     strokeType: 'line',
     strokeWidth: 2,
@@ -43,8 +44,8 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
           />
           <polygon
             points={path}
-            stroke={noFill ? fill : stroke}
-            fill={noFill ? 'none' : fill}
+            stroke={getComputedColor(stroke, "stroke")}
+            fill={noFill ? 'none' : getComputedColor(fill, "background")}
             strokeWidth={strokeWidth}
             rx={2}
             ry={2}
@@ -91,8 +92,8 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
         <polygon className={!noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'} points={path} />
         <polygon
           points={path}
-          stroke={noFill ? fill : stroke}
-          fill={noFill ? 'none' : fill}
+          stroke={getComputedColor(stroke, "stroke")}
+          fill={noFill ? 'none' : getComputedColor(fill, "background")}
           strokeWidth={strokeWidth}
           rx={2}
           ry={2}

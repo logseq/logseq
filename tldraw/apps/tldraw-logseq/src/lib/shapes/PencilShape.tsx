@@ -11,6 +11,7 @@ import getStroke, {
   StrokePoint,
 } from 'perfect-freehand'
 import { CustomStyleProps, withClampedStyles } from './style-props'
+import { getComputedColor } from '../color'
 
 export interface PencilShapeProps extends TLDrawShapeProps, CustomStyleProps {
   type: 'pencil'
@@ -131,8 +132,8 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
         strokeWidth={strokeWidth / 2}
         strokeLinejoin="round"
         strokeLinecap="round"
-        stroke={stroke ? `var(--color-${stroke}-500)` : "var(--ls-primary-text-color, #000)"}
-        fill={stroke ? `var(--color-${stroke}-500)` : "var(--ls-primary-text-color, #000)"}
+        stroke={getComputedColor(stroke, "stroke")}
+        fill={getComputedColor(stroke, "stroke")}
         strokeDasharray={strokeType === 'dashed' ? '12 4' : undefined}
       />
     )

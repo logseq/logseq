@@ -10,6 +10,7 @@ import { CustomStyleProps, withClampedStyles } from './style-props'
 import { getTextLabelSize } from '@tldraw/core'
 import { LabelMask } from './text/LabelMask'
 import { TextLabel } from './text/TextLabel'
+import { getComputedColor } from '../color'
 
 interface LineShapeProps extends CustomStyleProps, TLLineShapeProps {
   type: 'line'
@@ -76,7 +77,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
         <TextLabel
           font={font}
           text={label}
-          color={stroke}
+          color={getComputedColor(stroke, "text")}
           offsetX={offset[0]}
           offsetY={offset[1]}
           scale={scale}
@@ -161,7 +162,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       <>
         <Arrow
           style={{
-            stroke: stroke ? `var(--color-${stroke}-500)` : "var(--ls-primary-text-color, #000)",
+            stroke: getComputedColor(stroke, "stroke"),
             fill,
             strokeWidth,
             strokeType,
@@ -181,8 +182,8 @@ export class LineShape extends TLLineShape<LineShapeProps> {
               fontSize={20}
               transform={`translate(${midPoint[0]}, ${midPoint[1]})`}
               textAnchor="middle"
-              stroke={stroke}
-              fill={stroke}
+              fill={getComputedColor(stroke, "text")}
+              stroke={getComputedColor(stroke, "text")}
             >
               {label}
             </text>

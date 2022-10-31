@@ -5,6 +5,7 @@ import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import { computed, makeObservable } from 'mobx'
 import { CustomStyleProps, withClampedStyles } from './style-props'
+import { getComputedColor } from '../color'
 
 export interface PenShapeProps extends TLDrawShapeProps, CustomStyleProps {
   type: 'pen'
@@ -25,8 +26,8 @@ export class PenShape extends TLDrawShape<PenShapeProps> {
     point: [0, 0],
     points: [],
     isComplete: false,
-    stroke: '#000000',
-    fill: '#ffffff',
+    stroke: '',
+    fill: 's',
     noFill: false,
     strokeType: 'line',
     strokeWidth: 2,
@@ -56,8 +57,8 @@ export class PenShape extends TLDrawShape<PenShapeProps> {
         <path
           d={pointsPath}
           strokeWidth={strokeWidth}
-          stroke={stroke}
-          fill={stroke}
+          stroke={getComputedColor(stroke, "stroke")}
+          fill={getComputedColor(stroke, "stroke")}
           pointerEvents="all"
         />
       </SVGContainer>

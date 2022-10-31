@@ -11,32 +11,57 @@
   --shadow-medium: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-large: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 
-  backface-visibility: hidden;
+  --ls-wb-stroke-color-gray: var(--color-gray-500, gray);
+  --ls-wb-stroke-color-red: var(--color-red-500, red);
+  --ls-wb-stroke-color-yellow: var(--color-yellow-500, yellow);
+  --ls-wb-stroke-color-green: var(--color-green-500, green);
+  --ls-wb-stroke-color-blue: var(--color-blue-500, blue);
+  --ls-wb-stroke-color-purple: var(--color-purple-500, purple);
+  --ls-wb-stroke-color-pink: var(--color-pink-500, pink);
+  --ls-wb-stroke-color-default: var(--ls-secondary-border-color);
+  --ls-wb-text-color-default: var(--ls-secondary-text-color);
+  --ls-wb-background-color-default: var(--ls-secondary-background-color);
 
-  --tl-text-color-default: var(--ls-primary-text-color);
+  backface-visibility: hidden;
 }
 
 .dark-theme,
 html[data-theme='dark'] {
-  --tl-text-color-gray: var(--color-gray-400);
-  --tl-text-color-red: var(--color-red-400);
-  --tl-text-color-yellow: var(--color-yellow-400);
-  --tl-text-color-green: var(--color-green-400);
-  --tl-text-color-blue: var(--color-blue-400);
-  --tl-text-color-purple: var(--color-purple-400);
-  --tl-text-color-pink: var(--color-pink-400);
+  --ls-wb-background-color-gray: var(--color-gray-800, gray);
+  --ls-wb-background-color-red: var(--color-red-800, red);
+  --ls-wb-background-color-yellow: var(--color-yellow-800, yellow);
+  --ls-wb-background-color-green: var(--color-green-800, green);
+  --ls-wb-background-color-blue: var(--color-blue-800, blue);
+  --ls-wb-background-color-purple: var(--color-purple-800, purple);
+  --ls-wb-background-color-pink: var(--color-pink-800);
+
+  --ls-wb-text-color-gray: var(--color-gray-400, gray);
+  --ls-wb-text-color-red: var(--color-red-400, red);
+  --ls-wb-text-color-yellow: var(--color-yellow-400, yellow);
+  --ls-wb-text-color-green: var(--color-green-400, green);
+  --ls-wb-text-color-blue: var(--color-blue-400, blue);
+  --ls-wb-text-color-purple: var(--color-purple-400, purple);
+  --ls-wb-text-color-pink: var(--color-pink-400, pink);
 }
 
 .white-theme,
 .light-theme,
 html[data-theme='light'] {
-  --tl-text-color-gray: var(--color-gray-600);
-  --tl-text-color-red: var(--color-red-600);
-  --tl-text-color-yellow: var(--color-yellow-600);
-  --tl-text-color-green: var(--color-green-600);
-  --tl-text-color-blue: var(--color-blue-600);
-  --tl-text-color-purple: var(--color-purple-600);
-  --tl-text-color-pink: var(--color-pink-600);
+  --ls-wb-background-color-gray: var(--color-gray-200, gray);
+  --ls-wb-background-color-red: var(--color-red-200, red);
+  --ls-wb-background-color-yellow: var(--color-yellow-200, yellow);
+  --ls-wb-background-color-green: var(--color-green-200, green);
+  --ls-wb-background-color-blue: var(--color-blue-200, blue);
+  --ls-wb-background-color-purple: var(--color-purple-200, purple);
+  --ls-wb-background-color-pink: var(--color-pink-200, pink);
+
+  --ls-wb-text-color-gray: var(--color-gray-600, gray);
+  --ls-wb-text-color-red: var(--color-red-600, red);
+  --ls-wb-text-color-yellow: var(--color-yellow-600, yellow);
+  --ls-wb-text-color-green: var(--color-green-600, green);
+  --ls-wb-text-color-blue: var(--color-blue-600, blue);
+  --ls-wb-text-color-purple: var(--color-purple-600, purple);
+  --ls-wb-text-color-pink: var(--color-pink-600, pink);
 }
 
 .logseq-tldraw-wrapper {

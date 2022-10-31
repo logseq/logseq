@@ -14,6 +14,7 @@ import * as React from 'react'
 import type { SizeLevel } from '.'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 import { TextAreaUtils } from './text/TextAreaUtils'
+import { getComputedColor } from '../color'
 
 export interface TextShapeProps extends TLTextShapeProps, CustomStyleProps {
   borderRadius: number
@@ -55,7 +56,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     fontFamily: "var(--ls-font-family), 'Helvetica Neue', Helvetica, Arial, sans-serif",
     borderRadius: 0,
     stroke: '',
-    fill: '#ffffff',
+    fill: '',
     noFill: true,
     strokeType: 'line',
     strokeWidth: 2,
@@ -192,7 +193,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
             fontWeight,
             padding,
             lineHeight,
-            color: `var(--tl-text-color-${stroke ? stroke : "default"})`,
+            color: getComputedColor(stroke, "text"),
           }}
         >
           {isEditing ? (
@@ -319,7 +320,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
       <foreignObject width={bounds.width} height={bounds.height}>
         <div
           style={{
-            color: stroke,
+            color: getComputedColor(stroke, "text"),
             fontSize,
             fontFamily,
           }}
