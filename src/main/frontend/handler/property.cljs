@@ -82,9 +82,7 @@
 
 (defn add-property-value!
   [entity property-id property-value]
-  (when-not (or
-             (= property-id (:block/uuid entity))
-             (string/blank? property-value))
+  (when (not= property-id (:block/uuid entity))
     (let [properties (:block/properties entity)
           properties' (assoc properties property-id property-value)
           refs (extract-refs entity properties')]
