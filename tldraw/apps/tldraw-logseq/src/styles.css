@@ -935,21 +935,12 @@ html[data-theme='dark'] {
 }
 
 .tl-slider-root {
-  @apply relative flex items-center w-full;
+  @apply relative flex items-center w-full rounded-sm;
 
   user-select: none;
   touch-action: none;
-  background-color: var(--ls-secondary-background-color);
+  background: url("../img/checker.png");
 
-  &[data-orientation="horizontal"] {
-    height: 20px;
-  }
-
-  &[data-orientation="vertical"] {
-    flex-direction: column;
-    width: 20px;
-    height: 100%;
-  }
 }
 
 .tl-slider-track {
