@@ -2,7 +2,7 @@ import * as React from 'react'
 import type { TLAppPropsWithApp, TLAppPropsWithoutApp } from '../components'
 import type { TLReactApp, TLReactShape } from '../lib'
 
-declare const window: Window & { tln?: TLReactApp<any> }
+declare const window: Window & { tlapps?: Record<string, TLReactApp<any>> }
 
 export function useSetup<
   S extends TLReactShape = TLReactShape,
@@ -27,11 +27,16 @@ export function useSetup<
     const unsubs: (() => void)[] = []
     if (!app) return
     app.history.reset()
-    if (typeof window !== undefined) window['tln'] = app
+    if (typeof window !== undefined) {
+      window['tlapps'] = window['tlapps'] || {}
+      window['tlapps'][app.uuid] = app
+    }
     if (onMount) onMount(app, null)
     return () => {
       unsubs.forEach(unsub => unsub())
-      window['tln'] = undefined
+      if (typeof window !== undefined && window['tlapps']) {
+        delete window['tlapps'][app.uuid]
+      }
     }
   }, [app])
 

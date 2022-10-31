@@ -199,7 +199,7 @@
       (when (and sync-enabled?
                  current-repo
                  (not (config/demo-graph? current-repo))
-                 (user-handler/alpha-user?))
+                 (user-handler/alpha-or-beta-user?))
         (fs-sync/indicator))
 
       (when (and (not= (state/get-current-route) :home)

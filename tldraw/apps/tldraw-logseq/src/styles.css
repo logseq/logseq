@@ -492,7 +492,7 @@ button.tl-select-input-trigger {
     transform: translateY(-100%);
   }
 
-  &[data-active='false']:hover {
+  &[data-active='false']:hover:not([data-recently-changed='true']) {
     .tie {
       transform: translateY(0);
 
@@ -515,7 +515,7 @@ button.tl-select-input-trigger {
       }
     }
 
-    &:hover {
+    &:hover:not([data-recently-changed='true']) {
       color: var(--ls-primary-text-color);
       background-color: var(--ls-secondary-background-color);
 
@@ -532,12 +532,6 @@ button.tl-select-input-trigger {
   i.tie {
     transition: transform 0.2s ease-in-out;
     transition-delay: 0;
-  }
-
-  &[data-recently-changed='true'] {
-    i.tie {
-      transition-delay: 0.5s;
-    }
   }
 
   .tl-circle-button-icons-wrapper[data-icons-count='2'] {
@@ -680,18 +674,25 @@ button.tl-select-input-trigger {
 
   height: 40px;
   flex-shrink: 0;
-  background: linear-gradient(0deg, transparent, var(--ls-tertiary-background-color));
+
   color: var(--ls-title-text-color);
   border-top-left-radius: 8px;
   border-top-right-radius: 8px;
+  background: var(--ls-tertiary-background-color);
   padding: 0 1rem;
   gap: 0.5em;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
 
+  &.tl-logseq-portal-header-block {
+    background: linear-gradient(0deg, transparent, var(--ls-tertiary-background-color));
+  }
+
+
   .page-ref {
     color: var(--ls-title-text-color);
+    background: var(--ls-tertiary-background-color));
   }
 
   .breadcrumb {

@@ -7,6 +7,7 @@ import {
   TLReactCallbacks,
   TLReactComponents,
   TLReactToolConstructor,
+  useApp,
 } from '@tldraw/react'
 import * as React from 'react'
 import { AppUI } from './components/AppUI'
@@ -61,6 +62,20 @@ interface LogseqTldrawProps {
   onPersist?: TLReactCallbacks<Shape>['onPersist']
 }
 
+const AppImpl = () => {
+  const ref = React.useRef<HTMLDivElement>(null)
+  const app = useApp()
+  return (
+    <ContextMenu collisionRef={ref}>
+      <div ref={ref} className="logseq-tldraw logseq-tldraw-wrapper" data-tlapp={app.uuid}>
+        <AppCanvas components={components}>
+          <AppUI />
+        </AppCanvas>
+      </div>
+    </ContextMenu>
+  )
+}
+
 const AppInner = ({
   onPersist,
   model,
@@ -69,7 +84,6 @@ const AppInner = ({
   const onDrop = useDrop()
   const onPaste = usePaste()
   const onQuickAdd = useQuickAdd()
-  const ref = React.useRef<HTMLDivElement>(null)
 
   const onPersistOnDiff: TLReactCallbacks<Shape>['onPersist'] = React.useCallback(
     (app, info) => {
@@ -91,13 +105,7 @@ const AppInner = ({
       model={model}
       {...rest}
     >
-      <ContextMenu collisionRef={ref}>
-        <div ref={ref} className="logseq-tldraw logseq-tldraw-wrapper">
-          <AppCanvas components={components}>
-            <AppUI />
-          </AppCanvas>
-        </div>
-      </ContextMenu>
+      <AppImpl />
     </AppProvider>
   )
 }

@@ -72,7 +72,7 @@ const LogseqTypeTag = ({
 
 const LogseqPortalShapeHeader = observer(
   ({ type, fill, children }: { type: 'P' | 'B'; fill: string; children: React.ReactNode }) => {
-    return <div className="tl-logseq-portal-header" style={{background: `var(--ls-highlight-color-${fill})`}}>{children}</div>
+    return <div className={`tl-logseq-portal-header tl-logseq-portal-header-${type === "P" ? "page" : "block"}`} style={{background: `var(--ls-highlight-color-${fill})`}}>{children}</div>
   }
 )
 
@@ -882,7 +882,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   validateProps = (props: Partial<LogseqPortalShapeProps>) => {
     if (props.size !== undefined) {
       const scale = levelToScale[this.props.scaleLevel ?? 'md']
-      props.size[0] = Math.max(props.size[0], 240 * scale)
+      props.size[0] = Math.max(props.size[0], 60 * scale)
       props.size[1] = Math.max(props.size[1], HEADER_HEIGHT * scale)
     }
     return withClampedStyles(this, props)

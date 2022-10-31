@@ -7,30 +7,29 @@ import { action, computed, makeObservable, observable, toJS, transaction } from 
 import { GRID_SIZE } from '../../constants'
 import type {
   TLAsset,
-  TLEventMap,
-  TLShortcut,
-  TLSubscription,
-  TLSubscriptionEventName,
   TLCallback,
-  TLSubscriptionEventInfo,
-  TLStateEvents,
+  TLEventMap,
   TLEvents,
-  TLHandle,
+  TLShortcut,
+  TLStateEvents,
+  TLSubscription,
+  TLSubscriptionEventInfo,
+  TLSubscriptionEventName,
 } from '../../types'
 import { AlignType, DistributeType } from '../../types'
-import { KeyUtils, BoundsUtils, isNonNullable, createNewLineBinding } from '../../utils'
+import { BoundsUtils, createNewLineBinding, isNonNullable, KeyUtils, uniqueId } from '../../utils'
 import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
 import { TLApi } from '../TLApi'
 import { TLCursors } from '../TLCursors'
 
 import { TLHistory } from '../TLHistory'
 import { TLInputs } from '../TLInputs'
-import { type TLPageModel, TLPage } from '../TLPage'
+import { TLPage, type TLPageModel } from '../TLPage'
 import { TLSettings } from '../TLSettings'
 import { TLRootState } from '../TLState'
 import type { TLToolConstructor } from '../TLTool'
 import { TLViewport } from '../TLViewport'
-import { TLSelectTool, TLMoveTool } from '../tools'
+import { TLMoveTool, TLSelectTool } from '../tools'
 
 export interface TLDocumentModel<S extends TLShape = TLShape, A extends TLAsset = TLAsset> {
   // currentPageId: string
@@ -70,7 +69,8 @@ export class TLApp<
   }
 
   keybindingRegistered = false
-
+  uuid = uniqueId()
+  
   static id = 'app'
   static initial = 'select'
 
@@ -171,6 +171,7 @@ export class TLApp<
         keys: ['del', 'backspace'],
         fn: () => {
           this.api.deleteShapes()
+          this.selectedTool.transition('idle')
         },
       },
     ]

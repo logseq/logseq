@@ -37,13 +37,13 @@
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.fs :as fs]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-sync :as file-sync]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.assets :as assets-handler]
             [frontend.handler.query :as query-handler]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
@@ -72,6 +72,7 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -1654,6 +1655,9 @@
 (defn- bullet-on-click
   [e block uuid]
   (cond
+    (gp-whiteboard/shape-block? block)
+    (route-handler/redirect-to-whiteboard! (get-in block [:block/page :block/name]) {:block-id uuid})
+
     (gobj/get e "shiftKey")
     (do
       (state/sidebar-add-block!
@@ -2701,6 +2705,7 @@
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
         reference? (:reference? config)
+        whiteboard-block? (gp-whiteboard/shape-block? block)
         block-id (str "ls-block-" blocks-container-id "-" uuid)
         has-child? (first (:block/_parent (db/entity (:db/id block))))
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to)
@@ -2711,7 +2716,7 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
-        selected? (state/sub-block-selected? uuid)]
+        selected? (when-not slide? (state/sub-block-selected? uuid))]
     [:div.ls-block
      (cond->
        {:id block-id
@@ -2723,7 +2728,7 @@
                     (when (and card? (not review-cards?)) " shadow-md")
                     (when selected? " selected noselect"))
         :blockid (str uuid)
-        :haschild (str has-child?)}
+        :haschild (str (boolean has-child?))}
 
        level
        (assoc :level level)
@@ -2767,7 +2772,9 @@
       (when @*show-left-menu?
         (block-left-menu config block))
 
-      (block-content-or-editor config block edit-input-id block-id edit? false)
+      (if whiteboard-block?
+        (block-reference {} (str uuid) nil)
+        (block-content-or-editor config block edit-input-id block-id edit? false))
 
       (when @*show-right-menu?
         (block-right-menu config block edit?))]
