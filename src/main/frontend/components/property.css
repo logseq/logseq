@@ -1,3 +1,11 @@
+.property-value {
+    @apply px-1 rounded-sm;
+}
+
+.property-value:hover {
+  background: var(--ls-secondary-background-color);
+}
+
 .property-value-content {
   cursor: text;
   min-height: 24px;

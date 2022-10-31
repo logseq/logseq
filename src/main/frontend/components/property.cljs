@@ -76,6 +76,23 @@
                       (property-handler/delete-property! entity property-id))}
          (ui/icon "x")]])]))
 
+(rum/defc property-value < rum/reactive
+  [entity property k v k' {:keys [inline-text editor-box]}]
+  (let [block (assoc entity :editing-property property)
+        dom-id (str "ls-property-" k)
+        editor-id (str "property-" (:db/id entity) "-" k')
+        editing? (state/sub [:editor/editing? editor-id])]
+    (if editing?
+      (editor-box {:format :markdown
+                   :block block} editor-id {})
+      [:div.flex.flex-1.property-value-content
+       {:id dom-id
+        :on-click (fn []
+                    (let [cursor-range (util/caret-range (gdom/getElement dom-id))]
+                      (state/set-editing! editor-id (str v) block cursor-range)))}
+       (when-not (string/blank? (str v))
+         (inline-text {} :markdown (str v)))])))
+
 (rum/defcs properties-area <
   (rum/local false ::new-property?)
   rum/reactive
@@ -90,26 +107,14 @@
          (for [[k v] properties]
            (when-let [property (db/pull [:block/uuid k])]
              (when-let [k' (:block/original-name property)]
-               (let [editor-id (str "property-" (:db/id entity) "-" k')
-                     editing? (state/sub [:editor/editing? editor-id])
-                     ref-property? (contains? ref-keys k)]
+               (let [ref-property? (contains? ref-keys k)]
                  [:tr
                   [:td.property-key.p-0 {:style {:width 160}} ;FIXME: auto responsive
                    (property-key entity k' page-cp k ref-property?)]
 
                   [:td.property-value.p-0
-                   (let [block (assoc entity :editing-property property)
-                         dom-id (str "ls-property-" k)]
-                     (if editing?
-                       (editor-box {:format :markdown
-                                    :block block} editor-id {})
-                       [:div.flex.flex-1.property-value-content
-                        {:id dom-id
-                         :on-click (fn []
-                                     (let [cursor-range (util/caret-range (gdom/getElement dom-id))]
-                                       (state/set-editing! editor-id (str v) block cursor-range)))}
-                        (when-not (string/blank? (str v))
-                          (inline-text {} :markdown (str v)))]))]]))))]])
+                   (property-value entity property k v k' {:inline-text inline-text
+                                                           :editor-box editor-box})]]))))]])
 
      (if @*new-property?
        (property-input entity *new-property?)
