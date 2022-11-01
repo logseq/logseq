@@ -21,31 +21,31 @@
   protocol/Engine
 
   (query [_this q opts]
-    (prn "D:Search > Do Search Blocks:" repo q opts)
+    (println "D:Search > Query blocks:" repo q opts)
     (let [[e1 e2] (get-registered-engines repo)]
       (doseq [e e2]
         (protocol/query e q opts))
       (protocol/query e1 q opts)))
 
   (rebuild-blocks-indice! [_this]
-    (prn "D:Search > Initial blocks indice!:" repo)
+    (println "D:Search > Initial blocks indice!:" repo)
     (let [[e1 e2] (get-registered-engines repo)]
       (doseq [e e2]
         (protocol/rebuild-blocks-indice! e))
       (protocol/rebuild-blocks-indice! e1)))
 
   (transact-blocks! [_this data]
-    (prn "D:Search > Transact blocks!:" data)
+    (println "D:Search > Transact blocks!:" repo)
     (doseq [e (flatten (get-registered-engines repo))]
       (protocol/transact-blocks! e data)))
 
   (truncate-blocks! [_this]
-    (prn "D:Search > Truncate blocks!")
+    (println "D:Search > Truncate blocks!" repo)
     (doseq [e (flatten (get-registered-engines repo))]
       (protocol/truncate-blocks! e)))
 
   (remove-db! [_this]
-    (prn "D:Search > Remove DB!")
+    (println "D:Search > Remove Db!" repo)
     (doseq [e (flatten (get-registered-engines repo))]
       (protocol/remove-db! e))))
 
