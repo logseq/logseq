@@ -166,8 +166,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
           </foreignObject>
         </>
       )
-    } else {
-      return super.getShapeSVGJsx({})
     }
+    return super.getShapeSVGJsx({})
   }
 }
