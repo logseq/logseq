@@ -52,7 +52,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     fontWeight: 400,
     italic: false,
     padding: 4,
-    fontFamily: "var(--ls-font-family), 'Helvetica Neue', Helvetica, Arial, sans-serif",
+    fontFamily: 'var(--ls-font-family)',
     borderRadius: 0,
     stroke: 'var(--tl-foreground, #000)',
     fill: '#ffffff',

@@ -56,7 +56,7 @@ function getFileType(filename: string) {
   return 'unknown'
 }
 
-type MaybeShapes = Shape['props'][] | null | undefined
+type MaybeShapes = TLShapeModel[] | null | undefined
 
 type CreateShapeFN<Args extends any[]> = (...args: Args) => Promise<MaybeShapes> | MaybeShapes
 
@@ -350,7 +350,7 @@ export function usePaste() {
 
       app.cursors.setCursor(TLCursor.Progress)
 
-      let newShapes: Shape['props'][] = []
+      let newShapes: TLShapeModel[] = []
       try {
         if (dataTransfer) {
           newShapes.push(...((await tryCreateShapesFromDataTransfer(dataTransfer)) ?? []))
@@ -372,11 +372,13 @@ export function usePaste() {
       })
 
       app.wrapUpdate(() => {
-        app.api.addClonedShapes(
-          allShapesToAdd,
-          [...imageAssetsToCreate, ...assetsToClone],
-          bindingsToCreate
-        )
+        if (assetsToClone.length > 0) {
+          app.createAssets(assetsToClone)
+        }
+        if (newShapes.length > 0) {
+          app.createShapes(newShapes)
+        }
+        app.currentPage.updateBindings(Object.fromEntries(bindingsToCreate.map(b => [b.id, b])))
 
         if (app.selectedShapesArray.length === 1 && allShapesToAdd.length === 1 && !fromDrop) {
           const source = app.selectedShapesArray[0]
