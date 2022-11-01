@@ -44,7 +44,7 @@ export function ColorInput({ color, opacity, setColor, setOpacity, ...rest }: Co
             ))}
           </div>
 
-          <div className="m-1">
+          <div className="mx-1 my-2">
             <Slider.Root
               defaultValue={[opacity]}
               onValueCommit={value => setOpacity(value[0])}
