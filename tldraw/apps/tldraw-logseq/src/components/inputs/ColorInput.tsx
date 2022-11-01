@@ -6,11 +6,12 @@ import { Color } from '@tldraw/core'
 interface ColorInputProps extends React.InputHTMLAttributes<HTMLButtonElement> {
   color: string
   opacity: number
+  collisionRef: HTMLElement | null
   setColor: (value: string) => void
   setOpacity: (value: number) => void
 }
 
-export function ColorInput({ color, opacity, setColor, setOpacity, ...rest }: ColorInputProps) {
+export function ColorInput({ color, opacity, collisionRef, setColor, setOpacity, ...rest }: ColorInputProps) {
   const ref = React.useRef<HTMLDivElement>(null)
 
   function renderColor(color: string) {
@@ -32,7 +33,7 @@ export function ColorInput({ color, opacity, setColor, setOpacity, ...rest }: Co
       </Popover.Trigger>
 
       <Popover.Portal>
-        <Popover.Content className="tl-popover-content" side="top" sideOffset={15}>
+        <Popover.Content className="tl-popover-content" side="top" sideOffset={15} collisionBoundary={collisionRef}>
           <div className={'tl-color-palette'}>
             {Object.values(Color).map(value => (
               <button

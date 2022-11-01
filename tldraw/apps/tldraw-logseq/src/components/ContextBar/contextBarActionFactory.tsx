@@ -358,6 +358,7 @@ const SwatchAction = observer(() => {
       title="Color Picker"
       color={color}
       opacity={shapes[0].props.opacity}
+      collisionRef={document.getElementById('main-content-container')}
       setOpacity={handleSetOpacity}
       setColor={handleSetColor}
     />
