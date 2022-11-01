@@ -840,14 +840,14 @@ export interface IAssetsProxy {
    * @added 0.0.2
    * @param exts
    */
-  listFilesOfCurrentGraph(exts?: string | string[]): Promise<{
+  listFilesOfCurrentGraph(exts?: string | string[]): Promise<Array<{
     path: string
     size: number
     accessTime: number
     modifiedTime: number
     changeTime: number
     birthTime: number
-  }>
+  }>>
 
   /**
    * @example https://github.com/logseq/logseq/pull/6488
