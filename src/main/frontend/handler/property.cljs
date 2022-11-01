@@ -118,9 +118,12 @@
       "url" (if (gp-util/url? value)
               [true value]
               [false "invalid URL"])
-      "object" (if-let [page-name (page-ref/get-page-name value)]
-                 [true page-name]
-                 [false "invalid Object"]))))
+      "object" (let [page-name (or
+                                (try
+                                  (page-ref/get-page-name value)
+                                  (catch :default _))
+                                value)]
+                 [true page-name]))))
 
 (defn add-property-value!
   [entity property-id property-value]
@@ -134,7 +137,12 @@
           (let [properties (:block/properties entity)
                 property-value (get properties property-id)
                 value (if multiple-values?
-                        (conj (if (coll? property-value) (set property-value) #{property-value}) property-value-or-error)
+                        (->>
+                         (conj (if (coll? property-value)
+                                 (set property-value)
+                                 #{property-value})
+                               property-value-or-error)
+                         (remove string/blank?))
                         property-value-or-error)
                 refs (extract-refs entity (assoc properties property-id value))
                 value (if (and multiple-values? object?)
@@ -166,3 +174,26 @@
          {:block/uuid (:block/uuid entity)
           :block/properties properties'
           :block/refs refs})))))
+
+(defn delete-property-value!
+  "Delete value if a property has multiple values"
+  [entity property-id property-value]
+  (when (and entity (uuid? property-id))
+    (when (not= property-id (:block/uuid entity))
+    (when-let [property (db/pull [:block/uuid property-id])]
+      (let [schema (:block/property-schema property)
+            [success? property-value-or-error] (validate schema property-value)
+            multiple-values? (:multiple-values? schema)
+            object? (= "object" (:type schema))]
+        (when (and multiple-values? success?)
+          (let [properties (:block/properties entity)
+                properties' (update properties property-id disj property-value-or-error)
+                refs (extract-refs entity properties')]
+            (outliner-tx/transact!
+              {:outliner-op :save-block}
+              (outliner-core/save-block!
+               {:block/uuid (:block/uuid entity)
+                :block/properties properties'
+                :block/refs refs}))))
+        (state/clear-editor-action!)
+        (state/clear-edit!))))))

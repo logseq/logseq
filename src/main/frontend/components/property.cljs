@@ -77,6 +77,26 @@
                       (property-handler/delete-property! entity property-id))}
          (ui/icon "x")]])]))
 
+(rum/defcs multiple-value-item < (rum/local false ::show-close?)
+  [state entity property item dom-id' editor-id' {:keys [edit-fn page-cp inline-text]}]
+  (let [*show-close? (::show-close? state)
+        object? (= "object" (:type (:block/property-schema property)))]
+    [:div.flex.flex-1.flex-row {:on-mouse-over #(reset! *show-close? true)
+                                :on-mouse-out  #(reset! *show-close? false)}
+     [:div.flex.flex-1.property-value-content
+      {:id dom-id'
+       :on-click (fn [] (edit-fn editor-id' dom-id' item))}
+      (if object?
+        (page-cp {} {:block/name (util/page-name-sanity-lc item)})
+        (inline-text {} :markdown (str item)))]
+     (when @*show-close?
+       [:a.close.fade-in
+        {:title "Delete this value"
+         :on-mouse-down
+         (fn []
+           (property-handler/delete-property-value! entity (:block/uuid property) item))}
+        svg/close])]))
+
 (rum/defcs property-value < rum/reactive
   [state entity property k v k' {:keys [inline-text editor-box page-cp]}]
   (let [block (assoc entity :editing-property property)
@@ -101,6 +121,7 @@
     (cond
       multiple-values?
       (let [v' (if (coll? v) v (when v [v]))
+            v' (if (seq v) v [""])
             editor-id' (str editor-id (count v'))
             new-editing? (state/sub [:editor/editing? editor-id'])]
         [:div.flex.flex-1.flex-col
@@ -112,12 +133,9 @@
               (if editing?
                 (editor-box {:format :markdown
                              :block block} editor-id' {})
-                [:div.flex.flex-1.property-value-content
-                 {:id dom-id'
-                  :on-click (fn [] (edit-fn editor-id' dom-id' item))}
-                 (if object?
-                   (page-cp {} {:block/name (util/page-name-sanity-lc item)})
-                   (inline-text {} :markdown (str v)))])))
+                (multiple-value-item entity property item dom-id' editor-id' {:page-cp page-cp
+                                                                              :edit-fn edit-fn
+                                                                              :inline-text inline-text}))))
 
           (let [fv (first v')]
             (when (and (not new-editing?)
