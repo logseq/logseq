@@ -831,8 +831,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return (
       <HTMLContainer
         style={{
-          pointerEvents: 'all',
-          opacity: isErasing ? 0.2 : opacity,
+          pointerEvents: 'all'
         }}
         {...events}
       >
@@ -861,6 +860,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                   width: `calc(100% / ${scaleRatio})`,
                   height: `calc(100% / ${scaleRatio})`,
                   transform: `scale(${scaleRatio})`,
+                  opacity: isErasing ? 0.2 : opacity,
                 }}
               >
                 {!this.props.compact && !targetNotFound && (
