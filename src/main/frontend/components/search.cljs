@@ -453,17 +453,20 @@
                                             (search-handler/search (state/get-current-repo) value opts)
                                             (search-handler/search (state/get-current-repo) value)))
                                         timeout))))))}]]
-      [:div.search-results-wrap.border.border-red-500
-       [:div.search-results-services-tabs.py-2.px-4.flex.space-x-2
-        (ui/button "Default" :background "orange"
-                   :on-click #(reset! *active-engine-tab nil))
+      [:div.search-results-wrap
+        ;; list registered search engines
+       (when (seq engines)
+         [:ul.search-results-engines-tabs
+          [:li (ui/button "Default" :background "orange"
+                          :on-click #(reset! *active-engine-tab nil))]
 
-        (for [[k v] engines]
-          (ui/button [:span.flex.items-center (ui/icon "puzzle")
-                      k (when-let [result (and v (:result v))]
-                          (str "(" (count (:blocks result)) ")"))]
-                     :background (if (= k @*active-engine-tab) "green" "gray")
-                     :on-click #(reset! *active-engine-tab k)))]
+          (for [[k v] engines]
+            [:li {:key k}
+             (ui/button [:span.flex.items-center (:name v)
+                         (when-let [result (and v (:result v))]
+                           (str " (" (count (:blocks result)) ")"))]
+                        :background (if (= k @*active-engine-tab) "green" "gray")
+                        :on-click #(reset! *active-engine-tab k))])])
 
        (if-not (nil? @*active-engine-tab)
          (let [active-engine-result (get-in engines [@*active-engine-tab :result])]

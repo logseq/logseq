@@ -53,3 +53,13 @@
 .search-item svg {
     transform: scale(0.8);
 }
+
+.search-results-engines {
+  &-tabs {
+    @apply flex items-center list-none space-x-2 mx-0 px-2 pb-1;
+
+    > li {
+      @apply p-0 m-0;
+    }
+  }
+}
