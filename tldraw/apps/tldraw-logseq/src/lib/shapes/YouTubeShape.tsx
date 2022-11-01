@@ -3,8 +3,6 @@ import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps } from '@tldraw/react'
 import { action, computed } from 'mobx'
 import { observer } from 'mobx-react-lite'
-import { TablerIcon } from '../../components/icons'
-
 import { withClampedStyles } from './style-props'
 
 export interface YouTubeShapeProps extends TLBoxShapeProps {
