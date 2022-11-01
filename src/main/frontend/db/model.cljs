@@ -1390,23 +1390,28 @@
 
 (defn get-property-values
   [property]
-  (let [pred (fn [_db properties]
-               (get properties property))]
-    (->>
-     (d/q
-      '[:find [?property-val ...]
-        :in $ ?pred
-        :where
-        [_ :block/properties ?p]
-        [(?pred $ ?p) ?property-val]]
-      (conn/get-db)
-      pred)
-     (map (fn [x] (if (coll? x) x [x])))
-     (apply concat)
-     (map str)
-     (remove string/blank?)
-     (distinct)
-     (sort))))
+  (let [property-entity (db-utils/entity [:block/uuid property])
+        pred (fn [_db properties]
+               (get properties property))
+        values (->>
+                (d/q
+                  '[:find [?property-val ...]
+                    :in $ ?pred
+                    :where
+                    [_ :block/properties ?p]
+                    [(?pred $ ?p) ?property-val]]
+                  (conn/get-db)
+                  pred)
+                (map (fn [x] (if (coll? x) x [x])))
+                (apply concat)
+                (map str)
+                (remove string/blank?)
+                (distinct))
+        result (if (= "object" (:type (:block/property-schema property-entity)))
+                 (let [pages (db-utils/pull-many '[:block/original-name] (map (fn [name] [:block/name name]) values))]
+                   (map :block/original-name pages))
+                 values)]
+    (sort result)))
 
 (defn get-template-by-name
   [name]

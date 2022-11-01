@@ -85,7 +85,8 @@
         editing? (state/sub [:editor/editing? editor-id])
         schema (:block/property-schema property)
         edit-fn (fn [editor-id id v]
-                  (let [cursor-range (util/caret-range (gdom/getElement (or id dom-id)))]
+                  (let [v (str v)
+                        cursor-range (util/caret-range (gdom/getElement (or id dom-id)))]
                     (state/set-editing! editor-id v block cursor-range)
                     (js/setTimeout
                      (fn []
@@ -93,7 +94,7 @@
                                                        :entity entity
                                                        :pos 0})
                        (state/set-editor-action! :property-value-search))
-                     100)))
+                     50)))
         multiple-values? (:multiple-values? schema)
         type (:type schema)
         object? (= type "object")]

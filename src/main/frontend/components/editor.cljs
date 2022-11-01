@@ -266,7 +266,8 @@
             non-exist-handler #(property-handler/add-property-value! entity (:block/uuid property-entity) q)]
         (ui/auto-complete
          matched-values
-         {:on-chosen #(property-handler/add-property-value! entity (:block/uuid property-entity) q)
+         {:on-chosen (fn [result]
+                       (property-handler/add-property-value! entity (:block/uuid property-entity) result))
           :on-enter non-exist-handler
           :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new value: " q)]
           :header [:div.px-4.py-2.text-sm.font-medium "Matched property values: "]

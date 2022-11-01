@@ -190,11 +190,11 @@
            property (db/entity [:block/name (util/page-name-sanity-lc (str property))])]
        (when-let [id (:block/uuid property)]
          (let [result (db-model/get-property-values id)]
-          (when (seq result)
-            (if (string/blank? q)
-              result
-              (let [result (fuzzy-search result q :limit limit)]
-                (vec result))))))))))
+           (when (seq result)
+             (if (string/blank? q)
+               result
+               (let [result (fuzzy-search result q :limit limit)]
+                 (vec result))))))))))
 
 (defn sync-search-indice!
   [repo tx-report]

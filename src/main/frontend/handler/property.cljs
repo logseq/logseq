@@ -100,13 +100,16 @@
                        max-result (if max-n (<= n max-n) true)]
                    (cond
                      (and min-result max-result)
-                     [true value]
+                     [true n]
 
                      (false? min-result)
                      [false (str "the min value is " min-n)]
 
                      (false? max-result)
-                     [false (str "the max value is " max-n)])))
+                     [false (str "the max value is " max-n)]
+
+                     :else
+                     n)))
       "date" (if-let [result (js/Date. value)]
                (if (not= (str result) "invalid Date")
                  [true value]
@@ -148,7 +151,9 @@
                 :block/refs refs})))
           (notification/show!
            (str (:block/original-name property) ": " property-value-or-error)
-           :warning))))))
+           :warning))
+        (state/clear-editor-action!)
+        (state/clear-edit!)))))
 
 (defn delete-property!
   [entity property-id]
