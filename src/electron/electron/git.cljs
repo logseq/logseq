@@ -96,9 +96,19 @@
 
 ;; git log -100 --oneline -p ~/Desktop/org/pages/contents.org
 
+(defn pull!
+  []
+  (run-git! #js ["pull" "--rebase"]))
+
+(defn push!
+  []
+  (run-git! #js ["push" "origin"]))
+
 (defn commit!
   [message]
-  (run-git! #js ["commit" "-m" message]))
+  (pull!)
+  (run-git! #js ["commit" "-m" message])
+  (push!))
 
 (defn add-all-and-commit!
   ([]
