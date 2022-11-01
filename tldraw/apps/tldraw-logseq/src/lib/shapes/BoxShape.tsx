@@ -1,10 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
-import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
+import { TLBoxShape, TLBoxShapeProps, getComputedColor } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 import { BindingIndicator } from './BindingIndicator'
-import { getComputedColor } from '../color'
 
 export interface BoxShapeProps extends TLBoxShapeProps, CustomStyleProps {
   borderRadius: number

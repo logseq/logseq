@@ -6,6 +6,7 @@ import {
   TLResetBoundsInfo,
   TLResizeInfo,
   validUUID,
+  getComputedColor,
 } from '@tldraw/core'
 import { Virtuoso } from 'react-virtuoso'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
@@ -21,7 +22,6 @@ import { useCameraMovingRef } from '../../hooks/useCameraMoving'
 import { LogseqContext, type SearchResult } from '../logseq-context'
 import { BindingIndicator } from './BindingIndicator'
 import { CustomStyleProps, withClampedStyles } from './style-props'
-import { getComputedColor } from '../color'
 
 const HEADER_HEIGHT = 40
 const AUTO_RESIZE_THRESHOLD = 1

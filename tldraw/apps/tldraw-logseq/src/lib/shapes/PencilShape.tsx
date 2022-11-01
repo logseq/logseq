@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { SvgPathUtils, TLDrawShape, TLDrawShapeProps } from '@tldraw/core'
+import { SvgPathUtils, TLDrawShape, TLDrawShapeProps, getComputedColor } from '@tldraw/core'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import Vec from '@tldraw/vec'
 import { computed, makeObservable } from 'mobx'
@@ -11,7 +11,6 @@ import getStroke, {
   StrokePoint,
 } from 'perfect-freehand'
 import { CustomStyleProps, withClampedStyles } from './style-props'
-import { getComputedColor } from '../color'
 
 export interface PencilShapeProps extends TLDrawShapeProps, CustomStyleProps {
   type: 'pencil'

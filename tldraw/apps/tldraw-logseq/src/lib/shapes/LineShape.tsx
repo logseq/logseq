@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Decoration, TLLineShape, TLLineShapeProps } from '@tldraw/core'
-import { SVGContainer, TLComponentProps, useApp } from '@tldraw/react'
+import { Decoration, TLLineShape, TLLineShapeProps, getComputedColor } from '@tldraw/core'
+import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import Vec from '@tldraw/vec'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
@@ -10,7 +10,6 @@ import { CustomStyleProps, withClampedStyles } from './style-props'
 import { getTextLabelSize } from '@tldraw/core'
 import { LabelMask } from './text/LabelMask'
 import { TextLabel } from './text/TextLabel'
-import { getComputedColor } from '../color'
 
 interface LineShapeProps extends CustomStyleProps, TLLineShapeProps {
   type: 'line'

@@ -6,6 +6,7 @@ import {
   TLResizeStartInfo,
   TLTextShape,
   TLTextShapeProps,
+  getComputedColor,
 } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps } from '@tldraw/react'
 import { action, computed } from 'mobx'
@@ -14,7 +15,6 @@ import * as React from 'react'
 import type { SizeLevel } from '.'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 import { TextAreaUtils } from './text/TextAreaUtils'
-import { getComputedColor } from '../color'
 
 export interface TextShapeProps extends TLTextShapeProps, CustomStyleProps {
   borderRadius: number
