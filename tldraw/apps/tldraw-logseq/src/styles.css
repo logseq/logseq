@@ -960,7 +960,6 @@ html[data-theme='dark'] {
 
 .tl-slider-range {
   @apply absolute h-full rounded-sm;
-
 }
 
 .tl-slider-thumb {
@@ -969,13 +968,9 @@ html[data-theme='dark'] {
   width: 8px;
   height: 14px;
   background-color: var(--ls-secondary-background-color);
-  border: 1px solid var(--ls-border-color);
+  border: 1px solid var(--ls-secondary-border-color);
 
   &:hover {
     background-color: var(--ls-tertiary-background-color);
-  }
-
-  &:focus {
-    box-shadow: 0 0 0 1px var(--color-selectedStroke);
   }
 }
