@@ -37,7 +37,10 @@ export class LSPluginSearchService {
             return data
           }
         },
-        rebuildBlocksIndice: { f: 'onIndiceInit', args: ['graph', 'blocks'] }
+        rebuildBlocksIndice: { f: 'onIndiceInit', args: ['graph', 'blocks'] },
+        transactBlocks: { f: 'onBlocksChanged', args: ['graph', 'data'] },
+        truncateBlocks: { f: 'onIndiceReset', args: ['graph'] },
+        removeDb: { f: 'onGraph', args: ['graph'] }
       }
     ).forEach(
       ([k, v]) => {

@@ -290,23 +290,30 @@ export type ExternalCommandType =
 export type UserProxyTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets'
 
 export type SearchIndiceInitStatus = boolean
+export type SearchBlockItem = { id: EntityID, uuid: BlockIdentity, content: string, page: EntityID }
+export type SearchPageItem = string
+export type SearchFileItem = string
 
 export interface IPluginSearchServiceHooks {
   name: string
   options?: Record<string, any>
 
-  onQuery: (graph: string, key: string, opts: {}) =>
+  onQuery: (
+    graph: string,
+    key: string,
+    opts: Partial<{ limit: number }>
+  ) =>
     Promise<{
       graph: string,
       key: string,
-      blocks?: Array<{ uuid: BlockIdentity, content: string, page?: EntityID }>,
-      pages?: Array<any>,
-      files?: Array<any>
+      blocks?: Array<Partial<SearchBlockItem>>,
+      pages?: Array<SearchPageItem>,
+      files?: Array<SearchFileItem>
     }>
 
   onIndiceInit: (graph: string, blocks: any) => Promise<SearchIndiceInitStatus>
   onIndiceReset: (graph: string) => Promise<void>
-  onBlocksChanged: (graph: string, changes: { added: Array<any>, removed: Array<any> }) => Promise<void>
+  onBlocksChanged: (graph: string, changes: { added: Array<SearchBlockItem>, removed: Array<EntityID> }) => Promise<void>
   onGraphRemoved: (graph: string, opts?: {}) => Promise<any>
 }
 

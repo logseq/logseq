@@ -32,13 +32,16 @@
     ())
 
   (transact-blocks! [_this data]
-    (prn "D:Search > Plugin transact blocks! " data)
-    ())
+    (prn "D:Search > Plugin transact blocks! ")
+    (let [{:keys [blocks-to-remove-set blocks-to-add]} data]
+      (call-service! service "search:transactBlocks"
+                     {:data {:added   blocks-to-add
+                             :removed blocks-to-remove-set}})))
 
   (truncate-blocks! [_this]
     (prn "D:Search > Plugin truncate blocks!")
-    ())
+    (call-service! service "search:truncateBlocks" {}))
 
   (remove-db! [_this]
     (prn "D:Search > Plugin remove db hook!")
-    ()))
+    (call-service! service "search:removeDb" {})))
