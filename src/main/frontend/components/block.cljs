@@ -857,7 +857,7 @@
 (rum/defc block-reference < rum/reactive
   db-mixins/query
   [config id label]
-  (when-let [block-id (parse-uuid id)]
+  (if-let [block-id (parse-uuid id)]
     (let [db-id (:db/id (db/pull [:block/uuid block-id]))
           block (when db-id (db/pull-block db-id))
           block-type (keyword (get-in block [:block/properties :ls-type]))
@@ -927,7 +927,10 @@
                         :delay       [1000, 100]} inner)
              inner)])
         [:span.warning.mr-1 {:title "Block ref invalid"}
-         (block-ref/->block-ref id)]))))
+         (block-ref/->block-ref id)]))
+  [:span.warning.mr-1 {:title "Block ref invalid"}
+    (block-ref/->block-ref id)]
+))
 
 (defn inline-text
   ([format v]
