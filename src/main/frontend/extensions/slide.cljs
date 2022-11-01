@@ -3,7 +3,6 @@
             [cljs-bean.core :as bean]
             [frontend.loader :as loader]
             [frontend.ui :as ui]
-            [frontend.util :as util]
             [frontend.config :as config]
             [frontend.components.block :as block]
             [clojure.string :as string]
