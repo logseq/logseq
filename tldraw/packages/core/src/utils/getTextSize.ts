@@ -32,6 +32,7 @@ function getMeasurementDiv() {
     zIndex: '9999',
     userSelect: 'none',
     pointerEvents: 'none',
+    font: 'var(--ls-font-family)',
   })
 
   pre.tabIndex = -1
@@ -94,7 +95,7 @@ export function getTextLabelSize(
     melm.style.font = font
     melm.style.padding = padding + 'px'
 
-    const rect = melm.getBoundingClientRect();
+    const rect = melm.getBoundingClientRect()
 
     // In tests, offsetWidth and offsetHeight will be 0
     const width = Math.ceil(rect.width || 1)
