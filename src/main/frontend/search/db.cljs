@@ -31,10 +31,9 @@
 (defn page->index
   "Convert a page name to the index for searching (page content level)
    Generate index based on the DB content AT THE POINT OF TIME"
-  [{:block/keys [uuid _name] :as page}]
+  [{:block/keys [uuid _original-name] :as page}]
   (when-let [content (some-> (:block/file page)
                              (:file/content))]
-    (prn "content: " content)
     (when-not (> (count content) (* (max-len) 10))
       {:id   (:db/id page)
        :uuid (str uuid)

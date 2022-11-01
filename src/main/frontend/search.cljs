@@ -263,26 +263,35 @@
 
 (defn- get-indirect-pages
   "Return the set of pages that will have content updated" 
-  [tx-report] 
-  (->> (ds-report/get-blocks-and-pages tx-report)
-       :pages
-       (map :db/id)
-       set))
-
-(defn- pull-page
-  "Return a page entity of the latest state from tx-report"
-  [tx-report page-id]
-  (when-let [page-entity (db-report/safe-pull (:db-after tx-report) '[:db/id :block/name :block/uuid
-                                                                      {:block/file [:db/id :file/content]}] page-id)]
-    (when (:block/name page-entity) ;; confirm it's a page entity
-      page-entity)))
+  [tx-report]
+  (let [data   (:tx-data tx-report)
+        datoms (filter
+                (fn [datom]
+                  (contains? #{:file/content} (:a datom)))
+                data)]
+    (when (seq datoms)
+      (->> datoms
+           (mapv (fn [datom]
+                   (let [tar-db  (:db-after tx-report)]
+                     ;; Reverse query the corresponding page id of the modified `:file/content`)
+                     (when-let [page-id (->> (:e datom)
+                                             (db-report/safe-pull tar-db '[:block/_file])
+                                             (:block/_file)
+                                             (first)
+                                             (:db/id))]
+                       ;; Fetch page entity according to what page->index requested
+                       (db-report/safe-pull tar-db '[:db/id :block/uuid
+                                                     :block/original-name
+                                                     {:block/file [:file/content]}]
+                                            page-id)))))
+           (remove nil?)))))
 
 ;; TODO merge with logic in `invoke-hooks` when feature and test is sufficient
 (defn sync-search-indice!
   [repo tx-report]
-  (let [{:keys [pages-to-add pages-to-remove-set pages-to-add-id-set pages-to-remove-id-set
+  (let [{:keys [pages-to-add pages-to-remove-set pages-to-remove-id-set
                 blocks-to-add blocks-to-remove-set]} (get-direct-blocks-and-pages tx-report) ;; directly modified block & pages
-        updated-pages-id-set (get-indirect-pages tx-report)] ;; affected pages with modified children blocks
+        updated-pages (get-indirect-pages tx-report)]
     ;; update page title indice
     (when (or (seq pages-to-add) (seq pages-to-remove-set))
       (swap! search-db/indices update-in [repo :pages]
@@ -305,10 +314,8 @@
                          :blocks-to-add        blocks-to-add}))
 
     ;; update page indice
-    (when (or (seq pages-to-add-id-set) (seq pages-to-remove-id-set) (seq updated-pages-id-set)) ;; when move op happens, no :block/content provided
-      (let [pages-to-add-id-set   (set/union updated-pages-id-set pages-to-add-id-set)
-            verified-pages (map (partial pull-page tx-report) pages-to-add-id-set)
-            indice-pages   (map #(when % (search-db/page->index %)) verified-pages)
+    (when (or (seq pages-to-remove-id-set) (seq updated-pages)) ;; when move op happens, no :block/content provided
+      (let [indice-pages   (map search-db/page->index updated-pages)
             invalid-set    (->> (map (fn [updated indiced] ;; get id of pages without valid page index
                                        (if indiced nil (:db/id updated)))
                                      pages-to-add indice-pages)
