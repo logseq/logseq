@@ -64,9 +64,9 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
           width={Math.max(0.01, w - strokeWidth)}
           height={Math.max(0.01, h - strokeWidth)}
           strokeWidth={strokeWidth}
-          stroke={getComputedColor(stroke, "stroke")}
+          stroke={getComputedColor(stroke, 'stroke')}
           strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
-          fill={noFill ? 'none' : getComputedColor(fill, "background")}
+          fill={noFill ? 'none' : getComputedColor(fill, 'background')}
         />
       </SVGContainer>
     )

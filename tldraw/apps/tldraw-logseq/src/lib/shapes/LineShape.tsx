@@ -77,7 +77,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
         <TextLabel
           font={font}
           text={label}
-          color={getComputedColor(stroke, "text")}
+          color={getComputedColor(stroke, 'text')}
           offsetX={offset[0]}
           offsetY={offset[1]}
           scale={scale}
@@ -162,7 +162,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       <>
         <Arrow
           style={{
-            stroke: getComputedColor(stroke, "stroke"),
+            stroke: getComputedColor(stroke, 'stroke'),
             fill,
             strokeWidth,
             strokeType,
@@ -182,8 +182,8 @@ export class LineShape extends TLLineShape<LineShapeProps> {
               fontSize={20}
               transform={`translate(${midPoint[0]}, ${midPoint[1]})`}
               textAnchor="middle"
-              fill={getComputedColor(stroke, "text")}
-              stroke={getComputedColor(stroke, "text")}
+              fill={getComputedColor(stroke, 'text')}
+              stroke={getComputedColor(stroke, 'text')}
             >
               {label}
             </text>

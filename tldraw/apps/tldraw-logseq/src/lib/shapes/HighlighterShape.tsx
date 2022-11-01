@@ -49,7 +49,7 @@ export class HighlighterShape extends TLDrawShape<HighlighterShapeProps> {
         <path
           d={pointsPath}
           strokeWidth={strokeWidth * 16}
-          stroke={getComputedColor(stroke, "stroke")}
+          stroke={getComputedColor(stroke, 'stroke')}
           fill="none"
           pointerEvents="all"
           strokeLinejoin="round"

@@ -73,10 +73,25 @@ const LogseqTypeTag = ({
 
 const LogseqPortalShapeHeader = observer(
   ({ type, fill, children }: { type: 'P' | 'B'; fill: string; children: React.ReactNode }) => {
-    const bgColor = getComputedColor(fill, "background");
+    const bgColor = getComputedColor(fill, 'background')
 
-    return <div className={`tl-logseq-portal-header tl-logseq-portal-header-${type === "P" ? "page" : "block"}`}
-      style={{background: type === "P" ? bgColor : `linear-gradient(0deg, var(--ls-highlight-color-${fill ? fill : "default"}), ${bgColor}`}}>{children}</div>
+    return (
+      <div
+        className={`tl-logseq-portal-header tl-logseq-portal-header-${
+          type === 'P' ? 'page' : 'block'
+        }`}
+        style={{
+          background:
+            type === 'P'
+              ? bgColor
+              : `linear-gradient(0deg, var(--ls-highlight-color-${
+                  fill ? fill : 'default'
+                }), ${bgColor}`,
+        }}
+      >
+        {children}
+      </div>
+    )
   }
 )
 
@@ -711,7 +726,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         ref={cpRefContainer}
         className="tl-logseq-cp-container"
         style={{
-          background: fill ? `var(--ls-highlight-color-${fill})` : "transparent",
+          background: fill ? `var(--ls-highlight-color-${fill})` : 'transparent',
           overflow: this.props.isAutoResizing ? 'visible' : 'auto',
         }}
       >

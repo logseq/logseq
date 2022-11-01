@@ -193,7 +193,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
             fontWeight,
             padding,
             lineHeight,
-            color: getComputedColor(stroke, "text"),
+            color: getComputedColor(stroke, 'text'),
           }}
         >
           {isEditing ? (
@@ -320,7 +320,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
       <foreignObject width={bounds.width} height={bounds.height}>
         <div
           style={{
-            color: getComputedColor(stroke, "text"),
+            color: getComputedColor(stroke, 'text'),
             fontSize,
             fontFamily,
           }}

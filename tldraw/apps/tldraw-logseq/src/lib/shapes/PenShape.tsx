@@ -57,8 +57,8 @@ export class PenShape extends TLDrawShape<PenShapeProps> {
         <path
           d={pointsPath}
           strokeWidth={strokeWidth}
-          stroke={getComputedColor(stroke, "stroke")}
-          fill={getComputedColor(stroke, "stroke")}
+          stroke={getComputedColor(stroke, 'stroke')}
+          fill={getComputedColor(stroke, 'stroke')}
           pointerEvents="all"
         />
       </SVGContainer>

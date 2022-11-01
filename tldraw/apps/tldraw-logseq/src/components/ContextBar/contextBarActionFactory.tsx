@@ -57,7 +57,14 @@ const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 type ShapeType = Shape['props']['type']
 
 export const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
-  'logseq-portal': ['Swatch', 'Edit', 'LogseqPortalViewMode', 'ScaleLevel', 'OpenPage', 'AutoResizing'],
+  'logseq-portal': [
+    'Swatch',
+    'Edit',
+    'LogseqPortalViewMode',
+    'ScaleLevel',
+    'OpenPage',
+    'AutoResizing',
+  ],
   youtube: ['YoutubeLink'],
   iframe: ['IFrameSource'],
   box: ['Swatch', 'NoFill', 'StrokeType'],
@@ -346,7 +353,15 @@ const SwatchAction = observer(() => {
   }, [])
 
   const color = shapes[0].props.noFill ? shapes[0].props.stroke : shapes[0].props.fill
-  return <ColorInput title="Color Picker" color={color} opacity={shapes[0].props.opacity} setOpacity={handleSetOpacity} setColor={handleSetColor} />
+  return (
+    <ColorInput
+      title="Color Picker"
+      color={color}
+      opacity={shapes[0].props.opacity}
+      setOpacity={handleSetOpacity}
+      setColor={handleSetColor}
+    />
+  )
 })
 
 const StrokeTypeAction = observer(() => {

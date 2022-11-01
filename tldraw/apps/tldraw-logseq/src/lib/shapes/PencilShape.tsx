@@ -132,8 +132,8 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
         strokeWidth={strokeWidth / 2}
         strokeLinejoin="round"
         strokeLinecap="round"
-        stroke={getComputedColor(stroke, "stroke")}
-        fill={getComputedColor(stroke, "stroke")}
+        stroke={getComputedColor(stroke, 'stroke')}
+        fill={getComputedColor(stroke, 'stroke')}
         strokeDasharray={strokeType === 'dashed' ? '12 4' : undefined}
       />
     )

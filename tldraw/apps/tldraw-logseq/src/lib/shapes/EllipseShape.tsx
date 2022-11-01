@@ -52,9 +52,9 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
           rx={Math.max(0.01, (w - strokeWidth) / 2)}
           ry={Math.max(0.01, (h - strokeWidth) / 2)}
           strokeWidth={strokeWidth}
-          stroke={getComputedColor(stroke, "stroke")}
+          stroke={getComputedColor(stroke, 'stroke')}
           strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
-          fill={noFill ? 'none' : getComputedColor(fill, "background")}
+          fill={noFill ? 'none' : getComputedColor(fill, 'background')}
         />
       </SVGContainer>
     )
@@ -106,9 +106,9 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
           rx={Math.max(0.01, (w - strokeWidth) / 2)}
           ry={Math.max(0.01, (h - strokeWidth) / 2)}
           strokeWidth={strokeWidth}
-          stroke={getComputedColor(stroke, "stroke")}
+          stroke={getComputedColor(stroke, 'stroke')}
           strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
-          fill={noFill ? 'none' : getComputedColor(fill, "background")}
+          fill={noFill ? 'none' : getComputedColor(fill, 'background')}
         />
       </g>
     )

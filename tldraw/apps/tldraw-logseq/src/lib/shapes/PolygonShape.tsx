@@ -44,8 +44,8 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
           />
           <polygon
             points={path}
-            stroke={getComputedColor(stroke, "stroke")}
-            fill={noFill ? 'none' : getComputedColor(fill, "background")}
+            stroke={getComputedColor(stroke, 'stroke')}
+            fill={noFill ? 'none' : getComputedColor(fill, 'background')}
             strokeWidth={strokeWidth}
             rx={2}
             ry={2}
@@ -92,8 +92,8 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
         <polygon className={!noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'} points={path} />
         <polygon
           points={path}
-          stroke={getComputedColor(stroke, "stroke")}
-          fill={noFill ? 'none' : getComputedColor(fill, "background")}
+          stroke={getComputedColor(stroke, 'stroke')}
+          fill={noFill ? 'none' : getComputedColor(fill, 'background')}
           strokeWidth={strokeWidth}
           rx={2}
           ry={2}
