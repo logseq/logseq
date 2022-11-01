@@ -854,17 +854,14 @@ html[data-theme='dark'] {
   height: 32px;
   width: 32px;
   color: var(--ls-secondary-text-color);
-  opacity: 0.3;
+
   &:hover {
     background-color: var(--ls-tertiary-background-color);
   }
-  &[data-toggle='false'] {
-    opacity: 1;
-  }
+
   &[data-state='on'] {
     background-color: var(--ls-tertiary-background-color);
     color: var(--ls-primary-text-color);
-    opacity: 1;
   }
 }
 
