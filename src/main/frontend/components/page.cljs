@@ -178,7 +178,7 @@
   [repo tag]
   (let [pages (db/get-tag-pages repo tag)]
     (when (seq pages)
-      [:div.references.mt-6.flex-1.flex-row
+      [:div.references.page-tags.mt-6.flex-1.flex-row
        [:div.content
         (ui/foldable
          [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag)]
