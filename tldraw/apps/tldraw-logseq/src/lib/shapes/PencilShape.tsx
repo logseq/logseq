@@ -4,7 +4,7 @@ import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import Vec from '@tldraw/vec'
 import { computed, makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
-import getStroke, {
+import {
   getStrokeOutlinePoints,
   getStrokePoints,
   StrokeOptions,
