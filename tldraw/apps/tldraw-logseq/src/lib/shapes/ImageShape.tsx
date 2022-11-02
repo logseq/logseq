@@ -101,6 +101,7 @@ export class ImageShape extends TLImageShape<ImageShapeProps> {
           <img
             src={make_asset_url ? make_asset_url(asset.src) : asset.src}
             draggable={false}
+            loading="lazy"
             style={{
               position: 'relative',
               top: -t,
