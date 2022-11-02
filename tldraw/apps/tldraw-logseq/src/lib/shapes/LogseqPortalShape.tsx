@@ -199,7 +199,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     size: [400, 50],
     // collapsedHeight is the height before collapsing
     collapsedHeight: 0,
-    stroke: 'var(--ls-primary-text-color)',
+    stroke: '',
     fill: '',
     noFill: false,
     borderRadius: 8,
@@ -913,8 +913,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return (
       <>
         <rect
-          fill={this.props.fill}
-          stroke={this.props.stroke}
+          fill={this.props.fill ? `var(--ls-highlight-color-${this.props.fill})` : 'var(--ls-secondary-background-color)'}
+          stroke={getComputedColor(this.props.fill, 'background')}
           strokeWidth={this.props.strokeWidth ?? 2}
           fillOpacity={this.props.opacity ?? 0.2}
           width={bounds.width}
@@ -924,7 +924,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         />
         {!this.props.compact && (
           <rect
-            fill="#aaa"
+            fill={this.props.fill ? getComputedColor(this.props.fill, 'background') : 'var(--ls-tertiary-background-color)'}
             x={1}
             y={1}
             width={bounds.width - 2}
@@ -941,8 +941,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           textAnchor="middle"
           fontFamily="var(--ls-font-family)"
           fontSize="32"
-          fill={this.props.stroke}
-          stroke={this.props.stroke}
+          fill="var(--ls-secondary-text-color)"
+          stroke="var(--ls-secondary-text-color)"
         >
           {this.props.blockType === 'P' ? this.props.pageId : ''}
         </text>
