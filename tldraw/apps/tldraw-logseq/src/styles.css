@@ -685,7 +685,6 @@ button.tl-select-input-trigger {
   overflow: hidden;
   user-select: text;
   transform-origin: top left;
-  background: var(--ls-secondary-background-color);
 
   &[data-collapsed='true'][data-editing='false'] {
     @apply overflow-hidden;
@@ -697,7 +696,7 @@ button.tl-select-input-trigger {
 }
 
 .tl-logseq-portal-header {
-  @apply flex items-center w-full;
+  @apply relative flex items-center w-full;
 
   height: 40px;
   flex-shrink: 0;
@@ -705,17 +704,11 @@ button.tl-select-input-trigger {
   color: var(--ls-title-text-color);
   border-top-left-radius: 8px;
   border-top-right-radius: 8px;
-  background: var(--ls-tertiary-background-color);
   padding: 0 1rem;
   gap: 0.5em;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
-
-  &.tl-logseq-portal-header-block {
-    background: linear-gradient(0deg, transparent, var(--ls-tertiary-background-color));
-  }
-
 
   .page-ref {
     color: var(--ls-title-text-color);
@@ -779,7 +772,7 @@ button.tl-select-input-trigger {
 }
 
 .tl-logseq-cp-container {
-  @apply h-full w-full rounded-lg;
+  @apply relative h-full w-full rounded-lg;
 
   border-top-left-radius: 0;
   border-top-right-radius: 0;

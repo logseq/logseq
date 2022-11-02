@@ -72,24 +72,26 @@ const LogseqTypeTag = ({
 }
 
 const LogseqPortalShapeHeader = observer(
-  ({ type, fill, children }: { type: 'P' | 'B'; fill: string; children: React.ReactNode }) => {
+  ({ type, fill, opacity, children }: { type: 'P' | 'B'; fill: string; opacity: number; children: React.ReactNode }) => {
     const bgColor = getComputedColor(fill, 'background')
 
     return (
-      <div
-        className={`tl-logseq-portal-header tl-logseq-portal-header-${
-          type === 'P' ? 'page' : 'block'
-        }`}
-        style={{
-          background:
+      <div className={`tl-logseq-portal-header tl-logseq-portal-header-${type === 'P' ? 'page' : 'block'}`}>
+        <div
+          className="absolute inset-0 tl-logseq-portal-header-bg"
+          style={{
+            opacity,
+            background:
             type === 'P'
               ? bgColor
               : `linear-gradient(0deg, var(--ls-highlight-color-${
                   fill ? fill : 'default'
                 }), ${bgColor}`,
-        }}
-      >
-        {children}
+          }}
+        ></div>
+        <div className="relative">
+          {children}
+        </div>
       </div>
     )
   }
@@ -680,7 +682,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
   PortalComponent = observer(({}: TLComponentProps) => {
     const {
-      props: { pageId, fill },
+      props: { pageId, fill, opacity },
     } = this
     const { renderers } = React.useContext(LogseqContext)
     const app = useApp<Shape>()
@@ -724,12 +726,16 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return (
       <div
         ref={cpRefContainer}
-        className="tl-logseq-cp-container"
-        style={{
-          background: fill ? `var(--ls-highlight-color-${fill})` : 'transparent',
-          overflow: this.props.isAutoResizing ? 'visible' : 'auto',
-        }}
+        className="relative tl-logseq-cp-container"
+        style={{overflow: this.props.isAutoResizing ? 'visible' : 'auto'}}
       >
+        <div
+          className="absolute inset-0 tl-logseq-cp-container-bg"
+          style={{
+            background: fill ? `var(--ls-highlight-color-${fill})` : 'var(--ls-secondary-background-color)',
+            opacity
+          }}
+        ></div>
         {this.props.blockType === 'B' && this.props.compact ? (
           <Block blockId={pageId} />
         ) : (
@@ -860,11 +866,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                   width: `calc(100% / ${scaleRatio})`,
                   height: `calc(100% / ${scaleRatio})`,
                   transform: `scale(${scaleRatio})`,
-                  opacity: isErasing ? 0.2 : opacity,
+                  opacity: isErasing ? 0.2 : 1,
                 }}
               >
                 {!this.props.compact && !targetNotFound && (
-                  <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'} fill={fill}>
+                  <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'} fill={fill} opacity={opacity}>
                     {this.props.blockType === 'P' ? (
                       <PageNameLink pageName={pageId} />
                     ) : (
@@ -925,6 +931,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         {!this.props.compact && (
           <rect
             fill={this.props.fill ? getComputedColor(this.props.fill, 'background') : 'var(--ls-tertiary-background-color)'}
+            fillOpacity={this.props.opacity ?? 0.2}
             x={1}
             y={1}
             width={bounds.width - 2}
