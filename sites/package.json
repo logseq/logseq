@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "parcel ./index.html --host 0.0.0.0 --public-url http://localhost:1234/",
-    "build": "parcel build ./index.html --public-url https://ls-site.pages.dev/",
+    "build": "parcel build ./index.html --public-url https://ls-site-by6.pages.dev/",
     "dev:cloudflare": "wrangler2 dev"
   },
   "devDependencies": {
