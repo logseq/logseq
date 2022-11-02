@@ -35,6 +35,7 @@
             (p/resolved result))
           (let [error (gobj/get result "stderr")]
             (when-not (string/blank? error)
+              ;; TODO git rebase --abort if needed
               (log-error error))
             (p/rejected error)))))))
 
@@ -102,7 +103,9 @@
 
 (defn pull!
   []
-  (run-git! #js ["pull" "--rebase"]))
+  (run-git! #js ["pull" "--rebase"])
+  ;; TODO git rebase --abort if needed
+)
 
 (defn push!
   []
@@ -110,8 +113,8 @@
 
 (defn commit!
   [message]
-  (when (not (state/git-auto-pull-disabled?)) (pull!))
   (run-git! #js ["commit" "-m" message])
+  (when (not (state/git-auto-pull-disabled?)) (pull!))
   (when (not (state/git-auto-push-disabled?)) (push!)))
 
 (defn add-all-and-commit!
