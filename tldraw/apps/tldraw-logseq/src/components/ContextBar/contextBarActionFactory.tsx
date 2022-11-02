@@ -326,7 +326,7 @@ const NoFillAction = observer(() => {
       pressed={noFill}
       onPressedChange={handleChange}
     >
-      <TablerIcon name={noFill ?  "droplet-off" : "droplet"} />
+      <TablerIcon name={noFill ? 'droplet-off' : 'droplet'} />
     </ToggleInput>
   )
 })

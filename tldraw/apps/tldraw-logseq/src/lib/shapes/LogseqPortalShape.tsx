@@ -72,26 +72,38 @@ const LogseqTypeTag = ({
 }
 
 const LogseqPortalShapeHeader = observer(
-  ({ type, fill, opacity, children }: { type: 'P' | 'B'; fill: string; opacity: number; children: React.ReactNode }) => {
+  ({
+    type,
+    fill,
+    opacity,
+    children,
+  }: {
+    type: 'P' | 'B'
+    fill: string
+    opacity: number
+    children: React.ReactNode
+  }) => {
     const bgColor = getComputedColor(fill, 'background')
 
     return (
-      <div className={`tl-logseq-portal-header tl-logseq-portal-header-${type === 'P' ? 'page' : 'block'}`}>
+      <div
+        className={`tl-logseq-portal-header tl-logseq-portal-header-${
+          type === 'P' ? 'page' : 'block'
+        }`}
+      >
         <div
           className="absolute inset-0 tl-logseq-portal-header-bg"
           style={{
             opacity,
             background:
-            type === 'P'
-              ? bgColor
-              : `linear-gradient(0deg, var(--ls-highlight-color-${
-                  fill ? fill : 'default'
-                }), ${bgColor}`,
+              type === 'P'
+                ? bgColor
+                : `linear-gradient(0deg, var(--ls-highlight-color-${
+                    fill ? fill : 'default'
+                  }), ${bgColor}`,
           }}
         ></div>
-        <div className="relative">
-          {children}
-        </div>
+        <div className="relative">{children}</div>
       </div>
     )
   }
@@ -727,13 +739,15 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       <div
         ref={cpRefContainer}
         className="relative tl-logseq-cp-container"
-        style={{overflow: this.props.isAutoResizing ? 'visible' : 'auto'}}
+        style={{ overflow: this.props.isAutoResizing ? 'visible' : 'auto' }}
       >
         <div
           className="absolute inset-0 tl-logseq-cp-container-bg"
           style={{
-            background: fill ? `var(--ls-highlight-color-${fill})` : 'var(--ls-secondary-background-color)',
-            opacity
+            background: fill
+              ? `var(--ls-highlight-color-${fill})`
+              : 'var(--ls-secondary-background-color)',
+            opacity,
           }}
         ></div>
         {this.props.blockType === 'B' && this.props.compact ? (
@@ -837,7 +851,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return (
       <HTMLContainer
         style={{
-          pointerEvents: 'all'
+          pointerEvents: 'all',
         }}
         {...events}
       >
@@ -870,7 +884,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 }}
               >
                 {!this.props.compact && !targetNotFound && (
-                  <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'} fill={fill} opacity={opacity}>
+                  <LogseqPortalShapeHeader
+                    type={this.props.blockType ?? 'P'}
+                    fill={fill}
+                    opacity={opacity}
+                  >
                     {this.props.blockType === 'P' ? (
                       <PageNameLink pageName={pageId} />
                     ) : (
@@ -919,7 +937,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return (
       <>
         <rect
-          fill={this.props.fill ? `var(--ls-highlight-color-${this.props.fill})` : 'var(--ls-secondary-background-color)'}
+          fill={
+            this.props.fill
+              ? `var(--ls-highlight-color-${this.props.fill})`
+              : 'var(--ls-secondary-background-color)'
+          }
           stroke={getComputedColor(this.props.fill, 'background')}
           strokeWidth={this.props.strokeWidth ?? 2}
           fillOpacity={this.props.opacity ?? 0.2}
@@ -930,7 +952,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         />
         {!this.props.compact && (
           <rect
-            fill={this.props.fill ? getComputedColor(this.props.fill, 'background') : 'var(--ls-tertiary-background-color)'}
+            fill={
+              this.props.fill
+                ? getComputedColor(this.props.fill, 'background')
+                : 'var(--ls-tertiary-background-color)'
+            }
             fillOpacity={this.props.opacity ?? 0.2}
             x={1}
             y={1}

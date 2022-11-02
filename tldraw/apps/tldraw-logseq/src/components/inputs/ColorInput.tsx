@@ -11,7 +11,14 @@ interface ColorInputProps extends React.InputHTMLAttributes<HTMLButtonElement> {
   setOpacity: (value: number) => void
 }
 
-export function ColorInput({ color, opacity, collisionRef, setColor, setOpacity, ...rest }: ColorInputProps) {
+export function ColorInput({
+  color,
+  opacity,
+  collisionRef,
+  setColor,
+  setOpacity,
+  ...rest
+}: ColorInputProps) {
   const ref = React.useRef<HTMLDivElement>(null)
 
   function renderColor(color: string) {
@@ -32,7 +39,12 @@ export function ColorInput({ color, opacity, collisionRef, setColor, setOpacity,
         <button className="tl-color-drip mx-1">{renderColor(color)}</button>
       </Popover.Trigger>
 
-      <Popover.Content className="tl-popover-content" side="top" sideOffset={15} collisionBoundary={collisionRef}>
+      <Popover.Content
+        className="tl-popover-content"
+        side="top"
+        sideOffset={15}
+        collisionBoundary={collisionRef}
+      >
         <div className={'tl-color-palette'}>
           {Object.values(Color).map(value => (
             <button
@@ -62,7 +74,6 @@ export function ColorInput({ color, opacity, collisionRef, setColor, setOpacity,
 
         <Popover.Arrow className="tl-popover-arrow" />
       </Popover.Content>
-
     </Popover.Root>
   )
 }
