@@ -10,7 +10,6 @@
             [frontend.search.agency :as search-agency]
             [frontend.search.db :as search-db :refer [indices]]
             [frontend.search.protocol :as protocol]
-            [frontend.modules.datascript-report.core :as ds-report]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.property :as property]
@@ -262,12 +261,13 @@
                (get-pages-from-datoms-impl pages))))))
 
 (defn- get-indirect-pages
-  "Return the set of pages that will have content updated" 
+  "Return the set of pages that will have content updated"
   [tx-report]
   (let [data   (:tx-data tx-report)
         datoms (filter
                 (fn [datom]
-                  (contains? #{:file/content} (:a datom)))
+                  (and (:added datom)
+                       (contains? #{:file/content} (:a datom))))
                 data)]
     (when (seq datoms)
       (->> datoms
@@ -318,7 +318,7 @@
       (let [indice-pages   (map search-db/page->index updated-pages)
             invalid-set    (->> (map (fn [updated indiced] ;; get id of pages without valid page index
                                        (if indiced nil (:db/id updated)))
-                                     pages-to-add indice-pages)
+                                     updated-pages indice-pages)
                                 (remove nil?)
                                 set)
             pages-to-add   (->> indice-pages

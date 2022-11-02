@@ -106,7 +106,7 @@
 
 (defn create-pages-fts-table!
   [db]
-  (let [stmt (prepare db "CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(uuid, content, page)")]
+  (let [stmt (prepare db "CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(uuid, content)")]
     (.run ^object stmt)))
 
 (defn get-search-dir
@@ -276,7 +276,13 @@
                           (str "\"" match-input "\""))
             non-match-input (str "%" (string/replace q #"\s+" "%") "%")
             limit  (or limit 20)
-            select "select rowid, uuid, content from pages_fts where "
+            ;; https://www.sqlite.org/fts5.html#the_highlight_function
+            ;; the 2nd column in pages_fts (content)
+            ;; pfts_2lqh is a key for retrieval
+            ;; highlight and snippet only works for some matching with high rank
+            highlight-aux "highlight(pages_fts, 1, '$pfts_2lqh>$', '$<pfts_2lqh$')"
+            snippet-aux "snippet(pages_fts, 1, '$pfts_2lqh>$', '$<pfts_2lqh$', '...', 32)"
+            select (str "select rowid, uuid, " highlight-aux ", " snippet-aux " from pages_fts where ")
             match-sql (str select
                            " content match ? order by rank limit ?")
             non-match-sql (str select
