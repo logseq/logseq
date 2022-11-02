@@ -217,6 +217,37 @@
            (ipc/ipc :userAppCfgs :git/disable-auto-commit? enabled?))
          true)]]]))
 
+(rum/defcs switch-git-auto-pull-row < rum/reactive
+  [state t]
+  (let [enabled? (state/get-git-auto-pull-enabled?)]
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+     [:label.block.text-sm.font-medium.leading-5.opacity-70
+      (t :settings-page/git-pull-switcher-label)]
+     [:div
+      [:div.rounded-md.sm:max-w-xs
+       (ui/toggle
+         enabled?
+         (fn []
+           (state/set-state! [:electron/user-cfgs :git/disable-auto-pull?] enabled?)
+           (ipc/ipc :userAppCfgs :git/disable-auto-pull? enabled?))
+         true)]]]))
+
+
+(rum/defcs switch-git-auto-push-row < rum/reactive
+  [state t]
+  (let [enabled? (state/get-git-auto-push-enabled?)]
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+     [:label.block.text-sm.font-medium.leading-5.opacity-70
+      (t :settings-page/git-push-switcher-label)]
+     [:div
+      [:div.rounded-md.sm:max-w-xs
+       (ui/toggle
+         enabled?
+         (fn []
+           (state/set-state! [:electron/user-cfgs :git/disable-auto-push?] enabled?)
+           (ipc/ipc :userAppCfgs :git/disable-auto-push? enabled?))
+         true)]]]))
+
 (rum/defcs git-auto-commit-seconds < rum/reactive
   [state t]
   (let [secs (or (state/sub [:electron/user-cfgs :git/auto-commit-seconds]) 60)]
@@ -609,6 +640,8 @@
    [:br]
    (switch-git-auto-commit-row t)
    (git-auto-commit-seconds t)
+   (switch-git-auto-pull-row t)
+   (switch-git-auto-push-row t)
 
    (ui/admonition
      :warning

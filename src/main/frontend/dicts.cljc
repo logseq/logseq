@@ -195,6 +195,8 @@
         :settings-page/git-desc "is used for pages version control, you can click the vertical three dots menu to check the page's history."
         :settings-page/git-confirm "You need to restart the app after updating the Git settings."
         :settings-page/git-switcher-label "Enable Git auto commit"
+        :settings-page/git-pull-switcher-label "Enable Git auto pull before each commit"
+        :settings-page/git-push-switcher-label "Enable Git auto push after each commit"
         :settings-page/git-commit-delay "Git auto commit seconds"
         :settings-page/edit-config-edn "Edit config.edn"
         :settings-page/edit-global-config-edn "Edit global config.edn"

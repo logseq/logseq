@@ -1712,6 +1712,14 @@ Similar to re-frame subscriptions"
   []
   (false? (sub [:electron/user-cfgs :git/disable-auto-commit?])))
 
+(defn get-git-auto-pull-enabled?
+  []
+  (false? (sub [:electron/user-cfgs :git/disable-auto-pull?])))
+
+(defn get-git-auto-push-enabled?
+  []
+  (false? (sub [:electron/user-cfgs :git/disable-auto-push?])))
+
 (defn set-last-key-code!
   [key-code]
   (set-state! :editor/last-key-code key-code))

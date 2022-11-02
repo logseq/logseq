@@ -6,11 +6,15 @@
             [electron.logger :as logger]
             [promesa.core :as p]
             [clojure.string :as string]
+            [cljs-time.local :as t]
+            [cljs-time.format :as tf]
             ["fs-extra" :as fs]
             ["path" :as path]
             ["os" :as os]))
 
 (def log-error (partial logger/error "[Git]"))
+
+(def custom-formatter (tf/formatter "ddMMM@HH:mm:ss"))
 
 (defn get-graph-git-dir
   []
@@ -106,16 +110,16 @@
 
 (defn commit!
   [message]
-  (pull!)
+  (when (not (state/git-auto-pull-disabled?)) (pull!))
   (run-git! #js ["commit" "-m" message])
-  (push!))
+  (when (not (state/git-auto-push-disabled?)) (push!)))
 
 (defn add-all-and-commit!
   ([]
    (add-all-and-commit! nil))
   ([message]
    (let [message (if (string/blank? message)
-                   "Auto saved by Logseq"
+                   (string/join " - " ["Logseq AutoSave" (tf/unparse custom-formatter (t/local-now))])
                    message)]
      (->
       (p/let [_ (init!)

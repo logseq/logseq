@@ -45,6 +45,14 @@
   []
   (get-in @state [:config :git/disable-auto-commit?] true))
 
+(defn git-auto-pull-disabled?
+  []
+  (get-in @state [:config :git/disable-auto-pull?] true))
+
+(defn git-auto-push-disabled?
+  []
+  (get-in @state [:config :git/disable-auto-push?] true))
+
 (defn get-graph-path
   []
   (:graph/current @state))
