@@ -32,38 +32,37 @@ export function ColorInput({ color, opacity, collisionRef, setColor, setOpacity,
         <button className="tl-color-drip mx-1">{renderColor(color)}</button>
       </Popover.Trigger>
 
-      <Popover.Portal>
-        <Popover.Content className="tl-popover-content" side="top" sideOffset={15} collisionBoundary={collisionRef}>
-          <div className={'tl-color-palette'}>
-            {Object.values(Color).map(value => (
-              <button
-                className={`tl-color-drip m-1${value === color ? ' active' : ''}`}
-                onClick={() => setColor(value)}
-              >
-                {renderColor(value)}
-              </button>
-            ))}
-          </div>
-
-          <div className="mx-1 my-2">
-            <Slider.Root
-              defaultValue={[opacity]}
-              onValueCommit={value => setOpacity(value[0])}
-              max={1}
-              step={0.1}
-              aria-label="Opacity"
-              className="tl-slider-root"
+      <Popover.Content className="tl-popover-content" side="top" sideOffset={15} collisionBoundary={collisionRef}>
+        <div className={'tl-color-palette'}>
+          {Object.values(Color).map(value => (
+            <button
+              className={`tl-color-drip m-1${value === color ? ' active' : ''}`}
+              onClick={() => setColor(value)}
             >
-              <Slider.Track className="tl-slider-track">
-                <Slider.Range className="tl-slider-range" />
-              </Slider.Track>
-              <Slider.Thumb className="tl-slider-thumb" />
-            </Slider.Root>
-          </div>
+              {renderColor(value)}
+            </button>
+          ))}
+        </div>
 
-          <Popover.Arrow className="tl-popover-arrow" />
-        </Popover.Content>
-      </Popover.Portal>
+        <div className="mx-1 my-2">
+          <Slider.Root
+            defaultValue={[opacity]}
+            onValueCommit={value => setOpacity(value[0])}
+            max={1}
+            step={0.1}
+            aria-label="Opacity"
+            className="tl-slider-root"
+          >
+            <Slider.Track className="tl-slider-track">
+              <Slider.Range className="tl-slider-range" />
+            </Slider.Track>
+            <Slider.Thumb className="tl-slider-thumb" />
+          </Slider.Root>
+        </div>
+
+        <Popover.Arrow className="tl-popover-arrow" />
+      </Popover.Content>
+
     </Popover.Root>
   )
 }
