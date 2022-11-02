@@ -26,7 +26,7 @@ export class PenShape extends TLDrawShape<PenShapeProps> {
     points: [],
     isComplete: false,
     stroke: '',
-    fill: 's',
+    fill: '',
     noFill: false,
     strokeType: 'line',
     strokeWidth: 2,
