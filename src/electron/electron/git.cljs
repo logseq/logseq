@@ -107,15 +107,16 @@
   ;; TODO git rebase --abort if needed
 )
 
-(defn push!
+(defn pushWhen!
   []
-  (run-git! #js ["push" "origin"]))
+  (when (not (state/git-auto-push-disabled?)) 
+    (run-git! #js ["push" "origin"])))
 
 (defn commit!
   [message]
   (run-git! #js ["commit" "-m" message])
   (when (not (state/git-auto-pull-disabled?)) (pull!))
-  (when (not (state/git-auto-push-disabled?)) (push!)))
+  (pushWhen!))
 
 (defn add-all-and-commit!
   ([]
