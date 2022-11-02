@@ -9,6 +9,12 @@
          "2022-08-12T00:00:00Z"
 
          "2022-08-12T00:00:00Z"
+         "2022-08-12T00:00:00Z"
+
+         #{"Aug 12th, 2022"}
+         "2022-08-12T00:00:00Z"
+
+         #{"2022-08-12T00:00:00Z"}
          "2022-08-12T00:00:00Z")))
 
 (deftest test-normalize-percentage
@@ -21,7 +27,10 @@
          0
 
          "-5%"
-         -0.05)))
+         -0.05
+
+         #{"50%"}
+         0.5)))
 
 (deftest test-random-values
   (testing "random values should not be processed"

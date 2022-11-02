@@ -83,7 +83,7 @@
         (map? result)
         (do
           (state/set-state! :user/info result)
-          (let [status (if (user-handler/alpha-user?) :welcome :unavailable)]
+          (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
               (async/<! (file-sync-handler/load-session-graphs))
               (p/let [repos (repo-handler/refresh-repos!)]
@@ -134,7 +134,6 @@
        (state/set-current-repo! graph)
        ;; load config
        (repo-config-handler/restore-repo-config! graph)
-       (st/refresh!)
        (when-not (= :draw (state/get-current-route))
          (route-handler/redirect-to-home!))
        (when-let [dir-name (config/get-repo-dir graph)]
@@ -355,6 +354,9 @@
 (defmethod handle :go/plugins-waiting-lists [_]
   (plugin/open-waiting-updates-modal!))
 
+(defmethod handle :go/plugins-from-file [[_ plugins]]
+  (plugin/open-plugins-from-file-modal! plugins))
+
 (defmethod handle :go/plugins-settings [[_ pid nav? title]]
   (if pid
     (do
@@ -554,7 +556,6 @@
 
 (defn- refresh-cb []
   (page-handler/create-today-journal!)
-  (st/refresh!)
   (file-sync-restart!))
 
 (defmethod handle :graph/ask-for-re-fresh [_]
@@ -565,6 +566,7 @@
      (ui/button
       (t :yes)
       :autoFocus "on"
+      :class "ui__modal-enter"
       :large? true
       :on-click (fn []
                   (state/close-modal!)
@@ -640,7 +642,8 @@
   (when (db/get-db graph)
     (let [file (:block/file page-entity)]
       (when-let [path (:file/path file)]
-        (when (not= content (:file/content file))
+        (when (and (not= content (:file/content file))
+                   (:file/content file))
           (sync/add-new-version-file graph path (:file/content file)))
         (p/let [_ (file-handler/alter-file graph
                                            path
@@ -742,7 +745,7 @@
   (state/pub-event! [:notification/show
                      {:content
                       [:div
-                       [:h2.title "Oops, those files are failed to imported to your graph:"]
+                       [:h2.title "Oops. These files failed to import to your graph:"]
                        [:ol.my-2
                         (for [[file error] parse-errors]
                           (let [data (ex-data error)]

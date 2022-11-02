@@ -57,4 +57,3 @@
                              (when-not (.isDestroyed win)
                                (.. win -webContents
                                    (send progress-notify-chan (bean/->js progress-info))))))))
-                                   

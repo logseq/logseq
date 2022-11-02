@@ -21,6 +21,9 @@
     :block/uuid
     :block/content
     :block/format
+    :block/created-at
+    :block/updated-at
+    :block/collapsed?
     {:block/page      [:block/uuid]}
     {:block/left      [:block/uuid]}
     {:block/parent    [:block/uuid]}])
@@ -31,6 +34,7 @@
     (dissoc block
             :db/id
             :block/uuid ;; shape block uuid is read from properties
+            :block/collapsed?
             :block/content
             :block/format
             :block/left

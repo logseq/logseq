@@ -45,6 +45,7 @@
     "mobx": "^6.6.2",
     "mobx-react-lite": "^3.4.0",
     "mousetrap": "^1.6.5",
+    "potpack": "^1.0.2",
     "proxy-compare": "^2.3.0",
     "rbush": "^3.0.1",
     "uuid": "^8.0.0"

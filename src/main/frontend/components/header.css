@@ -19,7 +19,7 @@
 
   > .l {
     @apply pl-2;
-    
+
     width: var(--ls-left-sidebar-width);
     height: 100%;
     align-items: center;
@@ -27,10 +27,10 @@
   }
 
   > .r {
-    @apply pr-4;
     align-items: center;
     flex: 1;
     justify-content: flex-end;
+    padding-right: 6px;
   }
 
   /* To prevent header glitch on Safari */
@@ -44,7 +44,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    opacity: .8;
 
     .ti, .tie {
       font-size: 20px;
@@ -202,7 +201,7 @@
 }
 
 .button.icon {
-  @apply w-8 h-8 p-1;
+  @apply w-8 h-8 p-1 flex items-center justify-center;
 }
 
 .button.icon.add-graph-btn {
@@ -314,7 +313,7 @@ html.is-native-ipad {
 }
 
 html.is-native-iphone {
-  --ls-headbar-inner-top-padding: 36px;
+  --ls-headbar-inner-top-padding: 38px;
 
   .left-sidebar-inner {
     .create {

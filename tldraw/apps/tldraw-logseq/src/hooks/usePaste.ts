@@ -41,6 +41,13 @@ const safeParseJson = (json: string) => {
   }
 }
 
+const getWhiteboardsTldrFromText = (text: string) => {
+  const innerText = text.match(/<whiteboard-tldr>(.*)<\/whiteboard-tldr>/)?.[1]
+  if (innerText) {
+    return safeParseJson(decodeURIComponent(innerText))
+  }
+}
+
 interface VideoImageAsset extends TLAsset {
   size?: number[]
 }
@@ -139,11 +146,13 @@ export function usePaste() {
       }
 
       function createHTMLShape(text: string) {
-        return {
-          ...HTMLShape.defaultProps,
-          html: text,
-          point: [point[0], point[1]],
-        }
+        return [
+          {
+            ...HTMLShape.defaultProps,
+            html: text,
+            point: [point[0], point[1]],
+          },
+        ]
       }
 
       async function tryCreateShapesFromDataTransfer(dataTransfer: DataTransfer) {
@@ -208,7 +217,7 @@ export function usePaste() {
         }
         const rawText = await getDataFromType(item, 'text/html')
         if (rawText) {
-          return [createHTMLShape(rawText)]
+          return tryCreateShapeHelper(tryCreateClonedShapesFromJSON, createHTMLShape)(rawText)
         }
         return null
       }
@@ -223,6 +232,8 @@ export function usePaste() {
             allSelectedBlocks && allSelectedBlocks?.length > 1
               ? allSelectedBlocks.map(b => b.uuid)
               : [text]
+          // ensure all uuid in blockUUIDs is persisted
+          window.logseq?.api?.set_blocks_id?.(blockUUIDs)
           const tasks = blockUUIDs.map(uuid => tryCreateLogseqPortalShapesFromString(`((${uuid}))`))
           const newShapes = (await Promise.all(tasks)).flat().filter(isNonNullable)
           return newShapes.map((s, idx) => {
@@ -244,7 +255,6 @@ export function usePaste() {
           return tryCreateShapeHelper(
             tryCreateShapeFromURL,
             tryCreateShapeFromIframeString,
-            tryCreateClonedShapesFromJSON,
             tryCreateLogseqPortalShapesFromString
           )(text)
         }
@@ -253,9 +263,9 @@ export function usePaste() {
       }
 
       function tryCreateClonedShapesFromJSON(rawText: string) {
-        const data = safeParseJson(rawText)
+        const data = getWhiteboardsTldrFromText(rawText)
         try {
-          if (data?.type === 'logseq/whiteboard-shapes') {
+          if (data) {
             const shapes = data.shapes as TLShapeModel[]
             assetsToClone = data.assets as TLAsset[]
             const commonBounds = BoundsUtils.getCommonBounds(
@@ -268,6 +278,7 @@ export function usePaste() {
                 maxY: (shape.point?.[1] ?? point[1]) + (shape.size?.[1] ?? 4),
               }))
             )
+            const bindings = data.bindings as Record<string, TLBinding>
             const shapesToCreate = shapes.map(shape => {
               return {
                 ...shape,
@@ -287,9 +298,7 @@ export function usePaste() {
                   return
                 }
                 // try to bind the new shape
-                const binding = app.currentPage.bindings[h.bindingId]
-                // FIXME: if copy from a different whiteboard, the binding info
-                // will not be available
+                const binding = bindings[h.bindingId]
                 if (binding) {
                   // if the copied binding from/to is in the source
                   const oldFromIdx = shapes.findIndex(s => s.id === binding.fromId)
@@ -320,7 +329,7 @@ export function usePaste() {
       }
 
       async function tryCreateShapeFromURL(rawText: string) {
-        if (isValidURL(rawText)) {
+        if (isValidURL(rawText) && !(shiftKey || fromDrop)) {
           const isYoutubeUrl = (url: string) => {
             const youtubeRegex =
               /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:\S+)?$/
@@ -441,7 +450,7 @@ export function usePaste() {
           app.createShapes(allShapesToAdd)
         }
 
-        if (app.selectedShapesArray.length === 1 && allShapesToAdd.length === 1) {
+        if (app.selectedShapesArray.length === 1 && allShapesToAdd.length === 1 && !fromDrop) {
           const source = app.selectedShapesArray[0]
           const target = app.getShapeById(allShapesToAdd[0].id!)!
           app.createNewLineBinding(source, target)

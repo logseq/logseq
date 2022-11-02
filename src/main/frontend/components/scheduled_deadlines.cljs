@@ -22,7 +22,7 @@
                                  (db/get-date-scheduled-or-deadlines (string/capitalize page-name)))]
     (when (seq scheduled-or-deadlines)
       (ui/foldable
-       [:h2.font-bold.opacity-50 "SCHEDULED AND DEADLINE"]
+       [:h2.font-medium "SCHEDULED AND DEADLINE"]
        [:div.scheduled-deadlines.references-blocks.mb-6
         (let [ref-hiccup (block/->hiccup scheduled-or-deadlines
                                          {:id (str page-name "-agenda")

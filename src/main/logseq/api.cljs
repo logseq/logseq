@@ -21,6 +21,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.handler.command-palette :as palette-handler]
@@ -48,8 +49,8 @@
       (fn [a]
         (cond
           (keyword? a)
-          (cond-> (name a)  
-            camel-case? 
+          (cond-> (name a)
+            camel-case?
             (csk/->camelCase))
 
           (uuid? a) (str a)
@@ -431,12 +432,14 @@
   (fn [content]
     (when-let [input-id (state/get-edit-input-id)]
       (commands/simple-insert! input-id content {})
-      (.focus (gdom/getElement input-id)))))
+      (when-let [input (gdom/getElement input-id)]
+        (.focus input)))))
 
 (def ^:export restore_editing_cursor
   (fn []
     (when-let [input-id (state/get-edit-input-id)]
-      (.focus (gdom/getElement input-id)))))
+      (when-let [input (gdom/getElement input-id)]
+        (.focus input)))))
 
 (def ^:export get_editing_cursor_position
   (fn []
@@ -774,7 +777,7 @@
     (when-let [{:keys [repo id] :as mft} (bean/->clj manifest)]
       (if-not (and repo id)
         (throw (js/Error. "[required] :repo :id"))
-        (plugin-handler/install-marketplace-plugin mft)))))
+        (plugin-common-handler/install-marketplace-plugin mft)))))
 
 ;; db
 (defn ^:export q

@@ -482,7 +482,7 @@
       `replace-empty-target?`: If the `target-block` is an empty block, whether
                                to replace it, it defaults to be `false`.
     ``"
-  [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target?]}]
+  [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target?] :as opts}]
   {:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]}
   (let [target-block' (db/pull (:db/id target-block))
@@ -512,7 +512,10 @@
     (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/left b)))) tx)
       (do
         (state/pub-event! [:instrument {:type :outliner/invalid-structure
-                                        :payload {:data (mapv #(dissoc % :block/content) tx)}}])
+                                        :payload {:blocks blocks
+                                                  :target-block target-block'
+                                                  :opt opts
+                                                  :data (mapv #(dissoc % :block/content) tx)}}])
         (throw (ex-info "Invalid outliner data"
                         {:opts insert-opts
                          :tx (vec tx)

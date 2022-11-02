@@ -116,10 +116,10 @@ jobs:
         run: clojure -M:clj-kondo --parallel --lint src test
 
       - name: Carve lint for unused vars
-        run: bb lint:carve
+        run: bb lint:carve 2>/dev/null
 
       - name: Lint for vars that are too large
-        run: bb lint:large-vars
+        run: bb lint:large-vars 2>/dev/null
 
       - name: Lint for namespaces that aren't documented
-        run: bb lint:ns-docstrings
+        run: bb lint:ns-docstrings 2>/dev/null

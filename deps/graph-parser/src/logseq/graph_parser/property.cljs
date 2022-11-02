@@ -17,9 +17,11 @@
 
 (defn valid-property-name?
   [s]
-  [:pre (string? s)]
+  {:pre [(string? s)]}
   (and (gp-util/valid-edn-keyword? s)
-       (not (re-find #"[\"|^|(|)|{|}]+" s))))
+       (not (re-find #"[\"|^|(|)|{|}]+" s))
+       ;; Disallow tags as property names
+       (not (re-find #"^:#" s))))
 
 (defn properties-ast?
   [block]
@@ -27,10 +29,6 @@
    (vector? block)
    (contains? #{"Property_Drawer" "Properties"}
               (first block))))
-
-(def markers
-  #{"now" "later" "todo" "doing" "done" "wait" "waiting"
-    "canceled" "cancelled" "started" "in-progress"})
 
 ;; Built-in properties are properties that logseq uses for its features. Most of
 ;; these properties are hidden from the user but a few like the editable ones
@@ -60,10 +58,53 @@
    #{:id :custom-id :background-color :background_color :heading :collapsed
      :created-at :updated-at :last-modified-at :created_at :last_modified_at
      :query-table :query-properties :query-sort-by :query-sort-desc :ls-type
-     :hl-type :hl-page :hl-stamp :logseq.macro-name :logseq.macro-arguments
-     :logseq.tldraw.page :logseq.tldraw.shape}
-   (set (map keyword markers))
+     :hl-type :hl-page :hl-stamp :hl-color :logseq.macro-name :logseq.macro-arguments
+     :logseq.tldraw.page :logseq.tldraw.shape
+     ; task markers
+     :todo :doing :now :later :done}
    @built-in-extended-properties))
+
+(def built-in-property-types
+  "Types for built-in properties. Built-in properties whose values are to be
+  parsed by gp-text/parse-non-string-property-value should be added here"
+  {:template-including-parent :boolean
+   :public :boolean
+   :exclude-from-graph-view :boolean
+   :heading :boolean
+   :collapsed :boolean
+   :created-at :integer
+   :created_at :integer
+   :updated-at :integer
+   :last-modified-at :integer
+   :last_modified_at :integer
+   :query-table :boolean
+   :query-sort-desc :boolean
+   :hl-page :integer
+   :hl-stamp :integer
+   :todo :integer
+   :doing :integer
+   :now :integer
+   :later :integer
+   :done :integer})
+
+(assert (set/subset? (set (keys built-in-property-types))
+                     (set/union (hidden-built-in-properties)
+                                (editable-built-in-properties)))
+        "Keys of built-in-property-types must be valid built-in properties")
+
+(defn unparsed-built-in-properties
+  "Properties whose values will not be parsed by gp-text/parse-property"
+  []
+  (set/difference (set/union (hidden-built-in-properties)
+                             (editable-built-in-properties))
+                  ;; Most of these need to be auto-parsed as integers so exclude
+                  ;; them until we have ones that must be unparsed
+                  @built-in-extended-properties
+                  ;; Refs need to be parsed
+                  editable-linkable-built-in-properties
+                  ;; All these should be parsed by gp-text/parse-non-string-property-value
+                  (set (keys built-in-property-types))))
+
 
 (defonce properties-start ":PROPERTIES:")
 (defonce properties-end ":END:")

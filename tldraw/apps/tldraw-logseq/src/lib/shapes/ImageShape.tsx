@@ -48,8 +48,8 @@ export class ImageShape extends TLImageShape<ImageShapeProps> {
       <HTMLContainer {...events} opacity={isErasing ? 0.2 : opacity}>
         {isBinding && <BindingIndicator mode="html" strokeWidth={4} size={[w, h]} />}
 
-        <div style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
-          {asset && (
+        <div className="tl-image-shape-container">
+          {asset ? (
             <img
               src={handlers ? handlers.makeAssetUrl(asset.src) : asset.src}
               draggable={false}
@@ -60,9 +60,10 @@ export class ImageShape extends TLImageShape<ImageShapeProps> {
                 width: w + (l - r),
                 height: h + (t - b),
                 objectFit,
-                pointerEvents: 'all',
               }}
             />
+          ) : (
+            'Asset is missing'
           )}
         </div>
       </HTMLContainer>
@@ -100,6 +101,7 @@ export class ImageShape extends TLImageShape<ImageShapeProps> {
           <img
             src={make_asset_url ? make_asset_url(asset.src) : asset.src}
             draggable={false}
+            loading="lazy"
             style={{
               position: 'relative',
               top: -t,

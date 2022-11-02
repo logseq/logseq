@@ -71,7 +71,7 @@ h1.title.whiteboard-dashboard-title {
 .dashboard-create-card:hover {
   background-color: var(--ls-selection-background-color);
   box-shadow: 0 4px 8px -2px rgba(16, 24, 40, 0.1),
-    0 2px 4px -2px rgba(16, 24, 40, 0.06);
+  0 2px 4px -2px rgba(16, 24, 40, 0.06);
   border: 1px solid var(--ls-page-blockquote-border-color);
 }
 
@@ -101,6 +101,15 @@ h1.title.whiteboard-dashboard-title {
 
 .tl-logseq-cp-container > .ls-block {
   padding: 0;
+}
+
+input.tl-text-input {
+  border: none;
+  padding: 0;
+
+  &:focus {
+    box-shadow: none;
+  }
 }
 
 /**
@@ -140,11 +149,32 @@ h1.title.whiteboard-dashboard-title {
 }
 
 .whiteboard-page-title {
-  @apply inline-flex px-2 py-1;
+  @apply inline-flex px-2 py-1 w-full;
+
   font-size: 20px;
   border-radius: 8px;
   border: 1px solid transparent;
   background: var(--ls-secondary-background-color);
+
+  &-root {
+    max-width: 70%;
+    overflow: hidden;
+  }
+
+  .page-title-sizer-wrapper {
+    width: 98%;
+
+    > .title {
+      @apply whitespace-nowrap min-w-[80px];
+    }
+  }
+
+  .edit-input {
+    width: 100%;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+  }
 }
 
 .whiteboard-page-title:hover {

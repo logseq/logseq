@@ -139,6 +139,18 @@ To write a test that uses a datascript db:
 
 For examples of these tests, see `frontend.db.query-dsl-test` and `frontend.db.model-test`.
 
+### Async Unit Testing
+
+Async unit testing is well supported in ClojureScript.
+https://clojurescript.org/tools/testing#async-testing is a good guide for how to
+do this. We have a couple of test helpers that make testing async easier:
+
+- `frontend.test.helper/deftest-async` - `deftest` for async tests that ensures
+  uncaught exceptions don't abruptly end the test suite. If you don't use this
+  macro for async tests, you are expected to handle unexpected failures in your test
+- `frontend.test.helper/with-reset` - A version of `with-redefs` that works for
+  async contexts
+
 ## Accessibility
 
 Please refer to our [accessibility guidelines](accessibility.md).
@@ -153,15 +165,20 @@ aren't readable.
 
 ## Data validation and generation
 
-We currently use [spec](https://github.com/clojure/spec.alpha) for data
-validation (and generation someday). We may switch to
-[malli](https://github.com/metosin/malli) if we need to datafy our data models
-at some point.
+We use both [spec](https://github.com/clojure/spec.alpha) and
+[malli](https://github.com/metosin/malli) for data validation and (and
+generation someday). malli has the advantage that its schema is data and can be
+used for additional purposes. See plugin-config for an example.
 
 Specs should go under `src/main/frontend/spec/` and be compatible with clojure
-and clojurescript. See `frontend.spec.storage` for an example. By following
-these conventions, specs should also be usable by babashka. This is helpful as it
-allows for third party tools to be written with logseq's data model.
+and clojurescript. See `frontend.spec.storage` for an example.
+
+Malli schemas should go under `src/main/frontend/schema/` and be compatible with clojure
+and clojurescript. See `frontend.schema.handler.plugin-config` for an example.
+
+By following these conventions, these should also be usable by babashka. This is
+helpful as it allows for third party tools to be written with logseq's data
+model.
 
 ## Development Tools
 

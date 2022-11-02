@@ -7,6 +7,7 @@ import {
   TLResizeInfo,
   validUUID,
 } from '@tldraw/core'
+import { Virtuoso } from 'react-virtuoso'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import { useDebouncedValue } from '@tldraw/react'
 import Vec from '@tldraw/vec'
@@ -71,12 +72,7 @@ const LogseqTypeTag = ({
 
 const LogseqPortalShapeHeader = observer(
   ({ type, children }: { type: 'P' | 'B'; children: React.ReactNode }) => {
-    return (
-      <div className="tl-logseq-portal-header">
-        <LogseqTypeTag type={type} />
-        {children}
-      </div>
-    )
+    return <div className={`tl-logseq-portal-header tl-logseq-portal-header-${type === "P" ? "page" : "block"}`}>{children}</div>
   }
 )
 
@@ -156,7 +152,7 @@ const CircleButton = ({
   }, [active])
 
   return (
-    <div
+    <button
       data-active={active}
       data-recently-changed={recentlyChanged}
       style={style}
@@ -167,7 +163,7 @@ const CircleButton = ({
         {otherIcon && <TablerIcon name={otherIcon} />}
         <TablerIcon name={icon} />
       </div>
-    </div>
+    </button>
   )
 }
 
@@ -629,30 +625,35 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           />
         </div>
         <div className="tl-quick-search-options" ref={optionsWrapperRef}>
-          {options.map(({ actionIcon, onChosen, element }, index) => {
-            return (
-              <div
-                key={index}
-                data-focused={index === focusedOptionIdx}
-                className="tl-quick-search-option"
-                tabIndex={0}
-                onMouseEnter={() => {
-                  setPrefixIcon(actionIcon)
-                  setFocusedOptionIdx(index)
-                }}
-                // we have to use mousedown && stop propagation EARLY, otherwise some
-                // default behavior of clicking the rendered elements will happen
-                onMouseDownCapture={e => {
-                  if (onChosen()) {
-                    e.stopPropagation()
-                    e.preventDefault()
-                  }
-                }}
-              >
-                {element}
-              </div>
-            )
-          })}
+          <Virtuoso
+            style={{ height: Math.min(Math.max(1, options.length), 12) * 36 }}
+            totalCount={options.length}
+            itemContent={index => {
+              const { actionIcon, onChosen, element } = options[index]
+              return (
+                <div
+                  key={index}
+                  data-focused={index === focusedOptionIdx}
+                  className="tl-quick-search-option"
+                  tabIndex={0}
+                  onMouseEnter={() => {
+                    setPrefixIcon(actionIcon)
+                    setFocusedOptionIdx(index)
+                  }}
+                  // we have to use mousedown && stop propagation EARLY, otherwise some
+                  // default behavior of clicking the rendered elements will happen
+                  onMouseDownCapture={e => {
+                    if (onChosen()) {
+                      e.stopPropagation()
+                      e.preventDefault()
+                    }
+                  }}
+                >
+                  {element}
+                </div>
+              )
+            }}
+          />
         </div>
       </div>
     )
@@ -886,7 +887,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   validateProps = (props: Partial<LogseqPortalShapeProps>) => {
     if (props.size !== undefined) {
       const scale = levelToScale[this.props.scaleLevel ?? 'md']
-      props.size[0] = Math.max(props.size[0], 240 * scale)
+      props.size[0] = Math.max(props.size[0], 60 * scale)
       props.size[1] = Math.max(props.size[1], HEADER_HEIGHT * scale)
     }
     return withClampedStyles(this, props)

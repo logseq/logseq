@@ -153,6 +153,10 @@
      :electron/updater                      {}
      :electron/user-cfgs                    nil
 
+     ;; assets
+     :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)
+     :assets/alias-dirs                     (or (storage/get :assets/alias-dirs) [])
+
      ;; mobile
      :mobile/show-action-bar?               false
      :mobile/actioned-block                 nil
@@ -193,6 +197,7 @@
      ;; pdf
      :pdf/current                           nil
      :pdf/ref-highlight                     nil
+     :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)
 
      ;; all notification contents as k-v pairs
      :notification/contents                 {}
@@ -287,6 +292,10 @@
 ;;  (re-)fetches get-current-repo needlessly
 ;; TODO: Add consistent validation. Only a few config options validate at get time
 
+(defn get-current-pdf
+  []
+  (:pdf/current @state))
+
 (def default-config
   "Default config for a repo-specific, user config"
   {:feature/enable-search-remove-accents? true
@@ -296,7 +305,7 @@
    :file/name-format :legacy})
 
 ;; State that most user config is dependent on
-(declare get-current-repo)
+(declare get-current-repo sub set-state!)
 
 (defn merge-configs
   "Merges user configs in given orders. All values are overriden except for maps
@@ -342,6 +351,17 @@ should be done through this fn in order to get global config and config defaults
   (merge
     built-in-macros
     (:macros (get-config))))
+
+(defn set-assets-alias-enabled!
+  [v]
+  (set-state! :assets/alias-enabled? (boolean v))
+  (storage/set :assets/alias-enabled? (boolean v)))
+
+(defn set-assets-alias-dirs!
+  [dirs]
+  (when dirs
+    (set-state! :assets/alias-dirs dirs)
+    (storage/set :assets/alias-dirs dirs)))
 
 (defn get-custom-css-link
   []
@@ -557,7 +577,6 @@ Similar to re-frame subscriptions"
    (enable-whiteboards? (get-current-repo)))
   ([repo]
    (and
-    (util/electron?)
     ((resolve 'frontend.handler.user/alpha-user?)) ;; using resolve to avoid circular dependency
     (:feature/enable-whiteboards? (sub-config repo)))))
 
@@ -987,7 +1006,7 @@ Similar to re-frame subscriptions"
                                             (cons [repo db-id block-type])
                                             (distinct))))
       (open-right-sidebar!)
-      (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scrollable")]
+      (when-let [elem (gdom/getElementByClass "sidebar-item-list")]
         (util/scroll-to elem 0)))))
 
 (defn sidebar-remove-block!
@@ -1125,11 +1144,12 @@ Similar to re-frame subscriptions"
 (defn load-app-user-cfgs
   ([] (load-app-user-cfgs false))
   ([refresh?]
-   (p/let [cfgs (if (or refresh? (nil? (:electron/user-cfgs @state)))
-                  (ipc/ipc "userAppCfgs")
-                  (:electron/user-cfgs @state))
-           cfgs (if (object? cfgs) (bean/->clj cfgs) cfgs)]
-          (set-state! :electron/user-cfgs cfgs))))
+   (when (util/electron?)
+     (p/let [cfgs (if (or refresh? (nil? (:electron/user-cfgs @state)))
+                    (ipc/ipc :userAppCfgs)
+                    (:electron/user-cfgs @state))
+             cfgs (if (object? cfgs) (bean/->clj cfgs) cfgs)]
+       (set-state! :electron/user-cfgs cfgs)))))
 
 (defn setup-electron-updater!
   []
@@ -1409,7 +1429,8 @@ Similar to re-frame subscriptions"
 
 (defn active-tldraw-app
   []
-  ^js js/window.tln)
+  (when-let [tldraw-el (.closest js/document.activeElement ".logseq-tldraw[data-tlapp]")]
+    (gobj/get js/window.tlapps (.. tldraw-el -dataset -tlapp))))
 
 (defn tldraw-editing-logseq-block?
   []
@@ -1602,9 +1623,14 @@ Similar to re-frame subscriptions"
   [args]
   (set-state! :editor/args args))
 
+(defn whiteboard-active-but-not-editing-portal?
+  []
+  (and (active-tldraw-app) (not (tldraw-editing-logseq-block?))))
+
 (defn block-component-editing?
   []
-  (:block/component-editing-mode? @state))
+  (or (:block/component-editing-mode? @state)
+      (whiteboard-active-but-not-editing-portal?)))
 
 (defn set-block-component-editing-mode!
   [value]

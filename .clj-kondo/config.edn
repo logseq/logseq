@@ -5,10 +5,13 @@
  ;; for rum/defcs and _state.
  {all-components {:linters {:used-underscored-binding {:level :off}}}
   ;; false positive with match/match and _
-  frontend.handler.paste {:linters {:used-underscored-binding {:level :off}}}}
+  frontend.handler.paste {:linters {:used-underscored-binding {:level :off}}}
+  frontend.db {:linters {:aliased-namespace-symbol
+                         {:exclude [frontend.db.conn frontend.db.react logseq.db.default]}}}}
 
  :linters
- {:unresolved-symbol {:exclude [goog.DEBUG
+ {:aliased-namespace-symbol {:level :warning}
+  :unresolved-symbol {:exclude [goog.DEBUG
                                 goog.string.unescapeEntities
                                 ;; TODO:lint: Fix when fixing all type hints
                                 object]}
@@ -16,10 +19,14 @@
   :unresolved-var {:exclude [frontend.util/node-path.basename
                              frontend.util/node-path.dirname
                              frontend.util/node-path.join
+                             frontend.util/node-path.extname
                              frontend.util/node-path.name]}
 
   :consistent-alias
-  {:aliases {datascript.core d
+  {:aliases {cljs.reader reader
+             cljs-time.core t
+             cljs-time.coerce tc
+             datascript.core d
              datascript.transit dt
              datascript.db ddb
              electron.ipc ipc
@@ -42,12 +49,15 @@
              frontend.handler.extract extract
              frontend.handler.common common-handler
              frontend.handler.common.file file-common-handler
+             frontend.handler.common.plugin plugin-common-handler
              frontend.handler.config config-handler
              frontend.handler.events events
              frontend.handler.global-config global-config-handler
              frontend.handler.ui ui-handler
              frontend.handler.notification notification
              frontend.handler.page page-handler
+             frontend.handler.plugin plugin-handler
+             frontend.handler.plugin-config plugin-config-handler
              frontend.handler.repo repo-handler
              frontend.handler.repo-config repo-config-handler
              frontend.handler.search search-handler
@@ -59,6 +69,7 @@
              frontend.search search
              frontend.state state
              frontend.template template
+             frontend.test.helper test-helper
              frontend.ui ui
              frontend.util util
              frontend.util.clock clock
@@ -78,7 +89,8 @@
              logseq.graph-parser.util.page-ref page-ref
              logseq.graph-parser.util.block-ref block-ref
              logseq.graph-parser.date-time-util date-time-util
-             medley.core medley}}
+             medley.core medley
+             promesa.core p}}
 
   :namespace-name-mismatch {:level :warning}
   :used-underscored-binding {:level :warning}}
@@ -89,6 +101,7 @@
            promesa.core/loop clojure.core/loop
            promesa.core/recur clojure.core/recur
            rum.core/defcc rum.core/defc
+           rum.core/with-context clojure.core/let
            rum.core/defcontext clojure.core/def
            clojure.test.check.clojure-test/defspec clojure.core/def
            clojure.test.check.properties/for-all clojure.core/for
@@ -96,6 +109,8 @@
            frontend.modules.outliner.datascript/auto-transact! clojure.core/let
            frontend.namespaces/import-vars potemkin/import-vars
            ;; src/test
+           frontend.test.helper/deftest-async clojure.test/deftest
+           frontend.test.helper/with-reset cljs.test/async
            frontend.react/defc clojure.core/defn}
  :skip-comments true
  :output {:progress true}}

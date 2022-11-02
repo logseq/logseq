@@ -23,7 +23,6 @@
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
@@ -77,8 +76,8 @@
                       (or (not= page-name old-page-name)
                           (not= hiccup old-hiccup)
                           (not= block-uuid old-block-uuid))))}
-  [page-name _blocks hiccup sidebar? _block-uuid]
-  [:div.page-blocks-inner {:style {:margin-left (if sidebar? 0 -20)}}
+  [page-name _blocks hiccup sidebar? whiteboard? _block-uuid]
+  [:div.page-blocks-inner {:style {:margin-left (if (or sidebar? whiteboard?) 0 -20)}}
    (rum/with-key
      (content/content page-name
                       {:hiccup   hiccup
@@ -102,7 +101,7 @@
                                          (when (= "Enter" (util/ekey e))
                                            (handler-fn)))
                          :on-click handler-fn}
-       [:span.opacity-50
+       [:span.opacity-70
         "Click here to edit..."]]]]))
 
 (rum/defc add-button
@@ -125,7 +124,7 @@
                                   (date/journal-title->int (date/today))))
                      (state/pub-event! [:journal/insert-template page-name])))
                  state)}
-  [repo page-e {:keys [sidebar?] :as config}]
+  [repo page-e {:keys [sidebar? whiteboard?] :as config}]
   (when page-e
     (let [page-name (or (:block/name page-e)
                         (str (:block/uuid page-e)))
@@ -148,7 +147,7 @@
               hiccup-config (common-handler/config-with-document-mode hiccup-config)
               hiccup (component-block/->hiccup page-blocks hiccup-config {})]
           [:div
-           (page-blocks-inner page-name page-blocks hiccup sidebar? block-id)
+           (page-blocks-inner page-name page-blocks hiccup sidebar? whiteboard? block-id)
            (when-not config/publishing?
              (let [args (if block-id
                           {:block-uuid block-id}
@@ -179,7 +178,7 @@
   [repo tag]
   (let [pages (db/get-tag-pages repo tag)]
     (when (seq pages)
-      [:div.references.mt-6.flex-1.flex-row
+      [:div.references.page-tags.mt-6.flex-1.flex-row
        [:div.content
         (ui/foldable
          [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag)]
@@ -240,7 +239,7 @@
                     :else
                     (state/set-modal! (confirm-fn)))
                   (util/stop e))]
-    [:span.absolute.inset-0
+    [:span.absolute.inset-0.edit-input-wrapper
      {:class (util/classnames [{:editing @*edit?}])}
      [:input.edit-input
       {:type          "text"
@@ -279,14 +278,14 @@
           *edit? (get state ::edit?)
           *input-value (get state ::input-value)
           repo (state/get-current-repo)
-          hls-page? (pdf-assets/hls-page? title)
+          hls-page? (pdf-assets/hls-file? title)
           whiteboard-page? (model/whiteboard-page? page-name)
           untitled? (and whiteboard-page? (parse-uuid page-name)) ;; normal page cannot be untitled right?
           title (if hls-page?
-                  (pdf-assets/human-hls-pagename-display title)
+                  [:a.asset-ref (pdf-assets/fix-local-asset-pagename title)]
                   (if fmt-journal? (date/journal-title->custom-format title) title))
           old-name (or title page-name)]
-      [:h1.page-title.flex.cursor-pointer.gap-1
+      [:h1.page-title.flex.cursor-pointer.gap-1.w-full
        {:on-mouse-down (fn [e]
                            (when (util/right-click? e)
                              (state/set-state! :page-title/context {:page page-name})))
@@ -315,13 +314,7 @@
         [:span.title.block
          {:data-value (rum/react *input-value)
           :data-ref page-name
-          :style {:opacity (when @*edit? 0)
-                  :pointer-events "none"
-                  :font-weight "inherit"
-                  :white-space "nowrap"
-                  :overflow "hidden"
-                  :text-overflow "ellipsis"
-                  :min-width "80px"}}
+          :style {:opacity (when @*edit? 0)}}
          (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
                untitled? [:span.opacity-50 (t :untitled)]
                :else title)]]])))
@@ -421,13 +414,13 @@
                                    (page-mouse-leave e *control-show?))}
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when-not whiteboard?
-               [:div.flex-1.flex-row
+               [:div.flex-1.flex-row.w-full
                 [:h1.title.ls-page-title (page-title page-name icon title format fmt-journal?)]])
              (when (not config/publishing?)
-               [:div.flex.flex-row
-                (when plugin-handler/lsp-enabled?
+               (when config/lsp-enabled?
+                 [:div.flex.flex-row
                   (plugins/hook-ui-slot :page-head-actions-slotted nil)
-                  (plugins/hook-ui-items :pagebar))])])
+                  (plugins/hook-ui-items :pagebar)]))])
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))
              (let [config {:id "block-parent"
@@ -442,7 +435,7 @@
                _ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
                _ (when (and block? (not page))
                    (route-handler/redirect-to-page! @*current-block-page))]
-           (page-blocks-cp repo page {:sidebar? sidebar?}))]])
+           (page-blocks-cp repo page {:sidebar? sidebar? :whiteboard? whiteboard?}))]])
 
        (when today?
          (today-queries repo today? sidebar?))

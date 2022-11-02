@@ -9,7 +9,8 @@
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]))
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]
+            [frontend.handler.editor :as editor-handler]))
 
 (defn shape->block [shape page-name idx]
   (let [properties {:ls-type :whiteboard-shape
@@ -28,18 +29,25 @@
                            :block/properties {:ls-type :whiteboard-page
                                               :logseq.tldraw.page (dissoc tldr-data :shapes)}}
                           (when page-entity (select-keys page-entity [:block/created-at])))
-        page-block (outliner/block-with-timestamps page-block)
         ;; todo: use get-paginated-blocks instead?
         existing-blocks (model/get-page-blocks-no-cache (state/get-current-repo)
                                                         page-name
                                                         {:pull-keys '[:db/id
                                                                       :block/uuid
                                                                       :block/properties [:ls-type]
+                                                                      :block/created-at
+                                                                      :block/updated-at
                                                                       {:block/parent [:block/uuid]}]})
+        id->block (zipmap (map :block/uuid existing-blocks) existing-blocks)
         shapes (:shapes tldr-data)
         ;; we should maintain the order of the shapes in the page
         ;; bring back/forward is depending on this ordering
-        blocks (map-indexed (fn [idx shape] (shape->block shape page-name idx)) shapes)
+        blocks (map-indexed
+                (fn [idx shape]
+                  (let [block (shape->block shape page-name idx)]
+                    (merge block
+                           (select-keys (id->block (:block/uuid block))
+                                        [:block/created-at :block/updated-at])))) shapes)
         block-ids (->> shapes
                        (map (fn [shape] (when (= (:blockType shape) "B")
                                           (uuid (:pageId shape)))))
@@ -49,15 +57,17 @@
         ;; delete blocks when all of the following are false
         ;; - the block is not in the new blocks list
         ;; - the block's parent is not in the new block list
-        ;; - the block is not a shape block 
+        ;; - the block is not a shape block
         delete-blocks (filterv (fn [block]
                                  (not
                                   (or (block-ids (:block/uuid block))
                                       (block-ids (:block/uuid (:block/parent block)))
                                       (not (gp-whiteboard/shape-block? block)))))
                                existing-blocks)
-        delete-blocks-tx (mapv (fn [s] [:db/retractEntity (:db/id s)]) delete-blocks)]
-    (concat [page-block] blocks delete-blocks-tx)))
+        delete-blocks-tx (mapv (fn [s] [:db/retractEntity (:db/id s)]) delete-blocks)
+        page-and-blocks (->> (cons page-block blocks)
+                             (map outliner/block-with-timestamps))]
+    (concat page-and-blocks delete-blocks-tx)))
 
 (defn- get-whiteboard-clj [page-name]
   (when (model/page-exists? page-name)
@@ -143,13 +153,14 @@
    By default it will be placed next to the given shape id"
   [block-uuid source-shape & {:keys [link? bottom?]}]
   (let [app (state/active-tldraw-app)
-        api (.-api app)
+        ^js api (.-api app)
         point (-> (.getShapeById app source-shape)
                   (.-bounds)
-                  ((fn [bounds] (if bottom? 
+                  ((fn [bounds] (if bottom?
                                   [(.-minX bounds) (+ 64 (.-maxY bounds))]
                                   [(+ 64 (.-maxX bounds)) (.-minY bounds)]))))
         shape (->logseq-portal-shape block-uuid point)]
+    (when (uuid? block-uuid) (editor-handler/set-blocks-id! [block-uuid]))
     (.createShapes api (clj->js shape))
     (when link?
       (.createNewLineBinding api source-shape (:id shape)))))
@@ -197,9 +208,9 @@
     (db-utils/transact! [tx])
     uuid))
 
-(defn inside-portal
+(defn inside-portal?
   [target]
-  (dom/closest target ".tl-logseq-cp-container"))
+  (some? (dom/closest target ".tl-logseq-cp-container")))
 
 (defn closest-shape
   [target]

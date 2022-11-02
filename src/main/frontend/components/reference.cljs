@@ -127,12 +127,12 @@
         *collapsed? (atom nil)]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
-      [:h2.font-bold.opacity-80 (str
-                                 (when (seq filters)
-                                   (str filter-n " of "))
-                                 total
-                                 " Linked Reference"
-                                 (when (> total 1) "s"))]
+      [:h2.font-medium (str
+                        (when (seq filters)
+                          (str filter-n " of "))
+                        total
+                        " Linked Reference"
+                        (when (> total 1) "s"))]
       [:a.filter.fade-link
        {:title "Filter"
         :on-mouse-over (fn [_e]
@@ -229,7 +229,7 @@
                      frequencies)]
       (reset! *ref-pages ref-pages)
       (when (or (seq filter-state) (> filter-n 0))
-        [:div.references.flex-1.flex-row
+        [:div.references.page-linked.flex-1.flex-row
          [:div.content.pt-6
           (references-cp page-name filters filters-atom filter-state total filter-n filtered-ref-blocks' *ref-pages)]]))))
 
@@ -272,10 +272,10 @@
   (let [n-ref (get state ::n-ref)]
     (when page-name
       (let [page-name (string/lower-case page-name)]
-        [:div.references.mt-6.flex-1.flex-row
+        [:div.references.page-unlinked.mt-6.flex-1.flex-row
          [:div.content.flex-1
           (ui/foldable
-           [:h2.font-bold.opacity-80
+           [:h2.font-medium
             (if @n-ref
               (str @n-ref " Unlinked Reference" (when (> @n-ref 1)
                                                   "s"))

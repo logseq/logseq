@@ -37,17 +37,17 @@
                 :controls true
                 :history false
                 :center true
-                :transition "slide"}))]
+                :transition "slide"
+                :keyboardCondition "focused"}))]
     (.initialize deck)))
 
 ;; reveal.js doesn't support multiple nested sections yet.
 ;; https://github.com/hakimel/reveal.js/issues/1440
 (rum/defc block-container
   [config block level]
-  (let [deep-level? (>= level 2)
-        children (:block/children block)
+  (let [children (:block/children block)
         has-children? (seq children)
-        children (when (and has-children? (not deep-level?))
+        children (when has-children?
                    (map (fn [block]
                           (block-container config block (inc level))) children))
         block-el (block/block-container config (dissoc block :block/children))
@@ -55,9 +55,7 @@
     (if has-children?
       [:section dom-attrs
        [:section.relative
-        block-el
-        (when deep-level?
-          [:span.opacity-30.text-xl "Hidden children"])]
+        block-el]
        children]
       [:section dom-attrs block-el])))
 
@@ -93,11 +91,21 @@
         page (db/entity [:block/name page-name])
         journal? (:journal? page)
         repo (state/get-current-repo)
-        blocks (-> (db/get-paginated-blocks repo (:db/id page))
+        blocks (-> (db/get-paginated-blocks repo (:db/id page)
+                                            {:limit 1000})
                    (outliner-tree/blocks->vec-tree page-name))
         blocks (if journal?
                  (rest blocks)
                  blocks)
+        blocks (map (fn [block]
+                      (update block :block/children
+                              (fn [children]
+                                (->>
+                                 (mapcat
+                                  (fn [x]
+                                    (tree-seq map? :block/children x))
+                                  children)
+                                 (map #(dissoc % :block/children)))))) blocks)
         config {:id          "slide-reveal-js"
                 :slide?      true
                 :sidebar?    true

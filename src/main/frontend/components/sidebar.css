@@ -17,9 +17,6 @@
   }
 }
 
-.is-electron.is-mac .cp__sidebar-left-layout {
-}
-
 #app-container {
   display: flex;
   flex: 0 0 100%;
@@ -125,7 +122,6 @@
     text-align: center;
     display: inline-block;
     line-height: 1em;
-    opacity: .6;
   }
 
   a.item {
@@ -143,12 +139,12 @@
       position: relative;
     }
 
-    &.active, &:active {
-      background-color: var(--ls-quaternary-background-color);
+    &:hover {
+      background-color: var(--ls-tertiary-background-color);
     }
 
-    &:hover {
-      color: var(--ls-secondary-text-color);
+    &.active, &:active {
+      background-color: var(--ls-quaternary-background-color);
     }
   }
 
@@ -178,14 +174,9 @@
 
       > span {
         > a {
-          opacity: .4;
           padding-left: 12px;
           display: none;
           transition: none;
-
-          &:hover {
-            opacity: 1 !important;
-          }
 
           &:last-child {
             transform: translateY(-6px) translateX(2px) rotate(90deg);
@@ -214,10 +205,6 @@
         }
       }
 
-      &:active {
-        opacity: .8;
-      }
-
       .wrap-th {
         > span {
           font-size: 11px;
@@ -237,7 +224,6 @@
         a {
           width: 100%;
           padding: 2px 24px;
-          color: var(--ls-primary-text-color);
           transition: background-color .3s;
 
           .page-title {
@@ -254,10 +240,6 @@
 
           &:hover {
             background-color: var(--ls-quaternary-background-color);
-          }
-
-          &:active {
-            opacity: .7;
           }
         }
       }
@@ -354,7 +336,12 @@
   transition: width .3s;
 
   a {
-    color: var(--ls-primary-text-color);
+    color: var(--ls-header-button-background);
+    opacity: 0.9;
+  }
+
+  a:hover {
+    opacity: 1;
   }
 
   > .shade-mask {
@@ -480,7 +467,7 @@ html[data-theme='dark'] {
     > .inner {
       @apply font-bold
       rounded-full h-8 w-8 flex items-center justify-center font-bold
-      opacity-70 hover:opacity-100 select-none cursor-help;
+      select-none cursor-help;
 
       background-color: var(--ls-secondary-background-color);
     }
@@ -624,4 +611,16 @@ html[data-theme='dark'] {
 
 .full-height-without-header {
   height: calc(100vh - var(--ls-headbar-height) - 4rem);
+}
+
+a.ui__modal-close svg, a.close svg, span.rotating-arrow svg {
+    color: var(--ls-primary-text-color);
+}
+a.ui__modal-close, a.close {
+    color: var(--ls-primary-text-color);
+    opacity: 0.6;
+}
+
+a.ui__modal-close:hover, a.close:hover {
+    opacity: 1;
 }

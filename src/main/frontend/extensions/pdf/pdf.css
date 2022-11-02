@@ -1,11 +1,13 @@
 @import "_viewer.css";
 
 :root {
-  --ph-highlight-color-blue: var(--color-blue-100);
-  --ph-highlight-color-green: var(--color-green-100);
-  --ph-highlight-color-red: var(--color-red-100);
-  --ph-highlight-color-purple: var(--color-purple-100);
-  --ph-highlight-color-yellow: var(--color-yellow-100);
+  --ph-highlight-color-blue: var(--color-blue-300);
+  --ph-highlight-color-green: var(--color-green-300);
+  --ph-highlight-color-red: var(--color-red-300);
+  --ph-highlight-color-purple: var(--color-purple-300);
+  --ph-highlight-color-yellow: var(--color-yellow-300);
+
+  --ph-link-color: #106ba3;
 
   --ph-highlight-scroll-into-color: rgba(255, 75, 93, 0.67);
 
@@ -23,6 +25,31 @@ input::-webkit-inner-spin-button {
 
   &-container {
     display: flex;
+
+    *[data-color=yellow] {
+      background-color: var(--ph-highlight-color-yellow);
+      border-color: var(--ph-highlight-color-yellow);
+    }
+
+    *[data-color=blue] {
+      background-color: var(--ph-highlight-color-blue);
+      border-color: var(--ph-highlight-color-blue);
+    }
+
+    *[data-color=green] {
+      background-color: var(--ph-highlight-color-green);
+      border-color: var(--ph-highlight-color-green);
+    }
+
+    *[data-color=red] {
+      background-color: var(--ph-highlight-color-red);
+      border-color: var(--ph-highlight-color-red);
+    }
+
+    *[data-color=purple] {
+      background-color: var(--ph-highlight-color-purple);
+      border-color: var(--ph-highlight-color-purple);
+    }
   }
 
   &-loader {
@@ -80,6 +107,9 @@ input::-webkit-inner-spin-button {
             width: 35px;
             text-align: right;
             padding-right: 4px;
+            height: 18px;
+            border: none;
+            background: transparent;
           }
         }
 
@@ -158,11 +188,11 @@ input::-webkit-inner-spin-button {
           }
 
           &:hover {
-            color: #106ba3;
+            color: var(--ph-link-color);
           }
 
           &:active, &:focus {
-            background-color: #106ba3;
+            background-color: var(--ph-link-color);
             color: white;
 
             > i {
@@ -178,6 +208,58 @@ input::-webkit-inner-spin-button {
         padding-left: 12px;
       }
     }
+
+    &-tabs {
+      @apply flex justify-center py-2.5 space-x-1;
+
+      border-bottom: 1px solid #d9d9d9;
+
+      > .inner {
+        display: flex;
+        border: 1px solid #d5d5d5;
+        border-radius: 4px;
+      }
+
+      button {
+        font-size: 12px;
+        padding: 5px 6px;
+        line-height: 1;
+        border: none;
+        min-width: 90px;
+        border-radius: 3px;
+        color: black;
+
+        &:hover {
+          border: none;
+          opacity: .8;
+          color: black;
+          border-radius: 3px;
+        }
+
+        &:active {
+          opacity: 1;
+          background-color: #c5c5c5;
+        }
+
+        &.active {
+          background-color: #c5c5c5;
+        }
+      }
+    }
+
+    &-panels {
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 5px 0 5px 10px;
+    }
+
+    &-wrap.hls-popup-overlay {
+      right: -6px;
+      left: unset;
+      bottom: unset;
+      height: auto;
+      width: auto;
+    }
   }
 
   &-settings {
@@ -190,6 +272,7 @@ input::-webkit-inner-spin-button {
 
     &-item {
       display: flex;
+      color: rgb(115, 115, 115);
 
       &.theme-picker {
         justify-content: center;
@@ -233,6 +316,84 @@ input::-webkit-inner-spin-button {
         margin-top: 13px;
         opacity: 0.8;
         border-top: 1px solid #ccc;
+
+        &.is-between {
+          padding-top: 0;
+          border-top: none;
+        }
+      }
+    }
+  }
+
+  &-finder {
+    &-wrap.hls-popup-overlay {
+      right: -6px;
+      left: unset;
+      bottom: unset;
+      height: auto;
+      width: auto;
+    }
+
+    &.hls-popup-box {
+      min-width: 360px;
+      width: auto;
+
+      > .input-inner {
+        @apply p-2 relative;
+
+        .input-wrap {
+          @apply mr-1.5 border border-gray-300;
+          border-radius: 4px;
+
+          &:active, &:focus-within {
+            border-color: transparent;
+          }
+        }
+
+        input {
+          @apply flex-1 bg-gray-200;
+
+          padding: 1px 5px;
+          border-radius: 4px;
+          color: black;
+          outline: none;
+          border: 2px solid transparent;
+
+          &:focus {
+            border: 2px solid rgba(16, 107, 163, 0.75);
+          }
+        }
+
+        .ui__button {
+          margin-top: unset;
+          border-radius: 4px;
+          color: black;
+          padding: 4px;
+
+          .ti {
+            font-weight: bold;
+            color: #989898;
+          }
+
+          &.active .ti, &:hover .ti {
+            color: #1f1f1f !important;
+          }
+
+          &.icon-enter {
+            @apply absolute opacity-80;
+
+            right: -1px;
+            top: 2px;
+          }
+        }
+
+        > .ui__button {
+          margin-left: 8px;
+        }
+      }
+
+      > .result-inner {
+        @apply text-gray-800;
       }
     }
   }
@@ -282,31 +443,6 @@ input::-webkit-inner-spin-button {
     mix-blend-mode: multiply;
     touch-action: none;
     border-style: dashed;
-
-    &[data-color=yellow] {
-      background-color: var(--ph-highlight-color-yellow);
-      border-color: var(--ph-highlight-color-yellow);
-    }
-
-    &[data-color=blue] {
-      background-color: var(--ph-highlight-color-blue);
-      border-color: var(--ph-highlight-color-blue);
-    }
-
-    &[data-color=green] {
-      background-color: var(--ph-highlight-color-green);
-      border-color: var(--ph-highlight-color-green);
-    }
-
-    &[data-color=red] {
-      background-color: var(--ph-highlight-color-red);
-      border-color: var(--ph-highlight-color-red);
-    }
-
-    &[data-color=purple] {
-      background-color: var(--ph-highlight-color-purple);
-      border-color: var(--ph-highlight-color-purple);
-    }
   }
 
   &-viewer.is-area-dashed {
@@ -416,11 +552,97 @@ input::-webkit-inner-spin-button {
       mix-blend-mode: multiply;
     }
   }
+
+  &-highlights-list-item {
+    @apply active:opacity-100 mr-2;
+
+    user-select: none;
+    font-size: 12px;
+    padding-top: 8px;
+    padding-bottom: 2px;
+    padding-left: 6px;
+    border-radius: 4px;
+    margin-bottom: 3px;
+
+    &:first-child {
+      margin-top: 5px;
+    }
+
+    > h6 {
+      @apply flex items-center justify-between pr-2 relative;
+
+      font-size: 10px;
+      line-height: 1em;
+      color: #696969;
+      -webkit-font-smoothing: antialiased;
+
+      small {
+        width: 8px;
+        height: 8px;
+        border-radius: 100%;
+        margin-right: 6px;
+        border-color: #cccccc !important;
+      }
+
+      button {
+        @apply absolute right-0 top-[-6px] hover:opacity-80 active:opacity-100 hidden;
+
+        padding-right: 8px;
+        padding-top: 4px;
+
+        .ti {
+          font-size: 14px;
+        }
+      }
+    }
+
+    > p {
+      color: #646464;
+      padding-top: 6px;
+      padding-bottom: 2px;
+      margin: 0;
+
+      &.text-wrap {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        line-height: 1.24em;
+      }
+
+      &.area-wrap {
+        display: flex;
+        align-items: center;
+        padding-right: 6px;
+      }
+
+      &:hover {
+        color: var(--ph-link-color);
+      }
+    }
+
+    &.active {
+      background-color: var(--ph-link-color);
+
+      > h6, > p {
+        color: white;
+
+        button {
+          @apply inline;
+        }
+      }
+    }
+
+    &:hover:not(.active) {
+      opacity: .9;
+    }
+  }
 }
 
 .hls-text-region-item {
   cursor: pointer;
   position: absolute;
+  z-index: 2;
   transition: background 0.3s;
 
   background-color: rgba(252, 219, 97, 0.7);
@@ -448,7 +670,7 @@ input::-webkit-inner-spin-button {
 }
 
 .hls-popup {
-  &-wrap {
+  &-overlay {
     position: absolute;
     top: 40px;
     right: 0;
@@ -468,7 +690,7 @@ input::-webkit-inner-spin-button {
     border-radius: 4px;
     width: 320px;
     overflow-y: auto;
-    background-color: #e9e9e9;
+    background-color: #e3e7e8;
     outline: none;
     box-shadow: 0 2px 4px 0 rgba(134, 134, 134, 0.59);
 
@@ -576,11 +798,12 @@ input::-webkit-inner-spin-button {
 
 .block-content {
   &[data-type=annotation] {
-    a.prefix-link {
+    .prefix-link {
       display: inline-flex;
       align-items: center;
       padding-right: 4px;
       cursor: alias;
+      color: var(--ls-link-ref-text-color);
 
       &:before {
         content: "📌 ";
@@ -592,7 +815,7 @@ input::-webkit-inner-spin-button {
       margin-bottom: 10px;
       flex-direction: column;
 
-      a.prefix-link {
+      .prefix-link {
         display: inline;
       }
 
@@ -609,13 +832,63 @@ input::-webkit-inner-spin-button {
     }
 
     .hl-area {
-      display: block;
+      @apply relative;
+
+      display: inline-block;
       cursor: text;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 4px;
 
       img {
         margin: 0;
         box-shadow: none;
-        max-width: 80%;
+        max-width: 100%;
+        max-height: 420px;
+        cursor: alias;
+      }
+    }
+  }
+}
+
+.ls-hl-colored .block-content {
+  &[data-hl-color=green] {
+    .prefix-link {
+      &:before {
+        content: "🟢 ";
+      }
+    }
+  }
+
+  &[data-hl-color=purple] {
+    .prefix-link {
+      &:before {
+        content: "🟣 ";
+      }
+    }
+  }
+
+  &[data-hl-color=blue] {
+    .prefix-link {
+      &:before {
+        content: "🔵 ";
+      }
+    }
+  }
+
+  &[data-hl-color=yellow] {
+    .prefix-link {
+      &:before {
+        content: "🟡 ";
+      }
+    }
+  }
+
+  &[data-hl-color=red] {
+    .prefix-link {
+      &:before {
+        content: "🔴 ";
       }
     }
   }
@@ -712,4 +985,16 @@ body.is-pdf-active {
   background: rgb(185, 231, 255);
   mix-blend-mode: multiply;
   color: unset;
+}
+
+.textLayer .highlight {
+  background-color: rgb(206 255 162);
+  border: 1px solid transparent;
+  border-radius: 0;
+  padding: 0 2px;
+
+  &.selected {
+    background-color: rgb(206 255 162);
+    border: 2px dashed #ff3434;
+  }
 }

@@ -1,5 +1,6 @@
 (ns frontend.components.block
   (:refer-clojure :exclude [range])
+  (:require-macros [hiccups.core])
   (:require ["/frontend/utils" :as utils]
             ["@capacitor/share" :refer [^js Share]]
             [cljs-bean.core :as bean]
@@ -36,6 +37,7 @@
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.fs :as fs]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.dnd :as dnd]
@@ -70,6 +72,7 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -448,7 +451,9 @@
                     href
 
                     :else
-                    (get-file-absolute-path config href))]
+                    (if (assets-handler/check-alias-path? href)
+                      (assets-handler/normalize-asset-resource-url href)
+                      (get-file-absolute-path config href)))]
          (resizable-image config title href metadata full_text false))))))
 
 (defn repetition-to-string
@@ -536,7 +541,7 @@
        (:db/id page-entity)
        :page))
 
-    (whiteboard-handler/inside-portal (.-target e))
+    (whiteboard-handler/inside-portal? (.-target e))
     (whiteboard-handler/add-new-block-portal-shape!
      page-name
      (whiteboard-handler/closest-shape (.-target e)))
@@ -593,7 +598,7 @@
          (let [original-name (util/get-page-original-name page-entity)
                s (if (not= (util/safe-page-name-sanity-lc original-name) page-name-in-block)
                    page-name-in-block ;; page-name-in-block might be overrided (legacy)
-                   original-name)
+                   (pdf-assets/human-page-name original-name))
                _ (when-not page-entity (js/console.warn "page-inner's page-entity is nil, given page-name: " page-name
                                                         " page-name-in-block: " page-name-in-block))]
            (if tag? (str "#" s) s))))]))
@@ -701,11 +706,11 @@
 
 (rum/defc asset-reference
   [config title path]
-  (let [repo-path (config/get-repo-dir (state/get-current-repo))
-        full-path (if (util/absolute-path? path)
+  (let [repo (state/get-current-repo)
+        real-path-url (if (util/absolute-path? path)
                     path
-                    (.. util/node-path (join repo-path (config/get-local-asset-absolute-path path))))
-        ext-name (util/get-file-ext full-path)
+                    (assets-handler/resolve-asset-real-path-url repo path))
+        ext-name (util/get-file-ext path)
         title-or-path (cond
                         (string? title)
                         title
@@ -713,26 +718,19 @@
                         (->elem :span (map-inline config title))
                         :else
                         path)]
+
     [:div.asset-ref-wrap
      {:data-ext ext-name}
 
-     (if (= "pdf" ext-name)
-       [:a.asset-ref.is-pdf
-        {:on-mouse-down (fn [e]
-                          (when-let [current (pdf-assets/inflate-asset full-path)]
-                            (util/stop e)
-                            (state/set-state! :pdf/current current)))}
-        title-or-path]
-       [:a.asset-ref {:target "_blank" :href full-path}
-        title-or-path])
-
-     (case ext-name
+     (cond
        ;; https://en.wikipedia.org/wiki/HTML5_video
-       ("mp4" "ogg" "webm" "mov")
-       [:video {:src full-path
+       (contains? config/video-formats (keyword ext-name))
+       [:video {:src real-path-url
                 :controls true}]
 
-       nil)]))
+       :else
+       [:a.asset-ref {:target "_blank" :href real-path-url}
+        title-or-path])]))
 
 (defonce excalidraw-loaded? (atom false))
 (rum/defc excalidraw < rum/reactive
@@ -748,8 +746,9 @@
       (draw-component {:file file :block-uuid block-uuid}))))
 
 (rum/defc page-reference < rum/reactive
-  [html-export? s {:keys [nested-link? block-uuid id] :as config} label]
+  [html-export? s {:keys [nested-link? id] :as config} label]
   (let [show-brackets? (state/show-brackets?)
+        block-uuid (:block/uuid config)
         contents-page? (= "contents" (string/lower-case (str id)))]
     (if (string/ends-with? s ".excalidraw")
       [:div.draw {:on-click (fn [e]
@@ -835,10 +834,9 @@
 
 (defn- get-label-text
   [label]
-  (and (= 1 (count label))
-       (let [label (first label)]
-         (string? (last label))
-         (js/decodeURIComponent (last label)))))
+  (when (and (= 1 (count label))
+             (string? (last (first label))))
+    (js/decodeURIComponent (last (first label)))))
 
 (defn- get-page
   [label]
@@ -898,7 +896,7 @@
                      (:db/id block)
                      :block-ref)
 
-                    (whiteboard-handler/inside-portal (.-target e))
+                    (whiteboard-handler/inside-portal? (.-target e))
                     (whiteboard-handler/add-new-block-portal-shape!
                      (:block/uuid block)
                      (whiteboard-handler/closest-shape (.-target e)))
@@ -987,7 +985,8 @@
         (nil? metadata-show)
         (or
          (gp-config/local-asset? s)
-         (text-util/media-link? media-formats s)))
+         (text-util/media-link? media-formats s)
+         (= (first s) \@)))
        (true? (boolean metadata-show))))
 
      ;; markdown
@@ -1025,7 +1024,9 @@
                  href
 
                  :else
-                 (get-file-absolute-path config href))]
+                 (if (assets-handler/check-alias-path? href)
+                   (assets-handler/resolve-asset-real-path-url (state/get-current-repo) href)
+                   (get-file-absolute-path config href)))]
       (audio-cp href))))
 
 (defn- media-link
@@ -1040,16 +1041,16 @@
       (cond
         (util/electron?)
         [:a.asset-ref.is-pdf
-         {:href "javascript:void(0);"
-          :on-mouse-down (fn [_event]
+         {:on-mouse-down (fn [_event]
                            (when-let [current (pdf-assets/inflate-asset s)]
                              (state/set-state! :pdf/current current)))}
-         label-text]
+         (or label-text
+             (->elem :span (map-inline config label)))]
 
         (mobile-util/native-platform?)
         (asset-link config label-text s metadata full_text))
 
-      (contains? (config/doc-formats) ext)
+      (contains? config/doc-formats ext)
       (asset-link config label-text s metadata full_text)
 
       (not (contains? #{:mp4 :webm :mov} ext))
@@ -1504,7 +1505,7 @@
       (= name "embed")
       (macro-embed-cp config arguments)
 
-      (and plugin-handler/lsp-enabled? (= name "renderer"))
+      (and config/lsp-enabled? (= name "renderer"))
       (when-let [block-uuid (str (:block/uuid config))]
         (plugins/hook-ui-slot :macro-renderer-slotted (assoc options :uuid block-uuid)))
 
@@ -1523,6 +1524,12 @@
                "Strike_through" :del
                "Highlight" :mark)]
     (->elem elem (map-inline config data))))
+
+(defn hiccup->html
+  [s]
+  (-> (safe-read-string s)
+      (hiccups.core/html)
+      (security/sanitize-html)))
 
 (defn inline
   [{:keys [html-export?] :as config} item]
@@ -1545,7 +1552,7 @@
 
          ["Entity" e]
          [:span {:dangerouslySetInnerHTML
-                 {:__html (:html e)}}]
+                 {:__html (:html (security/sanitize-html e))}}]
 
          ["Latex_Fragment" [display s]] ;display can be "Displayed" or "Inline"
          (if html-export?
@@ -1575,18 +1582,18 @@
          ["Export_Snippet" "html" s]
          (when (not html-export?)
            [:span {:dangerouslySetInnerHTML
-                   {:__html s}}])
+                   {:__html (security/sanitize-html s)}}])
 
          ["Inline_Hiccup" s] ;; String to hiccup
          (ui/catch-error
           [:div.warning {:title "Invalid hiccup"} s]
-          (-> (safe-read-string s)
-              (security/remove-javascript-links-in-href)))
+          [:span {:dangerouslySetInnerHTML
+                  {:__html (hiccup->html s)}}])
 
          ["Inline_Html" s]
          (when (not html-export?)
            ;; TODO: how to remove span and only export the content of `s`?
-           [:span {:dangerouslySetInnerHTML {:__html s}}])
+           [:span {:dangerouslySetInnerHTML {:__html (security/sanitize-html s)}}])
 
          [(:or "Break_Line" "Hard_Break_Line")]
          [:br]
@@ -1648,6 +1655,9 @@
 (defn- bullet-on-click
   [e block uuid]
   (cond
+    (gp-whiteboard/shape-block? block)
+    (route-handler/redirect-to-whiteboard! (get-in block [:block/page :block/name]) {:block-id uuid})
+
     (gobj/get e "shiftKey")
     (do
       (state/sidebar-add-block!
@@ -1656,7 +1666,7 @@
        :block)
       (util/stop e))
 
-    (whiteboard-handler/inside-portal (.-target e))
+    (whiteboard-handler/inside-portal? (.-target e))
     (do (whiteboard-handler/add-new-block-portal-shape!
          uuid
          (whiteboard-handler/closest-shape (.-target e)))
@@ -1878,7 +1888,7 @@
 (declare block-content)
 
 (defn build-block-title
-  [config {:block/keys [title marker pre-block? properties]
+  [config {:block/keys [title marker pre-block? properties level]
            :as t}]
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
@@ -1902,7 +1912,7 @@
                       (<= heading-level 6)
                       heading-level)
                  (:heading properties))
-        heading (if (true? heading) 2 heading)
+        heading (if (true? heading) (min (inc level) 6) heading)
         elem (if heading
                (keyword (str "h" heading
                              (when block-ref? ".inline")))
@@ -1916,7 +1926,7 @@
                  (not= "nil" marker))
         {:class (str (string/lower-case marker))})
       (when bg-color
-        {:style {:background-color (if (some #{bg-color} ui/block-background-colors) 
+        {:style {:background-color (if (some #{bg-color} ui/block-background-colors)
                                      (str "var(--ls-highlight-color-" bg-color ")")
                                      bg-color)}
          :class "px-1 with-bg-color"}))
@@ -1930,20 +1940,30 @@
          (conj
           (map-inline config title)
           (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})])
-          (when (and (util/electron?) (not (#{:default :whiteboard-shape} block-type)))
-            [:a.prefix-link
-             {:on-click #(case block-type
-                           ;; pdf annotation
-                           :annotation (pdf-assets/open-block-ref! t)
-                           (.preventDefault %))}
+          (when (and
+                 (or config/publishing? (util/electron?))
+                 (not (#{:default :whiteboard-shape} block-type)))
+            (let [area? (= :area (keyword (:hl-type properties)))]
+              [:div.prefix-link
+               {:on-mouse-down (fn [^js e]
+                                 (let [^js target (.-target e)]
+                                   (case block-type
+                                     ;; pdf annotation
+                                     :annotation
+                                     (if (and area? (.contains (.-classList target) "blank"))
+                                       :actions
+                                       (do
+                                         (pdf-assets/open-block-ref! t)
+                                         (util/stop e)))
 
-             [:span.hl-page
-              [:strong.forbid-edit (str "P" (or (:hl-page properties) "?"))]
-              [:label.blank " "]]
+                                     :dune)))}
 
-             (when-let [st (and (= :area (keyword (:hl-type properties)))
-                                (:hl-stamp properties))]
-               (pdf-assets/area-display t st))]))
+               [:span.hl-page
+                [:strong.forbid-edit (str "P" (or (:hl-page properties) "?"))]
+                [:label.blank " "]]
+
+               (when (and area? (:hl-stamp properties))
+                 (pdf-assets/area-display t))])))
 
          [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])
        [tags])))))
@@ -1970,30 +1990,31 @@
        (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})
        [:span.page-property-key.font-medium (name k)])
      [:span.mr-1 ":"]
-     (cond
-       (int? v)
-       v
+     [:div.page-property-value.inline
+      (cond
+        (int? v)
+        v
 
-       (= k :file-path)
-       v
+        (= k :file-path)
+        v
 
-       date
-       date
+        date
+        date
 
-       (and (string? v) (gp-util/wrapped-by-quotes? v))
-       (gp-util/unquote-string v)
+        (and (string? v) (gp-util/wrapped-by-quotes? v))
+        (gp-util/unquote-string v)
 
-       (and property-separated-by-commas? (coll? v))
-       (let [v (->> (remove string/blank? v)
-                    (filter string?))
-             vals (for [v-item v]
-                    (page-cp config {:block/name v-item}))
-             elems (interpose (span-comma) vals)]
-         (for [elem elems]
-           (rum/with-key elem (str (random-uuid)))))
+        (and property-separated-by-commas? (coll? v))
+        (let [v (->> (remove string/blank? v)
+                     (filter string?))
+              vals (for [v-item v]
+                     (page-cp config {:block/name v-item}))
+              elems (interpose (span-comma) vals)]
+          (for [elem elems]
+            (rum/with-key elem (str (random-uuid)))))
 
-       :else
-       (inline-text config (:block/format block) (str v)))]))
+        :else
+        (inline-text config (:block/format block) (str v)))]]))
 
 (def hidden-editable-page-properties
   "Properties that are hidden in the pre-block (page property)"
@@ -2228,6 +2249,10 @@
                {:blockid       (str uuid)
                 :data-type (name block-type)
                 :style {:width "100%" :pointer-events (when stop-events? "none")}}
+
+                (not (string/blank? (:hl-color properties)))
+                (assoc :data-hl-color (:hl-color properties))
+
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
                                         (block-content-on-mouse-down e block block-id content edit-input-id))))]
@@ -2373,6 +2398,7 @@
                                            (editor-handler/unhighlight-blocks!)
                                            (state/set-editing! edit-input-id (:block/content block) block ""))}})
             (block-content config block edit-input-id block-id slide?))]
+
           (when-not hide-block-refs-count?
             [:div.flex.flex-row.items-center
              (when (and (:embed? config)
@@ -2474,7 +2500,7 @@
 (rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
 
 (defn breadcrumb
-  [config repo block-id {:keys [show-page? indent? level-limit _navigating-block]
+  [config repo block-id {:keys [show-page? indent? end-separator? level-limit _navigating-block]
                          :or {show-page? true
                               level-limit 3}
                          :as opts}]
@@ -2521,7 +2547,7 @@
                           " my-2")
                         (when indent?
                           " ml-4")))}
-         breadcrumb]))))
+         breadcrumb (when end-separator? (breadcrumb-separator))]))))
 
 (defn- block-drag-over
   [event uuid top? block-id *move-to]
@@ -2679,6 +2705,7 @@
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
         reference? (:reference? config)
+        whiteboard-block? (gp-whiteboard/shape-block? block)
         block-id (str "ls-block-" blocks-container-id "-" uuid)
         has-child? (first (:block/_parent (db/entity (:db/id block))))
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to)
@@ -2689,7 +2716,7 @@
         edit? (state/sub [:editor/editing? edit-input-id])
         card? (string/includes? data-refs-self "\"card\"")
         review-cards? (:review-cards? config)
-        selected? (state/sub-block-selected? uuid)]
+        selected? (when-not slide? (state/sub-block-selected? uuid))]
     [:div.ls-block
      (cond->
        {:id block-id
@@ -2701,7 +2728,7 @@
                     (when (and card? (not review-cards?)) " shadow-md")
                     (when selected? " selected noselect"))
         :blockid (str uuid)
-        :haschild (str has-child?)}
+        :haschild (str (boolean has-child?))}
 
        level
        (assoc :level level)
@@ -2745,7 +2772,9 @@
       (when @*show-left-menu?
         (block-left-menu config block))
 
-      (block-content-or-editor config block edit-input-id block-id edit? false)
+      (if whiteboard-block?
+        (block-reference {} (str uuid) nil)
+        (block-content-or-editor config block edit-input-id block-id edit? false))
 
       (when @*show-right-menu?
         (block-right-menu config block edit?))]
@@ -3199,23 +3228,31 @@
     (let [{:keys [lines language]} options
           attr (when language
                  {:data-lang language})
-          code (apply str lines)]
+          code (apply str lines)
+          [inside-portal? set-inside-portal?] (rum/use-state nil)]
       (cond
         html-export?
         (highlight/html-export attr code)
 
         :else
         (let [language (if (contains? #{"edn" "clj" "cljc" "cljs"} language) "clojure" language)]
-          (if (:slide? config)
-            (highlight/highlight (str (random-uuid))
-                                 {:class (str "language-" language)
-                                  :data-lang language}
-                                 code)
-            [:div
-             (lazy-editor/editor config (str (d/squuid)) attr code options)
-             (let [options (:options options)]
-               (when (and (= language "clojure") (contains? (set options) ":results"))
-                 (sci/eval-result code)))]))))))
+          [:div {:ref (fn [el]
+                        (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))}
+           (cond
+             (nil? inside-portal?) nil
+
+             (or (:slide? config) inside-portal?)
+             (highlight/highlight (str (random-uuid))
+                                  {:class (str "language-" language)
+                                   :data-lang language}
+                                  code)
+
+             :else
+             [:<>
+              (lazy-editor/editor config (str (d/squuid)) attr code options)
+              (let [options (:options options)]
+                (when (and (= language "clojure") (contains? (set options) ":results"))
+                  (sci/eval-result code)))])])))))
 
 (defn ^:large-vars/cleanup-todo markup-element-cp
   [{:keys [html-export?] :as config} item]
@@ -3293,17 +3330,17 @@
       ["Raw_Html" content]
       (when (not html-export?)
         [:div.raw_html {:dangerouslySetInnerHTML
-                        {:__html content}}])
+                        {:__html (security/sanitize-html content)}}])
       ["Export" "html" _options content]
       (when (not html-export?)
         [:div.export_html {:dangerouslySetInnerHTML
-                           {:__html content}}])
+                           {:__html (security/sanitize-html content)}}])
       ["Hiccup" content]
       (ui/catch-error
        [:div.warning {:title "Invalid hiccup"}
         content]
-       (-> (safe-read-string content)
-           (security/remove-javascript-links-in-href)))
+       [:div.hiccup_html {:dangerouslySetInnerHTML
+                          {:__html (hiccup->html content)}}])
 
       ["Export" "latex" _options content]
       (if html-export?

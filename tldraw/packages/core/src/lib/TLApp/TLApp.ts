@@ -3,34 +3,33 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { TLBounds } from '@tldraw/intersect'
 import { Vec } from '@tldraw/vec'
-import { action, computed, makeObservable, observable, transaction } from 'mobx'
+import { action, computed, makeObservable, observable, toJS, transaction } from 'mobx'
 import { GRID_SIZE } from '../../constants'
 import type {
   TLAsset,
-  TLEventMap,
-  TLShortcut,
-  TLSubscription,
-  TLSubscriptionEventName,
   TLCallback,
-  TLSubscriptionEventInfo,
-  TLStateEvents,
+  TLEventMap,
   TLEvents,
-  TLHandle,
+  TLShortcut,
+  TLStateEvents,
+  TLSubscription,
+  TLSubscriptionEventInfo,
+  TLSubscriptionEventName,
 } from '../../types'
 import { AlignType, DistributeType } from '../../types'
-import { KeyUtils, BoundsUtils, isNonNullable, createNewLineBinding } from '../../utils'
+import { BoundsUtils, createNewLineBinding, isNonNullable, KeyUtils, uniqueId } from '../../utils'
 import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
 import { TLApi } from '../TLApi'
 import { TLCursors } from '../TLCursors'
 
 import { TLHistory } from '../TLHistory'
 import { TLInputs } from '../TLInputs'
-import { type TLPageModel, TLPage } from '../TLPage'
+import { TLPage, type TLPageModel } from '../TLPage'
 import { TLSettings } from '../TLSettings'
 import { TLRootState } from '../TLState'
 import type { TLToolConstructor } from '../TLTool'
 import { TLViewport } from '../TLViewport'
-import { TLSelectTool, TLMoveTool } from '../tools'
+import { TLMoveTool, TLSelectTool } from '../tools'
 
 export interface TLDocumentModel<S extends TLShape = TLShape, A extends TLAsset = TLAsset> {
   // currentPageId: string
@@ -70,7 +69,8 @@ export class TLApp<
   }
 
   keybindingRegistered = false
-
+  uuid = uniqueId()
+  
   static id = 'app'
   static initial = 'select'
 
@@ -171,6 +171,7 @@ export class TLApp<
         keys: ['del', 'backspace'],
         fn: () => {
           this.api.deleteShapes()
+          this.selectedTool.transition('idle')
         },
       },
     ]
@@ -417,6 +418,21 @@ export class TLApp<
     return this
   }
 
+  packIntoRectangle = (shapes: S[] = this.selectedShapesArray): this => {
+    if (shapes.length < 2) return this
+
+    const deltaMap = Object.fromEntries(
+      BoundsUtils.getPackedDistributions(shapes).map(d => [d.id, d])
+    )
+
+    shapes.forEach(shape => {
+      if (deltaMap[shape.id]) shape.update({ point: deltaMap[shape.id].next })
+    })
+
+    this.persist()
+    return this
+  }
+
   /* --------------------- Assets --------------------- */
 
   @observable assets: Record<string, TLAsset> = {}
@@ -459,17 +475,21 @@ export class TLApp<
 
   copy = () => {
     if (this.selectedShapesArray.length > 0 && !this.editingShape) {
-      const tldrawString = JSON.stringify({
-        type: 'logseq/whiteboard-shapes',
+      const jsonString = JSON.stringify({
         shapes: this.selectedShapesArray.map(shape => shape.serialized),
-        // pasting into other whiteboard may require this if any shape uses asset
+        // pasting into other whiteboard may require this if any shape uses the assets
         assets: this.getCleanUpAssets().filter(asset => {
           return this.selectedShapesArray.some(shape => shape.props.assetId === asset.id)
         }),
+        // convey the bindings to maintain the new links after pasting
+        bindings: toJS(this.currentPage.bindings),
       })
+      const tldrawString = `<whiteboard-tldr>${encodeURIComponent(jsonString)}</whiteboard-tldr>`
+      // FIXME: use `writeClipboard` in frontend.utils
       navigator.clipboard.write([
         new ClipboardItem({
-          'text/plain': new Blob([tldrawString], { type: 'text/plain' }),
+          'text/html': new Blob([tldrawString], { type: 'text/html' }),
+          // ??? what plain text should be used here?
         }),
       ])
     }

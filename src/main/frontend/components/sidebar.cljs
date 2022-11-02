@@ -52,7 +52,7 @@
     [:div.header.items-center.mb-1
      {:on-click (fn [^js/MouseEvent _e]
                   (state/toggle-navigation-item-collapsed! class))}
-     [:div.font-medium.fade-link name]
+     [:div.font-medium name]
      [:span
       [:a.more svg/arrow-down-v2]]]
     [:div.bd child]]])
@@ -439,7 +439,7 @@
          [:div.mt-20
           [:div.ls-center
            (ui/loading (t :loading))]]
-         
+
          :else
          [:div
           {:class (if margin-less-pages? "" (util/hiccup->class "mx-auto.pb-24"))
@@ -623,6 +623,7 @@
         settings-open? (state/sub :ui/settings-open?)
         left-sidebar-open?  (state/sub :ui/left-sidebar-open?)
         wide-mode? (state/sub :ui/wide-mode?)
+        ls-block-hl-colored? (state/sub :pdf/block-highlight-colored?)
         onboarding-state (state/sub :file-sync/onboarding-state)
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
@@ -658,12 +659,15 @@
      [:main.theme-inner
       {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?
                                  :ls-right-sidebar-open sidebar-open?
-                                 :ls-wide-mode wide-mode?}])}
+                                 :ls-wide-mode wide-mode?
+                                 :ls-hl-colored ls-block-hl-colored?}])}
+
       [:button#skip-to-main
-       {:on-key-up (fn [e]
-                        (when (= (.-key e) "Enter")
-                          (ui/focus-element (ui/main-node))))}
-       "Skip to main content"]
+       {:on-click #(ui/focus-element (ui/main-node))
+        :on-key-up (fn [e]
+                     (when (= (.-key e) "Enter")
+                       (ui/focus-element (ui/main-node))))}
+       (t :accessibility/skip-to-main-content)]
       [:div.#app-container
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}

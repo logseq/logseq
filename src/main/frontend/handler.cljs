@@ -28,6 +28,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.global-config :as global-config-handler]
+            [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.metadata :as metadata-handler]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
@@ -91,11 +92,11 @@
            (->
             (p/do! (repo-config-handler/start {:repo repo})
                    (when (config/global-config-enabled?)
-                     (global-config-handler/start {:repo repo})))
+                     (global-config-handler/start {:repo repo}))
+                   (when (config/plugin-config-enabled?) (plugin-config-handler/start)))
             (p/finally
               (fn []
                 ;; install after config is restored
-                (shortcut/unlisten-all)
                 (shortcut/refresh!)
 
                 (cond
@@ -211,6 +212,7 @@
    (fn [_error]
      (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
      (state/set-indexedb-support! false)))
+  (idb/start)
 
   (react/run-custom-queries-when-idle!)
 

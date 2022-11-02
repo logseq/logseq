@@ -191,9 +191,10 @@
 (rum/defc sync-now
   []
   (ui/button "Sync now"
-             :class "block cursor-pointer"
-             :small? true
-             :on-click #(async/offer! fs-sync/immediately-local->remote-chan true)))
+    :class "block cursor-pointer"
+    :small? true
+    :on-click #(async/offer! fs-sync/immediately-local->remote-chan true)
+    :style {:color "#ffffff"}))
 
 (def *last-calculated-time (atom nil))
 
@@ -323,7 +324,7 @@
   [_state]
   (let [_                       (state/sub :auth/id-token)
         online?                 (state/sub :network/online?)
-        enabled-progress-panel? (util/electron?)
+        enabled-progress-panel? true
         current-repo            (state/get-current-repo)
         creating-remote-graph?  (state/sub [:ui/loading? :graph/create-remote?])
         current-graph-id        (state/sub-current-file-sync-graph-uuid)
@@ -387,7 +388,7 @@
                                                        (if (= (:url r) current-repo)
                                                          (dissoc r :GraphUUID :GraphName :remote?)
                                                          r))
-                                                  (state/get-repos)))
+                                                     (state/get-repos)))
                                                (create-remote-graph-fn))
 
                                            (second @graphs-txid) ; sync not started yet
@@ -427,12 +428,7 @@
           (cond-> []
             synced-file-graph?
             (concat
-             (if (and no-active-files? idle?)
-               [(when-not (util/electron?)
-                  {:item     [:div.flex.justify-center.w-full.py-2
-                              [:span.opacity-60 "Everything is synced!"]]
-                   :as-link? false})]
-
+             (when-not (and no-active-files? idle?)
                (cond
                  need-password?
                  [{:title   [:div.file-item
@@ -503,17 +499,16 @@
           ;; options
           {:outer-header
            [:<>
-            (when (util/electron?)
-              (indicator-progress-pane
-               sync-state sync-progress
-               {:idle?            idle?
-                :syncing?         syncing?
-                :need-password?   need-password?
-                :full-sync?       full-syncing?
-                :online?          online?
-                :queuing?         queuing?
-                :no-active-files? no-active-files?
-                :history-files?   (seq history-files)}))
+            (indicator-progress-pane
+             sync-state sync-progress
+             {:idle?            idle?
+              :syncing?         syncing?
+              :need-password?   need-password?
+              :full-sync?       full-syncing?
+              :online?          online?
+              :queuing?         queuing?
+              :no-active-files? no-active-files?
+              :history-files?   (seq history-files)})
 
             (when (and
                    (not enabled-progress-panel?)
@@ -617,10 +612,10 @@
               (ui/humanity-time-ago
                (or (:CreateTime version)
                    (:create-time version)) nil)]
-             [:small.opacity-50.translate-y-1
+             [:small.opacity-50.translate-y-1.flex.items-center.space-x-1
               (if local?
-                [:<> (ui/icon "git-commit") " local"]
-                [:<> (ui/icon "cloud") " remote"])]]])))]))
+                [:<> (ui/icon "git-commit") [:span "local"]]
+                [:<> (ui/icon "cloud") [:span "remote"]])]]])))]))
 
 (rum/defc pick-page-histories-for-sync
   [repo-url graph-uuid page-name page-entity]
@@ -769,7 +764,7 @@
     [:br]
     "to our users, we need a little more time to test it. That’s why we decided to first roll it out only to our "
     [:br]
-    "charitable OpenCollective sponsors. We can notify you once it becomes available for you."]
+    "charitable OpenCollective sponsors and backers. We can notify you once it becomes available for you."]
 
    [:div.pt-6.flex.justify-end.space-x-2
     (ui/button "Close" :on-click close-fn :background "gray" :class "opacity-60")]])

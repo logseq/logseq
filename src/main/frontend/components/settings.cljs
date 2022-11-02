@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [frontend.components.svg :as svg]
             [frontend.components.plugins :as plugins]
+            [frontend.components.assets :as assets]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.storage :as storage]
@@ -196,7 +197,7 @@
          enabled?
          (fn []
            (state/set-state! [:electron/user-cfgs :spell-check] (not enabled?))
-           (p/then (ipc/ipc "userAppCfgs" :spell-check (not enabled?))
+           (p/then (ipc/ipc :userAppCfgs :spell-check (not enabled?))
                    #(when (js/confirm (t :relaunch-confirm-to-work))
                       (js/logseq.api.relaunch))))
          true)]]]))
@@ -213,7 +214,7 @@
          enabled?
          (fn []
            (state/set-state! [:electron/user-cfgs :git/disable-auto-commit?] enabled?)
-           (ipc/ipc "userAppCfgs" :git/disable-auto-commit? enabled?))
+           (ipc/ipc :userAppCfgs :git/disable-auto-commit? enabled?))
          true)]]]))
 
 (rum/defcs git-auto-commit-seconds < rum/reactive
@@ -233,7 +234,7 @@
                                      (< 0 value (inc 600)))
                               (do
                                 (state/set-state! [:electron/user-cfgs :git/auto-commit-seconds] value)
-                                (ipc/ipc "userAppCfgs" :git/auto-commit-seconds value))
+                                (ipc/ipc :userAppCfgs :git/auto-commit-seconds value))
                               (when-let [elem (gobj/get event "target")]
                                 (notification/show!
                                  [:div "Invalid value! Must be a number between 1 and 600."]
@@ -247,7 +248,7 @@
             (t :settings-page/auto-updater)
             enabled?
             #((state/set-state! [:electron/user-cfgs :auto-update] (not enabled?))
-              (ipc/ipc "userAppCfgs" :auto-update (not enabled?))))))
+              (ipc/ipc :userAppCfgs :auto-update (not enabled?))))))
 
 (defn language-row [t preferred-language]
   (let [on-change (fn [e]
@@ -687,27 +688,37 @@
      (encryption-row enable-encryption?)
 
      (when-not web-platform?
+       [:div.mt-1.sm:mt-0.sm:col-span-2
+        [:hr]
+        (if logged-in?
+          [:div
+           (user-handler/email)
+           [:p (ui/button (t :logout) {:class "p-1"
+                                       :icon "logout"
+                                       :on-click user-handler/logout})]]
+          [:div
+           (ui/button (t :login) {:class "p-1"
+                                  :icon "login"
+                                  :on-click (fn []
+                                              (state/close-settings!)
+                                              (js/window.open config/LOGIN-URL))})
+           [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])])
+
+     (when-not web-platform?
+       [:<>
+        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
+        [:div.flex.flex-col.gap-4
+         {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
+         (sync-switcher-row enable-sync?)]])
+
+     (when-not web-platform?
        [:<>
         [:hr]
         [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]
-         [:div.mt-1.sm:mt-0.sm:col-span-2
-          (if logged-in?
-            [:div 
-              (user-handler/email)
-              [:p (ui/button (t :logout) {:class "p-1"
-                                          :icon "logout"
-                                          :on-click user-handler/logout})]]
-            [:div
-             (ui/button (t :login) {:class "p-1"
-                                    :icon "login"
-                                    :on-click (fn []
-                                                (state/close-settings!)
-                                                (js/window.open config/LOGIN-URL))})
-             [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])]]
+         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]]
         [:div.flex.flex-col.gap-4
          {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-         (sync-switcher-row enable-sync?)
          (whiteboards-switcher-row enable-whiteboards?)]])]))
 
 (rum/defcs settings
@@ -725,7 +736,7 @@
   (let [current-repo (state/sub :git/current-repo)
         ;; enable-block-timestamps? (state/enable-block-timestamps?)
         _installed-plugins (state/sub :plugin/installed-plugins)
-        plugins-of-settings (and plugin-handler/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
+        plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
         *active (::active state)]
 
     [:div#settings.cp__settings-main
@@ -737,15 +748,21 @@
       [:aside.md:w-64 {:style {:min-width "10rem"}}
        [:ul.settings-menu
         (for [[label id text icon]
-              [[:general "general" (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
-               [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
+              [[:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
+               [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
+
                (when (and
                       (util/electron?)
                       (not (file-sync-handler/synced-file-graph? current-repo)))
-                 [:git "git" (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
-               [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]
-               [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature" {:style {:font-size 18}
-                                                                                             :extension? true})]
+                 [:git "git" (t :settings-page/tab-version-control) (ui/icon "history")])
+
+               ;; (when (util/electron?)
+               ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
+
+               [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb")]
+               [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature" {:extension? true
+                                                                                             :style {:margin-left 2}})]
+
                (when plugins-of-settings
                  [:plugins-setting "plugins" (t :settings-of-plugins) (ui/icon "puzzle")])]]
 
@@ -778,6 +795,9 @@
 
          :git
          (settings-git)
+
+         :assets
+         (assets/settings-content)
 
          :advanced
          (settings-advanced current-repo)

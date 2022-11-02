@@ -188,6 +188,7 @@
         position: absolute;
         right: 5px;
         top: 2px;
+
         &:hover {
           opacity: .6;
         }
@@ -263,12 +264,21 @@
     margin-bottom: 12px;
   }
 
-  > .edit-input {
+  .edit-input {
     width: 100%;
-  }
+    border: none;
+    box-shadow: none;
+    padding-left: 5px;
+    padding-top: 5px;
 
-  &.editing {
-    background-color: var(--ls-secondary-background-color);
+    &-wrapper {
+      @apply rounded;
+
+      &.editing {
+        background-color: var(--ls-secondary-background-color);
+        margin-right: 15px;
+      }
+    }
   }
 }
 
@@ -280,20 +290,34 @@ a.page-title {
   color: inherit;
 }
 
+.page-title-sizer-wrapper {
+  @apply w-full;
+
+  :empty::before {
+    content: '\200b';
+  }
+
+  > .title {
+    @apply w-full pointer-events-none overflow-hidden overflow-ellipsis;
+  }
+
+  .edit-input {
+    padding-right: 4px;
+  }
+}
+
 html.is-native-android,
 html.is-native-ipad,
 html.is-native-iphone,
 html.is-native-iphone-without-notch {
-
-    .ls-page-title {
-        margin: 0px 0px 24px -15px;
-        padding: 0px;
-    }
+  .ls-page-title {
+    margin: 0 0 24px -15px;
+    padding: 0 !important;
+  }
 }
 
 /* Change to another cursor style if Shift key is active */
-[data-active-keystroke*="Shift" i]
-:is(.journal-title, .page-title,
+[data-active-keystroke*="Shift" i] :is(.journal-title, .page-title,
     .block-ref, .page-ref, a.tag,
     .bullet-container.cursor) {
   cursor: e-resize;
@@ -320,7 +344,7 @@ html.is-native-iphone-without-notch {
 }
 
 .cp__right-sidebar .add-button-link {
-    margin-left: 21px;
+  margin-left: 21px;
 }
 
 html.is-native-android,
@@ -343,11 +367,11 @@ html.is-native-ios {
   }
 
   .block-content-wrapper {
-      /* 38px is the width of block-control */
-      width: calc(100% - 35px);
-      @screen sm {
-          width: calc(100% - 33px);
-      }
+    /* 38px is the width of block-control */
+    width: calc(100% - 35px);
+    @screen sm {
+      width: calc(100% - 33px);
+    }
   }
 }
 
@@ -362,24 +386,24 @@ html.is-native-ios {
   .control-hide {
     display: none;
   }
- }
+}
 
- .toned-down {
-   opacity: 0.5;
+.toned-down {
+  opacity: 0.5;
   color: var(--ls-secondary-text-color);
- }
+}
 
- .highlighted {
+.highlighted {
   opacity: 1;
   color: var(--ls-primary-text-color);
- }
+}
 
- .separator-top {
-   border-top: 1px solid var(--ls-quaternary-background-color);
- }
+.separator-top {
+  border-top: 1px solid var(--ls-quaternary-background-color);
+}
 
- .icon-box {
+.icon-box {
   display: inline-block;
   line-height: normal;
   background-color: var(--ls-quaternary-background-color);
- }
+}

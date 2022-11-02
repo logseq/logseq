@@ -35,15 +35,31 @@
       (def API-DOMAIN "api-dev.logseq.com")
       (def WS-URL "wss://ws-dev.logseq.com/file-sync?graphuuid=%s")))
 
-;; feature flags
+;; Feature flags
+;; =============
 
 (goog-define ENABLE-PLUGINS true)
 (defonce enable-plugins? ENABLE-PLUGINS)
 
 (swap! state/state assoc :plugin/enabled enable-plugins?)
 
+;; Desktop only as other platforms requires better understanding of their
+;; multi-graph workflows and optimal place for a "global" dir
+(def global-config-enabled? util/electron?)
+
+;; User level configuration for whether plugins are enabled
+(defonce lsp-enabled?
+         (and (util/electron?)
+              (state/lsp-enabled?-or-theme)))
+
+(defn plugin-config-enabled?
+  []
+  (and lsp-enabled? (global-config-enabled?)))
+
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
+
+;; ============
 
 (def app-name "logseq")
 (def website
@@ -76,16 +92,40 @@
 (def markup-formats
   #{:org :md :markdown :asciidoc :adoc :rst})
 
-(defn doc-formats
-  []
+(def doc-formats
   #{:doc :docx :xls :xlsx :ppt :pptx :one :pdf :epub})
 
-(def audio-formats #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
+(def image-formats
+  #{:png :jpg :jpeg :bmp :gif :webp :svg})
+
+(def audio-formats
+  #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
+
+(def video-formats
+  #{:mp4 :webm :mov})
 
 (def media-formats (set/union (gp-config/img-formats) audio-formats))
 
 (def html-render-formats
   #{:adoc :asciidoc})
+
+(defn extname-of-supported?
+  ([input] (extname-of-supported?
+            input
+            [image-formats doc-formats audio-formats
+             video-formats markup-formats html-render-formats]))
+  ([input formats]
+   (when-let [input (some->
+                     (cond-> input
+                       (and (string? input)
+                            (not (string/blank? input)))
+                       (string/replace-first "." ""))
+                     (util/safe-lower-case)
+                     (keyword))]
+     (some
+      (fn [s]
+        (contains? s input))
+      formats))))
 
 (def mobile?
   (when-not util/node-test?
@@ -264,10 +304,6 @@
 (def pages-metadata-file "pages-metadata.edn")
 
 (def config-default-content (rc/inline "config.edn"))
-
-;; Desktop only as other platforms requires better understanding of their
-;; multi-graph workflows and optimal place for a "global" dir
-(def global-config-enabled? util/electron?)
 
 (defonce idb-db-prefix "logseq-db/")
 (defonce local-db-prefix "logseq_local_")

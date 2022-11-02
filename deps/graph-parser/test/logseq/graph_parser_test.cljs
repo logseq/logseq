@@ -65,18 +65,7 @@
                        @conn)
                   (map first)
                   (map :block/properties)))
-          "id as text has correct :block/properties"))
-
-    (let [conn (ldb/start-conn)]
-      (graph-parser/parse-file conn "foo.md" "- id:: [[628953c1-8d75-49fe-a648-f4c612109098]]" {})
-      (is (= [{:id #{"628953c1-8d75-49fe-a648-f4c612109098"}}]
-             (->> (d/q '[:find (pull ?b [*])
-                         :in $
-                         :where [?b :block/content] [(missing? $ ?b :block/name)]]
-                       @conn)
-                  (map first)
-                  (map :block/properties)))
-          "id as linked ref has correct :block/properties")))
+          "id as text has correct :block/properties")))
 
   (testing "unexpected failure during block extraction"
     (let [conn (ldb/start-conn)
@@ -295,13 +284,14 @@
   (let [conn (ldb/start-conn)
         properties {"foo" "valid"
                     "[[foo]]" "invalid"
-                    "some,prop" "invalid"}
+                    "some,prop" "invalid"
+                    "#blarg" "invalid"}
         body (str (gp-property/->block-content properties)
                   "\n- " (gp-property/->block-content properties))]
     (graph-parser/parse-file conn "foo.md" body {})
 
     (is (= [{:block/properties {:foo "valid"}
-             :block/invalid-properties #{"[[foo]]" "some,prop"}}]
+             :block/invalid-properties #{"[[foo]]" "some,prop" "#blarg"}}]
            (->> (d/q '[:find (pull ?b [*])
                        :in $
                        :where
@@ -314,7 +304,7 @@
         "Has correct (in)valid block properties")
 
     (is (= [{:block/properties {:foo "valid"}
-             :block/invalid-properties #{"[[foo]]" "some,prop"}}]
+             :block/invalid-properties #{"[[foo]]" "some,prop" "#blarg"}}]
            (->> (d/q '[:find (pull ?b [*])
                        :in $
                        :where [?b :block/properties] [?b :block/name]]
@@ -332,6 +322,23 @@
                                "title:: core.async"
                                {})
       (is (= #{"core.async"}
+             (->> (d/q '[:find (pull ?b [*])
+                         :in $
+                         :where [?b :block/name]]
+                       @conn)
+                  (map (comp :block/name first))
+                  (remove built-in-pages)
+                  set)))))
+
+  (testing "for file and web uris"
+    (let [conn (ldb/start-conn)
+          built-in-pages (set (map string/lower-case default-db/built-in-pages-names))]
+      (graph-parser/parse-file conn
+                               "foo.md"
+                               (str "- [Filename.txt](file:///E:/test/Filename.txt)\n"
+                                    "- [example](https://example.com)")
+                               {})
+      (is (= #{"foo"}
              (->> (d/q '[:find (pull ?b [*])
                          :in $
                          :where [?b :block/name]]

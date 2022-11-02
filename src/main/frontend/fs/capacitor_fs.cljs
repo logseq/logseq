@@ -111,31 +111,44 @@
       (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
 
 (def backup-dir "logseq/bak")
+(def version-file-dir "logseq/version-files/local")
+
 (defn- get-backup-dir
-  [repo-dir path ext]
+  [repo-dir path bak-dir ext]
   (let [relative-path (-> path
                           (string/replace (re-pattern (str "^" (gstring/regExpEscape repo-dir)))
                                           "")
                           (string/replace (re-pattern (str "(?i)" (gstring/regExpEscape (str "." ext)) "$"))
                                           ""))]
-    (util/safe-path-join repo-dir (str backup-dir "/" relative-path))))
+    (util/safe-path-join repo-dir (str bak-dir "/" relative-path))))
 
 (defn- truncate-old-versioned-files!
   "reserve the latest 6 version files"
   [dir]
-  (p/let [files (readdir dir)
-          files (js->clj files :keywordize-keys true)
-          old-versioned-files (drop 6 (reverse (sort-by :mtime files)))]
-    (mapv (fn [file]
-            (.deleteFile Filesystem (clj->js {:path (:uri file)})))
-          old-versioned-files)))
+  (->
+   (p/let [files (readdir dir)
+           files (js->clj files :keywordize-keys true)
+           old-versioned-files (drop 6 (reverse (sort-by :mtime files)))]
+     (mapv (fn [file]
+             (.deleteFile Filesystem (clj->js {:path (:uri file)})))
+           old-versioned-files))
+   (p/catch (fn [_]))))
 
+;; TODO: move this to FS protocol
 (defn backup-file
-  [repo-dir path content ext]
-  (let [backup-dir (get-backup-dir repo-dir path ext)
-        new-path (str backup-dir "/" (string/replace (.toISOString (js/Date.)) ":" "_") "." ext)]
+  "backup CONTENT under DIR :backup-dir or :version-file-dir
+  :backup-dir = `backup-dir`
+  :version-file-dir = `version-file-dir`"
+  [repo dir path content]
+  {:pre [(contains? #{:backup-dir :version-file-dir} dir)]}
+  (let [repo-dir (config/get-local-dir repo)
+        ext (util/get-file-ext path)
+        dir (case dir
+              :backup-dir (get-backup-dir repo-dir path backup-dir ext)
+              :version-file-dir (get-backup-dir repo-dir path version-file-dir ext))
+        new-path (util/safe-path-join dir (str (string/replace (.toISOString (js/Date.)) ":" "_") "." (mobile-util/platform) "." ext))]
     (<write-file-with-utf8 new-path content)
-    (truncate-old-versioned-files! backup-dir)))
+    (truncate-old-versioned-files! dir)))
 
 (defn backup-file-handle-changed!
   [repo-dir file-path content]
@@ -191,7 +204,7 @@
                  mtime (-> (js->clj stat :keywordize-keys true)
                            :mtime)]
            (when-not contents-matched?
-             (backup-file repo-dir path disk-content ext))
+             (backup-file repo-dir :backup-dir path disk-content))
            (db/set-file-last-modified-at! repo path mtime)
            (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
                              (encrypt/decrypt content)
@@ -206,24 +219,30 @@
                       (log/error :write-file-failed error)))))))))
 
 (defn get-file-path [dir path]
-  (let [dir (some-> dir (string/replace #"/+$" ""))
-        dir (if (and (not-empty dir) (string/starts-with? dir "/"))
-              (do
-                (js/console.trace "WARN: detect absolute path, use URL instead")
-                (str "file://" (js/encodeURI dir)))
-              dir)
-        path (some-> path (string/replace #"^/+" ""))]
-    (cond (nil? path)
-          dir
+  (let [dir        (some-> dir (string/replace #"/+$" ""))
+        dir        (if (and (not-empty dir) (string/starts-with? dir "/"))
+                     (do
+                       (js/console.trace "WARN: detect absolute path, use URL instead")
+                       (str "file://" (js/encodeURI dir)))
+                     dir)
+        path       (some-> path (string/replace #"^/+" ""))
+        encode-url #(let [encoded-chars?
+                          (and (string? %) (boolean (re-find #"(?i)%[0-9a-f]{2}" %)))]
+                      (cond-> %
+                        (not encoded-chars?)
+                        (js/encodeURI path)))]
+    (cond (string/blank? path)
+          (encode-url dir)
 
-          (nil? dir)
-          path
+          (string/blank? dir)
+          (encode-url path)
 
           (string/starts-with? path dir)
-          path
+          (encode-url path)
 
           :else
-          (str dir "/" path))))
+          (let [path' (encode-url path)]
+            (str dir "/" path')))))
 
 (defn- local-container-path?
   "Check whether `path' is logseq's container `localDocumentsPath' on iOS"

@@ -16,4 +16,9 @@
   opacity-100 scale-100 absolute;
 
   z-index: calc(var(--ls-z-index-level-1) + 1);
+  width: 270px;
+
+  a:hover {
+    color: var(--ls-primary-text-color);
+  }
 }

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-extra-semi */
 import { Vec } from '@tldraw/vec'
+import potpack from 'potpack'
 import type { TLShape } from '../lib'
 import {
   type TLBounds,
@@ -991,5 +992,38 @@ left past the initial left edge) then swap points on that axis.
     }
 
     return results
+  }
+
+  // pack shapes into a rectangle
+  static getPackedDistributions(shapes: TLShape[]) {
+    const commonBounds = BoundsUtils.getCommonBounds(shapes.map(({ bounds }) => bounds))
+    const origin = [commonBounds.minX, commonBounds.minY]
+    const shapesPosOriginal: Record<string, number[]> = Object.fromEntries(
+      shapes.map(s => [s.id, [s.bounds.minX, s.bounds.minY]])
+    )
+    const entries = shapes
+      .filter(s => !(s.props.handles?.start?.bindingId || s.props.handles?.end?.bindingId))
+      .map(shape => {
+        const bounds = shape.getBounds()
+        return {
+          id: shape.id,
+          w: bounds.width + 16,
+          h: bounds.height + 16,
+          x: bounds.minX,
+          y: bounds.minY,
+        }
+      })
+
+    potpack(entries)
+
+    const entriesToMove = entries.map(({ id, x, y }) => {
+      return {
+        id,
+        prev: shapesPosOriginal[id],
+        next: [x + origin[0], y + origin[1]],
+      }
+    })
+
+    return entriesToMove
   }
 }
