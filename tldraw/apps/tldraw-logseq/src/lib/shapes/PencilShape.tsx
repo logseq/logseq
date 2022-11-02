@@ -122,7 +122,7 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
   getShapeSVGJsx() {
     const {
       pointsPath,
-      props: { stroke, noFill, strokeWidth, strokeType },
+      props: { stroke, strokeWidth, strokeType },
     } = this
     return (
       <path

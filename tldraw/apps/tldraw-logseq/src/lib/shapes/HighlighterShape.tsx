@@ -73,18 +73,18 @@ export class HighlighterShape extends TLDrawShape<HighlighterShapeProps> {
   getShapeSVGJsx() {
     const {
       pointsPath,
-      props: { stroke, strokeWidth },
+      props: { stroke, strokeWidth, opacity },
     } = this
     return (
       <path
         d={pointsPath}
         strokeWidth={strokeWidth * 16}
-        stroke={stroke}
+        stroke={getComputedColor(stroke, 'stroke')}
         fill="none"
         pointerEvents="all"
         strokeLinejoin="round"
         strokeLinecap="round"
-        opacity={0.5}
+        opacity={opacity}
       />
     )
   }

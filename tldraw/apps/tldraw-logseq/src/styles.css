@@ -1,3 +1,16 @@
+:root {
+  --ls-wb-stroke-color-gray: var(--color-gray-500, gray);
+  --ls-wb-stroke-color-red: var(--color-red-500, red);
+  --ls-wb-stroke-color-yellow: var(--color-yellow-500, yellow);
+  --ls-wb-stroke-color-green: var(--color-green-500, green);
+  --ls-wb-stroke-color-blue: var(--color-blue-500, blue);
+  --ls-wb-stroke-color-purple: var(--color-purple-500, purple);
+  --ls-wb-stroke-color-pink: var(--color-pink-500, pink);
+  --ls-wb-stroke-color-default: var(--ls-secondary-border-color);
+  --ls-wb-text-color-default: var(--ls-secondary-text-color);
+  --ls-wb-background-color-default: var(--ls-tertiary-background-color);
+}
+
 .logseq-tldraw {
   --color-panel: var(--ls-tertiary-background-color);
   --color-panel-inverted: var(--ls-secondary-text-color);
@@ -10,17 +23,6 @@
   --shadow-small: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-medium: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-large: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-
-  --ls-wb-stroke-color-gray: var(--color-gray-500, gray);
-  --ls-wb-stroke-color-red: var(--color-red-500, red);
-  --ls-wb-stroke-color-yellow: var(--color-yellow-500, yellow);
-  --ls-wb-stroke-color-green: var(--color-green-500, green);
-  --ls-wb-stroke-color-blue: var(--color-blue-500, blue);
-  --ls-wb-stroke-color-purple: var(--color-purple-500, purple);
-  --ls-wb-stroke-color-pink: var(--color-pink-500, pink);
-  --ls-wb-stroke-color-default: var(--ls-secondary-border-color);
-  --ls-wb-text-color-default: var(--ls-secondary-text-color);
-  --ls-wb-background-color-default: var(--ls-tertiary-background-color);
 
   backface-visibility: hidden;
 }
