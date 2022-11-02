@@ -224,7 +224,7 @@
            :file/size (get-attr "size")
            :file/type (get-attr "type")}))
       (p/rejected "File not exists")))
-  (open-dir [_this ok-handler]
+  (open-dir [_this _dir ok-handler]
     (utils/openDirectory #js {:recursive true}
                          ok-handler))
   (get-files [_this path-or-handle ok-handler]

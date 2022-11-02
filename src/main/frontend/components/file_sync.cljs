@@ -534,7 +534,8 @@
                       (file-sync-handler/init-remote-graph url graph)
                       (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
 
-                    {:empty-dir?-or-pred
+                    {:sync-from-remote? true
+                     :empty-dir?-or-pred
                      (fn [ret]
                        (let [empty-dir? (nil? (second ret))]
                          (if-let [root (first ret)]

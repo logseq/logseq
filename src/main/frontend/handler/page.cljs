@@ -691,11 +691,18 @@
 (defn ls-dir-files!
   ([ok-handler] (ls-dir-files! ok-handler nil))
   ([ok-handler opts]
-   (web-nfs/ls-dir-files-with-handler!
-     (fn [e]
-       (init-commands!)
-       (when ok-handler (ok-handler e)))
-     opts)))
+   (let [ios-logseq-sync? (when (and (mobile-util/native-ios?)
+                                     (state/enable-sync?)
+                                     (not (:sync-from-remote? opts)))
+                            (js/confirm "Use Logseq Sync for this new graph?"))]
+     (web-nfs/ls-dir-files-with-handler!
+      (fn [e]
+        (init-commands!)
+        (when ok-handler
+          (ok-handler e)
+          (when ios-logseq-sync?
+            (state/pub-event! [:sync/create-remote-graph (state/get-current-repo)]))))
+      (assoc opts :ios-logseq-sync? ios-logseq-sync?)))))
 
 (defn get-all-pages
   [repo]

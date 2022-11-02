@@ -18,13 +18,33 @@ public class FolderPicker: CAPPlugin, UIDocumentPickerDelegate {
         self._call = call
 
         DispatchQueue.main.async { [weak self] in
+
             let documentPicker = UIDocumentPickerViewController(
-                documentTypes: [String(kUTTypeFolder)],
-                in: UIDocumentPickerMode.open
+              documentTypes: [String(kUTTypeFolder)],
+              in: UIDocumentPickerMode.open
             )
+
+            // Set the initial directory.
+
+            if let path = call.getString("path") {
+                // guard let url = URL(string: path) else {
+                //     call.reject("can not parse url")
+                //     return
+                // }
+
+                guard let documentDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+
+                let url = documentDirectory.appendingPathComponent(path)
+
+                print("picked folder url = " + url.path)
+
+                documentPicker.directoryURL = url
+
+            }
 
             documentPicker.allowsMultipleSelection = false
             documentPicker.delegate = self
+
             documentPicker.modalPresentationStyle = UIModalPresentationStyle.fullScreen
 
             self?.bridge?.viewController?.present(
