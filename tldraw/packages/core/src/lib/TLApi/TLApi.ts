@@ -201,7 +201,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     shapes,
     assets,
     bindings,
-    point,
+    point = [0, 0],
   }: {
     shapes: TLShapeModel[]
     point: number[]
@@ -307,18 +307,38 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     return null
   }
 
+  cloneShapesIntoCurrentPage = (opts: {
+    shapes: TLShapeModel[]
+    point: number[]
+    // assets & bindings are the context for creating shapes
+    assets: TLAsset[]
+    bindings: Record<string, TLBinding>
+  }) => {
+    const data = this.cloneShapes(opts)
+    if (data) {
+      this.addClonedShapes(data)
+    }
+    return this
+  }
+
+  addClonedShapes = (opts: ReturnType<TLApi['cloneShapes']>) => {
+    const { shapes, assets, bindings } = opts
+    if (assets.length > 0) {
+      this.app.createAssets(assets)
+    }
+    if (shapes.length > 0) {
+      this.app.createShapes(shapes)
+    }
+    this.app.currentPage.updateBindings(Object.fromEntries(bindings.map(b => [b.id, b])))
+    this.app.selectedTool.transition('idle') // clears possible editing states
+    return this
+  }
+
   addClonedShapesFromTldrString = (text: string, point: number[]) => {
     const data = this.getClonedShapesFromTldrString(text, point)
     if (data) {
-      const { shapes, bindings, assets } = data
-      if (assets.length > 0) {
-        this.app.createAssets(assets)
-      }
-      if (shapes.length > 0) {
-        this.app.createShapes(shapes)
-      }
-      this.app.currentPage.updateBindings(Object.fromEntries(bindings.map(b => [b.id, b])))
-      this.app.selectedTool.transition('idle') // clears possible editing states
+      this.addClonedShapes(data)
     }
+    return this
   }
 }

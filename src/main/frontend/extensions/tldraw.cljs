@@ -79,10 +79,13 @@
   [name block-id]
   (let [data (whiteboard-handler/page-name->tldr! name block-id)
         [tln set-tln] (rum/use-state nil)]
-    (rum/use-layout-effect!
+    (rum/use-effect!
      (fn []
        (when (and tln name)
          (when-let [^js api (gobj/get tln "api")]
+           (when (and (not (state/get-onboarding-whiteboard?))
+                      (= 0 (.. tln -shapes -length)))
+             (whiteboard-handler/populate-onboarding-whiteboard api))
            (when (and block-id (parse-uuid block-id))
              (. api selectShapes block-id)
              (. api zoomToSelection))))
