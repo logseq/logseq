@@ -4,13 +4,15 @@
             [dommy.core :as dom]
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
-            [frontend.handler.editor :as editor-handler]))
+            [promesa.core :as p]))
 
 (defn shape->block [shape page-name idx]
   (let [properties {:ls-type :whiteboard-shape
@@ -216,3 +218,34 @@
   [target]
   (when-let [shape-el (dom/closest target "[data-shape-id]")]
     (.getAttribute shape-el "data-shape-id")))
+
+(defn get-onboard-whiteboard-edn
+  []
+  (p/let [^js res (js/fetch "./whiteboard/onboarding.edn") ;; do we need to cache it?
+          text (.text res)
+          edn (gp-util/safe-read-string text)]
+    edn))
+
+(defn clone-whiteboard-from-edn
+  "Given a tldr, clone the whiteboard page into current active whiteboard"
+  ([edn]
+   (when-let [app (state/active-tldraw-app)]
+     (clone-whiteboard-from-edn edn (.-api app))))
+  ([{:keys [pages blocks]} api]
+   (let [page-block (first pages)
+         shapes (->> blocks
+                     (filter gp-whiteboard/shape-block?)
+                     (map gp-whiteboard/block->shape)
+                     (sort-by :index))
+         tldr-page (gp-whiteboard/page-block->tldr-page page-block)
+         assets (:assets tldr-page)
+         bindings (:bindings tldr-page)]
+     (.cloneShapesIntoCurrentPage ^js api (clj->js {:shapes shapes
+                                                    :assets assets
+                                                    :bindings bindings})))))
+(defn populate-onboarding-whiteboard
+  [api]
+  (when (some? api)
+    (p/let [edn (get-onboard-whiteboard-edn)]
+      (clone-whiteboard-from-edn edn api)
+      (state/set-onboarding-whiteboard! true))))
