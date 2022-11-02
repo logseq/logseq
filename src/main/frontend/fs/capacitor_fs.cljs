@@ -1,6 +1,6 @@
 (ns frontend.fs.capacitor-fs
   "Implementation of fs protocol for mobile"
-  (:require ["@capacitor/filesystem" :refer [Encoding Filesystem]]
+  (:require ["@capacitor/filesystem" :refer [Encoding Filesystem Directory]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [goog.string :as gstring]
@@ -266,6 +266,25 @@
      :webkit-allow-full-screen "webkitallowfullscreen"
      :height "100%"}]])
 
+(defn- open-dir
+  [dir]
+  (p/let [_ (when (mobile-util/native-android?) (android-check-permission))
+          {:keys [path localDocumentsPath]} (-> (.pickFolder mobile-util/folder-picker
+                                                             (clj->js (when (and dir (mobile-util/native-ios?))
+                                                                        {:path dir})))
+                                                  (p/then #(js->clj % :keywordize-keys true))
+                                                  (p/catch (fn [e]
+                                                             (js/alert (str e))
+                                                             nil))) ;; NOTE: If pick folder fails, let it crash
+            _ (when (and (mobile-util/native-ios?)
+                         (not (or (local-container-path? path localDocumentsPath)
+                                  (mobile-util/iCloud-container-path? path))))
+                (state/pub-event! [:modal/show-instruction]))
+            _ (js/console.log "Opening or Creating graph at directory: " path)
+            files (readdir path)
+            files (js->clj files :keywordize-keys true)]
+      (into [] (concat [{:path path}] files))))
+
 (defrecord ^:large-vars/cleanup-todo Capacitorfs []
   protocol/Fs
   (mkdir! [_this dir]
@@ -342,21 +361,8 @@
     (let [path (get-file-path dir path)]
       (p/chain (.stat Filesystem (clj->js {:path path}))
                #(js->clj % :keywordize-keys true))))
-  (open-dir [_this _ok-handler]
-    (p/let [_ (when (mobile-util/native-android?) (android-check-permission))
-            {:keys [path localDocumentsPath]} (-> (.pickFolder mobile-util/folder-picker)
-                                                  (p/then #(js->clj % :keywordize-keys true))
-                                                  (p/catch (fn [e]
-                                                             (js/alert (str e))
-                                                             nil))) ;; NOTE: If pick folder fails, let it crash
-            _ (when (and (mobile-util/native-ios?)
-                         (not (or (local-container-path? path localDocumentsPath)
-                                  (mobile-util/iCloud-container-path? path))))
-                (state/pub-event! [:modal/show-instruction]))
-            _ (js/console.log "Opening or Creating graph at directory: " path)
-            files (readdir path)
-            files (js->clj files :keywordize-keys true)]
-      (into [] (concat [{:path path}] files))))
+  (open-dir [_this dir _ok-handler]
+    (open-dir dir))
   (get-files [_this path-or-handle _ok-handler]
     (readdir path-or-handle))
   (watch-dir! [_this dir _options]

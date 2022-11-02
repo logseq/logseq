@@ -572,6 +572,24 @@
                   (state/close-modal!)
                   (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
 
+(defmethod handle :sync/create-remote-graph [[_ current-repo]]
+  (let [graph-name (js/decodeURI (util/node-path.basename current-repo))]
+    (async/go
+      (async/<! (sync/<sync-stop))
+      (state/set-state! [:ui/loading? :graph/create-remote?] true)
+      (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
+        (async/<! (sync/sync-start))
+        (state/set-state! [:ui/loading? :graph/create-remote?] false)
+        ;; update existing repo
+        (state/set-repos! (map (fn [r]
+                                 (if (= (:url r) current-repo)
+                                   (assoc r
+                                          :GraphUUID GraphUUID
+                                          :GraphName graph-name
+                                          :remote? true)
+                                   r))
+                            (state/get-repos)))))))
+
 (defmethod handle :graph/re-index [[_]]
   ;; Ensure the graph only has ONE window instance
   (repo-handler/re-index!
