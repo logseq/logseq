@@ -311,9 +311,9 @@ export interface IPluginSearchServiceHooks {
       files?: Array<SearchFileItem>
     }>
 
-  onIndiceInit: (graph: string, blocks: any) => Promise<SearchIndiceInitStatus>
+  onIndiceInit: (graph: string) => Promise<SearchIndiceInitStatus>
   onIndiceReset: (graph: string) => Promise<void>
-  onBlocksChanged: (graph: string, changes: { added: Array<SearchBlockItem>, removed: Array<EntityID> }) => Promise<void>
+  onBlocksChanged: (graph: string, changes: { added: Array<SearchBlockItem>, removed: Array<BlockEntity> }) => Promise<void>
   onGraphRemoved: (graph: string, opts?: {}) => Promise<any>
 }
 
