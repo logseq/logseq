@@ -8,7 +8,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.rum :refer [use-bounding-client-rect use-click-outside]]
+            [frontend.rum :refer [use-bounding-client-rect use-click-outside use-breakpoint]]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -207,39 +207,44 @@
                                      :checked (boolean (checked-page-names whiteboard-name))
                                      :on-checked-change (fn [checked]
                                                           (set-checked-page-names (if checked
-                                                                               (conj checked-page-names whiteboard-name)
-                                                                               (disj checked-page-names whiteboard-name))))})])
+                                                                                    (conj checked-page-names whiteboard-name)
+                                                                                    (disj checked-page-names whiteboard-name))))})])
          (for [n (range empty-cards)]
            [:div.dashboard-card.dashboard-bg-card {:key n}])]]])
     [:div "This feature is not publicly available yet."]))
 
 (rum/defc whiteboard-page
-  [name block-id]
-  [:div.absolute.w-full.h-full.whiteboard-page
+  [page-name block-id]
+  (let [[ref bp] (use-breakpoint)]
+    [:div.absolute.w-full.h-full.whiteboard-page
 
-   ;; makes sure the whiteboard will not cover the borders
-   {:key name
-    :style {:padding "0.5px" :z-index 0
-            :transform "translateZ(0)"
-            :text-rendering "geometricPrecision"
-            :-webkit-font-smoothing "subpixel-antialiased"}}
+     ;; makes sure the whiteboard will not cover the borders
+     {:key page-name
+      :ref ref
+      :data-breakpoint (name bp)
+      :style {:padding "0.5px" :z-index 0
+              :transform "translateZ(0)"
+              :text-rendering "geometricPrecision"
+              :-webkit-font-smoothing "subpixel-antialiased"}}
 
-   [:div.whiteboard-page-title-root
-    [:span.whiteboard-page-title
-     {:style {:color "var(--ls-primary-text-color)"
-              :user-select "none"}}
-     (page/page-title name
-                      [:span.tie.tie-whiteboard
-                       {:style {:font-size "0.9em"}}]
-                      (get-page-display-name name)
-                      nil
-                      false)]
+     [:div.whiteboard-page-title-root
+      [:div.whiteboard-page-title
+       {:style {:color "var(--ls-primary-text-color)"
+                :user-select "none"}}
+       (page/page-title page-name
+                        [:span.tie.tie-whiteboard
+                         {:style {:font-size "0.9em"}}]
+                        (get-page-display-name page-name)
+                        nil
+                        false)]
 
-    (page-refs-count name
-                     "text-md px-3 py-2 cursor-default whiteboard-page-refs-count"
-                     (fn [open?] [:<> "References" (ui/icon (if open? "references-hide" "references-show")
-                                                            {:extension? true})]))]
-   (tldraw-app name block-id)])
+      [:div.whiteboard-page-refs
+       (page-refs-count page-name
+                        "text-md px-3 py-2 cursor-default whiteboard-page-refs-count"
+                        (fn [open?] [:span.whiteboard-page-refs-count-label
+                                     "References" (ui/icon (if open? "references-hide" "references-show")
+                                                           {:extension? true})]))]]
+     (tldraw-app page-name block-id)]))
 
 (rum/defc whiteboard-route
   [route-match]
