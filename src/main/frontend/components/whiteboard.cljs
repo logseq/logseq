@@ -93,7 +93,7 @@
                       (util/stop e)
                       (d-open-flag (fn [o] (if (not= o 2) 2 0))))}
          [:div.open-page-ref-link refs-count]
-         (when render-fn (render-fn open?))]
+         (when render-fn (render-fn open? refs-count))]
         (reference/block-linked-references block-uuid)
         open?
         #(set-open-flag 0))))))
@@ -241,9 +241,10 @@
       [:div.whiteboard-page-refs
        (page-refs-count page-name
                         "text-md px-3 py-2 cursor-default whiteboard-page-refs-count"
-                        (fn [open?] [:span.whiteboard-page-refs-count-label
-                                     "References" (ui/icon (if open? "references-hide" "references-show")
-                                                           {:extension? true})]))]]
+                        (fn [open? refs-count] [:span.whiteboard-page-refs-count-label
+                                                (if (> refs-count 1) "References" "Reference")
+                                                (ui/icon (if open? "references-hide" "references-show")
+                                                         {:extension? true})]))]]
      (tldraw-app page-name block-id)]))
 
 (rum/defc whiteboard-route
