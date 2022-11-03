@@ -11,6 +11,7 @@
     "electron:debug": "electron-forge start --inspect-electron",
     "electron:make": "electron-forge make",
     "electron:make-macos-arm64": "electron-forge make --platform=darwin --arch=arm64",
+    "electron:make-linux-arm64": "electron-forge make --platform=linux --arch=arm64",
     "electron:publish:github": "electron-forge publish",
     "rebuild:better-sqlite3": "electron-rebuild -v 19.0.12 -f -w better-sqlite3",
     "rebuild:all": "electron-rebuild -v 19.0.12 -f",

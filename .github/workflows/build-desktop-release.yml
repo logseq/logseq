@@ -275,6 +275,56 @@ jobs:
           name: logseq-win64-builds
           path: builds
 
+    build-linux-arm64:
+    runs-on: ubuntu-18.04
+    needs: [ compile-cljs ]
+    steps:
+      - name: Download The Static Asset
+        uses: actions/download-artifact@v2
+        with:
+          name: static
+          path: static
+
+      - name: Retrieve tag version
+        id: ref
+        run: |
+          pkgver=$(cat ./static/VERSION)
+          echo ::set-output name=version::$pkgver
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # - name: Cache Node Modules
+      #   uses: actions/cache@v2
+      #   with:
+      #     path: |
+      #       **/node_modules
+      #     key: ${{ runner.os }}-node-modules
+
+      - name: Fetch deps and fix dugit arch for arm64
+        run: yarn install --ignore-platform && cd node_modules/dugite && npm_config_arch=arm64 node script/download-git.js
+        working-directory: ./static
+
+      - name: Build/Release Electron App for arm64
+        run: yarn electron:make-linux-arm64
+        working-directory: ./static
+
+      - name: Save artifacts
+        run: |
+          mkdir -p builds
+          # NOTE: save VERSION file to builds directory
+          cp static/VERSION ./builds/VERSION
+          mv static/out/make/*-*.AppImage ./builds/Logseq-linux-arm64-${{ steps.ref.outputs.version }}.AppImage
+          mv static/out/make/zip/linux/arm64/*-linux-arm64-*.zip ./builds/Logseq-linux-arm64-${{ steps.ref.outputs.version }}.zip
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: logseq-linux-arm64-builds
+          path: builds
+
   build-macos-x64:
     needs: [ compile-cljs ]
     runs-on: macos-11
