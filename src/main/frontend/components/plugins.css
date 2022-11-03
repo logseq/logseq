@@ -88,7 +88,11 @@
       }
 
       .dropdown-wrapper {
-          min-width: 14rem;
+        min-width: 14rem;
+      }
+
+      .title-wrap {
+        @apply whitespace-nowrap;
       }
     }
 
@@ -896,7 +900,7 @@ html[data-theme='dark'] {
 .ui__modal[label=plugins-dashboard] {
   .panel-content {
     overflow-y: auto;
-    max-height: calc(56vh + 290px);
+    max-height: calc(100vh - 100px);
   }
 }
 
