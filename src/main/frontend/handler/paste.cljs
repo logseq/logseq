@@ -189,8 +189,11 @@
            (js/console.error error)))
         (let [clipboard-data (gobj/get e "clipboardData")
               html (when-not raw-paste? (.getData clipboard-data "text/html"))
-              text (.getData clipboard-data "text")]
-          (if-not (and (string/blank? text) (string/blank? html))
+              text (.getData clipboard-data "text")
+              files (.-files clipboard-data)]
+          (if (and
+               (not (and (string/blank? text) (string/blank? html)))
+               (or (empty? files) (not (state/perferred-pasting-file?))))
             (paste-text-or-blocks-aux input e text html)
             (when id
               (let [_handled

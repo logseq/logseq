@@ -646,6 +646,10 @@ Similar to re-frame subscriptions"
   []
   (:editor/logical-outdenting? (sub-config)))
 
+(defn perferred-pasting-file?
+  []
+  (:editor/perferred-pasting-file? (sub-config)))
+
 (defn enable-encryption?
   [repo]
   (:feature/enable-encryption? (sub-config repo)))
@@ -753,6 +757,10 @@ Similar to re-frame subscriptions"
 (defn set-preferred-workflow!
   [workflow]
   (swap! state assoc-in [:me :preferred_workflow] (name workflow)))
+
+(defn set-preferred-paste-method!
+  [method]
+  (swap! state assoc-in [:me :preferred_pasting_method] (name method)))
 
 (defn set-preferred-language!
   [language]
