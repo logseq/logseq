@@ -248,7 +248,7 @@
   [page-name]
   (let [whiteboards (model/get-all-whiteboards (state/get-current-repo))]
     (and (or (empty? whiteboards)
-             (and 
+             (and
               (= 1 (count whiteboards))
               (= page-name (:block/name (first whiteboards)))))
          (not (state/get-onboarding-whiteboard?)))))

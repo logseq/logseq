@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
+import { IsMac } from './utils'
 
 test('enable whiteboards', async ({ page }) => {
     await expect(page.locator('.nav-header .whiteboard')).toBeHidden()
@@ -17,18 +18,32 @@ test('create new whiteboard', async ({ page }) => {
     await expect(page.locator('.logseq-tldraw')).toBeVisible()
 })
 
+test('check if the page contains the onboarding whiteboard', async ({ page }) => {
+    await expect(page.locator('.tl-text-shape-wrapper >> text=Welcome to')).toBeVisible()
+})
+
+test('cleanup the shapes', async ({ page }) => {
+    if (IsMac) {
+        await page.keyboard.press('Meta+a')
+    } else {
+        await page.keyboard.press('Control+a')
+    }
+    await page.keyboard.press('Delete')
+    await expect(page.locator('[data-type=Shape]')).not.toBeVisible()
+})
+
 test('set whiteboard title', async ({ page }) => {
     const title = "my-whiteboard"
     // Newly created whiteboard should have a default title
     await expect(page.locator('.whiteboard-page-title .title')).toContainText("Untitled");
 
     await page.click('.whiteboard-page-title')
-    await page.type('.whiteboard-page-title .title', title)
+    await page.fill('.whiteboard-page-title input', title)
     await page.keyboard.press('Enter')
     await expect(page.locator('.whiteboard-page-title .title')).toContainText(title);
 
     await page.click('.whiteboard-page-title')
-    await page.type('.whiteboard-page-title .title', "-2")
+    await page.fill('.whiteboard-page-title input', title + "-2")
     await page.keyboard.press('Enter')
 
     // Updating non-default title should pop up a confirmation dialog
@@ -83,7 +98,7 @@ test('quick add another whiteboard', async ({ page }) => {
     await page.click('#tl-create-whiteboard')
     
     await page.click('.whiteboard-page-title')
-    await page.type('.whiteboard-page-title .title', "my-whiteboard-3")
+    await page.fill('.whiteboard-page-title input', "my-whiteboard-3")
     await page.keyboard.press('Enter')
     
     const canvas = await page.waitForSelector('.logseq-tldraw');
@@ -97,7 +112,7 @@ test('quick add another whiteboard', async ({ page }) => {
     const quickAdd$ = page.locator('.tl-quick-search')
     await expect(quickAdd$).toBeVisible()
 
-    await page.type('.tl-quick-search input', 'my-whiteboard')
+    await page.fill('.tl-quick-search input', 'my-whiteboard')
     await quickAdd$.locator('.tl-quick-search-option >> text=my-whiteboard-2').first().click()
 
     await expect(quickAdd$).toBeHidden()
