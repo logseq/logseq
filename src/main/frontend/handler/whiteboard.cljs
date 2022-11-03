@@ -204,7 +204,7 @@
         tx {:block/left (select-keys last-root-block [:db/id])
             :block/uuid uuid
             :block/content (or content "")
-            :block/format :markdown ; fixme
+            :block/format :markdown ;; fixme to support org?
             :block/page {:block/name (util/page-name-sanity-lc page-name)}
             :block/parent {:block/name page-name}}]
     (db-utils/transact! [tx])
@@ -243,9 +243,17 @@
      (.cloneShapesIntoCurrentPage ^js api (clj->js {:shapes shapes
                                                     :assets assets
                                                     :bindings bindings})))))
+(defn should-populate-onboarding-whiteboard?
+  [page-name]
+  (let [whiteboards (model/get-all-whiteboards (state/get-current-repo))]
+    (and (or (empty? whiteboards) (some #(= page-name (:block/name %)) whiteboards))
+         (not (state/get-onboarding-whiteboard?)))))
+
 (defn populate-onboarding-whiteboard
   [api]
   (when (some? api)
-    (p/let [edn (get-onboard-whiteboard-edn)]
-      (clone-whiteboard-from-edn edn api)
-      (state/set-onboarding-whiteboard! true))))
+    (-> (p/let [edn (get-onboard-whiteboard-edn)]
+          (clone-whiteboard-from-edn edn api)
+          (state/set-onboarding-whiteboard! true))
+        (p/catch
+         (fn [e] (js/console.warn "Faield to populate onboarding whiteboard" e))))))

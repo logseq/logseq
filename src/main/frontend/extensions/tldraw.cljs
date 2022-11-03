@@ -13,7 +13,8 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.ui :as ui]))
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
@@ -76,21 +77,20 @@
                        (route-handler/redirect-to-page! page-name)))})
 
 (rum/defc tldraw-app
-  [name block-id]
-  (let [data (whiteboard-handler/page-name->tldr! name block-id)
-        [tln set-tln] (rum/use-state nil)]
-    (rum/use-effect!
-     (fn []
-       (when (and tln name)
-         (when-let [^js api (gobj/get tln "api")]
-           (when (and (not (state/get-onboarding-whiteboard?))
-                      (= 0 (.. tln -shapes -length)))
-             (whiteboard-handler/populate-onboarding-whiteboard api))
-           (when (and block-id (parse-uuid block-id))
-             (. api selectShapes block-id)
-             (. api zoomToSelection))))
-       nil) [name block-id tln])
-    (when (and (not-empty name) (not-empty (gobj/get data "currentPageId")))
+  [page-name block-id]
+  (let [populate-onboarding?  (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
+        data (whiteboard-handler/page-name->tldr! page-name block-id)
+        [loaded? set-loaded?] (rum/use-state false)
+        on-mount (fn [tln]
+                   (when-let [^js api (gobj/get tln "api")]
+                     (p/then (when populate-onboarding?
+                               (whiteboard-handler/populate-onboarding-whiteboard api))
+                             #(do (when (and block-id (parse-uuid block-id))
+                                    (. api selectShapes block-id)
+                                    (. api zoomToSelection))
+                                  (set-loaded? true)))))]
+
+    (when data
       [:div.draw.tldraw.whiteboard.relative.w-full.h-full
        {:style {:overscroll-behavior "none"}
         :on-blur (fn [e]
@@ -99,10 +99,15 @@
         ;; wheel -> overscroll may cause browser navigation
         :on-wheel util/stop-propagation}
 
+       (when
+        (and populate-onboarding? (not loaded?))
+         [:div.absolute.inset-0.flex.items-center.justify-center
+          {:style {:z-index 200}}
+          (ui/loading "Loading onboarding whiteboard ...")])
        (tldraw {:renderers tldraw-renderers
-                :handlers (get-tldraw-handlers name)
-                :onMount (fn [app] (set-tln ^js app))
+                :handlers (get-tldraw-handlers page-name)
+                :onMount on-mount
                 :onPersist (fn [app]
                              (let [document (gobj/get app "serialized")]
-                               (whiteboard-handler/transact-tldr! name document)))
+                               (whiteboard-handler/transact-tldr! page-name document)))
                 :model data})])))
