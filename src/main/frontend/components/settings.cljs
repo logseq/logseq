@@ -715,7 +715,7 @@
           "Check"
           [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
                     :target "_blank"}
-           "https://blog.logseq.com/how-to-setup-and-use-logseq-sync"]
+           "our blog article"]
           "to setup and use Logseq Sync."]]])
 
      (when-not web-platform?
