@@ -758,10 +758,6 @@ Similar to re-frame subscriptions"
   [workflow]
   (swap! state assoc-in [:me :preferred_workflow] (name workflow)))
 
-(defn set-preferred-paste-method!
-  [method]
-  (swap! state assoc-in [:me :preferred_pasting_method] (name method)))
-
 (defn set-preferred-language!
   [language]
   (set-state! :preferred-language (name language))
