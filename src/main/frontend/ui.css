@@ -87,7 +87,8 @@
 }
 
 .ui__modal {
-  @apply fixed px-4 pb-4 inset-0 flex items-baseline justify-center top-12 sm:top-24;
+  @apply fixed px-4 pb-4 inset-0 flex items-baseline justify-center
+  top-12 sm:top-[calc(3vh+50px)];
 
   &-overlay {
     @apply fixed inset-0 transition-opacity;
