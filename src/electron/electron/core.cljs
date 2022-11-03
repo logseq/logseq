@@ -118,6 +118,17 @@
                            (fn [part]
                              (. fs copy (path/join app-path part) (path/join static-dir part)))
                            ["css" "fonts" "icons" "img" "js"])))
+                ;;
+                ;; The "css" and "js" directories are copied from the app bundle,
+                ;; which could be on a read-only file system. Ensure they can be
+                ;; written to so that the rest of the export succeeds.
+                ;;
+                ;;   https://github.com/logseq/logseq/issues/5848
+                ;;   https://github.com/logseq/logseq/issues/6880
+                ;;
+                _ (p/all (map (fn [part]
+                                (. fs chmod (path/join static-dir part) 0755))
+                              ["css" "js"]))
                 export-css (if (fs/existsSync export-css-path) (. fs readFile export-css-path) "")
                 _ (. fs writeFile (path/join static-dir "css" "export.css")  export-css)
                 custom-css (if (fs/existsSync custom-css-path) (. fs readFile custom-css-path) "")
