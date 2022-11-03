@@ -15,11 +15,11 @@ test('enable whiteboards', async ({ page }) => {
 test('create new whiteboard', async ({ page }) => {
     await page.click('.nav-header .whiteboard')
     await page.click('#tl-create-whiteboard')
-    await expect(page.locator('.logseq-tldraw')).toBeVisible()
+    await expect(page.locator('.logseq-tldraw')).toHaveCount(1)
 })
 
 test('check if the page contains the onboarding whiteboard', async ({ page }) => {
-    await expect(page.locator('.tl-text-shape-wrapper >> text=Welcome to')).toBeVisible()
+    await expect(page.locator('.tl-text-shape-wrapper >> text=Welcome to')).toHaveCount(1)
 })
 
 test('cleanup the shapes', async ({ page }) => {
@@ -29,7 +29,7 @@ test('cleanup the shapes', async ({ page }) => {
         await page.keyboard.press('Control+a')
     }
     await page.keyboard.press('Delete')
-    await expect(page.locator('[data-type=Shape]')).not.toBeVisible()
+    await expect(page.locator('[data-type=Shape]')).toHaveCount(0)
 })
 
 test('set whiteboard title', async ({ page }) => {
