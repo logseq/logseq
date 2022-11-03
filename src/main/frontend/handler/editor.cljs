@@ -376,11 +376,13 @@
 
        ;; sanitized page name changed
        (when-let [title (get-in block' [:block/properties :title])]
-         (when-let [old-page-name (:block/name (db/entity (:db/id (:block/page block'))))]
-           (when (and (:block/pre-block? block')
-                      (not (string/blank? title))
-                      (not= (util/page-name-sanity-lc title) old-page-name))
-             (state/pub-event! [:page/title-property-changed old-page-name title]))))))))
+         (if (string? title)
+           (when-let [old-page-name (:block/name (db/entity (:db/id (:block/page block'))))]
+             (when (and (:block/pre-block? block')
+                        (not (string/blank? title))
+                        (not= (util/page-name-sanity-lc title) old-page-name))
+               (state/pub-event! [:page/title-property-changed old-page-name title])))
+           (js/console.error (str "Title is not a string: " title))))))))
 
 (defn save-block-if-changed!
   ([block value]
@@ -3089,9 +3091,15 @@
   (when (state/editing?)
     (keydown-backspace-handler false e)))
 
+(defn- slide-focused?
+  []
+  (some-> (first (dom/by-class "reveal"))
+          (dom/has-class? "focused")))
+
 (defn shortcut-up-down [direction]
   (fn [e]
-    (when-not (auto-complete?)
+    (when (and (not (auto-complete?))
+               (not (slide-focused?)))
       (util/stop e)
       (cond
         (state/editing?)

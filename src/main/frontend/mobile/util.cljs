@@ -51,6 +51,8 @@
          [414 896] "iPhone11"
          [428 926] "iPhone13ProMax"
          [476 847] "iPhone7Plus"
+         [393 852] "iPhone14Pro"
+         [430 932] "iPhone14ProMax"
          [744 1133] "iPadmini8.3"
          [768 1024] "iPad9.7"
          [810 1080] "iPad10.2"

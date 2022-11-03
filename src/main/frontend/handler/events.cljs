@@ -83,7 +83,7 @@
         (map? result)
         (do
           (state/set-state! :user/info result)
-          (let [status (if (user-handler/alpha-user?) :welcome :unavailable)]
+          (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
               (async/<! (file-sync-handler/load-session-graphs))
               (p/let [repos (repo-handler/refresh-repos!)]

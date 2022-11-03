@@ -33,7 +33,5 @@
   [f]
   (fn [e]
     (when (or (contains? #{:srs :page-histories} (state/get-modal-id))
-              (not (state/block-component-editing?))
-              ;; when in whiteboard mode and editing a logseq block
-              (and (state/active-tldraw-app) (state/tldraw-editing-logseq-block?)))
+              (not (state/block-component-editing?)))
       (f e))))
