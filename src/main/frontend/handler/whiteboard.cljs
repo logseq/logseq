@@ -233,6 +233,7 @@
      (clone-whiteboard-from-edn edn (.-api app))))
   ([{:keys [pages blocks]} api]
    (let [page-block (first pages)
+         ;; FIXME: should also clone normal blocks
          shapes (->> blocks
                      (filter gp-whiteboard/shape-block?)
                      (map gp-whiteboard/block->shape)
