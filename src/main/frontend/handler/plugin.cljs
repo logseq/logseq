@@ -233,8 +233,9 @@
     (js/window.apis.addListener channel listener)))
 
 (defn register-plugin
-  [pl]
-  (swap! state/state update-in [:plugin/installed-plugins] assoc (keyword (:id pl)) pl))
+  [plugin-metadata]
+  (when-let [pid (keyword (:id plugin-metadata))]
+    (swap! state/state update-in [:plugin/installed-plugins] assoc pid plugin-metadata)))
 
 (defn host-mounted!
   []
