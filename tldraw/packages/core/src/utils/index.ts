@@ -8,6 +8,7 @@ export * from './SvgPathUtils'
 export * from './BindingUtils'
 export * from './DataUtils'
 export * from './TextUtils'
+export * from './ColorUtils'
 export * from './getTextSize'
 export * from './cache'
 
