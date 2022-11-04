@@ -648,10 +648,6 @@ Similar to re-frame subscriptions"
   []
   (:editor/logical-outdenting? (sub-config)))
 
-(defn enable-encryption?
-  [repo]
-  (:feature/enable-encryption? (sub-config repo)))
-
 (defn doc-mode-enter-for-new-line?
   []
   (and (document-mode?)
