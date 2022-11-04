@@ -923,7 +923,7 @@ html[data-theme='dark'] {
 }
 
 .tl-color-bg {
-  @apply w-full h-full rounded-sm;
+  @apply flex justify-center items-center w-full h-full rounded-sm;
 }
 
 .tl-slider-root {
