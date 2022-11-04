@@ -98,9 +98,7 @@ const LogseqPortalShapeHeader = observer(
             background:
               type === 'P'
                 ? bgColor
-                : `linear-gradient(0deg, var(--ls-highlight-color-${
-                    fill && fill!=='var(--ls-secondary-background-color)' ? fill : 'default'
-                  }), ${bgColor}`,
+                : `linear-gradient(0deg, transparent, ${bgColor}`,
           }}
         ></div>
         <div className="relative">{children}</div>
@@ -736,11 +734,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     }, [this.initialHeightCalculated])
 
     return (
-      <div
-        ref={cpRefContainer}
-        className="relative tl-logseq-cp-container"
-        style={{ overflow: this.props.isAutoResizing ? 'visible' : 'auto' }}
-      >
+      <>
         <div
           className="absolute inset-0 tl-logseq-cp-container-bg"
           style={{
@@ -750,12 +744,18 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             opacity,
           }}
         ></div>
-        {this.props.blockType === 'B' && this.props.compact ? (
-          <Block blockId={pageId} />
-        ) : (
-          <Page pageName={pageId} />
-        )}
-      </div>
+        <div
+          ref={cpRefContainer}
+          className="relative tl-logseq-cp-container"
+          style={{ overflow: this.props.isAutoResizing ? 'visible' : 'auto' }}
+        >
+          {this.props.blockType === 'B' && this.props.compact ? (
+            <Block blockId={pageId} />
+          ) : (
+            <Page pageName={pageId} />
+          )}
+        </div>
+      </>
     )
   })
 

@@ -700,7 +700,7 @@ button.tl-select-input-trigger {
 
   height: 40px;
   flex-shrink: 0;
-
+  z-index: 1;
   color: var(--ls-title-text-color);
   border-top-left-radius: 8px;
   border-top-right-radius: 8px;
