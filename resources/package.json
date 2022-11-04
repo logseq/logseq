@@ -1,6 +1,6 @@
 {
   "name": "Logseq",
-  "packageName": "Logseq",
+  "productName": "Logseq",
   "version": "0.8.10",
   "main": "electron.js",
   "author": "Logseq",
