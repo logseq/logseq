@@ -1,5 +1,6 @@
 (ns frontend.modules.file.core
-  (:require [clojure.string :as string]
+  (:require [clojure.pprint :as pprint]
+            [clojure.string :as string]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -139,8 +140,10 @@
         file-path (-> (db-utils/entity file-db-id) :file/path)]
     (if (and (string? file-path) (not-empty file-path))
       (let [new-content (if (= "whiteboard" (:block/type page-block))
-                          (pr-str {:blocks tree
-                                   :pages (list (remove-transit-ids page-block))})
+                          (-> {:pages  (list (remove-transit-ids page-block))
+                               :blocks tree}
+                              (pprint/pprint)
+                              (with-out-str))
                           (tree->file-content tree {:init-level init-level}))
             files [[file-path new-content]]
             repo (state/get-current-repo)]
