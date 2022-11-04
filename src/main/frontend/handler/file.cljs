@@ -221,11 +221,11 @@
       (fs/watch-dir! dir))))
 
 (defn create-metadata-file
-  [repo-url encrypted?]
+  [repo-url]
   (let [repo-dir (config/get-repo-dir repo-url)
         path (str config/app-name "/" config/metadata-file)
         file-path (str "/" path)
-        default-content (if encrypted? "{:db/encrypted? true}" "{}")]
+        default-content "{}"]
     (p/let [_ (fs/mkdir-if-not-exists (util/safe-path-join repo-dir config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?

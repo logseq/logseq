@@ -21,7 +21,6 @@
             [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
             [frontend.db.persist :as db-persist]
-            [frontend.encrypt :as encrypt]
             [frontend.extensions.srs :as srs]
             [frontend.fs :as fs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
@@ -323,8 +322,7 @@
                         {:label "diff__cp"}))))
 
 (defmethod handle :modal/display-file-version [[_ path content hash]]
-  (p/let [content (when content (encrypt/decrypt content))]
-    (state/set-modal! #(git-component/file-specific-version path hash content))))
+  (state/set-modal! #(git-component/file-specific-version path hash content)))
 
 ;; Hook on a graph is ready to be shown to the user.
 ;; It's different from :graph/resotred, as :graph/restored is for window reloaded
@@ -603,18 +601,6 @@
          :on-click (fn []
                      (state/close-modal!)
                      (state/pub-event! [:graph/re-index])))]])))
-
-;; encryption
-(defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]
-  (state/set-modal!
-   (encryption/encryption-setup-dialog repo-url close-fn)))
-
-(defmethod handle :modal/encryption-input-secret-dialog [[_ repo-url db-encrypted-secret close-fn]]
-  (state/set-modal!
-   (encryption/encryption-input-secret-dialog
-    repo-url
-    db-encrypted-secret
-    close-fn)))
 
 (defmethod handle :modal/remote-encryption-input-pw-dialog [[_ repo-url remote-graph-info type opts]]
   (state/set-modal!
