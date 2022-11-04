@@ -376,9 +376,7 @@
                                                 (second @graphs-txid)
                                                 (fs-sync/graph-sync-off? (second @graphs-txid))
                                                 (async/<! (fs-sync/<check-remote-graph-exists (second @graphs-txid))))
-                                           (do
-                                             (prn "sync start")
-                                             (fs-sync/sync-start))
+                                           (fs-sync/sync-start)
 
                                            ;; remote graph already has been deleted, clear repos first, then create-remote-graph
                                            synced-file-graph?  ; <check-remote-graph-exists -> false

@@ -2929,6 +2929,9 @@
     (reset! current-sm-graph-uuid graph-uuid)
     (sync-manager user-uuid graph-uuid base-path repo txid *sync-state)))
 
+;; Avoid sync reentrancy
+(defonce *sync-entered? (atom false))
+
 (defn <sync-stop []
   (go
     (when-let [sm ^SyncManager (state/get-file-sync-manager (state/get-current-file-sync-graph-uuid))]
@@ -2937,6 +2940,8 @@
       (state/clear-file-sync-state! (:graph-uuid sm))
 
       (<! (-stop! sm))
+
+      (reset! *sync-entered? false)
 
       (println "[SyncManager" (:graph-uuid sm) "]" "stopped"))
 
@@ -2996,8 +3001,6 @@
 
 (declare network-online-cursor)
 
-;; Avoid reentrancy
-(defonce *sync-entered? (atom false))
 (defn sync-start
   []
   (when (false? @*sync-entered?)
