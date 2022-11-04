@@ -2338,9 +2338,9 @@
          (comp
           (filter
            (fn [[path _]]
-                                        ; 951 = (- 1024 36 36 1)
-                                        ; 1024 - user-uuid - graph-uuid - '/'
-             (<= (count (get fnames-map path)) 951)))
+                                        ; 950 = (- 1024 36 36 2)
+                                        ; 1024 - length of 'user-uuid/graph-uuid/'
+             (<= (count (get fnames-map path)) 950)))
           (map second))
          local-files-meta-map))))
 
