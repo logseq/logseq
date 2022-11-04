@@ -99,7 +99,7 @@ const LogseqPortalShapeHeader = observer(
               type === 'P'
                 ? bgColor
                 : `linear-gradient(0deg, var(--ls-highlight-color-${
-                    fill ? fill : 'default'
+                    fill && fill!=='var(--ls-secondary-background-color)' ? fill : 'default'
                   }), ${bgColor}`,
           }}
         ></div>
@@ -744,7 +744,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         <div
           className="absolute inset-0 tl-logseq-cp-container-bg"
           style={{
-            background: fill
+            background: fill && fill!=='var(--ls-secondary-background-color)'
               ? `var(--ls-highlight-color-${fill})`
               : 'var(--ls-secondary-background-color)',
             opacity,
@@ -938,7 +938,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       <>
         <rect
           fill={
-            this.props.fill
+            this.props.fill && this.props.fill !=='var(--ls-secondary-background-color)'
               ? `var(--ls-highlight-color-${this.props.fill})`
               : 'var(--ls-secondary-background-color)'
           }
@@ -953,7 +953,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         {!this.props.compact && (
           <rect
             fill={
-              this.props.fill
+              this.props.fill && this.props.fill !=='var(--ls-secondary-background-color)'
                 ? getComputedColor(this.props.fill, 'background')
                 : 'var(--ls-tertiary-background-color)'
             }
