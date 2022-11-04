@@ -15,7 +15,7 @@ This is a guide on creating Logseq development environment on Windows with `Powe
 
 ### An example of installing pre-requisites on Windows
 * Install [Chocolatey](https://chocolatey.org/)
-* Install JRE
+* Install JRE (only x64, x32 will not work)
 * Install NVM for Windows, Node.js, and Yarn
   ```
   choco install nvm
