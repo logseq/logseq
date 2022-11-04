@@ -172,7 +172,7 @@
 
 (defn- write-file-impl!
   [_this repo _dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
-  (if skip-compare?
+  (if (or (string/blank? repo) skip-compare?)
     (p/catch
      (p/let [result (<write-file-with-utf8 path content)]
        (when ok-handler
@@ -218,7 +218,7 @@
                       (error-handler error)
                       (log/error :write-file-failed error)))))))))
 
-(defn get-file-path [dir path]
+(defn normalize-file-protocol-path [dir path]
   (let [dir        (some-> dir (string/replace #"/+$" ""))
         dir        (if (and (not-empty dir) (string/starts-with? dir "/"))
                      (do
@@ -288,12 +288,13 @@
 (defrecord ^:large-vars/cleanup-todo Capacitorfs []
   protocol/Fs
   (mkdir! [_this dir]
-    (-> (.mkdir Filesystem
-                (clj->js
-                 {:path dir}))
-        (p/catch (fn [error]
-                   (log/error :mkdir! {:path dir
-                                       :error error})))))
+    (let [dir' (normalize-file-protocol-path "" dir)]
+      (-> (.mkdir Filesystem
+                  (clj->js
+                   {:path dir'}))
+          (p/catch (fn [error]
+                     (log/error :mkdir! {:path  dir'
+                                         :error error}))))))
   (mkdir-recur! [_this dir]
     (p/let
      [_ (-> (.mkdir Filesystem
@@ -313,7 +314,7 @@
                 dir)]
       (readdir dir)))
   (unlink! [this repo path _opts]
-    (p/let [path (get-file-path nil path)
+    (p/let [path (normalize-file-protocol-path nil path)
             repo-url (config/get-local-dir repo)
             recycle-dir (util/safe-path-join repo-url config/app-name ".recycle") ;; logseq/.recycle
             ;; convert url to pure path
@@ -327,20 +328,20 @@
     ;; Too dangerous!!! We'll never implement this.
     nil)
   (read-file [_this dir path _options]
-    (let [path (get-file-path dir path)]
+    (let [path (normalize-file-protocol-path dir path)]
       (->
        (<read-file-with-utf8 path)
        (p/catch (fn [error]
                   (log/error :read-file-failed error))))))
   (write-file! [this repo dir path content opts]
-    (let [path (get-file-path dir path)]
+    (let [path (normalize-file-protocol-path dir path)]
       (p/let [stat (p/catch
                     (.stat Filesystem (clj->js {:path path}))
                     (fn [_e] :not-found))]
         ;; `path` is full-path
         (write-file-impl! this repo dir path content opts stat))))
   (rename! [_this _repo old-path new-path]
-    (let [[old-path new-path] (map #(get-file-path "" %) [old-path new-path])]
+    (let [[old-path new-path] (map #(normalize-file-protocol-path "" %) [old-path new-path])]
       (p/catch
        (p/let [_ (.rename Filesystem
                           (clj->js
@@ -349,7 +350,7 @@
        (fn [error]
          (log/error :rename-file-failed error)))))
   (copy! [_this _repo old-path new-path]
-    (let [[old-path new-path] (map #(get-file-path "" %) [old-path new-path])]
+    (let [[old-path new-path] (map #(normalize-file-protocol-path "" %) [old-path new-path])]
       (p/catch
        (p/let [_ (.copy Filesystem
                         (clj->js
@@ -358,7 +359,7 @@
        (fn [error]
          (log/error :copy-file-failed error)))))
   (stat [_this dir path]
-    (let [path (get-file-path dir path)]
+    (let [path (normalize-file-protocol-path dir path)]
       (p/chain (.stat Filesystem (clj->js {:path path}))
                #(js->clj % :keywordize-keys true))))
   (open-dir [_this dir _ok-handler]
