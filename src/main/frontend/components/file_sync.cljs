@@ -482,18 +482,19 @@
              (when (seq history-files)
                (map-indexed (fn [i f] (:time f)
                               (let [path        (:path f)
-                                    ext         (string/lower-case (util/get-file-ext path))
-                                    _supported? (gp-config/mldoc-support? ext)
-                                    full-path   (util/node-path.join (config/get-repo-dir current-repo) path)
-                                    page-name   (db/get-file-page full-path)]
-                                {:title [:div.files-history.cursor-pointer
-                                         {:key      i :class (when (= i 0) "is-first")
-                                          :on-click (fn []
-                                                      (if page-name
-                                                        (rfe/push-state :page {:name page-name})
-                                                        (rfe/push-state :file {:path full-path})))}
-                                         [:span.file-sync-item (js/decodeURIComponent (:path f))]
-                                         [:div.opacity-50 (ui/humanity-time-ago (:time f) nil)]]}))
+                                    ext         (util/get-file-ext path)]
+                                (when ext
+                                  (let [ext         (string/lower-case ext)
+                                        full-path   (util/node-path.join (config/get-repo-dir current-repo) path)
+                                        page-name   (db/get-file-page full-path)]
+                                    {:title [:div.files-history.cursor-pointer
+                                             {:key      i :class (when (= i 0) "is-first")
+                                              :on-click (fn []
+                                                          (if page-name
+                                                            (rfe/push-state :page {:name page-name})
+                                                            (rfe/push-state :file {:path full-path})))}
+                                             [:span.file-sync-item (js/decodeURIComponent (:path f))]
+                                             [:div.opacity-50 (ui/humanity-time-ago (:time f) nil)]]}))))
                             (take 10 history-files)))))
 
           ;; options
