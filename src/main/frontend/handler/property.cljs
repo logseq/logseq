@@ -35,6 +35,7 @@
            ;; property
            {:block/uuid property-uuid
             :block/type "property"
+            :block/property-schema {:type "any"}
             :block/original-name key
             :block/name key-name}
 
@@ -94,7 +95,7 @@
     [true value]
     (case (:type schema)
       "any" [true value]
-      "number" (when-let [n (parse-double value)]
+      "number" (if-let [n (parse-double value)]
                  (let [[min-n max-n] [(:min schema) (:max schema)]
                        min-result (if min-n (>= n min-n) true)
                        max-result (if max-n (<= n max-n) true)]
@@ -109,9 +110,10 @@
                      [false (str "the max value is " max-n)]
 
                      :else
-                     n)))
+                     n))
+                 [false "invalid number"])
       "date" (if-let [result (js/Date. value)]
-               (if (not= (str result) "invalid Date")
+               (if (not= (str result) "Invalid Date")
                  [true value]
                  [false "invalid date"])
                [false "invalid date"])
