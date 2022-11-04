@@ -6,6 +6,7 @@ import {
   TLResizeStartInfo,
   TLTextShape,
   TLTextShapeProps,
+  getComputedColor,
 } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps } from '@tldraw/react'
 import { action, computed } from 'mobx'
@@ -54,8 +55,8 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     padding: 4,
     fontFamily: 'var(--ls-font-family)',
     borderRadius: 0,
-    stroke: 'var(--tl-foreground, #000)',
-    fill: '#ffffff',
+    stroke: '',
+    fill: '',
     noFill: true,
     strokeType: 'line',
     strokeWidth: 2,
@@ -188,7 +189,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
             fontWeight,
             padding,
             lineHeight,
-            color: stroke,
+            color: getComputedColor(stroke, 'text'),
           }}
         >
           {isEditing ? (
@@ -315,7 +316,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
       <foreignObject width={bounds.width} height={bounds.height}>
         <div
           style={{
-            color: stroke,
+            color: getComputedColor(stroke, 'text'),
             fontSize,
             fontFamily,
           }}

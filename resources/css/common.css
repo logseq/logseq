@@ -17,6 +17,7 @@
   --ls-error-color: var(--color-red-500);
   --ls-warning-color: var(--color-orange-500);
   --ls-success-color: var(--color-green-500);
+  --ls-highlight-color-default: var(--ls-secondary-background-color);
 }
 
 @media (prefers-color-scheme: dark) {

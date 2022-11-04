@@ -1,4 +1,4 @@
-import { debounce, Decoration, isNonNullable } from '@tldraw/core'
+import { Decoration, isNonNullable, Color } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import React from 'react'
@@ -57,7 +57,14 @@ const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 type ShapeType = Shape['props']['type']
 
 export const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
-  'logseq-portal': ['Edit', 'LogseqPortalViewMode', 'ScaleLevel', 'OpenPage', 'AutoResizing'],
+  'logseq-portal': [
+    'Swatch',
+    'Edit',
+    'LogseqPortalViewMode',
+    'ScaleLevel',
+    'OpenPage',
+    'AutoResizing',
+  ],
   youtube: ['YoutubeLink'],
   iframe: ['IFrameSource'],
   box: ['Swatch', 'NoFill', 'StrokeType'],
@@ -319,7 +326,7 @@ const NoFillAction = observer(() => {
       pressed={noFill}
       onPressedChange={handleChange}
     >
-      {noFill ? <TablerIcon name="eye-off" /> : <TablerIcon name="eye" />}
+      <TablerIcon name={noFill ? 'droplet-off' : 'droplet'} />
     </ToggleInput>
   )
 })
@@ -330,21 +337,32 @@ const SwatchAction = observer(() => {
   const shapes = filterShapeByAction<
     BoxShape | PolygonShape | EllipseShape | LineShape | PencilShape | TextShape
   >(app.selectedShapesArray, 'Swatch')
-  const handleChange = React.useMemo(() => {
-    let latestValue = ''
-    const handler: React.ChangeEventHandler<HTMLInputElement> = e => {
-      shapes.forEach(s => {
-        s.update({ fill: latestValue, stroke: latestValue })
-      })
-      app.persist()
-    }
-    return debounce(handler, 100, e => {
-      latestValue = e.target.value
+
+  const handleSetColor = React.useCallback((color: string) => {
+    shapes.forEach(s => {
+      s.update({ fill: color, stroke: color })
     })
+    app.persist()
   }, [])
 
-  const value = shapes[0].props.noFill ? shapes[0].props.stroke : shapes[0].props.fill
-  return <ColorInput title="Color Picker" value={value} onChange={handleChange} />
+  const handleSetOpacity = React.useCallback((opacity: number) => {
+    shapes.forEach(s => {
+      s.update({ opacity: opacity })
+    })
+    app.persist()
+  }, [])
+
+  const color = shapes[0].props.noFill ? shapes[0].props.stroke : shapes[0].props.fill
+  return (
+    <ColorInput
+      title="Color Picker"
+      color={color}
+      opacity={shapes[0].props.opacity}
+      collisionRef={document.getElementById('main-content-container')}
+      setOpacity={handleSetOpacity}
+      setColor={handleSetColor}
+    />
+  )
 })
 
 const StrokeTypeAction = observer(() => {

@@ -710,7 +710,13 @@
          [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
         [:div.flex.flex-col.gap-4
          {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-         (sync-switcher-row enable-sync?)]])
+         (sync-switcher-row enable-sync?)
+         [:div.text-sm
+          "Click"
+          [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
+                    :target "_blank"}
+           "here"]
+          "for instructions on how to set up and use Sync."]]])
 
      (when-not web-platform?
        [:<>
