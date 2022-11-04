@@ -71,8 +71,6 @@ public class FolderPicker: CAPPlugin, UIDocumentPickerDelegate {
       items.append(url.absoluteString)
     }
 
-    print(items.first as Any)
-
     self._call?.resolve([
       "path": items.first as Any,
       "localDocumentsPath": documentsPath[0] as Any
