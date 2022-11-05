@@ -370,6 +370,39 @@
                          "control-show cursor-pointer" "control-hide")}
     (ui/rotating-arrow @*all-collapsed?)]])
 
+(rum/defc page-properties
+  [entity]
+  (let [[property-value set-val!] (rum/use-state "")
+        property? (= "property" (:block/type entity))]
+    [:div.p-2.mb-4
+     (if property?
+       (property-schema/schema entity)
+       [:div
+        (property/properties entity {:page-cp component-block/page-cp
+                                     :inline-text component-block/inline-text})
+
+        [:div.mt-4
+         [:div.mr-2 "Parent page: "]
+         (if (:block/namespace entity)
+           (component-block/page-cp
+            {}
+            (db/entity (:db/id (:block/namespace entity))))
+           [:input.form-input.block.mt-1
+            {:style {:width 173} ; TODO: better form layout
+             :placeholder "Page name"
+             :value property-value
+             :on-change   (fn [^js e]
+                            (set-val! (.. e -target -value)))
+             :on-key-up (fn [e]
+                          (when (= 13 (.-which e))
+                            (let [page (util/evalue e)]
+                              (when-not (string/blank? page)
+                                (property-handler/set-namespace! (:db/id entity) page)))))
+             :on-blur (fn [e]
+                        (let [page (util/evalue e)]
+                          (when-not (string/blank? page)
+                            (property-handler/set-namespace! (:db/id entity) page))))}])]])]))
+
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page < rum/reactive
   (rum/local false ::all-collapsed?)
@@ -447,29 +480,7 @@
                   (plugins/hook-ui-items :pagebar)]))])
 
           (when properties-show?
-            (let [structured-tag? (= "tag" (:block/type entity))
-                  property? (= "property" (:block/type entity))]
-              [:div.p-2.mb-4
-               (if property?
-                 (property-schema/schema entity)
-                 [:div
-                  (property/properties entity {:page-cp component-block/page-cp
-                                               :inline-text component-block/inline-text})
-
-                  [:div.mt-4
-                   [:div.mr-2 "Parent page: "]
-                   (if (:block/namespace entity)
-                     (component-block/page-cp
-                      {}
-                      (db/entity (:db/id (:block/namespace entity))))
-                     [:input.form-input.block.mt-1
-                      {:style {:width 173} ; TODO: better form layout
-                       :placeholder "Page name"
-                       :on-blur (fn [e]
-                                  (let [page (util/evalue e)]
-                                    (when-not (string/blank? page)
-                                      (property-handler/set-namespace! (:db/id entity) page))))}])]])]
-              ))
+            (page-properties entity))
 
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))

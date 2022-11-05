@@ -47,10 +47,13 @@
   [page-db-id page-name]
   (let [page-name (util/page-name-sanity-lc page-name)
         page (db/entity [:block/name page-name])]
-    (when page
+    (if page
       (db/transact! (state/get-current-repo)
         [{:db/id page-db-id
-          :block/namespace (:db/id page)}]))))
+          :block/namespace (:db/id page)}])
+      (notification/show!
+       (str (pr-str page-name)  " is not a valid page")
+       :warning))))
 
 ;; TODO spec
 (defn set-property-schema!
@@ -144,7 +147,8 @@
                                  (set property-value)
                                  #{property-value})
                                property-value-or-error)
-                         (remove string/blank?))
+                         (remove string/blank?)
+                         set)
                         property-value-or-error)
                 refs (extract-refs entity (assoc properties property-id value))
                 value (if (and multiple-values? object?)
