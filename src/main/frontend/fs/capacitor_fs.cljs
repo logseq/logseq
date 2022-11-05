@@ -219,29 +219,33 @@
                       (log/error :write-file-failed error)))))))))
 
 (defn normalize-file-protocol-path [dir path]
-  (let [dir        (some-> dir (string/replace #"/+$" ""))
-        dir        (if (and (not-empty dir) (string/starts-with? dir "/"))
-                     (do
-                       (js/console.trace "WARN: detect absolute path, use URL instead")
-                       (str "file://" (js/encodeURI dir)))
-                     dir)
-        path       (some-> path (string/replace #"^/+" ""))
-        encode-url #(let [encoded-chars?
-                          (and (string? %) (boolean (re-find #"(?i)%[0-9a-f]{2}" %)))]
-                      (cond-> %
-                        (not encoded-chars?)
-                        (js/encodeURI path)))]
+  (let [dir             (some-> dir (string/replace #"/+$" ""))
+        dir             (if (and (not-empty dir) (string/starts-with? dir "/"))
+                          (do
+                            (js/console.trace "WARN: detect absolute path, use URL instead")
+                            (str "file://" (js/encodeURI dir)))
+                          dir)
+        path            (some-> path (string/replace #"^/+" ""))
+        safe-encode-url #(let [encoded-chars?
+                               (and (string? %) (boolean (re-find #"(?i)%[0-9a-f]{2}" %)))]
+                           (cond
+                             (not encoded-chars?)
+                             (js/encodeURI %)
+
+                             :else
+                             (js/encodeURI (js/decodeURI %))))]
+
     (cond (string/blank? path)
-          (encode-url dir)
+          (safe-encode-url dir)
 
           (string/blank? dir)
-          (encode-url path)
+          (safe-encode-url path)
 
           (string/starts-with? path dir)
-          (encode-url path)
+          (safe-encode-url path)
 
           :else
-          (let [path' (encode-url path)]
+          (let [path' (safe-encode-url path)]
             (str dir "/" path')))))
 
 (defn- local-container-path?

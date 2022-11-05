@@ -229,7 +229,7 @@ html.is-native-iphone-without-notch,
 html.is-native-ipad {
 
   #main-container {
-    padding-top: 0px;
+    padding-top: 0;
     display: flex;
     flex-direction: column;
   }
@@ -237,7 +237,7 @@ html.is-native-ipad {
   #main-content-container {
     padding-left: 22px;
     padding-right: 14px;
-    padding-top: 0px;
+    padding-top: 0;
     height: calc(100vh - var(--ls-headbar-inner-top-padding) - var(--ls-headbar-height));
 
     @screen sm {

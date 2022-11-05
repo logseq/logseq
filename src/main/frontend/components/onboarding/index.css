@@ -568,16 +568,13 @@ html.is-native-iphone,
 html.is-native-iphone-without-notch {
   .cp__onboarding {
     &-setups {
-      position: absolute;
       width: 100%;
-      top: 0;
-      left: 0;
-      height: 100vh;
+      height: 100%;
       overflow-y: auto;
 
       .inner-card {
         padding-top: 30px;
-        min-height: 100vh;
+        min-height: 100%;
         width: 100%;
 
         > h2 {
@@ -615,5 +612,13 @@ html.is-native-iphone-without-notch {
         }
       }
     }
+  }
+}
+
+html.is-native-android {
+  .cp__onboarding-setups {
+    position: absolute;
+    top: 0;
+    left: 0;
   }
 }
