@@ -66,7 +66,7 @@
      nil)])
 
 (rum/defcs picker < rum/reactive
-  [_state]
+  [_state onboarding-and-home?]
   (let [parsing?    (state/sub :repo/parsing-files?)
         native-ios? (mobile-util/native-ios?)]
 
@@ -81,7 +81,7 @@
 
        (if native-ios?
          ;; TODO: open for all native mobile platforms
-         (graph-picker/graph-picker-cp)
+         (graph-picker/graph-picker-cp onboarding-and-home?)
 
          (if (or (nfs/supported?) (mobile-util/native-platform?))
            [:div.choose.flex.flex-col.items-center

@@ -20,7 +20,7 @@
   (p/resolved (util/node-path.join root dirname)))
 
 (rum/defc graph-picker-cp
-  []
+  [onboarding-and-home?]
   (let [[step set-step!] (rum/use-state :init)
         *input-ref  (rum/create-ref)
         native-ios? (mobile-util/native-ios?)
@@ -47,6 +47,17 @@
                                            (js/console.error e)))
                                 (p/finally
                                  #()))))))]
+
+    (rum/use-effect!
+     (fn []
+       (when-let [^js input (and onboarding-and-home?
+                                 (rum/deref *input-ref))]
+         (let [handle (fn [] (js/setTimeout
+                              #(.scrollIntoView
+                                input #js {:behavior "smooth", :block "center", :inline "nearest"}) 100))]
+           (.addEventListener input "focus" handle)
+           (handle))))
+     [step])
 
     [:div.cp__graph-picker.px-10.py-10.w-full
 
