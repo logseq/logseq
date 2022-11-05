@@ -1924,3 +1924,13 @@ Similar to re-frame subscriptions"
 (defn get-onboarding-whiteboard?
   []
   (get-in @state [:whiteboard/onboarding-whiteboard?]))
+
+(defn get-local-container-root-url
+  []
+  (when (mobile-util/native-ios?)
+    (get-in @state [:mobile/container-urls :localContainerUrl])))
+
+(defn get-icloud-container-root-url
+  []
+  (when (mobile-util/native-ios?)
+    (get-in @state [:mobile/container-urls :iCloudContainerUrl])))

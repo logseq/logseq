@@ -14,7 +14,7 @@
 
 (defn show!
   ([content]
-   (show! content :info true nil 1500))
+   (show! content :info true nil 2000))
   ([content status]
    (show! content status true nil 1500))
   ([content status clear?]
