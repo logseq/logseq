@@ -79,6 +79,8 @@ html[data-theme='dark'] {
   --ls-page-blockquote-color: var(--ls-primary-text-color);
   --ls-page-blockquote-bg-color: var(--ls-secondary-background-color);
   --ls-page-blockquote-border-color: var(--ls-border-color);
+  --ls-page-mark-color: #262626;
+  --ls-page-mark-bg-color: #fef3ac;
   --ls-page-inline-code-color: var(--ls-primary-text-color);
   --ls-page-inline-code-bg-color: #01222a;
   --ls-scrollbar-foreground-color: #11505f;
@@ -156,6 +158,8 @@ html[data-theme='light'] {
   --ls-page-blockquote-color: var(--ls-primary-text-color);
   --ls-page-blockquote-bg-color: #fbfaf8;
   --ls-page-blockquote-border-color: #799bbc;
+  --ls-page-mark-color: #262626;
+  --ls-page-mark-bg-color: #fef3ac;
   --ls-page-inline-code-bg-color: #f7f7f7;
   --ls-page-inline-code-color: var(--ls-primary-text-color);
   --ls-scrollbar-foreground-color: rgba(0, 0, 0, 0.1);
@@ -760,8 +764,8 @@ a.navigation {
 /* text mark/highlight */
 
 mark {
-  background: #fef3ac;
-  color: #262626;
+  background: var(--ls-page-mark-bg-color);
+  color: var(--ls-page-mark-color);
   padding: 2px 4px;
   border-radius: 3px;
 }
