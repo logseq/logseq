@@ -13,8 +13,7 @@
             [reitit.frontend.easy :as rfe]
             [logseq.api]
             [frontend.fs.sync :as sync]
-            [frontend.config :as config]
-            [frontend.util :as util]))
+            [frontend.config :as config]))
 
 (defn set-router!
   []
