@@ -232,8 +232,8 @@
        {:style {:color "var(--ls-primary-text-color)"
                 :user-select "none"}}
        (page/page-title page-name
-                        [:span.tie.tie-whiteboard
-                         {:style {:font-size "0.9em"}}]
+                        [:span.text-lg
+                         (ui/icon "whiteboard" {:extension? true})]
                         (get-page-display-name page-name)
                         nil
                         false)]
