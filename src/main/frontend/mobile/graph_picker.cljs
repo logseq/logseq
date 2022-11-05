@@ -4,10 +4,13 @@
    [rum.core :as rum]
    [frontend.ui :as ui]
    [frontend.handler.notification :as notification]
+   [frontend.handler.web.nfs :as web-nfs]
    [frontend.handler.page :as page-handler]
    [frontend.util :as util]
    [frontend.modules.shortcut.core :as shortcut]
    [frontend.state :as state]
+   [frontend.mobile.util :as mobile-util]
+   [frontend.fs :as fs]
    [promesa.core :as p]))
 
 (defn validate-graph-dirname
@@ -19,19 +22,31 @@
 (rum/defc graph-picker-cp
   []
   (let [[step set-step!] (rum/use-state :init)
-        *input-ref (rum/create-ref)
+        *input-ref  (rum/create-ref)
+        native-ios? (mobile-util/native-ios?)
 
-        on-create  (fn [input-val]
-                     (let [graph-name (util/safe-sanitize-file-name input-val)]
-                       (if (string/blank? graph-name)
-                         (notification/show! "Illegal graph folder name.")
+        open-picker #(page-handler/ls-dir-files!
+                      (fn []
+                        (shortcut/refresh!)))
+        on-create   (fn [input-val]
+                      (let [graph-name (util/safe-sanitize-file-name input-val)]
+                        (if (string/blank? graph-name)
+                          (notification/show! "Illegal graph folder name.")
 
-                         ;; create graph directory under Logseq document folder
-                         (when-let [root (state/get-local-container-root-url)]
-                           (-> (validate-graph-dirname root graph-name)
-                               (p/then #(notification/show! (str "Create graph: " %)))
-                               (p/finally
-                                #(notification/show! graph-name)))))))]
+                          ;; create graph directory under Logseq document folder
+                          ;; TODO: icloud sync
+                          (when-let [root (state/get-local-container-root-url)]
+                            (-> (validate-graph-dirname root graph-name)
+                                (p/then (fn [graph-path]
+                                          (-> (fs/mkdir! graph-path)
+                                              (p/then (fn []
+                                                        (web-nfs/ls-dir-files-with-path! graph-path)
+                                                        (notification/show! (str "Create graph: " graph-name) :success))))))
+                                (p/catch (fn [^js e]
+                                           (notification/show! (str e) :error)
+                                           (js/console.error e)))
+                                (p/finally
+                                 #()))))))]
 
     [:div.cp__graph-picker.px-10.py-10.w-full
 
@@ -44,7 +59,11 @@
           [:strong "Create a new graph"]
           (ui/icon "chevron-right")]
 
-         :on-click #(set-step! :new-graph))
+         :on-click #(if (and native-ios?
+                             (some (fn [s] (not (string/blank? s)))
+                                   (vals (:mobile/container-urls @state/state))))
+                      (set-step! :new-graph)
+                      (open-picker)))
 
         (ui/button
          [:span.flex.items-center.justify-between.w-full.py-1
@@ -52,9 +71,7 @@
           (ui/icon "folder-plus")]
 
          :intent "logseq"
-         :on-click #(page-handler/ls-dir-files!
-                     (fn []
-                       (shortcut/refresh!))))]
+         :on-click open-picker)]
 
        ;; step 1
        :new-graph
