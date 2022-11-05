@@ -149,7 +149,7 @@ input.tl-text-input {
 }
 
 .whiteboard-page-title {
-  @apply flex px-2 py-1 flex-1 overflow-ellipsis overflow-hidden;
+  @apply px-2 py-1 flex-1 overflow-ellipsis overflow-hidden;
 
   font-size: 20px;
   border-radius: 8px;
@@ -162,7 +162,7 @@ input.tl-text-input {
   }
 
   .page-title-sizer-wrapper {
-    width: calc(100% - 24px);
+    width: calc(100% - 20px);
 
     > .title {
       @apply whitespace-nowrap min-w-[80px];
