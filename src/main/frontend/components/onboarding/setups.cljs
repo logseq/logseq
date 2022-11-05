@@ -10,9 +10,11 @@
             [frontend.util :as util]
             [frontend.handler.web.nfs :as nfs]
             [frontend.mobile.util :as mobile-util]
+            [frontend.mobile.graph-picker :as graph-picker]
             [frontend.handler.notification :as notification]
             [frontend.handler.external :as external-handler]
             [frontend.modules.shortcut.core :as shortcut]
+            [frontend.handler.user :as user-handler]
             [clojure.string :as string]
             [goog.object :as gobj]))
 
@@ -65,7 +67,8 @@
 
 (rum/defcs picker < rum/reactive
   [_state]
-  (let [parsing? (state/sub :repo/parsing-files?)]
+  (let [parsing?    (state/sub :repo/parsing-files?)
+        native-ios? (mobile-util/native-ios?)]
 
     (setups-container
      :picker
@@ -73,30 +76,34 @@
       [:section.a
        [:strong "Let’s get you set up."]
        [:small (str "Where on your " DEVICE " do you want to save your work?")
-        (when (mobile-util/native-platform?)
+        (when (and (mobile-util/native-platform?) (not native-ios?))
           (mobile-intro))]
 
-       (if (or (nfs/supported?) (mobile-util/native-platform?))
-         [:div.choose.flex.flex-col.items-center
-          {:on-click #(page-handler/ls-dir-files!
-                       (fn []
-                         (shortcut/refresh!)))}
-          [:i]
-          [:div.control
-           [:label.action-input.flex.items-center.justify-center.flex-col
-            {:disabled parsing?}
+       (if native-ios?
+         ;; TODO: open for all native mobile platforms
+         (graph-picker/graph-picker-cp)
 
-            (if parsing?
-              (ui/loading "")
-              [[:strong "Choose a folder"]
-               [:small "Open existing directory or Create a new one"]])]]]
-         [:div.px-5
-          (ui/admonition :warning
-                         [:p "It seems that your browser doesn't support the "
-                          [:a {:href   "https://web.dev/file-system-access/"
-                               :target "_blank"}
-                           "new native filesystem API"]
-                          [:span ", please use any Chromium 86+ based browser like Chrome, Vivaldi, Edge, etc. Notice that the API doesn't support mobile browsers at the moment."]])])]
+         (if (or (nfs/supported?) (mobile-util/native-platform?))
+           [:div.choose.flex.flex-col.items-center
+            {:on-click #(page-handler/ls-dir-files!
+                         (fn []
+                           (shortcut/refresh!)))}
+            [:i]
+            [:div.control
+             [:label.action-input.flex.items-center.justify-center.flex-col
+              {:disabled parsing?}
+
+              (if parsing?
+                (ui/loading "")
+                [[:strong "Choose a folder"]
+                 [:small "Open existing directory or Create a new one"]])]]]
+           [:div.px-5
+            (ui/admonition :warning
+                           [:p "It seems that your browser doesn't support the "
+                            [:a {:href   "https://web.dev/file-system-access/"
+                                 :target "_blank"}
+                             "new native filesystem API"]
+                            [:span ", please use any Chromium 86+ based browser like Chrome, Vivaldi, Edge, etc. Notice that the API doesn't support mobile browsers at the moment."]])]))]
       [:section.b.flex.items-center.flex-col
        [:p.flex
         [:i.as-flex-center (ui/icon "zoom-question" {:style {:fontSize "22px"}})]
