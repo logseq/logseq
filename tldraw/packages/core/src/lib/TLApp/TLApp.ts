@@ -70,7 +70,7 @@ export class TLApp<
 
   keybindingRegistered = false
   uuid = uniqueId()
-  
+
   static id = 'app'
   static initial = 'select'
 
@@ -451,8 +451,18 @@ export class TLApp<
     return this
   }
 
+  @action removeUnusedAssets = (): this => {
+    const usedAssets = this.getCleanUpAssets()
+    Object.keys(this.assets).forEach(assetId => {
+      if (!usedAssets.some(asset => asset.id === assetId)) {
+        delete this.assets[assetId]
+      }
+    })
+    this.persist()
+    return this
+  }
+
   getCleanUpAssets<T extends TLAsset>(): T[] {
-    let deleted = false
     const usedAssets = new Set<T>()
 
     this.pages.forEach(p =>
