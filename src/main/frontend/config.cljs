@@ -388,7 +388,7 @@
 
                  (and (mobile-util/native-ios?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)]
-                   (str dir relative-path))
+                   (util/safe-path-join dir relative-path))
 
                  (and (mobile-util/native-android?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)
