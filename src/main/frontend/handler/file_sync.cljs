@@ -13,7 +13,8 @@
             [frontend.handler.user :as user]
             [frontend.fs :as fs]
             [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]))
+            [cljs-time.core :as t]
+            [frontend.storage :as storage]))
 
 (def *beta-unavailable? (volatile! false))
 

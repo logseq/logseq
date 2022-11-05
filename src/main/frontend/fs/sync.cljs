@@ -1895,7 +1895,6 @@
                 (if (get-in @pwd-map [graph-uuid :private-key])
                   (do (when (state/modal-opened?)
                         (state/set-state! [:ui/loading? :set-graph-password] false)
-                        (notification/show! "Password successfully matched" :success)
                         (state/close-modal!))
                       ::idle)
                   ;; bad pwd
