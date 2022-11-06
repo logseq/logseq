@@ -199,12 +199,31 @@ html.is-zoomed-native-ios {
   }
 }
 
+
+.cp__graph-picker {
+  button.toggle-item {
+    @apply opacity-90 hover:text-inherit;
+
+    .ui__icon {
+      @apply scale-150;
+    }
+
+    &.is-on {
+      @apply opacity-100;
+
+      .ui__icon {
+        @apply text-indigo-600;
+      }
+    }
+  }
+}
+
 .ui__modal {
   &[label=graph-setup] {
     align-items: center;
 
     .ui__modal-panel {
-      transform: translate3d(0, -60px, 0);
+      transform: translate3d(0, -70px, 0);
     }
 
     .panel-content {

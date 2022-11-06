@@ -67,8 +67,11 @@
 
 (rum/defcs picker < rum/reactive
   [_state onboarding-and-home?]
-  (let [parsing?    (state/sub :repo/parsing-files?)
-        native-ios? (mobile-util/native-ios?)]
+  (let [parsing?       (state/sub :repo/parsing-files?)
+        _              (state/sub :auth/id-token)
+        native-ios?    (mobile-util/native-ios?)
+        native-icloud? (not (string/blank? (state/sub [:mobile/container-urls :iCloudContainerUrl])))
+        logged?        (user-handler/logged-in?)]
 
     (setups-container
      :picker
@@ -81,7 +84,9 @@
 
        (if native-ios?
          ;; TODO: open for all native mobile platforms
-         (graph-picker/graph-picker-cp {:onboarding-and-home? onboarding-and-home?})
+         (graph-picker/graph-picker-cp {:onboarding-and-home? onboarding-and-home?
+                                        :logged? logged?
+                                        :native-icloud? native-icloud?})
 
          (if (or (nfs/supported?) (mobile-util/native-platform?))
            [:div.choose.flex.flex-col.items-center

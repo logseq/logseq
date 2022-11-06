@@ -122,7 +122,7 @@
 (defn ^:large-vars/cleanup-todo ls-dir-files-with-handler!
   "Read files from directory and setup repo (for the first time setup a repo)"
   ([ok-handler] (ls-dir-files-with-handler! ok-handler nil))
-  ([ok-handler {:keys [empty-dir?-or-pred dir-result-fn ios-logseq-sync?]}]
+  ([ok-handler {:keys [empty-dir?-or-pred dir-result-fn picked-root-fn ios-logseq-sync?]}]
    (let [path-handles (atom {})
          electron? (util/electron?)
          mobile-native? (mobile-util/native-platform?)
@@ -149,6 +149,7 @@
                     (fn? empty-dir?-or-pred)
                     (empty-dir?-or-pred result)))
               root-handle (first result)
+              _ (when (fn? picked-root-fn) (picked-root-fn root-handle))
               dir-name (if nfs?
                          (gobj/get root-handle "name")
                          root-handle)
