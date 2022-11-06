@@ -11,9 +11,8 @@
   [uri]
   (try
     (js/decodeURIComponent uri)
-    (catch :default e
-      (println "decodeURIComponent failed: " uri)
-      (js/console.error e)
+    (catch :default _
+      (log/error :decode-uri-component-failed uri)
       uri)))
 
 (defn safe-url-decode
