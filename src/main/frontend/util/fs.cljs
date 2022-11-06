@@ -74,7 +74,7 @@
   (re-pattern (str "[" multiplatform-reserved-chars "]+")))
 
 (defn include-reserved-chars?
-  "Includes reserved charcters that would broken FS"
+  "Includes reserved characters that would broken FS"
   [s]
   (util/safe-re-find reserved-chars-pattern s))
 

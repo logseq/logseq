@@ -54,6 +54,7 @@
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.components.file-sync :as file-sync]
             [frontend.components.encryption :as encryption]
+            [frontend.components.conversion :as conversion-component]
             [goog.dom :as gdom]
             [logseq.db.schema :as db-schema]
             [promesa.core :as p]
@@ -704,6 +705,33 @@
     (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir)))
     (when (= dir (config/get-repo-dir repo))
       (fs/watch-dir! dir))))
+
+(defmethod handle :ui/notify-files-with-reserved-chars [[_ paths]]
+  (sync/<sync-stop)
+
+  (notification/show!
+   [:div
+    [:div.mb-4
+     [:div.font-semibold.mb-4.text-xl "It seems that you're using the old filename format."]
+
+     [:div
+      [:p
+       "We suggest you upgrading now to avoid some potential bugs."]
+      [:p
+       "For example, the files below have reserved characters that make them unable to be synced on some platforms."]]
+     ]
+    (ui/button
+      "Upgrade filename format"
+      :on-click (fn []
+                  (state/close-modal!)
+                  (state/set-modal!
+                  (fn [_] (conversion-component/files-breaking-changed))
+                  {:id :filename-format-panel :center? true})))
+    [:ol.my-2
+     (for [path paths]
+       [:li path])]]
+   :warning
+   false))
 
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]

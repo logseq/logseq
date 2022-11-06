@@ -836,7 +836,7 @@
   [label]
   (when (and (= 1 (count label))
              (string? (last (first label))))
-    (js/decodeURIComponent (last (first label)))))
+    (gp-util/safe-decode-uri-component (last (first label)))))
 
 (defn- get-page
   [label]
