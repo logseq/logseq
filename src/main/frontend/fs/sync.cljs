@@ -463,7 +463,7 @@
    (contains-path? (relative-path path))
    (boolean)))
 
-(defn- filter-files-with-reserved-chars
+(defn- filter-download-files-with-reserved-chars
   "Skip downloading file paths with reserved chars."
   [files]
   (let [reserved-files (filter
@@ -478,6 +478,20 @@
     (remove
      #(fs-util/include-reserved-chars? (-relative-path %))
      files)))
+
+(defn- filter-upload-files-with-reserved-chars
+  "Remove upoading file paths with reserved chars."
+  [paths]
+  (let [path-string? (string? (first paths))
+        f (if path-string?
+            fs-util/include-reserved-chars?
+            #(fs-util/include-reserved-chars? (-relative-path %)))
+        reserved-paths (filter f paths)]
+    (when (seq reserved-paths)
+      (let [paths (if path-string? reserved-paths (map -relative-path reserved-paths))]
+        (state/pub-event! [:ui/notify-files-with-reserved-chars paths])
+        (prn "Skipped uploading those file paths with reserved chars: " paths)))
+    (vec (remove f paths))))
 
 (defn- diffs->filetxns
   "transducer.
@@ -813,14 +827,10 @@
 
   (<update-remote-files [this graph-uuid base-path filepaths local-txid]
     (go
-      (let [files-with-reserved-chars (filter fs-util/include-reserved-chars? filepaths)]
-        (if (seq files-with-reserved-chars)
-          (state/pub-event! [:ui/notify-files-with-reserved-chars files-with-reserved-chars])
-          (do
-           (<! (<rsapi-cancel-all-requests))
-           (let [token (<! (<get-token this))]
-             (<! (<retry-rsapi
-                  #(p->c (ipc/ipc "update-remote-files" graph-uuid base-path filepaths local-txid token))))))))))
+      (<! (<rsapi-cancel-all-requests))
+      (let [token (<! (<get-token this))]
+        (<! (<retry-rsapi
+             #(p->c (ipc/ipc "update-remote-files" graph-uuid base-path filepaths local-txid token)))))))
 
   (<delete-remote-files [this graph-uuid base-path filepaths local-txid]
     (go
@@ -2207,7 +2217,7 @@
 
                     (when (pos-int? latest-txid)
                       (let [filtered-diff-txns (-> (transduce (diffs->filetxns) conj '() (reverse diff-txns))
-                                                   filter-files-with-reserved-chars)
+                                                   filter-download-files-with-reserved-chars)
                             partitioned-filetxns (transduce (partition-filetxns download-batch-size)
                                                             (completing (fn [r i] (conj r (reverse i)))) ;reverse
                                                             '()
@@ -2262,7 +2272,7 @@
                                            :epoch (tc/to-epoch (t/now))}})
                   {:stop true})
               (do (println "[full-sync(remote->local)]" (count sorted-diff-remote-files) "files need to sync")
-                  (let [filtered-files (filter-files-with-reserved-chars sorted-diff-remote-files)]
+                  (let [filtered-files (filter-download-files-with-reserved-chars sorted-diff-remote-files)]
                     (swap! *sync-state #(sync-state-reset-full-remote->local-files % sorted-diff-remote-files))
                     (<! (.sync-files-remote->local!
                          this (map (juxt relative-path -checksum)
@@ -2445,7 +2455,8 @@
                 _     (when (not= (count es**) (count es*))
                         (println :debug :filter-too-huge-files
                                  (mapv relative-path (set/difference (set es*) (set es**)))))
-                paths (sequence es->paths-xf es**)
+                paths (-> (sequence es->paths-xf es**)
+                          filter-upload-files-with-reserved-chars)
                 _     (println :sync-local->remote type paths)
                 r     (if (empty? paths)
                         (go @*txid)
@@ -2540,7 +2551,8 @@
                                            {:size (:size %)} (:etag %)))
                   (remove ignored?))
                  diff-local-files)
-                distinct-change-events (distinct-file-change-events change-events)
+                distinct-change-events (-> (distinct-file-change-events change-events)
+                                           filter-upload-files-with-reserved-chars)
                 _                      (swap! *sync-state #(sync-state-reset-full-local->remote-files % distinct-change-events))
                 change-events-partitions
                 (sequence

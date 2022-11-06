@@ -723,7 +723,7 @@
     (ui/button
       "Upgrade filename format"
       :on-click (fn []
-                  (state/close-modal!)
+                  (notification/clear-all!)
                   (state/set-modal!
                   (fn [_] (conversion-component/files-breaking-changed))
                   {:id :filename-format-panel :center? true})))
