@@ -79,7 +79,7 @@ test('draw a rectangle', async ({ page }) => {
 
     await page.keyboard.press('8')
 
-    await page.mouse.move(bounds.x, bounds.y);
+    await page.mouse.move(bounds.x + 5, bounds.y + 5);
     await page.mouse.down();
 
     await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
