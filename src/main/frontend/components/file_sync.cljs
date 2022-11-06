@@ -463,7 +463,7 @@
                                      {:key (str "queue-" path)}
                                      (try
                                        (gp-util/safe-decode-uri-component path)
-                                       (catch :default e
+                                       (catch :default _
                                          (prn "Wrong path: " path)
                                          path))]
                              :key   (str "queue-" path)

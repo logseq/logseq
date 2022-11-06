@@ -716,9 +716,9 @@
 
      [:div
       [:p
-       "We suggest you upgrading now to avoid some potential bugs."]
+       "We suggest you upgrade now to avoid some potential bugs."]
       [:p
-       "For example, the files below have reserved characters that make them unable to be synced on some platforms."]]
+       "For example, the files below have reserved characters can't be synced on some platforms."]]
      ]
     (ui/button
       "Upgrade filename format"
@@ -730,6 +730,29 @@
     [:ol.my-2
      (for [path paths]
        [:li path])]]
+   :warning
+   false))
+
+(defmethod handle :ui/notify-skipped-downloading-files [[_ paths]]
+  (notification/show!
+   [:div
+    [:div.mb-4
+     [:div.font-semibold.mb-4.text-xl "It seems that you're using the old filename format."]
+     [:p
+      "The files below that have reserved characters can't be saved on this device."]
+     [:div.overflow-y-auto.max-h-96
+      [:ol.my-2
+       (for [path paths]
+         [:li path])]]
+
+     [:div
+      [:p
+       "Check " [:a {:href "https://docs.logseq.com/#/page/logseq%20file%20and%20folder%20naming%20rules"
+                     :target "_blank"}
+                 "https://docs.logseq.com/#/page/logseq%20file%20and%20folder%20naming%20rules"]
+       " for more details."]
+      [:p
+       "To solve this problem, we suggest you upgrade the filename format (on Settings > Advanced > Filename format > click EDIT button) in other devices to avoid more potential bugs."]]]]
    :warning
    false))
 
