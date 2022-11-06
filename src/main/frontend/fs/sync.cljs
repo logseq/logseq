@@ -463,22 +463,40 @@
    (contains-path? (relative-path path))
    (boolean)))
 
-(defn- diffs->partitioned-filetxns
+(defn- filter-files-with-reserved-chars
+  [files]
+  (let [reserved-files (filter
+                        #(fs-util/include-reserved-chars? (-relative-path %))
+                        files)]
+    (when (seq reserved-files)
+      (prn "Skipped downloading those file paths with reserved chars: "
+           (map -relative-path reserved-files))
+      )
+    (remove
+     #(fs-util/include-reserved-chars? (-relative-path %))
+     files)))
+
+(defn- diffs->filetxns
   "transducer.
   1. diff -> `FileTxn` , see also `<get-diff`
   2. distinct redundant update type filetxns
-  3. partition filetxns, each partition contains same type filetxns,
-     for update type, at most N items in each partition
-     for delete & rename type, only 1 item in each partition.
-  4. remove update or rename filetxns if they are deleted in later filetxns.
+  3. remove update or rename filetxns if they are deleted in later filetxns.
   NOTE: this xf should apply on reversed diffs sequence (sort by txid)"
-  [n]
+  []
   (comp
    (map diff->filetxns)
    cat
    (remove ignored?)
    distinct-update-filetxns-xf
-   remove-deleted-filetxns-xf
+   remove-deleted-filetxns-xf))
+
+(defn- diffs->partitioned-filetxns
+  "partition filetxns, each partition contains same type filetxns,
+   for update type, at most N items in each partition
+   for delete & rename type, only 1 item in each partition."
+  [n]
+  (comp
+   (diffs->filetxns)
    (partition-filetxns n)))
 
 (defn- filepath+checksum->diff
@@ -2185,11 +2203,12 @@
                         {:need-remote->local-full-sync true})
 
                     (when (pos-int? latest-txid)
-                      (let [partitioned-filetxns (transduce (diffs->partitioned-filetxns download-batch-size)
+                      (let [filtered-diff-txns (-> (transduce (diffs->filetxns) conj '() (reverse diff-txns))
+                                                   filter-files-with-reserved-chars)
+                            partitioned-filetxns (transduce (partition-filetxns download-batch-size)
                                                             (completing (fn [r i] (conj r (reverse i)))) ;reverse
                                                             '()
-                                                            (reverse diff-txns))]
-                        ;; (swap! *sync-state #(sync-state-reset-full-remote->local-files % files))
+                                                            filtered-diff-txns)]
                         (put-sync-event! {:event :start
                                           :data  {:type       :remote->local
                                                   :graph-uuid graph-uuid
@@ -2240,11 +2259,12 @@
                                            :epoch (tc/to-epoch (t/now))}})
                   {:stop true})
               (do (println "[full-sync(remote->local)]" (count sorted-diff-remote-files) "files need to sync")
-                  (swap! *sync-state #(sync-state-reset-full-remote->local-files % sorted-diff-remote-files))
-                  (<! (.sync-files-remote->local!
-                       this (map (juxt relative-path -checksum)
-                                 sorted-diff-remote-files)
-                       latest-txid))))))))))
+                  (let [filtered-files (filter-files-with-reserved-chars sorted-diff-remote-files)]
+                    (swap! *sync-state #(sync-state-reset-full-remote->local-files % sorted-diff-remote-files))
+                    (<! (.sync-files-remote->local!
+                         this (map (juxt relative-path -checksum)
+                                filtered-files)
+                         latest-txid)))))))))))
 
 (defn- <file-changed?
   "return true when file changed compared with remote"
