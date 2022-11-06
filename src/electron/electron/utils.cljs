@@ -159,7 +159,6 @@
   [uri]
   (try
     (js/decodeURIComponent uri)
-    (catch :default e
+    (catch :default _
       (println "decodeURIComponent failed: " uri)
-      (js/console.error e)
       uri)))
