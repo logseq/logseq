@@ -11,16 +11,18 @@
    [frontend.state :as state]
    [frontend.mobile.util :as mobile-util]
    [frontend.fs :as fs]
+   [frontend.components.svg :as svg]
    [promesa.core :as p]))
 
 (defn validate-graph-dirname
   [root dirname]
 
-  ;; TODO: call plugin api
+  ;; TODO: how to handle existing graph name directory?
+  ;; TODO: temporarily just load the existing folder
   (p/resolved (util/node-path.join root dirname)))
 
 (rum/defc graph-picker-cp
-  [onboarding-and-home?]
+  [{:keys [onboarding-and-home?]}]
   (let [[step set-step!] (rum/use-state :init)
         *input-ref  (rum/create-ref)
         native-ios? (mobile-util/native-ios?)
@@ -59,12 +61,18 @@
            (handle))))
      [step])
 
-    [:div.cp__graph-picker.px-10.py-10.w-full
+    [:div.cp__graph-picker.w-full
+     {:class (when onboarding-and-home? (util/hiccup->class "px-10.py-10"))}
+
+     (when-not onboarding-and-home?
+       [:h1.flex.items-center
+        [:span.scale-75 (svg/logo false)]
+        [:span.pl-1 "Set up a graph"]])
 
      (case step
        ;; step 0
        :init
-       [:div.flex.flex-col.w-full.space-y-4
+       [:div.flex.flex-col.w-full.space-y-3
         (ui/button
          [:span.flex.items-center.justify-between.w-full.py-1
           [:strong "Create a new graph"]

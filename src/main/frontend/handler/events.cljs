@@ -43,6 +43,7 @@
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
+            [frontend.mobile.graph-picker :as graph-picker]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.shortcut.core :as st]
@@ -722,6 +723,13 @@
     (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir)))
     (when (= dir (config/get-repo-dir repo))
       (fs/watch-dir! dir))))
+
+(defmethod handle :graph/setup-a-repo [[_ opts]]
+  (if (mobile-util/native-ios?)
+    (do (state/set-modal!
+         #(graph-picker/graph-picker-cp {})
+         {:label "graph-setup"}))
+    (page-handler/ls-dir-files! st/refresh! opts)))
 
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]
