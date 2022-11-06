@@ -20,6 +20,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
+            [frontend.util.fs :as fs-util]
             [frontend.handler.notification :as notification]
             [frontend.context.i18n :refer [t]]
             [frontend.diff :as diff]
@@ -791,10 +792,14 @@
 
   (<update-remote-files [this graph-uuid base-path filepaths local-txid]
     (go
-      (<! (<rsapi-cancel-all-requests))
-      (let [token (<! (<get-token this))]
-        (<! (<retry-rsapi
-             #(p->c (ipc/ipc "update-remote-files" graph-uuid base-path filepaths local-txid token)))))))
+      (let [files-with-reserved-chars (filter fs-util/include-reserved-chars? filepaths)]
+        (if (seq files-with-reserved-chars)
+          (state/pub-event! [:ui/notify-files-with-reserved-chars files-with-reserved-chars])
+          (do
+           (<! (<rsapi-cancel-all-requests))
+           (let [token (<! (<get-token this))]
+             (<! (<retry-rsapi
+                  #(p->c (ipc/ipc "update-remote-files" graph-uuid base-path filepaths local-txid token))))))))))
 
   (<delete-remote-files [this graph-uuid base-path filepaths local-txid]
     (go

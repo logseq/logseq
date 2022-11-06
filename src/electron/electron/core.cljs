@@ -77,7 +77,7 @@
                       [STATIC_URL js/__dirname])
 
            path' (.-pathname url')
-           path' (js/decodeURIComponent path')
+           path' (utils/safe-decode-uri-component path')
            path' (.join path ROOT path')]
 
        (callback #js {:path path'}))))

@@ -359,7 +359,7 @@
                  "Local"))
          (->> (string/split repo-dir "Documents/")
               last
-              js/decodeURIComponent
+              gp-util/safe-decode-uri-component
               (str "/" (string/capitalize app-name) "/")))
     (get-repo-dir repo-dir)))
 
