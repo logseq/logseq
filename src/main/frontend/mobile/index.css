@@ -202,7 +202,14 @@ html.is-zoomed-native-ios {
 
 .cp__graph-picker {
   button.toggle-item {
-    @apply opacity-90 hover:text-inherit;
+    opacity: .5;
+    background: transparent !important;
+    -webkit-tap-highlight-color: transparent;
+
+    &:hover {
+      color: inherit;
+      opacity: .5;
+    }
 
     .ui__icon {
       @apply scale-150;
@@ -223,7 +230,7 @@ html.is-zoomed-native-ios {
     align-items: center;
 
     .ui__modal-panel {
-      transform: translate3d(0, -70px, 0);
+      transform: translate3d(0, -78px, 0);
     }
 
     .panel-content {
@@ -231,7 +238,7 @@ html.is-zoomed-native-ios {
     }
 
     .cp__graph-picker {
-      padding: 58px 20px 26px 20px;
+      padding: 58px 20px 20px 20px;
       background: var(--ls-search-background-color);
 
       > h1 {
