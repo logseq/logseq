@@ -158,7 +158,7 @@
            ;; password strength checker
            (when-not (string/blank? @*password)
              [:<>
-              [:div.input-hints.text-sm.py-2.px-3.rounded.mb-2.-mt-1.5.flex.items-center.space-x-3
+              [:div.input-hints.text-sm.py-2.px-3.rounded.mb-2.-mt-1.5.flex.items-center.sm:space-x-3.strength-wrap
                (let [included-set (set (:contains pw-strength))]
                  (for [i ["lowercase" "uppercase" "number" "symbol"]
                        :let [included? (contains? included-set i)]]

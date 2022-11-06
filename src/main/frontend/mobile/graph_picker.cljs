@@ -59,9 +59,19 @@
                                 (-> (validate-graph-dirname root graph-name)
                                     (p/then (fn [graph-path]
                                               (-> (fs/mkdir! graph-path)
-                                                  (p/then (fn []
-                                                            (web-nfs/ls-dir-files-with-path! graph-path opts)
-                                                            (notification/show! (str "Create graph: " graph-name) :success))))))
+                                                  (p/then
+                                                   (fn []
+                                                     (web-nfs/ls-dir-files-with-path!
+                                                      graph-path (merge
+                                                                  {:logseq-sync-on
+                                                                   logseq-sync-on?
+
+                                                                   :ok-handler
+                                                                   (fn []
+                                                                     (when logseq-sync-on?
+                                                                       (state/pub-event! [:sync/create-remote-graph (state/get-current-repo)])))}
+                                                                  opts))
+                                                     (notification/show! (str "Create graph: " graph-name) :success))))))
                                     (p/catch (fn [^js e]
                                                (notification/show! (str e) :error)
                                                (js/console.error e)))
@@ -112,20 +122,22 @@
 
        ;; step 1
        :new-graph
-       [:div.flex.flex-col.w-full.space-y-4.faster-fade-in
+       [:div.flex.flex-col.w-full.space-y-3.faster-fade-in
         [:input.form-input.block
          {:auto-focus  true
           :ref         *input-ref
           :placeholder "What's the graph name?"}]
 
-        (when logged?
-          (toggle-item {:title "Logseq sync"
-                        :on?   logseq-sync-on?}))
+        [:div.flex.flex-col
+         (when logged?
+           (toggle-item {:title     "Logseq sync"
+                         :on?       logseq-sync-on?
+                         :on-toggle #(set-sync-mode! (if % :logseq-sync (if native-icloud? :icloud-sync nil)))}))
 
-        (when (and native-icloud? (not logseq-sync-on?))
-          (toggle-item {:title     "iCloud sync"
-                        :on?       icloud-sync-on?
-                        :on-toggle #(set-sync-mode! (if % :icloud-sync nil))}))
+         (when (and native-icloud? (not logseq-sync-on?))
+           (toggle-item {:title     "iCloud sync"
+                         :on?       icloud-sync-on?
+                         :on-toggle #(set-sync-mode! (if % :icloud-sync nil))}))]
 
         [:div.flex.justify-between.items-center.pt-2
          (ui/button [:span.flex.items-center
