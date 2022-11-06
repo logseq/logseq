@@ -3000,11 +3000,11 @@
 
 (declare network-online-cursor)
 
-(defn sync-start
+(defn <sync-start
   []
-  (when (false? @*sync-entered?)
-    (reset! *sync-entered? true)
-    (go
+  (go
+    (when (false? @*sync-entered?)
+      (reset! *sync-entered? true)
       (let [*sync-state                 (atom (sync-state))
             current-user-uuid           (user/user-uuid)
             ;; put @graph-uuid & get-current-repo together,
@@ -3056,7 +3056,7 @@
                (<sync-stop)
 
                (and (false? o) (true? n))
-               (sync-start)
+               (<sync-start)
 
                :else
                nil)))

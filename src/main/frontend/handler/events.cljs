@@ -67,7 +67,7 @@
 (defn- file-sync-restart! []
   (async/go (async/<! (p->c (persist-var/load-vars)))
             (async/<! (sync/<sync-stop))
-            (some-> (sync/sync-start) async/<!)))
+            (some-> (sync/<sync-start) async/<!)))
 
 (defn- file-sync-stop! []
   (async/go (async/<! (p->c (persist-var/load-vars)))
@@ -93,7 +93,7 @@
                                     (vector? (:sync-meta %))
                                     (util/uuid-string? (first (:sync-meta %)))
                                     (util/uuid-string? (second (:sync-meta %)))) repos)
-                    (sync/sync-start)))))
+                    (sync/<sync-start)))))
             (ui-handler/re-render-root!)
             (file-sync/maybe-onboarding-show status)))))))
 

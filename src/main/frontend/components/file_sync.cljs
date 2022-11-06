@@ -132,7 +132,7 @@
               (do
                 (state/set-state! [:ui/loading? :graph/create-remote?] true)
                 (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
-                  (async/<! (fs-sync/sync-start))
+                  (async/<! (fs-sync/<sync-start))
                   (state/set-state! [:ui/loading? :graph/create-remote?] false)
                   ;; update existing repo
                   (state/set-repos! (map (fn [r]
@@ -376,7 +376,7 @@
                                                 (second @graphs-txid)
                                                 (fs-sync/graph-sync-off? (second @graphs-txid))
                                                 (async/<! (fs-sync/<check-remote-graph-exists (second @graphs-txid))))
-                                           (fs-sync/sync-start)
+                                           (fs-sync/<sync-start)
 
                                            ;; remote graph already has been deleted, clear repos first, then create-remote-graph
                                            synced-file-graph?  ; <check-remote-graph-exists -> false
