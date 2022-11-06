@@ -464,11 +464,14 @@
    (boolean)))
 
 (defn- filter-files-with-reserved-chars
+  "Skip downloading file paths with reserved chars."
   [files]
   (let [reserved-files (filter
                         #(fs-util/include-reserved-chars? (-relative-path %))
                         files)]
     (when (seq reserved-files)
+      (state/pub-event! [:ui/notify-skipped-downloading-files
+                         (map -relative-path reserved-files)])
       (prn "Skipped downloading those file paths with reserved chars: "
            (map -relative-path reserved-files))
       )
