@@ -52,10 +52,10 @@
                             (if (string/blank? graph-name)
                               (notification/show! "Illegal graph folder name.")
 
-                              ;; create graph directory under Logseq document folder
-                              ;; TODO: icloud sync
-                              (when-let [root (if icloud-sync-on? (state/get-icloud-container-root-url)
-                                                                  (state/get-local-container-root-url))]
+                              ;; create graph directory under Logseq document folder (local/icloud)
+                              (when-let [root (if icloud-sync-on?
+                                                (state/get-icloud-container-root-url)
+                                                (state/get-local-container-root-url))]
                                 (-> (validate-graph-dirname root graph-name)
                                     (p/then (fn [graph-path]
                                               (-> (fs/mkdir! graph-path)
