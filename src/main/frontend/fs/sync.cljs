@@ -167,6 +167,7 @@
 (defn- get-ignored-files
   []
   (into #{#"logseq/graphs-txid.edn$"
+          #"logseq/pages-metadata.edn$"
           #"logseq/version-files/"
           #"logseq/bak/"
           #"node_modules/"
