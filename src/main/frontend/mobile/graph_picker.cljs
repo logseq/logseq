@@ -22,7 +22,7 @@
   (p/resolved (util/node-path.join root dirname)))
 
 (rum/defc toggle-item
-  [{:keys [on? disabled? title on-toggle]}]
+  [{:keys [on? title on-toggle]}]
   (ui/button
    [:span.flex.items-center.justify-between.w-full.py-1
     [:strong title]
@@ -36,47 +36,48 @@
 
 (rum/defc graph-picker-cp
   [{:keys [onboarding-and-home? logged? native-icloud?] :as opts}]
-  (let [[step set-step!] (rum/use-state :init)
+  (let [can-logseq-sync? (and logged? (state/enable-sync?))
+        [step set-step!] (rum/use-state :init)
         [sync-mode set-sync-mode!] (rum/use-state
                                     (cond
-                                      logged? :logseq-sync
+                                      can-logseq-sync? :logseq-sync
                                       native-icloud? :icloud-sync))
-        icloud-sync-on? (= sync-mode :icloud-sync)
-        logseq-sync-on? (= sync-mode :logseq-sync)
-        *input-ref      (rum/create-ref)
-        native-ios?     (mobile-util/native-ios?)
+        icloud-sync-on?  (= sync-mode :icloud-sync)
+        logseq-sync-on?  (= sync-mode :logseq-sync)
+        *input-ref       (rum/create-ref)
+        native-ios?      (mobile-util/native-ios?)
 
-        open-picker     #(page-handler/ls-dir-files! shortcut/refresh! opts)
-        on-create       (fn [input-val]
-                          (let [graph-name (util/safe-sanitize-file-name input-val)]
-                            (if (string/blank? graph-name)
-                              (notification/show! "Illegal graph folder name.")
+        open-picker      #(page-handler/ls-dir-files! shortcut/refresh! opts)
+        on-create        (fn [input-val]
+                           (let [graph-name (util/safe-sanitize-file-name input-val)]
+                             (if (string/blank? graph-name)
+                               (notification/show! "Illegal graph folder name.")
 
-                              ;; create graph directory under Logseq document folder (local/icloud)
-                              (when-let [root (if icloud-sync-on?
-                                                (state/get-icloud-container-root-url)
-                                                (state/get-local-container-root-url))]
-                                (-> (validate-graph-dirname root graph-name)
-                                    (p/then (fn [graph-path]
-                                              (-> (fs/mkdir! graph-path)
-                                                  (p/then
-                                                   (fn []
-                                                     (web-nfs/ls-dir-files-with-path!
-                                                      graph-path (merge
-                                                                  {:logseq-sync-on
-                                                                   logseq-sync-on?
+                               ;; create graph directory under Logseq document folder (local/icloud)
+                               (when-let [root (if icloud-sync-on?
+                                                 (state/get-icloud-container-root-url)
+                                                 (state/get-local-container-root-url))]
+                                 (-> (validate-graph-dirname root graph-name)
+                                     (p/then (fn [graph-path]
+                                               (-> (fs/mkdir! graph-path)
+                                                   (p/then
+                                                    (fn []
+                                                      (web-nfs/ls-dir-files-with-path!
+                                                       graph-path (merge
+                                                                   {:logseq-sync-on
+                                                                    logseq-sync-on?
 
-                                                                   :ok-handler
-                                                                   (fn []
-                                                                     (when logseq-sync-on?
-                                                                       (state/pub-event! [:sync/create-remote-graph (state/get-current-repo)])))}
-                                                                  opts))
-                                                     (notification/show! (str "Create graph: " graph-name) :success))))))
-                                    (p/catch (fn [^js e]
-                                               (notification/show! (str e) :error)
-                                               (js/console.error e)))
-                                    (p/finally
-                                     #()))))))]
+                                                                    :ok-handler
+                                                                    (fn []
+                                                                      (when logseq-sync-on?
+                                                                        (state/pub-event! [:sync/create-remote-graph (state/get-current-repo)])))}
+                                                                   opts))
+                                                      (notification/show! (str "Create graph: " graph-name) :success))))))
+                                     (p/catch (fn [^js e]
+                                                (notification/show! (str e) :error)
+                                                (js/console.error e)))
+                                     (p/finally
+                                      #()))))))]
 
     (rum/use-effect!
      (fn []
@@ -129,7 +130,7 @@
           :placeholder "What's the graph name?"}]
 
         [:div.flex.flex-col
-         (when logged?
+         (when can-logseq-sync?
            (toggle-item {:title     "Logseq sync"
                          :on?       logseq-sync-on?
                          :on-toggle #(set-sync-mode! (if % :logseq-sync (if native-icloud? :icloud-sync nil)))}))
