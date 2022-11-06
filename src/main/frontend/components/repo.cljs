@@ -119,7 +119,7 @@
             [:div.mr-8
              (ui/button
                (t :open-a-directory)
-               :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])]]
+               :on-click #(state/pub-event! [:graph/setup-a-repo]))])]]
 
         (when (seq remote-graphs)
           [:div

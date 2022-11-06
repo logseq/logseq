@@ -81,7 +81,7 @@
 
        (if native-ios?
          ;; TODO: open for all native mobile platforms
-         (graph-picker/graph-picker-cp onboarding-and-home?)
+         (graph-picker/graph-picker-cp {:onboarding-and-home? onboarding-and-home?})
 
          (if (or (nfs/supported?) (mobile-util/native-platform?))
            [:div.choose.flex.flex-col.items-center
