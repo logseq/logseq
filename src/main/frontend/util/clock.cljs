@@ -24,9 +24,11 @@
 (defn seconds->days:hours:minutes:seconds
   [seconds]
   (let [days (quot (quot seconds 3600) 24)
-        hours (quot seconds 3600)
-        minutes (quot (- seconds (* hours 3600)) 60)
-        seconds (mod seconds 60)]
+        n (mod seconds (* 24 3600))
+        hours (quot n 3600)
+        n (mod n 3600)
+        minutes (quot n 60)
+        seconds (mod n 60)]
     (util/format "%s%s%s%s"
                  (if (zero? days) "" (str days "d"))
                  (if (zero? hours) "" (str hours "h"))
