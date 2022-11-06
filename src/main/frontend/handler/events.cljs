@@ -749,7 +749,7 @@
       [:p
        "Check " [:a {:href "https://docs.logseq.com/#/page/logseq%20file%20and%20folder%20naming%20rules"
                      :target "_blank"}
-                 "https://docs.logseq.com/#/page/logseq%20file%20and%20folder%20naming%20rules"]
+                 "Logseq file and folder naming rules"]
        " for more details."]
       [:p
        "To solve this problem, we suggest you upgrade the filename format (on Settings > Advanced > Filename format > click EDIT button) in other devices to avoid more potential bugs."]]]]
