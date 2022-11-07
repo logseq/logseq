@@ -515,59 +515,6 @@
                    synced-file-graph? queuing?)
               [:div.head-ctls (sync-now)])]}))])))
 
-(rum/defc pick-local-graph-for-sync [graph]
-  [:div.cp__file-sync-related-normal-modal
-   [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "cloud-download")]]
-
-   [:h1.mb-5.text-2xl.text-center.font-bold (util/format "Sync graph \"%s\" to local"
-                                                         (:GraphName graph))]
-
-   (ui/button
-     "Open a local directory"
-     :class "block w-full py-4 mt-4"
-     :on-click #(do
-                  (state/close-modal!)
-                  (fs-sync/<sync-stop)
-                  (->
-                   (page-handler/ls-dir-files!
-                    (fn [{:keys [url]}]
-                      (file-sync-handler/init-remote-graph url graph)
-                      (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
-
-                    {:sync-from-remote? true
-                     :empty-dir?-or-pred
-                     (fn [ret]
-                       (let [empty-dir? (nil? (second ret))]
-                         (if-let [root (first ret)]
-
-                           ;; verify directory
-                           (-> (if empty-dir?
-                                 (p/resolved nil)
-                                 (if (util/electron?)
-                                   (ipc/ipc :readGraphTxIdInfo root)
-                                   (fs-util/read-graphs-txid-info root)))
-
-                               (p/then (fn [^js info]
-                                         (when (and (not empty-dir?)
-                                                    (or (nil? info)
-                                                        (nil? (second info))
-                                                        (not= (second info) (:GraphUUID graph))))
-                                           (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
-                                             (p/resolved nil)
-                                             (throw (js/Error. nil)))))))
-
-                           ;; cancel pick a directory
-                           (throw (js/Error. nil)))))})
-                   (p/catch (fn [])))))
-
-   [:div.text-xs.opacity-50.px-1.flex-row.flex.items-center.p-2
-    (ui/icon "alert-circle")
-    [:span.ml-1 " An empty directory or an existing remote graph!"]]])
-
-(defn pick-dest-to-sync-panel [graph]
-  (fn []
-    (pick-local-graph-for-sync graph)))
-
 (rum/defc page-history-list
   [graph-uuid page-entity set-list-ready? set-page]
 

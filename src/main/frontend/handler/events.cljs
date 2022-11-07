@@ -179,23 +179,35 @@
       "Please wait seconds until all changes are saved for the current graph."
       :warning))))
 
-(defmethod handle :graph/pull-down-remote-graph [[_ graph]]
-  (when-let [graph-name (:GraphName graph)]
+(defmethod handle :graph/pull-down-remote-graph [[_ graph dir-name]]
+  (when-let [graph-name (or dir-name (:GraphName graph))]
     (let [graph-name (util/safe-sanitize-file-name graph-name)]
       (if (string/blank? graph-name)
         (notification/show! "Illegal graph folder name.")
 
         ;; Create graph directory under Logseq document folder (local)
         (when-let [root (state/get-local-container-root-url)]
-          (-> (graph-picker/validate-graph-dirname root graph-name)
-              (p/then (fn [graph-path]
-                        (-> (fs/mkdir-if-not-exists graph-path)
-                            (p/then
-                             (fn []
-                               (nfs-handler/ls-dir-files-with-path! graph-path))))))
-              (p/catch (fn [^js e]
-                         (notification/show! (str e) :error)
-                         (js/console.error e)))))))))
+          (let [graph-path (graph-picker/validate-graph-dirname root graph-name)]
+            (->
+             (p/let [exists? (fs/dir-exists? graph-path)]
+               (let [overwrite? (if exists?
+                                  (js/confirm (str "There's already a directory with the name \"" graph-name "\", do you want to overwrite it? Make sure to backup it first if you're not sure about it."))
+                                  true)]
+                 (if overwrite?
+                   (p/let [_ (fs/mkdir-if-not-exists graph-path)]
+                     (nfs-handler/ls-dir-files-with-path!
+                      graph-path
+                      {:ok-handler (fn []
+                                     (file-sync-handler/init-remote-graph graph-path graph)
+                                     (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))}))
+                   (let [graph-name (-> (js/prompt "Please specify a new directory name to download the graph:")
+                                        str
+                                        string/trim)]
+                     (when-not (string/blank? graph-name)
+                       (state/pub-event! [:graph/pull-down-remote-graph graph graph-name]))))))
+             (p/catch (fn [^js e]
+                        (notification/show! (str e) :error)
+                        (js/console.error e))))))))))
 
 (defmethod handle :graph/pick-page-histories [[_ graph-uuid page-name]]
   (state/set-modal!
