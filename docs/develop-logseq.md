@@ -49,7 +49,7 @@ yarn watch
 # Wait until watch reports `Build Completed.` for `:electron` and `:app`.
 # Then, run the following command in a different shell.
 # If you have opened desktop logseq, you should close it. Otherwise, this command will fail.
-yarn dev-electron-app
+(cd static && yarn install) && yarn dev-electron-app
 ```
 
 Alternatively, run `bb dev:electron-start` to do this step with one command. To
