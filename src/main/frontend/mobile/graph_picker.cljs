@@ -119,6 +119,7 @@
 
           :intent "logseq"
           :on-click (fn []
+                      (state/close-modal!)
                       (page-handler/ls-dir-files! shortcut/refresh!
                                                   {:dir (when native-ios?
                                                           (or
