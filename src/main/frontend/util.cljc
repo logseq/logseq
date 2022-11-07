@@ -88,6 +88,10 @@
 
 #?(:cljs
    (defn mobile?
+       "Triggering condition: Mobile phones
+        *** Warning!!! ***
+        For UX logic only! Don't use for FS logic
+        iPad / Android Pad doesn't trigger!"
      []
      (when-not node-test?
        (safe-re-find #"Mobi" js/navigator.userAgent))))

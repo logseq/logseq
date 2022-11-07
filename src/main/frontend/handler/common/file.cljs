@@ -69,7 +69,7 @@
                                             :date-formatter (state/get-date-formatter)
                                             :block-pattern (config/get-block-pattern (gp-util/get-format file))
                                             :supported-formats (gp-config/supported-formats)
-                                            :uri-encoded? (boolean (util/mobile?))
+                                            :uri-encoded? (boolean (mobile-util/native-platform?))
                                             :filename-format (state/get-filename-format repo-url)}
                                            (when (some? verbose) {:verbose verbose}))})]
      (:tx (graph-parser/parse-file (db/get-db repo-url false) file content options)))))
