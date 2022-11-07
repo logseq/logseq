@@ -68,7 +68,7 @@
 (defn- file-sync-restart! []
   (async/go (async/<! (p->c (persist-var/load-vars)))
             (async/<! (sync/<sync-stop))
-            (some-> (sync/sync-start) async/<!)))
+            (some-> (sync/<sync-start) async/<!)))
 
 (defn- file-sync-stop! []
   (async/go (async/<! (p->c (persist-var/load-vars)))
@@ -86,6 +86,7 @@
           (state/set-state! :user/info result)
           (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
+              (file-sync-handler/set-sync-enabled! true)
               (async/<! (file-sync-handler/load-session-graphs))
               (p/let [repos (repo-handler/refresh-repos!)]
                 (when-let [repo (state/get-current-repo)]
@@ -93,7 +94,7 @@
                                     (vector? (:sync-meta %))
                                     (util/uuid-string? (first (:sync-meta %)))
                                     (util/uuid-string? (second (:sync-meta %)))) repos)
-                    (sync/sync-start)))))
+                    (sync/<sync-start)))))
             (ui-handler/re-render-root!)
             (file-sync/maybe-onboarding-show status)))))))
 

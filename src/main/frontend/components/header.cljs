@@ -197,8 +197,7 @@
              (ui/icon "chevron-left" {:size 26})])))]
 
      [:div.r.flex
-      (when (and sync-enabled?
-                 current-repo
+      (when (and current-repo
                  (not (config/demo-graph? current-repo))
                  (user-handler/alpha-or-beta-user?))
         (fs-sync/indicator))

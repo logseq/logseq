@@ -14,6 +14,7 @@
             [frontend.fs :as fs]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
+            [frontend.storage :as storage]
             [logseq.graph-parser.util :as gp-util]))
 
 (def *beta-unavailable? (volatile! false))
@@ -235,3 +236,8 @@
           (= mins 1) "1 min left"
           (> mins 30) "calculating..."
           :else (str mins " mins left"))))))
+
+(defn set-sync-enabled!
+  [value]
+  (storage/set :logseq-sync-enabled value)
+  (state/set-state! :feature/enable-sync? value))

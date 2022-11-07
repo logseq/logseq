@@ -116,7 +116,7 @@
                       (if (instance? js/Error persist-r)
                         (js/console.error persist-r)
                         (when (fn? after-input-password)
-                          (async/<! (after-input-password))
+                          (after-input-password @*password)
                           ;; TODO: it's better if based on sync state
                           (when init-graph-keys
                             (js/setTimeout #(state/pub-event! [:file-sync/maybe-onboarding-show :sync-learn]) 10000)))))))))))

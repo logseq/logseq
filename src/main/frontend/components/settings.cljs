@@ -635,9 +635,7 @@
   [enabled?]
   (ui/toggle enabled?
              (fn []
-               (let [value (not enabled?)]
-                 (storage/set :logseq-sync-enabled value)
-                 (state/set-state! :feature/enable-sync? value)))
+               (file-sync-handler/set-sync-enabled! (not enabled?)))
              true))
 
 (defn sync-switcher-row [enabled?]
