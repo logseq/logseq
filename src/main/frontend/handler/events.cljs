@@ -21,7 +21,6 @@
             [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
             [frontend.db.persist :as db-persist]
-            [frontend.encrypt :as encrypt]
             [frontend.extensions.srs :as srs]
             [frontend.fs :as fs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
@@ -54,6 +53,7 @@
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.components.file-sync :as file-sync]
             [frontend.components.encryption :as encryption]
+            [frontend.components.conversion :as conversion-component]
             [goog.dom :as gdom]
             [logseq.db.schema :as db-schema]
             [promesa.core :as p]
@@ -67,7 +67,7 @@
 (defn- file-sync-restart! []
   (async/go (async/<! (p->c (persist-var/load-vars)))
             (async/<! (sync/<sync-stop))
-            (some-> (sync/sync-start) async/<!)))
+            (some-> (sync/<sync-start) async/<!)))
 
 (defn- file-sync-stop! []
   (async/go (async/<! (p->c (persist-var/load-vars)))
@@ -85,6 +85,7 @@
           (state/set-state! :user/info result)
           (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
+              (file-sync-handler/set-sync-enabled! true)
               (async/<! (file-sync-handler/load-session-graphs))
               (p/let [repos (repo-handler/refresh-repos!)]
                 (when-let [repo (state/get-current-repo)]
@@ -92,7 +93,7 @@
                                     (vector? (:sync-meta %))
                                     (util/uuid-string? (first (:sync-meta %)))
                                     (util/uuid-string? (second (:sync-meta %)))) repos)
-                    (sync/sync-start)))))
+                    (sync/<sync-start)))))
             (ui-handler/re-render-root!)
             (file-sync/maybe-onboarding-show status)))))))
 
@@ -321,8 +322,7 @@
                         {:label "diff__cp"}))))
 
 (defmethod handle :modal/display-file-version [[_ path content hash]]
-  (p/let [content (when content (encrypt/decrypt content))]
-    (state/set-modal! #(git-component/file-specific-version path hash content))))
+  (state/set-modal! #(git-component/file-specific-version path hash content)))
 
 ;; Hook on a graph is ready to be shown to the user.
 ;; It's different from :graph/resotred, as :graph/restored is for window reloaded
@@ -602,18 +602,6 @@
                      (state/close-modal!)
                      (state/pub-event! [:graph/re-index])))]])))
 
-;; encryption
-(defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]
-  (state/set-modal!
-   (encryption/encryption-setup-dialog repo-url close-fn)))
-
-(defmethod handle :modal/encryption-input-secret-dialog [[_ repo-url db-encrypted-secret close-fn]]
-  (state/set-modal!
-   (encryption/encryption-input-secret-dialog
-    repo-url
-    db-encrypted-secret
-    close-fn)))
-
 (defmethod handle :modal/remote-encryption-input-pw-dialog [[_ repo-url remote-graph-info type opts]]
   (state/set-modal!
    (encryption/input-password
@@ -704,6 +692,56 @@
     (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir)))
     (when (= dir (config/get-repo-dir repo))
       (fs/watch-dir! dir))))
+
+(defmethod handle :ui/notify-files-with-reserved-chars [[_ paths]]
+  (sync/<sync-stop)
+
+  (notification/show!
+   [:div
+    [:div.mb-4
+     [:div.font-semibold.mb-4.text-xl "It seems that you're using the old filename format."]
+
+     [:div
+      [:p
+       "We suggest you upgrade now to avoid some potential bugs."]
+      [:p
+       "For example, the files below have reserved characters can't be synced on some platforms."]]
+     ]
+    (ui/button
+      "Upgrade filename format"
+      :on-click (fn []
+                  (notification/clear-all!)
+                  (state/set-modal!
+                  (fn [_] (conversion-component/files-breaking-changed))
+                  {:id :filename-format-panel :center? true})))
+    [:ol.my-2
+     (for [path paths]
+       [:li path])]]
+   :warning
+   false))
+
+(defmethod handle :ui/notify-skipped-downloading-files [[_ paths]]
+  (notification/show!
+   [:div
+    [:div.mb-4
+     [:div.font-semibold.mb-4.text-xl "It seems that you're using the old filename format."]
+     [:p
+      "The files below that have reserved characters can't be saved on this device."]
+     [:div.overflow-y-auto.max-h-96
+      [:ol.my-2
+       (for [path paths]
+         [:li path])]]
+
+     [:div
+      [:p
+       "Check " [:a {:href "https://docs.logseq.com/#/page/logseq%20file%20and%20folder%20naming%20rules"
+                     :target "_blank"}
+                 "Logseq file and folder naming rules"]
+       " for more details."]
+      [:p
+       "To solve this problem, we suggest you upgrade the filename format (on Settings > Advanced > Filename format > click EDIT button) in other devices to avoid more potential bugs."]]]]
+   :warning
+   false))
 
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]

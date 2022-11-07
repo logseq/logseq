@@ -410,24 +410,6 @@
 ;;             (let [value (not enable-block-timestamps?)]
 ;;               (config-handler/set-config! :feature/enable-block-timestamps? value)))))
 
-(defn encryption-row [enable-encryption?]
-  (toggle "enable_encryption"
-          (t :settings-page/enable-encryption)
-          enable-encryption?
-          #(let [value (not enable-encryption?)]
-             (config-handler/set-config! :feature/enable-encryption? value)
-             (when value
-               (state/close-modal!)
-               ;; FIXME: Don't send the `(atom false)` ! Should check multi-window! or internal status error happens
-               (js/setTimeout (fn [] (state/pub-event! [:graph/ask-for-re-index (atom false) nil]))
-                              100)))
-          [:p.text-sm.opacity-50 "⚠️ This feature is experimental! "
-           [:span "You can use "]
-           [:a {:href "https://github.com/kanru/logseq-encrypt-ui"
-                :target "_blank"}
-            "logseq-encrypt-ui"]
-           [:span " to decrypt your graph."]]))
-
 (rum/defc keyboard-shortcuts-row [t]
   (row-with-button-action
     {:left-label   (t :settings-page/customize-shortcuts)
@@ -635,9 +617,7 @@
   [enabled?]
   (ui/toggle enabled?
              (fn []
-               (let [value (not enabled?)]
-                 (storage/set :logseq-sync-enabled value)
-                 (state/set-state! :feature/enable-sync? value)))
+               (file-sync-handler/set-sync-enabled! (not enabled?)))
              true))
 
 (defn sync-switcher-row [enabled?]
@@ -662,7 +642,6 @@
   []
   (let [current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
-        enable-encryption? (state/enable-encryption? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
         enable-sync? (state/enable-sync?)
         enable-whiteboards? (state/enable-whiteboards? current-repo)
@@ -685,8 +664,6 @@
      (when (and (util/electron?) config/enable-plugins?) (plugin-system-switcher-row))
      (flashcards-switcher-row enable-flashcards?)
      (zotero-settings-row)
-     (encryption-row enable-encryption?)
-
      (when-not web-platform?
        [:div.mt-1.sm:mt-0.sm:col-span-2
         [:hr]
