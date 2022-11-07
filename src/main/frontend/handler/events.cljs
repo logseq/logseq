@@ -579,7 +579,7 @@
       (async/<! (sync/<sync-stop))
       (state/set-state! [:ui/loading? :graph/create-remote?] true)
       (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
-        (async/<! (sync/sync-start))
+        (async/<! (sync/<sync-start))
         (state/set-state! [:ui/loading? :graph/create-remote?] false)
         ;; update existing repo
         (state/set-repos! (map (fn [r]
