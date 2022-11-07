@@ -49,7 +49,7 @@
     (display-welcome-message)
     (persist-var/load-vars)
     (when config/dev?
-      (js/setTimeout #(sync/sync-start) 1000))))
+      (js/setTimeout #(sync/<sync-start) 1000))))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads

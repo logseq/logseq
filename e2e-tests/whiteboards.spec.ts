@@ -3,6 +3,10 @@ import { test } from './fixtures'
 import { IsMac } from './utils'
 
 test('enable whiteboards', async ({ page }) => {
+    await page.evaluate(() => {
+        window.localStorage.removeItem('ls-onboarding-whiteboard?')
+    })
+
     await expect(page.locator('.nav-header .whiteboard')).toBeHidden()
     await page.click('#head .toolbar-dots-btn')
     await page.click('#head .dropdown-wrapper >> text=Settings')
@@ -30,6 +34,18 @@ test('cleanup the shapes', async ({ page }) => {
     }
     await page.keyboard.press('Delete')
     await expect(page.locator('[data-type=Shape]')).toHaveCount(0)
+})
+
+test('can right click title to show context menu', async ({ page }) => {
+    await page.click('.whiteboard-page-title', {
+        button: 'right',
+    })
+  
+    await expect(page.locator('#custom-context-menu')).toBeVisible()
+  
+    await page.keyboard.press('Escape')
+  
+    await expect(page.locator('#custom-context-menu')).toHaveCount(0)
 })
 
 test('set whiteboard title', async ({ page }) => {

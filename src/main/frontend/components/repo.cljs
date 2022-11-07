@@ -17,8 +17,6 @@
             [promesa.core :as p]
             [electron.ipc :as ipc]
             [goog.object :as gobj]
-            [frontend.components.encryption :as encryption]
-            [frontend.encrypt :as encrypt]
             [cljs.core.async :as async :refer [go <!]]
             [frontend.handler.file-sync :as file-sync]
             [reitit.frontend.easy :as rfe]))
@@ -60,14 +58,6 @@
                                      (state/pub-event! [:graph/switch url])))
 
      [:div.controls
-      (when (encrypt/encrypted-db? url)
-        [:a.control {:title    "Show encryption information about this graph"
-                     :on-click (fn []
-                                 (if remote?
-                                   (state/pub-event! [:modal/remote-encryption-input-pw-dialog url repo])
-                                   (state/set-modal! (encryption/encryption-dialog url))))}
-         "🔐"])
-
       (let [loading? (state/sub [:ui/loading? :remove/remote-graph GraphUUID])]
         [:div.flex.flex-row.items-center
          (when loading? [:div.ml-2 (ui/loading "")])
