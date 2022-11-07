@@ -140,5 +140,25 @@
 
    :page-ref
    '[(page-ref ?b ?page-name)
-     [?b :block/path-refs ?br]
-     [?br :block/name ?page-name]]})
+     ;; find page and its aliases by page-name
+     (or-join [?page ?page-alias]
+              ;; direct page name hit
+              (and [?page :block/name ?page-name]
+                   (not [_ :block/alias ?page])
+                   (or-join [?page ?page-alias]
+                            [?page :block/alias ?page-alias]
+                            [(ground #{}) ?page-alias]))
+              ;; alias name hit
+              (and [?hit-page-alias :block/name ?page-name]
+                   [?page :block/alias ?hit-page-alias]
+                   [?page :block/alias ?page-alias]))
+
+     ;; find blocks that reference to page or its aliases
+     (or-join [?b ?page ?page-alias]
+              [?b :block/path-refs ?page]
+              [?b :block/path-refs ?page-alias])
+
+     ;; except blocks that are on the same page
+     (not [?b :block/page ?page])
+     ;; and except some weird blank blocks that ref to aliases as their pages
+     (not [?b :block/page ?page-alias])]})
