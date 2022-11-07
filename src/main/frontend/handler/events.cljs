@@ -116,9 +116,9 @@
   (repo-handler/refresh-repos!)
   (file-sync-restart!))
 
-(defmethod handle :graph/unlinked [_]
-  (repo-handler/refresh-repos!)
-  (file-sync-restart!))
+(defmethod handle :graph/unlinked [repo current-repo]
+  (when (= (:url repo) current-repo)
+    (file-sync-restart!)))
 
 (defmethod handle :graph/refresh [_]
   (repo-handler/refresh-repos!))

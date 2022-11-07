@@ -762,7 +762,10 @@ Similar to re-frame subscriptions"
   (swap! state update-in [:me :repos]
          (fn [repos]
            (->> (remove #(or (= (:url repo) (:url %))
-                             (= (:GraphUUID repo) (:GraphUUID %))) repos)
+                             (and
+                              (:GraphUUID repo)
+                              (:GraphUUID %)
+                              (= (:GraphUUID repo) (:GraphUUID %)))) repos)
                 (util/distinct-by :url)))))
 
 (defn set-timestamp-block!

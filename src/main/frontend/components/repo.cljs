@@ -85,10 +85,11 @@
                                                              (file-sync/load-session-graphs)
                                                              (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] false)))}))]
                                      (state/set-modal! (confirm-fn)))
-                                   (do
+                                   (let [current-repo (state/get-current-repo)]
                                      (repo-handler/remove-repo! repo)
-                                     (file-sync/load-session-graphs)
-                                     (state/pub-event! [:graph/unlinked]))))}
+                                     (state/pub-event! [:graph/unlinked repo current-repo])
+                                     (when only-cloud?
+                                       (file-sync/load-session-graphs)))))}
                     (if only-cloud? "Remove" "Unlink")])])]]))
 
 (rum/defc repos < rum/reactive
