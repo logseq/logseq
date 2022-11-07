@@ -20,6 +20,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
+            [frontend.util.fs :as fs-util]
             [frontend.handler.notification :as notification]
             [frontend.context.i18n :refer [t]]
             [frontend.diff :as diff]
@@ -462,22 +463,57 @@
    (contains-path? (relative-path path))
    (boolean)))
 
-(defn- diffs->partitioned-filetxns
+(defn- filter-download-files-with-reserved-chars
+  "Skip downloading file paths with reserved chars."
+  [files]
+  (let [reserved-files (filter
+                        #(fs-util/include-reserved-chars? (-relative-path %))
+                        files)]
+    (when (seq reserved-files)
+      (state/pub-event! [:ui/notify-skipped-downloading-files
+                         (map -relative-path reserved-files)])
+      (prn "Skipped downloading those file paths with reserved chars: "
+           (map -relative-path reserved-files))
+      )
+    (remove
+     #(fs-util/include-reserved-chars? (-relative-path %))
+     files)))
+
+(defn- filter-upload-files-with-reserved-chars
+  "Remove upoading file paths with reserved chars."
+  [paths]
+  (let [path-string? (string? (first paths))
+        f (if path-string?
+            fs-util/include-reserved-chars?
+            #(fs-util/include-reserved-chars? (-relative-path %)))
+        reserved-paths (filter f paths)]
+    (when (seq reserved-paths)
+      (let [paths (if path-string? reserved-paths (map -relative-path reserved-paths))]
+        (state/pub-event! [:ui/notify-files-with-reserved-chars paths])
+        (prn "Skipped uploading those file paths with reserved chars: " paths)))
+    (vec (remove f paths))))
+
+(defn- diffs->filetxns
   "transducer.
   1. diff -> `FileTxn` , see also `<get-diff`
   2. distinct redundant update type filetxns
-  3. partition filetxns, each partition contains same type filetxns,
-     for update type, at most N items in each partition
-     for delete & rename type, only 1 item in each partition.
-  4. remove update or rename filetxns if they are deleted in later filetxns.
+  3. remove update or rename filetxns if they are deleted in later filetxns.
   NOTE: this xf should apply on reversed diffs sequence (sort by txid)"
-  [n]
+  []
   (comp
    (map diff->filetxns)
    cat
    (remove ignored?)
    distinct-update-filetxns-xf
-   remove-deleted-filetxns-xf
+   remove-deleted-filetxns-xf))
+
+(defn- diffs->partitioned-filetxns
+  "partition filetxns, each partition contains same type filetxns,
+   for update type, at most N items in each partition
+   for delete & rename type, only 1 item in each partition."
+  [n]
+  (comp
+   (diffs->filetxns)
    (partition-filetxns n)))
 
 (defn- filepath+checksum->diff
@@ -2181,11 +2217,12 @@
                         {:need-remote->local-full-sync true})
 
                     (when (pos-int? latest-txid)
-                      (let [partitioned-filetxns (transduce (diffs->partitioned-filetxns download-batch-size)
+                      (let [filtered-diff-txns (-> (transduce (diffs->filetxns) conj '() (reverse diff-txns))
+                                                   filter-download-files-with-reserved-chars)
+                            partitioned-filetxns (transduce (partition-filetxns download-batch-size)
                                                             (completing (fn [r i] (conj r (reverse i)))) ;reverse
                                                             '()
-                                                            (reverse diff-txns))]
-                        ;; (swap! *sync-state #(sync-state-reset-full-remote->local-files % files))
+                                                            filtered-diff-txns)]
                         (put-sync-event! {:event :start
                                           :data  {:type       :remote->local
                                                   :graph-uuid graph-uuid
@@ -2236,11 +2273,12 @@
                                            :epoch (tc/to-epoch (t/now))}})
                   {:stop true})
               (do (println "[full-sync(remote->local)]" (count sorted-diff-remote-files) "files need to sync")
-                  (swap! *sync-state #(sync-state-reset-full-remote->local-files % sorted-diff-remote-files))
-                  (<! (.sync-files-remote->local!
-                       this (map (juxt relative-path -checksum)
-                              sorted-diff-remote-files)
-                       latest-txid))))))))))
+                  (let [filtered-files (filter-download-files-with-reserved-chars sorted-diff-remote-files)]
+                    (swap! *sync-state #(sync-state-reset-full-remote->local-files % sorted-diff-remote-files))
+                    (<! (.sync-files-remote->local!
+                         this (map (juxt relative-path -checksum)
+                                filtered-files)
+                         latest-txid)))))))))))
 
 (defn- <file-changed?
   "return true when file changed compared with remote"
@@ -2418,7 +2456,8 @@
                 _     (when (not= (count es**) (count es*))
                         (println :debug :filter-too-huge-files
                                  (mapv relative-path (set/difference (set es*) (set es**)))))
-                paths (sequence es->paths-xf es**)
+                paths (-> (sequence es->paths-xf es**)
+                          filter-upload-files-with-reserved-chars)
                 _     (println :sync-local->remote type paths)
                 r     (if (empty? paths)
                         (go @*txid)
@@ -2513,7 +2552,8 @@
                                            {:size (:size %)} (:etag %)))
                   (remove ignored?))
                  diff-local-files)
-                distinct-change-events (distinct-file-change-events change-events)
+                distinct-change-events (-> (distinct-file-change-events change-events)
+                                           filter-upload-files-with-reserved-chars)
                 _                      (swap! *sync-state #(sync-state-reset-full-local->remote-files % distinct-change-events))
                 change-events-partitions
                 (sequence

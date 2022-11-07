@@ -14,7 +14,8 @@
             [frontend.fs :as fs]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
-            [frontend.storage :as storage]))
+            [frontend.storage :as storage]
+            [logseq.graph-parser.util :as gp-util]))
 
 (def *beta-unavailable? (volatile! false))
 
@@ -151,7 +152,7 @@
     (when-let [path (:file/path (db/entity file-id))]
       (let [base-path (config/get-repo-dir (state/get-current-repo))
             base-path (if (string/starts-with? base-path "file://")
-                        (js/decodeURIComponent base-path)
+                        (gp-util/safe-decode-uri-component base-path)
                         base-path)
             path*     (string/replace-first (string/replace-first path base-path "") #"^/" "")]
         (go

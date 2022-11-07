@@ -29,7 +29,8 @@
             [rum.core :as rum]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
-            [goog.functions :refer [debounce]]))
+            [goog.functions :refer [debounce]]
+            [logseq.graph-parser.util :as gp-util]))
 
 (declare maybe-onboarding-show)
 (declare open-icloud-graph-clone-picker)
@@ -78,7 +79,7 @@
 
      [:div.folder-tip.flex.flex-col.items-center
       [:h3
-       [:span (ui/icon "folder") [:label.pl-0.5 (js/decodeURIComponent graph-name)]]]
+       [:span (ui/icon "folder") [:label.pl-0.5 (gp-util/safe-decode-uri-component graph-name)]]]
       [:h4.px-6 (config/get-string-repo-dir repo)]
 
       (when (not (string/blank? selected-path))
@@ -439,7 +440,7 @@
 
              (map (fn [f] {:title [:div.file-item
                                    {:key (str "downloading-" f)}
-                                   (js/decodeURIComponent f)]
+                                   (gp-util/safe-decode-uri-component f)]
                            :key   (str "downloading-" f)
                            :icon  (if enabled-progress-panel?
                                     (let [progress (get sync-progress f)
@@ -458,13 +459,17 @@
                                 path (fs-sync/relative-path e)]
                             {:title [:div.file-item
                                      {:key (str "queue-" path)}
-                                     (js/decodeURIComponent path)]
+                                     (try
+                                       (gp-util/safe-decode-uri-component path)
+                                       (catch :default _
+                                         (prn "Wrong path: " path)
+                                         path))]
                              :key   (str "queue-" path)
                              :icon  (ui/icon icon)})) (take 10 queuing-files))
 
              (map (fn [f] {:title [:div.file-item
                                    {:key (str "uploading-" f)}
-                                   (js/decodeURIComponent f)]
+                                   (gp-util/safe-decode-uri-component f)]
                            :key   (str "uploading-" f)
                            :icon  (if enabled-progress-panel?
                                     (let [progress (get sync-progress f)
@@ -487,7 +492,7 @@
                                                         (if page-name
                                                           (rfe/push-state :page {:name page-name})
                                                           (rfe/push-state :file {:path full-path})))}
-                                           [:span.file-sync-item (js/decodeURIComponent (:path f))]
+                                           [:span.file-sync-item (gp-util/safe-decode-uri-component (:path f))]
                                            [:div.opacity-50 (ui/humanity-time-ago (:time f) nil)]]})))
                             (take 10 history-files)))))
 

@@ -54,6 +54,7 @@
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.components.file-sync :as file-sync]
             [frontend.components.encryption :as encryption]
+            [frontend.components.conversion :as conversion-component]
             [goog.dom :as gdom]
             [logseq.db.schema :as db-schema]
             [promesa.core :as p]
@@ -705,6 +706,56 @@
     (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir)))
     (when (= dir (config/get-repo-dir repo))
       (fs/watch-dir! dir))))
+
+(defmethod handle :ui/notify-files-with-reserved-chars [[_ paths]]
+  (sync/<sync-stop)
+
+  (notification/show!
+   [:div
+    [:div.mb-4
+     [:div.font-semibold.mb-4.text-xl "It seems that you're using the old filename format."]
+
+     [:div
+      [:p
+       "We suggest you upgrade now to avoid some potential bugs."]
+      [:p
+       "For example, the files below have reserved characters can't be synced on some platforms."]]
+     ]
+    (ui/button
+      "Upgrade filename format"
+      :on-click (fn []
+                  (notification/clear-all!)
+                  (state/set-modal!
+                  (fn [_] (conversion-component/files-breaking-changed))
+                  {:id :filename-format-panel :center? true})))
+    [:ol.my-2
+     (for [path paths]
+       [:li path])]]
+   :warning
+   false))
+
+(defmethod handle :ui/notify-skipped-downloading-files [[_ paths]]
+  (notification/show!
+   [:div
+    [:div.mb-4
+     [:div.font-semibold.mb-4.text-xl "It seems that you're using the old filename format."]
+     [:p
+      "The files below that have reserved characters can't be saved on this device."]
+     [:div.overflow-y-auto.max-h-96
+      [:ol.my-2
+       (for [path paths]
+         [:li path])]]
+
+     [:div
+      [:p
+       "Check " [:a {:href "https://docs.logseq.com/#/page/logseq%20file%20and%20folder%20naming%20rules"
+                     :target "_blank"}
+                 "Logseq file and folder naming rules"]
+       " for more details."]
+      [:p
+       "To solve this problem, we suggest you upgrade the filename format (on Settings > Advanced > Filename format > click EDIT button) in other devices to avoid more potential bugs."]]]]
+   :warning
+   false))
 
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]

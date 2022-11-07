@@ -150,6 +150,7 @@
   background-color: transparent;
   position: absolute;
   border-radius: 2px;
+  opacity: 0.6;
 }
 
 .block-children-left-border:hover {
