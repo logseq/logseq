@@ -323,15 +323,20 @@
   (-relative-path [this]))
 
 (defn relative-path [o]
-  (cond
-    (implements? IRelativePath o)
-    (-relative-path o)
+  (let [repo-dir (config/get-repo-dir (state/get-current-repo))]
+    (cond
+     (implements? IRelativePath o)
+     (-relative-path o)
 
-    (string? o)
-    (remove-user-graph-uuid-prefix o)
+     ;; full path
+     (and (string? o) (string/starts-with? o repo-dir))
+     (string/replace o (str repo-dir "/") "")
 
-    :else
-    (throw (js/Error. (str "unsupport type " (str o))))))
+     (string? o)
+     (remove-user-graph-uuid-prefix o)
+
+     :else
+     (throw (js/Error. (str "unsupport type " (str o)))))))
 
 (defprotocol IChecksum
   (-checksum [this]))
@@ -473,8 +478,7 @@
       (state/pub-event! [:ui/notify-skipped-downloading-files
                          (map -relative-path reserved-files)])
       (prn "Skipped downloading those file paths with reserved chars: "
-           (map -relative-path reserved-files))
-      )
+           (map -relative-path reserved-files)))
     (remove
      #(fs-util/include-reserved-chars? (-relative-path %))
      files)))

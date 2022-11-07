@@ -569,7 +569,8 @@
 (defmethod handle :file-watcher/changed [[_ ^js event]]
   (let [type (.-event event)
         payload (-> event
-                    (js->clj :keywordize-keys true))]
+                    (js->clj :keywordize-keys true)
+                    (update :path capacitor-fs/remove-private-part))]
     (fs-watcher/handle-changed! type payload)
     (when (file-sync-handler/enable-sync?)
      (sync/file-watch-handler type payload))))

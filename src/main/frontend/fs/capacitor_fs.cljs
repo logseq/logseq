@@ -212,6 +212,11 @@
                       (error-handler error)
                       (log/error :write-file-failed error)))))))))
 
+(defn remove-private-part
+  "iOS sometimes return the private part."
+  [path]
+  (string/replace path "///private/" "///"))
+
 (defn normalize-file-protocol-path [dir path]
   (let [dir             (some-> dir (string/replace #"/+$" ""))
         dir             (if (and (not-empty dir) (string/starts-with? dir "/"))
@@ -243,9 +248,8 @@
 
                 :else
                 (let [path' (safe-encode-url path)]
-                  (str dir "/" path')))
-        path' (string/replace path' "///private/" "///")]
-    path'))
+                  (str dir "/" path')))]
+    (remove-private-part path)))
 
 (defn- local-container-path?
   "Check whether `path' is logseq's container `localDocumentsPath' on iOS"
