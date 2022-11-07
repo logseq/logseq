@@ -20,17 +20,19 @@ public class FileContainer: CAPPlugin, UIDocumentPickerDelegate {
   }
 
   @objc func ensureDocuments(_ call: CAPPluginCall) {
+    var data: [String: String] = [:]
 
     if self.iCloudContainerUrl != nil {
       validateDocuments(at: self.iCloudContainerUrl!)
+      data["iCloudContainerUrl"] = self.iCloudContainerUrl?.absoluteString
     }
 
     if self.localContainerUrl != nil {
       validateDocuments(at: self.localContainerUrl!)
+      data["localContainerUrl"] = self.localContainerUrl?.absoluteString
     }
 
-    call.resolve(["iCloudContainerUrl": self.iCloudContainerUrl?.absoluteString as Any,
-                  "localContainerUrl": self.localContainerUrl?.absoluteString as Any])
+    call.resolve(data)
   }
 
   func validateDocuments(at url: URL) {
