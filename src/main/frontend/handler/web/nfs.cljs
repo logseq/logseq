@@ -122,17 +122,18 @@
 (defn ^:large-vars/cleanup-todo ls-dir-files-with-handler!
   "Read files from directory and setup repo (for the first time setup a repo)"
   ([ok-handler] (ls-dir-files-with-handler! ok-handler nil))
-  ([ok-handler {:keys [empty-dir?-or-pred dir-result-fn picked-root-fn ios-logseq-sync?]}]
+  ([ok-handler {:keys [empty-dir?-or-pred dir-result-fn picked-root-fn dir]}]
    (let [path-handles (atom {})
          electron? (util/electron?)
          mobile-native? (mobile-util/native-platform?)
          nfs? (and (not electron?)
                    (not mobile-native?))
          *repo (atom nil)
-         dir (when ios-logseq-sync?
-               ;; open Logseq's Documents folder
-               "")]
-    ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
+         dir (or dir nil)
+         dir (some-> dir
+                     (string/replace "file:///" "file://")
+                     (string/replace " " "%20"))]
+     ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
      (->
       (p/let [result (if (fn? dir-result-fn)
                        (dir-result-fn {:path-handles path-handles :nfs? nfs?})

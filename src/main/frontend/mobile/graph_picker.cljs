@@ -46,7 +46,6 @@
         logseq-sync-on?  (= sync-mode :logseq-sync)
         *input-ref       (rum/create-ref)
         native-ios?      (mobile-util/native-ios?)
-
         open-picker      #(page-handler/ls-dir-files! shortcut/refresh! opts)
         on-create        (fn [input-val]
                            (let [graph-name (util/safe-sanitize-file-name input-val)]
@@ -103,23 +102,28 @@
        :init
        [:div.flex.flex-col.w-full.space-y-3
         (ui/button
-         [:span.flex.items-center.justify-between.w-full.py-1
-          [:strong "Create a new graph"]
-          (ui/icon "chevron-right")]
+          [:span.flex.items-center.justify-between.w-full.py-1
+           [:strong "Create a new graph"]
+           (ui/icon "chevron-right")]
 
-         :on-click #(if (and native-ios?
-                             (some (fn [s] (not (string/blank? s)))
-                                   (vals (:mobile/container-urls @state/state))))
-                      (set-step! :new-graph)
-                      (open-picker)))
+          :on-click #(if (and native-ios?
+                              (some (fn [s] (not (string/blank? s)))
+                                    (vals (:mobile/container-urls @state/state))))
+                       (set-step! :new-graph)
+                       (open-picker)))
 
         (ui/button
-         [:span.flex.items-center.justify-between.w-full.py-1
-          [:strong "Select an existing graph"]
-          (ui/icon "folder-plus")]
+          [:span.flex.items-center.justify-between.w-full.py-1
+           [:strong "Select an existing graph"]
+           (ui/icon "folder-plus")]
 
-         :intent "logseq"
-         :on-click open-picker)]
+          :intent "logseq"
+          :on-click (fn []
+                      (page-handler/ls-dir-files! shortcut/refresh!
+                                                  {:dir (when native-ios?
+                                                          (or
+                                                           (state/get-icloud-container-root-url)
+                                                           (state/get-local-container-root-url)))})))]
 
        ;; step 1
        :new-graph

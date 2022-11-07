@@ -27,20 +27,10 @@ public class FolderPicker: CAPPlugin, UIDocumentPickerDelegate {
       // Set the initial directory.
 
       if let path = call.getString("path") {
-        // guard let url = URL(string: path) else {
-        //     call.reject("can not parse url")
-        //     return
-        // }
-
-        guard let documentDirectory = FileManager.default.urls(
-          for: .documentDirectory,
-          in: .userDomainMask
-        ).first
-        else {
-          return
+        guard let url = URL(string: path) else {
+             call.reject("can not parse url")
+             return
         }
-
-        let url = documentDirectory.appendingPathComponent(path)
 
         print("picked folder url = " + url.path)
 
