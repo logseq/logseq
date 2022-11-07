@@ -3,7 +3,8 @@
             [electron.search :as search]
             [electron.updater :refer [init-updater] :as updater]
             [electron.utils :refer [*win mac? linux? dev? get-win-from-sender restore-user-fetch-agent
-                                    decode-protected-assets-schema-path get-graph-name send-to-renderer]]
+                                    decode-protected-assets-schema-path get-graph-name send-to-renderer]
+             :as utils]
             [electron.url :refer [logseq-url-handler]]
             [electron.logger :as logger]
             [clojure.string :as string]
@@ -20,7 +21,7 @@
             [electron.git :as git]
             [electron.window :as win]
             [electron.exceptions :as exceptions]
-            ["/electron/utils" :as utils]))
+            ["/electron/utils" :as js-utils]))
 
 ;; Keep same as main/frontend.util.url
 (defonce LSP_SCHEME "logseq")
@@ -301,7 +302,7 @@
 
                (restore-user-fetch-agent)
 
-               (utils/disableXFrameOptions win)
+               (js-utils/disableXFrameOptions win)
 
                (search/ensure-search-dir!)
 
