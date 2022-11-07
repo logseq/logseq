@@ -23,7 +23,8 @@
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.fs.capacitor-fs :as capacitor-fs]))
 
 (defn remove-ignore-files
   [files dir-name nfs?]
@@ -152,6 +153,9 @@
               dir-name (if nfs?
                          (gobj/get root-handle "name")
                          root-handle)
+              dir-name (if (mobile-util/native-platform?)
+                         (capacitor-fs/normalize-file-protocol-path "" dir-name)
+                         dir-name)
               repo (str config/local-db-prefix dir-name)
               _ (state/set-loading-files! repo true)
               _ (when-not (or (state/home?) (state/setups-picker?))
