@@ -570,7 +570,8 @@
   (let [type (.-event event)
         payload (-> event
                     (js->clj :keywordize-keys true)
-                    (update :path capacitor-fs/remove-private-part))]
+                    (update :path (fn [path]
+                                    (when (string? path) (capacitor-fs/remove-private-part path)))))]
     (fs-watcher/handle-changed! type payload)
     (when (file-sync-handler/enable-sync?)
      (sync/file-watch-handler type payload))))

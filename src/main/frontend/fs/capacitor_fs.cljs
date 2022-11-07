@@ -249,7 +249,7 @@
                 :else
                 (let [path' (safe-encode-url path)]
                   (str dir "/" path')))]
-    (remove-private-part path)))
+    (remove-private-part path')))
 
 (defn- local-container-path?
   "Check whether `path' is logseq's container `localDocumentsPath' on iOS"
