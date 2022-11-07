@@ -767,9 +767,9 @@
                       :native-icloud? (not (string/blank? (state/get-icloud-container-root-url)))
                       :logged?        (user-handler/logged-in?)} opts)]
     (if (mobile-util/native-ios?)
-      (do (state/set-modal!
-           #(graph-picker/graph-picker-cp opts')
-           {:label "graph-setup"}))
+      (state/set-modal!
+       #(graph-picker/graph-picker-cp opts')
+       {:label "graph-setup"})
       (page-handler/ls-dir-files! st/refresh! opts'))))
 
 (defmethod handle :file/alter [[_ repo path content]]

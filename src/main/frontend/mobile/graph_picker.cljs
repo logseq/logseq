@@ -34,7 +34,7 @@
    :on-click #(when (fn? on-toggle)
                 (on-toggle (not on?)))))
 
-(rum/defc graph-picker-cp
+(rum/defc ^:large-vars/cleanup-todo graph-picker-cp
   [{:keys [onboarding-and-home? logged? native-icloud?] :as opts}]
   (let [can-logseq-sync? (and logged? (state/enable-sync?))
         [step set-step!] (rum/use-state :init)

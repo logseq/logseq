@@ -300,9 +300,6 @@
 (def custom-css-file "custom.css")
 (def export-css-file "export.css")
 (def custom-js-file "custom.js")
-(def metadata-file "metadata.edn")
-(def pages-metadata-file "pages-metadata.edn")
-
 (def config-default-content (rc/inline "config.edn"))
 
 (defonce idb-db-prefix "logseq-db/")
@@ -420,20 +417,6 @@
   ([repo]
    (when repo
      (get-file-path repo (str app-name "/" config-file)))))
-
-(defn get-metadata-path
-  ([]
-   (get-metadata-path (state/get-current-repo)))
-  ([repo]
-   (when repo
-     (get-file-path repo (str app-name "/" metadata-file)))))
-
-(defn get-pages-metadata-path
-  ([]
-   (get-pages-metadata-path (state/get-current-repo)))
-  ([repo]
-   (when repo
-     (get-file-path repo (str app-name "/" pages-metadata-file)))))
 
 (defn get-custom-css-path
   ([]
