@@ -1,5 +1,6 @@
 (ns frontend.extensions.zotero.setting
   (:require [clojure.string :as str]
+            [promesa.core :as p]
             [frontend.handler.config :as config-handler]
             [frontend.state :as state]
             [frontend.storage :as storage]))
@@ -46,8 +47,10 @@
 
 (defn set-profile [profile]
   (storage/set :zotero/setting-profile profile)
-  (when-not (contains? (all-profiles) profile)
-    (add-profile name)))
+  (p/let [has-item? (p/then (js/setTimeout 1000) ;; Wait 1000 ms for profile to be applied on config
+                            #(contains? (all-profiles) profile))]
+    (when-not has-item?
+      (add-profile profile))))
 
 (defn remove-profile [profile]
   (let [settings (dissoc (sub-zotero-config) profile)]
