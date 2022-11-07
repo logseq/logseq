@@ -697,7 +697,7 @@ Similar to re-frame subscriptions"
 
 (defn get-current-page
   []
-  (when (= :page (get-current-route))
+  (when (#{:page :whiteboard} (get-current-route))
     (get-in (get-route-match)
             [:path-params :name])))
 

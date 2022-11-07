@@ -1,14 +1,17 @@
 (ns frontend.components.whiteboard
   "Whiteboard related components"
   (:require [cljs.math :as math]
+            [frontend.components.content :as content]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
             [frontend.context.i18n :refer [t]]
             [frontend.db.model :as model]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.rum :refer [use-bounding-client-rect use-click-outside use-breakpoint]]
+            [frontend.rum :refer [use-bounding-client-rect use-breakpoint
+                                  use-click-outside]]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -230,7 +233,13 @@
      [:div.whiteboard-page-title-root
       [:div.whiteboard-page-title
        {:style {:color "var(--ls-primary-text-color)"
-                :user-select "none"}}
+                :user-select "none"}
+        :on-context-menu (fn [e]
+                           (util/stop e)
+                           (common-handler/show-custom-context-menu!
+                            e
+                            (content/page-title-custom-context-menu-content page-name))
+                           (state/set-state! :page-title/context nil))}
        (page/page-title page-name
                         [:span.text-lg
                          (ui/icon "whiteboard" {:extension? true})]
