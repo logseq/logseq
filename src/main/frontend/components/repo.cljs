@@ -58,39 +58,37 @@
                                      (state/pub-event! [:graph/switch url])))
 
      [:div.controls
-      (let [loading? (state/sub [:ui/loading? :remove/remote-graph GraphUUID])]
-        [:div.flex.flex-row.items-center
-         (when loading? [:div.ml-2 (ui/loading "")])
-         (ui/tippy {:html [:div.text-sm.max-w-xs
-                           (if only-cloud?
-                             "Deletes this remote graph. Note this can't be recovered."
-                             "Removes Logseq's access to the local file path of your graph. It won't remove your local files.")]
-                    :class "tippy-hover"
-                    :interactive true}
-                   [:a.text-gray-400.ml-4.font-medium.text-sm.whitespace-nowrap
-                    {:on-click (fn []
-                                 (if only-cloud?
-                                   (let [confirm-fn
-                                         (fn []
-                                           (ui/make-confirm-modal
-                                            {:title      [:div
-                                                          {:style {:max-width 700}}
-                                                          (str "Are you sure to permanently delete the graph \"" GraphName "\" from our server?")]
-                                             :sub-title   [:div.small.mt-1
-                                                           "Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]
-                                             :on-confirm (fn [_ {:keys [close-fn]}]
-                                                           (close-fn)
-                                                           (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] true)
-                                                           (go (<! (file-sync/<delete-graph GraphUUID))
-                                                             (file-sync/load-session-graphs)
-                                                             (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] false)))}))]
-                                     (state/set-modal! (confirm-fn)))
-                                   (let [current-repo (state/get-current-repo)]
-                                     (repo-handler/remove-repo! repo)
-                                     (state/pub-event! [:graph/unlinked repo current-repo])
-                                     (when only-cloud?
-                                       (file-sync/load-session-graphs)))))}
-                    (if only-cloud? "Remove" "Unlink")])])]]))
+      [:div.flex.flex-row.items-center
+       (ui/tippy {:html [:div.text-sm.max-w-xs
+                         (if only-cloud?
+                           "Deletes this remote graph. Note this can't be recovered."
+                           "Removes Logseq's access to the local file path of your graph. It won't remove your local files.")]
+                  :class "tippy-hover"
+                  :interactive true}
+                 [:a.text-gray-400.ml-4.font-medium.text-sm.whitespace-nowrap
+                  {:on-click (fn []
+                               (if only-cloud?
+                                 (let [confirm-fn
+                                       (fn []
+                                         (ui/make-confirm-modal
+                                          {:title      [:div
+                                                        {:style {:max-width 700}}
+                                                        (str "Are you sure to permanently delete the graph \"" GraphName "\" from our server?")]
+                                           :sub-title   [:div.small.mt-1
+                                                         "Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]
+                                           :on-confirm (fn [_ {:keys [close-fn]}]
+                                                         (close-fn)
+
+                                                         (state/set-state! [:file-sync/remote-graphs :loading] true)
+                                                         (go (<! (file-sync/<delete-graph GraphUUID))
+                                                             (state/delete-repo! repo)
+                                                             (state/delete-remote-graph! repo)
+                                                             (state/set-state! [:file-sync/remote-graphs :loading] false)))}))]
+                                   (state/set-modal! (confirm-fn)))
+                                 (let [current-repo (state/get-current-repo)]
+                                   (repo-handler/remove-repo! repo)
+                                   (state/pub-event! [:graph/unlinked repo current-repo]))))}
+                  (if only-cloud? "Remove" "Unlink")])]]]))
 
 (rum/defc repos < rum/reactive
   []
