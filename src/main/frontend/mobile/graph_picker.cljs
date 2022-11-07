@@ -59,7 +59,7 @@
                                                  (state/get-local-container-root-url))]
                                  (-> (validate-graph-dirname root graph-name)
                                      (p/then (fn [graph-path]
-                                               (-> (fs/mkdir! graph-path)
+                                               (-> (fs/mkdir-if-not-exists graph-path)
                                                    (p/then
                                                     (fn []
                                                       (web-nfs/ls-dir-files-with-path!

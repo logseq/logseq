@@ -2,7 +2,6 @@
   "System-component-like ns that manages writing to pages-metadata.edn"
   (:require [cljs.reader :as reader]
             [cljs.pprint]
-            [clojure.string :as string]
             [datascript.db :as ddb]
             [frontend.config :as config]
             [frontend.db :as db]
@@ -17,10 +16,9 @@
 (defn set-metadata!
   [k v]
   (when-let [repo (state/get-current-repo)]
-    (let [encrypted? (= k :db/encrypted-secret)
-          path (config/get-metadata-path)
+    (let [path (config/get-metadata-path)
           file-content (db/get-file path)]
-      (p/let [_ (file-handler/create-metadata-file repo false)]
+      (p/let [_ (file-handler/create-metadata-file repo)]
         (let [metadata-str (or file-content default-metadata-str)
               metadata (try
                          (reader/read-string metadata-str)
@@ -34,9 +32,6 @@
                              :else
                              (let [ks (if (vector? k) k [k])]
                                (assoc-in metadata ks v)))
-              new-metadata (if encrypted?
-                             (assoc new-metadata :db/encrypted? true)
-                             new-metadata)
               new-content (pr-str new-metadata)]
           (file-handler/set-file-content! repo path new-content))))))
 
@@ -57,11 +52,6 @@
                           path
                           new-content
                           {}))))))
-
-(defn set-db-encrypted-secret!
-  [encrypted-secret]
-  (when-not (string/blank? encrypted-secret)
-    (set-metadata! :db/encrypted-secret encrypted-secret)))
 
 (defn- handler-properties!
   [all-properties properties-tx]

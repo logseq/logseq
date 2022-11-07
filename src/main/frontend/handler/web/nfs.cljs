@@ -7,7 +7,6 @@
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.encrypt :as encrypt]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
@@ -24,7 +23,8 @@
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.fs.capacitor-fs :as capacitor-fs]))
 
 (defn remove-ignore-files
   [files dir-name nfs?]
@@ -153,6 +153,9 @@
               dir-name (if nfs?
                          (gobj/get root-handle "name")
                          root-handle)
+              dir-name (if (mobile-util/native-platform?)
+                         (capacitor-fs/normalize-file-protocol-path "" dir-name)
+                         dir-name)
               repo (str config/local-db-prefix dir-name)
               _ (state/set-loading-files! repo true)
               _ (when-not (or (state/home?) (state/setups-picker?))
@@ -188,8 +191,7 @@
             (-> (p/all (map (fn [file]
                               (p/let [content (if nfs?
                                                 (.text (:file/file file))
-                                                (:file/content file))
-                                      content (encrypt/decrypt content)]
+                                                (:file/content file))]
                                 (assoc file :file/content content))) markup-files))
                 (p/then (fn [result]
                           (p/let [files (map #(dissoc % :file/file) result)
@@ -295,8 +297,7 @@
                       (when-let [file (get-file-f path new-files)]
                         (p/let [content (if nfs?
                                           (.text (:file/file file))
-                                          (:file/content file))
-                                content (encrypt/decrypt content)]
+                                          (:file/content file))]
                           (assoc file :file/content content)))) added-or-modified))
         (p/then (fn [result]
                   (let [files (map #(dissoc % :file/file :file/handle) result)

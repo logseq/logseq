@@ -6,7 +6,6 @@
             [goog.string :as gstring]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.encrypt :as encrypt]
             [frontend.fs.protocol :as protocol]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -105,10 +104,7 @@
 (defn- contents-matched?
   [disk-content db-content]
   (when (and (string? disk-content) (string? db-content))
-    (if (encrypt/encrypted-db? (state/get-current-repo))
-      (p/let [decrypted-content (encrypt/decrypt disk-content)]
-        (= (string/trim decrypted-content) (string/trim db-content)))
-      (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
+    (p/resolved (= (string/trim disk-content) (string/trim db-content)))))
 
 (def backup-dir "logseq/bak")
 (def version-file-dir "logseq/version-files/local")
@@ -195,7 +191,7 @@
          (not contents-matched?)
          (not (contains? #{"excalidraw" "edn" "css"} ext))
          (not (string/includes? path "/.recycle/")))
-        (p/let [disk-content (encrypt/decrypt disk-content)]
+        (p/let [disk-content disk-content]
           (state/pub-event! [:file/not-matched-from-disk path disk-content content]))
 
         :else
@@ -206,9 +202,7 @@
            (when-not contents-matched?
              (backup-file repo-dir :backup-dir path disk-content))
            (db/set-file-last-modified-at! repo path mtime)
-           (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
-                             (encrypt/decrypt content)
-                             content)]
+           (p/let [content content]
              (db/set-file-content! repo path content))
            (when ok-handler
              (ok-handler repo path result))

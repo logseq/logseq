@@ -509,7 +509,7 @@
    (defn safe-path-join [prefix & paths]
      (let [path (apply node-path.join (cons prefix paths))]
        (if (and (electron?) (gstring/caseInsensitiveStartsWith path "file://"))
-         (js/decodeURIComponent (subs path 7))
+         (gp-util/safe-decode-uri-component (subs path 7))
          path))))
 
 (defn trim-safe
