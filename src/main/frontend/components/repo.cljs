@@ -52,7 +52,7 @@
         :let [only-cloud? (and remote? (nil? url))]]
     [:div.flex.justify-between.mb-4.items-center {:key (or url GraphUUID)}
      (normalized-graph-label repo #(if only-cloud?
-                                     (state/pub-event! [:graph/pick-dest-to-sync repo])
+                                     (state/pub-event! [:graph/pull-down-remote-graph repo])
                                      (state/pub-event! [:graph/switch url])))
 
      [:div.controls
@@ -158,7 +158,7 @@
                                                       (if (gobj/get e "shiftKey")
                                                         (state/pub-event! [:graph/open-new-window url])
                                                         (if-not local?
-                                                          (state/pub-event! [:graph/pick-dest-to-sync graph])
+                                                          (state/pub-event! [:graph/pull-down-remote-graph graph])
                                                           (state/pub-event! [:graph/switch url]))))}})))
                     switch-repos)
         refresh-link (let [nfs-repo? (config/local-db? current-repo)]

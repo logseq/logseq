@@ -179,10 +179,23 @@
       "Please wait seconds until all changes are saved for the current graph."
       :warning))))
 
-(defmethod handle :graph/pick-dest-to-sync [[_ graph]]
-  (state/set-modal!
-   (file-sync/pick-dest-to-sync-panel graph)
-   {:center? true}))
+(defmethod handle :graph/pull-down-remote-graph [[_ graph]]
+  (when-let [graph-name (:GraphName graph)]
+    (let [graph-name (util/safe-sanitize-file-name graph-name)]
+      (if (string/blank? graph-name)
+        (notification/show! "Illegal graph folder name.")
+
+        ;; Create graph directory under Logseq document folder (local)
+        (when-let [root (state/get-local-container-root-url)]
+          (-> (graph-picker/validate-graph-dirname root graph-name)
+              (p/then (fn [graph-path]
+                        (-> (fs/mkdir-if-not-exists graph-path)
+                            (p/then
+                             (fn []
+                               (nfs-handler/ls-dir-files-with-path! graph-path))))))
+              (p/catch (fn [^js e]
+                         (notification/show! (str e) :error)
+                         (js/console.error e)))))))))
 
 (defmethod handle :graph/pick-page-histories [[_ graph-uuid page-name]]
   (state/set-modal!

@@ -16,10 +16,7 @@
 
 (defn validate-graph-dirname
   [root dirname]
-
-  ;; TODO: how to handle existing graph name directory?
-  ;; TODO: temporarily just load the existing folder
-  (p/resolved (util/node-path.join root dirname)))
+  (util/node-path.join root dirname))
 
 (rum/defc toggle-item
   [{:keys [on? title on-toggle]}]
@@ -56,27 +53,21 @@
                                (when-let [root (if icloud-sync-on?
                                                  (state/get-icloud-container-root-url)
                                                  (state/get-local-container-root-url))]
-                                 (-> (validate-graph-dirname root graph-name)
-                                     (p/then (fn [graph-path]
-                                               (-> (fs/mkdir-if-not-exists graph-path)
-                                                   (p/then
-                                                    (fn []
-                                                      (web-nfs/ls-dir-files-with-path!
-                                                       graph-path (merge
-                                                                   {:logseq-sync-on
-                                                                    logseq-sync-on?
-
-                                                                    :ok-handler
-                                                                    (fn []
-                                                                      (when logseq-sync-on?
-                                                                        (state/pub-event! [:sync/create-remote-graph (state/get-current-repo)])))}
-                                                                   opts))
-                                                      (notification/show! (str "Create graph: " graph-name) :success))))))
+                                 (-> (let [graph-path (validate-graph-dirname root graph-name)]
+                                       (-> (fs/mkdir-if-not-exists graph-path)
+                                           (p/then
+                                            (fn []
+                                              (web-nfs/ls-dir-files-with-path!
+                                               graph-path (merge
+                                                           {:ok-handler
+                                                            (fn []
+                                                              (when logseq-sync-on?
+                                                                (state/pub-event! [:sync/create-remote-graph (state/get-current-repo)])))}
+                                                           opts))
+                                              (notification/show! (str "Create graph: " graph-name) :success)))))
                                      (p/catch (fn [^js e]
                                                 (notification/show! (str e) :error)
-                                                (js/console.error e)))
-                                     (p/finally
-                                      #()))))))]
+                                                (js/console.error e))))))))]
 
     (rum/use-effect!
      (fn []
