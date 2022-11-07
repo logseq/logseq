@@ -711,7 +711,7 @@ Similar to re-frame subscriptions"
       (when-not (mobile-util/native-platform?)
         "local")))
 
-(defn get-remote-repos
+(defn get-remote-graphs
   []
   (get-in @state [:file-sync/remote-graphs :graphs]))
 
@@ -719,6 +719,22 @@ Similar to re-frame subscriptions"
   [uuid]
   (when-let [graphs (seq (get-in @state [:file-sync/remote-graphs :graphs]))]
     (some #(when (= (:GraphUUID %) (str uuid)) %) graphs)))
+
+(defn delete-remote-graph!
+  [repo]
+  (swap! state update-in [:file-sync/remote-graphs :graphs]
+         (fn [repos]
+           (remove #(and
+                     (:GraphUUID repo)
+                     (:GraphUUID %)
+                     (= (:GraphUUID repo) (:GraphUUID %))) repos))))
+
+(defn add-remote-graph!
+  [repo]
+  (swap! state update-in [:file-sync/remote-graphs :graphs]
+         (fn [repos]
+           (->> (conj repos repo)
+                (distinct)))))
 
 (defn get-repos
   []

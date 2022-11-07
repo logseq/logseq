@@ -49,7 +49,8 @@
                (string? r))
         (let [tx-info [0 r (user/user-uuid) (state/get-current-repo)]]
           (<! (apply sync/<update-graphs-txid! tx-info))
-          (swap! refresh-file-sync-component not) tx-info)
+          (swap! refresh-file-sync-component not)
+          tx-info)
         (do
           (state/set-state! [:ui/loading? :graph/create-remote?] false)
           (cond

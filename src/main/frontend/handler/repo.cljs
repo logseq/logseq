@@ -498,7 +498,7 @@
   [local-repos remote-repos]
   (when-let [repos' (seq (concat (map #(if-let [sync-meta (seq (:sync-meta %))]
                                          (assoc % :GraphUUID (second sync-meta)) %)
-                                      local-repos)
+                                   local-repos)
                                  (some->> remote-repos
                                           (map #(assoc % :remote? true)))))]
     (let [repos' (group-by :GraphUUID repos')
@@ -515,7 +515,7 @@
   [url]
   (when-let [graphs (seq (and url (combine-local-&-remote-graphs
                                     (state/get-repos)
-                                    (state/get-remote-repos))))]
+                                    (state/get-remote-graphs))))]
     (first (filter #(when-let [url' (:url %)]
                       (= url url')) graphs))))
 
@@ -524,7 +524,7 @@
   (p/let [repos (get-repos)
           repos' (combine-local-&-remote-graphs
                   repos
-                  (state/get-remote-repos))]
+                  (state/get-remote-graphs))]
     (state/set-repos! repos')
     repos'))
 

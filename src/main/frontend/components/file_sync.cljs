@@ -135,7 +135,9 @@
                 (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
                   (async/<! (fs-sync/<sync-start))
                   (state/set-state! [:ui/loading? :graph/create-remote?] false)
-                  ;; update existing repo
+                  ;; update both local && remote graphs
+                  (state/add-remote-graph! {:GraphUUID GraphUUID
+                                            :GraphName graph-name})
                   (state/set-repos! (map (fn [r]
                                            (if (= (:url r) repo)
                                              (assoc r

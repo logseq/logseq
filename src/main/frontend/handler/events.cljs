@@ -113,15 +113,11 @@
       (route-handler/redirect-to-home!)))
   (when-let [dir-name (config/get-repo-dir repo)]
     (fs/watch-dir! dir-name))
-  (repo-handler/refresh-repos!)
   (file-sync-restart!))
 
 (defmethod handle :graph/unlinked [repo current-repo]
   (when (= (:url repo) current-repo)
     (file-sync-restart!)))
-
-(defmethod handle :graph/refresh [_]
-  (repo-handler/refresh-repos!))
 
 ;; FIXME: awful multi-arty function.
 ;; Should use a `-impl` function instead of the awful `skip-ios-check?` param with nested callback.
@@ -141,7 +137,6 @@
          (fs/watch-dir! dir-name))
        (srs/update-cards-due-count!)
        (state/pub-event! [:graph/ready graph])
-       (repo-handler/refresh-repos!)
        (file-sync-restart!)))))
 
 ;; Parameters for the `persist-db` function, to show the notification messages
