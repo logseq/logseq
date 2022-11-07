@@ -102,6 +102,7 @@
 (deftest rename-tests
   ;; z: new title structure; x: old ver title; y: title property (if available)
   (are [x y z] (= z (#'conversion-handler/calc-rename-target-impl :legacy :triple-lowbar x y))
+    "aaBBcc"      "aabbcc"        nil
     "aaa.bbb.ccc" "aaa/bbb/ccc"   {:status :informal,
                                    :target "aaa___bbb___ccc",
                                    :old-title "aaa/bbb/ccc",

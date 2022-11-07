@@ -4,7 +4,8 @@
   "For conversion logic between old version and new version"
   (:require [logseq.graph-parser.util :as gp-util]
             [frontend.util.fs :as fs-util]
-            [frontend.handler.config :refer [set-config!]]))
+            [frontend.handler.config :refer [set-config!]]
+            [frontend.util :as util]))
 
 (defn write-filename-format!
   "Return:
@@ -77,11 +78,16 @@
   ;;   It's about user's own data management decision and should be handled
   ;;   by user manually.
   ;; the 'expected' title of the user when updating from the previous format, or title will be broken in new format
-  (or (when (and (nil? prop-title)
-                 (not= old-format new-format))
-        (calc-previous-name old-format new-format file-body))
-      ;; if no break-change conversion triggered, check if file name is in an informal / outdated style.
-      (calc-current-name new-format file-body prop-title)))
+  (let [ret (or (when (and (nil? prop-title)
+                           (not= old-format new-format))
+                  (calc-previous-name old-format new-format file-body))
+                 ;; if no break-change conversion triggered, check if file name is in an informal / outdated style.
+                (calc-current-name new-format file-body prop-title))]
+    (when (and ret
+               ;; Return only when the target is different from the original file body, not only capitalization difference
+               (not= (util/page-name-sanity-lc (:target ret))
+                     (util/page-name-sanity-lc file-body)))
+      ret)))
 
 (defn calc-rename-target
   "Return the renaming status and new file body to recover the original title of the file in previous version. 
