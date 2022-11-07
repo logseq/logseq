@@ -83,7 +83,26 @@
      [:div {:class "font-medium" :key "content"}
       (highlight-exact-query content q)]]))
 
-(defonce search-timeout (atom nil))
+(defn- search-has-a-match?
+  [pages search-q result]
+  (or
+   (and (seq pages)
+        (= (util/safe-page-name-sanity-lc search-q)
+           (util/safe-page-name-sanity-lc (first pages))))
+   (nil? result)))
+
+(defn- transform-pages
+  [pages]
+  (map (fn [page]
+         (let [alias (model/get-redirect-page-name page)]
+           (cond->
+            {:type :page
+             :data page}
+            (and alias
+                 (not= (util/page-name-sanity-lc page)
+                       (util/page-name-sanity-lc alias)))
+            (assoc :alias alias))))
+       (remove nil? pages)))
 
 (defn- search-on-chosen-open-link
   [repo search-q {:keys [data type alias]}]
@@ -113,7 +132,8 @@
 
 (defn- search-on-chosen
   [repo search-q {:keys [type data alias]}]
-  (search-handler/add-search-to-recent! repo search-q)
+  (when-not (contains? #{:new-page :add-to-todays-journal} type)
+    (search-handler/add-search-to-recent! repo search-q))
   (search-handler/clear-search!)
   (case type
     :graph-add-filter
@@ -124,6 +144,11 @@
 
     :new-whiteboard
     (whiteboard-handler/create-new-whiteboard-and-redirect! search-q)
+
+    :add-to-todays-journal
+    (editor-handler/api-insert-new-block!
+     search-q
+     {:page (date/today)})
 
     :page
     (let [data (or alias data)]
@@ -209,6 +234,12 @@
        :graph-add-filter
        [:b search-q]
 
+       :add-to-todays-journal
+       (search-result-item {:name "block"
+                            :title (t :search-item/block)
+                            :extension? true}
+                           "Add new block to today's journal")
+
        :new-page
        (create-item-render "new-page" (t :new-page) (str "\"" (string/trim search-q) "\""))
 
@@ -250,29 +281,21 @@
 
 (rum/defc search-auto-complete
   [{:keys [pages files blocks has-more?] :as result} search-q all?]
-  (let [pages (when-not all? (map (fn [page]
-                                    (let [alias (model/get-redirect-page-name page)]
-                                      (cond->
-                                       {:type :page
-                                        :data page}
-                                        (and alias
-                                             (not= (util/page-name-sanity-lc page)
-                                                   (util/page-name-sanity-lc alias)))
-                                        (assoc :alias alias))))
-                                  (remove nil? pages)))
+  (let [pages (when-not all? (transform-pages pages))
         files (when-not all? (map (fn [file] {:type :file :data file}) files))
         blocks (map (fn [block] {:type :block :data block}) blocks)
         search-mode (state/sub :search/mode)
-        new-page (if (or
-                      (and (seq pages)
-                           (= (util/safe-page-name-sanity-lc search-q)
-                              (util/safe-page-name-sanity-lc (:data (first pages)))))
-                      (nil? result)
-                      all?)
-                   []
-                   (if (state/enable-whiteboards?)
-                     [{:type :new-page} {:type :new-whiteboard}]
-                     [{:type :new-page}]))
+        create-results
+        (if (or (search-has-a-match? (:pages result) search-q result)
+                all?)
+          []
+          (cond-> []
+                  (= search-mode :global)
+                  (conj {:type :add-to-todays-journal :group "Create"})
+                  true
+                  (conj {:type :new-page})
+                  (state/enable-whiteboards?)
+                  (conj {:type :new-whiteboard})))
         result (cond
                  config/publishing?
                  (concat pages files blocks)
@@ -281,7 +304,11 @@
                  (concat pages blocks)
 
                  :else
-                 (concat new-page pages files blocks))
+                 (concat create-results
+                         (map-indexed
+                          (fn [idx result]
+                            (if (= 0 idx) (assoc result :group "Search") result))
+                          (concat pages files blocks))))
         result (if (= search-mode :graph)
                  [{:type :graph-add-filter}]
                  result)
@@ -290,6 +317,7 @@
      (ui/auto-complete
       result
       {:class "search-results"
+       :get-group-name :group
        :on-chosen #(search-on-chosen repo search-q %)
        :on-shift-chosen #(search-on-shift-chosen repo search-q %)
        :item-render #(search-item-render search-q %)
@@ -308,6 +336,8 @@
 (rum/defc recent-search-and-pages
   [in-page-search?]
   [:div.recent-search
+  (when-not in-page-search?
+    [:div.px-2.font-medium.opacity-50.uppercase "Search"])
    [:div.wrap.px-4.py-2.text-sm.opacity-70.flex.flex-row.justify-between.align-items.mx-1.sm:mx-0
     [:div "Recent search:"]
     (ui/with-shortcut :go/search-in-page "bottom"
@@ -341,7 +371,7 @@
                     (case type
                       :page
                       (do (route/redirect-to-page! data)
-                          (state/close-modal!))
+                        (state/close-modal!))
                       :search
                       (let [q data]
                         (state/set-q! q)
@@ -392,6 +422,32 @@
     :else
     (t :search)))
 
+(defonce search-timeout (atom nil))
+
+(defn- input-on-change
+  [e]
+  (when @search-timeout
+    (js/clearTimeout @search-timeout))
+  (let [timeout 300
+        value (util/evalue e)
+        is-composing? (util/onchange-event-is-composing? e)] ;; #3199
+    (if (and (string/blank? value) (not is-composing?))
+      (search-handler/clear-search! false)
+      (let [search-mode (state/get-search-mode)
+            opts (if (= :page search-mode)
+                   (when-let [current-page (or (state/get-current-page)
+                                               (date/today))]
+                     {:page-db-id (:db/id (db/entity [:block/name (util/page-name-sanity-lc current-page)]))})
+                   {})]
+        (state/set-q! value)
+        (reset! search-timeout
+                (js/setTimeout
+                 (fn []
+                   (if (= :page search-mode)
+                     (search-handler/search (state/get-current-repo) value opts)
+                     (search-handler/search (state/get-current-repo) value)))
+                 timeout))))))
+
 (rum/defcs search-modal < rum/reactive
   (shortcut/disable-all-shortcuts)
   (mixins/event-mixin
@@ -404,9 +460,14 @@
   (let [search-result (state/sub :search/result)
         search-q (state/sub :search/q)
         search-mode (state/sub :search/mode)
-        timeout 300
         in-page-search? (= search-mode :page)]
     [:div.cp__palette.cp__palette-main
+     (when (= :global search-mode)
+       [:div.pt-2.pl-4.header-wrap
+        (when (seq search-q)
+          (if (search-has-a-match? (:pages search-result) search-q search-result)
+            [:div [:span.mr-2 (ui/icon "search")] "Search"]
+            [:div [:span.mr-2 (ui/icon "plus")] "Quick Capture"]))])
      [:div.ls-search
       [:div.input-wrap
       [:input.cp__palette-input.w-full
@@ -420,31 +481,11 @@
                          (default-placeholder search-mode))
         :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
         :value         search-q
-        :on-change     (fn [e]
-                         (when @search-timeout
-                           (js/clearTimeout @search-timeout))
-                         (let [value (util/evalue e)
-                               is-composing? (util/onchange-event-is-composing? e)] ;; #3199
-                           (if (and (string/blank? value) (not is-composing?))
-                             (search-handler/clear-search! false)
-                             (let [search-mode (state/get-search-mode)
-                                   opts (if (= :page search-mode)
-                                          (when-let [current-page (or (state/get-current-page)
-                                                                      (date/today))]
-                                            {:page-db-id (:db/id (db/entity [:block/name (util/page-name-sanity-lc current-page)]))})
-                                          {})]
-                               (state/set-q! value)
-                               (reset! search-timeout
-                                       (js/setTimeout
-                                        (fn []
-                                          (if (= :page search-mode)
-                                            (search-handler/search (state/get-current-repo) value opts)
-                                            (search-handler/search (state/get-current-repo) value)))
-                                        timeout))))))}]]
-      [:div.search-results-wrap
-       (if (seq search-result)
-         (search-auto-complete search-result search-q false)
-         (recent-search-and-pages in-page-search?))]]]))
+        :on-change     input-on-change}]]
+     [:div.search-results-wrap
+      (if (seq search-result)
+        (search-auto-complete search-result search-q false)
+        (recent-search-and-pages in-page-search?))]]]))
 
 (rum/defc more < rum/reactive
   [route]
