@@ -21,15 +21,14 @@
 (rum/defc toggle-item
   [{:keys [on? title on-toggle]}]
   (ui/button
-   [:span.flex.items-center.justify-between.w-full.py-1
-    [:strong title]
-    (ui/icon (if on? "toggle-right" "toggle-left"))]
-
-   :class (str "toggle-item " (when on? "is-on"))
-   :intent "logseq"
-   :on-mouse-down #(util/stop %)
-   :on-click #(when (fn? on-toggle)
-                (on-toggle (not on?)))))
+    [:span.flex.items-center.justify-between.w-full.py-1
+     [:strong title]
+     (ui/toggle on? (fn []) true)]
+    :class (str "toggle-item " (when on? "is-on"))
+    :intent "logseq"
+    :on-mouse-down #(util/stop %)
+    :on-click #(when (fn? on-toggle)
+                 (on-toggle (not on?)))))
 
 (rum/defc ^:large-vars/cleanup-todo graph-picker-cp
   [{:keys [onboarding-and-home? logged? native-icloud?] :as opts}]
@@ -91,7 +90,7 @@
      (case step
        ;; step 0
        :init
-       [:div.flex.flex-col.w-full.space-y-3
+       [:div.flex.flex-col.w-full.space-y-6
         (ui/button
           [:span.flex.items-center.justify-between.w-full.py-1
            [:strong "Create a new graph"]
@@ -139,8 +138,8 @@
         [:div.flex.justify-between.items-center.pt-2
          (ui/button [:span.flex.items-center
                      (ui/icon "chevron-left" {:size 18}) "Back"]
-                    :intent "logseq"
-                    :on-click #(set-step! :init))
+           :intent "logseq"
+           :on-click #(set-step! :init))
 
          (ui/button "Create"
                     :on-click

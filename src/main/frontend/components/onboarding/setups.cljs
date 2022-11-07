@@ -43,15 +43,9 @@
   []
   [:div.mobile-intro
    (cond
-     (mobile-util/native-ios?)
-     [:div
-      [:ul
-       [:li "Save them in " [:span.font-bold "iCloud Drive's Logseq directory"] ", and sync them across devices using iCloud."]
-       [:li "Save them in Logseq's directory of your device's local storage."]]]
-
      (mobile-util/native-android?)
      [:div
-      "You can save them in your local storage, and use any third-party sync service to keep your notes sync with other devices. "
+      "You can save them in your local storage, and use Logseq Sync or any third-party sync service to keep your notes sync with other devices. "
       "If you prefer to use Dropbox to sync your notes, you can use "
       [:a {:href "https://play.google.com/store/apps/details?id=com.ttxapps.dropsync"
            :target "_blank"}
@@ -75,12 +69,10 @@
 
     (setups-container
      :picker
-     [:article.flex
-      [:section.a
-       [:strong "Let’s get you set up."]
-       [:small (str "Where on your " DEVICE " do you want to save your work?")
-        (when (and (mobile-util/native-platform?) (not native-ios?))
-          (mobile-intro))]
+     [:article.flex.w-full
+      [:section.a.
+       (when (and (mobile-util/native-platform?) (not native-ios?))
+         (mobile-intro))
 
        (if native-ios?
          ;; TODO: open for all native mobile platforms
