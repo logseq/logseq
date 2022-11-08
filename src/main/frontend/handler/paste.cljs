@@ -196,8 +196,11 @@
                (or (empty? files) (not (state/perferred-pasting-file?))))
             (paste-text-or-blocks-aux input e text html)
             (when id
-              ((when-let [file (first files)]
-                 (when-let [block (state/get-edit-block)]
-                   (editor-handler/upload-asset id #js[file] (:block/format block)
-                                                editor-handler/*asset-uploading? true)))
-               (util/stop e))))))))))
+              (let [_handled
+                    (let [clipboard-data (gobj/get e "clipboardData")
+                          files (.-files clipboard-data)]
+                      (when-let [file (first files)]
+                        (when-let [block (state/get-edit-block)]
+                          (editor-handler/upload-asset id #js[file] (:block/format block)
+                                                       editor-handler/*asset-uploading? true))))]
+                (util/stop e))))))))))
