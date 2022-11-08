@@ -63,10 +63,10 @@
                                                               (when logseq-sync-on?
                                                                 (state/pub-event! [:sync/create-remote-graph (state/get-current-repo)])))}
                                                            opts))
-                                              (notification/show! (str "Create graph: " graph-name) :success)))))
-                                     (p/catch (fn [^js e]
-                                                (notification/show! (str e) :error)
-                                                (js/console.error e))))))))]
+                                              (notification/show! (str "Create graph: " graph-name) :success)))
+                                           (p/catch (fn [^js e]
+                                                      (notification/show! (str e) :error)
+                                                      (js/console.error e))))))))))]
 
     (rum/use-effect!
      (fn []
