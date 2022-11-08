@@ -2,7 +2,6 @@
   (:require [dommy.core :as dom]
             [frontend.commands :as commands]
             [frontend.date :as date]
-            [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.history :as history]
             [frontend.handler.page :as page-handler]
@@ -23,7 +22,7 @@
     (ui/icon icon {:size ui/icon-size})]])
 
 (rum/defc command
-  [command-handler icon & [count? event?]]
+  [command-handler icon & [event?]]
   [:div
    [:button.bottom-action
     {:on-mouse-down (fn [e]
