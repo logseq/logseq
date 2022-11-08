@@ -1,10 +1,10 @@
 (ns frontend.handler.user
   "Provides user related handler fns like login and logout"
+  (:require-macros [frontend.handler.user])
   (:require [frontend.config :as config]
             [frontend.handler.config :as config-handler]
             [frontend.state :as state]
             [frontend.debug :as debug]
-            [frontend.util :as util]
             [clojure.string :as string]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
@@ -130,7 +130,7 @@
 
           :else                         ; ok
         (when (and (:id_token (:body resp)) (:access_token (:body resp)))
-          (set-tokens! (:id_token (:body resp)) (:access_token (:body resp))))))))
+          (set-tokens! (:id_token (:body resp)) (:access_token (:body resp)))))))))
 
 (defn restore-tokens-from-localstorage
   "Restore id-token, access-token, refresh-token from localstorage,
@@ -168,36 +168,13 @@
   (clear-tokens)
   (state/pub-event! [:user/logout]))
 
-
-
-;;; refresh tokens loop
-(def stop-ch (chan (async/dropping-buffer 1)))
-(def refresh-now-ch (chan))
-(def refresh-finish-ch (chan (async/sliding-buffer 1)))
-
-
-(defn refresh-tokens-loop []
-  (debug/pprint "start refresh-tokens-loop")
-  (go-loop []
-    (async/alts! [refresh-now-ch (timeout 60000)])
-    (when (state/get-auth-refresh-token)
-      (let [id-token (state/get-auth-id-token)]
-        (when (or (nil? id-token)
-                  (-> id-token (parse-jwt) (almost-expired-or-expired?)))
-          (debug/pprint (str "refresh tokens... " (tc/to-string (t/now))))
-          (<! (<refresh-id-token&access-token)))))
-    (>! refresh-finish-ch true)
-    (when-not (async/poll! stop-ch)
-      (recur))))
-
 (defn <ensure-id&access-token
   []
   (go
     (when (or (nil? (state/get-auth-id-token))
-              (-> (state/get-auth-id-token) parse-jwt expired?))
-      (util/drain-chan refresh-finish-ch)
-      (>! refresh-now-ch true)
-      (<! refresh-finish-ch)
+              (-> (state/get-auth-id-token) parse-jwt almost-expired-or-expired?))
+      (debug/pprint (str "refresh tokens... " (tc/to-string (t/now))))
+      (<! (<refresh-id-token&access-token))
       (when (or (nil? (state/get-auth-id-token))
                 (-> (state/get-auth-id-token) parse-jwt expired?))
         (ex-info "empty or expired token and refresh failed" {})))))
@@ -208,6 +185,8 @@
     (if-some [exp (<! (<ensure-id&access-token))]
       exp
       (user-uuid))))
+
+;;; user groups
 
 (defn alpha-user?
   []
