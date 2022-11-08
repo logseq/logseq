@@ -48,7 +48,7 @@ export class ImageShape extends TLImageShape<ImageShapeProps> {
       <HTMLContainer {...events} opacity={isErasing ? 0.2 : opacity}>
         {isBinding && <BindingIndicator mode="html" strokeWidth={4} size={[w, h]} />}
 
-        <div className="tl-image-shape-container">
+        <div data-asset-loaded={!!asset} className="tl-image-shape-container">
           {asset ? (
             <img
               src={handlers ? handlers.makeAssetUrl(asset.src) : asset.src}

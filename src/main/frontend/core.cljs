@@ -13,8 +13,7 @@
             [reitit.frontend.easy :as rfe]
             [logseq.api]
             [frontend.fs.sync :as sync]
-            [frontend.config :as config]
-            [frontend.util :as util]))
+            [frontend.config :as config]))
 
 (defn set-router!
   []
@@ -49,8 +48,8 @@
     (rum/mount (page/current-page) node)
     (display-welcome-message)
     (persist-var/load-vars)
-    (when (and config/dev? (util/electron?))
-      (js/setTimeout #(sync/sync-start) 1000))))
+    (when config/dev?
+      (js/setTimeout #(sync/<sync-start) 1000))))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads
@@ -70,7 +69,6 @@
   ;; stop is called before any code is reloaded
   ;; this is controlled by :before-load in the config
   (handler/stop!)
-  (when (and config/dev? (util/electron?))
-
+  (when config/dev?
     (sync/<sync-stop))
   (js/console.log "stop"))

@@ -69,7 +69,7 @@
 (defn- get-whiteboard-tldr-from-text
   [text]
   (when-let [matched-text (util/safe-re-find #"<whiteboard-tldr>(.*)</whiteboard-tldr>" text)]
-    (try-parse-as-json (js/decodeURIComponent (second matched-text)))))
+    (try-parse-as-json (gp-util/safe-decode-uri-component (second matched-text)))))
 
 (defn- get-whiteboard-shape-refs-text
   [text]

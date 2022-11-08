@@ -263,6 +263,8 @@
      :ui/find-in-page                       nil
      :graph/importing                       nil
      :graph/importing-state                 {}
+
+     :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
      })))
 
 ;; Block ast state
@@ -650,10 +652,6 @@ Similar to re-frame subscriptions"
   []
   (:editor/perferred-pasting-file? (sub-config)))
 
-(defn enable-encryption?
-  [repo]
-  (:feature/enable-encryption? (sub-config repo)))
-
 (defn doc-mode-enter-for-new-line?
   []
   (and (document-mode?)
@@ -703,7 +701,7 @@ Similar to re-frame subscriptions"
 
 (defn get-current-page
   []
-  (when (= :page (get-current-route))
+  (when (#{:page :whiteboard} (get-current-route))
     (get-in (get-route-match)
             [:path-params :name])))
 
@@ -1920,3 +1918,12 @@ Similar to re-frame subscriptions"
   {:pre [(map? v)
          (= #{:repo :old-path :new-path} (set (keys v)))]}
   (async/offer! (get-file-rename-event-chan) v))
+
+(defn set-onboarding-whiteboard!
+  [v]
+  (set-state! :whiteboard/onboarding-whiteboard? v)
+  (storage/set :ls-onboarding-whiteboard? v))
+
+(defn get-onboarding-whiteboard?
+  []
+  (get-in @state [:whiteboard/onboarding-whiteboard?]))

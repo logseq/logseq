@@ -8,8 +8,7 @@
             [frontend.util :as util]
             [frontend.util.property :as property]
             [goog.object :as gobj]
-            ["ignore" :as Ignore]
-            [lambdaisland.glogi :as log]))
+            ["ignore" :as Ignore]))
 
 (defn copy-to-clipboard-without-id-property!
   [format raw-text html]
@@ -57,14 +56,6 @@
       (if (fn? error-message-or-handler)
         (error-message-or-handler e)
         (println error-message-or-handler))
-      {})))
-
-(defn read-metadata!
-  [content]
-  (try
-    (reader/read-string content)
-    (catch :default e
-      (log/error :parse/metadata-failed e)
       {})))
 
 (defn get-page-default-properties

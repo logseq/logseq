@@ -15,7 +15,6 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.state :as state]
-            [frontend.encrypt :as encrypt]
             [frontend.fs :as fs]))
 
 ;; all IPC paths must be normalized! (via gp-util/path-normalize)
@@ -56,9 +55,7 @@
           pages-metadata-path (config/get-pages-metadata-path)
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
-      (when (and (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
-                 (not (encrypt/content-encrypted? content))
-                 (not (:encryption/graph-parsing? @state/state)))
+      (when (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
         (cond
           (and (= "unlinkDir" type) dir)
           (state/pub-event! [:graph/dir-gone dir])

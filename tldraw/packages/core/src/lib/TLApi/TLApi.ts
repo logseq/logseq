@@ -1,6 +1,6 @@
 import Vec from '@tldraw/vec'
-import type { TLEventMap } from '../../types'
-import { BoundsUtils } from '../../utils'
+import type { TLAsset, TLBinding, TLEventMap } from '../../types'
+import { BoundsUtils, uniqueId } from '../../utils'
 import type { TLShape, TLShapeModel } from '../shapes'
 import type { TLApp } from '../TLApp'
 
@@ -194,5 +194,151 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
 
   createNewLineBinding = (source: S | string, target: S | string) => {
     return this.app.createNewLineBinding(source, target)
+  }
+
+  /** Clone shapes with given context */
+  cloneShapes = ({
+    shapes,
+    assets,
+    bindings,
+    point = [0, 0],
+  }: {
+    shapes: TLShapeModel[]
+    point: number[]
+    // assets & bindings are the context for creating shapes
+    assets: TLAsset[]
+    bindings: Record<string, TLBinding>
+  }) => {
+    const commonBounds = BoundsUtils.getCommonBounds(
+      shapes.map(shape => ({
+        minX: shape.point?.[0] ?? point[0],
+        minY: shape.point?.[1] ?? point[1],
+        width: shape.size?.[0] ?? 4,
+        height: shape.size?.[1] ?? 4,
+        maxX: (shape.point?.[0] ?? point[0]) + (shape.size?.[0] ?? 4),
+        maxY: (shape.point?.[1] ?? point[1]) + (shape.size?.[1] ?? 4),
+      }))
+    )
+
+    const clonedShapes = shapes.map(shape => {
+      return {
+        ...shape,
+        id: uniqueId(),
+        point: [
+          point[0] + shape.point![0] - commonBounds.minX,
+          point[1] + shape.point![1] - commonBounds.minY,
+        ],
+      }
+    })
+
+    const clonedBindings: TLBinding[] = []
+
+    // Try to rebinding the shapes with the given bindings
+    clonedShapes
+      .flatMap(s => Object.values(s.handles ?? {}))
+      .forEach(handle => {
+        if (!handle.bindingId) {
+          return
+        }
+        // try to bind the new shape
+        const binding = bindings[handle.bindingId]
+        if (binding) {
+          // if the copied binding from/to is in the source
+          const oldFromIdx = shapes.findIndex(s => s.id === binding.fromId)
+          const oldToIdx = shapes.findIndex(s => s.id === binding.toId)
+          if (binding && oldFromIdx !== -1 && oldToIdx !== -1) {
+            const newBinding: TLBinding = {
+              ...binding,
+              id: uniqueId(),
+              fromId: clonedShapes[oldFromIdx].id,
+              toId: clonedShapes[oldToIdx].id,
+            }
+            clonedBindings.push(newBinding)
+            handle.bindingId = newBinding.id
+          } else {
+            handle.bindingId = undefined
+          }
+        } else {
+          console.warn('binding not found', handle.bindingId)
+        }
+      })
+
+    const clonedAssets = assets.filter(asset => {
+      // do we need to create new asset id?
+      return clonedShapes.some(shape => shape.assetId === asset.id)
+    })
+    return {
+      shapes: clonedShapes,
+      assets: clonedAssets,
+      bindings: clonedBindings,
+    }
+  }
+
+  getClonedShapesFromTldrString = (text: string, point: number[]) => {
+    const safeParseJson = (json: string) => {
+      try {
+        return JSON.parse(json)
+      } catch {
+        return null
+      }
+    }
+
+    const getWhiteboardsTldrFromText = (text: string) => {
+      const innerText = text.match(/<whiteboard-tldr>(.*)<\/whiteboard-tldr>/)?.[1]
+      if (innerText) {
+        return safeParseJson(decodeURIComponent(innerText))
+      }
+    }
+
+    try {
+      const data = getWhiteboardsTldrFromText(text)
+      if (!data) return null
+      const { shapes, bindings, assets } = data
+
+      return this.cloneShapes({
+        shapes,
+        bindings,
+        assets,
+        point,
+      })
+    } catch (err) {
+      console.log(err)
+    }
+    return null
+  }
+
+  cloneShapesIntoCurrentPage = (opts: {
+    shapes: TLShapeModel[]
+    point: number[]
+    // assets & bindings are the context for creating shapes
+    assets: TLAsset[]
+    bindings: Record<string, TLBinding>
+  }) => {
+    const data = this.cloneShapes(opts)
+    if (data) {
+      this.addClonedShapes(data)
+    }
+    return this
+  }
+
+  addClonedShapes = (opts: ReturnType<TLApi['cloneShapes']>) => {
+    const { shapes, assets, bindings } = opts
+    if (assets.length > 0) {
+      this.app.createAssets(assets)
+    }
+    if (shapes.length > 0) {
+      this.app.createShapes(shapes)
+    }
+    this.app.currentPage.updateBindings(Object.fromEntries(bindings.map(b => [b.id, b])))
+    this.app.selectedTool.transition('idle') // clears possible editing states
+    return this
+  }
+
+  addClonedShapesFromTldrString = (text: string, point: number[]) => {
+    const data = this.getClonedShapesFromTldrString(text, point)
+    if (data) {
+      this.addClonedShapes(data)
+    }
+    return this
   }
 }
