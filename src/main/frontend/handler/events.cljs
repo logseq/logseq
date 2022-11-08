@@ -694,7 +694,7 @@
   (notification/show!
    [:div
     [:div.mb-4
-     [:div.font-semibold.mb-4.text-xl "It seems that you're using the old filename format."]
+     [:div.font-semibold.mb-4.text-xl "It seems that some of your filenames are in the outdated format."]
 
      [:div
       [:p
@@ -703,7 +703,7 @@
        "For example, the files below have reserved characters can't be synced on some platforms."]]
      ]
     (ui/button
-      "Upgrade filename format"
+      "Update filename format"
       :on-click (fn []
                   (notification/clear-all!)
                   (state/set-modal!
@@ -719,7 +719,7 @@
   (notification/show!
    [:div
     [:div.mb-4
-     [:div.font-semibold.mb-4.text-xl "It seems that you're using the old filename format."]
+     [:div.font-semibold.mb-4.text-xl "It seems that some of your filenames are in the outdated format."]
      [:p
       "The files below that have reserved characters can't be saved on this device."]
      [:div.overflow-y-auto.max-h-96
@@ -734,7 +734,7 @@
                  "Logseq file and folder naming rules"]
        " for more details."]
       [:p
-       "To solve this problem, we suggest you upgrade the filename format (on Settings > Advanced > Filename format > click EDIT button) in other devices to avoid more potential bugs."]]]]
+       "To solve this problem, we suggest you update the filename format (on Settings > Advanced > Filename format > click EDIT button) in other devices to avoid more potential bugs."]]]]
    :warning
    false))
 
