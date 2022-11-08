@@ -4,11 +4,12 @@
             [frontend.handler.config :as config-handler]
             [frontend.state :as state]
             [frontend.debug :as debug]
+            [frontend.util :as util]
             [clojure.string :as string]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [cljs-http.client :as http]
-            [cljs.core.async :as async :refer [go go-loop <! timeout]]))
+            [cljs.core.async :as async :refer [go go-loop <! >! timeout chan]]))
 
 (defn set-preferred-format!
   [format]
@@ -64,12 +65,7 @@
    :sub))
 
 (defn logged-in? []
-  (boolean
-   (some->
-    (state/get-auth-id-token)
-    parse-jwt
-    expired?
-    not)))
+  (some? (state/get-auth-refresh-token)))
 
 (defn- set-token-to-localstorage!
   ([id-token access-token]
@@ -83,12 +79,19 @@
    (js/localStorage.setItem "refresh-token" refresh-token)))
 
 (defn- clear-tokens
-  []
-  (state/set-auth-id-token nil)
-  (state/set-auth-access-token nil)
-  (state/set-auth-refresh-token nil)
-  (set-token-to-localstorage! "" "" ""))
-
+  ([]
+   (state/set-auth-id-token nil)
+   (state/set-auth-access-token nil)
+   (state/set-auth-refresh-token nil)
+   (set-token-to-localstorage! "" "" ""))
+  ([except-refresh-token?]
+   (state/set-auth-id-token nil)
+   (state/set-auth-access-token nil)
+   (when-not except-refresh-token?
+     (state/set-auth-refresh-token nil))
+   (if except-refresh-token?
+     (set-token-to-localstorage! "" "")
+     (set-token-to-localstorage! "" "" ""))))
 
 (defn- set-tokens!
   ([id-token access-token]
@@ -112,6 +115,11 @@
                                {:with-credentials? false}))]
 
         (cond
+          (and (<= 400 (:status resp))
+               (> 500 (:status resp)))
+          ;; invalid refresh-token
+          (clear-tokens)
+
           ;; e.g. api return 500, server internal error
           ;; we shouldn't clear tokens if they aren't expired yet
           ;; the `refresh-tokens-loop` will retry soon
@@ -120,7 +128,7 @@
           nil                           ; do nothing
 
           (not (http/unexceptional-status? (:status resp)))
-          (clear-tokens)
+          (clear-tokens true)
 
           :else                         ; ok
           (set-tokens! (:id_token (:body resp)) (:access_token (:body resp))))))))
@@ -164,19 +172,37 @@
 
 
 ;;; refresh tokens loop
-(def stop-refresh false)
+(def stop-ch (chan (async/dropping-buffer 1)))
+(def refresh-now-ch (chan))
+(def refresh-finish-ch (chan (async/sliding-buffer 1)))
+
+
 (defn refresh-tokens-loop []
   (debug/pprint "start refresh-tokens-loop")
   (go-loop []
-    (<! (timeout 60000))
+    (async/alts! [refresh-now-ch (timeout 60000)])
     (when (state/get-auth-refresh-token)
       (let [id-token (state/get-auth-id-token)]
         (when (or (nil? id-token)
                   (-> id-token (parse-jwt) (almost-expired-or-expired?)))
-          (debug/pprint (str "refresh tokens... " (tc/to-string(t/now))))
+          (debug/pprint (str "refresh tokens... " (tc/to-string (t/now))))
           (<! (<refresh-id-token&access-token)))))
-    (when-not stop-refresh
+    (>! refresh-finish-ch true)
+    (when-not (async/poll! stop-ch)
       (recur))))
+
+(defn <ensure-id&access-token
+  []
+  (go
+    (when (or (nil? (state/get-auth-id-token))
+              (-> (state/get-auth-id-token) parse-jwt expired?))
+      (util/drain-chan refresh-finish-ch)
+      (>! refresh-now-ch true)
+      (<! refresh-finish-ch)
+      (println :id-token (state/get-auth-id-token))
+      (when (or (nil? (state/get-auth-id-token))
+                (-> (state/get-auth-id-token) parse-jwt expired?))
+        (ex-info "empty or expired token and refresh failed" {})))))
 
 (defn alpha-user?
   []
