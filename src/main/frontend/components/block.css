@@ -192,13 +192,10 @@
   background: linear-gradient(90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%);
 
   .commands-button {
-    overflow: hidden;
-    max-width: 40px;
-    text-align: center;
-    margin: auto 0;
+    @apply overflow-hidden flex max-w-[40px];
 
     .indent {
-      opacity: 30%;
+      @apply flex items-center w-full justify-center opacity-30;
     }
   }
 }
@@ -208,18 +205,11 @@
   /* background: linear-gradient(-90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%); */
 
   .commands-button {
-    overflow: hidden;
-    text-align: center;
-    margin: auto 0;
+    @apply overflow-hidden flex flex-nowrap;
 
-    .outdent {
-      margin: 0 12px;
-      opacity: 30%;
-    }
-
-    .more {
-      margin: 0 12px;
-      opacity: 30%;
+    .outdent, .more {
+      @apply flex items-center justify-center
+      overflow-hidden opacity-30 m-0 w-[40px];
     }
   }
 }

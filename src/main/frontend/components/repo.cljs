@@ -4,10 +4,8 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.web.nfs :as nfs-handler]
-            [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -54,7 +52,7 @@
         :let [only-cloud? (and remote? (nil? url))]]
     [:div.flex.justify-between.mb-4.items-center {:key (or url GraphUUID)}
      (normalized-graph-label repo #(if only-cloud?
-                                     (state/pub-event! [:graph/pick-dest-to-sync repo])
+                                     (state/pub-event! [:graph/pull-down-remote-graph repo])
                                      (state/pub-event! [:graph/switch url])))
 
      [:div.controls
@@ -118,7 +116,7 @@
             [:div.mr-8
              (ui/button
                (t :open-a-directory)
-               :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])]]
+               :on-click #(state/pub-event! [:graph/setup-a-repo]))])]]
 
         (when (seq remote-graphs)
           [:div
@@ -159,7 +157,7 @@
                                                       (if (gobj/get e "shiftKey")
                                                         (state/pub-event! [:graph/open-new-window url])
                                                         (if-not local?
-                                                          (state/pub-event! [:graph/pick-dest-to-sync graph])
+                                                          (state/pub-event! [:graph/pull-down-remote-graph graph])
                                                           (state/pub-event! [:graph/switch url]))))}})))
                     switch-repos)
         refresh-link (let [nfs-repo? (config/local-db? current-repo)]
@@ -184,7 +182,7 @@
     (->>
      (concat repo-links
              [(when (seq repo-links) {:hr true})
-              {:title (t :new-graph) :options {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)}}
+              {:title (t :new-graph) :options {:on-click #(state/pub-event! [:graph/setup-a-repo])}}
               {:title (t :all-graphs) :options {:href (rfe/href :repos)}}
               refresh-link
               reindex-link

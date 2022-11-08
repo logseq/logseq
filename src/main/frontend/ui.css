@@ -106,7 +106,7 @@
     .panel-content {
       overflow-y: auto;
       overflow-x: hidden;
-      width: 94vw;
+      width: calc(94vw - 2rem);
       max-height: 89vh;
       padding: 2rem 1.5rem;
 

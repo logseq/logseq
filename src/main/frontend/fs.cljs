@@ -154,9 +154,9 @@
     nfs-record))
 
 (defn open-dir
-  [ok-handler]
+  [dir ok-handler]
   (let [record (get-record)]
-    (p/let [result (protocol/open-dir record ok-handler)]
+    (p/let [result (protocol/open-dir record dir ok-handler)]
       (if (or (util/electron?)
               (mobile-util/native-platform?))
         (let [[dir & paths] (bean/->clj result)]

@@ -322,15 +322,20 @@
   (-relative-path [this]))
 
 (defn relative-path [o]
-  (cond
-    (implements? IRelativePath o)
-    (-relative-path o)
+  (let [repo-dir (config/get-repo-dir (state/get-current-repo))]
+    (cond
+     (implements? IRelativePath o)
+     (-relative-path o)
 
-    (string? o)
-    (remove-user-graph-uuid-prefix o)
+     ;; full path
+     (and (string? o) (string/starts-with? o repo-dir))
+     (string/replace o (str repo-dir "/") "")
 
-    :else
-    (throw (js/Error. (str "unsupport type " (str o))))))
+     (string? o)
+     (remove-user-graph-uuid-prefix o)
+
+     :else
+     (throw (js/Error. (str "unsupport type " (str o)))))))
 
 (defprotocol IChecksum
   (-checksum [this]))
@@ -472,8 +477,7 @@
       (state/pub-event! [:ui/notify-skipped-downloading-files
                          (map -relative-path reserved-files)])
       (prn "Skipped downloading those file paths with reserved chars: "
-           (map -relative-path reserved-files))
-      )
+           (map -relative-path reserved-files)))
     (remove
      #(fs-util/include-reserved-chars? (-relative-path %))
      files)))
@@ -2986,7 +2990,7 @@
                                                     repo *sync-state remoteapi-with-stop
                                                     (if (mobile-util/native-platform?)
                                                       2000
-                                                      20000)
+                                                      10000)
                                                     *txid nil (chan) *stopped? *paused?
                                                     (chan 1) (chan 1))
         remote->local-syncer (->Remote->LocalSyncer user-uuid graph-uuid base-path

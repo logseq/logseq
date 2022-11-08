@@ -7,15 +7,16 @@
             [frontend.handler.editor :as editor]
             [frontend.handler.file :as file-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util.block-ref :as block-ref]
+            [frontend.mobile.util :as mobile-util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.state :as state]
-            [frontend.fs :as fs]))
+            [frontend.fs :as fs]
+            [frontend.fs.capacitor-fs :as capacitor-fs]))
 
 ;; all IPC paths must be normalized! (via gp-util/path-normalize)
 
@@ -49,10 +50,12 @@
   [type {:keys [dir path content stat global-dir] :as payload}]
   (when dir
     (let [path (gp-util/path-normalize path)
+          path (if (mobile-util/native-platform?)
+                 (capacitor-fs/normalize-file-protocol-path nil path)
+                 path)
           ;; Global directory events don't know their originating repo so we rely
           ;; on the client to correctly identify it
           repo (if global-dir (state/get-current-repo) (config/get-local-repo dir))
-          pages-metadata-path (config/get-pages-metadata-path)
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
       (when (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
@@ -67,8 +70,7 @@
           nil
 
           (and (= "add" type)
-               (not= (string/trim content) (string/trim db-content))
-               (not= path pages-metadata-path))
+               (not= (string/trim content) (string/trim db-content)))
           (let [backup? (not (string/blank? db-content))]
             (handle-add-and-change! repo path content db-content mtime backup?))
 
@@ -78,7 +80,6 @@
 
           (and (= "change" type)
                (not= (string/trim content) (string/trim db-content))
-               (not= path pages-metadata-path)
                (not (gp-config/local-asset? (string/replace-first path dir ""))))
           (when-not (and
                      (string/includes? path (str "/" (config/get-journals-directory) "/"))
@@ -102,19 +103,6 @@
           (do
             (println "reloading custom.css")
             (ui-handler/add-style-if-exists!))
-
-          ;; When metadata is added to watcher, update timestamps in db accordingly
-          ;; This event is not triggered on re-index
-          ;; Persistent metadata is gold standard when db is offline, so it's forced
-          (and (contains? #{"add"} type)
-               (= path pages-metadata-path))
-          (p/do! (repo-handler/update-pages-metadata! repo content true))
-
-          ;; Change is triggered by external changes, so update to the db
-          ;; Don't forced update when db is online, but resolving conflicts
-          (and (contains? #{"change"} type)
-               (= path pages-metadata-path))
-          (p/do! (repo-handler/update-pages-metadata! repo content false))
 
           (contains? #{"add" "change" "unlink"} type)
           nil

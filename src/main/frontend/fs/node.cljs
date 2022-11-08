@@ -75,8 +75,8 @@
                       (error-handler error)
                       (log/error :write-file-failed error)))))))))
 
-(defn- open-dir []
-  (p/let [dir-path (util/mocked-open-dir-path)
+(defn- open-dir [dir]
+  (p/let [dir-path (or dir (util/mocked-open-dir-path))
           result (if dir-path
                    (ipc/ipc "getFiles" dir-path)
                    (ipc/ipc "openDir" {}))]
@@ -113,8 +113,8 @@
   (stat [_this dir path]
     (let [path (concat-path dir path)]
       (ipc/ipc "stat" path)))
-  (open-dir [_this _ok-handler]
-    (open-dir))
+  (open-dir [_this dir _ok-handler]
+    (open-dir dir))
   (get-files [_this path-or-handle _ok-handler]
     (ipc/ipc "getFiles" path-or-handle))
   (watch-dir! [_this dir options]

@@ -120,9 +120,9 @@
   [input]
   (move-cursor-to input (line-end-pos input)))
 
-(defn move-cursor-to-line-beginning
-  [input]
-  (move-cursor-to input (line-beginning-pos input)))
+;; (defn move-cursor-to-line-beginning
+;;   [input]
+;;   (move-cursor-to input (line-beginning-pos input)))
 
 (defn move-cursor-to-end
   [input]

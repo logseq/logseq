@@ -6,7 +6,8 @@
             [frontend.ui :as ui]
             [rum.core :as rum]
             [frontend.config :as config]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]))
 
 (rum/defc add-local-directory
   []
@@ -16,33 +17,14 @@
      (if (mobile-util/native-platform?)
        [:div.text-sm
         (ui/button "Open a local directory"
-          :on-click #(page-handler/ls-dir-files! shortcut/refresh!))
+          :on-click #(state/pub-event! [:graph/setup-a-repo]))
         [:hr]
-        [:ol
-         [:li
-          [:div.font-bold.mb-2 "How to sync my notes?"]
-          (if (mobile-util/native-android?)
-            [:div
-             [:p "We're developing our built-in paid Logseq Sync, but you can use any third-party sync service to keep your notes sync with other devices."]
-             [:p "If you prefer to use Dropbox to sync your notes, you can use "
-              [:a {:href "https://play.google.com/store/apps/details?id=com.ttxapps.dropsync"
-                   :target "_blank"}
-               "Dropsync"]
-              ". Or you can use "
-              [:a {:href "https://play.google.com/store/apps/details?id=dk.tacit.android.foldersync.lite"
-                   :target "_blank"}
-               "FolderSync"]
-              "."]]
-            [:div
-             [:p "You can sync your graphs by using iCloud. Please choose an existing graph or create a new graph in your iCloud Drive's Logseq directory."]
-             [:p "We're developing our built-in paid Logseq Sync. Stay tuned."]])]
-
-         [:li.mt-8
-          [:div.font-bold.mb-2 "I need some help"]
-          [:p "👋 Join our Forum to chat with the makers and our helpful community members."]
-          (ui/button "Join the community"
-            :href "https://discuss.logseq.com"
-            :target "_blank")]]]
+        [:div
+         [:div.font-bold.mb-2 "I need some help"]
+         [:p "👋 Join our Forum to chat with the makers and our helpful community members."]
+         (ui/button "Join the community"
+           :href "https://discuss.logseq.com"
+           :target "_blank")]]
        [:div.cp__widgets-open-local-directory
         [:div.select-file-wrap.cursor
          (when nfs-supported?

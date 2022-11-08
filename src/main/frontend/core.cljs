@@ -57,13 +57,7 @@
   ;; so it is available even in :advanced release builds
 
   (plugin-handler/setup!
-   #(handler/start! start))
-
-  ;; popup to notify user, could be toggled in settings
-  ;; (handler/request-notifications-if-not-asked)
-
-  ;; (handler/run-notify-worker!)
-)
+   #(handler/start! start)))
 
 (defn stop []
   ;; stop is called before any code is reloaded
