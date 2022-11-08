@@ -139,6 +139,7 @@
                [(contains? ?v ?str-val)]))]
 
    :page-ref
+   #_:clj-kondo/ignore
    '[(page-ref ?b ?page-name)
      ;; find page and its aliases by page-name
      (or-join [?page ?page-alias]
