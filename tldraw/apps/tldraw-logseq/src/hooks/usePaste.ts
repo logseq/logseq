@@ -1,5 +1,4 @@
 import {
-  BoundsUtils,
   getSizeFromSrc,
   isNonNullable,
   TLAsset,
@@ -174,6 +173,7 @@ export function usePaste() {
               asset.type === 'video' ? VideoShape.defaultProps : ImageShape.defaultProps
             const newShape = {
               ...defaultProps,
+              id: uniqueId(),
               // TODO: Should be place near the last edited shape
               assetId: asset.id,
               opacity: 1,
@@ -372,8 +372,9 @@ export function usePaste() {
       })
 
       app.wrapUpdate(() => {
-        if (assetsToClone.length > 0) {
-          app.createAssets(assetsToClone)
+        const allAssets = [...imageAssetsToCreate, ...assetsToClone]
+        if (allAssets.length > 0) {
+          app.createAssets(allAssets)
         }
         if (newShapes.length > 0) {
           app.createShapes(newShapes)
@@ -389,6 +390,10 @@ export function usePaste() {
         app.setSelectedShapes(allShapesToAdd.map(s => s.id))
         app.selectedTool.transition('idle') // clears possible editing states
         app.cursors.setCursor(TLCursor.Default)
+
+        if (fromDrop) {
+          app.packIntoRectangle()
+        }
       })
     },
     []
