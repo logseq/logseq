@@ -211,16 +211,8 @@ html.is-zoomed-native-ios {
       opacity: .5;
     }
 
-    .ui__icon {
-      @apply scale-150;
-    }
-
     &.is-on {
       @apply opacity-100;
-
-      .ui__icon {
-        @apply text-indigo-600;
-      }
     }
   }
 }
