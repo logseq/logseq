@@ -57,7 +57,8 @@
   [page-name]
   (when-let [page-name (or
                         page-name
-                        (state/get-current-page))]
+                        (state/get-current-page)
+                        (state/get-current-whiteboard))]
     (let [page-name (util/page-name-sanity-lc page-name)
           repo (state/sub :git/current-repo)
           page (db/entity repo [:block/name page-name])
