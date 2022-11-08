@@ -15,7 +15,7 @@
             [rum.core :as rum]))
 
 (def ^:private icons-keywords
-  [:checkbox :brackets :parentheses :command :tag :a-b :list :camera
+  [:checkbox :camera :brackets :parentheses :command :tag :a-b :list
    :brand-youtube :link :rotate :rotate-clockwise :calendar :code :bold :italic :strikethrough :paint])
 
 (def ^:private commands-stats
@@ -94,13 +94,13 @@
                              (.focus input)))]
     (zipmap icons-keywords
             [(command editor-handler/cycle-todo! "checkbox" true)
+             (command #(mobile-camera/embed-photo parent-id) "camera" true)
              (command #(do (viewport-fn) (editor-handler/toggle-page-reference-embed parent-id)) "brackets" true)
              (command #(do (viewport-fn) (editor-handler/toggle-block-reference-embed parent-id)) "parentheses" true)
              (command #(do (viewport-fn) (commands/simple-insert! parent-id "/" {})) "command" true)
              (command #(do (viewport-fn) (commands/simple-insert! parent-id "#" {})) "tag" true)
              (command editor-handler/cycle-priority! "a-b" true)
              (command editor-handler/toggle-list! "list" true)
-             (command #(mobile-camera/embed-photo parent-id) "camera" true)
              (command commands/insert-youtube-timestamp "brand-youtube" true)
              (command editor-handler/html-link-format! "link" true)
              (command history/undo! "rotate" true true)
@@ -135,4 +135,3 @@
           ((first command) commands))]
        [:div.toolbar-hide-keyboard
         (command #(state/clear-edit!) "keyboard-show")]])))
-
