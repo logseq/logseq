@@ -8,6 +8,7 @@
             ["@capacitor/status-bar" :refer [^js StatusBar Style]]
             ["grapheme-splitter" :as GraphemeSplitter]
             ["remove-accents" :as removeAccents]
+            ["sanitize-filename" :as sanitizeFilename]
             ["check-password-strength" :refer [passwordStrength]]
             [frontend.loader :refer [load]]
             [cljs-bean.core :as bean]
@@ -72,7 +73,9 @@
        (when-let [^js ret (and (string? input)
                                (not (string/blank? input))
                                (passwordStrength input))]
-         (bean/->clj ret)))))
+         (bean/->clj ret)))
+     (defn safe-sanitize-file-name [s]
+       (sanitizeFilename (str s)))))
 
 #?(:cljs
    (defn ios?

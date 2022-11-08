@@ -397,7 +397,8 @@
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
-                                  (= :home route-name))]
+                                  (= :home route-name))
+        margin-less-pages? (or onboarding-and-home? margin-less-pages?)]
     [:div#main-container.cp__sidebar-main-layout.flex-1.flex
      {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
 
@@ -442,17 +443,15 @@
 
          :else
          [:div
-          {:class (if margin-less-pages? "" (util/hiccup->class "mx-auto.pb-24"))
-           :style {:margin-bottom (cond
-                                    margin-less-pages? 0
-                                    onboarding-and-home? -48
-                                    :else 120)
-                   :padding-bottom (when (mobile-util/native-iphone?) "7rem")}}
+          {:class (if (or onboarding-and-home? margin-less-pages?) "" (util/hiccup->class "mx-auto.pb-24"))
+           :style {:margin-bottom  (cond
+                                     margin-less-pages? 0
+                                     onboarding-and-home? 0
+                                     :else 120)}}
           main-content])
 
        (when onboarding-and-home?
-         [:div {:style {:padding-bottom 200}}
-          (onboarding/intro)])]]]))
+         (onboarding/intro onboarding-and-home?))]]]))
 
 (defonce sidebar-inited? (atom false))
 ;; TODO: simplify logic

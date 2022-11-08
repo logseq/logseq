@@ -692,10 +692,11 @@
   ([ok-handler] (ls-dir-files! ok-handler nil))
   ([ok-handler opts]
    (web-nfs/ls-dir-files-with-handler!
-     (fn [e]
-       (init-commands!)
-       (when ok-handler (ok-handler e)))
-     opts)))
+    (fn [e]
+      (init-commands!)
+      (when ok-handler
+        (ok-handler e)))
+    opts)))
 
 (defn get-all-pages
   [repo]

@@ -306,9 +306,6 @@
 (def custom-css-file "custom.css")
 (def export-css-file "export.css")
 (def custom-js-file "custom.js")
-(def metadata-file "metadata.edn")
-(def pages-metadata-file "pages-metadata.edn")
-
 (def config-default-content (rc/inline "config.edn"))
 
 (defonce idb-db-prefix "logseq-db/")
@@ -376,7 +373,7 @@
     path
     (util/node-path.join (get-repo-dir repo-url) path)))
 
-;; FIXME: There is another get-file-path at src/main/frontend/fs/capacitor_fs.cljs
+;; FIXME: There is another normalize-file-protocol-path at src/main/frontend/fs/capacitor_fs.cljs
 (defn get-file-path
   "Normalization happens here"
   [repo-url relative-path]
@@ -394,7 +391,7 @@
 
                  (and (mobile-util/native-ios?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)]
-                   (str dir relative-path))
+                   (util/safe-path-join dir relative-path))
 
                  (and (mobile-util/native-android?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)
@@ -426,20 +423,6 @@
   ([repo]
    (when repo
      (get-file-path repo (str app-name "/" config-file)))))
-
-(defn get-metadata-path
-  ([]
-   (get-metadata-path (state/get-current-repo)))
-  ([repo]
-   (when repo
-     (get-file-path repo (str app-name "/" metadata-file)))))
-
-(defn get-pages-metadata-path
-  ([]
-   (get-pages-metadata-path (state/get-current-repo)))
-  ([repo]
-   (when repo
-     (get-file-path repo (str app-name "/" pages-metadata-file)))))
 
 (defn get-custom-css-path
   ([]
