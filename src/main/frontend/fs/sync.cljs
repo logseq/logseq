@@ -2949,7 +2949,7 @@
                                                     repo *sync-state remoteapi-with-stop
                                                     (if (mobile-util/native-platform?)
                                                       2000
-                                                      20000)
+                                                      10000)
                                                     *txid nil (chan) *stopped? *paused?
                                                     (chan 1) (chan 1))
         remote->local-syncer (->Remote->LocalSyncer user-uuid graph-uuid base-path
