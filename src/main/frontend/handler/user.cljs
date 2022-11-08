@@ -58,7 +58,7 @@
    parse-jwt
    :email))
 
-(defn user-uuid []
+(defn- user-uuid []
   (some->
    (state/get-auth-id-token)
    parse-jwt
@@ -198,10 +198,16 @@
       (util/drain-chan refresh-finish-ch)
       (>! refresh-now-ch true)
       (<! refresh-finish-ch)
-      (println :id-token (state/get-auth-id-token))
       (when (or (nil? (state/get-auth-id-token))
                 (-> (state/get-auth-id-token) parse-jwt expired?))
         (ex-info "empty or expired token and refresh failed" {})))))
+
+(defn <user-uuid
+  []
+  (go
+    (if-some [exp (<! (<ensure-id&access-token))]
+      exp
+      (user-uuid))))
 
 (defn alpha-user?
   []

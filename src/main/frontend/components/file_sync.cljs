@@ -371,8 +371,9 @@
 
                                            ;; current graph belong to other user, do nothing
                                            (and (first @graphs-txid)
-                                                (not (fs-sync/check-graph-belong-to-current-user (user-handler/user-uuid)
-                                                                                                 (first @graphs-txid))))
+                                                (not (fs-sync/check-graph-belong-to-current-user
+                                                      (async/<! (user-handler/<user-uuid))
+                                                      (first @graphs-txid))))
                                            nil
 
                                            (and synced-file-graph?
