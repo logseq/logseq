@@ -21,7 +21,6 @@
             [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
             [frontend.db.persist :as db-persist]
-            [frontend.encrypt :as encrypt]
             [frontend.extensions.srs :as srs]
             [frontend.fs :as fs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
@@ -43,6 +42,7 @@
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
+            [frontend.mobile.graph-picker :as graph-picker]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.shortcut.core :as st]
@@ -54,6 +54,7 @@
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.components.file-sync :as file-sync]
             [frontend.components.encryption :as encryption]
+            [frontend.components.conversion :as conversion-component]
             [goog.dom :as gdom]
             [logseq.db.schema :as db-schema]
             [promesa.core :as p]
@@ -67,7 +68,7 @@
 (defn- file-sync-restart! []
   (async/go (async/<! (p->c (persist-var/load-vars)))
             (async/<! (sync/<sync-stop))
-            (some-> (sync/sync-start) async/<!)))
+            (some-> (sync/<sync-start) async/<!)))
 
 (defn- file-sync-stop! []
   (async/go (async/<! (p->c (persist-var/load-vars)))
@@ -85,6 +86,7 @@
           (state/set-state! :user/info result)
           (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
+              (file-sync-handler/set-sync-enabled! true)
               (async/<! (file-sync-handler/load-session-graphs))
               (p/let [repos (repo-handler/refresh-repos!)]
                 (when-let [repo (state/get-current-repo)]
@@ -92,7 +94,7 @@
                                     (vector? (:sync-meta %))
                                     (util/uuid-string? (first (:sync-meta %)))
                                     (util/uuid-string? (second (:sync-meta %)))) repos)
-                    (sync/sync-start)))))
+                    (sync/<sync-start)))))
             (ui-handler/re-render-root!)
             (file-sync/maybe-onboarding-show status)))))))
 
@@ -112,15 +114,11 @@
       (route-handler/redirect-to-home!)))
   (when-let [dir-name (config/get-repo-dir repo)]
     (fs/watch-dir! dir-name))
-  (repo-handler/refresh-repos!)
   (file-sync-restart!))
 
-(defmethod handle :graph/unlinked [_]
-  (repo-handler/refresh-repos!)
-  (file-sync-restart!))
-
-(defmethod handle :graph/refresh [_]
-  (repo-handler/refresh-repos!))
+(defmethod handle :graph/unlinked [repo current-repo]
+  (when (= (:url repo) current-repo)
+    (file-sync-restart!)))
 
 ;; FIXME: awful multi-arty function.
 ;; Should use a `-impl` function instead of the awful `skip-ios-check?` param with nested callback.
@@ -140,7 +138,6 @@
          (fs/watch-dir! dir-name))
        (srs/update-cards-due-count!)
        (state/pub-event! [:graph/ready graph])
-       (repo-handler/refresh-repos!)
        (file-sync-restart!)))))
 
 ;; Parameters for the `persist-db` function, to show the notification messages
@@ -177,10 +174,39 @@
       "Please wait seconds until all changes are saved for the current graph."
       :warning))))
 
-(defmethod handle :graph/pick-dest-to-sync [[_ graph]]
-  (state/set-modal!
-   (file-sync/pick-dest-to-sync-panel graph)
-   {:center? true}))
+(defmethod handle :graph/pull-down-remote-graph [[_ graph dir-name]]
+  (if (mobile-util/native-ios?)
+    (when-let [graph-name (or dir-name (:GraphName graph))]
+      (let [graph-name (util/safe-sanitize-file-name graph-name)]
+        (if (string/blank? graph-name)
+          (notification/show! "Illegal graph folder name.")
+
+          ;; Create graph directory under Logseq document folder (local)
+          (when-let [root (state/get-local-container-root-url)]
+            (let [graph-path (graph-picker/validate-graph-dirname root graph-name)]
+              (->
+               (p/let [exists? (fs/dir-exists? graph-path)]
+                 (let [overwrite? (if exists?
+                                    (js/confirm (str "There's already a directory with the name \"" graph-name "\", do you want to overwrite it? Make sure to backup it first if you're not sure about it."))
+                                    true)]
+                   (if overwrite?
+                     (p/let [_ (fs/mkdir-if-not-exists graph-path)]
+                       (nfs-handler/ls-dir-files-with-path!
+                        graph-path
+                        {:ok-handler (fn []
+                                       (file-sync-handler/init-remote-graph graph-path graph)
+                                       (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))}))
+                     (let [graph-name (-> (js/prompt "Please specify a new directory name to download the graph:")
+                                          str
+                                          string/trim)]
+                       (when-not (string/blank? graph-name)
+                         (state/pub-event! [:graph/pull-down-remote-graph graph graph-name]))))))
+               (p/catch (fn [^js e]
+                          (notification/show! (str e) :error)
+                          (js/console.error e)))))))))
+    (state/set-modal!
+     (file-sync/pick-dest-to-sync-panel graph)
+     {:center? true})))
 
 (defmethod handle :graph/pick-page-histories [[_ graph-uuid page-name]]
   (state/set-modal!
@@ -321,8 +347,7 @@
                         {:label "diff__cp"}))))
 
 (defmethod handle :modal/display-file-version [[_ path content hash]]
-  (p/let [content (when content (encrypt/decrypt content))]
-    (state/set-modal! #(git-component/file-specific-version path hash content))))
+  (state/set-modal! #(git-component/file-specific-version path hash content)))
 
 ;; Hook on a graph is ready to be shown to the user.
 ;; It's different from :graph/resotred, as :graph/restored is for window reloaded
@@ -543,7 +568,9 @@
 (defmethod handle :file-watcher/changed [[_ ^js event]]
   (let [type (.-event event)
         payload (-> event
-                    (js->clj :keywordize-keys true))]
+                    (js->clj :keywordize-keys true)
+                    (update :path (fn [path]
+                                    (when (string? path) (capacitor-fs/remove-private-part path)))))]
     (fs-watcher/handle-changed! type payload)
     (when (file-sync-handler/enable-sync?)
      (sync/file-watch-handler type payload))))
@@ -571,6 +598,24 @@
       :on-click (fn []
                   (state/close-modal!)
                   (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
+
+(defmethod handle :sync/create-remote-graph [[_ current-repo]]
+  (let [graph-name (js/decodeURI (util/node-path.basename current-repo))]
+    (async/go
+      (async/<! (sync/<sync-stop))
+      (state/set-state! [:ui/loading? :graph/create-remote?] true)
+      (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
+        (async/<! (sync/<sync-start))
+        (state/set-state! [:ui/loading? :graph/create-remote?] false)
+        ;; update existing repo
+        (state/set-repos! (map (fn [r]
+                                 (if (= (:url r) current-repo)
+                                   (assoc r
+                                          :GraphUUID GraphUUID
+                                          :GraphName graph-name
+                                          :remote? true)
+                                   r))
+                            (state/get-repos)))))))
 
 (defmethod handle :graph/re-index [[_]]
   ;; Ensure the graph only has ONE window instance
@@ -601,18 +646,6 @@
          :on-click (fn []
                      (state/close-modal!)
                      (state/pub-event! [:graph/re-index])))]])))
-
-;; encryption
-(defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]
-  (state/set-modal!
-   (encryption/encryption-setup-dialog repo-url close-fn)))
-
-(defmethod handle :modal/encryption-input-secret-dialog [[_ repo-url db-encrypted-secret close-fn]]
-  (state/set-modal!
-   (encryption/encryption-input-secret-dialog
-    repo-url
-    db-encrypted-secret
-    close-fn)))
 
 (defmethod handle :modal/remote-encryption-input-pw-dialog [[_ repo-url remote-graph-info type opts]]
   (state/set-modal!
@@ -704,6 +737,66 @@
     (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir)))
     (when (= dir (config/get-repo-dir repo))
       (fs/watch-dir! dir))))
+
+(defmethod handle :ui/notify-files-with-reserved-chars [[_ paths]]
+  (sync/<sync-stop)
+
+  (notification/show!
+   [:div
+    [:div.mb-4
+     [:div.font-semibold.mb-4.text-xl "It seems that some of your filenames are in the outdated format."]
+
+     [:div
+      [:p
+       "We suggest you upgrade now to avoid some potential bugs."]
+      [:p
+       "For example, the files below have reserved characters can't be synced on some platforms."]]
+     ]
+    (ui/button
+      "Update filename format"
+      :on-click (fn []
+                  (notification/clear-all!)
+                  (state/set-modal!
+                  (fn [_] (conversion-component/files-breaking-changed))
+                  {:id :filename-format-panel :center? true})))
+    [:ol.my-2
+     (for [path paths]
+       [:li path])]]
+   :warning
+   false))
+
+(defmethod handle :ui/notify-skipped-downloading-files [[_ paths]]
+  (notification/show!
+   [:div
+    [:div.mb-4
+     [:div.font-semibold.mb-4.text-xl "It seems that some of your filenames are in the outdated format."]
+     [:p
+      "The files below that have reserved characters can't be saved on this device."]
+     [:div.overflow-y-auto.max-h-96
+      [:ol.my-2
+       (for [path paths]
+         [:li path])]]
+
+     [:div
+      [:p
+       "Check " [:a {:href "https://docs.logseq.com/#/page/logseq%20file%20and%20folder%20naming%20rules"
+                     :target "_blank"}
+                 "Logseq file and folder naming rules"]
+       " for more details."]
+      [:p
+       "To solve this problem, we suggest you update the filename format (on Settings > Advanced > Filename format > click EDIT button) in other devices to avoid more potential bugs."]]]]
+   :warning
+   false))
+
+(defmethod handle :graph/setup-a-repo [[_ opts]]
+  (let [opts' (merge {:picked-root-fn #(state/close-modal!)
+                      :native-icloud? (not (string/blank? (state/get-icloud-container-root-url)))
+                      :logged?        (user-handler/logged-in?)} opts)]
+    (if (mobile-util/native-ios?)
+      (state/set-modal!
+       #(graph-picker/graph-picker-cp opts')
+       {:label "graph-setup"})
+      (page-handler/ls-dir-files! st/refresh! opts'))))
 
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]

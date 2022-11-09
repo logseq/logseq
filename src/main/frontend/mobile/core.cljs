@@ -10,7 +10,8 @@
             [frontend.mobile.intent :as intent]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [cljs-bean.core :as bean]))
 
 
 (def *url (atom nil))
@@ -23,8 +24,13 @@
 (defn- ios-init
   "Initialize iOS-specified event listeners"
   []
-  (p/let [path (capacitor-fs/ios-ensure-documents!)]
-    (println "iOS container path: " (js->clj path)))
+  (p/let [^js path (capacitor-fs/ios-ensure-documents!)]
+    (when-let [path' (bean/->clj path)]
+      (state/set-state! :mobile/container-urls
+                        (update-vals path' #(cond-> %
+                                              string?
+                                              (js/decodeURIComponent))))
+      (println "iOS container path: " path')))
 
   (state/pub-event! [:validate-appId])
 

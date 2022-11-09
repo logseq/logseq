@@ -6,8 +6,8 @@
             [frontend.components.onboarding.setups :as setups]))
 
 (rum/defc intro
-  []
-  (setups/picker))
+  [onboarding-and-home?]
+  (setups/picker onboarding-and-home?))
 
 (defn help
   []

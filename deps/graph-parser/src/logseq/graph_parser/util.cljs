@@ -7,16 +7,22 @@
             [clojure.walk :as walk]
             [logseq.graph-parser.log :as log]))
 
+(defn safe-decode-uri-component
+  [uri]
+  (try
+    (js/decodeURIComponent uri)
+    (catch :default _
+      (log/error :decode-uri-component-failed uri)
+      uri)))
+
 (defn safe-url-decode
   [string]
   (if (string/includes? string "%")
-    (try (some-> string str (js/decodeURIComponent))
-         (catch :default _
-           string))
+    (some-> string str safe-decode-uri-component)
     string))
 
 (defn path-normalize
-  "Normalize file path (for reading paths from FS, not required by writting)
+  "Normalize file path (for reading paths from FS, not required by writing)
    Keep capitalization senstivity"
   [s]
   (.normalize s "NFC"))
@@ -220,7 +226,8 @@
 ;; Source: https://github.com/logseq/logseq/blob/e7110eea6790eda5861fdedb6b02c2a78b504cd9/deps/graph-parser/src/logseq/graph_parser/extract.cljc#L35
 (defn legacy-title-parsing
   [file-name-body]
-  (js/decodeURIComponent (string/replace file-name-body "." "/")))
+  (let [title (string/replace file-name-body "." "/")]
+    (or (safe-decode-uri-component title) title)))
 
 ;; Register sanitization / parsing fns in:
 ;; logseq.graph-parser.util (parsing only)

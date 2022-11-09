@@ -461,8 +461,12 @@
       @apply flex-nowrap md:flex-wrap;
       background-color: var(--ls-primary-background-color);
 
+      &.strength-wrap {
+        @apply flex-wrap;
+      }
+      
       .strength-item {
-        @apply flex items-center leading-none opacity-60 mr-2;
+        @apply whitespace-nowrap flex items-center leading-none opacity-60;
 
         .ti {
           @apply scale-75;

@@ -138,7 +138,8 @@
         "threads": "1.6.5",
         "url": "^0.11.0",
         "yargs-parser": "20.2.4",
-        "path-complete-extname": "1.0.0"
+        "path-complete-extname": "1.0.0",
+        "sanitize-filename": "1.6.3"
     },
     "resolutions": {
         "pixi-graph-fork/@pixi/app": "6.2.0",

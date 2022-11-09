@@ -6,6 +6,7 @@ import {
   TLResetBoundsInfo,
   TLResizeInfo,
   validUUID,
+  getComputedColor,
 } from '@tldraw/core'
 import { Virtuoso } from 'react-virtuoso'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
@@ -71,8 +72,38 @@ const LogseqTypeTag = ({
 }
 
 const LogseqPortalShapeHeader = observer(
-  ({ type, children }: { type: 'P' | 'B'; children: React.ReactNode }) => {
-    return <div className={`tl-logseq-portal-header tl-logseq-portal-header-${type === "P" ? "page" : "block"}`}>{children}</div>
+  ({
+    type,
+    fill,
+    opacity,
+    children,
+  }: {
+    type: 'P' | 'B'
+    fill: string
+    opacity: number
+    children: React.ReactNode
+  }) => {
+    const bgColor =
+      fill !== 'var(--ls-secondary-background-color)'
+        ? getComputedColor(fill, 'background')
+        : 'var(--ls-tertiary-background-color)'
+
+    return (
+      <div
+        className={`tl-logseq-portal-header tl-logseq-portal-header-${
+          type === 'P' ? 'page' : 'block'
+        }`}
+      >
+        <div
+          className="absolute inset-0 tl-logseq-portal-header-bg"
+          style={{
+            opacity,
+            background: type === 'P' ? bgColor : `linear-gradient(0deg, transparent, ${bgColor}`,
+          }}
+        ></div>
+        <div className="relative">{children}</div>
+      </div>
+    )
   }
 )
 
@@ -180,8 +211,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     size: [400, 50],
     // collapsedHeight is the height before collapsing
     collapsedHeight: 0,
-    stroke: 'var(--ls-primary-text-color)',
-    fill: 'var(--ls-secondary-background-color)',
+    stroke: '',
+    fill: '',
     noFill: false,
     borderRadius: 8,
     strokeWidth: 2,
@@ -661,7 +692,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
   PortalComponent = observer(({}: TLComponentProps) => {
     const {
-      props: { pageId },
+      props: { pageId, fill, opacity },
     } = this
     const { renderers } = React.useContext(LogseqContext)
     const app = useApp<Shape>()
@@ -703,19 +734,29 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     }, [this.initialHeightCalculated])
 
     return (
-      <div
-        ref={cpRefContainer}
-        className="tl-logseq-cp-container"
-        style={{
-          overflow: this.props.isAutoResizing ? 'visible' : 'auto',
-        }}
-      >
-        {this.props.blockType === 'B' && this.props.compact ? (
-          <Block blockId={pageId} />
-        ) : (
-          <Page pageName={pageId} />
-        )}
-      </div>
+      <>
+        <div
+          className="absolute inset-0 tl-logseq-cp-container-bg"
+          style={{
+            background:
+              fill && fill !== 'var(--ls-secondary-background-color)'
+                ? `var(--ls-highlight-color-${fill})`
+                : 'var(--ls-secondary-background-color)',
+            opacity,
+          }}
+        ></div>
+        <div
+          ref={cpRefContainer}
+          className="relative tl-logseq-cp-container"
+          style={{ overflow: this.props.isAutoResizing ? 'visible' : 'auto' }}
+        >
+          {this.props.blockType === 'B' && this.props.compact ? (
+            <Block blockId={pageId} />
+          ) : (
+            <Page pageName={pageId} />
+          )}
+        </div>
+      </>
     )
   })
 
@@ -812,7 +853,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       <HTMLContainer
         style={{
           pointerEvents: 'all',
-          opacity: isErasing ? 0.2 : opacity,
         }}
         {...events}
       >
@@ -838,19 +878,18 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 data-portal-selected={portalSelected}
                 data-editing={isEditing}
                 style={{
-                  background: this.props.compact ? 'transparent' : fill,
-                  color: stroke,
                   width: `calc(100% / ${scaleRatio})`,
                   height: `calc(100% / ${scaleRatio})`,
                   transform: `scale(${scaleRatio})`,
-                  // @ts-expect-error ???
-                  '--ls-primary-background-color': !fill?.startsWith('var') ? fill : undefined,
-                  '--ls-primary-text-color': !stroke?.startsWith('var') ? stroke : undefined,
-                  '--ls-title-text-color': !stroke?.startsWith('var') ? stroke : undefined,
+                  opacity: isErasing ? 0.2 : 1,
                 }}
               >
                 {!this.props.compact && !targetNotFound && (
-                  <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'}>
+                  <LogseqPortalShapeHeader
+                    type={this.props.blockType ?? 'P'}
+                    fill={fill}
+                    opacity={opacity}
+                  >
                     {this.props.blockType === 'P' ? (
                       <PageNameLink pageName={pageId} />
                     ) : (
@@ -899,8 +938,12 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return (
       <>
         <rect
-          fill={this.props.fill}
-          stroke={this.props.stroke}
+          fill={
+            this.props.fill && this.props.fill !== 'var(--ls-secondary-background-color)'
+              ? `var(--ls-highlight-color-${this.props.fill})`
+              : 'var(--ls-secondary-background-color)'
+          }
+          stroke={getComputedColor(this.props.fill, 'background')}
           strokeWidth={this.props.strokeWidth ?? 2}
           fillOpacity={this.props.opacity ?? 0.2}
           width={bounds.width}
@@ -910,7 +953,12 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         />
         {!this.props.compact && (
           <rect
-            fill="#aaa"
+            fill={
+              this.props.fill && this.props.fill !== 'var(--ls-secondary-background-color)'
+                ? getComputedColor(this.props.fill, 'background')
+                : 'var(--ls-tertiary-background-color)'
+            }
+            fillOpacity={this.props.opacity ?? 0.2}
             x={1}
             y={1}
             width={bounds.width - 2}
@@ -927,8 +975,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           textAnchor="middle"
           fontFamily="var(--ls-font-family)"
           fontSize="32"
-          fill={this.props.stroke}
-          stroke={this.props.stroke}
+          fill="var(--ls-secondary-text-color)"
+          stroke="var(--ls-secondary-text-color)"
         >
           {this.props.blockType === 'P' ? this.props.pageId : ''}
         </text>

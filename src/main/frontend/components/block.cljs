@@ -836,7 +836,7 @@
   [label]
   (when (and (= 1 (count label))
              (string? (last (first label))))
-    (js/decodeURIComponent (last (first label)))))
+    (gp-util/safe-decode-uri-component (last (first label)))))
 
 (defn- get-page
   [label]
@@ -2346,17 +2346,17 @@
   [:div.block-left-menu.flex.bg-base-2.rounded-r-md.mr-1
    [:div.commands-button.w-0.rounded-r-md
     {:id (str "block-left-menu-" uuid)}
-    [:div.indent (ui/icon "indent-increase" {:style {:fontSize 16}})]]])
+    [:div.indent (ui/icon "indent-increase" {:size 18})]]])
 
 (rum/defc block-right-menu < rum/reactive
   [_config {:block/keys [uuid] :as _block} edit?]
   [:div.block-right-menu.flex.bg-base-2.rounded-md.ml-1
-   [:div.commands-button.w-0.flex.flew-col.rounded-md
+   [:div.commands-button.w-0.rounded-md
     {:id (str "block-right-menu-" uuid)
      :style {:max-width (if edit? 40 80)}}
-    [:div.outdent (ui/icon "indent-decrease" {:style {:fontSize 16}})]
+    [:div.outdent (ui/icon "indent-decrease" {:size 18})]
     (when-not edit?
-      [:div.more (ui/icon "dots-circle-horizontal" {:style {:fontSize 16}})])]])
+      [:div.more (ui/icon "dots-circle-horizontal" {:size 18})])]])
 
 (rum/defcs block-content-or-editor < rum/reactive
   (rum/local true ::hide-block-refs?)

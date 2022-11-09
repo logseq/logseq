@@ -14,9 +14,9 @@
             [frontend.fs.sync :as fs-sync]
             [frontend.handler.file-sync :refer [*beta-unavailable?] :as file-sync-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.web.nfs :as web-nfs]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -24,13 +24,13 @@
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
             [frontend.storage :as storage]
-            [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
-            [goog.functions :refer [debounce]]))
+            [goog.functions :refer [debounce]]
+            [logseq.graph-parser.util :as gp-util]))
 
 (declare maybe-onboarding-show)
 (declare open-icloud-graph-clone-picker)
@@ -79,7 +79,7 @@
 
      [:div.folder-tip.flex.flex-col.items-center
       [:h3
-       [:span (ui/icon "folder") [:label.pl-0.5 (js/decodeURIComponent graph-name)]]]
+       [:span (ui/icon "folder") [:label.pl-0.5 (gp-util/safe-decode-uri-component graph-name)]]]
       [:h4.px-6 (config/get-string-repo-dir repo)]
 
       (when (not (string/blank? selected-path))
@@ -133,9 +133,11 @@
               (do
                 (state/set-state! [:ui/loading? :graph/create-remote?] true)
                 (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
-                  (async/<! (fs-sync/sync-start))
+                  (async/<! (fs-sync/<sync-start))
                   (state/set-state! [:ui/loading? :graph/create-remote?] false)
-                  ;; update existing repo
+                  ;; update both local && remote graphs
+                  (state/add-remote-graph! {:GraphUUID GraphUUID
+                                            :GraphName graph-name})
                   (state/set-repos! (map (fn [r]
                                            (if (= (:url r) repo)
                                              (assoc r
@@ -377,9 +379,7 @@
                                                 (second @graphs-txid)
                                                 (fs-sync/graph-sync-off? (second @graphs-txid))
                                                 (async/<! (fs-sync/<check-remote-graph-exists (second @graphs-txid))))
-                                           (do
-                                             (prn "sync start")
-                                             (fs-sync/sync-start))
+                                           (fs-sync/<sync-start)
 
                                            ;; remote graph already has been deleted, clear repos first, then create-remote-graph
                                            synced-file-graph?  ; <check-remote-graph-exists -> false
@@ -442,7 +442,7 @@
 
              (map (fn [f] {:title [:div.file-item
                                    {:key (str "downloading-" f)}
-                                   (js/decodeURIComponent f)]
+                                   (gp-util/safe-decode-uri-component f)]
                            :key   (str "downloading-" f)
                            :icon  (if enabled-progress-panel?
                                     (let [progress (get sync-progress f)
@@ -461,13 +461,17 @@
                                 path (fs-sync/relative-path e)]
                             {:title [:div.file-item
                                      {:key (str "queue-" path)}
-                                     (js/decodeURIComponent path)]
+                                     (try
+                                       (gp-util/safe-decode-uri-component path)
+                                       (catch :default _
+                                         (prn "Wrong path: " path)
+                                         path))]
                              :key   (str "queue-" path)
                              :icon  (ui/icon icon)})) (take 10 queuing-files))
 
              (map (fn [f] {:title [:div.file-item
                                    {:key (str "uploading-" f)}
-                                   (js/decodeURIComponent f)]
+                                   (gp-util/safe-decode-uri-component f)]
                            :key   (str "uploading-" f)
                            :icon  (if enabled-progress-panel?
                                     (let [progress (get sync-progress f)
@@ -481,19 +485,17 @@
 
              (when (seq history-files)
                (map-indexed (fn [i f] (:time f)
-                              (let [path        (:path f)
-                                    ext         (string/lower-case (util/get-file-ext path))
-                                    _supported? (gp-config/mldoc-support? ext)
-                                    full-path   (util/node-path.join (config/get-repo-dir current-repo) path)
-                                    page-name   (db/get-file-page full-path)]
-                                {:title [:div.files-history.cursor-pointer
-                                         {:key      i :class (when (= i 0) "is-first")
-                                          :on-click (fn []
-                                                      (if page-name
-                                                        (rfe/push-state :page {:name page-name})
-                                                        (rfe/push-state :file {:path full-path})))}
-                                         [:span.file-sync-item (js/decodeURIComponent (:path f))]
-                                         [:div.opacity-50 (ui/humanity-time-ago (:time f) nil)]]}))
+                              (when-let [path (:path f)]
+                                (let [full-path   (util/node-path.join (config/get-repo-dir current-repo) path)
+                                      page-name   (db/get-file-page full-path)]
+                                  {:title [:div.files-history.cursor-pointer
+                                           {:key      i :class (when (= i 0) "is-first")
+                                            :on-click (fn []
+                                                        (if page-name
+                                                          (rfe/push-state :page {:name page-name})
+                                                          (rfe/push-state :file {:path full-path})))}
+                                           [:span.file-sync-item (gp-util/safe-decode-uri-component (:path f))]
+                                           [:div.opacity-50 (ui/humanity-time-ago (:time f) nil)]]})))
                             (take 10 history-files)))))
 
           ;; options

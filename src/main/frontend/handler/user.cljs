@@ -103,30 +103,17 @@
 
 
 (defn <refresh-id-token&access-token
-  "refresh id-token and access-token, if refresh_token expired, clear all tokens
-   return true if success, else false"
+  "Refresh id-token and access-token"
   []
   (go
     (when-let [refresh-token (state/get-auth-refresh-token)]
       (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_refresh_token?refresh_token=" refresh-token)
                                {:with-credentials? false}))]
-
-        (cond
-          ;; e.g. api return 500, server internal error
-          ;; we shouldn't clear tokens if they aren't expired yet
-          ;; the `refresh-tokens-loop` will retry soon
-          (and (not (http/unexceptional-status? (:status resp)))
-               (not (-> (state/get-auth-id-token) parse-jwt expired?)))
-          nil                           ; do nothing
-
-          (not (http/unexceptional-status? (:status resp)))
-          (clear-tokens)
-
-          :else                         ; ok
+        (when (and (:id_token (:body resp)) (:access_token (:body resp)))
           (set-tokens! (:id_token (:body resp)) (:access_token (:body resp))))))))
 
 (defn restore-tokens-from-localstorage
-  "restore id-token, access-token, refresh-token from localstorage,
+  "Restore id-token, access-token, refresh-token from localstorage,
   and refresh id-token&access-token if necessary.
   return nil when tokens are not available."
   []

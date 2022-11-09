@@ -1,14 +1,17 @@
 (ns frontend.components.whiteboard
   "Whiteboard related components"
   (:require [cljs.math :as math]
+            [frontend.components.content :as content]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
             [frontend.context.i18n :refer [t]]
             [frontend.db.model :as model]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.rum :refer [use-bounding-client-rect use-click-outside]]
+            [frontend.rum :refer [use-bounding-client-rect use-breakpoint
+                                  use-click-outside]]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -93,7 +96,7 @@
                       (util/stop e)
                       (d-open-flag (fn [o] (if (not= o 2) 2 0))))}
          [:div.open-page-ref-link refs-count]
-         (when render-fn (render-fn open?))]
+         (when render-fn (render-fn open? refs-count))]
         (reference/block-linked-references block-uuid)
         open?
         #(set-open-flag 0))))))
@@ -207,39 +210,51 @@
                                      :checked (boolean (checked-page-names whiteboard-name))
                                      :on-checked-change (fn [checked]
                                                           (set-checked-page-names (if checked
-                                                                               (conj checked-page-names whiteboard-name)
-                                                                               (disj checked-page-names whiteboard-name))))})])
+                                                                                    (conj checked-page-names whiteboard-name)
+                                                                                    (disj checked-page-names whiteboard-name))))})])
          (for [n (range empty-cards)]
            [:div.dashboard-card.dashboard-bg-card {:key n}])]]])
     [:div "This feature is not publicly available yet."]))
 
 (rum/defc whiteboard-page
-  [name block-id]
-  [:div.absolute.w-full.h-full.whiteboard-page
+  [page-name block-id]
+  (let [[ref bp] (use-breakpoint)]
+    [:div.absolute.w-full.h-full.whiteboard-page
 
-   ;; makes sure the whiteboard will not cover the borders
-   {:key name
-    :style {:padding "0.5px" :z-index 0
-            :transform "translateZ(0)"
-            :text-rendering "geometricPrecision"
-            :-webkit-font-smoothing "subpixel-antialiased"}}
+     ;; makes sure the whiteboard will not cover the borders
+     {:key page-name
+      :ref ref
+      :data-breakpoint (name bp)
+      :style {:padding "0.5px" :z-index 0
+              :transform "translateZ(0)"
+              :text-rendering "geometricPrecision"
+              :-webkit-font-smoothing "subpixel-antialiased"}}
 
-   [:div.whiteboard-page-title-root
-    [:span.whiteboard-page-title
-     {:style {:color "var(--ls-primary-text-color)"
-              :user-select "none"}}
-     (page/page-title name
-                      [:span.tie.tie-whiteboard
-                       {:style {:font-size "0.9em"}}]
-                      (get-page-display-name name)
-                      nil
-                      false)]
+     [:div.whiteboard-page-title-root
+      [:div.whiteboard-page-title
+       {:style {:color "var(--ls-primary-text-color)"
+                :user-select "none"}
+        :on-context-menu (fn [e]
+                           (util/stop e)
+                           (common-handler/show-custom-context-menu!
+                            e
+                            (content/page-title-custom-context-menu-content page-name))
+                           (state/set-state! :page-title/context nil))}
+       (page/page-title page-name
+                        [:span.text-lg
+                         (ui/icon "whiteboard" {:extension? true})]
+                        (get-page-display-name page-name)
+                        nil
+                        false)]
 
-    (page-refs-count name
-                     "text-md px-3 py-2 cursor-default whiteboard-page-refs-count"
-                     (fn [open?] [:<> "References" (ui/icon (if open? "references-hide" "references-show")
-                                                            {:extension? true})]))]
-   (tldraw-app name block-id)])
+      [:div.whiteboard-page-refs
+       (page-refs-count page-name
+                        "text-md px-3 py-2 cursor-default whiteboard-page-refs-count"
+                        (fn [open? refs-count] [:span.whiteboard-page-refs-count-label
+                                                (if (> refs-count 1) "References" "Reference")
+                                                (ui/icon (if open? "references-hide" "references-show")
+                                                         {:extension? true})]))]]
+     (tldraw-app page-name block-id)]))
 
 (rum/defc whiteboard-route
   [route-match]
