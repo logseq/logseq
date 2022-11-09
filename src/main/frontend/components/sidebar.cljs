@@ -39,6 +39,7 @@
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [logseq.graph-parser.util :as gp-util]
             [react-draggable]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -464,7 +465,7 @@
         file-basename (util/node-path.basename
                        (:current-parsing-file state))
         display-filename (if (mobile-util/native-platform?)
-                           (js/decodeURIComponent file-basename)
+                           (gp-util/safe-decode-uri-component file-basename)
                            file-basename)
         left-label [:div.flex.flex-row.font-bold
                     (t :parsing-files)
