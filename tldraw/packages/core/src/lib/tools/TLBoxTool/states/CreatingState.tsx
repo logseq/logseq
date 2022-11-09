@@ -86,9 +86,6 @@ export class CreatingState<
     if (this.creatingShape) {
       this.app.setSelectedShapes([this.creatingShape as unknown as S])
     }
-    if (!this.app.settings.isToolLocked) {
-      this.app.transition('select')
-    }
     this.app.persist()
   }
 

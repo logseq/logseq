@@ -925,9 +925,7 @@ export class TLApp<
     this.selectedTool.transition('idleHold')
   }
 
-  readonly onTransition: TLStateEvents<S, K>['onTransition'] = () => {
-    this.settings.update({ isToolLocked: false })
-  }
+  readonly onTransition: TLStateEvents<S, K>['onTransition'] = () => {}
 
   readonly onWheel: TLEvents<S, K>['wheel'] = (info, e) => {
     if (e.ctrlKey || e.metaKey || this.isIn('select.contextMenu')) {

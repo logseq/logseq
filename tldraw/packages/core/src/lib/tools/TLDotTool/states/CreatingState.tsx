@@ -48,9 +48,6 @@ export class CreatingState<
         this.app.setSelectedShapes([shape])
       })
     }
-    if (!this.app.settings.isToolLocked) {
-      this.app.transition('select')
-    }
     this.app.persist()
   }
 

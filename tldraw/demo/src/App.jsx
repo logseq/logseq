@@ -48,11 +48,13 @@ const Page = props => {
   const [value, setValue] = React.useState(JSON.stringify(props, null, 2))
   return (
     <div className="w-full font-mono page">
-      The Circle components are a collection of standardized UI elements and patterns for building
-      products. These pages provide more information and best practices on how to use the
-      components.The Circle components are a collection of standardized UI elements and patterns for
-      building products. These pages provide more information and best practices on how to use the
-      components.
+      <div className="min-w-[240px]">
+        The Circle components are a collection of standardized UI elements and patterns for building
+        products. These pages provide more information and best practices on how to use the
+        components.The Circle components are a collection of standardized UI elements and patterns
+        for building products. These pages provide more information and best practices on how to use
+        the components.
+      </div>
     </div>
   )
 }
@@ -60,11 +62,13 @@ const Page = props => {
 const Block = props => {
   return (
     <div className="w-full font-mono single-block">
-      The Circle components are a collection of standardized UI elements and patterns for building
-      products. These pages provide more information and best practices on how to use the
-      components.The Circle components are a collection of standardized UI elements and patterns for
-      building products. These pages provide more information and best practices on how to use the
-      components.
+      <div className="min-w-[240px]">
+        The Circle components are a collection of standardized UI elements and patterns for building
+        products. These pages provide more information and best practices on how to use the
+        components.The Circle components are a collection of standardized UI elements and patterns
+        for building products. These pages provide more information and best practices on how to use
+        the components.
+      </div>
     </div>
   )
 }
