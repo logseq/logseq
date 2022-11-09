@@ -20,12 +20,12 @@ export default defineConfig({
         plugins: [[require.resolve('@babel/plugin-proposal-decorators'), { legacy: true }]],
       },
     }),
-    basicSsl(),
+    // basicSsl(),
   ],
   server: {
     port: '3031',
     fs: { strict: false },
-    https: true,
+    // https: true,
   },
   resolve: {
     alias: [

@@ -216,9 +216,6 @@ export class TLBaseLineBindingState<
     if (this.currentShape) {
       this.app.setSelectedShapes([this.currentShape])
     }
-    if (!this.app.settings.isToolLocked) {
-      this.app.transition('select')
-    }
     this.app.persist()
   }
 
