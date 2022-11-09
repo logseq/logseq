@@ -12,7 +12,8 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.graph-parser.util :as gp-util]))
 
 (when (mobile-util/native-ios?)
   (defn ios-ensure-documents!
@@ -215,10 +216,20 @@
 (defn ios-force-include-private
   "iOS sometimes return paths without the private part."
   [path]
-  (if (string/includes? path "///private/")
+  (cond
+    (string/includes? path "///private/")
     path
+
+    (string/includes? path "///")
     (let [[prefix others] (string/split path "///")]
-      (str prefix "///private/" others))))
+      (str prefix "///private/" others))
+
+    :else
+    (do
+      (state/pub-event! [:instrument {:type :error/ios-path-missing-slashes
+                                      ;; respect user's privacy
+                                      :path (gp-util/safe-subs path 10)}])
+      path)))
 
 (defn normalize-file-protocol-path [dir path]
   (let [dir             (some-> dir (string/replace #"/+$" ""))
