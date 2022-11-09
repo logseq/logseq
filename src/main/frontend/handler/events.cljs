@@ -739,8 +739,6 @@
       (fs/watch-dir! dir))))
 
 (defmethod handle :ui/notify-files-with-reserved-chars [[_ paths]]
-  (sync/<sync-stop)
-
   (notification/show!
    [:div
     [:div.mb-4
