@@ -782,7 +782,7 @@
                  "Logseq file and folder naming rules"]
        " for more details."]
       [:p
-       "To solve this problem, we suggest you update the filename format (on Settings > Advanced > Filename format > click EDIT button) in other devices to avoid more potential bugs."]]]]
+       "To solve this problem, we suggest you quit Logseq and update the filename format (on Settings > Advanced > Filename format > click EDIT button) in other devices to avoid more potential bugs."]]]]
    :warning
    false))
 
