@@ -191,7 +191,7 @@
                html (when-not raw-paste? (.getData clipboard-data "text/html"))
                text (.getData clipboard-data "text")
                files (.-files clipboard-data)
-               paste-file-if-exiist (fn []
+               paste-file-if-exist (fn []
                                       (when id
                                         (let [_handled
                                               (let [clipboard-data (gobj/get e "clipboardData")
@@ -202,6 +202,6 @@
                                                                                  editor-handler/*asset-uploading? true))))]
                                           (util/stop e))))]
            (cond
-             (and (string/blank? text) (string/blank? html)) (paste-file-if-exiist)
-             (and (seq files) (state/perferred-pasting-file?)) (paste-file-if-exiist)
+             (and (string/blank? text) (string/blank? html)) (paste-file-if-exist)
+             (and (seq files) (state/perferred-pasting-file?)) (paste-file-if-exist)
              :else (paste-text-or-blocks-aux input e text html))))))))
