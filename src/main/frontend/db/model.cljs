@@ -16,7 +16,7 @@
             [frontend.util :as util :refer [react]]
             [frontend.util.drawer :as drawer]
             [logseq.db.default :as default-db]
-            [logseq.db.rules :refer [rules]]
+            [logseq.db.rules :as rules]
             [logseq.db.schema :as db-schema]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.text :as text]
@@ -300,16 +300,7 @@
             (alias ?page ?e)]
           (conn/get-db repo-url)
           (util/safe-page-name-sanity-lc page)
-          '[[(alias ?e2 ?e1)
-             [?e2 :block/alias ?e1]]
-            [(alias ?e2 ?e1)
-             [?e1 :block/alias ?e2]]
-            [(alias ?e1 ?e3)
-             [?e1 :block/alias ?e2]
-             [?e2 :block/alias ?e3]]
-            [(alias ?e3 ?e1)
-             [?e1 :block/alias ?e2]
-             [?e2 :block/alias ?e3]]])
+          (:alias rules/rules))
      db-utils/seq-flatten
      (set)
      (set/union #{page-id}))))
@@ -1585,7 +1576,7 @@
        [?p :block/name ?namespace]
        (namespace ?p ?c)]
      (conn/get-db repo)
-     rules
+     (:namespace rules/rules)
      namespace)))
 
 (defn- tree [flat-col root]
