@@ -278,8 +278,8 @@
   "max retry count is 5.
   *stop: volatile var, stop retry-request when it's true,
           and return :stop"
-  ([api-name body token refresh-token-fn *stop] (<request* api-name body token refresh-token-fn 0 *stop))
-  ([api-name body token refresh-token-fn retry-count *stop]
+  ([api-name body token *stop] (<request* api-name body token 0 *stop))
+  ([api-name body token retry-count *stop]
    (go
      (if (and *stop @*stop (contains? stoppable-apis api-name))
        :stop
@@ -291,8 +291,7 @@
              (throw (js/Error. :file-sync-request))
              (do (println "will retry after" (min 60000 (* 1000 retry-count)) "ms")
                  (<! (timeout (min 60000 (* 1000 retry-count))))
-                 (let [token (<! (refresh-token-fn))]
-                   (<! (<request* api-name body token refresh-token-fn (inc retry-count) *stop)))))
+                 (<! (<request* api-name body token (inc retry-count) *stop))))
            (:resp resp)))))))
 
 (defn <request [api-name & args]
@@ -721,8 +720,7 @@
   (<upload-graph-encrypt-keys [this graph-uuid public-key encrypted-private-key]))
 
 (defprotocol IToken
-  (<get-token [this])
-  (<refresh-token [this]))
+  (<get-token [this]))
 
 
 (defn <case-different-local-file-exist?
@@ -767,14 +765,9 @@
 
 (deftype RSAPI [^:mutable graph-uuid' ^:mutable private-key' ^:mutable public-key']
   IToken
-  (<get-token [this]
-    (go
-      (or (state/get-auth-id-token)
-          (<! (<refresh-token this)))))
-  (<refresh-token [_]
-    (go
-      (<! (user/<refresh-id-token&access-token))
-      (state/get-auth-id-token)))
+  (<get-token [_this]
+    (user/<wrap-ensure-id&access-token
+     (state/get-auth-id-token)))
 
   IRSAPI
   (rsapi-ready? [_ graph-uuid] (and (= graph-uuid graph-uuid') private-key' public-key'))
@@ -855,14 +848,9 @@
 
 (deftype ^:large-vars/cleanup-todo CapacitorAPI [^:mutable graph-uuid' ^:mutable private-key ^:mutable public-key']
   IToken
-  (<get-token [this]
-    (go
-      (or (state/get-auth-id-token)
-          (<! (<refresh-token this)))))
-  (<refresh-token [_]
-    (go
-      (<! (user/<refresh-id-token&access-token))
-      (state/get-auth-id-token)))
+  (<get-token [_this]
+    (user/<wrap-ensure-id&access-token
+     (state/get-auth-id-token)))
 
   IRSAPI
   (rsapi-ready? [_ graph-uuid] (and (= graph-uuid graph-uuid') private-key public-key'))
@@ -1128,7 +1116,7 @@
 
   (<request [this api-name body]
     (go
-      (let [resp (<! (<request api-name body (<! (<get-token this)) #(<refresh-token this) *stopped?))]
+      (let [resp (<! (<request api-name body (<! (<get-token this)) *stopped?))]
         (if (http/unexceptional-status? (:status resp))
           (get-resp-json-body resp)
           (let [exp (ex-info "request failed"
@@ -1147,186 +1135,189 @@
     (.<request this "update_files" {:GraphUUID graph-uuid :TXId txid :Files files}))
 
   IToken
-  (<get-token [this]
-    (go
-      (or (state/get-auth-id-token)
-          (<! (<refresh-token this)))))
-
-  (<refresh-token [_]
-    (go
-      (<! (user/<refresh-id-token&access-token))
-      (state/get-auth-id-token))))
+  (<get-token [_this]
+    (user/<wrap-ensure-id&access-token
+     (state/get-auth-id-token))))
 
 (extend-type RemoteAPI
   IRemoteAPI
-  (<user-info [this] (.<request this "user_info" {}))
+  (<user-info [this]
+    (user/<wrap-ensure-id&access-token
+     (<! (.<request this "user_info" {}))))
   (<get-remote-all-files-meta [this graph-uuid]
-    (go
-      (let [file-meta-list      (transient #{})
-            encrypted-path-list (transient [])
-            exp-r
-            (<!
-             (go-loop [continuation-token nil]
-               (let [r (<! (.<request this "get_all_files"
-                                      (into
-                                       {}
-                                       (remove (comp nil? second)
-                                               {:GraphUUID graph-uuid :ContinuationToken continuation-token}))))]
-                 (if (instance? ExceptionInfo r)
-                   r
-                   (let [next-continuation-token (:NextContinuationToken r)
-                         objs                    (:Objects r)]
-                     (apply conj! encrypted-path-list (map (comp remove-user-graph-uuid-prefix :Key) objs))
-                     (apply conj! file-meta-list
-                       (map
-                         #(hash-map :checksum (:checksum %)
-                                    :encrypted-path (remove-user-graph-uuid-prefix (:Key %))
-                                    :size (:Size %)
-                                    :last-modified (:LastModified %))
-                         objs))
-                     (when-not (empty? next-continuation-token)
-                       (recur next-continuation-token)))))))]
-        (if (instance? ExceptionInfo exp-r)
-          exp-r
-          (let [file-meta-list*      (persistent! file-meta-list)
-                encrypted-path-list* (persistent! encrypted-path-list)
-                path-list-or-exp     (<! (<decrypt-fnames rsapi graph-uuid encrypted-path-list*))]
-            (if (instance? ExceptionInfo path-list-or-exp)
-              path-list-or-exp
-              (let [encrypted-path->path-map (zipmap encrypted-path-list* path-list-or-exp)]
-                (set
-                 (mapv
-                  #(->FileMetadata (:size %)
-                                   (:checksum %)
-                                   (get encrypted-path->path-map (:encrypted-path %))
-                                   (:encrypted-path %)
-                                   (:last-modified %)
-                                   true nil)
-                  file-meta-list*)))))))))
+    (user/<wrap-ensure-id&access-token
+     (let [file-meta-list      (transient #{})
+           encrypted-path-list (transient [])
+           exp-r
+           (<!
+            (go-loop [continuation-token nil]
+              (let [r (<! (.<request this "get_all_files"
+                                     (into
+                                      {}
+                                      (remove (comp nil? second)
+                                              {:GraphUUID graph-uuid :ContinuationToken continuation-token}))))]
+                (if (instance? ExceptionInfo r)
+                  r
+                  (let [next-continuation-token (:NextContinuationToken r)
+                        objs                    (:Objects r)]
+                    (apply conj! encrypted-path-list (map (comp remove-user-graph-uuid-prefix :Key) objs))
+                    (apply conj! file-meta-list
+                           (map
+                            #(hash-map :checksum (:checksum %)
+                                       :encrypted-path (remove-user-graph-uuid-prefix (:Key %))
+                                       :size (:Size %)
+                                       :last-modified (:LastModified %))
+                            objs))
+                    (when-not (empty? next-continuation-token)
+                      (recur next-continuation-token)))))))]
+       (if (instance? ExceptionInfo exp-r)
+         exp-r
+         (let [file-meta-list*      (persistent! file-meta-list)
+               encrypted-path-list* (persistent! encrypted-path-list)
+               path-list-or-exp     (<! (<decrypt-fnames rsapi graph-uuid encrypted-path-list*))]
+           (if (instance? ExceptionInfo path-list-or-exp)
+             path-list-or-exp
+             (let [encrypted-path->path-map (zipmap encrypted-path-list* path-list-or-exp)]
+               (set
+                (mapv
+                 #(->FileMetadata (:size %)
+                                  (:checksum %)
+                                  (get encrypted-path->path-map (:encrypted-path %))
+                                  (:encrypted-path %)
+                                  (:last-modified %)
+                                  true nil)
+                 file-meta-list*)))))))))
 
   (<get-remote-files-meta [this graph-uuid filepaths]
     {:pre [(coll? filepaths)]}
-    (go
-      (let [encrypted-paths* (<! (<encrypt-fnames rsapi graph-uuid filepaths))
-            r                (<! (.<request this "get_files_meta" {:GraphUUID graph-uuid :Files encrypted-paths*}))]
-        (if (instance? ExceptionInfo r)
-          r
-          (let [encrypted-paths (mapv :FilePath r)
-                paths-or-exp    (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths))]
-            (if (instance? ExceptionInfo paths-or-exp)
-              paths-or-exp
-              (let [encrypted-path->path-map (zipmap encrypted-paths paths-or-exp)]
-                (into #{}
-                      (comp
-                       (filter #(not= "filepath too long" (:Error %)))
-                       (map #(->FileMetadata (:Size %)
-                                             (:Checksum %)
-                                             (get encrypted-path->path-map (:FilePath %))
-                                             (:FilePath %)
-                                             (:LastModified %)
-                                             true nil)))
-                      r))))))))
+    (user/<wrap-ensure-id&access-token
+     (let [encrypted-paths* (<! (<encrypt-fnames rsapi graph-uuid filepaths))
+           r                (<! (.<request this "get_files_meta" {:GraphUUID graph-uuid :Files encrypted-paths*}))]
+       (if (instance? ExceptionInfo r)
+         r
+         (let [encrypted-paths (mapv :FilePath r)
+               paths-or-exp    (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths))]
+           (if (instance? ExceptionInfo paths-or-exp)
+             paths-or-exp
+             (let [encrypted-path->path-map (zipmap encrypted-paths paths-or-exp)]
+               (into #{}
+                     (comp
+                      (filter #(not= "filepath too long" (:Error %)))
+                      (map #(->FileMetadata (:Size %)
+                                            (:Checksum %)
+                                            (get encrypted-path->path-map (:FilePath %))
+                                            (:FilePath %)
+                                            (:LastModified %)
+                                            true nil)))
+                     r))))))))
 
   (<get-remote-graph [this graph-name-opt graph-uuid-opt]
     {:pre [(or graph-name-opt graph-uuid-opt)]}
-    (.<request this "get_graph" (cond-> {}
-                                  (seq graph-name-opt)
-                                  (assoc :GraphName graph-name-opt)
-                                  (seq graph-uuid-opt)
-                                  (assoc :GraphUUID graph-uuid-opt))))
+    (user/<wrap-ensure-id&access-token
+     (<! (.<request this "get_graph" (cond-> {}
+                                       (seq graph-name-opt)
+                                       (assoc :GraphName graph-name-opt)
+                                       (seq graph-uuid-opt)
+                                       (assoc :GraphUUID graph-uuid-opt))))))
 
   (<get-remote-file-versions [this graph-uuid filepath]
-    (go
-      (let [encrypted-path (first (<! (<encrypt-fnames rsapi graph-uuid [filepath])))]
-        (<! (.<request this "get_file_version_list" {:GraphUUID graph-uuid :File encrypted-path})))))
+    (user/<wrap-ensure-id&access-token
+     (let [encrypted-path (first (<! (<encrypt-fnames rsapi graph-uuid [filepath])))]
+       (<! (.<request this "get_file_version_list" {:GraphUUID graph-uuid :File encrypted-path})))))
 
   (<list-remote-graphs [this]
-    (.<request this "list_graphs"))
+    (user/<wrap-ensure-id&access-token
+     (<! (.<request this "list_graphs"))))
 
   (<get-deletion-logs [this graph-uuid from-txid]
-    (go
-      (let [r (<! (.<request this "get_deletion_log" {:GraphUUID graph-uuid :FromTXId from-txid}))]
-        (if (instance? ExceptionInfo r)
-          r
-          (let [txns-with-encrypted-paths (mapv #(update % :path remove-user-graph-uuid-prefix) (:Transactions r))
-                encrypted-paths           (mapv :path txns-with-encrypted-paths)
-                encrypted-path->path-map
-                (zipmap
-                 encrypted-paths
-                 (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths)))
-                txns
-                (mapv
-                 (fn [txn] (update txn :path #(get encrypted-path->path-map %)))
-                 txns-with-encrypted-paths)]
-            txns)))))
+    (user/<wrap-ensure-id&access-token
+     (let [r (<! (.<request this "get_deletion_log" {:GraphUUID graph-uuid :FromTXId from-txid}))]
+       (if (instance? ExceptionInfo r)
+         r
+         (let [txns-with-encrypted-paths (mapv #(update % :path remove-user-graph-uuid-prefix) (:Transactions r))
+               encrypted-paths           (mapv :path txns-with-encrypted-paths)
+               encrypted-path->path-map
+               (zipmap
+                encrypted-paths
+                (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths)))
+               txns
+               (mapv
+                (fn [txn] (update txn :path #(get encrypted-path->path-map %)))
+                txns-with-encrypted-paths)]
+           txns)))))
 
   (<get-diff [this graph-uuid from-txid]
     ;; TODO: path in transactions should be relative path(now s3 key, which includes graph-uuid and user-uuid)
-    (go
-      (let [r (<! (.<request this "get_diff" {:GraphUUID graph-uuid :FromTXId from-txid}))]
-        (if (instance? ExceptionInfo r)
-          r
-          (let [txns-with-encrypted-paths (sort-by :TXId (:Transactions r))
-                txns-with-encrypted-paths*
-                (mapv
-                 (fn [txn]
-                   (assoc txn :TXContent
-                          (mapv
-                           (fn [[to-path from-path checksum]]
-                             [(remove-user-graph-uuid-prefix to-path)
-                              (some-> from-path remove-user-graph-uuid-prefix)
-                              checksum])
-                           (:TXContent txn))))
-                 txns-with-encrypted-paths)
+    (user/<wrap-ensure-id&access-token
+     (let [r (<! (.<request this "get_diff" {:GraphUUID graph-uuid :FromTXId from-txid}))]
+       (if (instance? ExceptionInfo r)
+         r
+         (let [txns-with-encrypted-paths (sort-by :TXId (:Transactions r))
+               txns-with-encrypted-paths*
+               (mapv
+                (fn [txn]
+                  (assoc txn :TXContent
+                         (mapv
+                          (fn [[to-path from-path checksum]]
+                            [(remove-user-graph-uuid-prefix to-path)
+                             (some-> from-path remove-user-graph-uuid-prefix)
+                             checksum])
+                          (:TXContent txn))))
+                txns-with-encrypted-paths)
+               encrypted-paths
+               (mapcat
+                (fn [txn]
+                  (remove
+                   #(or (nil? %) (not (string/starts-with? % "e.")))
+                   (mapcat
+                    (fn [[to-path from-path _checksum]] [to-path from-path])
+                    (:TXContent txn))))
+                txns-with-encrypted-paths*)
+               encrypted-path->path-map
+               (zipmap
                 encrypted-paths
-                (mapcat
-                 (fn [txn]
-                   (remove
-                    #(or (nil? %) (not (string/starts-with? % "e.")))
-                    (mapcat
-                     (fn [[to-path from-path _checksum]] [to-path from-path])
-                     (:TXContent txn))))
-                 txns-with-encrypted-paths*)
-                encrypted-path->path-map
-                (zipmap
-                 encrypted-paths
-                 (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths)))
-                txns
-                (mapv
-                 (fn [txn]
-                   (assoc
-                    txn :TXContent
-                    (mapv
-                     (fn [[to-path from-path checksum]]
-                       [(get encrypted-path->path-map to-path to-path)
-                        (some->> from-path (get encrypted-path->path-map))
-                        checksum])
-                     (:TXContent txn))))
-                 txns-with-encrypted-paths*)]
-            [txns
-             (:TXId (last txns))
-             (:TXId (first txns))])))))
+                (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths)))
+               txns
+               (mapv
+                (fn [txn]
+                  (assoc
+                   txn :TXContent
+                   (mapv
+                    (fn [[to-path from-path checksum]]
+                      [(get encrypted-path->path-map to-path to-path)
+                       (some->> from-path (get encrypted-path->path-map))
+                       checksum])
+                    (:TXContent txn))))
+                txns-with-encrypted-paths*)]
+           [txns
+            (:TXId (last txns))
+            (:TXId (first txns))])))))
 
   (<create-graph [this graph-name]
-    (.<request this "create_graph" {:GraphName graph-name}))
+    (user/<wrap-ensure-id&access-token
+     (<! (.<request this "create_graph" {:GraphName graph-name}))))
 
   (<delete-graph [this graph-uuid]
-    (.<request this "delete_graph" {:GraphUUID graph-uuid}))
+    (user/<wrap-ensure-id&access-token
+     (<! (.<request this "delete_graph" {:GraphUUID graph-uuid}))))
 
   (<get-graph-salt [this graph-uuid]
-    (.<request this "get_graph_salt" {:GraphUUID graph-uuid}))
+    (user/<wrap-ensure-id&access-token
+     (<! (.<request this "get_graph_salt" {:GraphUUID graph-uuid}))))
 
   (<create-graph-salt [this graph-uuid]
-    (.<request this "create_graph_salt" {:GraphUUID graph-uuid}))
+    (user/<wrap-ensure-id&access-token
+     (<! (.<request this "create_graph_salt" {:GraphUUID graph-uuid}))))
 
   (<get-graph-encrypt-keys [this graph-uuid]
-    (.<request this "get_graph_encrypt_keys" {:GraphUUID graph-uuid}))
+    (user/<wrap-ensure-id&access-token
+     (<! (.<request this "get_graph_encrypt_keys" {:GraphUUID graph-uuid}))))
 
   (<upload-graph-encrypt-keys [this graph-uuid public-key encrypted-private-key]
-    (.<request this "upload_graph_encrypt_keys" {:GraphUUID             graph-uuid
-                                                 :public-key            public-key
-                                                 :encrypted-private-key encrypted-private-key})))
-
+    (user/<wrap-ensure-id&access-token
+     (<! (.<request this "upload_graph_encrypt_keys" {:GraphUUID             graph-uuid
+                                                      :public-key            public-key
+                                                      :encrypted-private-key encrypted-private-key})))))
 
 (def remoteapi (->RemoteAPI nil))
 
@@ -3049,43 +3040,44 @@
     (when (false? @*sync-entered?)
       (reset! *sync-entered? true)
       (let [*sync-state                 (atom (sync-state))
-            current-user-uuid           (user/user-uuid)
+            current-user-uuid           (<! (user/<user-uuid))
             ;; put @graph-uuid & get-current-repo together,
             ;; prevent to get older repo dir and current graph-uuid.
             _                           (<! (p->c (persist-var/-load graphs-txid)))
             [user-uuid graph-uuid txid] @graphs-txid
             txid                        (or txid 0)
             repo                        (state/get-current-repo)]
-        (when (and repo
-                   (graph-sync-off? repo) @network-online-cursor
-                   user-uuid graph-uuid txid
-                   (user/logged-in?)
-                   (not (config/demo-graph? repo)))
-          (try
-            (when-let [sm (sync-manager-singleton current-user-uuid graph-uuid
-                                                  (config/get-repo-dir repo) repo
-                                                  txid *sync-state)]
-              (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
-                (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
-                  (clear-graphs-txid! repo)
-                  (do
-                    (state/set-file-sync-state graph-uuid @*sync-state)
-                    (state/set-file-sync-manager graph-uuid sm)
+        (when-not (instance? ExceptionInfo current-user-uuid)
+          (when (and repo
+                     (graph-sync-off? repo) @network-online-cursor
+                     user-uuid graph-uuid txid
+                     (user/logged-in?)
+                     (not (config/demo-graph? repo)))
+            (try
+              (when-let [sm (sync-manager-singleton current-user-uuid graph-uuid
+                                                    (config/get-repo-dir repo) repo
+                                                    txid *sync-state)]
+                (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
+                  (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
+                    (clear-graphs-txid! repo)
+                    (do
+                      (state/set-file-sync-state graph-uuid @*sync-state)
+                      (state/set-file-sync-manager graph-uuid sm)
 
-                    ;; update global state when *sync-state changes
-                    (add-watch *sync-state ::update-global-state
-                               (fn [_ _ _ n]
-                                 (state/set-file-sync-state graph-uuid n)))
+                      ;; update global state when *sync-state changes
+                      (add-watch *sync-state ::update-global-state
+                                 (fn [_ _ _ n]
+                                   (state/set-file-sync-state graph-uuid n)))
 
-                    (state/set-state! [:file-sync/graph-state :current-graph-uuid] graph-uuid)
+                      (state/set-state! [:file-sync/graph-state :current-graph-uuid] graph-uuid)
 
-                    (.start sm)
+                      (.start sm)
 
-                    (offer! remote->local-full-sync-chan true)
-                    (offer! full-sync-chan true)))))
-            (catch :default e
-              (prn "Sync start error: ")
-              (log/error :exception e))))
+                      (offer! remote->local-full-sync-chan true)
+                      (offer! full-sync-chan true)))))
+              (catch :default e
+                (prn "Sync start error: ")
+                (log/error :exception e)))))
         (reset! *sync-entered? false)))))
 
 ;;; ### some add-watches
