@@ -363,7 +363,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
    * Get a svg group element that can be used to render the shape with only the props data. In the
    * base, draw any shape as a box. Can be overridden by subclasses.
    */
-  getShapeSVGJsx(opts: any) {
+  getShapeSVGJsx(_?: any) {
     // Do not need to consider the original point here
     const bounds = this.getBounds()
     const { stroke, strokeWidth, strokeType, opacity, fill, noFill, borderRadius } = this
