@@ -346,6 +346,12 @@
           logical-outdenting?
           config-handler/toggle-logical-outdenting!))
 
+(defn perferred-pasting-file [t perferred-pasting-file?]
+  (toggle "preferred_pasting_file"
+          (t :settings-page/preferred-pasting-file)
+          perferred-pasting-file?
+          config-handler/toggle-perferred-pasting-file!))
+
 (defn tooltip-row [t enable-tooltip?]
   (toggle "enable_tooltip"
           (t :settings-page/enable-tooltip)
@@ -555,6 +561,7 @@
         enable-timetracking? (state/enable-timetracking?)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)
+        perferred-pasting-file? (state/perferred-pasting-file?)
         enable-tooltip? (state/enable-tooltip?)
         enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
         show-brackets? (state/show-brackets?)
@@ -568,6 +575,7 @@
      (show-brackets-row t show-brackets?)
      (when (util/electron?) (switch-spell-check-row t))
      (outdenting-row t logical-outdenting?)
+     (perferred-pasting-file t perferred-pasting-file?)
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (shortcut-tooltip-row t enable-shortcut-tooltip?))
      (when-not (or (util/mobile?) (mobile-util/native-platform?))

@@ -236,7 +236,6 @@
     (el/listen!))
   (persist-var/load-vars)
   (user-handler/restore-tokens-from-localstorage)
-  (user-handler/refresh-tokens-loop)
   (js/setTimeout instrument! (* 60 1000)))
 
 (defn stop! []

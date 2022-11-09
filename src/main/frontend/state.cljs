@@ -651,6 +651,10 @@ Similar to re-frame subscriptions"
   []
   (:editor/logical-outdenting? (sub-config)))
 
+(defn perferred-pasting-file?
+  []
+  (:editor/perferred-pasting-file? (sub-config)))
+
 (defn doc-mode-enter-for-new-line?
   []
   (and (document-mode?)

@@ -370,9 +370,13 @@
                                            (state/pub-event! [:file-sync/onboarding-tip :unavailable])
 
                                            ;; current graph belong to other user, do nothing
-                                           (and (first @graphs-txid)
-                                                (not (fs-sync/check-graph-belong-to-current-user (user-handler/user-uuid)
-                                                                                                 (first @graphs-txid))))
+                                           (let [user-uuid (async/<! (user-handler/<user-uuid))
+                                                 user-uuid (when-not (instance? ExceptionInfo user-uuid) user-uuid)]
+                                             (and (first @graphs-txid)
+                                                  user-uuid
+                                                  (not (fs-sync/check-graph-belong-to-current-user
+                                                        user-uuid
+                                                        (first @graphs-txid)))))
                                            nil
 
                                            (and synced-file-graph?
