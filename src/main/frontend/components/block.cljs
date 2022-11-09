@@ -312,8 +312,7 @@
           :title   title}
          metadata)]
        [:.asset-overlay]
-       (let [image-src (string/replace src #"^assets://" "")
-             _ (prn "image-src:" image-src)]
+       (let [image-src (string/replace src #"^assets://" "")]
          [:.asset-action-bar {:aria-hidden "true"}
           ;; the image path bar
           (when (util/electron?)
