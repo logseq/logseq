@@ -1,10 +1,24 @@
 (ns frontend.db.model-test
-  (:require [cljs.test :refer [use-fixtures deftest is]]
+  (:require [cljs.test :refer [use-fixtures deftest is are]]
             [frontend.db.model :as model]
             [frontend.test.helper :as test-helper :refer [load-test-files]]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
                      :after test-helper/destroy-test-db!})
+
+(deftest get-namespace-pages
+  (load-test-files [{:file/path "pages/a.b.c.md"
+                     :file/content "foo"}
+                    {:file/path "pages/b.c.md"
+                     :file/content "bar"}
+                    {:file/path "pages/b.d.md"
+                     :file/content "baz"}])
+
+  (is (= ["a/b" "a/b/c"]
+         (map :block/name (model/get-namespace-pages test-helper/test-db "a"))))
+
+  (is (= ["b/c" "b/d"]
+         (map :block/name (model/get-namespace-pages test-helper/test-db "b")))))
 
 (deftest get-page-namespace-routes
   (load-test-files [{:file/path "pages/a.b.c.md"
@@ -18,69 +32,40 @@
          (map :block/name (model/get-page-namespace-routes test-helper/test-db "b/c")))
       "Empty if page exists"))
 
-;; (deftest test-page-alias-with-multiple-alias
-;;   []
-;;   (p/let [files [{:file/path "a.md"
-;;                   :file/content "---\ntitle: a\nalias: b, c\n---"}
-;;                  {:file/path "b.md"
-;;                   :file/content "---\ntitle: b\nalias: a, d\n---"}
-;;                  {:file/path "e.md"
-;;                   :file/content "---\ntitle: e\n---\n## ref to [[b]]"}]
-;;           _ (-> (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false})
-;;                 (p/catch (fn [] "ignore indexedDB error")))
-;;           a-aliases (model/page-alias-set test-db "a")
-;;           b-aliases (model/page-alias-set test-db "b")
-;;           alias-names (model/get-page-alias-names test-db "a")
-;;           b-ref-blocks (model/get-page-referenced-blocks test-db "b")
-;;           a-ref-blocks (model/get-page-referenced-blocks test-db "a")]
-;;     (are [x y] (= x y)
-;;       4 (count a-aliases)
-;;       4 (count b-aliases)
-;;       1 (count b-ref-blocks)
-;;       1 (count a-ref-blocks)
-;;       (set ["b" "c" "d"]) (set alias-names))))
+(deftest test-page-alias-with-multiple-alias
+  (load-test-files [{:file/path "aa.md"
+                     :file/content "alias:: ab, ac"}
+                    {:file/path "ab.md"
+                     :file/content "alias:: aa, ad"}
+                    {:file/path "ae.md"
+                     :file/content "## ref to [[ab]]"}])
+  (let [a-aliases (model/page-alias-set test-helper/test-db "aa")
+        b-aliases (model/page-alias-set test-helper/test-db "ab")
+        alias-names (model/get-page-alias-names test-helper/test-db "aa")
+        b-ref-blocks (model/get-page-referenced-blocks "ab")
+        a-ref-blocks (model/get-page-referenced-blocks "aa")]
 
-;; (deftest test-page-alias-set
-;;   []
-;;   (p/let [files [{:file/path "a.md"
-;;                   :file/content "---\ntitle: a\nalias: [[b]]\n---"}
-;;                  {:file/path "b.md"
-;;                   :file/content "---\ntitle: b\nalias: [[c]]\n---"}
-;;                  {:file/path "d.md"
-;;                   :file/content "---\ntitle: d\n---\n## ref to [[b]]"}]
-;;           _ (-> (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false})
-;;                 (p/catch (fn [] "ignore indexedDB error")))
-;;           a-aliases (model/page-alias-set test-db "a")
-;;           b-aliases (model/page-alias-set test-db "b")
-;;           alias-names (model/get-page-alias-names test-db "a")
-;;           b-ref-blocks (model/get-page-referenced-blocks test-db "b")
-;;           a-ref-blocks (model/get-page-referenced-blocks test-db "a")]
-;;     (are [x y] (= x y)
-;;       3 (count a-aliases)
-;;       1 (count b-ref-blocks)
-;;       1 (count a-ref-blocks)
-;;       (set ["b" "c"]) (set alias-names))))
+    (are [x y] (= x y)
+         4 (count a-aliases)
+         4 (count b-aliases)
+         4 (count b-ref-blocks)
+         4 (count a-ref-blocks)
+         #{"ab" "ac" "ad"} (set alias-names))))
 
-;; (deftest test-page-alias-without-brackets
-;;   []
-;;   (p/let [files [{:file/path "a.md"
-;;                   :file/content "---\ntitle: a\nalias: b\n---"}
-;;                  {:file/path "b.md"
-;;                   :file/content "---\ntitle: b\nalias: c\n---"}
-;;                  {:file/path "d.md"
-;;                   :file/content "---\ntitle: d\n---\n## ref to [[b]]"}]
-;;           _ (-> (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false})
-;;                 (p/catch (fn [] "ignore indexedDB error")))
-;;           a-aliases (model/page-alias-set test-db "a")
-;;           b-aliases (model/page-alias-set test-db "b")
-;;           alias-names (model/get-page-alias-names test-db "a")
-;;           b-ref-blocks (model/get-page-referenced-blocks test-db "b")
-;;           a-ref-blocks (model/get-page-referenced-blocks test-db "a")]
-;;     (are [x y] (= x y)
-;;       3 (count a-aliases)
-;;       1 (count b-ref-blocks)
-;;       1 (count a-ref-blocks)
-;;       (set ["b" "c"]) (set alias-names))))
+(deftest test-page-alias-set
+  (load-test-files [{:file/path "aa.md"
+                     :file/content "alias:: ab"}
+                    {:file/path "ab.md"
+                     :file/content "alias:: ac"}
+                    {:file/path "ad.md"
+                     :file/content "## ref to [[ab]]"}])
+  (let [a-aliases (model/page-alias-set test-helper/test-db "aa")
+        alias-names (model/get-page-alias-names test-helper/test-db "aa")
+        a-ref-blocks (model/get-page-referenced-blocks "aa")]
+    (are [x y] (= x y)
+         3 (count a-aliases)
+         3 (count a-ref-blocks)
+         #{"ab" "ac"} (set alias-names))))
 
 (deftest get-pages-that-mentioned-page-with-show-journal
   (load-test-files [{:file/path "journals/2020_08_15.md"
