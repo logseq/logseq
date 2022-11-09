@@ -47,7 +47,8 @@ export class IdleState<
     } = this.app
 
     if (event.button === 2) {
-      this.tool.transition('contextMenu', info)
+      // relies on @radix-ui/react-context-menu Root's onOpenChange now
+      // this.tool.transition('contextMenu', info)
       return
     }
 
