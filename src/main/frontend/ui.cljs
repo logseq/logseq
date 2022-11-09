@@ -258,7 +258,7 @@
 (declare button)
 
 (rum/defc notification-clear-all
-  [state]
+  []
   [:div.ui__notifications-content
    [:div.pointer-events-auto
     (button "Clear all"
@@ -284,8 +284,8 @@
                        (css-transition
                         {:timeout 100
                          :k       "clear-all"}
-                        (fn [state]
-                          (notification-clear-all state))))
+                        (fn [_state]
+                          (notification-clear-all))))
            items (if clear-all (cons clear-all notifications) notifications)]
        (doall items)))))
 
