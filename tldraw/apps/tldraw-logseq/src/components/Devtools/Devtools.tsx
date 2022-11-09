@@ -25,7 +25,7 @@ const HistoryStack = observer(function HistoryStack() {
   }, [])
 
   React.useEffect(() => {
-    requestIdleCallback(() => {
+    requestAnimationFrame(() => {
       anchorRef.current
         ?.querySelector(`[data-item-index="${app.history.pointer}"]`)
         ?.scrollIntoView()
