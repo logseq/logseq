@@ -280,7 +280,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     const getWhiteboardsTldrFromText = (text: string) => {
       const innerText = text.match(/<whiteboard-tldr>(.*)<\/whiteboard-tldr>/)?.[1]
       if (innerText) {
-        return safeParseJson(decodeURIComponent(innerText))
+        return safeParseJson(innerText)
       }
     }
 

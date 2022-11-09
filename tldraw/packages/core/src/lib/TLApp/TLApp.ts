@@ -494,7 +494,7 @@ export class TLApp<
         // convey the bindings to maintain the new links after pasting
         bindings: toJS(this.currentPage.bindings),
       })
-      const tldrawString = `<whiteboard-tldr>${encodeURIComponent(jsonString)}</whiteboard-tldr>`
+      const tldrawString = encodeURIComponent(`<whiteboard-tldr>${jsonString}</whiteboard-tldr>`)
       // FIXME: use `writeClipboard` in frontend.utils
       navigator.clipboard.write([
         new ClipboardItem({
