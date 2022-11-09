@@ -197,10 +197,8 @@
                             asset-path (gp-config/remove-asset-protocol src)]
                         (if (string/blank? asset-path)
                           (reset! *exist? false)
-                          (-> (fs/file-exists? "" asset-path)
-                              (p/then
-                               (fn [exist?]
-                                 (reset! *exist? (boolean exist?))))))
+                          (p/let [exist? (fs/file-or-href-exists? "" asset-path)]
+                            (reset! *exist? (boolean exist?))))
                         (assoc state ::asset-path asset-path ::asset-file? true))
                       state)))
    :will-update (fn [state]
@@ -314,8 +312,10 @@
           :title   title}
          metadata)]
        [:.asset-overlay]
-       (let [image-src (string/replace src #"^assets://" "")]
+       (let [image-src (string/replace src #"^assets://" "")
+             _ (prn "image-src:" image-src)]
          [:.asset-action-bar {:aria-hidden "true"}
+          ;; the image path bar
           (when (util/electron?)
             [:button.asset-action-btn.text-left
              {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))

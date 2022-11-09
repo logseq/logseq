@@ -14,7 +14,8 @@
             [promesa.core :as p]
             [frontend.db :as db]
             [clojure.string :as string]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [logseq.graph-parser.util :as gp-util]))
 
 (defonce nfs-record (nfs/->Nfs))
 (defonce bfs-record (bfs/->Bfs))
@@ -215,6 +216,15 @@
    (stat dir path)
    (fn [stat] (not (nil? stat)))
    (fn [_e] false)))
+
+(defn file-or-href-exists?
+  "It not only accept path, but also href (url encoded path)"
+  [dir href]
+  (p/let [exist? (file-exists? dir href)
+          decoded-href   (gp-util/safe-decode-uri-component href)
+          decoded-exist? (when (not= decoded-href href)
+                           (file-exists? dir decoded-href))]
+    (or exist? decoded-exist?)))
 
 (defn dir-exists?
   [dir]
