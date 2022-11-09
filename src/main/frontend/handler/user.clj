@@ -1,5 +1,5 @@
-(ns frontend.handler.user)
-
+(ns frontend.handler.user
+  "Macros.")
 
 (defmacro <wrap-ensure-id&access-token
   [& body]

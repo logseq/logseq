@@ -9,7 +9,7 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [cljs-http.client :as http]
-            [cljs.core.async :as async :refer [go go-loop <! >! timeout chan]]))
+            [cljs.core.async :as async :refer [go <!]]))
 
 (defn set-preferred-format!
   [format]
