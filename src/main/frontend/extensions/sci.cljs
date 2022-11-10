@@ -9,27 +9,33 @@
   (/ (reduce + coll) (count coll)))
 
 (defn eval-string
-  [s]
+  ([s]
+   (eval-string s {}))
+  ([s ns]
   (try
     (sci/eval-string s {:bindings {'sum sum
                                    'average average
                                    'parseFloat js/parseFloat
+                                   'custom-js (if (exists? js/customJs) js/customJs (Empty.))
                                    'isNaN js/isNaN
                                    'log js/console.log
-                                   'pprint util/pp-str}})
+                                   'pprint util/pp-str}
+                        :namespaces ns
+                        :classes {'logseq-api js/logseq.api 'logseq-gp js/logseq.graph_parser :allow :all}
+                        })
     (catch :default e
       (println "Query: sci eval failed:")
-      (js/console.error e))))
+      (js/console.error e)))))
 
 (defn call-fn
   [f & args]
   (apply f args))
 
 (defn eval-result
-  [code]
+  [code block]
   [:div
    [:code "Results:"]
    [:div.results.mt-1
-    [:pre.code
-     (let [result (eval-string code)]
-       (str result))]]])
+    (let [editor-ns {'block (sci/new-var 'block block)}
+          result (eval-string code {'editor editor-ns})]
+      (if (and (vector? result) (keyword? (first result))) result [:pre.code (str result)]))]])
