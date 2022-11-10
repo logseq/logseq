@@ -833,7 +833,11 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [db (db/get-db repo)]
       (let [query (cljs.reader/read-string query)
-            resolved-inputs (map (comp query-react/resolve-input cljs.reader/read-string) inputs)
+            resolved-inputs (map #(cond
+                                    (string? %)
+                                    (some-> % (cljs.reader/read-string) (query-react/resolve-input))
+                                    :else %)
+                                 inputs)
             result (apply d/q query db resolved-inputs)]
         (bean/->js (normalize-keyword-for-json result false))))))
 
