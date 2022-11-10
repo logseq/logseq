@@ -2939,7 +2939,7 @@
                                                     base-path
                                                     repo *sync-state remoteapi-with-stop
                                                     (if (mobile-util/native-platform?)
-                                                      10000
+                                                      2000
                                                       10000)
                                                     *txid nil (chan) *stopped? *paused?
                                                     (chan 1) (chan 1))
