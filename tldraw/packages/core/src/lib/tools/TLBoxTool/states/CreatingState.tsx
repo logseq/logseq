@@ -89,10 +89,6 @@ export class CreatingState<
     this.app.persist()
   }
 
-  onWheel: TLStateEvents<S, K>['onWheel'] = (info, e) => {
-    this.onPointerMove(info, e)
-  }
-
   onKeyDown: TLStateEvents<S>['onKeyDown'] = (info, e) => {
     switch (e.key) {
       case 'Escape': {
