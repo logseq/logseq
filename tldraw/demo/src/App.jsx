@@ -29,7 +29,7 @@ const documentModel = onLoad() ?? {
           type: 'logseq-portal',
           parentId: 'page1',
           point: [369.109375, 170.5546875],
-          size: [0, 0],
+          size: [240, 0],
           stroke: '',
           fill: '',
           strokeWidth: 2,
@@ -44,31 +44,26 @@ const documentModel = onLoad() ?? {
   ],
 }
 
-const Page = props => {
-  const [value, setValue] = React.useState(JSON.stringify(props, null, 2))
+const Page = () => {
   return (
     <div className="w-full font-mono page">
-      <div className="min-w-[240px]">
-        The Circle components are a collection of standardized UI elements and patterns for building
-        products. These pages provide more information and best practices on how to use the
-        components.The Circle components are a collection of standardized UI elements and patterns
-        for building products. These pages provide more information and best practices on how to use
-        the components.
-      </div>
+      The Circle components are a collection of standardized UI elements and patterns for building
+      products. These pages provide more information and best practices on how to use the
+      components.The Circle components are a collection of standardized UI elements and patterns for
+      building products. These pages provide more information and best practices on how to use the
+      components.
     </div>
   )
 }
 
-const Block = props => {
+const Block = () => {
   return (
     <div className="w-full font-mono single-block">
-      <div className="min-w-[240px]">
-        The Circle components are a collection of standardized UI elements and patterns for building
-        products. These pages provide more information and best practices on how to use the
-        components.The Circle components are a collection of standardized UI elements and patterns
-        for building products. These pages provide more information and best practices on how to use
-        the components.
-      </div>
+      The Circle components are a collection of standardized UI elements and patterns for building
+      products. These pages provide more information and best practices on how to use the
+      components.The Circle components are a collection of standardized UI elements and patterns for
+      building products. These pages provide more information and best practices on how to use the
+      components.
     </div>
   )
 }
