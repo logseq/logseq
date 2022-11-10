@@ -219,10 +219,6 @@ export class TLBaseLineBindingState<
     this.app.persist()
   }
 
-  onWheel: TLStateEvents<S, K>['onWheel'] = (info, e) => {
-    this.onPointerMove(info, e)
-  }
-
   onExit: TLStateEvents<S, K>['onExit'] = () => {
     this.app.clearBindingShape()
     this.app.history.resume()
