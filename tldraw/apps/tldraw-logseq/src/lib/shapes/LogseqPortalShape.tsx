@@ -54,13 +54,14 @@ const LogseqTypeTag = ({
   type,
   active,
 }: {
-  type: 'B' | 'P' | 'WP' | 'BS' | 'PS'
+  type: 'B' | 'P' | 'BA' | 'WP' | 'BS' | 'PS'
   active?: boolean
 }) => {
   const nameMapping = {
     B: 'block',
     P: 'page',
     WP: 'whiteboard',
+    BA: 'new-block',
     BS: 'block-search',
     PS: 'page-search',
   }
@@ -455,7 +456,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         },
         element: (
           <div className="tl-quick-search-option-row">
-            <LogseqTypeTag active type="B" />
+            <LogseqTypeTag active type="BA" />
             {q.length > 0 ? (
               <>
                 <strong>New whiteboard block:</strong>

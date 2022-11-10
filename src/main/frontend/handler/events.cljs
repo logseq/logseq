@@ -782,7 +782,10 @@
                  "Logseq file and folder naming rules"]
        " for more details."]
       [:p
-       "To solve this problem, we suggest you quit Logseq and update the filename format (on Settings > Advanced > Filename format > click EDIT button) in other devices to avoid more potential bugs."]]]]
+       (util/format "To solve this problem, we suggest you quit Logseq and update the filename format (on Settings > Advanced > Filename format > click EDIT button)%s to avoid more potential bugs."
+                    (if (and util/mac? (not (mobile-util/native-ios?)))
+                      ""
+                      " in other devices"))]]]]
    :warning
    false))
 
