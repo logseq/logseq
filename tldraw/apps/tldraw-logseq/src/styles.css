@@ -235,7 +235,7 @@ html[data-theme='light'] {
 }
 
 .tl-statusbar {
-  @apply absolute flex items-center w-full bottom-0;
+  @apply fixed flex items-center w-full bottom-0;
 
   font-family: monospace;
   font-size: 10px;
