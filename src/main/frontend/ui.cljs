@@ -255,20 +255,39 @@
 
             (icon "x" {:fill "currentColor"})]]]]]]])))
 
+(declare button)
+
+(rum/defc notification-clear-all
+  []
+  [:div.ui__notifications-content
+   [:div.pointer-events-auto
+    (button "Clear all"
+      :intent "logseq"
+      :on-click (fn []
+                  (notification/clear-all!)))]])
+
 (rum/defc notification < rum/reactive
   []
   (let [contents (state/sub :notification/contents)]
     (transition-group
      {:class-name "notifications ui__notifications"}
-     (doall (map (fn [el]
-                   (let [k (first el)
-                         v (second el)]
-                     (css-transition
-                      {:timeout 100
-                       :key     (name k)}
-                      (fn [state]
-                        (notification-content state (:content v) (:status v) k)))))
-                 contents)))))
+     (let [notifications (map (fn [el]
+                                (let [k (first el)
+                                      v (second el)]
+                                  (css-transition
+                                   {:timeout 100
+                                    :key     (name k)}
+                                   (fn [state]
+                                     (notification-content state (:content v) (:status v) k)))))
+                           contents)
+           clear-all (when (> (count contents) 1)
+                       (css-transition
+                        {:timeout 100
+                         :k       "clear-all"}
+                        (fn [_state]
+                          (notification-clear-all))))
+           items (if clear-all (cons clear-all notifications) notifications)]
+       (doall items)))))
 
 (rum/defc humanity-time-ago
   [input opts]
@@ -623,7 +642,7 @@
        [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
         [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
          [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-          {:type     "button" 
+          {:type     "button"
            :autoFocus "on"
            :class "ui__modal-enter"
            :on-click #(and (fn? on-confirm)

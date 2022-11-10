@@ -137,7 +137,7 @@
         :file-rn/affected-pages "Affected Pages after the format change"
         :file-rn/suggest-rename "Action required: "
         :file-rn/otherwise-breaking "Or title will become"
-        :file-rn/no-action "Well done! No further action required"
+        :file-rn/no-action "Well done! No further action required."
         :file-rn/confirm-proceed "Update format!"
         :file-rn/select-confirm-proceed "Dev: write format"
         :file-rn/unreachable-title "Warning! The page name will become {1} under current filename format, unless the `title::` property is set manually"

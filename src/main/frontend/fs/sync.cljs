@@ -469,17 +469,16 @@
 (defn- filter-download-files-with-reserved-chars
   "Skip downloading file paths with reserved chars."
   [files]
-  (let [reserved-files (filter
-                        #(fs-util/include-reserved-chars? (-relative-path %))
-                        files)]
+  (let [f #(and
+            (not (.-deleted? ^js %))
+            (fs-util/include-reserved-chars? (-relative-path %)))
+        reserved-files (filter f files)]
     (when (seq reserved-files)
       (state/pub-event! [:ui/notify-skipped-downloading-files
                          (map -relative-path reserved-files)])
       (prn "Skipped downloading those file paths with reserved chars: "
            (map -relative-path reserved-files)))
-    (remove
-     #(fs-util/include-reserved-chars? (-relative-path %))
-     files)))
+    (remove f files)))
 
 (defn- filter-upload-files-with-reserved-chars
   "Remove upoading file paths with reserved chars."
@@ -2450,8 +2449,9 @@
                 _     (when (not= (count es**) (count es*))
                         (println :debug :filter-too-huge-files
                                  (mapv relative-path (set/difference (set es*) (set es**)))))
-                paths (-> (sequence es->paths-xf es**)
-                          filter-upload-files-with-reserved-chars)
+                paths (cond-> (sequence es->paths-xf es**)
+                        (not= type "unlink")
+                        filter-upload-files-with-reserved-chars)
                 _     (println :sync-local->remote type paths)
                 r     (if (empty? paths)
                         (go @*txid)

@@ -570,7 +570,7 @@
         payload (-> event
                     (js->clj :keywordize-keys true)
                     (update :path (fn [path]
-                                    (when (string? path) (capacitor-fs/remove-private-part path)))))]
+                                    (when (string? path) (capacitor-fs/ios-force-include-private path)))))]
     (fs-watcher/handle-changed! type payload)
     (when (file-sync-handler/enable-sync?)
      (sync/file-watch-handler type payload))))
@@ -739,8 +739,6 @@
       (fs/watch-dir! dir))))
 
 (defmethod handle :ui/notify-files-with-reserved-chars [[_ paths]]
-  (sync/<sync-stop)
-
   (notification/show!
    [:div
     [:div.mb-4
@@ -784,7 +782,10 @@
                  "Logseq file and folder naming rules"]
        " for more details."]
       [:p
-       "To solve this problem, we suggest you update the filename format (on Settings > Advanced > Filename format > click EDIT button) in other devices to avoid more potential bugs."]]]]
+       (util/format "To solve this problem, we suggest you quit Logseq and update the filename format (on Settings > Advanced > Filename format > click EDIT button)%s to avoid more potential bugs."
+                    (if (and util/mac? (not (mobile-util/native-ios?)))
+                      ""
+                      " in other devices"))]]]]
    :warning
    false))
 

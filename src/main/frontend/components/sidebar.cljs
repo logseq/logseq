@@ -39,6 +39,7 @@
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [logseq.graph-parser.util :as gp-util]
             [react-draggable]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -461,13 +462,17 @@
   (let [finished (or (:finished state) 0)
         total (:total state)
         width (js/Math.round (* (.toFixed (/ finished total) 2) 100))
+        file-basename (util/node-path.basename
+                       (:current-parsing-file state))
+        display-filename (if (mobile-util/native-platform?)
+                           (gp-util/safe-decode-uri-component file-basename)
+                           file-basename)
         left-label [:div.flex.flex-row.font-bold
                     (t :parsing-files)
                     [:div.hidden.md:flex.flex-row
                      [:span.mr-1 ": "]
                      [:div.text-ellipsis-wrapper {:style {:max-width 300}}
-                      (util/node-path.basename
-                       (:current-parsing-file state))]]]]
+                      display-filename]]]]
     (ui/progress-bar-with-label width left-label (str finished "/" total))))
 
 (rum/defc main-content < rum/reactive db-mixins/query
