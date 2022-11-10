@@ -3006,6 +3006,7 @@
                                                   (go
                                                     ;; Wait for file watcher events
                                                     (<! (timeout 2000))
+                                                    (util/drain-chan finished-local->remote-chan)
                                                     (<! (<sync-local->remote-now))
                                                     (<! finished-local->remote-chan)
                                                     (prn "finish task: " @*task-id)
