@@ -2939,7 +2939,7 @@
                                                     base-path
                                                     repo *sync-state remoteapi-with-stop
                                                     (if (mobile-util/native-platform?)
-                                                      2000
+                                                      10000
                                                       10000)
                                                     *txid nil (chan) *stopped? *paused?
                                                     (chan 1) (chan 1))
@@ -3000,16 +3000,19 @@
                (mobile-util/native-ios?)
                (let [*task-id (atom nil)]
                  (when (and (not is-active?) (state/get-current-file-sync-graph-uuid))
-                   (go
-                     ;; Wait for file watcher events
-                     (<! (timeout 2000))
-                     (<! (<sync-local->remote-now))
+                   (p/let [task-id (.beforeExit ^js BackgroundTask
+                                                (fn []
+                                                  (prn "before exit")
+                                                  (go
+                                                    ;; Wait for file watcher events
+                                                    (<! (timeout 2000))
+                                                    (<! (<sync-local->remote-now))
+                                                    (<! finished-local->remote-chan)
+                                                    (prn "finish task: " @*task-id)
+                                                    (let [opt #js {:taskId @*task-id}]
+                                                      (.finish ^js BackgroundTask opt)))))]
 
-                     (p/let [task-id (.beforeExit ^js BackgroundTask
-                                                 (fn []
-                                                   (<! finished-local->remote-chan)
-                                                   (.finish ^js BackgroundTask @*task-id)))]
-                      (reset! *task-id task-id)))))
+                     (reset! *task-id task-id))))
 
                :else
                nil)))
