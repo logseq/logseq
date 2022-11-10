@@ -2976,7 +2976,7 @@
 
     (reset! current-sm-graph-uuid nil)))
 
-(defn <sync-local->remote []
+(defn <sync-local->remote-now []
   (go
     (when-let [_sm ^SyncManager (state/get-file-sync-manager (state/get-current-file-sync-graph-uuid))]
       (offer! immediately-local->remote-chan true))))
@@ -3003,7 +3003,7 @@
                    (go
                      ;; Wait for file watcher events
                      (<! (timeout 2000))
-                     (<! (<sync-local->remote))
+                     (<! (<sync-local->remote-now))
 
                      (p/let [task-id (.beforeExit ^js BackgroundTask
                                                  (fn []
