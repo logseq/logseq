@@ -330,6 +330,11 @@
   resolved "https://registry.yarnpkg.com/@capacitor/status-bar/-/status-bar-4.0.1.tgz#d1320add5f4ef383394b94beae45a0c5af7250e1"
   integrity sha512-BmEyOf3m/hAf8bO4hCX0m5gpQPSgd05mGYl+9E841WUZeJjcYlmiG/EBshAUb2uGCVtyNaG36yPXB0r0Ypg+rw==
 
+"@capawesome/capacitor-background-task@^2.0.0":
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/@capawesome/capacitor-background-task/-/capacitor-background-task-2.0.0.tgz#d95029423ba23adfa1681b54516154465a40e759"
+  integrity sha512-rDr2uZIzWW5j66SbahQd+uqJvX/K/joEVLzf4e5ouOrz/WUS9Opi6d6it8rrMpILt5RhYRYSMX6kvTmscv1LoA==
+
 "@electron/get@^1.14.1":
   version "1.14.1"
   resolved "https://registry.yarnpkg.com/@electron/get/-/get-1.14.1.tgz#16ba75f02dffb74c23965e72d617adc721d27f40"
