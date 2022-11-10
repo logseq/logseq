@@ -201,7 +201,9 @@
           (list :finished-local->remote :finished-remote->local)
           (when-let [current-uuid (state/get-current-file-sync-graph-uuid)]
             (state/clear-file-sync-progress! current-uuid)
-            (state/set-state! [:file-sync/graph-state current-uuid :file-sync/last-synced-at] (:epoch data)))
+            (state/set-state! [:file-sync/graph-state current-uuid :file-sync/last-synced-at] (:epoch data))
+            (when (= event :finished-local->remote)
+              (async/offer! sync/finished-local->remote-chan true)))
 
           :start
           (when-let [current-uuid (state/get-current-file-sync-graph-uuid)]
