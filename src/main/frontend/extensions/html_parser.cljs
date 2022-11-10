@@ -171,7 +171,7 @@
                                    (string? (first children))
                                    (let [pattern (config/get-code format)]
                                      (str " "
-                                          (str pattern (first children) pattern)
+                                          pattern (map-join children) pattern
                                           " "))
 
                                    ;; skip monospace style, since it has more complex children
