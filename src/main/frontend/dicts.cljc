@@ -1140,6 +1140,7 @@
         :settings-page/enable-developer-mode "Activer le mode développeur"
         :settings-page/disable-developer-mode "Désactiver le mode développeur"
         :settings-page/developer-mode-desc "Le mode développeur aide les contributeurs et les développeurs d'extension à tester leur intégration avec Logseq."
+        :settings-page/preferred-pasting-file "Fichier de préférence pour le collage"
         :logseq "Logseq"
         :on "ON"
         :more-options "Plus d'options"
