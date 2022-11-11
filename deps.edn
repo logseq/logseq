@@ -31,7 +31,8 @@
   instaparse/instaparse                 {:mvn/version "1.4.10"}
   org.clojars.mmb90/cljs-cache          {:mvn/version "0.1.4"}
   logseq/graph-parser                   {:local/root "deps/graph-parser"}
-  metosin/malli                         {:mvn/version "0.9.1"}}
+  metosin/malli                         {:mvn/version "0.9.1"}
+  fipp/fipp                             {:mvn/version "0.6.26"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.54"}
@@ -46,6 +47,10 @@
                                 pjstadig/humane-test-output      {:mvn/version "0.11.0"}
                                 org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}}
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
+
+           :bench {:extra-paths ["src/bench/"]
+                   :extra-deps {olical/cljs-test-runner {:mvn/version "3.8.0"}}
+                   :main-opts ["-m" "cljs-test-runner.main"]}
 
            ;; Use :replace-deps for tools. See https://github.com/clj-kondo/clj-kondo/issues/1536#issuecomment-1013006889
            :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.10.14"}}
