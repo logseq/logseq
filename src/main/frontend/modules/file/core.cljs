@@ -5,6 +5,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
+            [frontend.modules.file.uprint :as up]
             [frontend.state :as state]
             [frontend.util.property :as property]
             [frontend.util.fs :as fs-util]
@@ -133,20 +134,6 @@
 
 (defn- remove-transit-ids [block] (dissoc block :db/id :block/file))
 
-(defn print-prefix-map* [prefix m print-one writer opts]
-  (pr-sequential-writer
-    writer
-    (fn [e w opts]
-      (do (print-one (key e) w opts)
-          (-write w \space)
-          (print-one (val e) w opts)))
-    (str prefix "{") ", " "}\n"
-    opts (seq m)))
-
-(defn pr-blocks-str [x]
-  (with-redefs [print-prefix-map print-prefix-map*]
-    (pr-str x)))
-
 (defn save-tree-aux!
   [page-block tree]
   (let [page-block (db/pull (:db/id page-block))
@@ -154,8 +141,8 @@
         file-path (-> (db-utils/entity file-db-id) :file/path)]
     (if (and (string? file-path) (not-empty file-path))
       (let [new-content (if (= "whiteboard" (:block/type page-block))
-                          (pr-blocks-str {:pages  (list (remove-transit-ids page-block))
-                                          :blocks tree})
+                          (up/ugly-pr-str {:pages  (list (remove-transit-ids page-block))
+                                           :blocks tree})
                           (tree->file-content tree {:init-level init-level}))
             files [[file-path new-content]]
             repo (state/get-current-repo)]
