@@ -226,7 +226,7 @@
             (do
               (state/set-state! :pdf/ref-highlight matched)
               ;; open pdf viewer
-              (state/set-state! :pdf/current (inflate-asset file-path)))
+              (state/set-current-pdf! (inflate-asset file-path)))
             (js/console.debug "[Unmatched highlight ref]" block)))))))
 
 (defn goto-block-ref!

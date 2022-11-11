@@ -690,18 +690,17 @@
               (. link-service setDocument pdf-document)
               (. link-service setViewer viewer)
 
-              ;; TODO: debug
               (set! (. js/window -lsPdfViewer) viewer)
 
               (p/then (. viewer setDocument pdf-document)
                       #(set-state! {:viewer viewer :bus event-bus :link link-service :el el}))
 
-              ;;TODO: destroy
               (fn []
                 (when-let [last-page (.-currentPageNumber viewer)]
                   (storage/set (str "ls-pdf-last-page-" (util/node-path.basename url)) last-page))
-
-                (when pdf-document (.destroy pdf-document)))))
+                (when pdf-document (.destroy pdf-document))
+                (.cleanup viewer)
+                (set! (. js/window -lsPdfViewer) nil))))
      [])
 
     ;; interaction events
