@@ -76,7 +76,12 @@
                :else
                nil)]
 
-       [:div.text-sm.opacity-50 (str "Version " version)]]]
+       [:div.text-sm version]
+
+       [:a.text-sm.fade-link.underline.inline
+        {:target "_blank"
+         :href "https://docs.logseq.com/#/page/changelog"}
+        "What's new?"]]]
 
      (when-not (or update-pending?
                    (string/blank? type))
