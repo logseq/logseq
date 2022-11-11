@@ -74,6 +74,9 @@ export function useGestureEvents(ref: React.RefObject<HTMLDivElement>) {
       const elm = ref.current
       if (event instanceof WheelEvent) return
       if (!(event.target === elm || elm?.contains(event.target as Node))) return
+      if (!rOriginPoint.current) {
+        rOriginPoint.current = origin
+      }
       const delta = Vec.sub(rOriginPoint.current, origin)
       const trueDelta = Vec.sub(delta, rDelta.current)
       callbacks.onPinch?.(
