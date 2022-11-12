@@ -632,8 +632,8 @@
                                                           (when mode
                                                             (state/set-custom-theme! mode theme)
                                                             (state/set-theme-mode! mode))
-                                                          (hook-plugin-app :theme-changed theme)
-                                                          (state/set-state! :plugin/selected-theme url))))
+                                                          (state/set-state! :plugin/selected-theme url)
+                                                          (hook-plugin-app :theme-changed theme))))
 
                                 (.on "reset-custom-theme" (fn [^js themes]
                                                             (let [themes       (bean/->clj themes)
