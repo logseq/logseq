@@ -4,9 +4,9 @@
   (pr-sequential-writer
     writer
     (fn [e w opts]
-      (do (print-one (key e) w opts)
-          (-write w \space)
-          (print-one (val e) w opts)))
+      (print-one (key e) w opts)
+      (-write w \space)
+      (print-one (val e) w opts))
     (str prefix "\n{") \newline "}"
     opts (seq m)))
 

@@ -1,6 +1,5 @@
 (ns frontend.macros
-  #?(:cljs (:require-macros [frontend.macros])
-     :clj (:require [clojure.edn :as edn])))
+  #?(:cljs (:require-macros [frontend.macros])))
 
 #?(:clj
    (defmacro slurped

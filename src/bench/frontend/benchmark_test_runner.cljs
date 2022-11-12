@@ -4,7 +4,7 @@
             [frontend.macros :refer [slurped]]
             [frontend.modules.file.uprint :as up]
             [clojure.pprint :as pprint]
-            [clojure.test :refer [run-tests deftest testing]]
+            [clojure.test :refer [deftest testing]]
             [fipp.edn :as fipp]))
 
 (def onboarding
