@@ -368,7 +368,7 @@
     (when-let [custom-theme (state/sub [:ui/custom-theme (keyword theme)])]
       ;; If the name is nil, the user has not set a custom theme (initially {:mode light/dark}).
       ;; The url is not used because the default theme does not have an url.
-      (when-let [name (:name custom-theme)]
+      (if (some? (:name custom-theme))
         (js/LSPluginCore.selectTheme (bean/->js custom-theme)
                                      (bean/->js {:emit false}))
         (state/set-state! :plugin/selected-theme (:url custom-theme))))))
