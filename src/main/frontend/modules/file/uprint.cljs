@@ -7,11 +7,11 @@
       (do (print-one (key e) w opts)
           (-write w \space)
           (print-one (val e) w opts)))
-    (str prefix "{") \newline "}"
+    (str prefix "\n{") \newline "}"
     opts (seq m)))
 
 (defn ugly-pr-str
-  "Ugly printing fast, with newline per block"
+  "Ugly printing fast, with newlines so that git diffs are smaller"
   [x]
   (with-redefs [print-prefix-map print-prefix-map*]
     (pr-str x)))
