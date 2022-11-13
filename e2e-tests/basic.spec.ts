@@ -228,3 +228,14 @@ test('invalid page props #3944', async ({ page, block }) => {
   // Force rendering property block
   await block.enterNext()
 })
+
+test('Scheduled date picker should point to the already specified Date #6985', async({page,block})=>{
+  await createRandomPage(page);
+  await block.mustFill('testTask \n SCHEDULED: <2000-05-06 Sat>');
+  await block.enterNext();
+
+  // Open date picker
+  await page.click('a.opacity-80');
+  expect(page.locator('text=May 2000')).toBeVisible();
+  expect(page.locator('td:has-text("6").active')).toBeVisible();
+})
