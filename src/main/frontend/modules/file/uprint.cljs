@@ -1,4 +1,5 @@
-(ns frontend.modules.file.uprint)
+(ns frontend.modules.file.uprint
+  "A fast pprint alternative.")
 
 (defn print-prefix-map* [prefix m print-one writer opts]
   (pr-sequential-writer
