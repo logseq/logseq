@@ -236,7 +236,13 @@ export const ContextMenu = observer(function ContextMenu({
               {developerMode && (
                 <ReactContextMenu.Item
                   className="tl-menu-item"
-                  onClick={() => console.log(app.selectedShapesArray.map(s => toJS(s.serialized)))}
+                  onClick={() => {
+                    if (app.selectedShapesArray.length === 1) {
+                      console.log(toJS(app.selectedShapesArray[0].serialized))
+                    } else {
+                      console.log(app.selectedShapesArray.map(s => toJS(s.serialized)))
+                    }
+                  }}
                 >
                   (Dev) Print shape props
                 </ReactContextMenu.Item>

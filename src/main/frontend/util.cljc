@@ -8,6 +8,7 @@
             ["@capacitor/status-bar" :refer [^js StatusBar Style]]
             ["grapheme-splitter" :as GraphemeSplitter]
             ["remove-accents" :as removeAccents]
+            ["sanitize-filename" :as sanitizeFilename]
             ["check-password-strength" :refer [passwordStrength]]
             [frontend.loader :refer [load]]
             [cljs-bean.core :as bean]
@@ -72,7 +73,9 @@
        (when-let [^js ret (and (string? input)
                                (not (string/blank? input))
                                (passwordStrength input))]
-         (bean/->clj ret)))))
+         (bean/->clj ret)))
+     (defn safe-sanitize-file-name [s]
+       (sanitizeFilename (str s)))))
 
 #?(:cljs
    (defn ios?
@@ -88,6 +91,10 @@
 
 #?(:cljs
    (defn mobile?
+       "Triggering condition: Mobile phones
+        *** Warning!!! ***
+        For UX logic only! Don't use for FS logic
+        iPad / Android Pad doesn't trigger!"
      []
      (when-not node-test?
        (safe-re-find #"Mobi" js/navigator.userAgent))))
@@ -506,7 +513,7 @@
    (defn safe-path-join [prefix & paths]
      (let [path (apply node-path.join (cons prefix paths))]
        (if (and (electron?) (gstring/caseInsensitiveStartsWith path "file://"))
-         (js/decodeURIComponent (subs path 7))
+         (gp-util/safe-decode-uri-component (subs path 7))
          path))))
 
 (defn trim-safe

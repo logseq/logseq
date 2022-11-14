@@ -4,16 +4,7 @@
             [frontend.util :as util]
             [clojure.string :as string]
             [frontend.handler.property :as property-handler]
-            [frontend.db :as db]
-            [frontend.db.model :as db-model]
-            [frontend.mixins :as mixins]
             [rum.core :as rum]
-            [frontend.state :as state]
-            [goog.dom :as gdom]
-            [frontend.search :as search]
-            [frontend.components.search.highlight :as highlight]
-            [frontend.components.svg :as svg]
-            [frontend.modules.shortcut.core :as shortcut]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.notification :as notification]))
 

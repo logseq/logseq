@@ -189,8 +189,7 @@
     (when-let [property (db/pull [:block/uuid property-id])]
       (let [schema (:block/property-schema property)
             [success? property-value-or-error] (validate schema property-value)
-            multiple-values? (:multiple-values? schema)
-            object? (= "object" (:type schema))]
+            multiple-values? (:multiple-values? schema)]
         (when (and multiple-values? success?)
           (let [properties (:block/properties entity)
                 properties' (update properties property-id disj property-value-or-error)

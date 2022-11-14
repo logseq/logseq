@@ -375,6 +375,8 @@
 (rum/defc hiccup-content < rum/static
   (mixins/event-mixin
    (fn [state]
+     ;; fixme: this mixin will register global event listeners on window
+     ;; which might cause unexpected issues
      (mixins/listen state js/window "contextmenu"
                     (fn [e]
                       (let [target (gobj/get e "target")

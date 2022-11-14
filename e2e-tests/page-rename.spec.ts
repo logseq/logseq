@@ -6,17 +6,12 @@ import { IsMac, createPage, randomLowerString, newBlock, newInnerBlock, randomSt
  * Test rename feature
  ***/
 
-async function page_rename_test(page: Page, original_page_name: string, new_page_name: string) {
+async function rename_page(page: Page, new_name: string) {
   let selectAll = 'Control+a'
   if (IsMac) {
     selectAll = 'Meta+a'
   }
 
-  const rand = randomString(10)
-  let original_name = original_page_name + rand
-  let new_name = new_page_name + rand
-
-  await createPage(page, original_name)
   await page.click('.ls-page-title .page-title')
   await page.waitForSelector('input[type="text"]')
   await page.keyboard.press(selectAll)
@@ -24,6 +19,17 @@ async function page_rename_test(page: Page, original_page_name: string, new_page
   await page.type('.title input', new_name)
   await page.keyboard.press('Enter')
   await page.click('.ui__confirm-modal button')
+}
+
+async function page_rename_test(page: Page, original_page_name: string, new_page_name: string) {
+  const rand = randomString(10)
+  let original_name = original_page_name + rand
+  let new_name = new_page_name + rand
+
+  await createPage(page, original_name)
+
+  // Rename page in UI
+  await rename_page(page, new_name)
 
   expect(await page.innerText('.page-title .title')).toBe(new_name)
 
@@ -32,9 +38,46 @@ async function page_rename_test(page: Page, original_page_name: string, new_page
   // TODO: Test if page is hierarchy
 }
 
+async function homepage_rename_test(page: Page, original_page_name: string, new_page_name: string) {
+
+  const rand = randomString(10)
+  let original_name = original_page_name + rand
+  let new_name = new_page_name + rand
+
+  await createPage(page, original_name)
+
+  // Toggle settings
+  await page.click('#main-content-container')
+  await page.keyboard.press('t')
+  await page.keyboard.press('s')
+
+  await page.click('a[data-id="features"]')
+  await page.click('#settings div:nth-child(1) a')
+
+  await page.type('input', original_name)
+  await page.click('[aria-label="Close"]')
+
+  expect(await page.locator('.home-nav span.flex-1').innerText()).toBe(original_name);
+
+  await rename_page(page, new_name)
+
+  expect(await page.locator('.home-nav span.flex-1').innerText()).toBe(new_name);
+
+  // Reenable journal
+  await page.click('#main-content-container')
+  await page.keyboard.press('t')
+  await page.keyboard.press('s')
+  await page.click('a[data-id="features"]')
+  await page.click('#settings div:nth-child(1) a')
+  await page.click('[aria-label="Close"]')
+
+}
+
 test('page rename test', async ({ page }) => {
+  await homepage_rename_test(page, "abcd", "a/b/c/d")
   await page_rename_test(page, "abcd", "a.b.c.d")
   await page_rename_test(page, "abcd", "a/b/c/d")
+
 })
 
 // TODO introduce more samples when #4722 is fixed
@@ -45,7 +88,7 @@ test('page title property test', async ({ page }) => {
   let original_name = "etpde old" + rand
   let new_name = "etpde new" + rand
   await createPage(page, original_name)
-   // add some spaces to test if it is trimmed
+  // add some spaces to test if it is trimmed
   await page.type(':nth-match(textarea, 1)', 'title:: ' + new_name + "     ")
   await page.press(':nth-match(textarea, 1)', 'Enter') // DWIM property mode creates new line
   await page.press(':nth-match(textarea, 1)', 'Enter')

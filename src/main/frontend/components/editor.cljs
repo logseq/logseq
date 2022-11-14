@@ -24,7 +24,6 @@
             [frontend.util.keycode :as keycode]
             [goog.dom :as gdom]
             [goog.string :as gstring]
-            [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.util :as gp-util]
             [promesa.core :as p]
             [react-draggable]
@@ -95,9 +94,6 @@
                                                      {:last-pattern commands/angle-bracket}))
         :class     "black"}))))
 
-(defn- in-sidebar? [el]
-  (not (.contains (.getElementById js/document "left-container") el)))
-
 (rum/defc page-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   "Embedded page searching popup"
@@ -109,7 +105,6 @@
         (when input
           (let [current-pos (cursor/pos input)
                 edit-content (or (state/sub [:editor/content id]) "")
-                sidebar? (in-sidebar? input)
                 q (or
                    @editor-handler/*selected-text
                    (when (= action :page-search-hashtag)
@@ -150,7 +145,7 @@
              matched-pages
              {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
               :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
-              :item-render (fn [page-name chosen?]
+              :item-render (fn [page-name]
                              [:div.flex
                               (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
                               (highlight/highlight-exact-query page-name q)])
@@ -259,8 +254,7 @@
         input (gdom/getElement id)
         property-entity (db/entity [:block/name (util/page-name-sanity-lc property)])]
     (when (and entity property-entity input)
-      (let [current-pos (cursor/pos input)
-            edit-content (state/sub [:editor/content id])
+      (let [edit-content (state/sub [:editor/content id])
             q (string/triml (or edit-content ""))
             matched-values (editor-handler/get-matched-property-values property q)
             non-exist-handler #(property-handler/add-property-value! entity (:block/uuid property-entity) q)]

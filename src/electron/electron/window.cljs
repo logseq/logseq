@@ -123,7 +123,7 @@
           new-win-handler
           (fn [e url]
             (let [url (if (string/starts-with? url "file:")
-                        (js/decodeURIComponent url) url)
+                        (utils/safe-decode-uri-component url) url)
                   url (if-not win32? (string/replace url "file://" "") url)]
               (logger/info "new-window" url)
               (if (some #(string/includes?

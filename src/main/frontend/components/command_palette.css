@@ -37,15 +37,6 @@
       height: var(--palettle-input-height);
     }
 
-    .recent-search {
-      > .wrap {
-        > div:last-child {
-          display: flex !important;
-          justify-items: center;
-        }
-      }
-    }
-
     .cp__palette-input {
       color: var(--ls-secondary-text-color);
       border: none;

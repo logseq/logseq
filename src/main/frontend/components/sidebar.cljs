@@ -39,6 +39,7 @@
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [logseq.graph-parser.util :as gp-util]
             [react-draggable]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -397,7 +398,8 @@
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
-                                  (= :home route-name))]
+                                  (= :home route-name))
+        margin-less-pages? (or onboarding-and-home? margin-less-pages?)]
     [:div#main-container.cp__sidebar-main-layout.flex-1.flex
      {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
 
@@ -442,17 +444,15 @@
 
          :else
          [:div
-          {:class (if margin-less-pages? "" (util/hiccup->class "mx-auto.pb-24"))
-           :style {:margin-bottom (cond
-                                    margin-less-pages? 0
-                                    onboarding-and-home? -48
-                                    :else 120)
-                   :padding-bottom (when (mobile-util/native-iphone?) "7rem")}}
+          {:class (if (or onboarding-and-home? margin-less-pages?) "" (util/hiccup->class "mx-auto.pb-24"))
+           :style {:margin-bottom  (cond
+                                     margin-less-pages? 0
+                                     onboarding-and-home? 0
+                                     :else 120)}}
           main-content])
 
        (when onboarding-and-home?
-         [:div {:style {:padding-bottom 200}}
-          (onboarding/intro)])]]]))
+         (onboarding/intro onboarding-and-home?))]]]))
 
 (defonce sidebar-inited? (atom false))
 ;; TODO: simplify logic
@@ -462,13 +462,17 @@
   (let [finished (or (:finished state) 0)
         total (:total state)
         width (js/Math.round (* (.toFixed (/ finished total) 2) 100))
+        file-basename (util/node-path.basename
+                       (:current-parsing-file state))
+        display-filename (if (mobile-util/native-platform?)
+                           (gp-util/safe-decode-uri-component file-basename)
+                           file-basename)
         left-label [:div.flex.flex-row.font-bold
                     (t :parsing-files)
                     [:div.hidden.md:flex.flex-row
                      [:span.mr-1 ": "]
                      [:div.text-ellipsis-wrapper {:style {:max-width 300}}
-                      (util/node-path.basename
-                       (:current-parsing-file state))]]]]
+                      display-filename]]]]
     (ui/progress-bar-with-label width left-label (str finished "/" total))))
 
 (rum/defc main-content < rum/reactive db-mixins/query

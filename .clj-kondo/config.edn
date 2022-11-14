@@ -30,6 +30,8 @@
              datascript.transit dt
              datascript.db ddb
              electron.ipc ipc
+             electron.utils utils
+             "/electron/utils" js-utils
              frontend.commands commands
              frontend.config config
              frontend.date date

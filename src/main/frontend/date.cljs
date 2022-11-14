@@ -43,7 +43,8 @@
      "EEEE, MM/dd/yyyy"
      "EEEE, yyyy/MM/dd"
      "dd-MM-yyyy"
-     "dd.MM.yyyy"
+     ;; This tyle will mess up other date formats like "2022-08" "2022Q4" "2022/10"
+     ;;  "dd.MM.yyyy"
      "MM/dd/yyyy"
      "MM-dd-yyyy"
      "MM_dd_yyyy"
@@ -170,7 +171,8 @@
                  :minute "2-digit"
                  :hourCycle "h23"}))))
 
-(defn valid?
+(defn normalize-date
+  "Given raw date string, return a normalized date string at best effort."
   [s]
   (some
    (fn [formatter]
@@ -180,10 +182,15 @@
          false)))
    (journal-title-formatters)))
 
-(defn valid-journal-title?
+(defn normalize-journal-title
+  "Normalize journal title at best effort. Return nil if title is not a valid date"
   [title]
   (and title
-       (valid? (gp-util/capitalize-all title))))
+       (normalize-date (gp-util/capitalize-all title))))
+
+(defn valid-journal-title?
+  [title]
+  (boolean (normalize-journal-title title)))
 
 (defn journal-title->
   ([journal-title then-fn]

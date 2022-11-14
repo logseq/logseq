@@ -24,7 +24,7 @@
     (let [result (first (gp-util/split-last "." file-name))
           ext (string/lower-case (gp-util/get-file-ext filepath))]
       (if (or (gp-config/mldoc-support? ext) (= "edn" ext))
-        (js/decodeURIComponent (string/replace result "." "/"))
+        (gp-util/safe-decode-uri-component (string/replace result "." "/"))
         result))))
 
 (defn- get-page-name

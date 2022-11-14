@@ -17,6 +17,7 @@
   --ls-error-color: var(--color-red-500);
   --ls-warning-color: var(--color-orange-500);
   --ls-success-color: var(--color-green-500);
+  --ls-highlight-color-default: var(--ls-secondary-background-color);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -78,6 +79,8 @@ html[data-theme='dark'] {
   --ls-page-blockquote-color: var(--ls-primary-text-color);
   --ls-page-blockquote-bg-color: var(--ls-secondary-background-color);
   --ls-page-blockquote-border-color: var(--ls-border-color);
+  --ls-page-mark-color: #262626;
+  --ls-page-mark-bg-color: #fef3ac;
   --ls-page-inline-code-color: var(--ls-primary-text-color);
   --ls-page-inline-code-bg-color: #01222a;
   --ls-scrollbar-foreground-color: #11505f;
@@ -102,6 +105,8 @@ html[data-theme='dark'] {
   --ls-error-background-color: var(--color-red-900);
   --ls-warning-text-color: var(--color-yellow-100);
   --ls-warning-background-color: var(--color-yellow-900);
+  --ls-success-text-color: var(--color-green-100);
+  --ls-success-background-color: var(--color-green-900);
   --ls-focus-ring-color: rgba(18, 98, 119, 0.5);
   --ls-header-button-background: #dee4ea;
   --color-level-1: var(--ls-secondary-background-color);
@@ -153,6 +158,8 @@ html[data-theme='light'] {
   --ls-page-blockquote-color: var(--ls-primary-text-color);
   --ls-page-blockquote-bg-color: #fbfaf8;
   --ls-page-blockquote-border-color: #799bbc;
+  --ls-page-mark-color: #262626;
+  --ls-page-mark-bg-color: #fef3ac;
   --ls-page-inline-code-bg-color: #f7f7f7;
   --ls-page-inline-code-color: var(--ls-primary-text-color);
   --ls-scrollbar-foreground-color: rgba(0, 0, 0, 0.1);
@@ -177,6 +184,8 @@ html[data-theme='light'] {
   --ls-error-background-color: var(--color-red-100);
   --ls-warning-text-color: var(--color-yellow-800);
   --ls-warning-background-color: var(--color-yellow-100);
+  --ls-success-text-color: var(--color-green-800);
+  --ls-success-background-color: var(--color-green-100);
   --ls-focus-ring-color: rgba(66, 133, 244, 0.5);
   --ls-header-button-background: rgba(15, 20, 25, 1);
   --color-level-1: var(--ls-secondary-background-color);
@@ -633,7 +642,7 @@ span.warning, div.warning:not(.admonitionblock), p.warning {
 }
 
 .bg-warning {
-  background: var(--ls-waring-background-color);
+  background: var(--ls-warning-background-color);
 }
 
 a.error,
@@ -755,8 +764,8 @@ a.navigation {
 /* text mark/highlight */
 
 mark {
-  background: #fef3ac;
-  color: #262626;
+  background: var(--ls-page-mark-bg-color);
+  color: var(--ls-page-mark-color);
   padding: 2px 4px;
   border-radius: 3px;
 }

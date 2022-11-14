@@ -10,8 +10,7 @@
             [frontend.config :as config]
             [frontend.state :as state]
             [frontend.handler.notification :as notification]
-            ["/frontend/utils" :as utils]
-            [frontend.encrypt :as encrypt]))
+            ["/frontend/utils" :as utils]))
 
 ;; We need to cache the file handles in the memory so that
 ;; the browser will not keep asking permissions.
@@ -58,10 +57,7 @@
 (defn- contents-matched?
   [disk-content db-content]
   (when (and (string? disk-content) (string? db-content))
-    (if (encrypt/encrypted-db? (state/get-current-repo))
-      (p/let [decrypted-content (encrypt/decrypt disk-content)]
-        (= (string/trim decrypted-content) (string/trim db-content)))
-      (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
+    (p/resolved (= (string/trim disk-content) (string/trim db-content)))))
 
 (defrecord ^:large-vars/cleanup-todo Nfs []
   protocol/Fs
@@ -173,16 +169,12 @@
                          (not contents-matched?)
                          (not (contains? #{"excalidraw" "edn" "css"} ext))
                          (not (string/includes? path "/.recycle/")))
-                      (p/let [local-content (encrypt/decrypt local-content)]
-                        (state/pub-event! [:file/not-matched-from-disk path local-content content]))
+                      (state/pub-event! [:file/not-matched-from-disk path local-content content])
                       (p/let [_ (verify-permission repo file-handle true)
                               _ (utils/writeFile file-handle content)
                               file (.getFile file-handle)]
                         (when file
-                          (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
-                                            (encrypt/decrypt content)
-                                            content)]
-                            (db/set-file-content! repo path content))
+                          (db/set-file-content! repo path content)
                           (nfs-saved-handler repo path file))))))
                 (p/catch (fn [e]
                            (js/console.error e))))
@@ -232,7 +224,7 @@
            :file/size (get-attr "size")
            :file/type (get-attr "type")}))
       (p/rejected "File not exists")))
-  (open-dir [_this ok-handler]
+  (open-dir [_this _dir ok-handler]
     (utils/openDirectory #js {:recursive true}
                          ok-handler))
   (get-files [_this path-or-handle ok-handler]

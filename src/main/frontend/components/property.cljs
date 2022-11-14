@@ -5,8 +5,6 @@
             [clojure.string :as string]
             [frontend.handler.property :as property-handler]
             [frontend.db :as db]
-            [frontend.db.model :as db-model]
-            [frontend.mixins :as mixins]
             [rum.core :as rum]
             [frontend.state :as state]
             [goog.dom :as gdom]
@@ -116,12 +114,11 @@
                        (state/set-editor-action! :property-value-search))
                      50)))
         multiple-values? (:multiple-values? schema)
-        type (:type schema)
-        object? (= type "object")]
+        type (:type schema)]
     (cond
       multiple-values?
       (let [v' (if (coll? v) v (when v [v]))
-            v' (if (seq v) v [""])
+            v' (if (seq v') v' [""])
             editor-id' (str editor-id (count v'))
             new-editing? (state/sub [:editor/editing? editor-id'])]
         [:div.flex.flex-1.flex-col

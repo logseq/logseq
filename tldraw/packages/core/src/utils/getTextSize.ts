@@ -1,5 +1,5 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let melm: any
+let melm: HTMLElement
 
 interface TLTextMeasureStyles {
   fontStyle?: string
@@ -32,6 +32,7 @@ function getMeasurementDiv() {
     zIndex: '9999',
     userSelect: 'none',
     pointerEvents: 'none',
+    font: 'var(--ls-font-family)',
   })
 
   pre.tabIndex = -1
@@ -88,15 +89,17 @@ export function getTextLabelSize(
       return [10, 10]
     }
 
-    if (!melm.parent) document.body.appendChild(melm)
+    if (!melm.parentNode) document.body.appendChild(melm)
 
     melm.innerHTML = `${text}&#8203;`
     melm.style.font = font
     melm.style.padding = padding + 'px'
 
+    const rect = melm.getBoundingClientRect()
+
     // In tests, offsetWidth and offsetHeight will be 0
-    const width = melm.offsetWidth || 1
-    const height = melm.offsetHeight || 1
+    const width = Math.ceil(rect.width || 1)
+    const height = Math.ceil(rect.height || 1)
 
     saveCached(text, font, padding, [width, height])
   }

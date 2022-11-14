@@ -50,7 +50,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.handler.property :as property-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
@@ -199,10 +198,8 @@
                             asset-path (gp-config/remove-asset-protocol src)]
                         (if (string/blank? asset-path)
                           (reset! *exist? false)
-                          (-> (fs/file-exists? "" asset-path)
-                              (p/then
-                               (fn [exist?]
-                                 (reset! *exist? (boolean exist?))))))
+                          (p/let [exist? (fs/file-or-href-exists? "" asset-path)]
+                            (reset! *exist? (boolean exist?))))
                         (assoc state ::asset-path asset-path ::asset-file? true))
                       state)))
    :will-update (fn [state]
@@ -318,6 +315,7 @@
        [:.asset-overlay]
        (let [image-src (string/replace src #"^assets://" "")]
          [:.asset-action-bar {:aria-hidden "true"}
+          ;; the image path bar
           (when (util/electron?)
             [:button.asset-action-btn.text-left
              {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))
@@ -608,7 +606,7 @@
 
 (rum/defc page-cp
   "Accepts {:block/name sanitized / unsanitized page-name}"
-  [{:keys [html-export? redirect-page-name label children contents-page? preview?] :as config} page]
+  [{:keys [html-export? redirect-page-name label children contents-page?] :as config} page]
   (when-let [page-name-in-block (:block/name page)]
     (let [page-name-in-block (gp-util/remove-boundary-slashes page-name-in-block)
           page-name (util/page-name-sanity-lc page-name-in-block)
@@ -776,7 +774,7 @@
   [label]
   (when (and (= 1 (count label))
              (string? (last (first label))))
-    (js/decodeURIComponent (last (first label)))))
+    (gp-util/safe-decode-uri-component (last (first label)))))
 
 (defn- get-page
   [label]
@@ -797,7 +795,7 @@
 (rum/defc block-reference < rum/reactive
   db-mixins/query
   [config id label]
-  (when-let [block-id (parse-uuid id)]
+  (if-let [block-id (parse-uuid id)]
     (let [db-id (:db/id (db/pull [:block/uuid block-id]))
           block (when db-id (db/pull-block db-id))
           block-type (keyword (get-in block [:block/properties :ls-type]))
@@ -867,7 +865,10 @@
                         :delay       [1000, 100]} inner)
              inner)])
         [:span.warning.mr-1 {:title "Block ref invalid"}
-         (block-ref/->block-ref id)]))))
+         (block-ref/->block-ref id)]))
+  [:span.warning.mr-1 {:title "Block ref invalid"}
+    (block-ref/->block-ref id)]
+))
 
 (defn inline-text
   ([format v]
@@ -1643,7 +1644,7 @@
                   (:block/uuid child)))))]]))))
 
 (defn- block-content-empty?
-  [{:block/keys [properties title body type]}]
+  [{:block/keys [properties title body]}]
   (and
    (or
     (empty? properties)
@@ -2271,17 +2272,17 @@
   [:div.block-left-menu.flex.bg-base-2.rounded-r-md.mr-1
    [:div.commands-button.w-0.rounded-r-md
     {:id (str "block-left-menu-" uuid)}
-    [:div.indent (ui/icon "indent-increase" {:style {:fontSize 16}})]]])
+    [:div.indent (ui/icon "indent-increase" {:size 18})]]])
 
 (rum/defc block-right-menu < rum/reactive
   [_config {:block/keys [uuid] :as _block} edit?]
   [:div.block-right-menu.flex.bg-base-2.rounded-md.ml-1
-   [:div.commands-button.w-0.flex.flew-col.rounded-md
+   [:div.commands-button.w-0.rounded-md
     {:id (str "block-right-menu-" uuid)
      :style {:max-width (if edit? 40 80)}}
-    [:div.outdent (ui/icon "indent-decrease" {:style {:fontSize 16}})]
+    [:div.outdent (ui/icon "indent-decrease" {:size 18})]
     (when-not edit?
-      [:div.more (ui/icon "dots-circle-horizontal" {:style {:fontSize 16}})])]])
+      [:div.more (ui/icon "dots-circle-horizontal" {:size 18})])]])
 
 (rum/defcs block-content-or-editor < rum/reactive
   (rum/local true ::hide-block-refs?)

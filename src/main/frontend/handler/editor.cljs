@@ -39,7 +39,6 @@
             [frontend.util.keycode :as keycode]
             [frontend.util.list :as list]
             [frontend.util.marker :as marker]
-            [frontend.util.priority :as priority]
             [frontend.util.property :as property]
             [frontend.util.text :as text-util]
             [frontend.util.thingatpt :as thingatpt]
@@ -377,11 +376,13 @@
 
        ;; sanitized page name changed
        (when-let [title (get-in block' [:block/properties :title])]
-         (when-let [old-page-name (:block/name (db/entity (:db/id (:block/page block'))))]
-           (when (and (:block/pre-block? block')
-                      (not (string/blank? title))
-                      (not= (util/page-name-sanity-lc title) old-page-name))
-             (state/pub-event! [:page/title-property-changed old-page-name title]))))))))
+         (if (string? title)
+           (when-let [old-page-name (:block/name (db/entity (:db/id (:block/page block'))))]
+             (when (and (:block/pre-block? block')
+                        (not (string/blank? title))
+                        (not= (util/page-name-sanity-lc title) old-page-name))
+               (state/pub-event! [:page/title-property-changed old-page-name title])))
+           (js/console.error (str "Title is not a string: " title))))))))
 
 (defn save-block-if-changed!
   ([block value]
@@ -757,17 +758,6 @@
                                           (util/format "[#%s]" priority)
                                           (util/format "[#%s]" new-priority))]
     (save-block-if-changed! block new-content)))
-
-(defn cycle-priority!
-  []
-  (when (state/get-edit-block)
-    (let [format (or (db/get-page-format (state/get-current-page))
-                     (state/get-preferred-format))
-          input-id (state/get-edit-input-id)
-          content (state/get-edit-content)
-          new-priority (priority/cycle-priority-state content)
-          new-value (priority/add-or-update-priority content format new-priority)]
-      (state/set-edit-content! input-id new-value))))
 
 (defn delete-block-aux!
   [{:block/keys [uuid repo] :as _block} children?]
@@ -1266,7 +1256,7 @@
                  (db-model/query-block-by-uuid block-or-uuid) block-or-uuid)
          format (:block/format block)]
      (save-block! {:block block :repo repo :format format} content)))
-  ([{:keys [block] :as state} value]
+  ([{:keys [block]} value]
    (save-block-aux! block value {})))
 
 (defn save-current-block!
@@ -2120,13 +2110,6 @@
                            (state/set-editor-action! :property-value-search)))
                        50)))))
 
-(defn property-value-on-chosen-handler
-  [element-id q]
-  (fn [property-value]
-    (commands/insert! element-id (str gp-property/colons " " (or property-value q))
-                      {:last-pattern (str gp-property/colons " " q)})
-    (state/clear-editor-action!)))
-
 (defn parent-is-page?
   [{{:block/keys [parent page]} :data :as node}]
   {:pre [(tree/satisfied-inode? node)]}
@@ -2265,55 +2248,6 @@
                                     (+ (:end item) (count next-bullet) 2))]
                       (state/set-edit-content! (state/get-edit-input-id) value')
                       (cursor/move-cursor-to input cursor'))))))))))))
-
-(defn toggle-list!
-  []
-  (when-not (auto-complete?)
-    (let [{:keys [block]} (get-state)]
-      (when block
-        (let [input (state/get-input)
-              format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
-              new-unordered-bullet (case format :org "-" "*")
-              current-pos (cursor/pos input)
-              content (state/get-edit-content)
-              pos (atom current-pos)]
-          (if-let [item (thingatpt/list-item-at-point input)]
-            (let [{:keys [ordered]} item
-                  list-beginning-pos (list/list-beginning-pos input)
-                  list-end-pos (list/list-end-pos input)
-                  list (subs content list-beginning-pos list-end-pos)
-                  items (string/split-lines list)
-                  splitter-reg (if ordered #"[\d]*\.\s*" #"[-\*]{1}\s*")
-                  items-without-bullet (vec (map #(last (string/split % splitter-reg 2)) items))
-                  new-list (string/join "\n"
-                                        (if ordered
-                                          (map #(str new-unordered-bullet " " %) items-without-bullet)
-                                          (map-indexed #(str (inc %1) ". " %2) items-without-bullet)))
-                  index-of-current-item (inc (.indexOf items-without-bullet
-                                                       (last (string/split (:raw-content item) splitter-reg 2))))
-                  numbers-length (->> (map-indexed
-                                       #_:clj-kondo/ignore
-                                       #(str (inc %1) ". ")
-                                       (subvec items-without-bullet 0 index-of-current-item))
-                                      string/join
-                                      count)
-                  pos-diff (- numbers-length (* 2 index-of-current-item))]
-              (delete-and-update input list-beginning-pos list-end-pos)
-              (insert new-list)
-              (reset! pos (if ordered
-                            (- current-pos pos-diff)
-                            (+ current-pos pos-diff))))
-            (let [prev-item (list/get-prev-item input)]
-              (cursor/move-cursor-down input)
-              (cursor/move-cursor-to-line-beginning input)
-              (if prev-item
-                (let [{:keys [bullet ordered]} prev-item
-                      current-bullet (if ordered (str (inc bullet) ".") bullet)]
-                  (insert (str current-bullet " "))
-                  (reset! pos (+ current-pos (count current-bullet) 1)))
-                (do (insert (str new-unordered-bullet " "))
-                    (reset! pos (+ current-pos 2))))))
-          (cursor/move-cursor-to input @pos))))))
 
 (defn toggle-page-reference-embed
   [parent-id]
