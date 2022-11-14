@@ -536,10 +536,14 @@
 (defn- hide-context-menu-and-clear-selection
   [e]
   (state/hide-custom-context-menu!)
-  (when-not (or (gobj/get e "shiftKey")
-                (util/meta-key? e)
-                (state/get-edit-input-id))
-    (editor-handler/clear-selection!)))
+  (let [block (.closest (.-target e) ".ls-block")]
+    (when-not (or (gobj/get e "shiftKey")
+                  (util/meta-key? e)
+                  (state/get-edit-input-id)
+                  (and block
+                       (or (= block (.-target e))
+                           (.contains block (.-target e)))))
+      (editor-handler/clear-selection!))))
 
 (rum/defc render-custom-context-menu
   [links position]

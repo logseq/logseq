@@ -4,6 +4,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
+            [frontend.modules.file.uprint :as up]
             [frontend.state :as state]
             [frontend.util.property :as property]
             [frontend.util.fs :as fs-util]
@@ -113,8 +114,9 @@
             whiteboard-page? (= "whiteboard" (:block/type page))
             format (if whiteboard-page? "edn" format)
             journal-page? (date/valid-journal-title? title)
-            filename (if journal-page?
-                       (date/date->file-name journal-page?)
+            journal-title (date/normalize-journal-title title)
+            filename (if (and journal-page? (not (string/blank? journal-title)))
+                       (date/date->file-name journal-title)
                        (-> (or (:block/original-name page) (:block/name page))
                            (fs-util/file-name-sanity)))
             sub-dir (cond
@@ -139,8 +141,10 @@
         file-path (-> (db-utils/entity file-db-id) :file/path)]
     (if (and (string? file-path) (not-empty file-path))
       (let [new-content (if (= "whiteboard" (:block/type page-block))
-                          (pr-str {:blocks tree
-                                   :pages (list (remove-transit-ids page-block))})
+                          (->
+                           (up/ugly-pr-str {:blocks tree
+                                            :pages (list (remove-transit-ids page-block))})
+                           (string/triml))
                           (tree->file-content tree {:init-level init-level}))
             files [[file-path new-content]]
             repo (state/get-current-repo)]

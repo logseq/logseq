@@ -211,6 +211,7 @@
         :settings-page/disable-sentry "Send usage data and diagnostics to Logseq"
         :settings-page/preferred-outdenting "Logical outdenting"
         :settings-page/custom-date-format "Preferred date format"
+        :settings-page/custom-date-format-warning "Re-index required! Existing journal references would be broken!"
         :settings-page/preferred-file-format "Preferred file format"
         :settings-page/preferred-workflow "Preferred workflow"
         :settings-page/preferred-pasting-file "Preferred pasting file"

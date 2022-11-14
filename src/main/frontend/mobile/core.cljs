@@ -93,9 +93,9 @@
   (println :debug :app-state-change-handler state (js/Date.))
   (when (state/get-current-repo)
     (let [is-active? (.-isActive state)]
-      (state/set-mobile-app-state-change is-active?)
       (when-not is-active?
-        (editor-handler/save-current-block!)))))
+        (editor-handler/save-current-block!))
+      (state/set-mobile-app-state-change is-active?))))
 
 (defn- general-init
   "Initialize event listeners used by both iOS and Android"

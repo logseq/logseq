@@ -218,7 +218,9 @@
   [path]
   (if (mobile-util/native-ios?)
     (cond
-      (string/includes? path "///private/")
+      (or (string/includes? path "///private/")
+          ;; virtual matchine
+          (string/starts-with? path "file:///Users/"))
       path
 
       (string/includes? path "///")

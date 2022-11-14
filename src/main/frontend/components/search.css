@@ -2,6 +2,10 @@
   > .inner {
     width: 100%;
   }
+
+  .search-result {
+    @apply flex;
+  }
 }
 
 .search-ac {
