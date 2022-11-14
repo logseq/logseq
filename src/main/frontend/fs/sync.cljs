@@ -31,7 +31,8 @@
             [rum.core :as rum]
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
-            [frontend.fs.capacitor-fs :as capacitor-fs]))
+            [frontend.fs.capacitor-fs :as capacitor-fs]
+            ["@capawesome/capacitor-background-task" :refer [BackgroundTask]]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -54,7 +55,7 @@
 ;;   then we need a remote->local-full-sync,
 ;;   which compare local-files with remote-files, sync diff-remote-files to local
 ;; - local->remote-full-sync will be triggered after 20mins of idle
-;; - every 20s, flush local changes, and sync to remote
+;; - every 10s, flush local changes, and sync to remote
 
 ;; TODO: use access-token instead of id-token
 ;; TODO: a remote delete-diff cause local related-file deleted, then trigger a `FileChangeEvent`,
@@ -1985,11 +1986,6 @@
   see also `*resume-state`"
   (chan 1))
 (def pause-resume-mult (async/mult pause-resume-chan))
-(def app-state-changed-cursor (rum/cursor state/state :mobile/app-state-change))
-(add-watch app-state-changed-cursor "sync"
-           (fn [_ _ _ {:keys [is-active?]}]
-             (prn "is-active? " is-active?)
-             (offer! pause-resume-chan is-active?)))
 
 (def recent-edited-chan
   "Triggered when there is content editing"
@@ -2980,10 +2976,52 @@
 
     (reset! current-sm-graph-uuid nil)))
 
+(defn <sync-local->remote-now []
+  (go
+    (when-let [_sm ^SyncManager (state/get-file-sync-manager (state/get-current-file-sync-graph-uuid))]
+      (offer! immediately-local->remote-chan true))))
+
 (defn sync-need-password!
   []
   (when-let [sm ^SyncManager (state/get-file-sync-manager (state/get-current-file-sync-graph-uuid))]
     (.need-password sm)))
+
+(def app-state-changed-cursor (rum/cursor state/state :mobile/app-state-change))
+
+(def finished-local->remote-chan (chan 1))
+(add-watch app-state-changed-cursor "sync"
+           (fn [_ _ _ {:keys [is-active?]}]
+             (prn "is-active? " is-active?)
+             (cond
+               (mobile-util/native-android?)
+               ;; TODO: support background task on Android
+               (offer! pause-resume-chan is-active?)
+
+               (mobile-util/native-ios?)
+               (let [*task-id (atom nil)]
+                 (if is-active?
+                   (offer! pause-resume-chan is-active?)
+                   (when (state/get-current-file-sync-graph-uuid)
+                     (p/let [task-id (.beforeExit ^js BackgroundTask
+                                                  (fn []
+                                                    (prn "before exit")
+                                                    (go
+                                                      ;; Wait for file watcher events
+                                                      (<! (timeout 2000))
+                                                      (util/drain-chan finished-local->remote-chan)
+                                                      (<! (<sync-local->remote-now))
+                                                      ;; wait at most 20s
+                                                      (async/alts! [finished-local->remote-chan (timeout 20000)])
+                                                      (offer! pause-resume-chan false) ; pause
+                                                      (<! (timeout 5000))
+                                                      (prn "finish task: " @*task-id)
+                                                      (let [opt #js {:taskId @*task-id}]
+                                                        (.finish ^js BackgroundTask opt)))))]
+
+                       (reset! *task-id task-id)))))
+
+               :else
+               nil)))
 
 (defn check-graph-belong-to-current-user
   [current-user-uuid graph-user-uuid]

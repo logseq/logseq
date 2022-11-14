@@ -18,6 +18,8 @@
             [frontend.handler.plugin :as plugin-handler]
             [clojure.string :as string]))
 
+(defonce PER-PAGE-SIZE 15)
+
 (rum/defcs installed-themes
   <
   (rum/local [] ::themes)
@@ -107,14 +109,14 @@
   (rum/use-effect!
    (fn []
      (let [err-handle
-           (fn [^js e]
-             (case (keyword (aget e "name"))
-               :IllegalPluginPackageError
-               (notification/show! "Illegal Logseq plugin package." :error)
-               :ExistedImportedPluginPackageError
-               (notification/show! "Existed Imported plugin package." :error)
-               :default)
-             (plugin-handler/reset-unpacked-state))
+                      (fn [^js e]
+                        (case (keyword (aget e "name"))
+                          :IllegalPluginPackageError
+                          (notification/show! "Illegal Logseq plugin package." :error)
+                          :ExistedImportedPluginPackageError
+                          (notification/show! "Existed Imported plugin package." :error)
+                          :default)
+                        (plugin-handler/reset-unpacked-state))
            reg-handle #(plugin-handler/reset-unpacked-state)]
        (when unpacked-pkg-path
          (doto js/LSPluginCore
@@ -130,16 +132,20 @@
     [:strong.inline-flex.px-3 "Loading ..."]))
 
 (rum/defc category-tabs
-  [t category on-action]
+  [t total-nums category on-action]
 
   [:div.secondary-tabs.categories.flex
    (ui/button
-    [:span.flex.items-center (ui/icon "puzzle") (t :plugins)]
+    [:span.flex.items-center
+     (ui/icon "puzzle")
+     (t :plugins) (when (vector? total-nums) (str " (" (first total-nums) ")"))]
     :intent "logseq"
     :on-click #(on-action :plugins)
     :class (if (= category :plugins) "active" ""))
    (ui/button
-    [:span.flex.items-center (ui/icon "palette") (t :themes)]
+    [:span.flex.items-center
+     (ui/icon "palette")
+     (t :themes) (when (vector? total-nums) (str " (" (last total-nums) ")"))]
     :intent "logseq"
     :on-click #(on-action :themes)
     :class (if (= category :themes) "active" ""))])
@@ -175,7 +181,7 @@
   []
   (ui/admonition
    :warning
-   [:div.max-w-4xl
+   [:p.text-md
     "Plugins can access your graph and your local files, issue network requests.
       They can also cause data corruption or loss. We're working on proper access rules for your graphs.
       Meanwhile, make sure you have regular backups of your graphs and only install the plugins when you can read and
@@ -269,8 +275,7 @@
 (defn get-open-plugin-readme-handler
   [url item repo]
   #(plugin-handler/open-readme!
-    url item (if repo remote-readme-display local-markdown-display))
-  )
+    url item (if repo remote-readme-display local-markdown-display)))
 
 (rum/defc plugin-item-card < rum/static
   [t {:keys [id name title version url description author icon iir repo sponsors] :as item}
@@ -429,14 +434,14 @@
 
 (rum/defc ^:large-vars/cleanup-todo panel-control-tabs < rum/static
   [search-key *search-key category *category
-   sort-by *sort-by filter-by *filter-by
+   sort-by *sort-by filter-by *filter-by total-nums
    selected-unpacked-pkg market? develop-mode?
    reload-market-fn agent-opts]
 
   (let [*search-ref (rum/create-ref)]
-    [:div.mb-2.flex.justify-between.control-tabs.relative
+    [:div.pb-3.flex.justify-between.control-tabs.relative
      [:div.flex.items-center.l
-      (category-tabs t category #(reset! *category %))
+      (category-tabs t total-nums category #(reset! *category %))
 
       (when (and develop-mode? (not market?))
         [:div
@@ -469,7 +474,7 @@
         (ui/dropdown-with-links
          (fn [{:keys [toggle-fn]}]
            (ui/button
-            [:span (ui/icon "filter")]
+            (ui/icon "filter")
             :class (str (when-not (contains? #{:default} filter-by) "picked ") "sort-or-filter-by")
             :on-click toggle-fn
             :intent "link"))
@@ -512,7 +517,7 @@
         (ui/dropdown-with-links
          (fn [{:keys [toggle-fn]}]
            (ui/button
-            [:span (ui/icon "arrows-sort")]
+            (ui/icon "arrows-sort")
             :class (str (when-not (contains? #{:default :downloads} sort-by) "picked ") "sort-or-filter-by")
             :on-click toggle-fn
             :intent "link"))
@@ -534,7 +539,7 @@
       (ui/dropdown-with-links
        (fn [{:keys [toggle-fn]}]
          (ui/button
-          [:span (ui/icon "dots-vertical")]
+          (ui/icon "dots-vertical")
           :class "more-do"
           :on-click toggle-fn
           :intent "link"))
@@ -566,71 +571,119 @@
       ;; developer
       (panel-tab-developer)]]))
 
-(rum/defcs marketplace-plugins
+(def plugin-items-list-mixins
+  {:did-mount
+   (fn [s]
+     (when-let [^js el (rum/dom-node s)]
+       (when-let [^js el-list (.querySelector el ".cp__plugins-item-lists")]
+         (when-let [^js cls (.-classList (.querySelector el ".control-tabs"))]
+           (.addEventListener
+            el-list "scroll"
+            #(if (> (.-scrollTop el-list) 1)
+               (.add cls "scrolled")
+               (.remove cls "scrolled"))))))
+     s)})
+
+(rum/defc lazy-items-loader
+  [load-more!]
+  (let [^js inViewState (ui/useInView #js {:threshold 0})
+        in-view? (.-inView inViewState)]
+
+    (rum/use-effect!
+     (fn []
+       (load-more!))
+     [in-view?])
+
+    [:div {:ref (.-ref inViewState)}
+     [:p.py-1.text-center.opacity-0 (when (.-inView inViewState) "·")]]))
+
+(rum/defcs ^:large-vars/data-var marketplace-plugins
   < rum/static rum/reactive
-  (rum/local false ::fetching)
-  (rum/local "" ::search-key)
-  (rum/local :plugins ::category)
-  (rum/local :downloads ::sort-by)                        ;; downloads / stars / letters / updates
-  (rum/local :default ::filter-by)
-  (rum/local nil ::error)
-  {:did-mount (fn [s]
-                (let [reload-fn (fn [force-refresh?]
-                                  (when-not @(::fetching s)
-                                    (reset! (::fetching s) true)
-                                    (reset! (::error s) nil)
-                                    (-> (plugin-handler/load-marketplace-plugins force-refresh?)
-                                        (p/then #(plugin-handler/load-marketplace-stats false))
-                                        (p/catch #(do (js/console.error %) (reset! (::error s) %)))
-                                        (p/finally #(reset! (::fetching s) false)))))]
-                  (reload-fn false)
-                  (assoc s ::reload (partial reload-fn true))))}
+    plugin-items-list-mixins
+    (rum/local false ::fetching)
+    (rum/local "" ::search-key)
+    (rum/local :plugins ::category)
+    (rum/local :downloads ::sort-by)    ;; downloads / stars / letters / updates
+    (rum/local :default ::filter-by)
+    (rum/local nil ::error)
+    (rum/local nil ::cached-query-flag)
+    (rum/local 1 ::current-page)
+    {:did-mount
+     (fn [s]
+       (let [reload-fn (fn [force-refresh?]
+                         (when-not @(::fetching s)
+                           (reset! (::fetching s) true)
+                           (reset! (::error s) nil)
+                           (-> (plugin-handler/load-marketplace-plugins force-refresh?)
+                               (p/then #(plugin-handler/load-marketplace-stats false))
+                               (p/catch #(do (js/console.error %) (reset! (::error s) %)))
+                               (p/finally #(reset! (::fetching s) false)))))]
+         (reload-fn false)
+         (assoc s ::reload (partial reload-fn true))))}
   [state]
-  (let [pkgs              (state/sub :plugin/marketplace-pkgs)
-        stats             (state/sub :plugin/marketplace-stats)
-        installed-plugins (state/sub :plugin/installed-plugins)
-        installing        (state/sub :plugin/installing)
-        online?           (state/sub :network/online?)
-        develop-mode?     (state/sub :ui/developer-mode?)
-        agent-opts        (state/sub [:electron/user-cfgs :settings/agent])
-        *search-key       (::search-key state)
-        *category         (::category state)
-        *sort-by          (::sort-by state)
-        *filter-by        (::filter-by state)
-        *fetching         (::fetching state)
-        *error            (::error state)
-        filtered-pkgs     (when (seq pkgs)
-                            (if (= @*category :themes)
-                              (filter #(:theme %) pkgs)
-                              (filter #(not (:theme %)) pkgs)))
-        filtered-pkgs     (if (and (seq filtered-pkgs) (not= :default @*filter-by))
-                            (filter #(apply
-                                      (if (= :installed @*filter-by) identity not)
-                                      [(contains? installed-plugins (keyword (:id %)))])
-                                    filtered-pkgs)
-                            filtered-pkgs)
-        filtered-pkgs     (if-not (string/blank? @*search-key)
-                            (if-let [author (and (string/starts-with? @*search-key "@")
-                                                 (subs @*search-key 1))]
-                              (filter #(= author (:author %)) filtered-pkgs)
-                              (search/fuzzy-search
-                               filtered-pkgs @*search-key
-                               :limit 30
-                               :extract-fn :title))
-                            filtered-pkgs)
-        filtered-pkgs     (map #(if-let [stat (get stats (keyword (:id %)))]
-                                  (let [downloads (:total_downloads stat)
-                                        stars     (:stargazers_count stat)]
-                                    (assoc % :stat stat
-                                           :stars stars
-                                           :downloads downloads))
-                                  %) filtered-pkgs)
-        sorted-pkgs       (apply sort-by
-                                 (conj
-                                  (case @*sort-by
-                                    :letters [#(util/safe-lower-case (or (:title %) (:name %)))]
-                                    [@*sort-by #(compare %2 %1)])
-                                  filtered-pkgs))]
+  (let [pkgs               (state/sub :plugin/marketplace-pkgs)
+        stats              (state/sub :plugin/marketplace-stats)
+        installed-plugins  (state/sub :plugin/installed-plugins)
+        installing         (state/sub :plugin/installing)
+        online?            (state/sub :network/online?)
+        develop-mode?      (state/sub :ui/developer-mode?)
+        agent-opts         (state/sub [:electron/user-cfgs :settings/agent])
+        *search-key        (::search-key state)
+        *category          (::category state)
+        *sort-by           (::sort-by state)
+        *filter-by         (::filter-by state)
+        *cached-query-flag (::cached-query-flag state)
+        *current-page      (::current-page state)
+        *fetching          (::fetching state)
+        *error             (::error state)
+        theme-plugins      (filter #(:theme %) pkgs)
+        normal-plugins     (filter #(not (:theme %)) pkgs)
+        filtered-pkgs      (when (seq pkgs)
+                             (if (= @*category :themes) theme-plugins normal-plugins))
+        total-nums         [(count normal-plugins) (count theme-plugins)]
+        filtered-pkgs      (if (and (seq filtered-pkgs) (not= :default @*filter-by))
+                             (filter #(apply
+                                       (if (= :installed @*filter-by) identity not)
+                                       [(contains? installed-plugins (keyword (:id %)))])
+                                     filtered-pkgs)
+                             filtered-pkgs)
+        filtered-pkgs      (if-not (string/blank? @*search-key)
+                             (if-let [author (and (string/starts-with? @*search-key "@")
+                                                  (subs @*search-key 1))]
+                               (filter #(= author (:author %)) filtered-pkgs)
+                               (search/fuzzy-search
+                                filtered-pkgs @*search-key
+                                :limit 30
+                                :extract-fn :title))
+                             filtered-pkgs)
+        filtered-pkgs      (map #(if-let [stat (get stats (keyword (:id %)))]
+                                   (let [downloads (:total_downloads stat)
+                                         stars     (:stargazers_count stat)]
+                                     (assoc % :stat stat
+                                            :stars stars
+                                            :downloads downloads))
+                                   %) filtered-pkgs)
+        sorted-plugins     (apply sort-by
+                                  (conj
+                                   (case @*sort-by
+                                     :letters [#(util/safe-lower-case (or (:title %) (:name %)))]
+                                     [@*sort-by #(compare %2 %1)])
+                                   filtered-pkgs))
+
+        fn-query-flag      (fn [] (string/join "_" (map #(str @%) [*filter-by *sort-by *search-key *category])))
+        str-query-flag     (fn-query-flag)
+        _                  (when (not= str-query-flag @*cached-query-flag)
+                             (when-let [^js list-cnt (rum/ref-node state "list-ref")]
+                               (set! (.-scrollTop list-cnt) 0))
+                             (reset! *current-page 1))
+        _                  (reset! *cached-query-flag str-query-flag)
+
+        page-total-items   (count sorted-plugins)
+        sorted-plugins     (if-not (> page-total-items PER-PAGE-SIZE)
+                             sorted-plugins (take (* @*current-page PER-PAGE-SIZE) sorted-plugins))
+        load-more-pages!   #(when (> page-total-items PER-PAGE-SIZE)
+                              (when (< (* PER-PAGE-SIZE @*current-page) page-total-items)
+                                (reset! *current-page (inc @*current-page))))]
 
     [:div.cp__plugins-marketplace
 
@@ -638,7 +691,7 @@
       @*search-key *search-key
       @*category *category
       @*sort-by *sort-by @*filter-by *filter-by
-      nil true develop-mode? (::reload state)
+      total-nums nil true develop-mode? (::reload state)
       agent-opts)
 
      (cond
@@ -646,7 +699,7 @@
        [:p.flex.justify-center.pt-20.opacity-50 (svg/offline 30)]
 
        @*fetching
-       [:p.flex.justify-center.pt-20 svg/loading]
+       [:p.flex.justify-center.py-20 svg/loading]
 
        @*error
        [:p.flex.justify-center.pt-20.opacity-50 "Remote error: " (.-message @*error)]
@@ -654,23 +707,33 @@
        :else
        [:div.cp__plugins-marketplace-cnt
         {:class (util/classnames [{:has-installing (boolean installing)}])}
-        [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
-         (for [item sorted-pkgs]
-           (rum/with-key
+        [:div.cp__plugins-item-lists
+         {:ref "list-ref"}
+         [:div.cp__plugins-item-lists-inner
+          ;; items list
+          (for [item sorted-plugins]
+            (rum/with-key
              (let [pid  (keyword (:id item))
                    stat (:stat item)]
                (plugin-item-card t item
                                  (get-in item [:settings :disabled]) true *search-key installing
                                  (and installing (= (keyword (:id installing)) pid))
                                  (contains? installed-plugins pid) stat nil))
-             (:id item)))]])]))
+             (:id item)))]
+
+         ;; items loader
+         (when (seq sorted-plugins)
+           (lazy-items-loader load-more-pages!))]])]))
 
 (rum/defcs installed-plugins
   < rum/static rum/reactive
-  (rum/local "" ::search-key)
-  (rum/local :default ::filter-by)                        ;; default / enabled / disabled / unpacked / update-available
-  (rum/local :default ::sort-by)
-  (rum/local :plugins ::category)
+    plugin-items-list-mixins
+    (rum/local "" ::search-key)
+    (rum/local :default ::filter-by)                        ;; default / enabled / disabled / unpacked / update-available
+    (rum/local :default ::sort-by)
+    (rum/local :plugins ::category)
+    (rum/local nil ::cached-query-flag)
+    (rum/local 1 ::current-page)
   [state]
   (let [installed-plugins     (state/sub [:plugin/installed-plugins])
         installed-plugins     (vals installed-plugins)
@@ -683,11 +746,14 @@
         *sort-by              (::sort-by state)
         *search-key           (::search-key state)
         *category             (::category state)
+        *cached-query-flag    (::cached-query-flag state)
+        *current-page         (::current-page state)
         default-filter-by?    (= :default @*filter-by)
+        theme-plugins         (filter #(:theme %) installed-plugins)
+        normal-plugins        (filter #(not (:theme %)) installed-plugins)
         filtered-plugins      (when (seq installed-plugins)
-                                (if (= @*category :themes)
-                                  (filter #(:theme %) installed-plugins)
-                                  (filter #(not (:theme %)) installed-plugins)))
+                                (if (= @*category :themes) theme-plugins normal-plugins))
+        total-nums            [(count normal-plugins) (count theme-plugins)]
         filtered-plugins      (if-not default-filter-by?
                                 (filter (fn [it]
                                           (let [disabled (get-in it [:settings :disabled])]
@@ -713,31 +779,51 @@
                                                 (update %1 k conj %2)) [[] []])
                                      (#(update % 0 (fn [coll] (sort-by :iir coll))))
                                      (flatten))
-                                filtered-plugins)]
-    [:div.cp__plugins-installed
+                                filtered-plugins)
 
+        fn-query-flag         (fn [] (string/join "_" (map #(str @%) [*filter-by *sort-by *search-key *category])))
+        str-query-flag        (fn-query-flag)
+        _                     (when (not= str-query-flag @*cached-query-flag)
+                                (when-let [^js list-cnt (rum/ref-node state "list-ref")]
+                                  (set! (.-scrollTop list-cnt) 0))
+                                (reset! *current-page 1))
+        _                     (reset! *cached-query-flag str-query-flag)
+
+        page-total-items      (count sorted-plugins)
+        sorted-plugins        (if-not (> page-total-items PER-PAGE-SIZE)
+                                sorted-plugins (take (* @*current-page PER-PAGE-SIZE) sorted-plugins))
+        load-more-pages!      #(when (> page-total-items PER-PAGE-SIZE)
+                                 (when (< (* PER-PAGE-SIZE @*current-page) page-total-items)
+                                   (reset! *current-page (inc @*current-page))))]
+
+    [:div.cp__plugins-installed
      (panel-control-tabs
       @*search-key *search-key
       @*category *category
       @*sort-by *sort-by
       @*filter-by *filter-by
-      selected-unpacked-pkg
+      total-nums selected-unpacked-pkg
       false develop-mode? nil
       agent-opts)
 
-     [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
-      (for [item sorted-plugins]
-        (rum/with-key
+     [:div.cp__plugins-item-lists
+      {:ref "list-ref"}
+      [:div.cp__plugins-item-lists-inner
+       (for [item sorted-plugins]
+         (rum/with-key
           (let [pid (keyword (:id item))]
             (plugin-item-card t item
                               (get-in item [:settings :disabled]) false *search-key updating
                               (and updating (= (keyword (:id updating)) pid))
                               true nil (get coming-updates pid)))
-          (:id item)))]]))
+          (:id item)))]
+
+      (when (seq sorted-plugins)
+        (lazy-items-loader load-more-pages!))]]))
 
 (rum/defcs waiting-coming-updates
   < rum/reactive
-  {:will-mount (fn [s] (state/reset-unchecked-update) s)}
+    {:will-mount (fn [s] (state/reset-unchecked-update) s)}
   [_s]
   (let [_            (state/sub :plugin/updates-coming)
         downloading? (state/sub :plugin/updates-downloading?)
@@ -892,26 +978,36 @@
       [:a.button (ui/icon "puzzle" {:size 20})]])
 
    ;; items
-   (for [[_ {:keys [key pinned?] :as opts} pid] items
-         :let [pkey (str (name pid) ":" key)]]
-     {:title   key
-      :item    [:div.flex.items-center.item-wrap
-                (ui-item-renderer pid :toolbar (assoc opts :prefix "pl-" :key (str "pl-" key)))
-                [:span.opacity-80 {:style {:padding-left "2px"}} key]
-                [:span.pin.flex.items-center.opacity-60
-                 {:class (util/classnames [{:pinned pinned?}])}
-                 (ui/icon (if pinned? "pinned" "pin"))]]
-      :options {:on-click (fn [^js e]
-                            (let [^js target (.-target e)
-                                  user-btn?  (boolean (.closest target "div[data-injected-ui]"))]
-                              (when-not user-btn?
-                                (plugin-handler/op-pinned-toolbar-item! pkey (if pinned? :remove :add))))
-                            false)}})
+   (concat
+    (for [[_ {:keys [key pinned?] :as opts} pid] items
+          :let [pkey (str (name pid) ":" key)]]
+      {:title   key
+       :item    [:div.flex.items-center.item-wrap
+                 (ui-item-renderer pid :toolbar (assoc opts :prefix "pl-" :key (str "pl-" key)))
+                 [:span.opacity-80 {:style {:padding-left "2px"}} key]
+                 [:span.pin.flex.items-center.opacity-60
+                  {:class (util/classnames [{:pinned pinned?}])}
+                  (ui/icon (if pinned? "pinned" "pin"))]]
+       :options {:on-click (fn [^js e]
+                             (let [^js target (.-target e)
+                                   user-btn?  (boolean (.closest target "div[data-injected-ui]"))]
+                               (when-not user-btn?
+                                 (plugin-handler/op-pinned-toolbar-item! pkey (if pinned? :remove :add))))
+                             false)}})
+    [{:hr true}
+     {:title   (t :plugins)
+      :options {:on-click #(plugin-handler/goto-plugins-dashboard!)
+                :class "extra-item mt-2"}
+      :icon    (ui/icon "apps")}
+     {:title   (t :settings)
+      :options {:on-click #(plugin-handler/goto-plugins-settings!)
+                :class "extra-item"}
+      :icon    (ui/icon "adjustments")}])
    {:trigger-class "toolbar-plugins-manager-trigger"}))
 
 (rum/defcs hook-ui-items < rum/reactive
-  < {:key-fn #(identity "plugin-hook-items")}
-  "type of :toolbar, :pagebar"
+                           < {:key-fn #(identity "plugin-hook-items")}
+                           "type of :toolbar, :pagebar"
   [_state type]
   (when (state/sub [:plugin/installed-ui-items])
     (let [toolbar?     (= :toolbar type)
@@ -965,7 +1061,8 @@
       :tab-index "-1"}
      [:h1 (t :plugins)]
      (security-warning)
-     [:hr]
+
+     [:hr.my-4]
 
      [:div.tabs.flex.items-center.justify-center
       [:div.tabs-inner.flex.items-center
@@ -984,7 +1081,7 @@
 
 (rum/defcs focused-settings-content
   < rum/reactive
-  (rum/local (state/sub :plugin/focused-settings) ::cache)
+    (rum/local (state/sub :plugin/focused-settings) ::cache)
   [_state title]
   (let [*cache  (::cache _state)
         focused (state/sub :plugin/focused-settings)
@@ -1006,7 +1103,7 @@
               [:li
                {:class (util/classnames [{:active (= id focused)}])}
                [:a.flex.items-center.settings-plugin-item
-                {:data-id id
+                {:data-id  id
                  :on-click #(do (state/set-state! :plugin/focused-settings id))}
                 (if (and icon (not (string/blank? icon)))
                   [:img.icon {:src icon}]
@@ -1064,7 +1161,8 @@
   []
   (state/set-modal!
    (fn [_close!]
-     (plugins-page))))
+     (plugins-page))
+   {:label "plugins-dashboard"}))
 
 (defn open-waiting-updates-modal!
   []

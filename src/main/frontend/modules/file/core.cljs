@@ -113,8 +113,9 @@
             whiteboard-page? (= "whiteboard" (:block/type page))
             format (if whiteboard-page? "edn" format)
             journal-page? (date/valid-journal-title? title)
-            filename (if journal-page?
-                       (date/date->file-name journal-page?)
+            journal-title (date/normalize-journal-title title)
+            filename (if (and journal-page? (not (string/blank? journal-title)))
+                       (date/date->file-name journal-title)
                        (-> (or (:block/original-name page) (:block/name page))
                            (fs-util/file-name-sanity)))
             sub-dir (cond
