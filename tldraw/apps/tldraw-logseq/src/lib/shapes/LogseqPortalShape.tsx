@@ -54,7 +54,7 @@ const LogseqTypeTag = ({
   type,
   active,
 }: {
-  type: 'B' | 'P' | 'BA' | 'PA' | 'WP' | 'BS' | 'PS'
+  type: 'B' | 'P' | 'BA' | 'PA' | 'WA' | 'WP' | 'BS' | 'PS'
   active?: boolean
 }) => {
   const nameMapping = {
@@ -63,6 +63,7 @@ const LogseqTypeTag = ({
     WP: 'whiteboard',
     BA: 'new-block',
     PA: 'new-page',
+    WA: 'new-whiteboard',
     BS: 'block-search',
     PS: 'page-search',
   }
@@ -470,7 +471,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         ),
       })
 
-      // New page option when no exact match
+      // New page or whiteboard option when no exact match
       if (!searchResult?.pages?.some(p => p.toLowerCase() === q.toLowerCase()) && q) {
         options.push({
           actionIcon: 'circle-plus',
@@ -482,6 +483,20 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             <div className="tl-quick-search-option-row">
               <LogseqTypeTag active type="PA" />
               <strong>New page:</strong>
+              {q}
+            </div>
+          ),
+        },{
+          actionIcon: 'circle-plus',
+          onChosen: () => {
+            handlers?.addNewWhiteboard(q)
+            finishCreating(q)
+            return true
+          },
+          element: (
+            <div className="tl-quick-search-option-row">
+              <LogseqTypeTag active type="WA" />
+              <strong>New whiteboard:</strong>
               {q}
             </div>
           ),
