@@ -150,12 +150,11 @@
   (js/window.apis.on "quickCapture"
                      (fn [args]
                        (let [{:keys [url title content]} (bean/->clj args)
-                             page (or (state/get-current-page)
-                                      (string/lower-case (date/journal-name)))
+                             page (string/lower-case (date/today))
                              format (db/get-page-format page)
                              time (date/get-current-time)
                              text (or (and content (not-empty (string/trim content))) "")
-                             link (if (string/includes? url "www.youtube.com") (str "{{video " url "}}") (if (not-empty title) (config/link-format format title url) url))
+                             link (if (string/includes? url "www.youtube.com") (str title " {{video " url "}}") (if (not-empty title) (config/link-format format title url) url))
                              template (get-in (state/get-config)
                                               [:quick-capture-templates :text]
                                               "**{time}** [[quick capture]]: {text} {url}")
