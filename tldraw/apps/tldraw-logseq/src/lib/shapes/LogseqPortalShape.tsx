@@ -659,7 +659,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         </div>
         <div className="tl-quick-search-options" ref={optionsWrapperRef}>
           <Virtuoso
-            style={{ height: Math.min(Math.max(1, options.length), 12) * 36 }}
+            style={{ height: Math.min(Math.max(1, options.length), 12) * 40 }}
             totalCount={options.length}
             itemContent={index => {
               const { actionIcon, onChosen, element } = options[index]

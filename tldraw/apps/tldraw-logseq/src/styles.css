@@ -658,7 +658,8 @@ button.tl-select-input-trigger {
 }
 
 .tl-quick-search-option-row {
-  display: flex;
+  @apply flex items-center;
+
   gap: 0.5em;
 
   .breadcrumb {
@@ -667,7 +668,7 @@ button.tl-select-input-trigger {
 }
 
 .tl-quick-search-option-placeholder {
-  width: 20px;
+  width: 22px;
   flex-shrink: 0;
 }
 
@@ -729,8 +730,8 @@ button.tl-select-input-trigger {
   @apply flex items-center justify-center rounded text-base;
 
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   line-height: 1;
   color: #fff;
   background: rgba(0, 0, 0, 0.5);
