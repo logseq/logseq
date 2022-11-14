@@ -473,34 +473,37 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
       // New page or whiteboard option when no exact match
       if (!searchResult?.pages?.some(p => p.toLowerCase() === q.toLowerCase()) && q) {
-        options.push({
-          actionIcon: 'circle-plus',
-          onChosen: () => {
-            finishCreating(q)
-            return true
+        options.push(
+          {
+            actionIcon: 'circle-plus',
+            onChosen: () => {
+              finishCreating(q)
+              return true
+            },
+            element: (
+              <div className="tl-quick-search-option-row">
+                <LogseqTypeTag active type="PA" />
+                <strong>New page:</strong>
+                {q}
+              </div>
+            ),
           },
-          element: (
-            <div className="tl-quick-search-option-row">
-              <LogseqTypeTag active type="PA" />
-              <strong>New page:</strong>
-              {q}
-            </div>
-          ),
-        },{
-          actionIcon: 'circle-plus',
-          onChosen: () => {
-            handlers?.addNewWhiteboard(q)
-            finishCreating(q)
-            return true
-          },
-          element: (
-            <div className="tl-quick-search-option-row">
-              <LogseqTypeTag active type="WA" />
-              <strong>New whiteboard:</strong>
-              {q}
-            </div>
-          ),
-        })
+          {
+            actionIcon: 'circle-plus',
+            onChosen: () => {
+              handlers?.addNewWhiteboard(q)
+              finishCreating(q)
+              return true
+            },
+            element: (
+              <div className="tl-quick-search-option-row">
+                <LogseqTypeTag active type="WA" />
+                <strong>New whiteboard:</strong>
+                {q}
+              </div>
+            ),
+          }
+        )
       }
 
       // search filters
