@@ -914,13 +914,14 @@ Similar to re-frame subscriptions"
   (when-let [input (get-input)]
     (util/get-selection-start input)))
 
-(defn set-selection-start-block!
-  [start-block]
-  (swap! state assoc :selection/start-block start-block))
-
 (defn get-selection-start-block
   []
   (get @state :selection/start-block))
+
+(defn set-selection-start-block!
+  [start-block]
+  (when-not (get-selection-start-block)
+    (swap! state assoc :selection/start-block start-block)))
 
 (defn set-selection-blocks!
   ([blocks]
@@ -942,7 +943,8 @@ Similar to re-frame subscriptions"
   (swap! state assoc
          :selection/mode false
          :selection/blocks nil
-         :selection/direction :down))
+         :selection/direction :down
+         :selection/start-block nil))
 
 (defn get-selection-blocks
   []

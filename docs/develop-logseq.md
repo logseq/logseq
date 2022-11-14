@@ -30,7 +30,7 @@ Then open the browser <http://localhost:3001>.
 yarn release
 ```
 
-The released files will be at `resources/` directory.
+The released files will be at `static/` directory.
 
 ## Desktop app development
 

@@ -537,3 +537,40 @@ test('should show text after soft return when node is collapsed #5074', async ({
     'Before soft return\nAfter soft return'
   )
 })
+
+test('should not erase typed text when expanding block quickly after typing #3891', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  await block.mustFill('initial text,')
+  await page.waitForTimeout(500)
+  await page.type('textarea >> nth=0', ' then expand', { delay: 10 })
+  // A quick cmd-down must not destroy the typed text
+  if (IsMac) {
+    await page.keyboard.press('Meta+ArrowDown')
+  } else {
+    await page.keyboard.press('Control+ArrowDown')
+  }
+  await page.waitForTimeout(500)
+  expect(await page.inputValue('textarea >> nth=0')).toBe(
+    'initial text, then expand'
+  )
+
+  // First undo should delete the last typed information, not undo a no-op expand action
+  if (IsMac) {
+    await page.keyboard.press('Meta+z')
+  } else {
+    await page.keyboard.press('Control+z')
+  }
+  expect(await page.inputValue('textarea >> nth=0')).toBe(
+    'initial text,'
+  )
+
+  if (IsMac) {
+    await page.keyboard.press('Meta+z')
+  } else {
+    await page.keyboard.press('Control+z')
+  }
+  expect(await page.inputValue('textarea >> nth=0')).toBe(
+    ''
+  )
+})

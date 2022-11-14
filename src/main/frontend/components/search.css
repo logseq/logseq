@@ -5,6 +5,10 @@
 
     border-radius: 4px;
   }
+
+  .search-result {
+    @apply flex;
+  }
 }
 
 #search-wrapper svg {
