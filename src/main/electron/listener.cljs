@@ -163,10 +163,10 @@
                                          (string/replace "{time}" time)
                                          (string/replace "{url}" link)
                                          (string/replace "{text}" text))]
-                         (if (and (state/get-edit-block) (state/editing?))
+                         (if (and (state/get-edit-block) (not state/editing?)) ;; changed to not so that block is created at the end of the page
                            (editor-handler/insert content)
                            (editor-handler/api-insert-new-block! content {:page page
-                                                                          :edit-block? false
+                                                                          :edit-block? true
                                                                           :replace-empty-target? true})))))
 
   (js/window.apis.on "openNewWindowOfGraph"
