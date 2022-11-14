@@ -65,10 +65,6 @@ export class PointingMinimapState<
     }
   }
 
-  onWheel: TLEvents<S>['wheel'] = (info, e) => {
-    this.onPointerMove(info, e)
-  }
-
   onPointerMove: TLEvents<S>['pointer'] = (info, e) => {
     const newCameraPoint = this.getCameraPoint([e.clientX, e.clientY])
     if (newCameraPoint) {

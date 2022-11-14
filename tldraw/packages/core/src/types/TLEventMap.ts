@@ -12,7 +12,6 @@
 import type { AnyObject } from './types'
 
 export interface TLEventMap {
-  wheel: AnyObject
   pointer: AnyObject
   touch: AnyObject
   keyboard: AnyObject

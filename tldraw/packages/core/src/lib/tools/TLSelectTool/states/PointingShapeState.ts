@@ -25,10 +25,6 @@ export class PointingShapeState<
     }
   }
 
-  onWheel: TLEvents<S>['wheel'] = (info, e) => {
-    this.onPointerMove(info, e)
-  }
-
   onPointerMove: TLEvents<S>['pointer'] = () => {
     const { currentPoint, originPoint } = this.app.inputs
     if (Vec.dist(currentPoint, originPoint) > 5) {

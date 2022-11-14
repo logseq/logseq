@@ -1,5 +1,5 @@
 import { Vec } from '@tldraw/vec'
-import type { TLEventMap, TLStateEvents } from '../../../../types'
+import type { TLEventMap, TLEvents, TLStateEvents } from '../../../../types'
 import { lerp, uniqueId, PointUtils } from '../../../../utils'
 import type { TLShape, TLDrawShape } from '../../../shapes'
 import type { TLApp } from '../../../TLApp'
@@ -34,6 +34,10 @@ export class CreatingState<
         points: this.points,
       })
     }
+  }
+
+  onPinchStart: TLEvents<S>['pinch'] = (info, event) => {
+    this.tool.transition('pinching', { info, event })
   }
 
   onEnter = () => {
@@ -91,10 +95,6 @@ export class CreatingState<
     this.tool.previousShape = this.shape
     this.tool.transition('idle')
     this.app.persist()
-  }
-
-  onWheel: TLStateEvents<S, K>['onWheel'] = (info, e) => {
-    this.onPointerMove(info, e)
   }
 
   onKeyDown: TLStateEvents<S>['onKeyDown'] = (info, e) => {
