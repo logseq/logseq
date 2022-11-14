@@ -3247,25 +3247,18 @@
         repo (state/get-current-repo)
         value (boolean value)]
     (when repo
-      (outliner-tx/transact!
+      (save-current-block!) ;; Save the input contents before collapsing 
+      (outliner-tx/transact! ;; Save the new collapsed state as an undo transaction (if it changed)
         {:outliner-op :collapse-expand-blocks}
         (doseq [block-id block-ids]
           (when-let [block (db/entity [:block/uuid block-id])]
-            (let [current-value (:block/collapsed? block)]
+            (let [current-value (boolean (:block/collapsed? block))]
               (when-not (= current-value value)
                 (let [block {:block/uuid block-id
                              :block/collapsed? value}]
                   (outliner-core/save-block! block)))))))
       (doseq [block-id block-ids]
-        (state/set-collapsed-block! block-id value))
-      (let [block-id (first block-ids)
-            input-pos (or (state/get-edit-pos) :max)]
-        ;; update editing input content
-        (when-let [editing-block (state/get-edit-block)]
-          (when (= (:block/uuid editing-block) block-id)
-            (edit-block! editing-block
-                         input-pos
-                         (state/get-edit-input-id))))))))
+        (state/set-collapsed-block! block-id value)))))
 
 (defn collapse-block! [block-id]
   (when (collapsable? block-id)

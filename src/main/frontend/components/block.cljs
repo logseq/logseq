@@ -2147,7 +2147,7 @@
         (do
           (util/stop e)
           (state/conj-selection-block! (gdom/getElement block-id) :down)
-          (when (and block-id (not (state/get-selection-start-block)))
+          (when block-id
             (state/set-selection-start-block! block-id)))
         (when (contains? #{1 0} button)
           (when-not (target-forbidden-edit? target)
