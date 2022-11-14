@@ -102,7 +102,7 @@
 
     :page-presentation
     (let [page-name (:block/name (db/entity db-id))]
-      [[:a {:href (rfe/href :page {:name page-name})}
+      [[:a.page-title {:href (rfe/href :page {:name page-name})}
         (db-model/get-page-original-name page-name)]
        [:div.ml-2.slide.mt-2
         (slide/slide page-name)]])
