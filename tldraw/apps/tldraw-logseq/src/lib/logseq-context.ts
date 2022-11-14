@@ -26,6 +26,7 @@ export interface LogseqContextValue {
       query: string,
       filters: { 'pages?': boolean; 'blocks?': boolean; 'files?': boolean }
     ) => Promise<SearchResult>
+    addNewWhiteboard: (pageName: string) => void
     addNewBlock: (content: string) => string // returns the new block uuid
     queryBlockByUUID: (uuid: string) => any
     isWhiteboardPage: (pageName: string) => boolean
