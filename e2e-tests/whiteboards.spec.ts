@@ -19,7 +19,7 @@ test('enable whiteboards', async ({ page }) => {
 test('create new whiteboard', async ({ page }) => {
     await page.click('.nav-header .whiteboard')
     await page.click('#tl-create-whiteboard')
-    await expect(page.locator('.logseq-tldraw')).toHaveCount(1)
+    await expect(page.locator('.logseq-tldraw')).toBeVisible()
 })
 
 test('check if the page contains the onboarding whiteboard', async ({ page }) => {
