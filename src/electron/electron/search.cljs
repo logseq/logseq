@@ -254,12 +254,20 @@
          (take limit)
          (vec))))))
 
+(defn- search-pages-res-unpack
+  [arr]
+  (let [[rowid uuid content snippet] arr]
+    {:id      rowid
+     :uuid    uuid
+     :content content
+     :snippet snippet}))
+
 (defn- search-pages-aux
   [database sql input limit]
   (let [stmt (prepare database sql)]
-    (js->clj
-     (.all ^object stmt  input limit)
-     :keywordize-keys true)))
+    (map search-pages-res-unpack (-> (.raw ^object stmt)
+                                     (.all input limit)
+                                     (js->clj)))))
 
 (defn search-pages
   [repo q {:keys [limit]}]

@@ -20,9 +20,10 @@
   (query-page [_this q opts]
     (p/let [result (ipc/ipc "search-pages" repo q opts)
             result (bean/->clj result)]
-      (keep (fn [{:keys [content uuid]}]
+      (keep (fn [{:keys [content snippet uuid]}]
               (when-not (> (count content) (* 10 (state/block-content-max-length repo)))
                 {:block/uuid uuid
+                 :snippet snippet
                  :block/content content})) result)))
   (rebuild-blocks-indice! [_this]
     (let [blocks-indice (search-db/build-blocks-indice repo)
