@@ -1753,21 +1753,19 @@ Similar to re-frame subscriptions"
   (when-let [id (and id (keyword id))]
     (get-in @state [:plugin/installed-plugins id])))
 
-(defn get-all-enabled?-installed-plugins
-  ([enabled? include-unpacked?]
-   (filterv
-     #(and (if include-unpacked? true (:iir %))
-           (if-not (boolean? enabled?) true (= (not enabled?) (boolean (get-in % [:settings :disabled])))))
-     (vals (:plugin/installed-plugins @state)))))
-
 (defn get-enabled?-installed-plugins
-  ([theme?] (get-enabled?-installed-plugins theme? true false))
-  ([theme? enabled? include-unpacked?]
+  ([theme?] (get-enabled?-installed-plugins theme? true false false))
+  ([theme? enabled? include-unpacked? include-all?]
    (filterv
      #(and (if include-unpacked? true (:iir %))
            (if-not (boolean? enabled?) true (= (not enabled?) (boolean (get-in % [:settings :disabled]))))
-           (= (boolean theme?) (:theme %)))
+           (or include-all? (= (boolean theme?) (:theme %))))
      (vals (:plugin/installed-plugins @state)))))
+
+(defn get-all-enabled?-installed-plugins
+  ([] (get-all-enabled?-installed-plugins true true))
+  ([enabled? include-unpacked?]
+   (get-enabled?-installed-plugins nil enabled? include-unpacked? true)))
 
 (defn lsp-enabled?-or-theme
   []
