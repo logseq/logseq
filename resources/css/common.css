@@ -189,6 +189,7 @@ html[data-theme='light'] {
   --color-level-3: var(--ls-quaternary-background-color);
   --color-level-4: #d0e6fa;
   --color-level-5: #bbdaf6;
+  --color-level-6: #a7cef1;
 }
 
 html:not(.is-native-android) {
