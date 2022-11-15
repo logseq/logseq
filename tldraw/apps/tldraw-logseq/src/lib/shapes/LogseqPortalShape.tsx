@@ -994,10 +994,13 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           }}
           transform={`translate(${bounds.width / 2}, ${10 + bounds.height / 2})`}
           textAnchor="middle"
-          fontFamily="var(--ls-font-family)"
+          fontFamily="Blocky"
           fontSize="32"
-          fill="var(--ls-secondary-text-color)"
-          stroke="var(--ls-secondary-text-color)"
+          fill={
+            this.props.fill && this.props.fill !== 'var(--ls-secondary-background-color)'
+              ? getComputedColor(this.props.fill, 'background')
+              : 'var(--ls-tertiary-background-color)'
+          }
         >
           {this.props.blockType === 'P' ? this.props.pageId : ''}
         </text>
