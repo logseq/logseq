@@ -37,7 +37,9 @@ jobs:
         run: yarn cache clean && yarn install --frozen-lockfile
 
       - name: Build Released-Web
-        run: yarn gulp:build && clojure -M:cljs release app  --config-merge '{:asset-path "${{env.asset-path}}"}'
+        run: |
+          yarn gulp:build && clojure -M:cljs release app  --config-merge '{:asset-path "${{env.asset-path}}"}'
+          rm -rf ./static/*.js.map
 
       - name: Publish to Cloudflare Pages
         uses: cloudflare/pages-action@1
