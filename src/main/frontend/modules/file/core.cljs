@@ -4,6 +4,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
+            [frontend.modules.file.uprint :as up]
             [frontend.state :as state]
             [frontend.util.property :as property]
             [frontend.util.fs :as fs-util]
@@ -227,9 +228,11 @@
             new-content (cond
                           ;; TODO: treat as "edn" below too
                           (= "whiteboard" (:block/type page-block))
-                          (pr-str {:blocks tree
-                                   :pages (list (remove-transit-ids page-block))})
-
+                          (->
+                           (up/ugly-pr-str {:blocks tree
+                                            :pages (list (remove-transit-ids page-block))})
+                           (string/triml))
+                          
                           (= "edn" ext)
                           (let [{:keys [blocks refs]} (edn-transform-blocks page-block tree)]
                             (with-out-str
@@ -240,12 +243,12 @@
                                 :refs refs})))
 
                           :else
-                          (tree->file-content tree {:init-level init-level}))
-            files [[file-path new-content]]
-            repo (state/get-current-repo)]
-        (file-handler/alter-files-handler! repo files {} {}))
-      ;; In e2e tests, "card" page in db has no :file/path
-      (js/console.error "File path from page-block is not valid" page-block tree))))
+                                                                        (tree->file-content tree {:init-level init-level}))
+                                files [[file-path new-content]]
+                                repo (state/get-current-repo)]
+                            (file-handler/alter-files-handler! repo files {} {}))
+                          ;; In e2e tests, "card" page in db has no :file/path
+                          (js/console.error "File path from page-block is not valid" page-block tree))))
 
 (defn save-tree!
   [page-block tree]

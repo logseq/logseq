@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
+import { isSafari, TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps } from '@tldraw/react'
 import { action, computed } from 'mobx'
 import { observer } from 'mobx-react-lite'
@@ -131,17 +131,26 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
   }
 
   getShapeSVGJsx() {
+    if (isSafari()) {
+      // Safari doesn't support foreignObject well
+      return super.getShapeSVGJsx(null);
+    }
     // Do not need to consider the original point here
     const bounds = this.getBounds()
     const embedId = this.embedId
 
     if (embedId) {
       return (
-        <>
+        <g>
           <foreignObject width={bounds.width} height={bounds.height}>
             <img
               src={`https://img.youtube.com/vi/${embedId}/mqdefault.jpg`}
               draggable={false}
+              style={{
+                display: 'contents',
+                width: bounds.width,
+                height: bounds.height,
+              }}
               loading="lazy"
               className="rounded-lg relative pointer-events-none w-full h-full grayscale-[50%]"
             />
@@ -162,7 +171,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
               </svg>
             </div>
           </foreignObject>
-        </>
+        </g>
       )
     }
     return super.getShapeSVGJsx({})

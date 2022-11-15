@@ -35,9 +35,7 @@ export function ColorInput({
 
   return (
     <Popover.Root>
-      <Popover.Trigger>
-        <button className="tl-color-drip mx-1">{renderColor(color)}</button>
-      </Popover.Trigger>
+      <Popover.Trigger className="tl-color-drip mx-1">{renderColor(color)}</Popover.Trigger>
 
       <Popover.Content
         className="tl-popover-content"
@@ -48,6 +46,7 @@ export function ColorInput({
         <div className={'tl-color-palette'}>
           {Object.values(Color).map(value => (
             <button
+              key={value}
               className={`tl-color-drip m-1${value === color ? ' active' : ''}`}
               onClick={() => setColor(value)}
             >

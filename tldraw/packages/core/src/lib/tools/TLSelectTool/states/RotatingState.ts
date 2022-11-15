@@ -72,10 +72,6 @@ export class RotatingState<
     this.snapshot = {}
   }
 
-  onWheel: TLEvents<S>['wheel'] = (info, e) => {
-    this.onPointerMove(info, e)
-  }
-
   onPointerMove: TLEvents<S>['pointer'] = () => {
     const {
       selectedShapes,

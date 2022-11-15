@@ -166,12 +166,6 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     return this
   }
 
-  toggleToolLock = (): this => {
-    const { settings } = this.app
-    settings.update({ showGrid: !settings.isToolLocked })
-    return this
-  }
-
   save = () => {
     this.app.save()
     return this
@@ -286,7 +280,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     const getWhiteboardsTldrFromText = (text: string) => {
       const innerText = text.match(/<whiteboard-tldr>(.*)<\/whiteboard-tldr>/)?.[1]
       if (innerText) {
-        return safeParseJson(decodeURIComponent(innerText))
+        return safeParseJson(innerText)
       }
     }
 
