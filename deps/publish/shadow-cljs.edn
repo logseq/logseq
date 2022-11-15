@@ -1,0 +1,6 @@
+{:deps true
+ :builds
+ {:library {:target :node-library
+            :output-to "out/lib.js"
+            :exports {:html logseq.publish/->html}}}
+ :nrepl {:port 8704}}

@@ -31,6 +31,7 @@
   instaparse/instaparse                 {:mvn/version "1.4.10"}
   org.clojars.mmb90/cljs-cache          {:mvn/version "0.1.4"}
   logseq/graph-parser                   {:local/root "deps/graph-parser"}
+  logseq/publish                        {:local/root "deps/publish"}
   metosin/malli                         {:mvn/version "0.9.1"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]

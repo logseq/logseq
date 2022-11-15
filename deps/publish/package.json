@@ -1,0 +1,10 @@
+{
+    "name": "logseq-publish",
+    "version": "0.0.1",
+    "scripts": {
+        "watch": "npx shadow-cljs watch library"
+    },
+    "dependencies": {
+        "shadow-cljs": "^2.20.10"
+    }
+}

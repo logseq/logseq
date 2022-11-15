@@ -1,0 +1,33 @@
+{:paths ["src"]
+ :deps
+ ;; External deps should be kept in sync with https://github.com/logseq/nbb-logseq/blob/main/bb.edn
+ {com.andrewmcveigh/cljs-time {:git/url "https://github.com/logseq/cljs-time" ;; fork
+                               :sha     "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
+  ;; local dep
+  logseq/db {:local/root "../db"}
+  logseq/graph-parser {:local/root "../graph-parser"}
+  ;; stubbed in nbb
+  com.lambdaisland/glogi {:mvn/version "1.1.144"}
+  ;; built in to nbb
+  cljs-bean/cljs-bean {:mvn/version "1.5.0"}
+  rum/rum             {:mvn/version "0.12.9"}
+  org.clojure/core.match                {:mvn/version "1.0.0"}
+  thheller/shadow-cljs                  {:mvn/version "2.19.0"}}
+
+ :aliases
+ ;; This runs tests with nodejs. Would be nice to run this with in a browser env
+ ;; since this is how its normally run in the app but this requires more setup
+ ;; with karma, shadow-cljs.edn and headless mode on CI
+ {:cljs {:extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.54"}
+                       org.clojure/tools.namespace      {:mvn/version "0.2.11"}
+                       cider/cider-nrepl                {:mvn/version "0.28.4"}
+                       org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}}
+         :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
+
+  :test {:extra-paths ["test"]
+         :extra-deps {olical/cljs-test-runner {:mvn/version "3.8.0"}
+                      org.clojure/clojurescript {:mvn/version "1.11.54"}}
+         :main-opts ["-m" "cljs-test-runner.main"]}
+
+  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.10.14"}}
+              :main-opts  ["-m" "clj-kondo.main"]}}}
