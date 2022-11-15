@@ -23,8 +23,7 @@
       (keep (fn [{:keys [content snippet uuid]}]
               (when-not (> (count content) (* 10 (state/block-content-max-length repo)))
                 {:block/uuid uuid
-                 :snippet snippet
-                 :block/content content})) result)))
+                 :block/snippet snippet})) result)))
   (rebuild-blocks-indice! [_this]
     (let [blocks-indice (search-db/build-blocks-indice repo)
           pages-indice  (search-db/build-pages-indice repo)]

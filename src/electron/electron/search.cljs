@@ -288,9 +288,8 @@
             ;; the 2nd column in pages_fts (content)
             ;; pfts_2lqh is a key for retrieval
             ;; highlight and snippet only works for some matching with high rank
-            highlight-aux "highlight(pages_fts, 1, '$pfts_2lqh>$', '$<pfts_2lqh$')"
             snippet-aux "snippet(pages_fts, 1, '$pfts_2lqh>$', '$<pfts_2lqh$', '...', 32)"
-            select (str "select rowid, uuid, " highlight-aux ", " snippet-aux " from pages_fts where ")
+            select (str "select rowid, uuid, content, " snippet-aux " from pages_fts where ")
             match-sql (str select
                            " content match ? order by rank limit ?")
             non-match-sql (str select
@@ -299,7 +298,8 @@
          (concat
           (search-pages-aux database match-sql match-input limit)
           (search-pages-aux database non-match-sql non-match-input limit))
-         (distinct)
+         ;; distinct by :id
+         (group-by :id) (vals) (map first)
          (take limit)
          (vec))))))
 

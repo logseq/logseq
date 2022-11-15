@@ -274,6 +274,7 @@
   (db-utils/entity [:block/uuid (if (uuid? id) id (uuid id))]))
 
 (defn query-block-by-uuid
+  "Return block or page entity, depends on the uuid"
   [id]
   (db-utils/pull [:block/uuid (if (uuid? id) id (uuid id))]))
 

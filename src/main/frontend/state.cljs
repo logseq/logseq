@@ -51,7 +51,7 @@
      :journals-length                       3
 
      :search/q                              ""
-     :search/mode                           :global
+     :search/mode                           :global  ;; inner page or full graph? {:page :global}
      :search/result                         nil
      :search/graph-filters                  []
      :search/engines                        {}

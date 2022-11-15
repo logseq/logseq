@@ -4,8 +4,7 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.util :as util]
-            ["fuse.js" :as fuse]
-            [frontend.db.utils :as db-util]))
+            ["fuse.js" :as fuse]))
 
 ;; Notice: When breaking changes happen, bump version in src/electron/electron/search.cljs
 

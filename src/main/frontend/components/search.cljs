@@ -62,11 +62,63 @@
                              (conj result [:span content])))]
             [:p {:class "m-0"} elements]))))))
 
+;; (def fts-mark)
+
+;; (defn highlight-page-content-query
+;;   [content q]
+;;   (if (or (string/blank? content) (string/blank? q))
+;;     content
+;;     (if (and (string/includes? )
+;;              (not (util/safe-re-find #" " q)))
+;;       (let [i (string/index-of lc-content lc-q)
+;;             [before after] [(subs content 0 i) (subs content (+ i (count q)))]]
+;;         [:div
+;;          (when-not (string/blank? before)
+;;            [:span before])
+;;          [:mark.p-0.rounded-none (subs content i (+ i (count q)))]
+;;          (when-not (string/blank? after)
+;;            [:span after])])
+;;       (let [elements (loop [words q-words
+;;                             content content
+;;                             result []]
+;;                        (if (and (seq words) content)
+;;                          (let [word (first words)
+;;                                lc-word (util/search-normalize word (state/enable-search-remove-accents?))
+;;                                lc-content (util/search-normalize content (state/enable-search-remove-accents?))]
+;;                            (if-let [i (string/index-of lc-content lc-word)]
+;;                              (recur (rest words)
+;;                                     (subs content (+ i (count word)))
+;;                                     (vec
+;;                                      (concat result
+;;                                              [[:span (subs content 0 i)]
+;;                                               [:mark.p-0.rounded-none (subs content i (+ i (count word)))]])))
+;;                              (recur nil
+;;                                     content
+;;                                     result)))
+;;                          (conj result [:span content])))]
+;;         [:p {:class "m-0"} elements]))))
+
 (rum/defc search-result-item
   [icon content]
   [:.search-result
    (ui/type-icon icon)
    [:.self-center content]])
+
+(rum/defc page-content-search-result-item
+  [repo uuid snippet _q search-mode]
+  [:div
+   (when (not= search-mode :page)
+     [:div {:class "mb-1" :key "parents"}
+      (block/breadcrumb {:id "block-search-block-parent"
+                         :block? true
+                         :search? true}
+                        repo
+                        (clojure.core/uuid uuid)
+                        {:indent? false})])
+   [:div {:class "font-medium" :key "content"}
+    ;; (highlight-page-content-query snippet q)
+    snippet
+    ]])
 
 (rum/defc block-search-result-item
   [repo uuid format content q search-mode]
@@ -254,10 +306,23 @@
                                 (do (log/error "search result with non-existing uuid: " data)
                                     (str "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."))))])
 
+       :page-content
+       (let [{:block/keys [snippet uuid]} data  ;; content here is normalized
+             repo (state/sub :git/current-repo)
+             page (model/query-block-by-uuid uuid)] ;; it's actually a page
+         [:span {:data-block-ref uuid}
+          (search-result-item {:name "page"
+                               :title (t :search-item/page)
+                               :extension? true}
+                              (if page
+                                (page-content-search-result-item repo uuid snippet search-q search-mode)
+                                (do (log/error "search result with non-existing uuid: " data)
+                                    (str "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."))))])
+
        nil)]))
 
 (rum/defc search-auto-complete
-  [{:keys [engine pages files blocks has-more?] :as result} search-q all?]
+  [{:keys [engine pages files pages-content blocks has-more?] :as result} search-q all?]
   (let [pages (when-not all? (map (fn [page]
                                     (let [alias (model/get-redirect-page-name page)]
                                       (cond->
@@ -270,6 +335,7 @@
                                   (remove nil? pages)))
         files (when-not all? (map (fn [file] {:type :file :data file}) files))
         blocks (map (fn [block] {:type :block :data block}) blocks)
+        pages-content (map (fn [pages-content] {:type :page-content :data pages-content}) pages-content)
         search-mode (state/sub :search/mode)
         new-page (if (or
                       (some? engine)
@@ -284,13 +350,13 @@
                      [{:type :new-page}]))
         result (cond
                  config/publishing?
-                 (concat pages files blocks)
+                 (concat pages files blocks) ;; Browser doesn't have page content FTS
 
                  (= :whiteboard/link search-mode)
-                 (concat pages blocks)
+                 (concat pages blocks pages-content)
 
                  :else
-                 (concat new-page pages files blocks))
+                 (concat new-page pages files blocks pages-content))
         result (if (= search-mode :graph)
                  [{:type :graph-add-filter}]
                  result)
