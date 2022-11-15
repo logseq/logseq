@@ -61,7 +61,8 @@
     (gp-util/safe-subs s 0 200)))
 
 (defn get-page-file-path
-  ([] (get-page-file-path (state/get-current-page)))
+  ([] (get-page-file-path (or (state/get-current-page)
+                              (state/get-current-whiteboard))))
   ([page-name]
    (when page-name
      (let [page-name (util/page-name-sanity-lc page-name)]
