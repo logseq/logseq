@@ -136,7 +136,7 @@
                (reset! *timestamp {:time ""
                                    :repeater {}}))
              (when-not (:date-picker/date @state/state)
-               (state/set-state! :date-picker/date (t/today))))
+               (state/set-state! :date-picker/date (get ts :date (t/today)))))
            state)
    :will-unmount (fn [state]
                    (clear-timestamp!)
