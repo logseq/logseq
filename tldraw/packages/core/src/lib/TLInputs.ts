@@ -33,9 +33,10 @@ export class TLInputs<K extends TLEventMap> {
     Object.assign(this.containerOffset, containerOffset)
   }
 
-  @action private updateModifiers(
-    event: K['gesture'] | K['pointer'] | K['keyboard'] | K['wheel'] | K['touch']
-  ) {
+  @action private updateModifiers(event: K['gesture'] | K['pointer'] | K['keyboard'] | K['touch']) {
+    if (!event.isPrimary) {
+      return
+    }
     if ('clientX' in event) {
       this.previousScreenPoint = this.currentScreenPoint
       this.currentScreenPoint = Vec.sub([event.clientX, event.clientY], this.containerOffset)
@@ -48,18 +49,7 @@ export class TLInputs<K extends TLEventMap> {
     }
   }
 
-  @action onWheel = (pagePoint: number[], event: K['wheel']) => {
-    // if (this.state === 'pinching') return
-    this.updateModifiers(event)
-    this.previousPoint = this.currentPoint
-    this.currentPoint = pagePoint
-    // start panning = true here in panCamera (called in TLApp)
-    this.state = 'panning'
-    // otherwise, set panning = false?
-  }
-
   @action onPointerDown = (pagePoint: number[], event: K['pointer']) => {
-    // if (this.pointerIds.size > 0) return
     this.pointerIds.add(event.pointerId)
     this.updateModifiers(event)
     this.originScreenPoint = this.currentScreenPoint
@@ -69,7 +59,7 @@ export class TLInputs<K extends TLEventMap> {
 
   @action onPointerMove = (
     pagePoint: number[],
-    event: K['gesture'] | K['pointer'] | K['keyboard'] | K['wheel'] | K['touch']
+    event: K['gesture'] | K['pointer'] | K['keyboard'] | K['touch']
   ) => {
     if (this.state === 'pinching') return
     if (this.state === 'panning') {
@@ -110,7 +100,7 @@ export class TLInputs<K extends TLEventMap> {
 
   @action onPinchStart = (
     pagePoint: number[],
-    event: K['gesture'] | K['pointer'] | K['keyboard'] | K['wheel'] | K['touch']
+    event: K['gesture'] | K['pointer'] | K['keyboard'] | K['touch']
   ) => {
     this.updateModifiers(event)
     this.state = 'pinching'
@@ -118,7 +108,7 @@ export class TLInputs<K extends TLEventMap> {
 
   @action onPinch = (
     pagePoint: number[],
-    event: K['gesture'] | K['pointer'] | K['keyboard'] | K['wheel'] | K['touch']
+    event: K['gesture'] | K['pointer'] | K['keyboard'] | K['touch']
   ) => {
     if (this.state !== 'pinching') return
     this.updateModifiers(event)
@@ -126,7 +116,7 @@ export class TLInputs<K extends TLEventMap> {
 
   @action onPinchEnd = (
     pagePoint: number[],
-    event: K['gesture'] | K['pointer'] | K['keyboard'] | K['wheel'] | K['touch']
+    event: K['gesture'] | K['pointer'] | K['keyboard'] | K['touch']
   ) => {
     if (this.state !== 'pinching') return
     this.updateModifiers(event)

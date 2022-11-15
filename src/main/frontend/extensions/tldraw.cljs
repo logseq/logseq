@@ -65,6 +65,8 @@
    :isWhiteboardPage model/whiteboard-page?
    :saveAsset save-asset-handler
    :makeAssetUrl editor-handler/make-asset-url
+   :addNewWhiteboard (fn [page-name]
+                       (whiteboard-handler/create-new-whiteboard-page! page-name))
    :addNewBlock (fn [content]
                   (str (whiteboard-handler/add-new-block! name content)))
    :sidebarAddBlock (fn [uuid type]

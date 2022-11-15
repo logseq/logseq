@@ -216,14 +216,7 @@ export class TLBaseLineBindingState<
     if (this.currentShape) {
       this.app.setSelectedShapes([this.currentShape])
     }
-    if (!this.app.settings.isToolLocked) {
-      this.app.transition('select')
-    }
     this.app.persist()
-  }
-
-  onWheel: TLStateEvents<S, K>['onWheel'] = (info, e) => {
-    this.onPointerMove(info, e)
   }
 
   onExit: TLStateEvents<S, K>['onExit'] = () => {

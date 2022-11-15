@@ -248,7 +248,7 @@ export function usePaste() {
       }
 
       function tryCreateClonedShapesFromJSON(rawText: string) {
-        const result = app.api.getClonedShapesFromTldrString(rawText, point)
+        const result = app.api.getClonedShapesFromTldrString(decodeURIComponent(rawText), point)
         if (result) {
           const { shapes, assets, bindings } = result
           assetsToClone.push(...assets)
