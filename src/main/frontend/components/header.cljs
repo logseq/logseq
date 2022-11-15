@@ -53,14 +53,16 @@
   < {:key-fn #(identity "publish-button")}
   []
   (let [_ (state/sub :auth/id-token)
-        loading? (state/sub [:ui/loading? :login])
-        sync-enabled? (file-sync-handler/enable-sync?)
+        loading? (state/sub [:ui/loading? :publish])
         logged? (user-handler/logged-in?)]
-    (when (and sync-enabled? logged?)
-      [:button.button.icon.inline
-       {:title "Publish"
-        :on-click publish-handler/publish}
-       (ui/icon "send" {:size ui/icon-size})])))
+    (when logged?
+      (if loading?
+        [:button.button.icon.inline
+         (ui/loading "")]
+        [:button.button.icon.inline
+         {:title "Publish"
+          :on-click publish-handler/publish}
+         (ui/icon "send" {:size ui/icon-size})]))))
 
 (rum/defc left-menu-button < rum/reactive
   < {:key-fn #(identity "left-menu-toggle-button")}

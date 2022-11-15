@@ -22,6 +22,7 @@
 
 (defn publish
   []
+  (state/set-state! [:ui/loading? :publish] true)
   (let [repo         (state/get-current-repo)
         page-name    (or (state/get-current-page)
                          (date/today))
@@ -58,6 +59,7 @@
                                   {:oauth-token       token
                                    :body              (js/JSON.stringify (bean/->js body))
                                    :with-credentials? false}))]
+        (state/set-state! [:ui/loading? :publish] false)
         (if (:success result)
           (when-let [url (get-in result [:body :url])]
             (let [url' (string/replace url "https://logseq.io" "http://localhost:3000")]
