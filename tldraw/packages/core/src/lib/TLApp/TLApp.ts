@@ -70,7 +70,7 @@ export class TLApp<
 
   keybindingRegistered = false
   uuid = uniqueId()
-  
+
   static id = 'app'
   static initial = 'select'
 
@@ -451,8 +451,18 @@ export class TLApp<
     return this
   }
 
+  @action removeUnusedAssets = (): this => {
+    const usedAssets = this.getCleanUpAssets()
+    Object.keys(this.assets).forEach(assetId => {
+      if (!usedAssets.some(asset => asset.id === assetId)) {
+        delete this.assets[assetId]
+      }
+    })
+    this.persist()
+    return this
+  }
+
   getCleanUpAssets<T extends TLAsset>(): T[] {
-    let deleted = false
     const usedAssets = new Set<T>()
 
     this.pages.forEach(p =>
@@ -484,7 +494,7 @@ export class TLApp<
         // convey the bindings to maintain the new links after pasting
         bindings: toJS(this.currentPage.bindings),
       })
-      const tldrawString = `<whiteboard-tldr>${encodeURIComponent(jsonString)}</whiteboard-tldr>`
+      const tldrawString = encodeURIComponent(`<whiteboard-tldr>${jsonString}</whiteboard-tldr>`)
       // FIXME: use `writeClipboard` in frontend.utils
       navigator.clipboard.write([
         new ClipboardItem({
@@ -915,18 +925,7 @@ export class TLApp<
     this.selectedTool.transition('idleHold')
   }
 
-  readonly onTransition: TLStateEvents<S, K>['onTransition'] = () => {
-    this.settings.update({ isToolLocked: false })
-  }
-
-  readonly onWheel: TLEvents<S, K>['wheel'] = (info, e) => {
-    if (e.ctrlKey || e.metaKey || this.isIn('select.contextMenu')) {
-      return
-    }
-
-    this.viewport.panCamera(info.delta)
-    this.inputs.onWheel([...this.viewport.getPagePoint([e.clientX, e.clientY]), 0.5], e)
-  }
+  readonly onTransition: TLStateEvents<S, K>['onTransition'] = () => {}
 
   readonly onPointerDown: TLEvents<S, K>['pointer'] = (info, e) => {
     // Pan canvas when holding middle click

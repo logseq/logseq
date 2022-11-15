@@ -9,7 +9,7 @@ export function useZoom(ref: React.RefObject<HTMLDivElement>) {
   React.useLayoutEffect(() => {
     return autorun(() => {
       const zoom = viewport.camera.zoom
-      if (app.inputs.state !== 'pinching') {
+      if (app.inputs.state !== 'pinching' && zoom != null) {
         ref.current?.style.setProperty('--tl-zoom', zoom.toString())
       }
     })

@@ -16,6 +16,6 @@ export class LogseqPortalTool extends TLTool<
   Shape = LogseqPortalShape
 
   onPinch: TLEvents<Shape>['pinch'] = info => {
-    this.app.viewport.pinchCamera(info.point, [0, 0], info.offset[0])
+    this.app.viewport.pinchZoom(info.point, info.delta, info.delta[2])
   }
 }

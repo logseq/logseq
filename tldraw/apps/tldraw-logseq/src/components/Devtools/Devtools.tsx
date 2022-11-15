@@ -6,7 +6,7 @@ import ReactDOM from 'react-dom'
 import type { Shape } from '../../lib'
 
 const printPoint = (point: number[]) => {
-  return `[${point.map(d => d.toFixed(2)).join(', ')}]`
+  return `[${point.map(d => d?.toFixed(2) ?? '-').join(', ')}]`
 }
 
 const HistoryStack = observer(function HistoryStack() {
@@ -25,7 +25,7 @@ const HistoryStack = observer(function HistoryStack() {
   }, [])
 
   React.useEffect(() => {
-    requestIdleCallback(() => {
+    requestAnimationFrame(() => {
       anchorRef.current
         ?.querySelector(`[data-item-index="${app.history.pointer}"]`)
         ?.scrollIntoView()
@@ -75,7 +75,7 @@ export const DevTools = observer(() => {
   }, [])
 
   const rendererStatusText = [
-    ['Z', zoom.toFixed(2)],
+    ['Z', zoom?.toFixed(2) ?? 'null'],
     ['MP', printPoint(inputs.currentPoint)],
     ['MS', printPoint(inputs.currentScreenPoint)],
     ['VP', printPoint(point)],

@@ -1,3 +1,16 @@
+:root {
+  --ls-wb-stroke-color-gray: var(--color-gray-500, gray);
+  --ls-wb-stroke-color-red: var(--color-red-500, red);
+  --ls-wb-stroke-color-yellow: var(--color-yellow-500, yellow);
+  --ls-wb-stroke-color-green: var(--color-green-500, green);
+  --ls-wb-stroke-color-blue: var(--color-blue-500, blue);
+  --ls-wb-stroke-color-purple: var(--color-purple-500, purple);
+  --ls-wb-stroke-color-pink: var(--color-pink-500, pink);
+  --ls-wb-stroke-color-default: var(--ls-secondary-border-color);
+  --ls-wb-text-color-default: var(--ls-secondary-text-color);
+  --ls-wb-background-color-default: var(--ls-tertiary-background-color);
+}
+
 .logseq-tldraw {
   --color-panel: var(--ls-tertiary-background-color);
   --color-panel-inverted: var(--ls-secondary-text-color);
@@ -12,6 +25,45 @@
   --shadow-large: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 
   backface-visibility: hidden;
+}
+
+.dark-theme,
+html[data-theme='dark'] {
+  --ls-wb-background-color-gray: var(--color-gray-800, gray);
+  --ls-wb-background-color-red: var(--color-red-800, red);
+  --ls-wb-background-color-yellow: var(--color-yellow-800, yellow);
+  --ls-wb-background-color-green: var(--color-green-800, green);
+  --ls-wb-background-color-blue: var(--color-blue-800, blue);
+  --ls-wb-background-color-purple: var(--color-purple-800, purple);
+  --ls-wb-background-color-pink: var(--color-pink-800);
+
+  --ls-wb-text-color-gray: var(--color-gray-400, gray);
+  --ls-wb-text-color-red: var(--color-red-400, red);
+  --ls-wb-text-color-yellow: var(--color-yellow-400, yellow);
+  --ls-wb-text-color-green: var(--color-green-400, green);
+  --ls-wb-text-color-blue: var(--color-blue-400, blue);
+  --ls-wb-text-color-purple: var(--color-purple-400, purple);
+  --ls-wb-text-color-pink: var(--color-pink-400, pink);
+}
+
+.white-theme,
+.light-theme,
+html[data-theme='light'] {
+  --ls-wb-background-color-gray: var(--color-gray-200, gray);
+  --ls-wb-background-color-red: var(--color-red-200, red);
+  --ls-wb-background-color-yellow: var(--color-yellow-200, yellow);
+  --ls-wb-background-color-green: var(--color-green-200, green);
+  --ls-wb-background-color-blue: var(--color-blue-200, blue);
+  --ls-wb-background-color-purple: var(--color-purple-200, purple);
+  --ls-wb-background-color-pink: var(--color-pink-200, pink);
+
+  --ls-wb-text-color-gray: var(--color-gray-600, gray);
+  --ls-wb-text-color-red: var(--color-red-600, red);
+  --ls-wb-text-color-yellow: var(--color-yellow-600, yellow);
+  --ls-wb-text-color-green: var(--color-green-600, green);
+  --ls-wb-text-color-blue: var(--color-blue-600, blue);
+  --ls-wb-text-color-purple: var(--color-purple-600, purple);
+  --ls-wb-text-color-pink: var(--color-pink-600, pink);
 }
 
 .logseq-tldraw-wrapper {
@@ -132,15 +184,6 @@
     padding: 2px;
   }
 
-  .color-input-wrapper {
-    overflow: hidden;
-    height: 20px;
-    width: 20px;
-    border-radius: 2px;
-    margin: 2px;
-    box-shadow: 0 0 0 2px var(--ls-tertiary-background-color);
-  }
-
   .color-input {
     transform: translate(-50%, -50%) scale(4);
   }
@@ -187,7 +230,7 @@
 }
 
 .tl-statusbar {
-  @apply absolute flex items-center w-full bottom-0;
+  @apply fixed flex items-center w-full bottom-0;
 
   font-family: monospace;
   font-size: 10px;
@@ -608,6 +651,7 @@ button.tl-select-input-trigger {
   padding: 8px 16px;
   cursor: pointer;
   gap: 0.5em;
+  user-select: none;
 
   &[data-focused='true'] {
     background-color: var(--ls-menu-hover-color, #f4f5f7);
@@ -615,7 +659,8 @@ button.tl-select-input-trigger {
 }
 
 .tl-quick-search-option-row {
-  display: flex;
+  @apply flex items-center;
+
   gap: 0.5em;
 
   .breadcrumb {
@@ -624,12 +669,16 @@ button.tl-select-input-trigger {
 }
 
 .tl-quick-search-option-placeholder {
-  width: 20px;
+  width: 24px;
   flex-shrink: 0;
 }
 
 .tl-quick-search-option-breadcrumb {
   opacity: 0.5;
+}
+
+[data-inner-events=false] * {
+  user-select: none;
 }
 
 .tl-logseq-portal-container {
@@ -639,6 +688,7 @@ button.tl-select-input-trigger {
   left: 0;
   overscroll-behavior: none;
   opacity: 1;
+  overflow: hidden;
   user-select: text;
   transform-origin: top left;
 
@@ -652,25 +702,19 @@ button.tl-select-input-trigger {
 }
 
 .tl-logseq-portal-header {
-  @apply flex items-center w-full;
+  @apply relative flex items-center w-full;
 
   height: 40px;
   flex-shrink: 0;
-
+  z-index: 1;
   color: var(--ls-title-text-color);
   border-top-left-radius: 8px;
   border-top-right-radius: 8px;
-  background: var(--ls-tertiary-background-color);
   padding: 0 1rem;
   gap: 0.5em;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
-
-  &.tl-logseq-portal-header-block {
-    background: linear-gradient(0deg, transparent, var(--ls-tertiary-background-color));
-  }
-
 
   .page-ref {
     color: var(--ls-title-text-color);
@@ -691,8 +735,8 @@ button.tl-select-input-trigger {
   @apply flex items-center justify-center rounded text-base;
 
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   line-height: 1;
   color: #fff;
   background: rgba(0, 0, 0, 0.5);
@@ -702,7 +746,10 @@ button.tl-select-input-trigger {
 
 .tl-image-shape-container {
   @apply h-full w-full overflow-hidden flex items-center justify-center pointer-events-auto;
-  background-color: var(--ls-secondary-background-color);
+
+  &[data-asset-loaded="false"] {
+    background-color: var(--ls-secondary-background-color);
+  }
 }
 
 .tl-html-container {
@@ -734,8 +781,10 @@ button.tl-select-input-trigger {
 }
 
 .tl-logseq-cp-container {
-  @apply h-full w-full rounded-lg;
+  @apply relative h-full w-full rounded-lg;
 
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
   overscroll-behavior: none;
   flex: 1 1 0%;
   cursor: default;
@@ -809,17 +858,14 @@ html[data-theme='dark'] {
   height: 32px;
   width: 32px;
   color: var(--ls-secondary-text-color);
-  opacity: 0.3;
+
   &:hover {
     background-color: var(--ls-tertiary-background-color);
   }
-  &[data-toggle='false'] {
-    opacity: 1;
-  }
+
   &[data-state='on'] {
     background-color: var(--ls-tertiary-background-color);
     color: var(--ls-primary-text-color);
-    opacity: 1;
   }
 }
 
@@ -848,4 +894,85 @@ html[data-theme='dark'] {
   stroke: transparent;
   pointer-events: all;
   stroke-width: min(100px, calc(12px * var(--tl-scale)));
+}
+
+.tl-popover-content {
+  @apply rounded-sm drop-shadow-md;
+
+  padding: 4px;
+  width: 160px;
+  background-color: var(--ls-secondary-background-color);
+  z-index: 100000;
+}
+
+.tl-popover-arrow {
+  fill: var(--ls-secondary-background-color);
+}
+
+.tl-color-palette {
+  @apply flex flex-wrap;
+}
+
+.tl-color-drip {
+  @apply rounded text-sm;
+
+  width: 30px;
+  height: 30px;
+  padding: 3px;
+  border: 1px solid var(--ls-secondary-border-color);
+  color: var(--ls-secondary-text-color);
+
+  &.active {
+    padding: 0;
+
+    .tl-color-bg {
+      border: 3px solid var(--ls-selection-background-color);
+    }
+  }
+}
+
+.tl-color-bg {
+  @apply flex justify-center items-center w-full h-full rounded-sm;
+}
+
+.tl-slider-root {
+  @apply relative flex items-center w-full rounded-sm;
+
+  user-select: none;
+  touch-action: none;
+  background: url("../img/checker.png");
+
+}
+
+.tl-slider-track {
+  @apply relative grow rounded-sm w-full;
+
+  background: linear-gradient(90deg, transparent, var(--ls-tertiary-background-color));
+  border: 1px solid var(--ls-secondary-border-color);
+
+  &[data-orientation="horizontal"] {
+    height: 10px;
+  }
+
+  &[data-orientation="vertical"] {
+    width: 10px;
+  }
+}
+
+.tl-slider-range {
+  @apply absolute h-full rounded-sm;
+}
+
+.tl-slider-thumb {
+  @apply block rounded-sm;
+
+  width: 8px;
+  height: 14px;
+  background-color: var(--ls-secondary-background-color);
+  border: 1px solid var(--color-selectedStroke);
+  box-shadow: 0 0 1px var(--ls-secondary-border-color);
+
+  &:hover {
+    background-color: var(--ls-tertiary-background-color);
+  }
 }

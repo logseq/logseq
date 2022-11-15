@@ -17,6 +17,7 @@
   --ls-error-color: var(--color-red-500);
   --ls-warning-color: var(--color-orange-500);
   --ls-success-color: var(--color-green-500);
+  --ls-highlight-color-default: var(--ls-secondary-background-color);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -78,17 +79,17 @@ html[data-theme='dark'] {
   --ls-page-blockquote-color: var(--ls-primary-text-color);
   --ls-page-blockquote-bg-color: var(--ls-secondary-background-color);
   --ls-page-blockquote-border-color: var(--ls-border-color);
+  --ls-page-mark-color: #262626;
+  --ls-page-mark-bg-color: #fef3ac;
   --ls-page-inline-code-color: var(--ls-primary-text-color);
   --ls-page-inline-code-bg-color: #01222a;
   --ls-scrollbar-foreground-color: #11505f;
   --ls-scrollbar-background-color: rgba(30, 60, 67, 0.1);
   --ls-scrollbar-thumb-hover-color: rgba(255, 255, 255, 0.2);
-  --ls-head-text-color: var(--ls-link-text-color);
   --ls-cloze-text-color: #8fbc8f;
   --ls-icon-color: var(--ls-link-text-color);
   --ls-search-icon-color: var(--ls-link-text-color);
   --ls-a-chosen-bg: var(--ls-secondary-background-color);
-  --ls-right-sidebar-code-bg-color: #04303c;
   --ls-pie-bg-color: #01303b;
   --ls-pie-fg-color: #0b5869;
   --ls-highlight-color-gray: var(--color-gray-900);
@@ -155,17 +156,17 @@ html[data-theme='light'] {
   --ls-page-blockquote-color: var(--ls-primary-text-color);
   --ls-page-blockquote-bg-color: #fbfaf8;
   --ls-page-blockquote-border-color: #799bbc;
+  --ls-page-mark-color: #262626;
+  --ls-page-mark-bg-color: #fef3ac;
   --ls-page-inline-code-bg-color: #f7f7f7;
   --ls-page-inline-code-color: var(--ls-primary-text-color);
   --ls-scrollbar-foreground-color: rgba(0, 0, 0, 0.1);
   --ls-scrollbar-background-color: rgba(0, 0, 0, 0.05);
   --ls-scrollbar-thumb-hover-color: rgba(0, 0, 0, 0.2);
-  --ls-head-text-color: var(--ls-link-text-color);
   --ls-cloze-text-color: #0000cd;
   --ls-icon-color: #646464;
   --ls-search-icon-color: var(--ls-icon-color);
   --ls-a-chosen-bg: #f7f7f7;
-  --ls-right-sidebar-code-bg-color: var(--ls-secondary-background-color);
   --ls-pie-bg-color: #e1e1e1;
   --ls-pie-fg-color: #0a4a5d;
   --ls-highlight-color-gray: var(--color-gray-100);
@@ -759,8 +760,8 @@ a.navigation {
 /* text mark/highlight */
 
 mark {
-  background: #fef3ac;
-  color: #262626;
+  background: var(--ls-page-mark-bg-color);
+  color: var(--ls-page-mark-color);
   padding: 2px 4px;
   border-radius: 3px;
 }

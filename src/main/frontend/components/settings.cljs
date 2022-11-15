@@ -6,6 +6,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.storage :as storage]
+            [frontend.spec.storage :as storage-spec]
             [frontend.date :as date]
             [frontend.dicts :as dicts]
             [frontend.handler :as handler]
@@ -76,7 +77,12 @@
                :else
                nil)]
 
-       [:div.text-sm.opacity-50 (str "Version " version)]]]
+       [:div.text-sm version]
+
+       [:a.text-sm.fade-link.underline.inline
+        {:target "_blank"
+         :href "https://docs.logseq.com/#/page/changelog"}
+        "What's new?"]]]
 
      (when-not (or update-pending?
                    (string/blank? type))
@@ -299,7 +305,12 @@
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "custom_date_format"}
-    (t :settings-page/custom-date-format)]
+    (t :settings-page/custom-date-format)
+    (ui/tippy {:html        (t :settings-page/custom-date-format-warning)     
+               :class       "tippy-hover ml-2"
+               :interactive true
+               :disabled    false}
+              (svg/info))]
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md
      [:select.form-select.is-small
@@ -345,6 +356,12 @@
                      (svg/info))]
           logical-outdenting?
           config-handler/toggle-logical-outdenting!))
+
+(defn perferred-pasting-file [t perferred-pasting-file?]
+  (toggle "preferred_pasting_file"
+          (t :settings-page/preferred-pasting-file)
+          perferred-pasting-file?
+          config-handler/toggle-perferred-pasting-file!))
 
 (defn tooltip-row [t enable-tooltip?]
   (toggle "enable_tooltip"
@@ -409,24 +426,6 @@
 ;;           (fn []
 ;;             (let [value (not enable-block-timestamps?)]
 ;;               (config-handler/set-config! :feature/enable-block-timestamps? value)))))
-
-(defn encryption-row [enable-encryption?]
-  (toggle "enable_encryption"
-          (t :settings-page/enable-encryption)
-          enable-encryption?
-          #(let [value (not enable-encryption?)]
-             (config-handler/set-config! :feature/enable-encryption? value)
-             (when value
-               (state/close-modal!)
-               ;; FIXME: Don't send the `(atom false)` ! Should check multi-window! or internal status error happens
-               (js/setTimeout (fn [] (state/pub-event! [:graph/ask-for-re-index (atom false) nil]))
-                              100)))
-          [:p.text-sm.opacity-50 "⚠️ This feature is experimental! "
-           [:span "You can use "]
-           [:a {:href "https://github.com/kanru/logseq-encrypt-ui"
-                :target "_blank"}
-            "logseq-encrypt-ui"]
-           [:span " to decrypt your graph."]]))
 
 (rum/defc keyboard-shortcuts-row [t]
   (row-with-button-action
@@ -495,7 +494,7 @@
         [on? set-on?] (rum/use-state value)
         on-toggle #(let [v (not on?)]
                      (set-on? v)
-                     (storage/set :lsp-core-enabled v))]
+                     (storage/set ::storage-spec/lsp-core-enabled v))]
     [:div.flex.items-center
      (ui/toggle on? on-toggle true)
      (when (not= (boolean value) on?)
@@ -573,6 +572,7 @@
         enable-timetracking? (state/enable-timetracking?)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)
+        perferred-pasting-file? (state/perferred-pasting-file?)
         enable-tooltip? (state/enable-tooltip?)
         enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
         show-brackets? (state/show-brackets?)
@@ -586,6 +586,7 @@
      (show-brackets-row t show-brackets?)
      (when (util/electron?) (switch-spell-check-row t))
      (outdenting-row t logical-outdenting?)
+     (perferred-pasting-file t perferred-pasting-file?)
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (shortcut-tooltip-row t enable-shortcut-tooltip?))
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
@@ -635,9 +636,7 @@
   [enabled?]
   (ui/toggle enabled?
              (fn []
-               (let [value (not enabled?)]
-                 (storage/set :logseq-sync-enabled value)
-                 (state/set-state! :feature/enable-sync? value)))
+               (file-sync-handler/set-sync-enabled! (not enabled?)))
              true))
 
 (defn sync-switcher-row [enabled?]
@@ -662,7 +661,6 @@
   []
   (let [current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
-        enable-encryption? (state/enable-encryption? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
         enable-sync? (state/enable-sync?)
         enable-whiteboards? (state/enable-whiteboards? current-repo)
@@ -682,10 +680,39 @@
             :on-key-press  (fn [e]
                              (when (= "Enter" (util/ekey e))
                                (update-home-page e)))}]]]])
-     (when (and (util/electron?) config/enable-plugins?) (plugin-system-switcher-row))
+     (when (and (util/electron?) config/feature-plugin-system-on?) (plugin-system-switcher-row))
      (flashcards-switcher-row enable-flashcards?)
      (zotero-settings-row)
-     (encryption-row enable-encryption?)
+     (when-not web-platform?
+       [:div.mt-1.sm:mt-0.sm:col-span-2
+        [:hr]
+        (if logged-in?
+          [:div
+           (user-handler/email)
+           [:p (ui/button (t :logout) {:class "p-1"
+                                       :icon "logout"
+                                       :on-click user-handler/logout})]]
+          [:div
+           (ui/button (t :login) {:class "p-1"
+                                  :icon "login"
+                                  :on-click (fn []
+                                              (state/close-settings!)
+                                              (js/window.open config/LOGIN-URL))})
+           [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])])
+
+     (when-not web-platform?
+       [:<>
+        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
+        [:div.flex.flex-col.gap-4
+         {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
+         (sync-switcher-row enable-sync?)
+         [:div.text-sm
+          "Click"
+          [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
+                    :target "_blank"}
+           "here"]
+          "for instructions on how to set up and use Sync."]]])
 
      (when-not web-platform?
        [:div.mt-1.sm:mt-0.sm:col-span-2

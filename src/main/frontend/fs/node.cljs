@@ -9,8 +9,7 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]
-            [frontend.encrypt :as encrypt]))
+            [promesa.core :as p]))
 
 (defn concat-path
   [dir path]
@@ -29,10 +28,7 @@
 (defn- contents-matched?
   [disk-content db-content]
   (when (and (string? disk-content) (string? db-content))
-    (if (encrypt/encrypted-db? (state/get-current-repo))
-      (p/let [decrypted-content (encrypt/decrypt disk-content)]
-        (= (string/trim decrypted-content) (string/trim db-content)))
-      (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
+    (p/resolved (= (string/trim disk-content) (string/trim db-content)))))
 
 (defn- write-file-impl!
   [this repo dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
@@ -61,8 +57,7 @@
          (not contents-matched?)
          (not (contains? #{"excalidraw" "edn" "css"} ext))
          (not (string/includes? path "/.recycle/")))
-        (p/let [disk-content (encrypt/decrypt disk-content)]
-          (state/pub-event! [:file/not-matched-from-disk path disk-content content]))
+        (state/pub-event! [:file/not-matched-from-disk path disk-content content])
 
         :else
         (->
@@ -71,10 +66,7 @@
            (when-not contents-matched?
              (ipc/ipc "backupDbFile" (config/get-local-dir repo) path disk-content content))
            (db/set-file-last-modified-at! repo path mtime)
-           (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
-                             (encrypt/decrypt content)
-                             content)]
-             (db/set-file-content! repo path content))
+           (db/set-file-content! repo path content)
            (when ok-handler
              (ok-handler repo path result))
            result)
@@ -83,8 +75,8 @@
                       (error-handler error)
                       (log/error :write-file-failed error)))))))))
 
-(defn- open-dir []
-  (p/let [dir-path (util/mocked-open-dir-path)
+(defn- open-dir [dir]
+  (p/let [dir-path (or dir (util/mocked-open-dir-path))
           result (if dir-path
                    (ipc/ipc "getFiles" dir-path)
                    (ipc/ipc "openDir" {}))]
@@ -121,8 +113,8 @@
   (stat [_this dir path]
     (let [path (concat-path dir path)]
       (ipc/ipc "stat" path)))
-  (open-dir [_this _ok-handler]
-    (open-dir))
+  (open-dir [_this dir _ok-handler]
+    (open-dir dir))
   (get-files [_this path-or-handle _ok-handler]
     (ipc/ipc "getFiles" path-or-handle))
   (watch-dir! [_this dir options]

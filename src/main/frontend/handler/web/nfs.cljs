@@ -7,7 +7,6 @@
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.encrypt :as encrypt]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
@@ -24,7 +23,8 @@
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.fs.capacitor-fs :as capacitor-fs]))
 
 (defn remove-ignore-files
   [files dir-name nfs?]
@@ -122,18 +122,23 @@
 (defn ^:large-vars/cleanup-todo ls-dir-files-with-handler!
   "Read files from directory and setup repo (for the first time setup a repo)"
   ([ok-handler] (ls-dir-files-with-handler! ok-handler nil))
-  ([ok-handler {:keys [empty-dir?-or-pred dir-result-fn]}]
+  ([ok-handler {:keys [empty-dir?-or-pred dir-result-fn picked-root-fn dir]}]
    (let [path-handles (atom {})
          electron? (util/electron?)
          mobile-native? (mobile-util/native-platform?)
          nfs? (and (not electron?)
                    (not mobile-native?))
-         *repo (atom nil)]
-    ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
+         *repo (atom nil)
+         dir (or dir nil)
+         dir (some-> dir
+                     (string/replace "file:///" "file://")
+                     (string/replace " " "%20"))]
+     ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
      (->
       (p/let [result (if (fn? dir-result-fn)
                        (dir-result-fn {:path-handles path-handles :nfs? nfs?})
-                       (fs/open-dir (fn [path handle]
+                       (fs/open-dir dir
+                                    (fn [path handle]
                                       (when nfs?
                                         (swap! path-handles assoc path handle)))))
               _ (when-not (nil? empty-dir?-or-pred)
@@ -145,9 +150,13 @@
                     (fn? empty-dir?-or-pred)
                     (empty-dir?-or-pred result)))
               root-handle (first result)
+              _ (when (fn? picked-root-fn) (picked-root-fn root-handle))
               dir-name (if nfs?
                          (gobj/get root-handle "name")
                          root-handle)
+              dir-name (if (mobile-util/native-platform?)
+                         (capacitor-fs/normalize-file-protocol-path "" dir-name)
+                         dir-name)
               repo (str config/local-db-prefix dir-name)
               _ (state/set-loading-files! repo true)
               _ (when-not (or (state/home?) (state/setups-picker?))
@@ -183,8 +192,7 @@
             (-> (p/all (map (fn [file]
                               (p/let [content (if nfs?
                                                 (.text (:file/file file))
-                                                (:file/content file))
-                                      content (encrypt/decrypt content)]
+                                                (:file/content file))]
                                 (assoc file :file/content content))) markup-files))
                 (p/then (fn [result]
                           (p/let [files (map #(dissoc % :file/file) result)
@@ -290,8 +298,7 @@
                       (when-let [file (get-file-f path new-files)]
                         (p/let [content (if nfs?
                                           (.text (:file/file file))
-                                          (:file/content file))
-                                content (encrypt/decrypt content)]
+                                          (:file/content file))]
                           (assoc file :file/content content)))) added-or-modified))
         (p/then (fn [result]
                   (let [files (map #(dissoc % :file/file :file/handle) result)

@@ -90,7 +90,6 @@ h1.title.whiteboard-dashboard-title {
 
 .single-block > :is(.block-content-wrapper, .editor-wrapper) {
   width: 100% !important;
-  background-color: var(--ls-secondary-background-color);
   padding: 8px 12px;
   border-radius: 8px;
 }
@@ -126,6 +125,7 @@ input.tl-text-input {
 }
 
 .whiteboard-page-refs-count {
+  @apply whitespace-nowrap;
   border-radius: 8px;
   background: var(--ls-primary-background-color);
 }
@@ -138,7 +138,7 @@ input.tl-text-input {
 .whiteboard-page-title-root {
   @apply shadow-md flex items-center;
   position: absolute;
-  left: 53px;
+  left: 2.5rem;
   top: 0;
   background: var(--ls-primary-background-color);
   padding: 4px;
@@ -149,7 +149,7 @@ input.tl-text-input {
 }
 
 .whiteboard-page-title {
-  @apply inline-flex px-2 py-1 w-full;
+  @apply px-2 py-1 flex-1 overflow-ellipsis overflow-hidden;
 
   font-size: 20px;
   border-radius: 8px;
@@ -162,7 +162,7 @@ input.tl-text-input {
   }
 
   .page-title-sizer-wrapper {
-    width: 98%;
+    width: calc(100% - 20px);
 
     > .title {
       @apply whitespace-nowrap min-w-[80px];
@@ -184,4 +184,41 @@ input.tl-text-input {
 .whiteboard-page-title:focus-within {
   border: 1px solid var(--ls-border-color);
   box-shadow: 0 0 0 4px var(--ls-focus-ring-color);
+}
+
+.whiteboard-page-refs-count-label {
+  @apply flex gap-1 items-center;
+}
+
+.whiteboard-page-refs {
+  @apply flex-shrink-0;
+}
+
+.whiteboard-page[data-breakpoint=sm] {
+  .whiteboard-page-refs-count-label {
+    display: none;
+  }
+
+  .whiteboard-page-title-root {
+    left: 0.5rem;
+  }
+
+  .tl-action-bar {
+    left: 0.5rem;
+    bottom: 0.5rem;
+  }
+
+  .tl-primary-tools {
+    right: 0;
+  }
+}
+
+/* disable user select globally for whiteboard on iOS/iPad. Is there a better option? */
+html:is(.is-ios, is-native-ios, is-native-ipad) [data-page="whiteboard"] * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }

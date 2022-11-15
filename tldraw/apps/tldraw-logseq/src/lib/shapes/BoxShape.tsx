@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
-import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
+import { TLBoxShape, TLBoxShapeProps, getComputedColor } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 import { BindingIndicator } from './BindingIndicator'
@@ -20,8 +20,8 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
     point: [0, 0],
     size: [100, 100],
     borderRadius: 2,
-    stroke: '#000000',
-    fill: 'var(--ls-secondary-background-color)',
+    stroke: '',
+    fill: '',
     noFill: false,
     strokeType: 'line',
     strokeWidth: 2,
@@ -63,9 +63,9 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
           width={Math.max(0.01, w - strokeWidth)}
           height={Math.max(0.01, h - strokeWidth)}
           strokeWidth={strokeWidth}
-          stroke={noFill ? fill : stroke}
+          stroke={getComputedColor(stroke, 'stroke')}
           strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
-          fill={noFill ? 'none' : fill}
+          fill={noFill ? 'none' : getComputedColor(fill, 'background')}
         />
       </SVGContainer>
     )

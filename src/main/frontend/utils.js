@@ -1,6 +1,7 @@
 import path from 'path/path.js'
 
 // TODO split the capacitor abilities to a separate file for capacitor APIs
+import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { Clipboard as CapacitorClipboard } from '@capacitor/clipboard'
 
@@ -244,9 +245,8 @@ export const getClipText = (cb, errorHandler) => {
   })
 }
 
-// TODO split the capacitor clipboard to a separate file for capacitor APIs
 export const writeClipboard = ({text, html}) => {
-    if (typeof navigator.permissions == "undefined") {
+    if (Capacitor.isNativePlatform()) {
         CapacitorClipboard.write({ string: text });
         return
     }

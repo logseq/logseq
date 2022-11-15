@@ -11,7 +11,9 @@
             [frontend.handler.conversion :refer [supported-filename-formats write-filename-format! calc-rename-target]]
             [frontend.db :as db]
             [frontend.context.i18n :refer [t]]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.handler.file-sync :as file-sync-handler]
+            [frontend.handler.notification :as notification]))
 
 (defn- ask-for-re-index
   "Multiple-windows? (optional) - if multiple exist on the current graph
@@ -26,10 +28,15 @@
 
 (defn- <close-modal-on-done
   "Ask users to re-index when the modal is exited"
-  []
+  [sync?]
   (async/go (state/close-settings!)
             (async/<! (async/timeout 100)) ;; modal race condition requires investigation
-            (ask-for-re-index)))
+            (if sync?
+              (notification/show!
+               [:div "Please re-index this graph after all the changes are synced."]
+               :warning
+               false)
+              (ask-for-re-index))))
 
 (rum/defc legacy-warning
   [repo *target-format *dir-format *solid-format]
@@ -115,10 +122,11 @@
                                       (when-let [ret (calc-rename-target page (:file/path file) @*dir-format @*target-format)]
                                         (merge ret {:page page :file file}))))
                                (remove nil?))
+            sync? (file-sync-handler/current-graph-sync-on?)
             <rename-all   #(async/go (doseq [{:keys [file target status]} rename-items]
                                        (when (not= status :unreachable)
                                          (async/<! (p->c (page-handler/rename-file! file target (constantly nil) true)))))
-                                     (<close-modal-on-done))]
+                                     (<close-modal-on-done sync?))]
 
         (if (not-empty rename-items)
           [:div ;; Normal UX stage 2: close stage 1 UI, show the action description as admolition

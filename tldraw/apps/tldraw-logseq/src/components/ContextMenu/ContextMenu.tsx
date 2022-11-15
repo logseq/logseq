@@ -34,7 +34,15 @@ export const ContextMenu = observer(function ContextMenu({
   }, [])
 
   return (
-    <ReactContextMenu.Root>
+    <ReactContextMenu.Root
+      onOpenChange={open => {
+        if (open && !app.isIn('select.contextMenu')) {
+          app.transition('select').selectedTool.transition('contextMenu')
+        } else if (!open && app.isIn('select.contextMenu')) {
+          app.selectedTool.transition('idle')
+        }
+      }}
+    >
       <ReactContextMenu.Trigger>{children}</ReactContextMenu.Trigger>
       <ReactContextMenu.Content
         className="tl-menu tl-context-menu"
@@ -236,7 +244,13 @@ export const ContextMenu = observer(function ContextMenu({
               {developerMode && (
                 <ReactContextMenu.Item
                   className="tl-menu-item"
-                  onClick={() => console.log(app.selectedShapesArray.map(s => toJS(s.serialized)))}
+                  onClick={() => {
+                    if (app.selectedShapesArray.length === 1) {
+                      console.log(toJS(app.selectedShapesArray[0].serialized))
+                    } else {
+                      console.log(app.selectedShapesArray.map(s => toJS(s.serialized)))
+                    }
+                  }}
                 >
                   (Dev) Print shape props
                 </ReactContextMenu.Item>

@@ -8,7 +8,8 @@
             [frontend.mobile.util :as mobile-util]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.config :as gp-config]))
+            [logseq.graph-parser.config :as gp-config]
+            [frontend.fs.capacitor-fs :as capacitor-fs]))
 
 (defn- page-exists-in-another-file
   "Conflict of files towards same page"
@@ -40,6 +41,7 @@
   ([repo-url file content {:keys [verbose] :as options}]
    (let [electron-local-repo? (and (util/electron?)
                                    (config/local-db? repo-url))
+         repo-dir (config/get-repo-dir repo-url)
          file (cond
                 (and electron-local-repo?
                      util/win32?
@@ -49,13 +51,10 @@
                 (and electron-local-repo? (or
                                            util/win32?
                                            (not= "/" (first file))))
-                (str (config/get-repo-dir repo-url) "/" file)
+                (str repo-dir "/" file)
 
-                (and (mobile-util/native-android?) (not= "/" (first file)))
-                file
-
-                (and (mobile-util/native-ios?) (not= "/" (first file)))
-                file
+                (mobile-util/native-platform?)
+                (capacitor-fs/normalize-file-protocol-path repo-dir file)
 
                 :else
                 file)
@@ -69,7 +68,7 @@
                                             :date-formatter (state/get-date-formatter)
                                             :block-pattern (config/get-block-pattern (gp-util/get-format file))
                                             :supported-formats (gp-config/supported-formats)
-                                            :uri-encoded? (boolean (util/mobile?))
+                                            :uri-encoded? (boolean (mobile-util/native-platform?))
                                             :filename-format (state/get-filename-format repo-url)}
                                            (when (some? verbose) {:verbose verbose}))})]
      (:tx (graph-parser/parse-file (db/get-db repo-url false) file content options)))))

@@ -9,6 +9,7 @@
             [electron.ipc :as ipc]
             [frontend.mobile.util :as mobile-util]
             [frontend.storage :as storage]
+            [frontend.spec.storage :as storage-spec]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
@@ -158,6 +159,7 @@
      :assets/alias-dirs                     (or (storage/get :assets/alias-dirs) [])
 
      ;; mobile
+     :mobile/container-urls                 nil
      :mobile/show-action-bar?               false
      :mobile/actioned-block                 nil
      :mobile/show-toolbar?                  false
@@ -171,7 +173,7 @@
      ;; plugin
      :plugin/enabled                        (and (util/electron?)
                                                  ;; true false :theme-only
-                                                 ((fnil identity true) (storage/get :lsp-core-enabled)))
+                                                 ((fnil identity true) (storage/get ::storage-spec/lsp-core-enabled)))
      :plugin/preferences                    nil
      :plugin/indicator-text                 nil
      :plugin/installed-plugins              {}
@@ -263,6 +265,8 @@
      :ui/find-in-page                       nil
      :graph/importing                       nil
      :graph/importing-state                 {}
+
+     :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
      })))
 
 ;; Block ast state
@@ -646,9 +650,9 @@ Similar to re-frame subscriptions"
   []
   (:editor/logical-outdenting? (sub-config)))
 
-(defn enable-encryption?
-  [repo]
-  (:feature/enable-encryption? (sub-config repo)))
+(defn perferred-pasting-file?
+  []
+  (:editor/perferred-pasting-file? (sub-config)))
 
 (defn doc-mode-enter-for-new-line?
   []
@@ -703,6 +707,12 @@ Similar to re-frame subscriptions"
     (get-in (get-route-match)
             [:path-params :name])))
 
+(defn get-current-whiteboard
+  []
+  (when (= :whiteboard (get-current-route))
+    (get-in (get-route-match)
+            [:path-params :name])))
+
 (defn route-has-p?
   []
   (get-in (get-route-match) [:query-params :p]))
@@ -713,7 +723,7 @@ Similar to re-frame subscriptions"
       (when-not (mobile-util/native-platform?)
         "local")))
 
-(defn get-remote-repos
+(defn get-remote-graphs
   []
   (get-in @state [:file-sync/remote-graphs :graphs]))
 
@@ -721,6 +731,22 @@ Similar to re-frame subscriptions"
   [uuid]
   (when-let [graphs (seq (get-in @state [:file-sync/remote-graphs :graphs]))]
     (some #(when (= (:GraphUUID %) (str uuid)) %) graphs)))
+
+(defn delete-remote-graph!
+  [repo]
+  (swap! state update-in [:file-sync/remote-graphs :graphs]
+         (fn [repos]
+           (remove #(and
+                     (:GraphUUID repo)
+                     (:GraphUUID %)
+                     (= (:GraphUUID repo) (:GraphUUID %))) repos))))
+
+(defn add-remote-graph!
+  [repo]
+  (swap! state update-in [:file-sync/remote-graphs :graphs]
+         (fn [repos]
+           (->> (conj repos repo)
+                (distinct)))))
 
 (defn get-repos
   []
@@ -764,7 +790,10 @@ Similar to re-frame subscriptions"
   (swap! state update-in [:me :repos]
          (fn [repos]
            (->> (remove #(or (= (:url repo) (:url %))
-                             (= (:GraphUUID repo) (:GraphUUID %))) repos)
+                             (and
+                              (:GraphUUID repo)
+                              (:GraphUUID %)
+                              (= (:GraphUUID repo) (:GraphUUID %)))) repos)
                 (util/distinct-by :url)))))
 
 (defn set-timestamp-block!
@@ -886,13 +915,14 @@ Similar to re-frame subscriptions"
   (when-let [input (get-input)]
     (util/get-selection-start input)))
 
-(defn set-selection-start-block!
-  [start-block]
-  (swap! state assoc :selection/start-block start-block))
-
 (defn get-selection-start-block
   []
   (get @state :selection/start-block))
+
+(defn set-selection-start-block!
+  [start-block]
+  (when-not (get-selection-start-block)
+    (swap! state assoc :selection/start-block start-block)))
 
 (defn set-selection-blocks!
   ([blocks]
@@ -914,7 +944,8 @@ Similar to re-frame subscriptions"
   (swap! state assoc
          :selection/mode false
          :selection/blocks nil
-         :selection/direction :down))
+         :selection/direction :down
+         :selection/start-block nil))
 
 (defn get-selection-blocks
   []
@@ -1234,7 +1265,7 @@ Similar to re-frame subscriptions"
   ([panel-content]
    (set-sub-modal! panel-content
                    {:close-btn? true}))
-  ([panel-content {:keys [id label close-btn? show? center?] :as opts}]
+  ([panel-content {:keys [id label close-btn? close-backdrop? show? center?] :as opts}]
    (if (not (modal-opened?))
      (set-modal! panel-content opts)
      (let [modals (:modal/subsets @state)
@@ -1246,7 +1277,8 @@ Similar to re-frame subscriptions"
                     :modal/label         (or label (if center? "ls-modal-align-center" ""))
                     :modal/show?         (if (boolean? show?) show? true)
                     :modal/panel-content panel-content
-                    :modal/close-btn?    close-btn?})]
+                    :modal/close-btn?    close-btn?
+                    :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)})]
        (swap! state update-in
               [:modal/subsets (or idx (count modals))]
               merge input)
@@ -1916,3 +1948,22 @@ Similar to re-frame subscriptions"
   {:pre [(map? v)
          (= #{:repo :old-path :new-path} (set (keys v)))]}
   (async/offer! (get-file-rename-event-chan) v))
+
+(defn set-onboarding-whiteboard!
+  [v]
+  (set-state! :whiteboard/onboarding-whiteboard? v)
+  (storage/set :ls-onboarding-whiteboard? v))
+
+(defn get-onboarding-whiteboard?
+  []
+  (get-in @state [:whiteboard/onboarding-whiteboard?]))
+
+(defn get-local-container-root-url
+  []
+  (when (mobile-util/native-ios?)
+    (get-in @state [:mobile/container-urls :localContainerUrl])))
+
+(defn get-icloud-container-root-url
+  []
+  (when (mobile-util/native-ios?)
+    (get-in @state [:mobile/container-urls :iCloudContainerUrl])))

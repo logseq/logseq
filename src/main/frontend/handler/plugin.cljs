@@ -233,8 +233,9 @@
     (js/window.apis.addListener channel listener)))
 
 (defn register-plugin
-  [pl]
-  (swap! state/state update-in [:plugin/installed-plugins] assoc (keyword (:id pl)) pl))
+  [plugin-metadata]
+  (when-let [pid (keyword (:id plugin-metadata))]
+    (swap! state/state update-in [:plugin/installed-plugins] assoc pid plugin-metadata)))
 
 (defn host-mounted!
   []
@@ -513,6 +514,11 @@
 (defn goto-plugins-dashboard!
   []
   (state/pub-event! [:go/plugins]))
+
+(defn goto-plugins-settings!
+  []
+  (when-let [pl (first (seq (get-enabled-plugins-if-setting-schema)))]
+    (state/pub-event! [:go/plugins-settings (:id pl)])))
 
 (defn- get-user-default-plugins
   []

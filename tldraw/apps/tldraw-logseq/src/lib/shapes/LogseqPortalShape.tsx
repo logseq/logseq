@@ -6,6 +6,7 @@ import {
   TLResetBoundsInfo,
   TLResizeInfo,
   validUUID,
+  getComputedColor,
 } from '@tldraw/core'
 import { Virtuoso } from 'react-virtuoso'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
@@ -53,13 +54,16 @@ const LogseqTypeTag = ({
   type,
   active,
 }: {
-  type: 'B' | 'P' | 'WP' | 'BS' | 'PS'
+  type: 'B' | 'P' | 'BA' | 'PA' | 'WA' | 'WP' | 'BS' | 'PS'
   active?: boolean
 }) => {
   const nameMapping = {
     B: 'block',
     P: 'page',
     WP: 'whiteboard',
+    BA: 'new-block',
+    PA: 'new-page',
+    WA: 'new-whiteboard',
     BS: 'block-search',
     PS: 'page-search',
   }
@@ -71,8 +75,38 @@ const LogseqTypeTag = ({
 }
 
 const LogseqPortalShapeHeader = observer(
-  ({ type, children }: { type: 'P' | 'B'; children: React.ReactNode }) => {
-    return <div className={`tl-logseq-portal-header tl-logseq-portal-header-${type === "P" ? "page" : "block"}`}>{children}</div>
+  ({
+    type,
+    fill,
+    opacity,
+    children,
+  }: {
+    type: 'P' | 'B'
+    fill: string
+    opacity: number
+    children: React.ReactNode
+  }) => {
+    const bgColor =
+      fill !== 'var(--ls-secondary-background-color)'
+        ? getComputedColor(fill, 'background')
+        : 'var(--ls-tertiary-background-color)'
+
+    return (
+      <div
+        className={`tl-logseq-portal-header tl-logseq-portal-header-${
+          type === 'P' ? 'page' : 'block'
+        }`}
+      >
+        <div
+          className="absolute inset-0 tl-logseq-portal-header-bg"
+          style={{
+            opacity,
+            background: type === 'P' ? bgColor : `linear-gradient(0deg, transparent, ${bgColor}`,
+          }}
+        ></div>
+        <div className="relative">{children}</div>
+      </div>
+    )
   }
 )
 
@@ -180,8 +214,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     size: [400, 50],
     // collapsedHeight is the height before collapsing
     collapsedHeight: 0,
-    stroke: 'var(--ls-primary-text-color)',
-    fill: 'var(--ls-secondary-background-color)',
+    stroke: '',
+    fill: '',
     noFill: false,
     borderRadius: 8,
     strokeWidth: 2,
@@ -424,35 +458,52 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         },
         element: (
           <div className="tl-quick-search-option-row">
-            <LogseqTypeTag active type="B" />
+            <LogseqTypeTag active type="BA" />
             {q.length > 0 ? (
               <>
-                <strong>New whiteboard block:</strong>
+                <strong>New block:</strong>
                 {q}
               </>
             ) : (
-              <strong>New whiteboard block</strong>
+              <strong>New block</strong>
             )}
           </div>
         ),
       })
 
-      // New page option when no exact match
+      // New page or whiteboard option when no exact match
       if (!searchResult?.pages?.some(p => p.toLowerCase() === q.toLowerCase()) && q) {
-        options.push({
-          actionIcon: 'circle-plus',
-          onChosen: () => {
-            finishCreating(q)
-            return true
+        options.push(
+          {
+            actionIcon: 'circle-plus',
+            onChosen: () => {
+              finishCreating(q)
+              return true
+            },
+            element: (
+              <div className="tl-quick-search-option-row">
+                <LogseqTypeTag active type="PA" />
+                <strong>New page:</strong>
+                {q}
+              </div>
+            ),
           },
-          element: (
-            <div className="tl-quick-search-option-row">
-              <LogseqTypeTag active type="P" />
-              <strong>New page:</strong>
-              {q}
-            </div>
-          ),
-        })
+          {
+            actionIcon: 'circle-plus',
+            onChosen: () => {
+              handlers?.addNewWhiteboard(q)
+              finishCreating(q)
+              return true
+            },
+            element: (
+              <div className="tl-quick-search-option-row">
+                <LogseqTypeTag active type="WA" />
+                <strong>New whiteboard:</strong>
+                {q}
+              </div>
+            ),
+          }
+        )
       }
 
       // search filters
@@ -626,7 +677,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         </div>
         <div className="tl-quick-search-options" ref={optionsWrapperRef}>
           <Virtuoso
-            style={{ height: Math.min(Math.max(1, options.length), 12) * 36 }}
+            style={{ height: Math.min(Math.max(1, options.length), 12) * 40 }}
             totalCount={options.length}
             itemContent={index => {
               const { actionIcon, onChosen, element } = options[index]
@@ -661,7 +712,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
   PortalComponent = observer(({}: TLComponentProps) => {
     const {
-      props: { pageId },
+      props: { pageId, fill, opacity },
     } = this
     const { renderers } = React.useContext(LogseqContext)
     const app = useApp<Shape>()
@@ -703,19 +754,29 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     }, [this.initialHeightCalculated])
 
     return (
-      <div
-        ref={cpRefContainer}
-        className="tl-logseq-cp-container"
-        style={{
-          overflow: this.props.isAutoResizing ? 'visible' : 'auto',
-        }}
-      >
-        {this.props.blockType === 'B' && this.props.compact ? (
-          <Block blockId={pageId} />
-        ) : (
-          <Page pageName={pageId} />
-        )}
-      </div>
+      <>
+        <div
+          className="absolute inset-0 tl-logseq-cp-container-bg"
+          style={{
+            background:
+              fill && fill !== 'var(--ls-secondary-background-color)'
+                ? `var(--ls-highlight-color-${fill})`
+                : 'var(--ls-secondary-background-color)',
+            opacity,
+          }}
+        ></div>
+        <div
+          ref={cpRefContainer}
+          className="relative tl-logseq-cp-container"
+          style={{ overflow: this.props.isAutoResizing ? 'visible' : 'auto' }}
+        >
+          {this.props.blockType === 'B' && this.props.compact ? (
+            <Block blockId={pageId} />
+          ) : (
+            <Page pageName={pageId} />
+          )}
+        </div>
+      </>
     )
   })
 
@@ -812,12 +873,12 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       <HTMLContainer
         style={{
           pointerEvents: 'all',
-          opacity: isErasing ? 0.2 : opacity,
         }}
         {...events}
       >
         {isBinding && <BindingIndicator mode="html" strokeWidth={strokeWidth} size={size} />}
         <div
+          data-inner-events={!tlEventsEnabled}
           onWheelCapture={stop}
           onPointerDown={stop}
           onPointerUp={stop}
@@ -838,19 +899,18 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 data-portal-selected={portalSelected}
                 data-editing={isEditing}
                 style={{
-                  background: this.props.compact ? 'transparent' : fill,
-                  color: stroke,
                   width: `calc(100% / ${scaleRatio})`,
                   height: `calc(100% / ${scaleRatio})`,
                   transform: `scale(${scaleRatio})`,
-                  // @ts-expect-error ???
-                  '--ls-primary-background-color': !fill?.startsWith('var') ? fill : undefined,
-                  '--ls-primary-text-color': !stroke?.startsWith('var') ? stroke : undefined,
-                  '--ls-title-text-color': !stroke?.startsWith('var') ? stroke : undefined,
+                  opacity: isErasing ? 0.2 : 1,
                 }}
               >
                 {!this.props.compact && !targetNotFound && (
-                  <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'}>
+                  <LogseqPortalShapeHeader
+                    type={this.props.blockType ?? 'P'}
+                    fill={fill}
+                    opacity={opacity}
+                  >
                     {this.props.blockType === 'P' ? (
                       <PageNameLink pageName={pageId} />
                     ) : (
@@ -899,8 +959,12 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     return (
       <>
         <rect
-          fill={this.props.fill}
-          stroke={this.props.stroke}
+          fill={
+            this.props.fill && this.props.fill !== 'var(--ls-secondary-background-color)'
+              ? `var(--ls-highlight-color-${this.props.fill})`
+              : 'var(--ls-secondary-background-color)'
+          }
+          stroke={getComputedColor(this.props.fill, 'background')}
           strokeWidth={this.props.strokeWidth ?? 2}
           fillOpacity={this.props.opacity ?? 0.2}
           width={bounds.width}
@@ -910,7 +974,12 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         />
         {!this.props.compact && (
           <rect
-            fill="#aaa"
+            fill={
+              this.props.fill && this.props.fill !== 'var(--ls-secondary-background-color)'
+                ? getComputedColor(this.props.fill, 'background')
+                : 'var(--ls-tertiary-background-color)'
+            }
+            fillOpacity={this.props.opacity ?? 0.2}
             x={1}
             y={1}
             width={bounds.width - 2}
@@ -927,8 +996,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           textAnchor="middle"
           fontFamily="var(--ls-font-family)"
           fontSize="32"
-          fill={this.props.stroke}
-          stroke={this.props.stroke}
+          fill="var(--ls-secondary-text-color)"
+          stroke="var(--ls-secondary-text-color)"
         >
           {this.props.blockType === 'P' ? this.props.pageId : ''}
         </text>
