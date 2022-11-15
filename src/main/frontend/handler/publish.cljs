@@ -10,7 +10,8 @@
             [cljs-http.client :as http]
             [cljs.core.async :as async :refer [go <!]]
             [frontend.handler.notification :as notification]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.publish :as publish]))
 
 (defn- update-vals-uuid->str
   [coll]
@@ -40,10 +41,13 @@
                           (map (fn [b]
                                  [(str (:block/uuid b)) (update-vals-uuid->str (db/get-block-and-children repo (:block/uuid b)))]))
                           (into {}))
-        body         {:page-id      (str (:block/uuid page))
+        page-id      (str (:block/uuid page))
+        html         (publish/->html blocks refed-blocks refs page-id)
+        body         {:page-id      page-id
                       :blocks       (update-vals-uuid->str (cons page blocks))
                       :refed-blocks refed-blocks
-                      :refs         (update-vals-uuid->str refs)}
+                      :refs         (update-vals-uuid->str refs)
+                      :html         html}
         ;; TODO: refresh token if empty
         token        (state/get-auth-id-token)]
     (prn "Debug [PUBLISH] body: " body)
