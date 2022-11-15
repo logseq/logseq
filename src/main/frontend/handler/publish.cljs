@@ -43,7 +43,14 @@
                                  [(str (:block/uuid b)) (update-vals-uuid->str (db/get-block-and-children repo (:block/uuid b)))]))
                           (into {}))
         page-id      (str (:block/uuid page))
-        blocks       (update-vals-uuid->str (cons page blocks))
+        blocks'      (if (and block-uuid (seq blocks))
+                       (->>
+                        (update (vec blocks) 0 dissoc :block/left :block/parent)
+                        (map #(dissoc % :block/page)))
+                       (cons page blocks))
+        blocks       (->> blocks'
+                          (util/distinct-by :block/uuid)
+                          update-vals-uuid->str)
         refs         (update-vals-uuid->str refs)
         html         (publish/->html blocks refed-blocks refs page-id)
         body         {:page-id      page-id
