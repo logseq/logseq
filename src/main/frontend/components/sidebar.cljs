@@ -20,7 +20,6 @@
             [frontend.db.model :as db-model]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.srs :as srs]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.mobile.swipe :as swipe]
             [frontend.handler.page :as page-handler]
