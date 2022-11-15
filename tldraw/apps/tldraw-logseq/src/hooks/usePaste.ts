@@ -376,8 +376,8 @@ export function usePaste() {
         if (allAssets.length > 0) {
           app.createAssets(allAssets)
         }
-        if (newShapes.length > 0) {
-          app.createShapes(newShapes)
+        if (allShapesToAdd.length > 0) {
+          app.createShapes(allShapesToAdd)
         }
         app.currentPage.updateBindings(Object.fromEntries(bindingsToCreate.map(b => [b.id, b])))
 
