@@ -2540,7 +2540,7 @@
                             (filterv identity)
                             (map (fn [x] (if (vector? x)
                                            (let [[block label] x]
-                                             (breadcrumb-fragment config block label opts))
+                                             (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
                                            [:span.opacity-70 "⋯"])))
                             (interpose (breadcrumb-separator)))]
         [:div.breadcrumb.block-parents.flex-row.flex-1
