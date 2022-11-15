@@ -2,15 +2,16 @@
   "Main ns used by logseq app to build an HTML from a page or a block."
   (:require [rum.core :as rum]
             [logseq.publish.util :as util]
-            [logseq.publish.html :as html]))
+            [logseq.publish.html :as html]
+            ["react-dom/server" :as react-dom-server]))
 
 (defn ->html
   "Convert blocks into HTML."
   [blocks refed-blocks refs root-id]
   (let [result (util/profile "render static markup"
-                             (rum/render-static-markup
+                             (react-dom-server/renderToString
                               (html/blocks-container blocks {:refed-blocks refed-blocks
-                                                        :refs refs} root-id)))]
+                                                             :refs refs} root-id)))]
     (println "Debug time in total: " @html/*debug-time)
     result))
 

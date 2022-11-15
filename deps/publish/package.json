@@ -5,6 +5,8 @@
         "watch": "npx shadow-cljs watch library"
     },
     "dependencies": {
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0",
         "shadow-cljs": "^2.20.10"
     }
 }

@@ -42,11 +42,13 @@
                                  [(str (:block/uuid b)) (update-vals-uuid->str (db/get-block-and-children repo (:block/uuid b)))]))
                           (into {}))
         page-id      (str (:block/uuid page))
+        blocks       (update-vals-uuid->str (cons page blocks))
+        refs         (update-vals-uuid->str refs)
         html         (publish/->html blocks refed-blocks refs page-id)
         body         {:page-id      page-id
-                      :blocks       (update-vals-uuid->str (cons page blocks))
+                      :blocks       blocks
                       :refed-blocks refed-blocks
-                      :refs         (update-vals-uuid->str refs)
+                      :refs         refs
                       :html         html}
         ;; TODO: refresh token if empty
         token        (state/get-auth-id-token)]
