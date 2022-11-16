@@ -715,7 +715,8 @@
          ;; destroy
          (fn []
            (.destroy pdf-document)
-           (set! (. js/window -lsPdfViewer) nil) )))
+           (set! (. js/window -lsPdfViewer) nil)
+           (.cleanup viewer))))
      [])
 
     ;; interaction events
