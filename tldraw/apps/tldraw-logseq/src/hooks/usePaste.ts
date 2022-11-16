@@ -1,5 +1,4 @@
 import {
-  BoundsUtils,
   getSizeFromSrc,
   isNonNullable,
   TLAsset,
@@ -33,21 +32,6 @@ const isValidURL = (url: string) => {
   }
 }
 
-const safeParseJson = (json: string) => {
-  try {
-    return JSON.parse(json)
-  } catch {
-    return null
-  }
-}
-
-const getWhiteboardsTldrFromText = (text: string) => {
-  const innerText = text.match(/<whiteboard-tldr>(.*)<\/whiteboard-tldr>/)?.[1]
-  if (innerText) {
-    return safeParseJson(decodeURIComponent(innerText))
-  }
-}
-
 interface VideoImageAsset extends TLAsset {
   size?: number[]
 }
@@ -71,7 +55,7 @@ function getFileType(filename: string) {
   return 'unknown'
 }
 
-type MaybeShapes = Shape['props'][] | null | undefined
+type MaybeShapes = TLShapeModel[] | null | undefined
 
 type CreateShapeFN<Args extends any[]> = (...args: Args) => Promise<MaybeShapes> | MaybeShapes
 
@@ -189,6 +173,7 @@ export function usePaste() {
               asset.type === 'video' ? VideoShape.defaultProps : ImageShape.defaultProps
             const newShape = {
               ...defaultProps,
+              id: uniqueId(),
               // TODO: Should be place near the last edited shape
               assetId: asset.id,
               opacity: 1,
@@ -263,67 +248,12 @@ export function usePaste() {
       }
 
       function tryCreateClonedShapesFromJSON(rawText: string) {
-        const data = getWhiteboardsTldrFromText(rawText)
-        try {
-          if (data) {
-            const shapes = data.shapes as TLShapeModel[]
-            assetsToClone = data.assets as TLAsset[]
-            const commonBounds = BoundsUtils.getCommonBounds(
-              shapes.map(shape => ({
-                minX: shape.point?.[0] ?? point[0],
-                minY: shape.point?.[1] ?? point[1],
-                width: shape.size?.[0] ?? 4,
-                height: shape.size?.[1] ?? 4,
-                maxX: (shape.point?.[0] ?? point[0]) + (shape.size?.[0] ?? 4),
-                maxY: (shape.point?.[1] ?? point[1]) + (shape.size?.[1] ?? 4),
-              }))
-            )
-            const bindings = data.bindings as Record<string, TLBinding>
-            const shapesToCreate = shapes.map(shape => {
-              return {
-                ...shape,
-                id: uniqueId(),
-                point: [
-                  point[0] + shape.point![0] - commonBounds.minX,
-                  point[1] + shape.point![1] - commonBounds.minY,
-                ],
-              }
-            })
-
-            // Try to rebinding the shapes to the new assets
-            shapesToCreate
-              .flatMap(s => Object.values(s.handles ?? {}))
-              .forEach(h => {
-                if (!h.bindingId) {
-                  return
-                }
-                // try to bind the new shape
-                const binding = bindings[h.bindingId]
-                if (binding) {
-                  // if the copied binding from/to is in the source
-                  const oldFromIdx = shapes.findIndex(s => s.id === binding.fromId)
-                  const oldToIdx = shapes.findIndex(s => s.id === binding.toId)
-                  if (binding && oldFromIdx !== -1 && oldToIdx !== -1) {
-                    const newBinding: TLBinding = {
-                      ...binding,
-                      id: uniqueId(),
-                      fromId: shapesToCreate[oldFromIdx].id,
-                      toId: shapesToCreate[oldToIdx].id,
-                    }
-                    bindingsToCreate.push(newBinding)
-                    h.bindingId = newBinding.id
-                  } else {
-                    h.bindingId = undefined
-                  }
-                } else {
-                  console.warn('binding not found', h.bindingId)
-                }
-              })
-
-            return shapesToCreate as Shape['props'][]
-          }
-        } catch (err) {
-          console.error(err)
+        const result = app.api.getClonedShapesFromTldrString(decodeURIComponent(rawText), point)
+        if (result) {
+          const { shapes, assets, bindings } = result
+          assetsToClone.push(...assets)
+          bindingsToCreate.push(...bindings)
+          return shapes
         }
         return null
       }
@@ -420,7 +350,7 @@ export function usePaste() {
 
       app.cursors.setCursor(TLCursor.Progress)
 
-      let newShapes: Shape['props'][] = []
+      let newShapes: TLShapeModel[] = []
       try {
         if (dataTransfer) {
           newShapes.push(...((await tryCreateShapesFromDataTransfer(dataTransfer)) ?? []))
@@ -446,9 +376,10 @@ export function usePaste() {
         if (allAssets.length > 0) {
           app.createAssets(allAssets)
         }
-        if (allShapesToAdd.length > 0) {
-          app.createShapes(allShapesToAdd)
+        if (newShapes.length > 0) {
+          app.createShapes(newShapes)
         }
+        app.currentPage.updateBindings(Object.fromEntries(bindingsToCreate.map(b => [b.id, b])))
 
         if (app.selectedShapesArray.length === 1 && allShapesToAdd.length === 1 && !fromDrop) {
           const source = app.selectedShapesArray[0]
@@ -456,10 +387,13 @@ export function usePaste() {
           app.createNewLineBinding(source, target)
         }
 
-        app.currentPage.updateBindings(Object.fromEntries(bindingsToCreate.map(b => [b.id, b])))
         app.setSelectedShapes(allShapesToAdd.map(s => s.id))
         app.selectedTool.transition('idle') // clears possible editing states
         app.cursors.setCursor(TLCursor.Default)
+
+        if (fromDrop) {
+          app.packIntoRectangle()
+        }
       })
     },
     []

@@ -287,19 +287,19 @@
           old-name (or title page-name)]
       [:h1.page-title.flex.cursor-pointer.gap-1.w-full
        {:on-mouse-down (fn [e]
-                           (when (util/right-click? e)
-                             (state/set-state! :page-title/context {:page page-name})))
-          :on-click (fn [e]
-                      (.preventDefault e)
-                      (if (gobj/get e "shiftKey")
-                        (when-let [page (db/pull repo '[*] [:block/name page-name])]
-                          (state/sidebar-add-block!
-                           repo
-                           (:db/id page)
-                           :page))
-                        (when (and (not hls-page?) (not fmt-journal?))
-                          (reset! *input-value (if untitled? "" old-name))
-                          (reset! *edit? true))))}
+                         (when (util/right-click? e)
+                           (state/set-state! :page-title/context {:page page-name})))
+        :on-click (fn [e]
+                    (.preventDefault e)
+                    (if (gobj/get e "shiftKey")
+                      (when-let [page (db/pull repo '[*] [:block/name page-name])]
+                        (state/sidebar-add-block!
+                         repo
+                         (:db/id page)
+                         :page))
+                      (when (and (not hls-page?) (not fmt-journal?))
+                        (reset! *input-value (if untitled? "" old-name))
+                        (reset! *edit? true))))}
        (when (not= icon "") [:span.page-icon icon])
        [:div.page-title-sizer-wrapper.relative
         (when (rum/react *edit?)

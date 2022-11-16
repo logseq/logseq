@@ -32,10 +32,6 @@ export class BrushingState<
     this.tree.clear()
   }
 
-  onWheel: TLEvents<S>['wheel'] = (info, e) => {
-    this.onPointerMove(info, e)
-  }
-
   onPointerMove: TLEvents<S>['pointer'] = () => {
     const {
       inputs: { shiftKey, ctrlKey, originPoint, currentPoint },

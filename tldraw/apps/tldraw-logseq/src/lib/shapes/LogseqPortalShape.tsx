@@ -54,13 +54,16 @@ const LogseqTypeTag = ({
   type,
   active,
 }: {
-  type: 'B' | 'P' | 'WP' | 'BS' | 'PS'
+  type: 'B' | 'P' | 'BA' | 'PA' | 'WA' | 'WP' | 'BS' | 'PS'
   active?: boolean
 }) => {
   const nameMapping = {
     B: 'block',
     P: 'page',
     WP: 'whiteboard',
+    BA: 'new-block',
+    PA: 'new-page',
+    WA: 'new-whiteboard',
     BS: 'block-search',
     PS: 'page-search',
   }
@@ -83,7 +86,10 @@ const LogseqPortalShapeHeader = observer(
     opacity: number
     children: React.ReactNode
   }) => {
-    const bgColor = getComputedColor(fill, 'background')
+    const bgColor =
+      fill !== 'var(--ls-secondary-background-color)'
+        ? getComputedColor(fill, 'background')
+        : 'var(--ls-tertiary-background-color)'
 
     return (
       <div
@@ -95,12 +101,7 @@ const LogseqPortalShapeHeader = observer(
           className="absolute inset-0 tl-logseq-portal-header-bg"
           style={{
             opacity,
-            background:
-              type === 'P'
-                ? bgColor
-                : `linear-gradient(0deg, var(--ls-highlight-color-${
-                    fill ? fill : 'default'
-                  }), ${bgColor}`,
+            background: type === 'P' ? bgColor : `linear-gradient(0deg, transparent, ${bgColor}`,
           }}
         ></div>
         <div className="relative">{children}</div>
@@ -457,35 +458,52 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         },
         element: (
           <div className="tl-quick-search-option-row">
-            <LogseqTypeTag active type="B" />
+            <LogseqTypeTag active type="BA" />
             {q.length > 0 ? (
               <>
-                <strong>New whiteboard block:</strong>
+                <strong>New block:</strong>
                 {q}
               </>
             ) : (
-              <strong>New whiteboard block</strong>
+              <strong>New block</strong>
             )}
           </div>
         ),
       })
 
-      // New page option when no exact match
+      // New page or whiteboard option when no exact match
       if (!searchResult?.pages?.some(p => p.toLowerCase() === q.toLowerCase()) && q) {
-        options.push({
-          actionIcon: 'circle-plus',
-          onChosen: () => {
-            finishCreating(q)
-            return true
+        options.push(
+          {
+            actionIcon: 'circle-plus',
+            onChosen: () => {
+              finishCreating(q)
+              return true
+            },
+            element: (
+              <div className="tl-quick-search-option-row">
+                <LogseqTypeTag active type="PA" />
+                <strong>New page:</strong>
+                {q}
+              </div>
+            ),
           },
-          element: (
-            <div className="tl-quick-search-option-row">
-              <LogseqTypeTag active type="P" />
-              <strong>New page:</strong>
-              {q}
-            </div>
-          ),
-        })
+          {
+            actionIcon: 'circle-plus',
+            onChosen: () => {
+              handlers?.addNewWhiteboard(q)
+              finishCreating(q)
+              return true
+            },
+            element: (
+              <div className="tl-quick-search-option-row">
+                <LogseqTypeTag active type="WA" />
+                <strong>New whiteboard:</strong>
+                {q}
+              </div>
+            ),
+          }
+        )
       }
 
       // search filters
@@ -659,7 +677,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         </div>
         <div className="tl-quick-search-options" ref={optionsWrapperRef}>
           <Virtuoso
-            style={{ height: Math.min(Math.max(1, options.length), 12) * 36 }}
+            style={{ height: Math.min(Math.max(1, options.length), 12) * 40 }}
             totalCount={options.length}
             itemContent={index => {
               const { actionIcon, onChosen, element } = options[index]
@@ -736,26 +754,29 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     }, [this.initialHeightCalculated])
 
     return (
-      <div
-        ref={cpRefContainer}
-        className="relative tl-logseq-cp-container"
-        style={{ overflow: this.props.isAutoResizing ? 'visible' : 'auto' }}
-      >
+      <>
         <div
           className="absolute inset-0 tl-logseq-cp-container-bg"
           style={{
-            background: fill
-              ? `var(--ls-highlight-color-${fill})`
-              : 'var(--ls-secondary-background-color)',
+            background:
+              fill && fill !== 'var(--ls-secondary-background-color)'
+                ? `var(--ls-highlight-color-${fill})`
+                : 'var(--ls-secondary-background-color)',
             opacity,
           }}
         ></div>
-        {this.props.blockType === 'B' && this.props.compact ? (
-          <Block blockId={pageId} />
-        ) : (
-          <Page pageName={pageId} />
-        )}
-      </div>
+        <div
+          ref={cpRefContainer}
+          className="relative tl-logseq-cp-container"
+          style={{ overflow: this.props.isAutoResizing ? 'visible' : 'auto' }}
+        >
+          {this.props.blockType === 'B' && this.props.compact ? (
+            <Block blockId={pageId} />
+          ) : (
+            <Page pageName={pageId} />
+          )}
+        </div>
+      </>
     )
   })
 
@@ -857,6 +878,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       >
         {isBinding && <BindingIndicator mode="html" strokeWidth={strokeWidth} size={size} />}
         <div
+          data-inner-events={!tlEventsEnabled}
           onWheelCapture={stop}
           onPointerDown={stop}
           onPointerUp={stop}
@@ -938,7 +960,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       <>
         <rect
           fill={
-            this.props.fill
+            this.props.fill && this.props.fill !== 'var(--ls-secondary-background-color)'
               ? `var(--ls-highlight-color-${this.props.fill})`
               : 'var(--ls-secondary-background-color)'
           }
@@ -953,7 +975,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         {!this.props.compact && (
           <rect
             fill={
-              this.props.fill
+              this.props.fill && this.props.fill !== 'var(--ls-secondary-background-color)'
                 ? getComputedColor(this.props.fill, 'background')
                 : 'var(--ls-tertiary-background-color)'
             }

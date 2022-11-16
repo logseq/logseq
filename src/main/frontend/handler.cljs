@@ -29,7 +29,6 @@
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
-            [frontend.handler.metadata :as metadata-handler]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
@@ -237,8 +236,6 @@
     (el/listen!))
   (persist-var/load-vars)
   (user-handler/restore-tokens-from-localstorage)
-  (user-handler/refresh-tokens-loop)
-  (metadata-handler/run-set-page-metadata-job!)
   (js/setTimeout instrument! (* 60 1000)))
 
 (defn stop! []

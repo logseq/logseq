@@ -9,8 +9,6 @@
    :ast/version     {}
    :db/type         {}
    :db/ident        {:db/unique :db.unique/identity}
-   :db/encrypted?    {}
-   :db/encryption-keys {}
 
    :recent/pages {}
 

@@ -4,10 +4,8 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.web.nfs :as nfs-handler]
-            [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -17,8 +15,6 @@
             [promesa.core :as p]
             [electron.ipc :as ipc]
             [goog.object :as gobj]
-            [frontend.components.encryption :as encryption]
-            [frontend.encrypt :as encrypt]
             [cljs.core.async :as async :refer [go <!]]
             [frontend.handler.file-sync :as file-sync]
             [reitit.frontend.easy :as rfe]))
@@ -56,50 +52,41 @@
         :let [only-cloud? (and remote? (nil? url))]]
     [:div.flex.justify-between.mb-4.items-center {:key (or url GraphUUID)}
      (normalized-graph-label repo #(if only-cloud?
-                                     (state/pub-event! [:graph/pick-dest-to-sync repo])
+                                     (state/pub-event! [:graph/pull-down-remote-graph repo])
                                      (state/pub-event! [:graph/switch url])))
 
      [:div.controls
-      (when (encrypt/encrypted-db? url)
-        [:a.control {:title    "Show encryption information about this graph"
-                     :on-click (fn []
-                                 (if remote?
-                                   (state/pub-event! [:modal/remote-encryption-input-pw-dialog url repo])
-                                   (state/set-modal! (encryption/encryption-dialog url))))}
-         "🔐"])
+      [:div.flex.flex-row.items-center
+       (ui/tippy {:html [:div.text-sm.max-w-xs
+                         (if only-cloud?
+                           "Deletes this remote graph. Note this can't be recovered."
+                           "Removes Logseq's access to the local file path of your graph. It won't remove your local files.")]
+                  :class "tippy-hover"
+                  :interactive true}
+                 [:a.text-gray-400.ml-4.font-medium.text-sm.whitespace-nowrap
+                  {:on-click (fn []
+                               (if only-cloud?
+                                 (let [confirm-fn
+                                       (fn []
+                                         (ui/make-confirm-modal
+                                          {:title      [:div
+                                                        {:style {:max-width 700}}
+                                                        (str "Are you sure to permanently delete the graph \"" GraphName "\" from our server?")]
+                                           :sub-title   [:div.small.mt-1
+                                                         "Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]
+                                           :on-confirm (fn [_ {:keys [close-fn]}]
+                                                         (close-fn)
 
-      (let [loading? (state/sub [:ui/loading? :remove/remote-graph GraphUUID])]
-        [:div.flex.flex-row.items-center
-         (when loading? [:div.ml-2 (ui/loading "")])
-         (ui/tippy {:html [:div.text-sm.max-w-xs
-                           (if only-cloud?
-                             "Deletes this remote graph. Note this can't be recovered."
-                             "Removes Logseq's access to the local file path of your graph. It won't remove your local files.")]
-                    :class "tippy-hover"
-                    :interactive true}
-                   [:a.text-gray-400.ml-4.font-medium.text-sm.whitespace-nowrap
-                    {:on-click (fn []
-                                 (if only-cloud?
-                                   (let [confirm-fn
-                                         (fn []
-                                           (ui/make-confirm-modal
-                                            {:title      [:div
-                                                          {:style {:max-width 700}}
-                                                          (str "Are you sure to permanently delete the graph \"" GraphName "\" from our server?")]
-                                             :sub-title   [:div.small.mt-1
-                                                           "Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]
-                                             :on-confirm (fn [_ {:keys [close-fn]}]
-                                                           (close-fn)
-                                                           (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] true)
-                                                           (go (<! (file-sync/<delete-graph GraphUUID))
-                                                             (file-sync/load-session-graphs)
-                                                             (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] false)))}))]
-                                     (state/set-modal! (confirm-fn)))
-                                   (do
-                                     (repo-handler/remove-repo! repo)
-                                     (file-sync/load-session-graphs)
-                                     (state/pub-event! [:graph/unlinked]))))}
-                    (if only-cloud? "Remove" "Unlink")])])]]))
+                                                         (state/set-state! [:file-sync/remote-graphs :loading] true)
+                                                         (go (<! (file-sync/<delete-graph GraphUUID))
+                                                             (state/delete-repo! repo)
+                                                             (state/delete-remote-graph! repo)
+                                                             (state/set-state! [:file-sync/remote-graphs :loading] false)))}))]
+                                   (state/set-modal! (confirm-fn)))
+                                 (let [current-repo (state/get-current-repo)]
+                                   (repo-handler/remove-repo! repo)
+                                   (state/pub-event! [:graph/unlinked repo current-repo]))))}
+                  (if only-cloud? "Remove" "Unlink")])]]]))
 
 (rum/defc repos < rum/reactive
   []
@@ -129,7 +116,7 @@
             [:div.mr-8
              (ui/button
                (t :open-a-directory)
-               :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])]]
+               :on-click #(state/pub-event! [:graph/setup-a-repo]))])]]
 
         (when (seq remote-graphs)
           [:div
@@ -170,7 +157,7 @@
                                                       (if (gobj/get e "shiftKey")
                                                         (state/pub-event! [:graph/open-new-window url])
                                                         (if-not local?
-                                                          (state/pub-event! [:graph/pick-dest-to-sync graph])
+                                                          (state/pub-event! [:graph/pull-down-remote-graph graph])
                                                           (state/pub-event! [:graph/switch url]))))}})))
                     switch-repos)
         refresh-link (let [nfs-repo? (config/local-db? current-repo)]
@@ -195,7 +182,7 @@
     (->>
      (concat repo-links
              [(when (seq repo-links) {:hr true})
-              {:title (t :new-graph) :options {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)}}
+              {:title (t :new-graph) :options {:on-click #(state/pub-event! [:graph/setup-a-repo])}}
               {:title (t :all-graphs) :options {:href (rfe/href :repos)}}
               refresh-link
               reindex-link

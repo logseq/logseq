@@ -230,7 +230,7 @@ html[data-theme='light'] {
 }
 
 .tl-statusbar {
-  @apply absolute flex items-center w-full bottom-0;
+  @apply fixed flex items-center w-full bottom-0;
 
   font-family: monospace;
   font-size: 10px;
@@ -651,6 +651,7 @@ button.tl-select-input-trigger {
   padding: 8px 16px;
   cursor: pointer;
   gap: 0.5em;
+  user-select: none;
 
   &[data-focused='true'] {
     background-color: var(--ls-menu-hover-color, #f4f5f7);
@@ -658,7 +659,8 @@ button.tl-select-input-trigger {
 }
 
 .tl-quick-search-option-row {
-  display: flex;
+  @apply flex items-center;
+
   gap: 0.5em;
 
   .breadcrumb {
@@ -667,12 +669,16 @@ button.tl-select-input-trigger {
 }
 
 .tl-quick-search-option-placeholder {
-  width: 20px;
+  width: 24px;
   flex-shrink: 0;
 }
 
 .tl-quick-search-option-breadcrumb {
   opacity: 0.5;
+}
+
+[data-inner-events=false] * {
+  user-select: none;
 }
 
 .tl-logseq-portal-container {
@@ -700,7 +706,7 @@ button.tl-select-input-trigger {
 
   height: 40px;
   flex-shrink: 0;
-
+  z-index: 1;
   color: var(--ls-title-text-color);
   border-top-left-radius: 8px;
   border-top-right-radius: 8px;
@@ -729,8 +735,8 @@ button.tl-select-input-trigger {
   @apply flex items-center justify-center rounded text-base;
 
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   line-height: 1;
   color: #fff;
   background: rgba(0, 0, 0, 0.5);
@@ -740,7 +746,10 @@ button.tl-select-input-trigger {
 
 .tl-image-shape-container {
   @apply h-full w-full overflow-hidden flex items-center justify-center pointer-events-auto;
-  background-color: var(--ls-secondary-background-color);
+
+  &[data-asset-loaded="false"] {
+    background-color: var(--ls-secondary-background-color);
+  }
 }
 
 .tl-html-container {
@@ -923,7 +932,7 @@ html[data-theme='dark'] {
 }
 
 .tl-color-bg {
-  @apply w-full h-full rounded-sm;
+  @apply flex justify-center items-center w-full h-full rounded-sm;
 }
 
 .tl-slider-root {

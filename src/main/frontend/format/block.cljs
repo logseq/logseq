@@ -52,7 +52,7 @@ and handles unexpected failure."
   ([block]
    (some->> block
             str
-            date/valid?
+            date/normalize-date
             (tf/unparse date/custom-formatter))))
 
 (defn normalize-block

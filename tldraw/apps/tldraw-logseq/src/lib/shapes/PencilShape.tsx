@@ -126,7 +126,7 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
     } = this
     return (
       <path
-        pointerEvents="none"
+        pointerEvents="all"
         d={pointsPath}
         strokeWidth={strokeWidth / 2}
         strokeLinejoin="round"

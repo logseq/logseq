@@ -152,6 +152,7 @@
   [{:keys [open-fn current-repo default-home new-block-mode]}]
   (let [repos (->> (state/sub [:me :repos])
                    (remove #(= (:url %) config/local-repo)))
+        _ (state/sub [:user/info :UserGroups])
         electron-mac? (and util/mac? (util/electron?))
         show-open-folder? (and (nfs/supported?)
                                (or (empty? repos)
@@ -196,8 +197,7 @@
              (ui/icon "chevron-left" {:size 26})])))]
 
      [:div.r.flex
-      (when (and sync-enabled?
-                 current-repo
+      (when (and current-repo
                  (not (config/demo-graph? current-repo))
                  (user-handler/alpha-or-beta-user?))
         (fs-sync/indicator))

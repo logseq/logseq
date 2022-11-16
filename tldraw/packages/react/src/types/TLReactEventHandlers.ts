@@ -6,7 +6,6 @@ export interface TLReactEventHandlers<
   S extends TLReactShape = TLReactShape,
   E extends TLEventInfo<S> = TLEventInfo<S>
 > {
-  onWheel: TLEvents<S, TLReactEventMap, E>['wheel']
   onPointerDown: TLEvents<S, TLReactEventMap, E>['pointer']
   onPointerUp: TLEvents<S, TLReactEventMap, E>['pointer']
   onPointerMove: TLEvents<S, TLReactEventMap, E>['pointer']

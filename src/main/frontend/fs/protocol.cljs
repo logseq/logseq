@@ -13,7 +13,7 @@
   (rename! [this repo old-path new-path])
   (copy! [this repo old-path new-path])
   (stat [this dir path])
-  (open-dir [this ok-handler])
+  (open-dir [this dir ok-handler])
   (get-files [this path-or-handle ok-handler])
   (watch-dir! [this dir options])
   (unwatch-dir! [this dir])

@@ -154,3 +154,11 @@
 (defn normalize-lc
   [s]
   (normalize (string/lower-case s)))
+
+(defn safe-decode-uri-component
+  [uri]
+  (try
+    (js/decodeURIComponent uri)
+    (catch :default _
+      (println "decodeURIComponent failed: " uri)
+      uri)))

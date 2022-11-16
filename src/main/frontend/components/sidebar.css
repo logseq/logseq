@@ -65,11 +65,12 @@
 
 #main-content-container {
   @apply p-4 sm:px-8;
+
   font-size: 1em;
 }
 
 #main-content-container[data-is-margin-less-pages=true] {
-  padding: 0;
+  padding: 0 !important;
   position: relative;
 }
 
@@ -614,13 +615,14 @@ html[data-theme='dark'] {
 }
 
 a.ui__modal-close svg, a.close svg, span.rotating-arrow svg {
-    color: var(--ls-primary-text-color);
+  color: var(--ls-primary-text-color);
 }
+
 a.ui__modal-close, a.close {
-    color: var(--ls-primary-text-color);
-    opacity: 0.6;
+  color: var(--ls-primary-text-color);
+  opacity: 0.6;
 }
 
 a.ui__modal-close:hover, a.close:hover {
-    opacity: 1;
+  opacity: 1;
 }
