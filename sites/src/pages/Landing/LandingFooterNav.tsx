@@ -29,7 +29,7 @@ export function FooterDescCard (props: any) {
 
 export function FeaturesBoards () {
   return (
-    <div className={'app-features-boards hidden sm:block'}>
+    <div className={'app-features-boards'}>
       <div className="board-item">
         <div className="inner">
           <div className="l info-wrap flex-1">
@@ -39,29 +39,31 @@ export function FeaturesBoards () {
               <span>Always up-to-date notes</span> <br/>
               <span className="text-logseq-50/80">between all your devices.</span>
             </h2>
-            <h3>
+            <h3 className="hidden sm:block">
               <span
                 className="text-logseq-50/80">With encrypted file syncing, you'll always have your <br/> notes </span>
               <span>backed up and securely available in real-time <br/> on any device. </span>
             </h3>
           </div>
 
-          <div className="r img-wrap flex-1"></div>
+          <div className="r img-wrap flex-1 hidden sm:block"></div>
         </div>
       </div>
 
       <div className="board-item">
         <div className="inner whiteboard">
-          <div className="l img-wrap flex-1"></div>
+          <div className="l img-wrap flex-1 hidden sm:flex"></div>
 
           <div className="r info-wrap flex-1">
             <strong><ScribbleLoop size={38} weight={'duotone'}/></strong>
             <h1>Whiteboards <sup>ALPHA</sup></h1>
+
             <h2>
               <span>A new canvas</span> <br/>
               <span className="text-logseq-50/80">for your thoughts.</span>
             </h2>
-            <h3>
+
+            <h3 className="hidden sm:block">
               <span className="text-logseq-50/80">Place any of your thoughts from the knowledge base <br/>
               or new ones next to each other on an infinite canvas</span> <br/>
               <span>to connect, associate and understand in new ways.</span>
@@ -75,9 +77,29 @@ export function FeaturesBoards () {
 }
 
 export function FeaturesBoardsDL () {
+  const appState = useAppState()
+
+  const itemWhiteboard = (
+    <div className="board-item whiteboard flex-1">
+      <div className="inner">
+        <div className="r info-wrap flex-1">
+          <strong><ScribbleLoop size={38} weight={'duotone'}/></strong>
+          <h1>Whiteboards <sup>ALPHA</sup></h1>
+          <h2>
+            <span>A new canvas </span>
+            <span className="text-logseq-50/80">for your
+                  <br/>thoughts.</span>
+          </h2>
+        </div>
+
+      </div>
+    </div>
+  )
+
   return (
     <div className={'app-features-boards dl-page hidden sm:block'}>
       <div className="board-item-wrap">
+
         <div className="board-item file-sync">
           <div className="inner">
             <div className="l info-wrap flex-1">
@@ -91,6 +113,8 @@ export function FeaturesBoardsDL () {
             </div>
           </div>
         </div>
+
+        {appState.sm.get() && (itemWhiteboard)}
 
         <div className="board-item rtc-collaboration">
           <div className="inner">
@@ -111,22 +135,11 @@ export function FeaturesBoardsDL () {
         </div>
       </div>
 
-      <div className="board-item-wrap flex w-full">
-        <div className="board-item whiteboard flex-1">
-          <div className="inner">
-            <div className="r info-wrap flex-1">
-              <strong><ScribbleLoop size={38} weight={'duotone'}/></strong>
-              <h1>Whiteboards <sup>ALPHA</sup></h1>
-              <h2>
-                <span>A new canvas </span>
-                <span className="text-logseq-50/80">for your
-                  <br/>thoughts.</span>
-              </h2>
-            </div>
-
-          </div>
+      {!appState.sm.get() && (
+        <div className="board-item-wrap flex w-full">
+          {itemWhiteboard}
         </div>
-      </div>
+      )}
     </div>
   )
 }

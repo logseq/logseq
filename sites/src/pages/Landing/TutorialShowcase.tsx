@@ -50,7 +50,7 @@ const featuresSlideItems = [
         icon: <ClockCounterClockwise size={20} weight="duotone"/>,
         title: 'Review notes',
         desc: <span>Capture, structure, and review all of your class notes with ease using the
-          <a>Linked References</a>, <a>Queries</a>, and <a>Search </a>features.</span>
+          <a> Linked References</a>, <a>Queries</a>, and <a>Search </a>features.</span>
       },
       {
         icon: <Binoculars size={20} weight="duotone"/>,
@@ -79,7 +79,7 @@ const featuresSlideItems = [
         icon: <ClockCounterClockwise size={20} weight="duotone"/>,
         title: 'Review notes',
         desc: <span>Capture, structure, and review all of your class notes with ease using the
-          <a>Linked References</a>, <a>Queries</a>, and <a>Search </a>features.</span>
+          <a> Linked References</a>, <a>Queries</a>, and <a>Search </a>features.</span>
       },
       {
         icon: <CalendarCheck size={20} weight="duotone"/>,

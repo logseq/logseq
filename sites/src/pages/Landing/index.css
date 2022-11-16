@@ -892,10 +892,11 @@ h1, h2, h3 {
 }
 
 .app-features-boards {
-  @apply pt-8;
+  @apply pt-8 sm:block;
 
   .board-item {
-    @apply min-h-[300px] mx-24 px-16 mb-10;
+    @apply px-4 mb-6
+    sm:min-h-[300px] sm:mx-24 sm:px-16 sm:mb-10;
 
     position: relative;
     box-sizing: border-box;
@@ -922,7 +923,8 @@ h1, h2, h3 {
       @apply flex;
 
       > .l {
-        @apply flex flex-col pt-10 pb-12;
+        @apply flex-col pt-4 pb-5
+        sm:pt-10 sm:pb-12;
       }
 
       > .img-wrap {
@@ -948,7 +950,7 @@ h1, h2, h3 {
         }
 
         h2 {
-          @apply text-[38px] leading-[1.1em] py-2 tracking-wide;
+          @apply text-[25px] sm:text-[38px] leading-[1.2em] py-2 tracking-wide;
         }
 
         h3 {
@@ -957,7 +959,8 @@ h1, h2, h3 {
       }
 
       &.whiteboard {
-        @apply pt-10 pb-12;
+        @apply pt-4 pb-5
+        sm:pt-10 sm:pb-12;
 
         > .img-wrap {
           @apply -mb-12 -ml-16;
@@ -969,24 +972,25 @@ h1, h2, h3 {
         }
 
         > .r {
-          @apply pl-16;
+          @apply sm:pl-16;
         }
       }
     }
   }
 
   &.dl-page {
-    @apply flex space-x-7 px-32;
+    @apply flex
+    sm:space-x-7 sm:px-32;
 
     > .board-item-wrap {
       @apply flex-1;
     }
 
     .board-item {
-      @apply mx-0 px-8;
+      @apply sm:mx-0 sm:px-8;
 
       &.file-sync, &.rtc-collaboration {
-        margin-bottom: 30px;
+        @apply sm:mb-[30px];
 
         .info-wrap h3 {
           background-image: url("./assets/filesync-abstraction.png");
@@ -1010,7 +1014,8 @@ h1, h2, h3 {
         @apply flex;
 
         > .inner {
-          @apply pt-10 mb-8 -mx-8 -mb-2 px-8 flex flex-1;
+          @apply pt-4 flex flex-1
+          sm:pt-10 sm:mb-8 sm:-mx-8 sm:-mb-2 sm:px-8;
 
           border-radius: 1em;
           overflow: hidden;
