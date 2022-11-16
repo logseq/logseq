@@ -60,19 +60,14 @@ export const PrimaryTools = observer(function PrimaryTools() {
   return (
     <div className="tl-primary-tools">
       <div className="tl-toolbar tl-tools-floating-panel">
-        <ToolButton title="Select" id="select" icon="select-cursor" />
-        <ToolButton
-          title="Move"
-          id="move"
-          icon={app.isIn('move.panning') ? 'hand-grab' : 'hand-stop'}
-        />
+        <ToolButton title="Logseq Portal" id="logseq-portal" icon={<LogseqIcon />} />
         <ToolButton title="Draw" id="pencil" icon="ballpen" />
         <ToolButton title="Highlight" id="highlighter" icon="highlight" />
         <ToolButton title="Eraser" id="erase" icon="eraser" />
         <ToolButton title="Connector" id="line" icon="connector" />
         <ToolButton title="Text" id="text" icon="text" />
         <GeometryToolButtons />
-        <ToolButton title="Logseq Portal" id="logseq-portal" icon={<LogseqIcon />} />
+        />
       </div>
     </div>
   )
