@@ -74,7 +74,8 @@
                 :min-height "40px"
                 :max-height "420px"
                 :left offset-x
-                :top offset-y}} children])]))
+                :top offset-y}}
+       (when d-open children)])]))
 
 (rum/defc dropdown-menu
   [{:keys [label children classname hover?]}]
