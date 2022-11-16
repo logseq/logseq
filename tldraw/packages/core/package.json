@@ -37,22 +37,22 @@
   "dependencies": {
     "@tldraw/intersect": "2.0.0-alpha.1",
     "@tldraw/vec": "2.0.0-alpha.1",
-    "@use-gesture/react": "^10.2.20",
-    "fast-copy": "^2.1.3",
+    "@use-gesture/react": "^10.2.22",
+    "fast-copy": "^3.0.0",
     "fast-deep-equal": "^3.1.3",
     "hotkeys-js": "^3.10.0",
     "is-plain-object": "^5.0.0",
-    "mobx": "^6.6.2",
+    "mobx": "^6.7.0",
     "mobx-react-lite": "^3.4.0",
     "mousetrap": "^1.6.5",
-    "potpack": "^1.0.2",
+    "potpack": "^2.0.0",
     "proxy-compare": "^2.3.0",
     "rbush": "^3.0.1",
-    "uuid": "^8.0.0"
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
     "@types/is-plain-object": "^2.0.4",
-    "@types/mousetrap": "^1.6.8",
+    "@types/mousetrap": "^1.6.11",
     "@types/node": "^16.11.6",
     "@types/rbush": "^3.0.0",
     "@types/react": "^17.0.0",
