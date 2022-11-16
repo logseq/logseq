@@ -259,12 +259,7 @@
                         (fn [open? refs-count] [:span.whiteboard-page-refs-count-label
                                                 (if (> refs-count 1) "References" "Reference")
                                                 (ui/icon (if open? "references-hide" "references-show")
-                                                         {:extension? true})]))]
-      (dropdown-menu {:label "(DEV) Show blocks in outliner"
-                      :classname "hidden"
-                      :children
-                      [:div.p-2 (page/page-blocks-cp (state/get-current-repo)
-                                                     (model/get-page page-name) nil)]})]
+                                                         {:extension? true})]))]]
      (tldraw-app page-name block-id)]))
 
 (rum/defc whiteboard-route
