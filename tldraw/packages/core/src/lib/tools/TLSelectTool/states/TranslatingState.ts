@@ -137,10 +137,6 @@ export class TranslatingState<
     this.initialClonePoints = {}
   }
 
-  onWheel: TLEvents<S>['wheel'] = (info, e) => {
-    this.onPointerMove(info, e)
-  }
-
   onPointerMove: TLEvents<S>['pointer'] = () => {
     this.moveSelectedShapesToPointer()
   }

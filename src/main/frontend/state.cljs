@@ -9,6 +9,7 @@
             [electron.ipc :as ipc]
             [frontend.mobile.util :as mobile-util]
             [frontend.storage :as storage]
+            [frontend.spec.storage :as storage-spec]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
@@ -172,7 +173,7 @@
      ;; plugin
      :plugin/enabled                        (and (util/electron?)
                                                  ;; true false :theme-only
-                                                 ((fnil identity true) (storage/get :lsp-core-enabled)))
+                                                 ((fnil identity true) (storage/get ::storage-spec/lsp-core-enabled)))
      :plugin/preferences                    nil
      :plugin/indicator-text                 nil
      :plugin/installed-plugins              {}
@@ -914,13 +915,14 @@ Similar to re-frame subscriptions"
   (when-let [input (get-input)]
     (util/get-selection-start input)))
 
-(defn set-selection-start-block!
-  [start-block]
-  (swap! state assoc :selection/start-block start-block))
-
 (defn get-selection-start-block
   []
   (get @state :selection/start-block))
+
+(defn set-selection-start-block!
+  [start-block]
+  (when-not (get-selection-start-block)
+    (swap! state assoc :selection/start-block start-block)))
 
 (defn set-selection-blocks!
   ([blocks]
@@ -942,7 +944,8 @@ Similar to re-frame subscriptions"
   (swap! state assoc
          :selection/mode false
          :selection/blocks nil
-         :selection/direction :down))
+         :selection/direction :down
+         :selection/start-block nil))
 
 (defn get-selection-blocks
   []
@@ -1262,7 +1265,7 @@ Similar to re-frame subscriptions"
   ([panel-content]
    (set-sub-modal! panel-content
                    {:close-btn? true}))
-  ([panel-content {:keys [id label close-btn? show? center?] :as opts}]
+  ([panel-content {:keys [id label close-btn? close-backdrop? show? center?] :as opts}]
    (if (not (modal-opened?))
      (set-modal! panel-content opts)
      (let [modals (:modal/subsets @state)
@@ -1274,7 +1277,8 @@ Similar to re-frame subscriptions"
                     :modal/label         (or label (if center? "ls-modal-align-center" ""))
                     :modal/show?         (if (boolean? show?) show? true)
                     :modal/panel-content panel-content
-                    :modal/close-btn?    close-btn?})]
+                    :modal/close-btn?    close-btn?
+                    :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)})]
        (swap! state update-in
               [:modal/subsets (or idx (count modals))]
               merge input)

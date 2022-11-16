@@ -308,26 +308,27 @@
 (rum/defc recent-search-and-pages
   [in-page-search?]
   [:div.recent-search
-   [:div.wrap.px-4.py-2.text-sm.opacity-70.flex.flex-row.justify-between.align-items.mx-1.sm:mx-0
+   [:div.wrap.px-4.pb-2.text-sm.opacity-70.flex.flex-row.justify-between.align-items.mx-1.sm:mx-0
     [:div "Recent search:"]
-    (ui/with-shortcut :go/search-in-page "bottom"
-      [:div.flex-row.flex.align-items
-       [:div.mr-3.flex "Search blocks in page:"]
-       [:div.flex.items-center
-        (ui/toggle in-page-search?
-                   (fn [_value]
-                     (state/set-search-mode! (if in-page-search? :global :page)))
-                   true)]
-       (ui/tippy {:html [:div
-                         ;; TODO: fetch from config
-                         "Tip: " [:code (util/->platform-shortcut "Ctrl + Shift + p")] " to open the commands palette"]
-                  :interactive     true
-                  :arrow           true
-                  :theme       "monospace"}
-                 [:a.flex.fade-link.items-center
-                  {:style {:margin-left 12}
-                   :on-click #(state/toggle! :ui/command-palette-open?)}
-                  (ui/icon "command" {:style {:font-size 20}})])])]
+    [:div.hidden.md:flex
+     (ui/with-shortcut :go/search-in-page "bottom"
+       [:div.flex-row.flex.align-items
+        [:div.mr-3.flex "Search blocks in page:"]
+        [:div.flex.items-center
+         (ui/toggle in-page-search?
+                    (fn [_value]
+                      (state/set-search-mode! (if in-page-search? :global :page)))
+                    true)]
+        (ui/tippy {:html [:div
+                          ;; TODO: fetch from config
+                          "Tip: " [:code (util/->platform-shortcut "Ctrl + Shift + p")] " to open the commands palette"]
+                   :interactive     true
+                   :arrow           true
+                   :theme       "monospace"}
+                  [:a.flex.fade-link.items-center
+                   {:style {:margin-left 12}
+                    :on-click #(state/toggle! :ui/command-palette-open?)}
+                   (ui/icon "command" {:style {:font-size 20}})])])]]
    (let [recent-search (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
          pages (->> (db/get-key-value :recent/pages)
                     (remove nil?)
@@ -407,7 +408,7 @@
         timeout 300
         in-page-search? (= search-mode :page)]
     [:div.cp__palette.cp__palette-main
-     [:div.ls-search
+     [:div.ls-search.p-2
       [:div.input-wrap
       [:input.cp__palette-input.w-full
        {:type          "text"

@@ -5,7 +5,7 @@ import fs from 'fs'
 import path from 'path'
 
 // Build with [tsup](https://tsup.egoist.sh)
-await $`tsup`
+await $`npx tsup`
 
 // Prepare package.json file
 const packageJson = fs.readFileSync('package.json', 'utf8')

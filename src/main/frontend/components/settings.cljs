@@ -6,6 +6,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.storage :as storage]
+            [frontend.spec.storage :as storage-spec]
             [frontend.date :as date]
             [frontend.dicts :as dicts]
             [frontend.handler :as handler]
@@ -76,7 +77,12 @@
                :else
                nil)]
 
-       [:div.text-sm.opacity-50 (str "Version " version)]]]
+       [:div.text-sm version]
+
+       [:a.text-sm.fade-link.underline.inline
+        {:target "_blank"
+         :href "https://docs.logseq.com/#/page/changelog"}
+        "What's new?"]]]
 
      (when-not (or update-pending?
                    (string/blank? type))
@@ -299,7 +305,12 @@
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "custom_date_format"}
-    (t :settings-page/custom-date-format)]
+    (t :settings-page/custom-date-format)
+    (ui/tippy {:html        (t :settings-page/custom-date-format-warning)     
+               :class       "tippy-hover ml-2"
+               :interactive true
+               :disabled    false}
+              (svg/info))]
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md
      [:select.form-select.is-small
@@ -483,7 +494,7 @@
         [on? set-on?] (rum/use-state value)
         on-toggle #(let [v (not on?)]
                      (set-on? v)
-                     (storage/set :lsp-core-enabled v))]
+                     (storage/set ::storage-spec/lsp-core-enabled v))]
     [:div.flex.items-center
      (ui/toggle on? on-toggle true)
      (when (not= (boolean value) on?)
@@ -669,7 +680,7 @@
             :on-key-press  (fn [e]
                              (when (= "Enter" (util/ekey e))
                                (update-home-page e)))}]]]])
-     (when (and (util/electron?) config/enable-plugins?) (plugin-system-switcher-row))
+     (when (and (util/electron?) config/feature-plugin-system-on?) (plugin-system-switcher-row))
      (flashcards-switcher-row enable-flashcards?)
      (zotero-settings-row)
      (when-not web-platform?

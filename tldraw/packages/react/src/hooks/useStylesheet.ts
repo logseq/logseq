@@ -119,6 +119,9 @@ const tlcss = css`
     cursor: var(--tl-cursor) !important;
     box-sizing: border-box;
     color: var(--tl-foreground);
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
   }
 
   .tl-overlay {

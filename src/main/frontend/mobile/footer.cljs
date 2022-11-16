@@ -50,7 +50,8 @@
 
 (rum/defc footer < rum/reactive
   []
-  (when (and (not (state/sub :editor/editing?))
+  (when (and (#{:page :home} (state/sub [:route-match :data :name]))
+             (not (state/sub :editor/editing?))
              (state/sub :mobile/show-tabbar?)
              (state/get-current-repo))
     [:div.cp__footer.w-full.bottom-0.justify-between

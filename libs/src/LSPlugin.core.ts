@@ -634,8 +634,8 @@ class PluginLocal extends EventEmitter<'loaded'
 
     // Validate id
     const { registeredPlugins, isRegistering } = this._ctx
-    if (isRegistering && registeredPlugins.has(logseq.id)) {
-      throw new ExistedImportedPluginPackageError('prepare package Error')
+    if (isRegistering && registeredPlugins.has(this.id)) {
+      throw new ExistedImportedPluginPackageError('Registered plugin package Error')
     }
 
     return async () => {
