@@ -84,6 +84,10 @@
   content: "\ea0e";
 }
 
+.tie-pdf-highlight::before {
+  content: "\ec9c"; /* https://tabler-icons.io/i/pin */
+}
+
 .tie-references-hide::before {
   content: "\ea0f";
 }

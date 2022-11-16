@@ -806,7 +806,8 @@ input::-webkit-inner-spin-button {
       color: var(--ls-link-ref-text-color);
 
       &:before {
-        content: "📌 ";
+        @apply tie tie-pdf-highlight pr-1 opacity-80;
+        color: var(--ls-secondary-text-color);
       }
     }
 
@@ -856,7 +857,8 @@ input::-webkit-inner-spin-button {
   &[data-hl-color=green] {
     .prefix-link {
       &:before {
-        content: "🟢 ";
+        @apply tie tie-pdf-highlight pr-1;
+        color: var(--color-green-500);
       }
     }
   }
@@ -864,7 +866,8 @@ input::-webkit-inner-spin-button {
   &[data-hl-color=purple] {
     .prefix-link {
       &:before {
-        content: "🟣 ";
+        @apply tie tie-pdf-highlight pr-1;
+        color: var(--color-purple-500);
       }
     }
   }
@@ -872,7 +875,8 @@ input::-webkit-inner-spin-button {
   &[data-hl-color=blue] {
     .prefix-link {
       &:before {
-        content: "🔵 ";
+        @apply tie tie-pdf-highlight pr-1;
+        color: var(--color-blue-500);
       }
     }
   }
@@ -880,7 +884,8 @@ input::-webkit-inner-spin-button {
   &[data-hl-color=yellow] {
     .prefix-link {
       &:before {
-        content: "🟡 ";
+        @apply tie tie-pdf-highlight pr-1;
+        color: var(--color-yellow-400);
       }
     }
   }
@@ -888,7 +893,8 @@ input::-webkit-inner-spin-button {
   &[data-hl-color=red] {
     .prefix-link {
       &:before {
-        content: "🔴 ";
+        @apply tie tie-pdf-highlight pr-1;
+        color: var(--color-red-500);
       }
     }
   }
