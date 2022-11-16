@@ -2,7 +2,6 @@ import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { ToolButton } from '../ToolButton'
-import { LogseqIcon } from '../icons'
 import { ColorInput } from '../inputs/ColorInput'
 import * as Separator from '@radix-ui/react-separator'
 
@@ -72,7 +71,8 @@ export const PrimaryTools = observer(function PrimaryTools() {
   return (
     <div className="tl-primary-tools">
       <div className="tl-toolbar tl-tools-floating-panel">
-        <ToolButton title="Logseq Portal" id="logseq-portal" icon={<LogseqIcon />} />
+        <ToolButton title="Logseq Portal" id="logseq-portal" icon="circle-plus" />
+        <Separator.Root className="tl-toolbar-separator" orientation="horizontal" style={{margin: "0 -4px"}}/>
         <ToolButton title="Draw" id="pencil" icon="ballpen" />
         <ToolButton title="Highlight" id="highlighter" icon="highlight" />
         <ToolButton title="Eraser" id="erase" icon="eraser" />
