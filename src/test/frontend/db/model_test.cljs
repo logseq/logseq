@@ -1,7 +1,9 @@
 (ns frontend.db.model-test
-  (:require [cljs.test :refer [use-fixtures deftest is]]
+  (:require [cljs.test :refer [use-fixtures deftest testing is]]
             [frontend.db.model :as model]
-            [frontend.test.helper :as test-helper :refer [load-test-files]]))
+            [frontend.test.helper :as test-helper :refer [load-test-files]]
+            [logseq.graph-parser.util.block-ref :as block-ref]
+            ))
 
 (use-fixtures :each {:before test-helper/start-test-db!
                      :after test-helper/destroy-test-db!})
@@ -136,6 +138,21 @@
          (#'model/get-unnecessary-namespaces-name '("one/two/tree" "one" "one/two" "non nested tag" "non nested link")))
       "Must be  one/two one"))
 
+(deftest refs-to-page-maintained-on-reload
+  (testing 
+    "Refs to blocks on a page are retained if that page is reload."
+  (let [ test-uuid "16c90195-6a03-4b3f-839d-095a496d9acd"
+          target-page-content (str "first line\n- target block\n  id:: " test-uuid)
+          referring-page-content (str "first line\n- " (block-ref/->block-ref test-uuid))]
+    (load-test-files [{:file/path "pages/target.md"
+                       :file/content target-page-content}
+                      {:file/path "pages/referrer.md"
+                       :file/content referring-page-content}])
+    (is (= (model/get-all-referenced-blocks-uuid) [(parse-uuid test-uuid)]))
+    (load-test-files [{:file/path "pages/target.md"
+                       :file/content target-page-content}])
+    (is (= (model/get-all-referenced-blocks-uuid) [(parse-uuid test-uuid)]))
+    )))
 
 
 

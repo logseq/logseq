@@ -37,8 +37,8 @@
                     (extract/extract-whiteboard-edn file content extract-options')
 
                     :else nil)
-              delete-blocks (delete-blocks-fn (first pages) file)
               block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
+              delete-blocks (delete-blocks-fn (first pages) file block-ids)
               block-refs-ids (->> (mapcat :block/refs blocks)
                                   (filter (fn [ref] (and (vector? ref)
                                                          (= :block/uuid (first ref)))))
