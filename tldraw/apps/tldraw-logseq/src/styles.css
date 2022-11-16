@@ -873,6 +873,11 @@ html[data-theme='dark'] {
   background-color: var(--ls-border-color);
   width: 1px;
   opacity: 0.5;
+
+  &[data-orientation='horizontal'] {
+    height: 1px;
+    width: auto;
+  }
 }
 
 .tl-youtube-link,
@@ -900,7 +905,6 @@ html[data-theme='dark'] {
   @apply rounded-sm drop-shadow-md;
 
   padding: 4px;
-  width: 160px;
   background-color: var(--ls-secondary-background-color);
   z-index: 100000;
 }
@@ -910,14 +914,14 @@ html[data-theme='dark'] {
 }
 
 .tl-color-palette {
-  @apply flex flex-wrap;
+  @apply grid grid-cols-4;
 }
 
 .tl-color-drip {
   @apply rounded text-sm;
 
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   padding: 3px;
   border: 1px solid var(--ls-secondary-border-color);
   color: var(--ls-secondary-text-color);

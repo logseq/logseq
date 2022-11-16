@@ -1,12 +1,15 @@
 import * as React from 'react'
 import * as Popover from '@radix-ui/react-popover'
+import type { Side } from '@radix-ui/react-popper'
 import * as Slider from '@radix-ui/react-slider'
 import { TablerIcon } from '../icons'
 import { Color } from '@tldraw/core'
+
 interface ColorInputProps extends React.InputHTMLAttributes<HTMLButtonElement> {
   color: string
   opacity: number
   collisionRef: HTMLElement | null
+  popoverSide: Side
   setColor: (value: string) => void
   setOpacity: (value: number) => void
 }
@@ -15,6 +18,7 @@ export function ColorInput({
   color,
   opacity,
   collisionRef,
+  popoverSide,
   setColor,
   setOpacity,
   ...rest
@@ -35,11 +39,11 @@ export function ColorInput({
 
   return (
     <Popover.Root>
-      <Popover.Trigger className="tl-color-drip mx-1">{renderColor(color)}</Popover.Trigger>
+      <Popover.Trigger className="tl-color-drip">{renderColor(color)}</Popover.Trigger>
 
       <Popover.Content
         className="tl-popover-content"
-        side="top"
+        side={popoverSide}
         sideOffset={15}
         collisionBoundary={collisionRef}
       >

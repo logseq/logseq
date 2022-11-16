@@ -3,6 +3,8 @@ import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { ToolButton } from '../ToolButton'
 import { LogseqIcon } from '../icons'
+import { ColorInput } from '../inputs/ColorInput'
+import * as Separator from '@radix-ui/react-separator'
 
 const GeometryToolButtons = observer(() => {
   const geometries = [
@@ -54,8 +56,18 @@ const GeometryToolButtons = observer(() => {
   )
 })
 
+
+
 export const PrimaryTools = observer(function PrimaryTools() {
   const app = useApp()
+
+  const handleSetColor = React.useCallback((color: string) => {
+    app.api.setColor(color)
+  }, [])
+
+  const handleSetOpacity = React.useCallback((opacity: number) => {
+    app.api.setOpacity(opacity)
+  }, [])
 
   return (
     <div className="tl-primary-tools">
@@ -67,6 +79,15 @@ export const PrimaryTools = observer(function PrimaryTools() {
         <ToolButton title="Connector" id="line" icon="connector" />
         <ToolButton title="Text" id="text" icon="text" />
         <GeometryToolButtons />
+        <Separator.Root className="tl-toolbar-separator" orientation="horizontal" style={{margin: "0 -4px"}}/>
+        <ColorInput
+          title="Color Picker"
+          popoverSide="left"
+          color={app.settings.color}
+          opacity={app.settings.opacity}
+          collisionRef={document.getElementById('main-content-container')}
+          setOpacity={handleSetOpacity}
+          setColor={handleSetColor}
         />
       </div>
     </div>
