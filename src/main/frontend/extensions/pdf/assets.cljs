@@ -59,11 +59,11 @@
         data))))
 
 (defn persist-hls-data$
-  [{:keys [hls-file]} highlights]
+  [{:keys [hls-file]} highlights extra]
   (when hls-file
     (let [repo-cur (state/get-current-repo)
           repo-dir (config/get-repo-dir repo-cur)
-          data (pr-str {:highlights highlights})]
+          data (pr-str {:highlights highlights :extra extra})]
       (fs/write-file! repo-cur repo-dir hls-file data {:skip-compare? true}))))
 
 (defn resolve-hls-data-by-key$

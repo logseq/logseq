@@ -433,6 +433,14 @@
          #(js-delete (. el -dataset) "theme")))
      [viewer-theme])
 
+    ;; export page state
+    (rum/use-effect!
+     (fn []
+       (when viewer
+         (.dispatch (.-eventBus viewer) (name :ls-update-extra-state)
+                    #js {:page current-page-num})))
+     [viewer current-page-num])
+
     ;; pager hooks
     (rum/use-effect!
      (fn []
