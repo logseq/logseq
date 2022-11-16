@@ -119,7 +119,7 @@
         "ignore": "5.1.8",
         "is-svg": "4.3.0",
         "jszip": "3.7.0",
-        "mldoc": "^1.5.0",
+        "mldoc": "^1.5.1",
         "path": "0.12.7",
         "path-complete-extname": "1.0.0",
         "pixi-graph-fork": "0.2.0",
