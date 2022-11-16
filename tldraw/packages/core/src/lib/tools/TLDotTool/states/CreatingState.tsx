@@ -48,14 +48,7 @@ export class CreatingState<
         this.app.setSelectedShapes([shape])
       })
     }
-    if (!this.app.settings.isToolLocked) {
-      this.app.transition('select')
-    }
     this.app.persist()
-  }
-
-  onWheel: TLStateEvents<S, K>['onWheel'] = (info, e) => {
-    this.onPointerMove(info, e)
   }
 
   onKeyDown: TLStateEvents<S>['onKeyDown'] = (info, e) => {

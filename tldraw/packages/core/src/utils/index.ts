@@ -82,6 +82,14 @@ export function isDarwin(): boolean {
 }
 
 /**
+ * Migrated from frontend.util/safari?
+ */
+export function isSafari(): boolean {
+  const ua = window.navigator.userAgent.toLowerCase()
+  return ua.includes('webkit') && !ua.includes('chrome')
+}
+
+/**
  * Get whether an event is command (mac) or control (pc).
  *
  * @param e

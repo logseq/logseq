@@ -5,11 +5,9 @@ export function useDebouncedValue<T>(value: T, ms = 0) {
   useEffect(() => {
     let canceled = false
     const handler = setTimeout(() => {
-      requestIdleCallback(() => {
-        if (!canceled) {
-          setDebouncedValue(value)
-        }
-      })
+      if (!canceled) {
+        setDebouncedValue(value)
+      }
     }, ms)
     return () => {
       canceled = true

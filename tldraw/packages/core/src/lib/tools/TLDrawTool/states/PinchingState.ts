@@ -1,8 +1,8 @@
 import type { TLEventMap, TLEventInfo, TLEvents } from '../../../../types'
-import type { TLShape } from '../../../shapes'
+import type { TLDrawShape, TLShape } from '../../../shapes'
 import type { TLApp } from '../../../TLApp'
 import { TLToolState } from '../../../TLToolState'
-import type { TLMoveTool } from '../TLMoveTool'
+import type { TLDrawTool } from '../TLDrawTool'
 
 type GestureInfo<
   S extends TLShape,
@@ -15,9 +15,10 @@ type GestureInfo<
 
 export class PinchingState<
   S extends TLShape,
+  T extends S & TLDrawShape,
   K extends TLEventMap,
   R extends TLApp<S, K>,
-  P extends TLMoveTool<S, K, R>
+  P extends TLDrawTool<T, S, K, R>
 > extends TLToolState<S, K, R, P> {
   static id = 'pinching'
 

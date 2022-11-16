@@ -29,7 +29,7 @@ const documentModel = onLoad() ?? {
           type: 'logseq-portal',
           parentId: 'page1',
           point: [369.109375, 170.5546875],
-          size: [0, 0],
+          size: [240, 0],
           stroke: '',
           fill: '',
           strokeWidth: 2,
@@ -44,8 +44,7 @@ const documentModel = onLoad() ?? {
   ],
 }
 
-const Page = props => {
-  const [value, setValue] = React.useState(JSON.stringify(props, null, 2))
+const Page = () => {
   return (
     <div className="w-full font-mono page">
       The Circle components are a collection of standardized UI elements and patterns for building
@@ -57,7 +56,7 @@ const Page = props => {
   )
 }
 
-const Block = props => {
+const Block = () => {
   return (
     <div className="w-full font-mono single-block">
       The Circle components are a collection of standardized UI elements and patterns for building

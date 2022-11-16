@@ -46,15 +46,6 @@ export class TLViewport {
     return this
   }
 
-  private _currentView = {
-    minX: 0,
-    minY: 0,
-    maxX: 1,
-    maxY: 1,
-    width: 1,
-    height: 1,
-  }
-
   @computed get currentView(): TLBounds {
     const {
       bounds,
@@ -82,10 +73,21 @@ export class TLViewport {
     return Vec.mul(Vec.add(point, camera.point), camera.zoom)
   }
 
-  pinchCamera = (point: number[], delta: number[], zoom: number): this => {
+  onZoom = (point: number[], zoom: number): this => {
+    return this.pinchZoom(point, [0, 0], zoom)
+  }
+
+  /**
+   * Pinch to a new zoom level, possibly together with a pan.
+   *
+   * @param point The current point under the cursor.
+   * @param delta The movement delta.
+   * @param zoom The new zoom level
+   */
+  pinchZoom = (point: number[], delta: number[], zoom: number): this => {
     const { camera } = this
-    zoom = Math.max(TLViewport.minZoom, Math.min(TLViewport.maxZoom, zoom))
     const nextPoint = Vec.sub(camera.point, Vec.div(delta, camera.zoom))
+    zoom = Vec.clamp(zoom, TLViewport.minZoom, TLViewport.maxZoom)
     const p0 = Vec.sub(Vec.div(point, camera.zoom), nextPoint)
     const p1 = Vec.sub(Vec.div(point, zoom), nextPoint)
     return this.update({ point: Vec.toFixed(Vec.add(nextPoint, Vec.sub(p1, p0))), zoom })
@@ -94,7 +96,7 @@ export class TLViewport {
   setZoom = (zoom: number) => {
     const { bounds } = this
     const center = [bounds.width / 2, bounds.height / 2]
-    this.pinchCamera(center, [0, 0], zoom)
+    this.onZoom(center, zoom)
   }
 
   zoomIn = () => {
