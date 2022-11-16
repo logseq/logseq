@@ -425,7 +425,7 @@ jobs:
     with:
       build-target: "${{ github.event.inputs.build-target }}"
       # if scheduled, use production mode
-      enable-file-sync-production: true
+      enable-file-sync-production: "${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}"
     secrets:
       ANDROID_KEYSTORE: "${{ secrets.ANDROID_KEYSTORE }}"
       ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
