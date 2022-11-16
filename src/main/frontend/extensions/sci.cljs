@@ -38,4 +38,4 @@
    [:div.results.mt-1
     (let [editor-ns {'block (sci/new-var 'block block)}
           result (eval-string code {'editor editor-ns})]
-      (if (and (vector? result) (keyword? (first result))) result [:pre.code (str result)]))]])
+      (if (and (vector? result) (:hiccup (meta result))) result [:pre.code (str result)]))]])
