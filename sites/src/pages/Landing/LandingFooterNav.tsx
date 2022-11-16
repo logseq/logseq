@@ -30,7 +30,7 @@ export function FooterDescCard (props: any) {
 export function FeaturesBoards () {
   return (
     <div className={'app-features-boards'}>
-      <div className="board-item">
+      <div className="board-item hidden sm:block">
         <div className="inner">
           <div className="l info-wrap flex-1">
             <strong><CloudCheck size={38} weight={'duotone'}/></strong>
@@ -50,7 +50,7 @@ export function FeaturesBoards () {
         </div>
       </div>
 
-      <div className="board-item">
+      <div className="board-item hidden sm:block">
         <div className="inner whiteboard">
           <div className="l img-wrap flex-1 hidden sm:flex"></div>
 
@@ -85,11 +85,19 @@ export function FeaturesBoardsDL () {
         <div className="r info-wrap flex-1">
           <strong><ScribbleLoop size={38} weight={'duotone'}/></strong>
           <h1>Whiteboards <sup>ALPHA</sup></h1>
-          <h2>
-            <span>A new canvas </span>
-            <span className="text-logseq-50/80">for your
-                  <br/>thoughts.</span>
-          </h2>
+
+          {appState.sm.get() ?
+            (
+              <h2>
+                <span>A new canvas </span> <br/>
+                <span className="text-logseq-50/80">for your thoughts.</span>
+              </h2>
+            ) : (
+              <h2>
+                <span>A new canvas </span>
+                <span className="text-logseq-50/80">for your<br/>thoughts.</span>
+              </h2>
+            )}
         </div>
 
       </div>

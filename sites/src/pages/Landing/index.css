@@ -675,7 +675,7 @@ h1, h2, h3 {
 
     > .actions {
       @apply flex flex-col py-6 rounded-3xl
-      mt-12 px-4 bg-logseq-500 sm:items-center
+      mt-4 px-4 bg-logseq-500 sm:items-center
       sm:mx-10 sm:mt-24 sm:py-16 sm:px-0 sm:bg-transparent;
     }
   }
@@ -942,7 +942,7 @@ h1, h2, h3 {
         }
 
         h1 {
-          @apply text-[24px] pt-4 pb-2 tracking-wide;
+          @apply font-semibold text-[21px] pt-3 sm:text-[24px] sm:pt-4 pb-2 sm:tracking-wide;
 
           sup {
             @apply text-xs text-logseq-100;
@@ -950,7 +950,8 @@ h1, h2, h3 {
         }
 
         h2 {
-          @apply text-[25px] sm:text-[38px] leading-[1.2em] py-2 tracking-wide;
+          @apply text-[25px] tracking-wide leading-[1.2em]
+          pt-1 pb-2 sm:text-[38px]  sm:py-2;
         }
 
         h3 {
@@ -994,19 +995,36 @@ h1, h2, h3 {
 
         .info-wrap h3 {
           background-image: url("./assets/filesync-abstraction.png");
-          background-size: contain;
+          background-size: 130%;
           background-repeat: no-repeat;
           height: 60px;
-          margin-top: 15px;
+          margin-top: 8px;
+          margin-bottom: -8px;
+
+          @screen sm {
+            background-size: contain;
+            height: 60px;
+            margin-top: 15px;
+            margin-bottom: 0;
+          }
         }
       }
 
       &.rtc-collaboration {
         .info-wrap h3 {
           background-image: url("./assets/rtc-abstraction.png");
-          height: 86px;
+          height: 74px;
+          background-size: 95%;
           position: relative;
-          left: -16px;
+          left: -20px;
+          padding-top: 4px;
+
+          @screen sm {
+            height: 86px;
+            position: relative;
+            left: -16px;
+            background-size: contain;
+          }
         }
       }
 
@@ -1014,15 +1032,24 @@ h1, h2, h3 {
         @apply flex;
 
         > .inner {
-          @apply pt-4 flex flex-1
-          sm:pt-10 sm:mb-8 sm:-mx-8 sm:-mb-2 sm:px-8;
+          @apply pt-4 flex flex-1 pb-20 -mx-4 -mt-4
+          sm:pt-10 sm:-mx-8 sm:-mb-2 sm:px-8;
 
           border-radius: 1em;
           overflow: hidden;
-          background-image: url("./assets/whiteboard_canvas_fadeout.png");
+          background-image: url("./assets/whiteboard-demo-small.png");
           background-repeat: no-repeat;
-          background-size: contain;
+          background-size: 100%;
           background-position: bottom;
+
+          @screen sm {
+            background-size: contain;
+            background-image: url("./assets/whiteboard_canvas_fadeout.png");
+          }
+
+          > .r {
+            @apply px-4 py-4 sm:px-0 sm:py-0;
+          }
         }
       }
     }
