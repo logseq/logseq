@@ -18,8 +18,8 @@
   --color-text-inverted: var(--ls-tertiary-background-color);
   --color-hover: var(--ls-secondary-background-color);
   --color-selectedStroke: rgb(42, 123, 253);
-  --color-selectedFill: #4285f4;
-  --color-selectedContrast: #fff;
+  --color-selectedFill: var(--ls-selection-background-color);
+  --color-selectedContrast: var(--ls-selection-text-color);
   --shadow-small: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-medium: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-large: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
@@ -248,8 +248,8 @@ html[data-theme='light'] {
 .tl-button {
   @apply relative flex items-center justify-center rounded border-0;
 
-  height: 32px;
-  width: 32px;
+  height: 30px;
+  width: 30px;
   font-family: var(--ls-font-family);
   background: none;
   cursor: pointer;
