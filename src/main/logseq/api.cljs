@@ -525,9 +525,10 @@
 
 (def ^:export insert_block
   (fn [block-uuid-or-page-name content ^js opts]
-    (let [{:keys [before sibling isPageBlock customUUID properties]} (bean/->clj opts)
+    (let [{:keys [before sibling focus isPageBlock customUUID properties]} (bean/->clj opts)
           page-name (and isPageBlock block-uuid-or-page-name)
           custom-uuid (or customUUID (:id properties))
+          edit-block? (if (nil? focus) true focus)
           _ (when (not (string/blank? custom-uuid))
               (when-not (util/uuid-string? custom-uuid)
                 (throw (js/Error.
@@ -557,6 +558,7 @@
                       {:block-uuid  block-uuid'
                        :sibling?    sibling?
                        :before?     before?
+                       :edit-block? edit-block?
                        :page        page-name
                        :custom-uuid custom-uuid
                        :properties  (merge properties
