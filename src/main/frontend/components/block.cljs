@@ -3609,7 +3609,7 @@
             (when (seq blocks)
               (let [alias? (:block/alias? page)
                     page (db/entity (:db/id page))
-                    whiteboard? (= "whiteboard" (:block/type page))]
+                    whiteboard? (model/whiteboard-page? page)]
                 [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                              (:ref? config)
                              (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))

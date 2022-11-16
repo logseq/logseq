@@ -476,7 +476,7 @@
 
       ;; Redirect to the newly renamed page
       (when redirect?
-        (route-handler/redirect! {:to          (if (= "whiteboard" (:block/type page)) :whiteboard :page)
+        (route-handler/redirect! {:to          (if (model/whiteboard-page? page) :whiteboard :page)
                                   :push        false
                                   :path-params {:name new-page-name}}))
 
