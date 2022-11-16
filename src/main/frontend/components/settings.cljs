@@ -6,6 +6,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.storage :as storage]
+            [frontend.spec.storage :as storage-spec]
             [frontend.date :as date]
             [frontend.dicts :as dicts]
             [frontend.handler :as handler]
@@ -493,7 +494,7 @@
         [on? set-on?] (rum/use-state value)
         on-toggle #(let [v (not on?)]
                      (set-on? v)
-                     (storage/set :lsp-core-enabled v))]
+                     (storage/set ::storage-spec/lsp-core-enabled v))]
     [:div.flex.items-center
      (ui/toggle on? on-toggle true)
      (when (not= (boolean value) on?)
@@ -679,7 +680,7 @@
             :on-key-press  (fn [e]
                              (when (= "Enter" (util/ekey e))
                                (update-home-page e)))}]]]])
-     (when (and (util/electron?) config/enable-plugins?) (plugin-system-switcher-row))
+     (when (and (util/electron?) config/feature-plugin-system-on?) (plugin-system-switcher-row))
      (flashcards-switcher-row enable-flashcards?)
      (zotero-settings-row)
      (when-not web-platform?

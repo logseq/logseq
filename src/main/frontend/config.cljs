@@ -39,9 +39,7 @@
 ;; =============
 
 (goog-define ENABLE-PLUGINS true)
-(defonce enable-plugins? ENABLE-PLUGINS)
-
-(swap! state/state assoc :plugin/enabled enable-plugins?)
+(defonce feature-plugin-system-on? ENABLE-PLUGINS)
 
 ;; Desktop only as other platforms requires better understanding of their
 ;; multi-graph workflows and optimal place for a "global" dir
@@ -50,6 +48,7 @@
 ;; User level configuration for whether plugins are enabled
 (defonce lsp-enabled?
          (and (util/electron?)
+              (not (false? feature-plugin-system-on?))
               (state/lsp-enabled?-or-theme)))
 
 (defn plugin-config-enabled?
