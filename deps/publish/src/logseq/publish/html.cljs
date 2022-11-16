@@ -218,6 +218,7 @@
   (when (and block (:block/content block))
     (let [title [:span {:class "block-ref"}
                  (block-content (assoc config :block-ref? true) block)]]
+      ;; TODO: add href
       [:div.block-ref-wrap.inline
        (if label
          (->elem
@@ -226,23 +227,17 @@
          title)])))
 
 (rum/defc page-reference < rum/reactive
-  [s config label]
-  (let [s (string/trim s)]
-    [:span.page-reference
-     {:data-ref s}
-     [:span.text-gray-500.bracket page-ref/left-brackets]
-     (cond
-       (and label
-            (string? label)
-            (not (string/blank? label))) ; alias
-       label
-
-       (coll? label)
-       (->elem :span (map-inline config label))
-
-       :else
-       s)
-     [:span.text-gray-500.bracket page-ref/right-brackets]]))
+  [s _config _label]
+  (let [s (some-> s
+                  string/trim
+                  gp-util/page-name-sanity-lc)]
+    (when-not (string/blank? s)
+      [:span.page-reference
+       {:data-ref s}
+       [:span.text-gray-500.bracket page-ref/left-brackets]
+       [:a {:href (str "/page/" (util/url-encode s))}
+        s]
+       [:span.text-gray-500.bracket page-ref/right-brackets]])))
 
 (defn get-refed-block
   [refed-blocks id embed?]
