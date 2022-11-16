@@ -212,3 +212,13 @@ input.tl-text-input {
     right: 0;
   }
 }
+
+/* disable user select globally for whiteboard on iOS/iPad. Is there a better option? */
+html:is(.is-ios, is-native-ios, is-native-ipad) [data-page="whiteboard"] * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}

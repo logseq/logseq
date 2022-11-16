@@ -1,4 +1,4 @@
-import type { TLEventMap, TLStateEvents } from '../../../../types'
+import type { TLEventMap, TLEvents, TLStateEvents } from '../../../../types'
 import type { TLShape, TLDrawShape } from '../../../shapes'
 import type { TLApp } from '../../../TLApp'
 import { TLToolState } from '../../../TLToolState'
@@ -18,9 +18,8 @@ export class IdleState<
     this.tool.transition('creating')
   }
 
-  onPinchStart: TLStateEvents<S, K>['onPinchStart'] = (...args) => {
-    this.app.transition('select', { returnTo: this.app.currentState.id })
-    this.app._events.onPinchStart?.(...args)
+  onPinchStart: TLEvents<S>['pinch'] = (info, event) => {
+    this.tool.transition('pinching', { info, event })
   }
 
   onKeyDown: TLStateEvents<S>['onKeyDown'] = (info, e) => {

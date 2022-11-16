@@ -14,6 +14,9 @@ export function usePreventNavigation(rCanvas: React.RefObject<HTMLDivElement>): 
     }
 
     const preventNavigation = (event: TouchEvent) => {
+      if (event.touches.length === 0) {
+        return
+      }
       // Center point of the touch area
       const touchXPosition = event.touches[0].pageX
       // Size of the touch area

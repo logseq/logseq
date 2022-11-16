@@ -7,6 +7,7 @@ import {
   TLTextShape,
   TLTextShapeProps,
   getComputedColor,
+  isSafari,
 } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps } from '@tldraw/react'
 import { action, computed } from 'mobx'
@@ -306,6 +307,10 @@ export class TextShape extends TLTextShape<TextShapeProps> {
   }
 
   getShapeSVGJsx() {
+    if (isSafari()) {
+      // Safari doesn't support foreignObject well
+      return super.getShapeSVGJsx(null);
+    }
     const {
       props: { text, stroke, fontSize, fontFamily },
     } = this
@@ -319,6 +324,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
             color: getComputedColor(stroke, 'text'),
             fontSize,
             fontFamily,
+            display: 'contents',
           }}
         >
           {text}

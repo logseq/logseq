@@ -9,6 +9,7 @@
             [electron.ipc :as ipc]
             [frontend.mobile.util :as mobile-util]
             [frontend.storage :as storage]
+            [frontend.spec.storage :as storage-spec]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
@@ -172,7 +173,7 @@
      ;; plugin
      :plugin/enabled                        (and (util/electron?)
                                                  ;; true false :theme-only
-                                                 ((fnil identity true) (storage/get :lsp-core-enabled)))
+                                                 ((fnil identity true) (storage/get ::storage-spec/lsp-core-enabled)))
      :plugin/preferences                    nil
      :plugin/indicator-text                 nil
      :plugin/installed-plugins              {}

@@ -54,7 +54,7 @@ const LogseqTypeTag = ({
   type,
   active,
 }: {
-  type: 'B' | 'P' | 'BA' | 'WP' | 'BS' | 'PS'
+  type: 'B' | 'P' | 'BA' | 'PA' | 'WA' | 'WP' | 'BS' | 'PS'
   active?: boolean
 }) => {
   const nameMapping = {
@@ -62,6 +62,8 @@ const LogseqTypeTag = ({
     P: 'page',
     WP: 'whiteboard',
     BA: 'new-block',
+    PA: 'new-page',
+    WA: 'new-whiteboard',
     BS: 'block-search',
     PS: 'page-search',
   }
@@ -459,32 +461,49 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             <LogseqTypeTag active type="BA" />
             {q.length > 0 ? (
               <>
-                <strong>New whiteboard block:</strong>
+                <strong>New block:</strong>
                 {q}
               </>
             ) : (
-              <strong>New whiteboard block</strong>
+              <strong>New block</strong>
             )}
           </div>
         ),
       })
 
-      // New page option when no exact match
+      // New page or whiteboard option when no exact match
       if (!searchResult?.pages?.some(p => p.toLowerCase() === q.toLowerCase()) && q) {
-        options.push({
-          actionIcon: 'circle-plus',
-          onChosen: () => {
-            finishCreating(q)
-            return true
+        options.push(
+          {
+            actionIcon: 'circle-plus',
+            onChosen: () => {
+              finishCreating(q)
+              return true
+            },
+            element: (
+              <div className="tl-quick-search-option-row">
+                <LogseqTypeTag active type="PA" />
+                <strong>New page:</strong>
+                {q}
+              </div>
+            ),
           },
-          element: (
-            <div className="tl-quick-search-option-row">
-              <LogseqTypeTag active type="P" />
-              <strong>New page:</strong>
-              {q}
-            </div>
-          ),
-        })
+          {
+            actionIcon: 'circle-plus',
+            onChosen: () => {
+              handlers?.addNewWhiteboard(q)
+              finishCreating(q)
+              return true
+            },
+            element: (
+              <div className="tl-quick-search-option-row">
+                <LogseqTypeTag active type="WA" />
+                <strong>New whiteboard:</strong>
+                {q}
+              </div>
+            ),
+          }
+        )
       }
 
       // search filters
@@ -658,7 +677,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         </div>
         <div className="tl-quick-search-options" ref={optionsWrapperRef}>
           <Virtuoso
-            style={{ height: Math.min(Math.max(1, options.length), 12) * 36 }}
+            style={{ height: Math.min(Math.max(1, options.length), 12) * 40 }}
             totalCount={options.length}
             itemContent={index => {
               const { actionIcon, onChosen, element } = options[index]
@@ -859,6 +878,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       >
         {isBinding && <BindingIndicator mode="html" strokeWidth={strokeWidth} size={size} />}
         <div
+          data-inner-events={!tlEventsEnabled}
           onWheelCapture={stop}
           onPointerDown={stop}
           onPointerUp={stop}
