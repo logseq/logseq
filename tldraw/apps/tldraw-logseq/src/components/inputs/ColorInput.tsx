@@ -11,7 +11,7 @@ interface ColorInputProps extends React.InputHTMLAttributes<HTMLButtonElement> {
   collisionRef: HTMLElement | null
   popoverSide: Side
   setColor: (value: string) => void
-  setOpacity: (value: number) => void
+  setOpacity?: (value: number) => void
 }
 
 export function ColorInput({
@@ -59,7 +59,7 @@ export function ColorInput({
           ))}
         </div>
 
-        <div className="mx-1 my-2">
+        {setOpacity && (<div className="mx-1 my-2">
           <Slider.Root
             defaultValue={[opacity]}
             onValueCommit={value => setOpacity(value[0])}
@@ -73,7 +73,7 @@ export function ColorInput({
             </Slider.Track>
             <Slider.Thumb className="tl-slider-thumb" />
           </Slider.Root>
-        </div>
+        </div>)}
 
         <Popover.Arrow className="tl-popover-arrow" />
       </Popover.Content>

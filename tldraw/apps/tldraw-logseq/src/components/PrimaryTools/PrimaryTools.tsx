@@ -13,10 +13,6 @@ export const PrimaryTools = observer(function PrimaryTools() {
     app.api.setColor(color)
   }, [])
 
-  const handleSetOpacity = React.useCallback((opacity: number) => {
-    app.api.setOpacity(opacity)
-  }, [])
-
   return (
     <div className="tl-primary-tools">
       <div className="tl-toolbar tl-tools-floating-panel">
@@ -35,7 +31,6 @@ export const PrimaryTools = observer(function PrimaryTools() {
           color={app.settings.color}
           opacity={app.settings.opacity}
           collisionRef={document.getElementById('main-content-container')}
-          setOpacity={handleSetOpacity}
           setColor={handleSetColor}
         />
       </div>
