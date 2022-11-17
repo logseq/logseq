@@ -1,7 +1,7 @@
 import { uniqueId, fileToBase64 } from '@tldraw/core'
 import React from 'react'
 import ReactDOM from 'react-dom'
-import { App as TldrawApp, generateJSXFromApp } from '@tldraw/logseq'
+import { App as TldrawApp, generateJSXFromModel } from '@tldraw/logseq'
 
 const storingKey = 'playground.index'
 
@@ -152,7 +152,7 @@ const PreviewButton = ({ model }) => {
   }, [])
 
   const preview = React.useMemo(() => {
-    return generateJSXFromApp(model, w / h)
+    return generateJSXFromModel(model, w / h)
   }, [model, w, h])
 
   return (

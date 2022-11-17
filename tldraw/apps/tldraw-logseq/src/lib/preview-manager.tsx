@@ -134,12 +134,12 @@ export class PreviewManager {
  *
  * @param serializedApp
  */
-export function generateSVGFromApp(serializedApp: TLDocumentModel<Shape>, ratio = 4 / 3) {
+export function generateSVGFromModel(serializedApp: TLDocumentModel<Shape>, ratio = 4 / 3) {
   const preview = new PreviewManager(serializedApp)
   return preview.exportAsSVG(ratio)
 }
 
-export function generateJSXFromApp(serializedApp: TLDocumentModel<Shape>, ratio = 4 / 3) {
+export function generateJSXFromModel(serializedApp: TLDocumentModel<Shape>, ratio = 4 / 3) {
   const preview = new PreviewManager(serializedApp)
   return preview.generatePreviewJsx(undefined, ratio)
 }
