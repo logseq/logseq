@@ -10,6 +10,7 @@ const STEPS = [
   [0.7, 2.5, 1],
 ]
 
+// Grid is slow to render. Maybe we render it using canvas?
 export const Grid = observer(function Grid({ size }: TLGridProps) {
   const {
     viewport: {
