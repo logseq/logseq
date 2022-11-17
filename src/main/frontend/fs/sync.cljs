@@ -27,6 +27,7 @@
             [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.encrypt :as encrypt]
+            [logseq.graph-parser.util :as gp-util]
             [medley.core :refer [dedupe-by]]
             [rum.core :as rum]
             [promesa.core :as p]
@@ -788,7 +789,7 @@
           (->> r
                js->clj
                (map (fn [[path metadata]]
-                      (->FileMetadata (get metadata "size") (get metadata "md5") path
+                      (->FileMetadata (get metadata "size") (get metadata "md5") (gp-util/path-normalize path)
                                       (get metadata "encryptedFname") (get metadata "mtime") false nil)))
                set)))))
   (<get-local-files-meta [_ graph-uuid base-path filepaths]
@@ -798,16 +799,19 @@
         (->> r
              js->clj
              (map (fn [[path metadata]]
-                    (->FileMetadata (get metadata "size") (get metadata "md5") path
+                    (->FileMetadata (get metadata "size") (get metadata "md5") (gp-util/path-normalize path)
                                     (get metadata "encryptedFname") (get metadata "mtime") false nil)))))))
   (<rename-local-file [_ graph-uuid base-path from to]
-    (<retry-rsapi #(p->c (ipc/ipc "rename-local-file" graph-uuid base-path from to))))
+    (<retry-rsapi #(p->c (ipc/ipc "rename-local-file" graph-uuid base-path
+                                  (gp-util/path-normalize from)
+                                  (gp-util/path-normalize to)))))
   (<update-local-files [this graph-uuid base-path filepaths]
     (println "update-local-files" graph-uuid base-path filepaths)
-    (go
-      (<! (<rsapi-cancel-all-requests))
-      (let [token (<! (<get-token this))]
-        (<! (p->c (ipc/ipc "update-local-files" graph-uuid base-path filepaths token))))))
+    (let [normalized-filepaths (mapv gp-util/path-normalize filepaths)]
+      (go
+        (<! (<rsapi-cancel-all-requests))
+        (let [token (<! (<get-token this))]
+          (<! (p->c (ipc/ipc "update-local-files" graph-uuid base-path normalized-filepaths token)))))))
   (<download-version-files [this graph-uuid base-path filepaths]
     (go
       (let [token (<! (<get-token this))
@@ -816,24 +820,27 @@
         r)))
 
   (<delete-local-files [_ graph-uuid base-path filepaths]
-    (go
-      (println "delete-local-files" filepaths)
-      (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "delete-local-files" graph-uuid base-path filepaths))))]
-        r)))
+    (let [normalized-filepaths (mapv gp-util/path-normalize filepaths)]
+      (go
+        (println "delete-local-files" filepaths)
+        (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "delete-local-files" graph-uuid base-path normalized-filepaths))))]
+          r))))
 
   (<update-remote-files [this graph-uuid base-path filepaths local-txid]
-    (go
-      (<! (<rsapi-cancel-all-requests))
-      (let [token (<! (<get-token this))]
-        (<! (<retry-rsapi
-             #(p->c (ipc/ipc "update-remote-files" graph-uuid base-path filepaths local-txid token)))))))
+    (let [normalized-filepaths (mapv gp-util/path-normalize filepaths)]
+      (go
+        (<! (<rsapi-cancel-all-requests))
+        (let [token (<! (<get-token this))]
+          (<! (<retry-rsapi
+               #(p->c (ipc/ipc "update-remote-files" graph-uuid base-path normalized-filepaths local-txid token))))))))
 
   (<delete-remote-files [this graph-uuid base-path filepaths local-txid]
-    (go
-      (let [token (<! (<get-token this))]
-        (<!
-         (<retry-rsapi
-          #(p->c (ipc/ipc "delete-remote-files" graph-uuid base-path filepaths local-txid token)))))))
+    (let [normalized-filepaths (mapv gp-util/path-normalize filepaths)]
+      (go
+        (let [token (<! (<get-token this))]
+          (<!
+           (<retry-rsapi
+            #(p->c (ipc/ipc "delete-remote-files" graph-uuid base-path normalized-filepaths local-txid token))))))))
   (<encrypt-fnames [_ graph-uuid fnames] (go (js->clj (<! (p->c (ipc/ipc "encrypt-fnames" graph-uuid fnames))))))
   (<decrypt-fnames [_ graph-uuid fnames] (go
                                            (let [r (<! (p->c (ipc/ipc "decrypt-fnames" graph-uuid fnames)))]
@@ -876,7 +883,7 @@
           (->> (.-result r)
                js->clj
                (map (fn [[path metadata]]
-                      (->FileMetadata (get metadata "size") (get metadata "md5") path
+                      (->FileMetadata (get metadata "size") (get metadata "md5") (gp-util/path-normalize path)
                                       (get metadata "encryptedFname") (get metadata "mtime") false nil)))
                set)))))
 
@@ -890,7 +897,7 @@
         (->> (.-result r)
              js->clj
              (map (fn [[path metadata]]
-                    (->FileMetadata (get metadata "size") (get metadata "md5") path
+                    (->FileMetadata (get metadata "size") (get metadata "md5") (gp-util/path-normalize path)
                                     (get metadata "encryptedFname") (get metadata "mtime") false nil)))
              set))))
 
@@ -898,16 +905,17 @@
     (p->c (.renameLocalFile mobile-util/file-sync
                             (clj->js {:graphUUID graph-uuid
                                       :basePath base-path
-                                      :from from
-                                      :to to}))))
+                                      :from (gp-util/path-normalize from)
+                                      :to (gp-util/path-normalize to)}))))
 
   (<update-local-files [this graph-uuid base-path filepaths]
-    (go
-      (let [token (<! (<get-token this))]
-        (<! (p->c (.updateLocalFiles mobile-util/file-sync (clj->js {:graphUUID graph-uuid
-                                                                     :basePath base-path
-                                                                     :filePaths filepaths
-                                                                     :token token})))))))
+    (let [normalized-filepaths (mapv gp-util/path-normalize filepaths)]
+      (go
+        (let [token (<! (<get-token this))]
+          (<! (p->c (.updateLocalFiles mobile-util/file-sync (clj->js {:graphUUID graph-uuid
+                                                                       :basePath base-path
+                                                                       :filePaths normalized-filepaths
+                                                                       :token token}))))))))
 
   (<download-version-files [this graph-uuid base-path filepaths]
     (go
@@ -921,38 +929,41 @@
         r)))
 
   (<delete-local-files [_ graph-uuid base-path filepaths]
-    (go
-      (let [r (<! (<retry-rsapi #(p->c (.deleteLocalFiles mobile-util/file-sync
-                                                          (clj->js {:graphUUID graph-uuid
-                                                                    :basePath base-path
-                                                                    :filePaths filepaths})))))]
-        r)))
+    (let [normalized-filepaths (mapv gp-util/path-normalize filepaths)]
+      (go
+        (let [r (<! (<retry-rsapi #(p->c (.deleteLocalFiles mobile-util/file-sync
+                                                            (clj->js {:graphUUID graph-uuid
+                                                                      :basePath base-path
+                                                                      :filePaths normalized-filepaths})))))]
+          r))))
 
   (<update-remote-files [this graph-uuid base-path filepaths local-txid]
-    (go
-      (let [token (<! (<get-token this))
-            r (<! (p->c (.updateRemoteFiles mobile-util/file-sync
-                                            (clj->js {:graphUUID graph-uuid
-                                                      :basePath base-path
-                                                      :filePaths filepaths
-                                                      :txid local-txid
-                                                      :token token
-                                                      :fnameEncryption true}))))]
-        (if (instance? ExceptionInfo r)
-          r
-          (get (js->clj r) "txid")))))
+    (let [normalized-filepaths (mapv gp-util/path-normalize filepaths)]
+      (go
+        (let [token (<! (<get-token this))
+              r (<! (p->c (.updateRemoteFiles mobile-util/file-sync
+                                              (clj->js {:graphUUID graph-uuid
+                                                        :basePath base-path
+                                                        :filePaths normalized-filepaths
+                                                        :txid local-txid
+                                                        :token token
+                                                        :fnameEncryption true}))))]
+          (if (instance? ExceptionInfo r)
+            r
+            (get (js->clj r) "txid"))))))
 
   (<delete-remote-files [this graph-uuid _base-path filepaths local-txid]
-    (go
-      (let [token (<! (<get-token this))
-            r (<! (p->c (.deleteRemoteFiles mobile-util/file-sync
-                                            (clj->js {:graphUUID graph-uuid
-                                                      :filePaths filepaths
-                                                      :txid local-txid
-                                                      :token token}))))]
-        (if (instance? ExceptionInfo r)
-          r
-          (get (js->clj r) "txid")))))
+    (let [normalized-filepaths (mapv gp-util/path-normalize filepaths)]
+      (go
+        (let [token (<! (<get-token this))
+              r (<! (p->c (.deleteRemoteFiles mobile-util/file-sync
+                                              (clj->js {:graphUUID graph-uuid
+                                                        :filePaths normalized-filepaths
+                                                        :txid local-txid
+                                                        :token token}))))]
+          (if (instance? ExceptionInfo r)
+            r
+            (get (js->clj r) "txid"))))))
 
   (<encrypt-fnames [_ graph-uuid fnames]
     (go
@@ -1160,7 +1171,10 @@
                   r
                   (let [next-continuation-token (:NextContinuationToken r)
                         objs                    (:Objects r)]
-                    (apply conj! encrypted-path-list (map (comp remove-user-graph-uuid-prefix :Key) objs))
+                    (apply conj! encrypted-path-list (map (comp gp-util/path-normalize
+                                                                remove-user-graph-uuid-prefix
+                                                                :Key)
+                                                          objs))
                     (apply conj! file-meta-list
                            (map
                             #(hash-map :checksum (:checksum %)
@@ -1205,7 +1219,8 @@
                       (filter #(not= "filepath too long" (:Error %)))
                       (map #(->FileMetadata (:Size %)
                                             (:Checksum %)
-                                            (get encrypted-path->path-map (:FilePath %))
+                                            (some-> (get encrypted-path->path-map (:FilePath %))
+                                                    gp-util/path-normalize)
                                             (:FilePath %)
                                             (:LastModified %)
                                             true nil)))
