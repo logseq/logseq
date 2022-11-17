@@ -152,12 +152,12 @@ const PreviewButton = ({ model }) => {
   }, [])
 
   const preview = React.useMemo(() => {
-    return generateJSXFromModel(model, w / h)
-  }, [model, w, h])
+    return show ? generateJSXFromModel(model, w / h) : null
+  }, [show, model, w, h])
 
   return (
     <>
-      {show ? (
+      {preview ? (
         <div
           className="fixed inset-0 flex items-center justify-center pointer-events-none h-screen w-screen"
           style={{ zIndex: '10000' }}
