@@ -156,6 +156,8 @@
                  :exception-decrypt-failed
                  :remote->local-full-sync-failed
                  :local->remote-full-sync-failed
+                 :get-remote-graph-failed
+                 :get-deletion-logs-failed
                  })
 
 (s/def ::sync-event (s/keys :req-un [::event ::data]))
