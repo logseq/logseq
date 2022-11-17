@@ -841,6 +841,16 @@ input::-webkit-inner-spin-button {
       overflow: hidden;
       margin-top: 4px;
 
+      .actions {
+        @apply absolute right-1 top-1 flex opacity-0 transition-opacity;
+      }
+
+      &:hover {
+        .actions {
+          @apply opacity-100;
+        }
+      }
+
       img {
         margin: 0;
         box-shadow: none;

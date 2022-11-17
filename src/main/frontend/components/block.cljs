@@ -61,6 +61,7 @@
             [frontend.util.drawer :as drawer]
             [frontend.util.property :as property]
             [frontend.util.text :as text-util]
+            [frontend.handler.notification :as notification]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -264,14 +265,6 @@
     (when (seq images)
       (lightbox/preview-images! images))))
 
-(defn copy-image-to-clipboard
-  [src]
-  (-> (js/fetch src)
-      (.then (fn [data]
-               (-> (.blob data)
-                   (.then (fn [blob]
-                            (js/navigator.clipboard.write (clj->js [(js/ClipboardItem. (clj->js {(.-type blob) blob}))])))))))))
-
 (defonce *resizing-image? (atom false))
 (rum/defcs resizable-image <
   (rum/local nil ::size)
@@ -353,12 +346,13 @@
             (ui/icon "trash")]
 
            [:button.asset-action-btn
-            {:title (t :asset/copy)
-             :tabIndex "-1"
+            {:title         (t :asset/copy)
+             :tabIndex      "-1"
              :on-mouse-down util/stop
-             :on-click (fn [e]
-                         (util/stop e)
-                         (copy-image-to-clipboard image-src))}
+             :on-click      (fn [e]
+                              (util/stop e)
+                              (-> (util/copy-image-to-clipboard image-src)
+                                  (p/then #(notification/show! "Copied!" :success))))}
             (ui/icon "copy")]
 
            [:button.asset-action-btn

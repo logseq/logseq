@@ -8,6 +8,10 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.assets :as assets-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.ui :as ui]
+            [frontend.context.i18n :refer [t]]
+            [frontend.extensions.lightbox :as lightbox]
             [frontend.util.page-property :as page-property]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -242,12 +246,51 @@
    (when-let [name (:key current)]
      (rfe/push-state :page {:name (str "hls__" name)} (if id {:anchor (str "block-content-" + id)} nil)))))
 
+(defn open-lightbox
+  [e]
+  (let [images (js/document.querySelectorAll ".hl-area img")
+        images (to-array images)
+        images (if-not (= (count images) 1)
+                 (let [^js image (.closest (.-target e) ".hl-area")
+                       image (. image querySelector "img")]
+                   (->> images
+                        (sort-by (juxt #(.-y %) #(.-x %)))
+                        (split-with (complement #{image}))
+                        reverse
+                        (apply concat)))
+                 images)
+        images (for [^js it images] {:src (.-src it)
+                                     :w (.-naturalWidth it)
+                                     :h (.-naturalHeight it)})]
+
+    (when (seq images)
+      (lightbox/preview-images! images))))
+
 (rum/defc area-display
   [block]
   (when-let [asset-path' (and block (pdf-utils/get-area-block-asset-url
                                      block (db-utils/pull (:db/id (:block/page block)))))]
-    (let [asset-path     (editor-handler/make-asset-url asset-path')]
+    (let [asset-path (editor-handler/make-asset-url asset-path')]
       [:span.hl-area
+       [:span.actions
+        (when-not config/publishing?
+          [:button.asset-action-btn.px-1
+           {:title         (t :asset/copy)
+            :tabIndex      "-1"
+            :on-mouse-down util/stop
+            :on-click      (fn [e]
+                             (util/stop e)
+                             (-> (util/copy-image-to-clipboard (gp-config/remove-asset-protocol asset-path))
+                                 (p/then #(notification/show! "Copied!" :success))))}
+           (ui/icon "copy")])
+
+        [:button.asset-action-btn.px-1
+         {:title         (t :asset/maximize)
+          :tabIndex      "-1"
+          :on-mouse-down util/stop
+          :on-click      open-lightbox}
+
+         (ui/icon "maximize")]]
        [:img {:src asset-path}]])))
 
 (defn fix-local-asset-pagename
