@@ -329,6 +329,17 @@ button.tl-select-input-trigger {
   font-family: var(--ls-font-family);
 }
 
+.tl-geometry-tools-pane-anchor {
+  @apply relative;
+}
+
+.tl-popover-indicator {
+  @apply absolute;
+
+  left: -2px;
+  bottom: -2px;
+}
+
 .floating-panel[data-tool-locked='true'] > .tl-button[data-selected='true']::after {
   @apply block absolute;
 

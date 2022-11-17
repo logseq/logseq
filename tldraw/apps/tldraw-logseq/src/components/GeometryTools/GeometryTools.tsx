@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { ToolButton } from '../ToolButton'
 import * as Popover from '@radix-ui/react-popover'
+import { TablerIcon } from '../icons'
 
 export const GeometryTools = observer(function GeometryTools() {
   const geometries = [
@@ -23,6 +24,8 @@ export const GeometryTools = observer(function GeometryTools() {
     },
   ]
 
+  const [isOpen, setOpen] = React.useState(false);
+
   const app = useApp()
   const [activeGeomId, setActiveGeomId] = React.useState(
     () => (geometries.find(geo => geo.id === app.selectedTool.id) ?? geometries[0]).id
@@ -35,9 +38,10 @@ export const GeometryTools = observer(function GeometryTools() {
   }, [app.selectedTool.id])
 
   return (
-    <Popover.Root>
+    <Popover.Root onOpenChange={(open: boolean) => {setOpen(open)}}>
       <Popover.Trigger className="tl-geometry-tools-pane-anchor">
         <ToolButton {...geometries.find(geo => geo.id === activeGeomId)!} />
+        <TablerIcon className="tl-popover-indicator" name={isOpen ? "chevron-up-right" : "chevron-down-left"} />
       </Popover.Trigger>
 
       <Popover.Content
