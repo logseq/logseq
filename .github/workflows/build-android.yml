@@ -98,14 +98,14 @@ jobs:
           echo ::set-output name=version::$pkgver
 
       - name: Update Nightly APP Version
-        if: ${{ inputs.build-target == 'nightly' || github.event.inputs.build-target == 'nightly' }}
+        if: ${{ inputs.build-target == '' || inputs.build-target == 'nightly' || github.event.inputs.build-target == 'nightly' }}
         run: |
           sed -i 's/defonce version ".*"/defonce version "${{ steps.ref.outputs.version }}"/g' src/main/frontend/version.cljs
           sed -i 's/versionName ".*"/versionName "${{ steps.ref.outputs.version }}"/g' android/app/build.gradle
 
       - name: Set Build Environment Variables
         run: |
-          echo "ENABLE_FILE_SYNC_PRODUCTION=${{ inputs.enable-file-sync-production == 'true' || github.event.inputs.enable-file-sync-production == 'true' }}" >> $GITHUB_ENV
+          echo "ENABLE_FILE_SYNC_PRODUCTION=${{ inputs.enable-file-sync-production || github.event.inputs.enable-file-sync-production || inputs.build-target == '' }}" >> $GITHUB_ENV
 
       - name: Compile CLJS - android variant, use es6 instead of es-next
         run: yarn install && yarn release-android-app
@@ -133,7 +133,7 @@ jobs:
           rm -rvf android/app/src/main/assets/public || true
 
       - name: Sync public to Android Project
-        run: npx cap sync
+        run: npx cap sync android
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v2
