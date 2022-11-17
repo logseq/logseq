@@ -1,4 +1,4 @@
-import { modulate } from '@tldraw/core'
+import { isSafari, modulate } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import { transparentize } from 'polished'
 import React from 'react'
@@ -12,8 +12,45 @@ const STEPS = [
   [0.7, 2.5, 1],
 ]
 
+const SVGGrid = observer(function CanvasGrid({ size }: TLGridProps) {
+  const {
+    viewport: {
+      camera: { point, zoom },
+    },
+  } = useRendererContext()
+  return (
+    <svg className="tl-grid" version="1.1" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        {STEPS.map(([min, mid, _size], i) => {
+          const s = _size * size * zoom
+          const xo = point[0] * zoom
+          const yo = point[1] * zoom
+          const gxo = xo > 0 ? xo % s : s + (xo % s)
+          const gyo = yo > 0 ? yo % s : s + (yo % s)
+          const opacity = zoom < mid ? modulate(zoom, [min, mid], [0, 1]) : 1
+
+          return (
+            <pattern
+              key={`grid-pattern-${i}`}
+              id={`grid-${i}`}
+              width={s}
+              height={s}
+              patternUnits="userSpaceOnUse"
+            >
+              <circle className={`tl-grid-dot`} cx={gxo} cy={gyo} r={1.5} opacity={opacity} />
+            </pattern>
+          )
+        })}
+      </defs>
+      {STEPS.map((_, i) => (
+        <rect key={`grid-rect-${i}`} width="100%" height="100%" fill={`url(#grid-${i})`} />
+      ))}
+    </svg>
+  )
+})
+
 // Grid is slow to render. Maybe we render it using canvas?
-export const Grid = observer(function Grid({ size }: TLGridProps) {
+const CanvasGrid = observer(function Grid({ size }: TLGridProps) {
   const {
     viewport: {
       camera: { point, zoom },
@@ -91,7 +128,12 @@ export const Grid = observer(function Grid({ size }: TLGridProps) {
     }
   }, [point[0], point[1], zoom, bounds.width, bounds.height])
 
-  return (
-    <canvas ref={ref} width={bounds.width} height={bounds.height} className="tl-grid-canvas" />
-  )
+  return <canvas ref={ref} width={bounds.width} height={bounds.height} className="tl-grid-canvas" />
+})
+
+export const Grid = observer(function Grid({ size }: TLGridProps) {
+  if (isSafari()) {
+    return <CanvasGrid size={size} />
+  }
+  return <SVGGrid size={size} />
 })
