@@ -336,6 +336,7 @@ button.tl-select-input-trigger {
 .tl-popover-indicator {
   @apply absolute;
 
+  pointer-events: none;
   left: -2px;
   bottom: -2px;
 }
