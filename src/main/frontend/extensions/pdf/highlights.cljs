@@ -12,7 +12,6 @@
             [frontend.commands :as commands]
             [frontend.rum :refer [use-atom]]
             [frontend.state :as state]
-            [frontend.storage :as storage]
             [frontend.util :as util]
             [medley.core :as medley]
             [promesa.core :as p]
@@ -44,14 +43,12 @@
   (rum/use-effect!
    (fn []
      (when viewer
-       (when-let [current (:pdf/current @state/state)]
-         (let [active-hl (:pdf/ref-highlight @state/state)
-               page-key  (:filename current)
-               last-page (and page-key
-                              (util/safe-parse-int (storage/get (str "ls-pdf-last-page-" page-key))))]
-
-           (when (and last-page (nil? active-hl))
-             (set! (.-currentPageNumber viewer) last-page))))))
+       (when-let [_ (:pdf/current @state/state)]
+         (let [active-hl (:pdf/ref-highlight @state/state)]
+           (when-not active-hl
+             (.on (.-eventBus viewer) (name :restore-last-page)
+                  (fn [last-page]
+                    (set! (.-currentPageNumber viewer) (util/safe-parse-int last-page)))))))))
    [viewer])
   nil)
 
@@ -665,7 +662,7 @@
        })]))
 
 (rum/defc pdf-viewer
-  [url initial-hls ^js pdf-document ops]
+  [_url initial-hls initial-page ^js pdf-document ops]
 
   (let [*el-ref (rum/create-ref)
         [state, set-state!] (rum/use-state {:viewer nil :bus nil :link nil :el nil})
@@ -675,33 +672,50 @@
 
     ;; instant pdfjs viewer
     (rum/use-effect!
-     (fn [] (let [^js event-bus    (js/pdfjsViewer.EventBus.)
-                  ^js link-service (js/pdfjsViewer.PDFLinkService. #js {:eventBus event-bus :externalLinkTarget 2})
-                  ^js el           (rum/deref *el-ref)
-                  ^js viewer       (js/pdfjsViewer.PDFViewer.
-                                    #js {:container         el
-                                         :eventBus          event-bus
-                                         :linkService       link-service
-                                         :findController    (js/pdfjsViewer.PDFFindController.
-                                                             #js {:linkService link-service :eventBus event-bus})
-                                         :textLayerMode     2
-                                         :annotationMode    2
-                                         :removePageBorders true})]
-              (. link-service setDocument pdf-document)
-              (. link-service setViewer viewer)
+     (fn []
+       (let [^js event-bus    (js/pdfjsViewer.EventBus.)
+             ^js link-service (js/pdfjsViewer.PDFLinkService. #js {:eventBus event-bus :externalLinkTarget 2})
+             ^js el           (rum/deref *el-ref)
+             ^js viewer       (js/pdfjsViewer.PDFViewer.
+                               #js {:container         el
+                                    :eventBus          event-bus
+                                    :linkService       link-service
+                                    :findController    (js/pdfjsViewer.PDFFindController.
+                                                        #js {:linkService link-service :eventBus event-bus})
+                                    :textLayerMode     2
+                                    :annotationMode    2
+                                    :removePageBorders true})]
 
-              ;; TODO: debug
-              (set! (. js/window -lsPdfViewer) viewer)
+         (. link-service setDocument pdf-document)
+         (. link-service setViewer viewer)
 
-              (p/then (. viewer setDocument pdf-document)
-                      #(set-state! {:viewer viewer :bus event-bus :link link-service :el el}))
+         ;; events
+         (doto event-bus
+           ;; it must be initialized before set-up document
+           (.on "pagesinit"
+                (fn []
+                  (set! (. viewer -currentScaleValue) "auto")
+                  (set-page-ready! true)))
 
-              ;;TODO: destroy
-              (fn []
-                (when-let [last-page (.-currentPageNumber viewer)]
-                  (storage/set (str "ls-pdf-last-page-" (util/node-path.basename url)) last-page))
+           (.on (name :ls-update-extra-state)
+                #(when-let [extra (bean/->clj %)]
+                   (apply (:set-hls-extra! ops) [extra]))))
 
-                (when pdf-document (.destroy pdf-document)))))
+         (p/then (. viewer setDocument pdf-document)
+                 #(set-state! {:viewer viewer :bus event-bus :link link-service :el el}))
+
+         ;; TODO: debug
+         (set! (. js/window -lsPdfViewer) viewer)
+
+         ;; set initial page
+         (js/setTimeout
+          #(set! (.-currentPageNumber viewer) initial-page) 16)
+
+         ;; destroy
+         (fn []
+           (.destroy pdf-document)
+           (set! (. js/window -lsPdfViewer) nil)
+           (.cleanup viewer))))
      [])
 
     ;; interaction events
@@ -710,20 +724,13 @@
        (when-let [^js viewer (:viewer state)]
          (let [fn-textlayer-ready
                (fn [^js p]
-                 (set-ano-state! {:loaded-pages (conj (:loaded-pages ano-state) (int (.-pageNumber p)))}))
-
-               fn-page-ready
-               (fn []
-                 (set! (. viewer -currentScaleValue) "auto")
-                 (set-page-ready! true))]
+                 (set-ano-state! {:loaded-pages (conj (:loaded-pages ano-state) (int (.-pageNumber p)))}))]
 
            (doto (.-eventBus viewer)
-             (.on "pagesinit" fn-page-ready)
              (.on "textlayerrendered" fn-textlayer-ready))
 
            #(do
               (doto (.-eventBus viewer)
-                (.off "pagesinit" fn-page-ready)
                 (.off "textlayerrendered" fn-textlayer-ready))))))
 
      [(:viewer state)
@@ -750,23 +757,27 @@
 (rum/defc ^:large-vars/data-var pdf-loader
   [{:keys [url hls-file] :as pdf-current}]
   (let [*doc-ref       (rum/use-ref nil)
-        [state, set-state!] (rum/use-state {:error nil :pdf-document nil :status nil})
-        [hls-state, set-hls-state!] (rum/use-state {:initial-hls nil :latest-hls nil})
-        set-dirty-hls! (fn [latest-hls]                     ;; TODO: incremental
-                         (set-hls-state! {:initial-hls [] :latest-hls latest-hls}))]
+        [loader-state, set-loader-state!] (rum/use-state {:error nil :pdf-document nil :status nil})
+        [hls-state, set-hls-state!] (rum/use-state {:initial-hls nil :latest-hls nil :extra nil :loaded false})
+        [initial-page, set-initial-page!] (rum/use-state 0)
+        set-dirty-hls! (fn [latest-hls]  ;; TODO: incremental
+                         (set-hls-state! #(merge % {:initial-hls [] :latest-hls latest-hls})))
+        set-hls-extra! (fn [extra]
+                         (set-hls-state! #(merge % {:extra extra})))]
 
     ;; load highlights
     (rum/use-effect!
      (fn []
        (p/catch
-        (p/let [data       (pdf-assets/load-hls-data$ pdf-current)
-                highlights (:highlights data)]
-          (set-hls-state! {:initial-hls highlights}))
+        (p/let [data (pdf-assets/load-hls-data$ pdf-current)
+                {:keys [highlights extra]} data]
+          (set-initial-page! (util/safe-parse-int (:page extra)))
+          (set-hls-state! {:initial-hls highlights :latest-hls highlights :extra extra :loaded true}))
 
         ;; error
         (fn [e]
           (js/console.error "[load hls error]" e)
-          (set-hls-state! {:initial-hls []})))
+          (set-hls-state! {:initial-hls [] :loaded true})))
 
        ;; cancel
        #())
@@ -775,15 +786,16 @@
     ;; cache highlights
     (rum/use-effect!
      (fn []
-       (when-let [hls (:latest-hls hls-state)]
+       (when (= :completed (:status loader-state))
          (p/catch
-          (pdf-assets/persist-hls-data$ pdf-current hls)
+          (pdf-assets/persist-hls-data$
+           pdf-current (:latest-hls hls-state) (:extra hls-state))
 
           ;; write hls file error
           (fn [e]
             (js/console.error "[write hls error]" e)))))
 
-     [(:latest-hls hls-state)])
+     [(:latest-hls hls-state) (:extra hls-state)])
 
     ;; load document
     (rum/use-effect!
@@ -795,20 +807,18 @@
                        ;;:cMapUrl       "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.8.335/cmaps/"
                        :cMapPacked    true}]
 
-         (set-state! {:status :loading})
+         (set-loader-state! {:status :loading})
 
          (-> (get-doc$ (clj->js opts))
-             (p/then #(set-state! {:pdf-document %}))
-             (p/catch #(set-state! {:error %}))
-             (p/finally #(set-state! {:status :completed})))
-
+             (p/then #(set-loader-state! {:pdf-document % :status :completed}))
+             (p/catch #(set-loader-state! {:error %})))
          #()))
      [url])
 
     (rum/use-effect!
      (fn []
-       (when-let [error (:error state)]
-         (dd "[ERROR loader]" (:error state))
+       (when-let [error (:error loader-state)]
+         (dd "[ERROR loader]" (:error loader-state))
          (case (.-name error)
            "MissingPDFException"
            (do
@@ -835,24 +845,24 @@
               :error
               false)
              (state/set-state! :pdf/current nil)))))
-     [(:error state)])
+     [(:error loader-state)])
 
     (rum/bind-context
      [*highlights-ctx* hls-state]
      [:div.extensions__pdf-loader {:ref *doc-ref}
-      (let [status-doc  (:status state)
+      (let [status-doc  (:status loader-state)
             initial-hls (:initial-hls hls-state)]
 
-        (if (or (= status-doc :loading)
-                (nil? initial-hls))
+        (if (= status-doc :loading)
 
           [:div.flex.justify-center.items-center.h-screen.text-gray-500.text-lg
            svg/loading]
 
-          [(rum/with-key (pdf-viewer
-                          url initial-hls
-                          (:pdf-document state)
-                          {:set-dirty-hls! set-dirty-hls!}) "pdf-viewer")]))])))
+          (when-let [pdf-document (and (:loaded hls-state) (:pdf-document loader-state))]
+            [(rum/with-key (pdf-viewer
+                            url initial-hls initial-page pdf-document
+                            {:set-dirty-hls! set-dirty-hls!
+                             :set-hls-extra! set-hls-extra!}) "pdf-viewer")])))])))
 
 (rum/defc pdf-container
   [{:keys [identity] :as pdf-current}]
