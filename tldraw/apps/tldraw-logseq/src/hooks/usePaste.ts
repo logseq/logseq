@@ -371,6 +371,8 @@ export function usePaste() {
         }
       })
 
+      const filesOnly = dataTransfer?.types.every(t => t === 'Files')
+
       app.wrapUpdate(() => {
         const allAssets = [...imageAssetsToCreate, ...assetsToClone]
         if (allAssets.length > 0) {
@@ -391,7 +393,7 @@ export function usePaste() {
         app.selectedTool.transition('idle') // clears possible editing states
         app.cursors.setCursor(TLCursor.Default)
 
-        if (fromDrop) {
+        if (fromDrop || filesOnly) {
           app.packIntoRectangle()
         }
       })
