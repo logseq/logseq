@@ -293,24 +293,10 @@
          (ui/icon "maximize")]]
        [:img {:src asset-path}]])))
 
-(defn fix-local-asset-pagename
-  [filename]
-  (when-not (string/blank? filename)
-    (let [local-asset? (re-find #"[0-9]{13}_\d$" filename)
-          hls?         (re-find #"^hls__" filename)
-          len          (count filename)]
-      (if (or local-asset? hls?)
-        (-> filename
-            (subs 0 (if local-asset? (- len 15) len))
-            (string/replace #"^hls__" "")
-            (string/replace "_" " ")
-            (string/trimr))
-        filename))))
-
 (defn human-page-name
   [page-name]
   (cond
     (string/starts-with? page-name "hls__")
-    (fix-local-asset-pagename page-name)
+    (pdf-utils/fix-local-asset-pagename page-name)
 
     :else (util/trim-safe page-name)))
