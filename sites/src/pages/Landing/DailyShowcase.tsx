@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import cx from 'classnames'
 import { FloatGlassButton, openLightbox } from './common'
-import { ArrowSquareOut, CaretDown, FrameCorners, TwitterLogo } from 'phosphor-react'
+import { ArrowSquareOut, CaretDown, DiscordLogo, FrameCorners, TwitterLogo } from 'phosphor-react'
 import { AnimateInTurnStage } from '../../components/Animations'
 import { useAppState } from '../../state'
 
@@ -15,6 +15,7 @@ const showcases = [
     label: 'Relationships',
     iconUrl: IconImageRelations,
     descImgUrl: new URL('./assets/benefit-0.png', import.meta.url),
+    refLink: 'https://twitter.com/1238361496603648001/status/1516223572972351496',
     desc: (
       <p>
         Communicate better. <span className="opacity-60">Stay on top of your <br/>relationships, conversations, and meetings.</span>
@@ -48,6 +49,8 @@ const showcases = [
     label: 'Journaling',
     iconUrl: IconImageJournals,
     descImgUrl: new URL('./assets/benefit-2.png', import.meta.url),
+    refLink: 'https://discord.com/channels/725182569297215569/766475028978991104/965786173148627044',
+    refType: 'discord',
     desc: (
       <p>
         Understand yourself better.
@@ -62,6 +65,7 @@ const showcases = [
     label: 'Data Control',
     iconUrl: IconImageDataControl,
     descImgUrl: new URL('./assets/benefit-3.png', import.meta.url),
+    refLink: 'https://twitter.com/15777984/status/1522601138738151427',
     desc: (
       <p>
         <span>Do all this without lock-in.</span> <br/>
@@ -287,11 +291,14 @@ export function DailyShowcase () {
                         <strong className="font-normal opacity-60">User Feedback</strong>
                         <div className="flex items-center">
                           <span className="opacity-60">Via </span>
-                          <TwitterLogo className="mx-2" size={30} weight="duotone"/>
-                          <span className="opacity-60">Twitter</span>
+                          {(it.refType === 'discord') ?
+                            (<><DiscordLogo className="mx-2" size={30} weight="duotone"/> <span className="opacity-60">Discord</span></>) :
+                            (<><TwitterLogo className="mx-2" size={30} weight="duotone"/> <span className="opacity-60">Twitter</span></>)}
                           <span
-                            className="border rounded p-1 border-gray-600 ml-3 bg-gray-500/20 select-none cursor-pointer active:opacity-80">
-                            <ArrowSquareOut size={18} weight={'duotone'}/>
+                            className="border rounded p-1 border-gray-600 ml-3 bg-gray-500/20 cursor-pointer active:opacity-80">
+                            <a target={'_blank'} href={it.refLink}>
+                              <ArrowSquareOut size={18} weight={'duotone'}/>
+                            </a>
                           </span>
                         </div>
                       </div>
