@@ -519,14 +519,16 @@
         [:span.nu.flex.items-center.opacity-70
          [:input {:ref            *page-ref
                   :type           "number"
+                  :class          (util/classnames [{:is-long (> (util/safe-parse-int current-page-num) 999)}])
                   :default-value  current-page-num
                   :on-mouse-enter #(.select ^js (.-target %))
                   :on-key-up      (fn [^js e]
                                     (let [^js input (.-target e)
                                           value     (util/safe-parse-int (.-value input))]
+                                      (set-current-page-num! value)
                                       (when (and (= (.-keyCode e) 13) value (> value 0))
-                                        (set! (. viewer -currentPageNumber)
-                                              (if (> value total-page-num) total-page-num value)))))}]
+                                        (->> (if (> value total-page-num) total-page-num value)
+                                             (set! (. viewer -currentPageNumber))))))}]
          [:small "/ " total-page-num]]
 
         [:span.ct.flex.items-center
