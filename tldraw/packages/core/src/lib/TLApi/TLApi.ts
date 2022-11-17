@@ -168,13 +168,27 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
 
   setColor = (color: string): this => {
     const { settings } = this.app
+
     settings.update({ color: color })
+
+    this.app.selectedShapesArray.forEach(s => {
+      s.update({ fill: color, stroke: color })
+    })
+    this.app.persist()
+
     return this
   }
 
   setOpacity = (opacity: number): this => {
     const { settings } = this.app
+
     settings.update({ opacity: opacity })
+
+    this.app.selectedShapesArray.forEach(s => {
+      s.update({ opacity: opacity })
+    })
+    this.app.persist()
+
     return this
   }
 
