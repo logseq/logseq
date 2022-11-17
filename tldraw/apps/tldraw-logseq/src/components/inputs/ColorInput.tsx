@@ -42,7 +42,7 @@ export function ColorInput({
       <Popover.Trigger className="tl-color-drip">{renderColor(color)}</Popover.Trigger>
 
       <Popover.Content
-        className="tl-popover-content"
+        className="tl-popover-content p-1"
         side={popoverSide}
         sideOffset={15}
         collisionBoundary={collisionRef}
