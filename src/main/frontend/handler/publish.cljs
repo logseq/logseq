@@ -59,12 +59,15 @@
                       :refs         refs
                       :html         html}
         ;; TODO: refresh token if empty
-        token        (state/get-auth-id-token)]
+        token        (state/get-auth-id-token)
+        publish-api  (if config/dev?
+                       (str "http://localhost:3000/api/v1/blocks")
+                       (str "https://" config/API-DOMAIN "/publish/publish_upload"))]
     (prn "Debug [PUBLISH] body: " body)
     (go
-      (let [result (<! (http/post (str "https://" config/API-DOMAIN "/publish/publish_upload")
+      (let [result (<! (http/post publish-api
                                   {:oauth-token       token
-                                   :body              (js/JSON.stringify (bean/->js body))
+                                   :edn-params        body
                                    :with-credentials? false}))]
         (state/set-state! [:ui/loading? :publish] false)
         (if (:success result)
