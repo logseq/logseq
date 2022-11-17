@@ -12,7 +12,6 @@
             [frontend.commands :as commands]
             [frontend.rum :refer [use-atom]]
             [frontend.state :as state]
-            [frontend.storage :as storage]
             [frontend.util :as util]
             [medley.core :as medley]
             [promesa.core :as p]
