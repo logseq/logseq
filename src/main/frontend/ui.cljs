@@ -366,10 +366,12 @@
 (defn apply-custom-theme-effect! [theme]
   (when config/lsp-enabled?
     (when-let [custom-theme (state/sub [:ui/custom-theme (keyword theme)])]
-      (when-let [url (:url custom-theme)]
+      ;; If the name is nil, the user has not set a custom theme (initially {:mode light/dark}).
+      ;; The url is not used because the default theme does not have an url.
+      (if (some? (:name custom-theme))
         (js/LSPluginCore.selectTheme (bean/->js custom-theme)
-                                     (bean/->js {:emit true}))
-        (state/set-state! :plugin/selected-theme url)))))
+                                     (bean/->js {:emit false}))
+        (state/set-state! :plugin/selected-theme (:url custom-theme))))))
 
 (defn setup-system-theme-effect!
   []
