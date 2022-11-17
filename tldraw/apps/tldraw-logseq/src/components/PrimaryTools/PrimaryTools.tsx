@@ -20,7 +20,7 @@ export const PrimaryTools = observer(function PrimaryTools() {
   return (
     <div className="tl-primary-tools">
       <div className="tl-toolbar tl-tools-floating-panel">
-        <ToolButton title="Logseq Portal" id="logseq-portal" icon="circle-plus" />
+        <ToolButton title="Add block or page" id="logseq-portal" icon="circle-plus" />
         <Separator.Root className="tl-toolbar-separator" orientation="horizontal"/>
         <ToolButton title="Draw" id="pencil" icon="ballpen" />
         <ToolButton title="Highlight" id="highlighter" icon="highlight" />
