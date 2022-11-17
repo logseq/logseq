@@ -558,7 +558,7 @@
                        :sibling?    sibling?
                        :before?     before?
                        :page        page-name
-                       :custom-uuid custom-uuid
+                       :custom-uuid (uuid custom-uuid)
                        :properties  (merge properties
                                            (when custom-uuid {:id custom-uuid}))})]
       (bean/->js (normalize-keyword-for-json new-block)))))
