@@ -3,7 +3,8 @@
   (:require ["dompurify" :as DOMPurify]))
 
 (def sanitization-options (clj->js {:ADD_TAGS ["iframe"]
-                                    :ALLOW_UNKNOWN_PROTOCOLS true}))
+                                    :ALLOW_UNKNOWN_PROTOCOLS true
+                                    :ALLOWED_ATTR ["is"]}))
 
 (defn sanitize-html
   [html]
