@@ -17,9 +17,9 @@
   --color-text: var(--ls-primary-text-color);
   --color-text-inverted: var(--ls-tertiary-background-color);
   --color-hover: var(--ls-secondary-background-color);
-  --color-selectedStroke: rgb(42, 123, 253);
-  --color-selectedFill: var(--ls-selection-background-color);
-  --color-selectedContrast: var(--ls-selection-text-color);
+  --color-selectedStroke: var(--color-indigo-900);
+  --color-selectedFill: var(--color-indigo-500);
+  --color-selectedContrast: #fff;
   --shadow-small: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-medium: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-large: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
@@ -331,14 +331,22 @@ button.tl-select-input-trigger {
 
 .tl-geometry-tools-pane-anchor {
   @apply relative;
+
+  &[aria-expanded='true'] {
+    .tl-popover-indicator {
+      transform: rotate(180deg);
+      color: #000;
+    }
+  }
 }
 
 .tl-popover-indicator {
-  @apply absolute;
+  @apply absolute text-2xs;
 
+  opacity: 0.6;
   pointer-events: none;
-  left: -2px;
-  bottom: -2px;
+  left: 0;
+  bottom: -1px;
 }
 
 .floating-panel[data-tool-locked='true'] > .tl-button[data-selected='true']::after {

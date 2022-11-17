@@ -24,8 +24,6 @@ export const GeometryTools = observer(function GeometryTools() {
     },
   ]
 
-  const [isOpen, setOpen] = React.useState(false);
-
   const app = useApp()
   const [activeGeomId, setActiveGeomId] = React.useState(
     () => (geometries.find(geo => geo.id === app.selectedTool.id) ?? geometries[0]).id
@@ -38,10 +36,10 @@ export const GeometryTools = observer(function GeometryTools() {
   }, [app.selectedTool.id])
 
   return (
-    <Popover.Root onOpenChange={(open: boolean) => {setOpen(open)}}>
+    <Popover.Root>
       <Popover.Trigger className="tl-geometry-tools-pane-anchor">
         <ToolButton {...geometries.find(geo => geo.id === activeGeomId)!} />
-        <TablerIcon className="tl-popover-indicator" name={isOpen ? "chevron-up-right" : "chevron-down-left"} />
+        <TablerIcon className="tl-popover-indicator" name="chevron-down-left" />
       </Popover.Trigger>
 
       <Popover.Content
