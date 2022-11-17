@@ -13,7 +13,7 @@ export class TLSettings implements TLSettingsProps {
   }
 
   @observable mode: 'dark' | 'light' = 'light'
-  @observable showGrid = !isSafari()
+  @observable showGrid = true
 
   @action update(props: Partial<TLSettingsProps>): void {
     Object.assign(this, props)
