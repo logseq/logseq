@@ -1576,7 +1576,8 @@
        (or
          (surround-by? input :start "")
          (surround-by? input " " "")
-         (surround-by? input "]" ""))))
+         (surround-by? input "]" "")
+         (surround-by? input "(" ""))))
 
 (defn wrapped-by?
   [input before end]
