@@ -1570,6 +1570,14 @@
           pos (cursor/pos input)]
       (text-util/surround-by? value pos before end))))
 
+(defn- autopair-left-paren?
+  [input key]
+  (and (= key "(")
+       (or
+         (surround-by? input :start "")
+         (surround-by? input " " "")
+         (surround-by? input "]" ""))))
+
 (defn wrapped-by?
   [input before end]
   (when input
@@ -2727,7 +2735,11 @@
 
         ;; If you type `xyz`, the last backtick should close the first and not add another autopair
         ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)
-        (contains? (set (keys autopair-map)) key)
+        (-> (keys autopair-map)
+            set
+            (disj "(")
+            (contains? key)
+            (or (autopair-left-paren? input key)))
         (let [curr (get-current-input-char input)
                   prev (util/nth-safe value (dec pos))]
             (util/stop e)
