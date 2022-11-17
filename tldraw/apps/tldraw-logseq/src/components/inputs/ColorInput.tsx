@@ -59,21 +59,23 @@ export function ColorInput({
           ))}
         </div>
 
-        {setOpacity && (<div className="mx-1 my-2">
-          <Slider.Root
-            defaultValue={[opacity]}
-            onValueCommit={value => setOpacity(value[0])}
-            max={1}
-            step={0.1}
-            aria-label="Opacity"
-            className="tl-slider-root"
-          >
-            <Slider.Track className="tl-slider-track">
-              <Slider.Range className="tl-slider-range" />
-            </Slider.Track>
-            <Slider.Thumb className="tl-slider-thumb" />
-          </Slider.Root>
-        </div>)}
+        {setOpacity && (
+          <div className="mx-1 my-2">
+            <Slider.Root
+              defaultValue={[opacity]}
+              onValueCommit={value => setOpacity(value[0])}
+              max={1}
+              step={0.1}
+              aria-label="Opacity"
+              className="tl-slider-root"
+            >
+              <Slider.Track className="tl-slider-track">
+                <Slider.Range className="tl-slider-range" />
+              </Slider.Track>
+              <Slider.Thumb className="tl-slider-thumb" />
+            </Slider.Root>
+          </div>
+        )}
 
         <Popover.Arrow className="tl-popover-arrow" />
       </Popover.Content>

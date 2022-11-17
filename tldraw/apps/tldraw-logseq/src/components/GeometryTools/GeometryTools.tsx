@@ -42,11 +42,7 @@ export const GeometryTools = observer(function GeometryTools() {
         <TablerIcon className="tl-popover-indicator" name="chevron-down-left" />
       </Popover.Trigger>
 
-      <Popover.Content
-        className="tl-popover-content"
-        side="left"
-        sideOffset={15}
-      >
+      <Popover.Content className="tl-popover-content" side="left" sideOffset={15}>
         <div className="tl-toolbar tl-geometry-toolbar">
           {geometries.map(props => (
             <ToolButton key={props.id} {...props} />
