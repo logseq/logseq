@@ -628,6 +628,7 @@ export interface IEditorProxy extends Record<string, any> {
       before: boolean
       sibling: boolean
       isPageBlock: boolean
+      focus: boolean
       customUUID: string
       properties: {}
     }>
