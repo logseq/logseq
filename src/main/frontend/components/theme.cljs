@@ -27,7 +27,7 @@
           (.add cls "dark")
           (.remove cls "dark"))
         (ui/apply-custom-theme-effect! theme)
-        (plugin-handler/hook-plugin-app :theme-mode-changed {:mode theme} nil))
+        (plugin-handler/hook-plugin-app :theme-mode-changed {:mode theme}))
      [theme])
 
     (rum/use-effect!
