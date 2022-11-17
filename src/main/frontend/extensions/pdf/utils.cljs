@@ -173,6 +173,20 @@
           (string/replace #"\|#\|([a-zA-Z_])" " $1")
           (string/replace sp "")))))
 
+(defn fix-local-asset-pagename
+  [filename]
+  (when-not (string/blank? filename)
+    (let [local-asset? (re-find #"[0-9]{13}_\d$" filename)
+          hls?         (re-find #"^hls__" filename)
+          len          (count filename)]
+      (if (or local-asset? hls?)
+        (-> filename
+            (subs 0 (if local-asset? (- len 15) len))
+            (string/replace #"^hls__" "")
+            (string/replace "_" " ")
+            (string/trimr))
+        filename))))
+
 ;; TODO: which viewer instance?
 (defn next-page
   []
