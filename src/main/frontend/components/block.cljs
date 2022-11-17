@@ -3252,9 +3252,9 @@
              :else
              [:<>
               (lazy-editor/editor config (str (d/squuid)) attr code options)
-              (let [options (:options options)]
+              (let [options (:options options) block (:block config)]
                 (when (and (= language "clojure") (contains? (set options) ":results"))
-                  (sci/eval-result code)))])])))))
+                  (sci/eval-result code block)))])])))))
 
 (defn ^:large-vars/cleanup-todo markup-element-cp
   [{:keys [html-export?] :as config} item]
