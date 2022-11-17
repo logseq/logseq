@@ -1,8 +1,6 @@
 import type { Shape } from '.'
 
 export interface CustomStyleProps {
-  stroke: string
-  fill: string
   noFill: boolean
   strokeWidth: number
   strokeType: 'dashed' | 'line'
