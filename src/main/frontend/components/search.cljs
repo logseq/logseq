@@ -13,7 +13,7 @@
             [frontend.db.model :as model]
             [frontend.handler.search :as search-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.ui :as ui]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
@@ -203,7 +203,7 @@
 (defn- search-item-render
   [search-q {:keys [type data alias]}]
   (let [search-mode (state/get-search-mode)
-        data (if (string? data) (pdf-assets/fix-local-asset-pagename data) data)]
+        data (if (string? data) (pdf-utils/fix-local-asset-pagename data) data)]
     [:div {:class "py-2"}
      (case type
        :graph-add-filter
