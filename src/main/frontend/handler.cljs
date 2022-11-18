@@ -219,14 +219,15 @@
 
   (-> (p/let [repos (get-repos)
               _ (state/set-repos! repos)
-              _ (restore-and-setup! repos)])
+              _ (restore-and-setup! repos)]
+        (when (mobile-util/native-platform?)
+          (p/do!
+           (mobile-util/hide-splash)
+           (state/restore-mobile-theme!))))
       (p/catch (fn [e]
                  (js/console.error "Error while restoring repos: " e)))
       (p/finally (fn []
                    (state/set-db-restoring! false))))
-  (when (mobile-util/native-platform?)
-    (p/do! (state/restore-mobile-theme!)
-           (mobile-util/hide-splash)))
 
   (db/run-batch-txs!)
   (file/<ratelimit-file-writes!)
