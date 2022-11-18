@@ -2,7 +2,6 @@
   "Plugin service implementation of search protocol"
   (:require [frontend.state :as state]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.search.db :as search-db]
             [frontend.search.protocol :as protocol]
             [cljs-bean.core :as bean]))
 

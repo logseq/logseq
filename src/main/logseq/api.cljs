@@ -13,7 +13,7 @@
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.utils :as db-utils]
-            [frontend.db.react :as db-react]
+            [frontend.db.react :refer [sub-key-value]]
             [frontend.db.query-react :as query-react]
             [frontend.fs :as fs]
             [frontend.handler.dnd :as editor-dnd-handler]
@@ -140,7 +140,7 @@
 
 (def ^:export get_current_graph_recent
   (fn []
-    (some->> (db-react/sub-key-value :recent/pages)
+    (some->> (sub-key-value :recent/pages)
              (remove string/blank?)
              (filter string?)
              (bean/->js))))
