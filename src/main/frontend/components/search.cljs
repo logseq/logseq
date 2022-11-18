@@ -433,7 +433,12 @@
                          (default-placeholder search-mode))
         :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
         :value         search-q
-        :on-change     (fn [e]
+        :on-key-down   (fn [^js e]
+                         (when (= 27 (.-keyCode e))
+                           (when-not (string/blank? search-q)
+                             (util/stop e)
+                             (search-handler/clear-search!))))
+        :on-change     (fn [^js e]
                          (when @search-timeout
                            (js/clearTimeout @search-timeout))
                          (let [value (util/evalue e)
