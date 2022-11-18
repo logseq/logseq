@@ -911,10 +911,11 @@
 
   (<update-local-files [this graph-uuid base-path filepaths]
     (go
-      (let [token (<! (<get-token this))]
+      (let [token (<! (<get-token this))
+            filepaths' (map #(capacitor-fs/normalize-file-protocol-path % nil :normalize? false) filepaths)]
         (<! (p->c (.updateLocalFiles mobile-util/file-sync (clj->js {:graphUUID graph-uuid
                                                                      :basePath base-path
-                                                                     :filePaths filepaths
+                                                                     :filePaths filepaths'
                                                                      :token token})))))))
 
   (<download-version-files [this graph-uuid base-path filepaths]
@@ -2820,12 +2821,17 @@
               (.schedule this ::pause nil nil))
           unknown
           (do
+            ;; TODO: instrument all the unknown
             (put-sync-event! {:event :remote->local-full-sync-failed
                               :data  {:graph-uuid graph-uuid
                                       :exp        unknown
                                       :epoch      (tc/to-epoch (t/now))}})
-            ;; if any exception occurred, re-exec remote->local-full-sync
-            (.schedule this ::remote->local-full-sync nil nil))))))
+            (let [next-state (if (string/includes? (str (ex-cause unknown)) "404 Not Found")
+                               ;; TODO: this should never happen
+                               ::pause
+                               ;; if any other exception occurred, re-exec remote->local-full-sync
+                               ::remote->local-full-sync)]
+              (.schedule this next-state nil nil)))))))
 
   (remote->local [this _next-state {remote-val :remote}]
     (go
