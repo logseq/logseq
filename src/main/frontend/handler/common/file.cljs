@@ -20,7 +20,7 @@
       (when (not= file current-file)
         current-file))))
 
-(defn- get-clear-blocks-tx
+(defn- retract-blocks-tx
   [blocks retain-uuids]
   (let [tx-for-block (fn [block] (let [{uuid :block/uuid eid :db/id} block
                                        should-retain? (and uuid (contains? retain-uuids uuid))]
@@ -32,23 +32,31 @@
     (mapcat tx-for-block (distinct blocks)))
   )
 
-(defn- get-clear-block-tx
-  "Returns the transactional operations to clear blocks belonging to the given
-  page and file.
+(defn- retract-file-blocks-tx
+  "Returns the transactional operations to retract blocks belonging to the
+  given page name and file path. This function is required when a file is being
+  parsed from disk; before saving the parsed, blocks from the previous version
+  of that file need to be retracted.
+  
+  The 'Page' parsed from the new file version is passed separately from the
+  file-path, as the page name can be set via properties in the file, and thus
+  can change between versions. If it has changed, existing blocks for both the
+  old and new page name will be retracted.
 
-  Blocks are by default fully deleted via retractEntity. However, a collection
+  Blocks are by default fully cleared via retractEntity. However, a collection
   of block UUIDs to retain can be passed, and any blocks with matching uuids
   will instead have their attributes cleared individually via
   'retractAttribute'. This will preserve block references to the retained
   UUIDs."
-  [repo-url first-page file retain-uuid-blocks]
-  (let [pages-to-clear (filter some? [(db/get-file-page file) file])
+  [repo-url file-page file-path retain-uuid-blocks]
+  (let [existing-file-page (db/get-file-page file-path)
+        pages-to-clear (distinct (filter some? [existing-file-page (:block/name file-page)]))
         blocks (mapcat (fn [page] (db/get-page-blocks-no-cache repo-url page {:pull-keys [:db/id :block/uuid]})) pages-to-clear)
         retain-uuids (if (seq retain-uuid-blocks) (set (filter some? (map :block/uuid retain-uuid-blocks))) [])
-        tx (get-clear-blocks-tx blocks retain-uuids)]
-    (when-let [current-file (page-exists-in-another-file repo-url first-page file)]
-      (when (not= file current-file)
-        (let [error (str "Page already exists with another file: " current-file ", current file: " file)]
+        tx (retract-blocks-tx blocks retain-uuids)]
+    (when-let [current-file (page-exists-in-another-file repo-url file-page file-path)]
+      (when (not= file-path current-file)
+        (let [error (str "Page already exists with another file: " current-file ", current file: " file-path)]
           (state/pub-event! [:notification/show
                              {:content error
                               :status :error
@@ -84,7 +92,7 @@
          new? (nil? (db/entity [:file/path file]))
          options (merge (dissoc options :verbose)
                         {:new? new?
-                         :delete-blocks-fn (partial get-clear-block-tx repo-url)
+                         :delete-blocks-fn (partial retract-file-blocks-tx repo-url)
                          :extract-options (merge
                                            {:user-config (state/get-config)
                                             :date-formatter (state/get-date-formatter)
