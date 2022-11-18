@@ -24,7 +24,7 @@ export function useGestureEvents(ref: React.RefObject<HTMLDivElement>) {
 
       const [x, y, z] = normalizeWheel(event)
 
-      if (inputs.state === 'pinching' || rWheelTs.current === event.timeStamp) {
+      if (inputs.state === 'pinching' || rWheelTs.current >= event.timeStamp) {
         return
       }
 
