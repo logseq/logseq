@@ -166,6 +166,19 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     return this
   }
 
+  setColor = (color: string): this => {
+    const { settings } = this.app
+
+    settings.update({ color: color })
+
+    this.app.selectedShapesArray.forEach(s => {
+      s.update({ fill: color, stroke: color })
+    })
+    this.app.persist()
+
+    return this
+  }
+
   save = () => {
     this.app.save()
     return this
