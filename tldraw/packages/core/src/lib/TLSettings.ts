@@ -5,6 +5,7 @@ import { isSafari } from '../utils'
 export interface TLSettingsProps {
   mode: 'light' | 'dark'
   showGrid: boolean
+  color: string
 }
 
 export class TLSettings implements TLSettingsProps {
@@ -14,6 +15,7 @@ export class TLSettings implements TLSettingsProps {
 
   @observable mode: 'dark' | 'light' = 'light'
   @observable showGrid = true
+  @observable color = ''
 
   @action update(props: Partial<TLSettingsProps>): void {
     Object.assign(this, props)

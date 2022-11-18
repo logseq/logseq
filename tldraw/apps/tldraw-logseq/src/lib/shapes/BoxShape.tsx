@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { SVGContainer, TLComponentProps } from '@tldraw/react'
+import { SVGContainer, TLComponentProps, useApp } from '@tldraw/react'
 import { TLBoxShape, TLBoxShapeProps, getComputedColor } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import { CustomStyleProps, withClampedStyles } from './style-props'

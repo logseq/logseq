@@ -71,6 +71,8 @@ export class CreatingState<
         point: originPoint.slice(0, 2),
         points: this.points,
         isComplete: false,
+        fill: this.app.settings.color,
+        stroke: this.app.settings.color,
       })
       this.app.currentPage.addShapes(this.shape)
     }

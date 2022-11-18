@@ -310,6 +310,8 @@ export function usePaste() {
                 point: [point[0], point[1]],
                 size: [400, 0], // use 0 here to enable auto-resize
                 pageId: blockRef,
+                fill: app.settings.color,
+                stroke: app.settings.color,
                 blockType: 'B' as 'B',
               },
             ]
@@ -324,6 +326,8 @@ export function usePaste() {
               point: [point[0], point[1]],
               size: [400, 0], // use 0 here to enable auto-resize
               pageId: pageName,
+              fill: app.settings.color,
+              stroke: app.settings.color,
               blockType: 'P' as 'P',
             },
           ]
@@ -339,6 +343,8 @@ export function usePaste() {
               size: [400, 0], // use 0 here to enable auto-resize
               point: [point[0], point[1]],
               pageId: uuid,
+              fill: app.settings.color,
+              stroke: app.settings.color,
               blockType: 'B' as 'B',
               compact: true,
             },
