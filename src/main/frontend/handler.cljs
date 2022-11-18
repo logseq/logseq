@@ -225,7 +225,8 @@
       (p/finally (fn []
                    (state/set-db-restoring! false))))
   (when (mobile-util/native-platform?)
-    (mobile-util/hide-splash))
+    (p/do! (state/restore-mobile-theme!)
+           (mobile-util/hide-splash)))
 
   (db/run-batch-txs!)
   (file/<ratelimit-file-writes!)

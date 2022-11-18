@@ -1114,7 +1114,7 @@ Similar to re-frame subscriptions"
 
 (defn set-theme-mode!
   [mode]
-  (when (mobile-util/native-ios?)
+  (when (mobile-util/native-platform?)
     (if (= mode "light")
       (util/set-theme-light)
       (util/set-theme-dark)))
@@ -1137,7 +1137,7 @@ Similar to re-frame subscriptions"
       (set-state! :ui/system-theme? false)
       (storage/set :ui/system-theme? false))))
 
-(defn toggle-theme
+(defn- toggle-theme
   [theme]
   (if (= theme "dark") "light" "dark"))
 
@@ -1151,6 +1151,17 @@ Similar to re-frame subscriptions"
   ([mode theme]
    (set-state! (if mode [:ui/custom-theme (keyword mode)] :ui/custom-theme) theme)
    (storage/set :ui/custom-theme (:ui/custom-theme @state))))
+
+(defn restore-mobile-theme!
+  "Restore mobile theme setting from local storage"
+  []
+  (let [mode (or (storage/get :ui/theme) "light")
+        system-theme? (storage/get :ui/system-theme?)]
+    (when (and (not system-theme?)
+               (mobile-util/native-platform?))
+      (if (= mode "light")
+        (util/set-theme-light)
+        (util/set-theme-dark)))))
 
 (defn set-editing-block-dom-id!
   [block-dom-id]
