@@ -885,7 +885,7 @@
           (->> (.-result r)
                js->clj
                (map (fn [[path metadata]]
-                      (->FileMetadata (get metadata "size") (get metadata "md5") (gp-util/path-normalize path)
+                      (->FileMetadata (get metadata "size") (get metadata "md5") (capacitor-fs/normalize-file-protocol-path nil path)
                                       (get metadata "encryptedFname") (get metadata "mtime") false nil)))
                set)))))
 
@@ -899,7 +899,7 @@
         (->> (.-result r)
              js->clj
              (map (fn [[path metadata]]
-                    (->FileMetadata (get metadata "size") (get metadata "md5") (gp-util/path-normalize path)
+                    (->FileMetadata (get metadata "size") (get metadata "md5") (capacitor-fs/normalize-file-protocol-path nil path)
                                     (get metadata "encryptedFname") (get metadata "mtime") false nil)))
              set))))
 
@@ -907,11 +907,11 @@
     (p->c (.renameLocalFile mobile-util/file-sync
                             (clj->js {:graphUUID graph-uuid
                                       :basePath base-path
-                                      :from (gp-util/path-normalize from)
-                                      :to (gp-util/path-normalize to)}))))
+                                      :from (capacitor-fs/normalize-file-protocol-path nil from)
+                                      :to (capacitor-fs/normalize-file-protocol-path nil to)}))))
 
   (<update-local-files [this graph-uuid base-path filepaths]
-    (let [normalized-filepaths (mapv gp-util/path-normalize filepaths)]
+    (let [normalized-filepaths (mapv #(capacitor-fs/normalize-file-protocol-path nil %) filepaths)]
       (go
         (let [token (<! (<get-token this))]
           (<! (p->c (.updateLocalFiles mobile-util/file-sync (clj->js {:graphUUID graph-uuid
@@ -931,7 +931,7 @@
         r)))
 
   (<delete-local-files [_ graph-uuid base-path filepaths]
-    (let [normalized-filepaths (mapv gp-util/path-normalize filepaths)]
+    (let [normalized-filepaths (mapv #(capacitor-fs/normalize-file-protocol-path nil %) filepaths)]
       (go
         (let [r (<! (<retry-rsapi #(p->c (.deleteLocalFiles mobile-util/file-sync
                                                             (clj->js {:graphUUID graph-uuid
@@ -940,7 +940,7 @@
           r))))
 
   (<update-remote-files [this graph-uuid base-path filepaths local-txid]
-    (let [normalized-filepaths (mapv gp-util/path-normalize filepaths)]
+    (let [normalized-filepaths (mapv #(capacitor-fs/normalize-file-protocol-path nil %) filepaths)]
       (go
         (let [token (<! (<get-token this))
               r (<! (p->c (.updateRemoteFiles mobile-util/file-sync
@@ -955,7 +955,7 @@
             (get (js->clj r) "txid"))))))
 
   (<delete-remote-files [this graph-uuid _base-path filepaths local-txid]
-    (let [normalized-filepaths (mapv gp-util/path-normalize filepaths)]
+    (let [normalized-filepaths (mapv #(capacitor-fs/normalize-file-protocol-path nil %) filepaths)]
       (go
         (let [token (<! (<get-token this))
               r (<! (p->c (.deleteRemoteFiles mobile-util/file-sync
@@ -1173,7 +1173,7 @@
                   r
                   (let [next-continuation-token (:NextContinuationToken r)
                         objs                    (:Objects r)]
-                    (apply conj! encrypted-path-list (map (comp gp-util/path-normalize
+                    (apply conj! encrypted-path-list (map (comp #(capacitor-fs/normalize-file-protocol-path nil %)
                                                                 remove-user-graph-uuid-prefix
                                                                 :Key)
                                                           objs))
@@ -1221,8 +1221,8 @@
                       (filter #(not= "filepath too long" (:Error %)))
                       (map #(->FileMetadata (:Size %)
                                             (:Checksum %)
-                                            (some-> (get encrypted-path->path-map (:FilePath %))
-                                                    gp-util/path-normalize)
+                                            (some->> (get encrypted-path->path-map (:FilePath %))
+                                                     (capacitor-fs/normalize-file-protocol-path nil ))
                                             (:FilePath %)
                                             (:LastModified %)
                                             true nil)))

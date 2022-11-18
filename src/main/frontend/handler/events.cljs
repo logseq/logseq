@@ -570,7 +570,7 @@
         payload (-> event
                     (js->clj :keywordize-keys true)
                     (update :path (fn [path]
-                                    (when (string? path) (capacitor-fs/ios-force-include-private path)))))]
+                                    (when (string? path) (capacitor-fs/normalize-file-protocol-path nil path)))))]
     (fs-watcher/handle-changed! type payload)
     (when (file-sync-handler/enable-sync?)
      (sync/file-watch-handler type payload))))
