@@ -298,10 +298,6 @@
 ;;  (re-)fetches get-current-repo needlessly
 ;; TODO: Add consistent validation. Only a few config options validate at get time
 
-(defn get-current-pdf
-  []
-  (:pdf/current @state))
-
 (def default-config
   "Default config for a repo-specific, user config"
   {:feature/enable-search-remove-accents? true
@@ -2024,3 +2020,16 @@ Similar to re-frame subscriptions"
   []
   (when (mobile-util/native-ios?)
     (get-in @state [:mobile/container-urls :iCloudContainerUrl])))
+
+(defn get-current-pdf
+  []
+  (:pdf/current @state))
+
+(defn set-current-pdf!
+  [inflated-file]
+  (let [settle-file! #(set-state! :pdf/current inflated-file)]
+    (if-not (get-current-pdf)
+      (settle-file!)
+      (when (apply not= (map :identity [inflated-file (get-current-pdf)]))
+        (set-state! :pdf/current nil)
+        (js/setTimeout #(settle-file!) 16)))))
