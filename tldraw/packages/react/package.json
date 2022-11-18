@@ -41,6 +41,7 @@
     "mobx": "^6.7.0",
     "mobx-react-lite": "^3.4.0",
     "mousetrap": "^1.6.5",
+    "polished": "^4.2.2",
     "rbush": "^3.0.1",
     "uuid": "^9.0.0"
   },

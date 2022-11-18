@@ -377,13 +377,15 @@ export function usePaste() {
         }
       })
 
+      const filesOnly = dataTransfer?.types.every(t => t === 'Files')
+
       app.wrapUpdate(() => {
         const allAssets = [...imageAssetsToCreate, ...assetsToClone]
         if (allAssets.length > 0) {
           app.createAssets(allAssets)
         }
-        if (newShapes.length > 0) {
-          app.createShapes(newShapes)
+        if (allShapesToAdd.length > 0) {
+          app.createShapes(allShapesToAdd)
         }
         app.currentPage.updateBindings(Object.fromEntries(bindingsToCreate.map(b => [b.id, b])))
 
@@ -397,7 +399,7 @@ export function usePaste() {
         app.selectedTool.transition('idle') // clears possible editing states
         app.cursors.setCursor(TLCursor.Default)
 
-        if (fromDrop) {
+        if (fromDrop || filesOnly) {
           app.packIntoRectangle()
         }
       })

@@ -679,9 +679,10 @@ button.tl-select-input-trigger {
   opacity: 0.5;
 }
 
+/* This will breaks block selection
 [data-inner-events=false] * {
   user-select: none;
-}
+} */
 
 .tl-logseq-portal-container {
   @apply flex flex-col rounded-lg absolute;

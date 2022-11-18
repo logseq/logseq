@@ -9,7 +9,7 @@
   flex: 0 0 auto;
   white-space: nowrap;
   height: 80px;
-  align-items: start;
+  align-items: flex-start;
   box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.05);
 
   .bottom-action {

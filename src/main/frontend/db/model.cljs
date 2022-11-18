@@ -1677,13 +1677,21 @@
    macro-name))
 
 (defn whiteboard-page?
-  [page-name]
-  (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page-name)])]
-    (or
-     (= "whiteboard" (:block/type page))
-     (when-let [file (:block/file page)]
-       (when-let [path (:file/path (db-utils/entity (:db/id file)))]
-         (gp-config/whiteboard? path))))))
+  "Given a page name or a page object, check if it is a whiteboard page"
+  [page]
+  (cond
+    (string? page)
+    (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)])]
+      (or
+       (= "whiteboard" (:block/type page))
+       (when-let [file (:block/file page)]
+         (when-let [path (:file/path (db-utils/entity (:db/id file)))]
+           (gp-config/whiteboard? path)))))
+
+    (seq page)
+    (= "whiteboard" (:block/type page))
+
+    :else false))
 
 (defn get-all-whiteboards
   [repo]

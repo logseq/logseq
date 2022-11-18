@@ -941,19 +941,19 @@
      (let [^js jsTablerIcons (gobj/get js/window "tablerIcons")]
        (if (or extension? font? (not jsTablerIcons))
          [:span.ui__icon (merge {:class
-                     (util/format
-                      (str "%s-" class
-                           (when (:class opts)
-                             (str " " (string/trim (:class opts)))))
-                      (if extension? "tie tie" "ti ti"))}
-                    (dissoc opts :class :extension? :font?))]
+                                 (util/format
+                                  (str "%s-" class
+                                       (when (:class opts)
+                                         (str " " (string/trim (:class opts)))))
+                                  (if extension? "tie tie" "ti ti"))}
+                                (dissoc opts :class :extension? :font?))]
 
          ;; tabler svg react
          (when-let [klass (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase class)))]
            (let [f (get-adapt-icon-class klass)]
              [:span.ui__icon.ti
               {:class (str "ls-icon-" class)}
-              (f (merge {:size 18} (r/map-keys->camel-case opts)))])))))))
+              (f (merge {:size 18} (r/map-keys->camel-case (dissoc opts :class))))])))))))
 
 (defn button
   [text & {:keys [background href class intent on-click small? large? title icon icon-props disabled?]

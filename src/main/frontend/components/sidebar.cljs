@@ -2,6 +2,7 @@
   (:require [cljs-drag-n-drop.core :as dnd]
             [clojure.string :as string]
             [frontend.components.command-palette :as command-palette]
+            [frontend.components.find-in-page :as find-in-page]
             [frontend.components.header :as header]
             [frontend.components.journal :as journal]
             [frontend.components.onboarding :as onboarding]
@@ -12,7 +13,6 @@
             [frontend.components.svg :as svg]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
-            [frontend.components.find-in-page :as find-in-page]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -392,7 +392,9 @@
                             (when-let [id (state/get-edit-input-id)]
                               (let [format (:block/format (state/get-edit-block))]
                                 (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))))})
-                  (common-handler/listen-to-scroll! element))
+                  (common-handler/listen-to-scroll! element)
+                  (when (:margin-less-pages? (first (:rum/args state))) ;; makes sure full screen pages displaying without scrollbar
+                    (set! (.. element -scrollTop) 0)))
                 state)}
   [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content show-action-bar? show-recording-bar?]}]
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
