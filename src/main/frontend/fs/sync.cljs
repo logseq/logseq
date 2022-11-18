@@ -809,11 +809,10 @@
                                   (gp-util/path-normalize to)))))
   (<update-local-files [this graph-uuid base-path filepaths]
     (println "update-local-files" graph-uuid base-path filepaths)
-    (let [normalized-filepaths (mapv gp-util/path-normalize filepaths)]
-      (go
-        (<! (<rsapi-cancel-all-requests))
-        (let [token (<! (<get-token this))]
-          (<! (p->c (ipc/ipc "update-local-files" graph-uuid base-path normalized-filepaths token)))))))
+    (go
+      (<! (<rsapi-cancel-all-requests))
+      (let [token (<! (<get-token this))]
+        (<! (p->c (ipc/ipc "update-local-files" graph-uuid base-path filepaths token))))))
   (<download-version-files [this graph-uuid base-path filepaths]
     (go
       (let [token (<! (<get-token this))
@@ -911,13 +910,12 @@
                                       :to (capacitor-fs/normalize-file-protocol-path nil to)}))))
 
   (<update-local-files [this graph-uuid base-path filepaths]
-    (let [normalized-filepaths (mapv #(capacitor-fs/normalize-file-protocol-path nil %) filepaths)]
-      (go
-        (let [token (<! (<get-token this))]
-          (<! (p->c (.updateLocalFiles mobile-util/file-sync (clj->js {:graphUUID graph-uuid
-                                                                       :basePath base-path
-                                                                       :filePaths normalized-filepaths
-                                                                       :token token}))))))))
+    (go
+      (let [token (<! (<get-token this))]
+        (<! (p->c (.updateLocalFiles mobile-util/file-sync (clj->js {:graphUUID graph-uuid
+                                                                     :basePath base-path
+                                                                     :filePaths filepaths
+                                                                     :token token})))))))
 
   (<download-version-files [this graph-uuid base-path filepaths]
     (go
