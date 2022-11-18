@@ -458,15 +458,23 @@
         ;; list registered search engines
        (when (seq engines)
          [:ul.search-results-engines-tabs
-          [:li (ui/button "Default" :background "orange"
-                          :on-click #(reset! *active-engine-tab nil))]
+          [:li
+           {:class (when-not @*active-engine-tab "is-active")}
+           (ui/button
+            [:span.flex.items-center
+             (svg/logo 14) [:span.pl-2 "Default"]]
+            :background "orange"
+            :on-click #(reset! *active-engine-tab nil))]
 
           (for [[k v] engines]
-            [:li {:key k}
-             (ui/button [:span.flex.items-center (:name v)
+            [:li
+             {:key k
+              :class (if (= k @*active-engine-tab) "is-active" "")}
+             (ui/button [:span.flex.items-center
+                         [:span.pr-2 (ui/icon "puzzle")]
+                         (:name v)
                          (when-let [result (and v (:result v))]
                            (str " (" (count (:blocks result)) ")"))]
-                        :background (if (= k @*active-engine-tab) "green" "gray")
                         :on-click #(reset! *active-engine-tab k))])])
 
        (if-not (nil? @*active-engine-tab)
