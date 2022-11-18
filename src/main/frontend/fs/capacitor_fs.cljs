@@ -250,7 +250,7 @@
                              (js/encodeURI %)
 
                              :else
-                             (js/encodeURI (js/decodeURI %))))
+                             (js/encodeURI (gp-util/path-normalize (js/decodeURI %)))))
         path' (cond
                 (and path (string/starts-with? path "file:/"))
                 (safe-encode-url path)

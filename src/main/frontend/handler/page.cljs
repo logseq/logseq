@@ -99,6 +99,7 @@
 (defn- create-title-property?
   [journal? page-name]
   (and (not journal?)
+       (not= (state/get-filename-format) :triple-lowbar)
        (fs-util/create-title-property? page-name)))
 
 (defn- build-page-tx [format properties page journal? whiteboard?]
