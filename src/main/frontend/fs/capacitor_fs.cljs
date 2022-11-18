@@ -235,7 +235,8 @@
         path))
     path))
 
-(defn normalize-file-protocol-path [dir path]
+(defn normalize-file-protocol-path [dir path & {:keys [normalize?]
+                                                :or {normalize? true}}]
   (let [dir             (some-> dir (string/replace #"/+$" ""))
         dir             (if (and (not-empty dir) (string/starts-with? dir "/"))
                           (do
@@ -243,6 +244,7 @@
                             (str "file://" (js/encodeURI dir)))
                           dir)
         path            (some-> path (string/replace #"^/+" ""))
+        normalize-f     (if normalize? gp-util/path-normalize identity)
         safe-encode-url #(let [encoded-chars?
                                (and (string? %) (boolean (re-find #"(?i)%[0-9a-f]{2}" %)))]
                            (cond
@@ -250,7 +252,7 @@
                              (js/encodeURI %)
 
                              :else
-                             (js/encodeURI (gp-util/path-normalize (js/decodeURI %)))))
+                             (js/encodeURI (normalize-f (js/decodeURI %)))))
         path' (cond
                 (and path (string/starts-with? path "file:/"))
                 (safe-encode-url path)
