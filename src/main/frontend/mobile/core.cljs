@@ -113,7 +113,7 @@
 
   (.addListener mobile-util/fs-watcher "watcher"
                 (fn [event]
-                  (state/pub-event! [:file-watcher/changed event])))
+                  (state/pub-event! [:mobile-file-watcher/changed event])))
 
   (.addListener Keyboard "keyboardWillShow"
                 (fn [^js info]

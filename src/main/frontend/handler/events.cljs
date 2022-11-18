@@ -565,7 +565,7 @@
          :warning
          false)))))
 
-(defmethod handle :file-watcher/changed [[_ ^js event]]
+(defmethod handle :mobile-file-watcher/changed [[_ ^js event]]
   (let [type (.-event event)
         payload (-> event
                     (js->clj :keywordize-keys true)
