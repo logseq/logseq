@@ -6,8 +6,8 @@ import { TablerIcon } from '../icons'
 import { Color } from '@tldraw/core'
 
 interface ColorInputProps extends React.InputHTMLAttributes<HTMLButtonElement> {
-  color: string
-  opacity: number
+  color?: string
+  opacity?: number
   collisionRef: HTMLElement | null
   popoverSide: Side
   setColor: (value: string) => void

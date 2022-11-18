@@ -33,7 +33,6 @@ export const PrimaryTools = observer(function PrimaryTools() {
           title="Color Picker"
           popoverSide="left"
           color={app.settings.color}
-          opacity={app.settings.opacity}
           collisionRef={document.getElementById('main-content-container')}
           setColor={handleSetColor}
         />

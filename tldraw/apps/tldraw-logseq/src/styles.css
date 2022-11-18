@@ -248,8 +248,8 @@ html[data-theme='light'] {
 .tl-button {
   @apply relative flex items-center justify-center rounded border-0;
 
-  height: 30px;
-  width: 30px;
+  height: 32px;
+  width: 32px;
   font-family: var(--ls-font-family);
   background: none;
   cursor: pointer;
@@ -343,10 +343,10 @@ button.tl-select-input-trigger {
 .tl-popover-indicator {
   @apply absolute text-2xs;
 
-  opacity: 0.6;
+  opacity: 0.8;
   pointer-events: none;
   left: 0;
-  bottom: -1px;
+  bottom: -3px;
 }
 
 .floating-panel[data-tool-locked='true'] > .tl-button[data-selected='true']::after {
