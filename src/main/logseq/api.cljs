@@ -442,7 +442,7 @@
   (fn [^js opts]
     (state/clear-sidebar-blocks!)
     (when-let [opts (and opts (bean/->clj opts))]
-      (and (:closeSidebar opts) (state/hide-right-sidebar!)))
+      (and (:close opts) (state/hide-right-sidebar!)))
     nil))
 
 (def ^:export push_state

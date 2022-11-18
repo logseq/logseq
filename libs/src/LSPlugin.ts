@@ -438,7 +438,7 @@ export interface IAppProxy {
   setFullScreen: (flag: boolean | 'toggle') => void
   setLeftSidebarVisible: (flag: boolean | 'toggle') => void
   setRightSidebarVisible: (flag: boolean | 'toggle') => void
-  clearRightSidebarBlocks: (opts?: { closeSidebar: boolean }) => void
+  clearRightSidebarBlocks: (opts?: { close: boolean }) => void
 
   registerUIItem: (
     type: 'toolbar' | 'pagebar',

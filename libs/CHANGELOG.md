@@ -14,6 +14,8 @@ All notable changes to this project will be documented in this file.
   `App.getCurrentGraphFavorites: () => Promise<Array<string> | null>`
 - All recent pages list of current graph.
   `App.getCurrentGraphRecent: () => Promise<Array<string> | null>`
+- Clear right sidebar blocks.
+  `App.clearRightSidebarBlocks: (opts?: { close: boolean }) => void`
 - Support register `CodeMirror` enhancer. _#Experiment feature_
   `Experiments.registerExtensionsEnhancer<T = any>(type: 'katex' | 'codemirror', enhancer: (v: T) => Promise<any>)`
 - Support hooks for app search service. _#Alpha stage_
