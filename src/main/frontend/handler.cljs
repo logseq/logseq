@@ -200,6 +200,7 @@
   [render]
   (set-global-error-notification!)
   (register-components-fns!)
+  (user-handler/restore-tokens-from-localstorage)
   (state/set-db-restoring! true)
   (render)
   (i18n/start)
@@ -237,7 +238,6 @@
   (when (util/electron?)
     (el/listen!))
   (persist-var/load-vars)
-  (user-handler/restore-tokens-from-localstorage)
   (js/setTimeout instrument! (* 60 1000)))
 
 (defn stop! []

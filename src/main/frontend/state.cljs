@@ -234,7 +234,7 @@
      :reactive/query-dbs                    {}
 
      ;; login, userinfo, token, ...
-     :auth/refresh-token                    nil
+     :auth/refresh-token                    (storage/get "refresh-token")
      :auth/access-token                     nil
      :auth/id-token                         nil
 
