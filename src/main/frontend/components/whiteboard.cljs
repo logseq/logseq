@@ -120,7 +120,7 @@
                                  :or {portal? true}}]
    (let [page-entity (model/get-page page-name-or-uuid)
          block-uuid (:block/uuid page-entity)
-         refs-count (count (model/get-block-references-count block-uuid))]
+         refs-count (model/get-block-references-count block-uuid)]
      (when (> refs-count 0)
        (dropdown-menu {:classname classname
                        :label (fn [open?]

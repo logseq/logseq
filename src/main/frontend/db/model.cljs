@@ -1322,7 +1322,7 @@
                                        block-uuid
                                        block-attrs)
                               react)]
-        count query-result))))
+        (count query-result)))))
 
 (defn journal-page?
   "sanitized page-name only"

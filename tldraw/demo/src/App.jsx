@@ -84,7 +84,11 @@ const PageNameLink = props => {
 }
 
 const ReferencesCount = props => {
-  return <div className="open-page-ref-link rounded bg-gray-400 p-0.5">3</div>
+  return (
+    <div className={props.className}>
+      <div className={'open-page-ref-link rounded bg-gray-400 p-0.5 '}>3</div>
+    </div>
+  )
 }
 
 const StatusBarSwitcher = ({ label, onClick }) => {

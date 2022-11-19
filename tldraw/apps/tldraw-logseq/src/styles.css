@@ -125,7 +125,7 @@ html[data-theme='light'] {
   margin-left: auto;
   padding-left: 20px;
 
-  .keyboard-shortcut > code {
+  .keyboard-shortcut>code {
     padding: 4px !important;
     text-rendering: initial;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
@@ -165,8 +165,8 @@ html[data-theme='light'] {
 }
 
 .tl-context-bar {
-  gap: 12px;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 6px;
 
   label {
     font-family: var(--ls-font-family);
@@ -286,7 +286,7 @@ html[data-theme='light'] {
 }
 
 button.tl-select-input-trigger {
-  @apply flex items-center py-1 px-3;
+  @apply flex items-center px-3;
   box-shadow: 0 0 0 1px var(--ls-secondary-border-color);
   background-color: var(--ls-secondary-background-color);
   min-width: 160px;
@@ -349,7 +349,7 @@ button.tl-select-input-trigger {
   bottom: -3px;
 }
 
-.floating-panel[data-tool-locked='true'] > .tl-button[data-selected='true']::after {
+.floating-panel[data-tool-locked='true']>.tl-button[data-selected='true']::after {
   @apply block absolute;
 
   content: '';
@@ -505,7 +505,7 @@ button.tl-select-input-trigger {
 }
 
 .tl-circle-button {
-  @apply absolute flex items-center	justify-center transition-all rounded-full shadow;
+  @apply absolute flex items-center justify-center transition-all rounded-full shadow;
 
   color: var(--ls-primary-text-color);
   background-color: var(--ls-secondary-background-color);
@@ -602,7 +602,7 @@ button.tl-select-input-trigger {
     background-color: rgba(0, 0, 0, 0.5) !important;
   }
 
-  > i.ti {
+  >i.ti {
     transform: translateY(-0.5px);
   }
 }
@@ -770,7 +770,7 @@ button.tl-select-input-trigger {
   width: fit-content;
 }
 
-.tl-html-anchor > iframe {
+.tl-html-anchor>iframe {
   @apply h-full w-full !important;
   margin: 0;
 }
@@ -778,7 +778,7 @@ button.tl-select-input-trigger {
 .tl-video-container {
   @apply h-full w-full m-0 relative;
 
-  > video {
+  >video {
     @apply h-full w-full m-0 relative;
   }
 }
