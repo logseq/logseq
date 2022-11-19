@@ -20,6 +20,15 @@ export interface LogseqContextValue {
     PageNameLink: React.FC<{
       pageName: string
     }>
+    ReferencesCount: React.FC<{
+      id: string
+      className?: string
+      options?: {
+        'portal?'?: boolean
+        'hover?'?: boolean
+        renderFn?: (open?: boolean, count?: number) => React.ReactNode
+      }
+    }>
   }
   handlers: {
     search: (

@@ -59,6 +59,7 @@ export const RendererContext = observer(function App<S extends TLReactShape>({
       SelectionBackground,
       SelectionDetail,
       SelectionForeground,
+      ...rest
     } = components
 
     return {
@@ -68,6 +69,7 @@ export const RendererContext = observer(function App<S extends TLReactShape>({
       callbacks,
       meta,
       components: {
+        ...rest,
         Brush: Brush === null ? undefined : _Brush,
         ContextBar,
         DirectionIndicator: DirectionIndicator === null ? undefined : _DirectionIndicator,
@@ -90,6 +92,7 @@ export const RendererContext = observer(function App<S extends TLReactShape>({
       SelectionBackground,
       SelectionDetail,
       SelectionForeground,
+      ...rest
     } = components
 
     return autorun(() => {
@@ -100,6 +103,7 @@ export const RendererContext = observer(function App<S extends TLReactShape>({
         callbacks,
         meta,
         components: {
+          ...rest,
           Brush: Brush === null ? undefined : _Brush,
           ContextBar,
           DirectionIndicator: DirectionIndicator === null ? undefined : _DirectionIndicator,

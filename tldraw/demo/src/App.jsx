@@ -83,6 +83,10 @@ const PageNameLink = props => {
   )
 }
 
+const ReferencesCount = props => {
+  return <div className="open-page-ref-link rounded bg-gray-400 p-0.5">3</div>
+}
+
 const StatusBarSwitcher = ({ label, onClick }) => {
   const [anchor, setAnchor] = React.useState(null)
   React.useEffect(() => {
@@ -210,6 +214,7 @@ export default function App() {
           Block,
           Breadcrumb,
           PageNameLink,
+          ReferencesCount,
         }}
         handlers={{
           search: searchHandler,

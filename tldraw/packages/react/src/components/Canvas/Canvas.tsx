@@ -22,6 +22,7 @@ import { Container } from '../Container'
 import { ContextBarContainer } from '../ContextBarContainer'
 import { HTMLLayer } from '../HTMLLayer'
 import { Indicator } from '../Indicator'
+import { ReferencesCountContainer } from '../ReferencesCountContainer'
 import { SelectionDetailContainer } from '../SelectionDetailContainer'
 import { Shape } from '../Shape'
 import { SVGContainer } from '../SVGContainer'
@@ -107,6 +108,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
     onlySelectedShape && 'handles' in onlySelectedShape.props ? selectedShapes?.[0] : undefined
   const selectedShapesSet = React.useMemo(() => new Set(selectedShapes || []), [selectedShapes])
   const erasingShapesSet = React.useMemo(() => new Set(erasingShapes || []), [erasingShapes])
+  const singleSelectedShape = selectedShapes?.length === 1 ? selectedShapes[0] : undefined
 
   return (
     <div ref={rContainer} className={`tl-container ${className ?? ''}`}>
@@ -170,6 +172,13 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                   />
                 </Container>
               )}
+              {showSelection && singleSelectedShape && components.ReferencesCount && (
+                <ReferencesCountContainer
+                  hidden={false}
+                  bounds={singleSelectedShape.bounds}
+                  shape={singleSelectedShape}
+                />
+              )}
               {showHandles && onlySelectedShapeWithHandles && components.Handle && (
                 <Container
                   data-type="onlySelectedShapeWithHandles"
@@ -204,8 +213,8 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                   key={'context' + selectedShapes.map(shape => shape.id).join('')}
                   shapes={selectedShapes}
                   hidden={!showContextBar}
-                  bounds={selectedShapes.length === 1 ? selectedShapes[0].bounds : selectionBounds}
-                  rotation={selectedShapes.length === 1 ? selectedShapes[0].props.rotation : 0}
+                  bounds={singleSelectedShape ? singleSelectedShape.bounds : selectionBounds}
+                  rotation={singleSelectedShape ? singleSelectedShape.props.rotation : 0}
                 />
               )}
             </>

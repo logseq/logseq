@@ -512,7 +512,7 @@ const getContextBarActionTypes = (type: ShapeType) => {
   return (shapeMapping[type] ?? []).filter(isNonNullable)
 }
 
-export const getContextBarActionsForTypes = (shapes: Shape[]) => {
+export const getContextBarActionsForShapes = (shapes: Shape[]) => {
   const types = shapes.map(s => s.props.type)
   const actionTypes = new Set(shapes.length > 0 ? getContextBarActionTypes(types[0]) : [])
   for (let i = 1; i < types.length && actionTypes.size > 0; i++) {

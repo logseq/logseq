@@ -69,7 +69,7 @@ const defaultTheme: TLTheme = {
   accent: 'rgb(255, 0, 0)',
   brushFill: 'var(--ls-scrollbar-background-color, rgba(0, 0, 0, .05))',
   brushStroke: 'var(--ls-scrollbar-thumb-hover-color, rgba(0, 0, 0, .05))',
-  selectStroke: 'rgb(66, 133, 244)',
+  selectStroke: 'var(--color-selectedFill)',
   selectFill: 'rgba(65, 132, 244, 0.05)',
   binding: 'rgba(65, 132, 244, 0.5)',
   background: 'var(--ls-primary-background-color)',

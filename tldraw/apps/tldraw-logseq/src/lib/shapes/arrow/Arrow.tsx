@@ -8,7 +8,7 @@ interface ShapeStyles {
   stroke: string
   strokeWidth: number
   strokeType: 'line' | 'dashed'
-  fill: string
+  fill?: string
 }
 
 interface ArrowSvgProps {

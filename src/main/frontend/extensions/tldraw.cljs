@@ -14,7 +14,8 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.ui :as ui]))
+            [frontend.ui :as ui]
+            [frontend.components.whiteboard :as whiteboard]))
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
@@ -54,12 +55,18 @@
          (when-let [[asset-file-name _ full-file-path] (and (seq res) (first res))]
            (editor-handler/resolve-relative-path (or full-file-path asset-file-name)))))))
 
+(defn references-count
+  [props]
+  (apply whiteboard/references-count
+         (map (fn [k] (js->clj (gobj/get props k) {:keywordize-keys true})) ["id" "className" "options"])))
+
 (def tldraw-renderers {:Page page-cp
                        :Block block-cp
                        :Breadcrumb breadcrumb
-                       :PageNameLink page-name-link})
+                       :PageNameLink page-name-link
+                       :ReferencesCount references-count})
 
-(defn get-tldraw-handlers [name]
+(defn get-tldraw-handlers [current-whiteboard-name]
   {:search search-handler
    :queryBlockByUUID #(clj->js (model/query-block-by-uuid (parse-uuid %)))
    :isWhiteboardPage model/whiteboard-page?
@@ -68,7 +75,7 @@
    :addNewWhiteboard (fn [page-name]
                        (whiteboard-handler/create-new-whiteboard-page! page-name))
    :addNewBlock (fn [content]
-                  (str (whiteboard-handler/add-new-block! name content)))
+                  (str (whiteboard-handler/add-new-block! current-whiteboard-name content)))
    :sidebarAddBlock (fn [uuid type]
                       (state/sidebar-add-block! (state/get-current-repo)
                                                 (:db/id (model/get-page uuid))

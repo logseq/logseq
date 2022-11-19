@@ -34,10 +34,6 @@ import {
 } from './lib'
 import { LogseqContext, type LogseqContextValue } from './lib/logseq-context'
 
-const components: TLReactComponents<Shape> = {
-  ContextBar: ContextBar,
-}
-
 const tools: TLReactToolConstructor<Shape>[] = [
   BoxTool,
   // DotTool,
@@ -62,9 +58,24 @@ interface LogseqTldrawProps {
   onPersist?: TLReactCallbacks<Shape>['onPersist']
 }
 
+const ReferencesCount: LogseqContextValue['renderers']['ReferencesCount'] = props => {
+  const { renderers } = React.useContext(LogseqContext)
+
+  const options = { 'portal?': false }
+
+  return <renderers.ReferencesCount {...props} options={options} />
+}
+
 const AppImpl = () => {
   const ref = React.useRef<HTMLDivElement>(null)
   const app = useApp()
+  const components = React.useMemo(
+    () => ({
+      ContextBar,
+      ReferencesCount,
+    }),
+    []
+  )
   return (
     <ContextMenu collisionRef={ref}>
       <div ref={ref} className="logseq-tldraw logseq-tldraw-wrapper" data-tlapp={app.uuid}>

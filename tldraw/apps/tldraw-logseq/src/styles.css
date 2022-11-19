@@ -319,7 +319,7 @@ button.tl-select-input-trigger {
   }
 
   &[data-state='checked'] {
-    background-color: #4285f4;
+    background-color: var(--color-selectedFill);
     color: #fff;
   }
 }
@@ -986,4 +986,11 @@ html[data-theme='dark'] {
   &:hover {
     background-color: var(--ls-tertiary-background-color);
   }
+}
+
+.tl-reference-count-container {
+  @apply inline-flex items-center justify-center p-1;
+  background-color: var(--color-selectedFill);
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
 }

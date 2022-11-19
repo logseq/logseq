@@ -82,7 +82,7 @@ const LogseqPortalShapeHeader = observer(
     children,
   }: {
     type: 'P' | 'B'
-    fill: string
+    fill?: string
     opacity: number
     children: React.ReactNode
   }) => {
