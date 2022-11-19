@@ -1762,11 +1762,6 @@ Similar to re-frame subscriptions"
            (or include-all? (= (boolean theme?) (:theme %))))
      (vals (:plugin/installed-plugins @state)))))
 
-(defn get-all-enabled?-installed-plugins
-  ([] (get-all-enabled?-installed-plugins true true))
-  ([enabled? include-unpacked?]
-   (get-enabled?-installed-plugins nil enabled? include-unpacked? true)))
-
 (defn lsp-enabled?-or-theme
   []
   (:plugin/enabled @state))
