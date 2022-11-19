@@ -1,4 +1,4 @@
-import { Decoration, isNonNullable } from '@tldraw/core'
+import { Decoration, isNonNullable, validUUID } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import React from 'react'
@@ -503,25 +503,80 @@ const TextStyleAction = observer(() => {
 const ReferencesAction = observer(() => {
   const app = useApp<Shape>()
   const shape = app.selectedShapesArray[0]
-  const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    shape.update({ refs: [e.target.value] })
-    app.persist()
-  }, [])
 
-  const [value, setValue] = React.useState(shape.props.refs?.[0] ?? '')
+  const [value, setValue] = React.useState('')
+
+  const [show, setShow] = React.useState(false)
+
+  const { handlers } = React.useContext(LogseqContext)
+
+  const handleChange = () => {
+    const refs = shape.props.refs ?? []
+    if (refs.includes(value)) return
+    shape.update({ refs: [...refs, value] })
+    app.persist()
+  }
+
+  const hasLinks = shape.props.refs && shape.props.refs.length > 0
 
   return (
-    <span className="flex gap-3">
-      {shape.props.refs?.length}
-      <TextInput
-        title="Website Url"
-        className="tl-iframe-src"
-        value={value}
-        onChange={e => {
-          setValue(e.target.value)
-        }}
-        onBlur={handleChange}
-      />
+    <span className="flex gap-3 relative">
+      <ToggleInput
+        className="px-2 tl-button"
+        pressed={show}
+        onPressedChange={s => setShow(s)}
+        title="Open References and Links"
+      >
+        <TablerIcon name="link" />
+        {hasLinks && <div className="tl-shape-references-count">{shape.props.refs?.length}</div>}
+      </ToggleInput>
+
+      {show && (
+        <div className="tl-shape-references-panel">
+          <TextInput
+            title="Website Url"
+            className="tl-iframe-src"
+            value={value}
+            onChange={e => {
+              setValue(e.target.value)
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                handleChange()
+              }
+              e.stopPropagation()
+            }}
+          />
+          <div className="text-xs font-bold inline-flex gap-1 items-center">
+            <TablerIcon name="link" />
+            Your Links
+          </div>
+          {shape.props.refs?.map((ref, i) => {
+            return (
+              <div className="tl-shape-references-panel-item">
+                <div>{ref}</div>
+                <div className="flex-1" />
+                <Button
+                  title="Open Page in Right Sidebar"
+                  type="button"
+                  onClick={() => handlers?.sidebarAddBlock(ref, validUUID(ref) ? 'block' : 'page')}
+                >
+                  <TablerIcon name="layout-sidebar-right" />
+                </Button>
+                <button
+                  className="hover:opacity-60"
+                  onClick={() => {
+                    shape.update({ refs: shape.props.refs?.filter((_, j) => j !== i) })
+                    app.persist()
+                  }}
+                >
+                  <TablerIcon name="x" />
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </span>
   )
 })

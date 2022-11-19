@@ -246,10 +246,10 @@ html[data-theme='light'] {
 }
 
 .tl-button {
-  @apply relative flex items-center justify-center rounded border-0;
+  @apply relative flex items-center justify-center rounded border-0 gap-1;
 
   height: 32px;
-  width: 32px;
+  min-width: 32px;
   font-family: var(--ls-font-family);
   background: none;
   cursor: pointer;
@@ -859,7 +859,7 @@ html[data-theme='dark'] {
 .tl-toggle-input {
   @apply inline-flex items-center justify-center;
   height: 32px;
-  width: 32px;
+  min-width: 32px;
   color: var(--ls-secondary-text-color);
 
   &:hover {
@@ -993,4 +993,24 @@ html[data-theme='dark'] {
   background-color: var(--color-selectedFill);
   border-top-right-radius: 6px;
   border-bottom-right-radius: 6px;
+}
+
+.tl-shape-references-count {
+  @apply px-1;
+  background-color: var(--ls-page-properties-background-color);
+}
+
+.tl-shape-references-panel {
+  @apply absolute shadow-lg rounded-lg p-3;
+  width: 320px;
+  transform: translate(20px, -8px);
+  left: 100%;
+  top: 0;
+  background-color: var(--ls-secondary-background-color);
+}
+
+.tl-shape-references-panel-item {
+  @apply rounded py-1 px-4 flex items-center justify-center gap-1;
+  color: var(--color-text);
+  background-color: var(--ls-tertiary-background-color);
 }
