@@ -17,7 +17,8 @@
             [logseq.graph-parser.config :as gp-config]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.graph-parser.log :as log]))
 
 ;; Stores main application state
 (defonce ^:large-vars/data-var state
@@ -312,11 +313,11 @@
   which are merged."
   [& configs]
   (apply merge-with
-    (fn merge-config [current new]
-      (if (and (map? current) (map? new))
-        (merge current new)
-        new))
-    configs))
+         (fn merge-config [current new]
+           (if (and (map? current) (map? new))
+             (merge current new)
+             new))
+         configs))
 
 (defn get-config
   "User config for the given repo or current repo if none given. All config fetching
@@ -324,10 +325,16 @@ should be done through this fn in order to get global config and config defaults
   ([]
    (get-config (get-current-repo)))
   ([repo-url]
-   (merge-configs
-    default-config
-    (get-in @state [:config ::global-config])
-    (get-in @state [:config repo-url]))))
+   (try
+     (merge-configs
+      default-config
+      (get-in @state [:config ::global-config])
+      (get-in @state [:config repo-url]))
+     (catch :default e
+       (do
+         (log/error "Cannot parse config files" e)
+         (log/error "Restore default config")
+         default-config)))))
 
 (defonce publishing? (atom nil))
 
@@ -540,9 +547,15 @@ Similar to re-frame subscriptions"
   ([] (sub-config (get-current-repo)))
   ([repo]
    (let [config (sub :config)]
-     (merge-configs default-config
-                    (get config ::global-config)
-                    (get config repo)))))
+     (try
+       (merge-configs default-config
+                      (get config ::global-config)
+                      (get config repo))
+       (catch :default e
+         (do
+           (log/error "Cannot parse config files" e)
+           (log/error "Restore default config")
+           default-config))))))
 
 (defn enable-grammarly?
   []
