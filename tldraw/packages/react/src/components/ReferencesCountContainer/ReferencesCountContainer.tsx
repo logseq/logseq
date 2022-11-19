@@ -37,7 +37,7 @@ export const ReferencesCountContainer = observer(function ReferencesCountContain
             left: '100%',
             pointerEvents: 'all',
             transformOrigin: 'left top',
-            transform: 'scale(var(--tl-scale)) translateY(8px)',
+            transform: 'translateY(6px)',
           }}
           onPointerDown={stop}
           onWheelCapture={stop}

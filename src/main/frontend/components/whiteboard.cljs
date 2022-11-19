@@ -5,6 +5,7 @@
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
             [frontend.context.i18n :refer [t]]
+            [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
@@ -108,7 +109,7 @@
 
 ;; TODO: move to frontend.components.reference
 ;; TODO: reactivity when ref count change
-(rum/defc references-count < rum/static
+(rum/defc references-count < rum/reactive db-mixins/query
   "Shows a references count for any block or page.
    When clicked, a dropdown menu will show the reference details"
   ([page-name-or-uuid classname]
@@ -119,7 +120,7 @@
                                  :or {portal? true}}]
    (let [page-entity (model/get-page page-name-or-uuid)
          block-uuid (:block/uuid page-entity)
-         refs-count (count (:block/_refs page-entity))]
+         refs-count (count (model/get-block-references-count block-uuid))]
      (when (> refs-count 0)
        (dropdown-menu {:classname classname
                        :label (fn [open?]
