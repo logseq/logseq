@@ -25,7 +25,7 @@ export const ReferencesCountContainer = observer(function ReferencesCountContain
   return (
     <Container
       style={{
-        zIndex: 20000,
+        zIndex: 10003,
       }}
       bounds={bounds}
       aria-label="references-count-container"
