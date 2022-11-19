@@ -66,10 +66,14 @@
                                       (block-ids (:block/uuid (:block/parent block)))
                                       (not (gp-whiteboard/shape-block? block)))))
                                existing-blocks)
+        ;; always recalcuate refs for now. 
+        ;; todo: optimize in frontend.modules.outliner.pipeline/compute-block-path-refs?
+        refs-tx (mapcat (fn [m] [[:db/retract (:db/id m) :block/path-refs]
+                                 [:db/retract (:db/id m) :block/refs]]) existing-blocks)
         delete-blocks-tx (mapv (fn [s] [:db/retractEntity (:db/id s)]) delete-blocks)
         page-and-blocks (->> (cons page-block blocks)
                              (map outliner/block-with-timestamps))]
-    (concat page-and-blocks delete-blocks-tx)))
+    (concat refs-tx page-and-blocks delete-blocks-tx)))
 
 (defn- get-whiteboard-clj [page-name]
   (when (model/page-exists? page-name)
