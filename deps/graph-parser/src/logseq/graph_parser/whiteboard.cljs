@@ -49,9 +49,10 @@
        {:block/uuid (uuid (:pageId shape))})]))
 
 (defn- with-whiteboard-block-refs
-  [shape]
+  [shape page-name]
   (let [refs (or (get-shape-refs shape) [])]
-    (merge {:block/refs refs})))
+    (merge {:block/refs refs
+            :block/path-refs (conj refs {:block/name page-name})})))
 
 (defn- with-whiteboard-content
   "Main purpose of this function is to populate contents when shapes are used as references in outliner."
@@ -72,7 +73,7 @@
     (merge (if shape?
              (merge
               {:block/uuid (uuid (:id shape))}
-              (with-whiteboard-block-refs shape)
+              (with-whiteboard-block-refs shape page-name)
               (with-whiteboard-content shape))
 
              ;; TODO: remove?
