@@ -1,32 +1,32 @@
-import { Decoration, isNonNullable, Color } from '@tldraw/core'
+import { Decoration, isNonNullable } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import React from 'react'
 import type {
-  Shape,
-  LogseqPortalShape,
-  TextShape,
+  BoxShape,
+  EllipseShape,
   HTMLShape,
   IFrameShape,
-  YouTubeShape,
-  BoxShape,
-  PolygonShape,
-  EllipseShape,
   LineShape,
+  LogseqPortalShape,
   PencilShape,
+  PolygonShape,
+  Shape,
+  TextShape,
+  YouTubeShape,
 } from '../../lib'
 import { LogseqContext } from '../../lib/logseq-context'
+import { Button } from '../Button'
 import { TablerIcon } from '../icons'
 import { ColorInput } from '../inputs/ColorInput'
-import { type SelectOption, SelectInput } from '../inputs/SelectInput'
+import { SelectInput, type SelectOption } from '../inputs/SelectInput'
 import { TextInput } from '../inputs/TextInput'
 import {
-  type ToggleGroupInputOption,
   ToggleGroupInput,
   ToggleGroupMultipleInput,
+  type ToggleGroupInputOption,
 } from '../inputs/ToggleGroupInput'
 import { ToggleInput } from '../inputs/ToggleInput'
-import { Button } from '../Button'
 
 export const contextBarActionTypes = [
   // Order matters
@@ -42,6 +42,7 @@ export const contextBarActionTypes = [
   'LogseqPortalViewMode',
   'ArrowMode',
   'OpenPage',
+  'References',
 ] as const
 
 type ContextBarActionType = typeof contextBarActionTypes[number]
@@ -50,13 +51,14 @@ const singleShapeActions: ContextBarActionType[] = [
   'YoutubeLink',
   'IFrameSource',
   'OpenPage',
+  'References',
 ]
 
 const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 
 type ShapeType = Shape['props']['type']
 
-export const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
+export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
   'logseq-portal': [
     'Swatch',
     'Edit',
@@ -64,17 +66,20 @@ export const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = 
     'ScaleLevel',
     'OpenPage',
     'AutoResizing',
+    'References',
   ],
-  youtube: ['YoutubeLink'],
-  iframe: ['IFrameSource'],
-  box: ['Swatch', 'NoFill', 'StrokeType'],
-  ellipse: ['Swatch', 'NoFill', 'StrokeType'],
-  polygon: ['Swatch', 'NoFill', 'StrokeType'],
-  line: ['Edit', 'Swatch', 'ArrowMode'],
-  pencil: ['Swatch'],
-  highlighter: ['Swatch'],
-  text: ['Edit', 'Swatch', 'ScaleLevel', 'AutoResizing', 'TextStyle'],
-  html: ['ScaleLevel', 'AutoResizing'],
+  youtube: ['YoutubeLink', 'References'],
+  iframe: ['IFrameSource', 'References'],
+  box: ['Swatch', 'NoFill', 'StrokeType', 'References'],
+  ellipse: ['Swatch', 'NoFill', 'StrokeType', 'References'],
+  polygon: ['Swatch', 'NoFill', 'StrokeType', 'References'],
+  line: ['Edit', 'Swatch', 'ArrowMode', 'References'],
+  pencil: ['Swatch', 'References'],
+  highlighter: ['Swatch', 'References'],
+  text: ['Edit', 'Swatch', 'ScaleLevel', 'AutoResizing', 'TextStyle', 'References'],
+  html: ['ScaleLevel', 'AutoResizing', 'References'],
+  image: ['References'],
+  video: ['References'],
 }
 
 export const withFillShapes = Object.entries(shapeMapping)
@@ -495,6 +500,32 @@ const TextStyleAction = observer(() => {
   )
 })
 
+const ReferencesAction = observer(() => {
+  const app = useApp<Shape>()
+  const shape = app.selectedShapesArray[0]
+  const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    shape.update({ refs: [e.target.value] })
+    app.persist()
+  }, [])
+
+  const [value, setValue] = React.useState(shape.props.refs?.[0] ?? '')
+
+  return (
+    <span className="flex gap-3">
+      {shape.props.refs?.length}
+      <TextInput
+        title="Website Url"
+        className="tl-iframe-src"
+        value={value}
+        onChange={e => {
+          setValue(e.target.value)
+        }}
+        onBlur={handleChange}
+      />
+    </span>
+  )
+})
+
 contextBarActionMapping.set('Edit', EditAction)
 contextBarActionMapping.set('AutoResizing', AutoResizingAction)
 contextBarActionMapping.set('LogseqPortalViewMode', LogseqPortalViewModeAction)
@@ -507,6 +538,7 @@ contextBarActionMapping.set('Swatch', SwatchAction)
 contextBarActionMapping.set('StrokeType', StrokeTypeAction)
 contextBarActionMapping.set('ArrowMode', ArrowModeAction)
 contextBarActionMapping.set('TextStyle', TextStyleAction)
+contextBarActionMapping.set('References', ReferencesAction)
 
 const getContextBarActionTypes = (type: ShapeType) => {
   return (shapeMapping[type] ?? []).filter(isNonNullable)

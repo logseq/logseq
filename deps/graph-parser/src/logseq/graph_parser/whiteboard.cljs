@@ -43,16 +43,24 @@
 
 
 (defn- get-shape-refs [shape]
-  (when (= "logseq-portal" (:type shape))
-    [(if (= (:blockType shape) "P")
-       {:block/name (gp-util/page-name-sanity-lc (:pageId shape))}
-       {:block/uuid (uuid (:pageId shape))})]))
+  (let [portal-refs (when (= "logseq-portal" (:type shape))
+                      [(if (= (:blockType shape) "P")
+                         {:block/name (gp-util/page-name-sanity-lc (:pageId shape))}
+                         {:block/uuid (uuid (:pageId shape))})])
+        shape-link-refs (->> (:refs shape)
+                             (filter (complement empty?))
+                             (map (fn [ref] (if (parse-uuid ref)
+                                              {:block/uuid (parse-uuid ref)}
+                                              {:block/name (gp-util/page-name-sanity-lc ref)}))))]
+    (concat portal-refs shape-link-refs)))
 
 (defn- with-whiteboard-block-refs
   [shape page-name]
   (let [refs (or (get-shape-refs shape) [])]
-    (merge {:block/refs refs
-            :block/path-refs (conj refs {:block/name page-name})})))
+    (merge {:block/refs (if (seq refs) refs [])
+            :block/path-refs (if (seq refs)
+                               (conj refs {:block/name page-name})
+                               [])})))
 
 (defn- with-whiteboard-content
   "Main purpose of this function is to populate contents when shapes are used as references in outliner."
