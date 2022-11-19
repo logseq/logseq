@@ -2798,6 +2798,10 @@
           (.schedule this ::stop nil nil)
           unknown
           (do
+            (state/pub-event! [:instrument {:type :sync/unknown
+                                            :event :local->remote-full-sync-failed
+                                            :graph-uuid graph-uuid
+                                            :payload {:error unknown}}])
             (put-sync-event! {:event :local->remote-full-sync-failed
                               :data  {:graph-uuid graph-uuid
                                       :epoch      (tc/to-epoch (t/now))}})
@@ -2821,7 +2825,10 @@
               (.schedule this ::pause nil nil))
           unknown
           (do
-            ;; TODO: instrument all the unknown
+            (state/pub-event! [:instrument {:type :sync/unknown
+                                            :event :remote->local-full-sync-failed
+                                            :graph-uuid graph-uuid
+                                            :payload {:error unknown}}])
             (put-sync-event! {:event :remote->local-full-sync-failed
                               :data  {:graph-uuid graph-uuid
                                       :exp        unknown
@@ -2862,6 +2869,10 @@
                 (.schedule this ::pause nil nil))
             unknown
             (do (prn "remote->local err" unknown)
+                (state/pub-event! [:instrument {:type :sync/unknown
+                                                :event :remote->local
+                                                :graph-uuid graph-uuid
+                                                :payload {:error unknown}}])
                 (.schedule this ::idle nil nil)))))))
 
   (local->remote [this {local-changes :local}]
@@ -2921,6 +2932,10 @@
           unknown
           (do
             (debug/pprint "local->remote" unknown)
+            (state/pub-event! [:instrument {:type :sync/unknown
+                                            :event :local->remote
+                                            :graph-uuid graph-uuid
+                                            :payload {:error unknown}}])
             (.schedule this ::idle nil nil))))))
   IStoppable
   (-stop! [_]
