@@ -988,19 +988,41 @@ html[data-theme='dark'] {
   }
 }
 
-.tl-reference-count-container {
-  @apply inline-flex items-center justify-center p-1;
-  background-color: var(--color-selectedFill);
-  border-top-right-radius: 6px;
-  border-bottom-right-radius: 6px;
+.tl-references-count-container {
+  z-index: 10003;
 }
 
-.tl-shape-references-count {
+.tl-references-count {
+  @apply inline-flex items-center justify-center p-1 transition-all;
+  background-color: var(--color-selectedFill);
+
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+
+
+  &:hover, &.open {
+    @apply p-1.5;
+  }
+}
+
+.tl-references-count-rounded {
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  transform: translate(4px, -6px);
+
+  &:hover, &.open {
+    height: 36px;
+    width: 36px;
+  }
+}
+
+.tl-shape-links-count {
   @apply px-1;
   background-color: var(--ls-page-properties-background-color);
 }
 
-.tl-shape-references-panel {
+.tl-shape-links-panel {
   @apply absolute shadow-lg rounded-lg p-3;
   width: 320px;
   transform: translate(20px, -8px);
@@ -1009,7 +1031,7 @@ html[data-theme='dark'] {
   background-color: var(--ls-secondary-background-color);
 }
 
-.tl-shape-references-panel-item {
+.tl-shape-links-panel-item {
   @apply rounded py-1 px-4 flex items-center justify-center gap-1;
   color: var(--color-text);
   background-color: var(--ls-tertiary-background-color);

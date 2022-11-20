@@ -42,7 +42,7 @@ export const contextBarActionTypes = [
   'LogseqPortalViewMode',
   'ArrowMode',
   'OpenPage',
-  'References',
+  'Links',
 ] as const
 
 type ContextBarActionType = typeof contextBarActionTypes[number]
@@ -51,7 +51,7 @@ const singleShapeActions: ContextBarActionType[] = [
   'YoutubeLink',
   'IFrameSource',
   'OpenPage',
-  'References',
+  'Links',
 ]
 
 const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
@@ -66,20 +66,20 @@ export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
     'ScaleLevel',
     'OpenPage',
     'AutoResizing',
-    'References',
+    'Links',
   ],
-  youtube: ['YoutubeLink', 'References'],
-  iframe: ['IFrameSource', 'References'],
-  box: ['Swatch', 'NoFill', 'StrokeType', 'References'],
-  ellipse: ['Swatch', 'NoFill', 'StrokeType', 'References'],
-  polygon: ['Swatch', 'NoFill', 'StrokeType', 'References'],
-  line: ['Edit', 'Swatch', 'ArrowMode', 'References'],
-  pencil: ['Swatch', 'References'],
-  highlighter: ['Swatch', 'References'],
-  text: ['Edit', 'Swatch', 'ScaleLevel', 'AutoResizing', 'TextStyle', 'References'],
-  html: ['ScaleLevel', 'AutoResizing', 'References'],
-  image: ['References'],
-  video: ['References'],
+  youtube: ['YoutubeLink', 'Links'],
+  iframe: ['IFrameSource', 'Links'],
+  box: ['Swatch', 'NoFill', 'StrokeType', 'Links'],
+  ellipse: ['Swatch', 'NoFill', 'StrokeType', 'Links'],
+  polygon: ['Swatch', 'NoFill', 'StrokeType', 'Links'],
+  line: ['Edit', 'Swatch', 'ArrowMode', 'Links'],
+  pencil: ['Swatch', 'Links'],
+  highlighter: ['Swatch', 'Links'],
+  text: ['Edit', 'Swatch', 'ScaleLevel', 'AutoResizing', 'TextStyle', 'Links'],
+  html: ['ScaleLevel', 'AutoResizing', 'Links'],
+  image: ['Links'],
+  video: ['Links'],
 }
 
 export const withFillShapes = Object.entries(shapeMapping)
@@ -500,7 +500,7 @@ const TextStyleAction = observer(() => {
   )
 })
 
-const ReferencesAction = observer(() => {
+const LinksAction = observer(() => {
   const app = useApp<Shape>()
   const shape = app.selectedShapesArray[0]
 
@@ -525,14 +525,14 @@ const ReferencesAction = observer(() => {
         className="px-2 tl-button"
         pressed={show}
         onPressedChange={s => setShow(s)}
-        title="Open References and Links"
+        title="Open References & Links"
       >
         <TablerIcon name="link" />
-        {hasLinks && <div className="tl-shape-references-count">{shape.props.refs?.length}</div>}
+        {hasLinks && <div className="tl-shape-links-count">{shape.props.refs?.length}</div>}
       </ToggleInput>
 
       {show && (
-        <div className="tl-shape-references-panel">
+        <div className="tl-shape-links-panel">
           <TextInput
             title="Website Url"
             className="tl-iframe-src"
@@ -553,7 +553,7 @@ const ReferencesAction = observer(() => {
           </div>
           {shape.props.refs?.map((ref, i) => {
             return (
-              <div className="tl-shape-references-panel-item">
+              <div className="tl-shape-links-panel-item">
                 <div>{ref}</div>
                 <div className="flex-1" />
                 <Button
@@ -593,7 +593,7 @@ contextBarActionMapping.set('Swatch', SwatchAction)
 contextBarActionMapping.set('StrokeType', StrokeTypeAction)
 contextBarActionMapping.set('ArrowMode', ArrowModeAction)
 contextBarActionMapping.set('TextStyle', TextStyleAction)
-contextBarActionMapping.set('References', ReferencesAction)
+contextBarActionMapping.set('Links', LinksAction)
 
 const getContextBarActionTypes = (type: ShapeType) => {
   return (shapeMapping[type] ?? []).filter(isNonNullable)

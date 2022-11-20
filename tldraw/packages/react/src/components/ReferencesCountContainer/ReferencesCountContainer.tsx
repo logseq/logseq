@@ -11,10 +11,14 @@ export interface TLReferencesCountContainerProps<S extends TLReactShape> {
   shape: S
 }
 
+// backlinks
 export const ReferencesCountContainer = observer(function ReferencesCountContainer<
   S extends TLReactShape
 >({ bounds, hidden, shape }: TLReferencesCountContainerProps<S>) {
   const {
+    viewport: {
+      camera: { zoom },
+    },
     components: { ReferencesCount },
   } = useRendererContext()
 
@@ -22,12 +26,12 @@ export const ReferencesCountContainer = observer(function ReferencesCountContain
 
   const stop: React.EventHandler<any> = e => e.stopPropagation()
 
+  const rounded = bounds.height * zoom < 50
+
   return (
     <Container
-      style={{
-        zIndex: 10003,
-      }}
       bounds={bounds}
+      className="tl-references-count-container"
       aria-label="references-count-container"
     >
       <HTMLContainer>
@@ -37,12 +41,17 @@ export const ReferencesCountContainer = observer(function ReferencesCountContain
             left: '100%',
             pointerEvents: 'all',
             transformOrigin: 'left top',
-            transform: 'translateY(6px)',
+            transform: 'translateY(6px) scale(var(--tl-scale))',
           }}
           onPointerDown={stop}
           onWheelCapture={stop}
+          title="Shape Backlinks"
         >
-          <ReferencesCount className="tl-reference-count-container" id={shape.id} shape={shape} />
+          <ReferencesCount
+            className={'tl-references-count ' + (rounded ? 'tl-references-count-rounded' : '')}
+            id={shape.id}
+            shape={shape}
+          />
         </span>
       </HTMLContainer>
     </Container>

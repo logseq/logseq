@@ -70,7 +70,7 @@
     [:div.inline-block.dropdown-anchor {:ref anchor-ref}
      label
      (if portal?
-       ;; FIXME: refactor the following code 
+       ;; FIXME: refactor the following code ...
        (ui/portal
         [:div.fixed.shadow-lg.color-level.px-2.rounded-lg.transition.md:w-64.lg:w-128.overflow-auto
          {:ref (juxt content-ref click-outside-ref)
@@ -108,7 +108,6 @@
      children open? #(set-open-flag 0) portal?)))
 
 ;; TODO: move to frontend.components.reference
-;; TODO: reactivity when ref count change
 (rum/defc references-count < rum/reactive db-mixins/query
   "Shows a references count for any block or page.
    When clicked, a dropdown menu will show the reference details"
