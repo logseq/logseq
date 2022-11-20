@@ -37,3 +37,12 @@ test('custom hiccup should not spawn any dialogs', async ({ page, block }) => {
 
   expect(true).toBeTruthy()
 })
+
+test('"is" attribute should be allowed for plugin purposes', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  await page.keyboard.type('[:div {:is "custom-element" :id "custom-element-id"}]', { delay: 5 })
+  await block.enterNext()
+
+  await expect(page.locator('#custom-element-id')).toHaveAttribute('is', 'custom-element');
+})

@@ -28,6 +28,8 @@ export interface TLShapeProps {
   type: any
   parentId: string
   name?: string
+  fill?: string
+  stroke?: string
   point: number[]
   size?: number[]
   scale?: number[]
