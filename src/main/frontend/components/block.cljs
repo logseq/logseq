@@ -3589,7 +3589,9 @@
                  (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
                 (for [block parent-blocks]
                   (let [block' (update block :block/children tree/non-consecutive-blocks->vec-tree)]
-                    (breadcrumb-with-container block' config)))
+                    (rum/with-key
+                      (breadcrumb-with-container block' config)
+                      (:db/id block'))))
                 {:debug-id page})])))))]
 
      (and (:group-by-page? config)
