@@ -1029,6 +1029,10 @@ html[data-theme='dark'] {
   color: var(--ls-primary-text-color);
 }
 
+.tl-shape-links-panel {
+  @apply rounded-b-lg;
+}
+
 .tl-shape-links-reference-panel {
   @apply rounded-t-lg;
 }

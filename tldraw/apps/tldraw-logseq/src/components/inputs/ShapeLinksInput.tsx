@@ -77,7 +77,7 @@ export function ShapeLinksInput({
         </div>
       }
     >
-      <div className="color-level">
+      <div className="color-level rounded-lg">
         {pageId && portalType && (
           <div className="tl-shape-links-reference-panel">
             <div className="text-base font-bold inline-flex gap-1 items-center">
