@@ -572,8 +572,9 @@ button.tl-select-input-trigger {
 }
 
 .tl-quick-search-input-container {
-  @apply flex items-center rounded-lg text-base;
+  @apply flex items-center rounded-lg text-base max-w-full;
 
+  min-height: 40px;
   background-color: var(--ls-secondary-background-color);
   padding: 6px 16px;
   box-shadow: var(--shadow-small);
@@ -618,7 +619,11 @@ button.tl-select-input-trigger {
 .tl-text-input {
   @apply absolute inset-0;
 
-  outline: none;
+  outline: none !important;
+}
+
+.tl-quick-search .tl-text-input {
+  border: none;
 }
 
 .tl-input-hidden {
@@ -633,7 +638,7 @@ button.tl-select-input-trigger {
 }
 
 .tl-quick-search-options {
-  @apply absolute left-0 w-full flex;
+  @apply absolute left-0 w-full flex z-10;
 
   top: calc(100% + 12px);
   background-color: var(--ls-primary-background-color);
@@ -1025,7 +1030,7 @@ html[data-theme='dark'] {
 .tl-shape-links-panel,
 .tl-shape-links-reference-panel {
   @apply p-3;
-  width: 320px;
+  width: 340px;
   color: var(--ls-primary-text-color);
 }
 
@@ -1044,6 +1049,11 @@ html[data-theme='dark'] {
   .page-ref {
     color: var(--ls-title-text-color);
   }
+}
+
+.tl-shape-links-panel-add-button {
+  @apply w-full font-medium text-base h-[40px];
+  background-color: var(--ls-secondary-background-color);
 }
 
 .tl-popover-trigger-button {

@@ -5,7 +5,7 @@ import { LogseqContext } from '../../lib/logseq-context'
 import { Button } from '../Button'
 import { TablerIcon } from '../icons'
 import { PopoverButton } from '../PopoverButton'
-import { TextInput } from './TextInput'
+import { LogseqQuickSearch } from '../QuickSearch'
 
 interface ShapeLinksInputProps extends React.HTMLAttributes<HTMLButtonElement> {
   shapeType: string
@@ -33,7 +33,9 @@ function ShapeLinkItem({
   return (
     <div className="tl-shape-links-panel-item color-level">
       <TablerIcon name={type === 'P' ? 'page' : 'block'} />
-      {type === 'P' ? <PageNameLink pageName={id} /> : <Breadcrumb levelLimit={2} blockId={id} />}
+      <div className="whitespace-pre break-all overflow-hidden text-ellipsis">
+        {type === 'P' ? <PageNameLink pageName={id} /> : <Breadcrumb levelLimit={1} blockId={id} />}
+      </div>
       <div className="flex-1" />
       <Button title="Open Page" type="button" onClick={() => handlers?.redirectToPage(id)}>
         <TablerIcon name="external-link" />
@@ -64,7 +66,7 @@ export function ShapeLinksInput({
   ...rest
 }: ShapeLinksInputProps) {
   const noOfLinks = refs.length + (pageId ? 1 : 0)
-  const [value, setValue] = React.useState('')
+  const [showQuickSearch, setShowQuickSearch] = React.useState(false)
 
   return (
     <PopoverButton
@@ -98,20 +100,36 @@ export function ShapeLinksInput({
             This <strong>{shapeType}</strong> can be linked to any other block, page or whiteboard
             element you have stored in Logseq.
           </div>
-          <TextInput
-            value={value}
-            onChange={e => {
-              setValue(e.target.value)
-            }}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                if (value && !refs.includes(value)) {
-                  onRefsChange([...refs, value])
+
+          <div className="h-2" />
+
+          {showQuickSearch ? (
+            <LogseqQuickSearch
+              style={{
+                width: 'calc(100% - 46px)',
+                marginLeft: '46px',
+              }}
+              onBlur={() => setShowQuickSearch(false)}
+              placeholder="Start typing to search..."
+              onChange={newValue => {
+                if (newValue && !refs.includes(newValue)) {
+                  onRefsChange([...refs, newValue])
+                  setShowQuickSearch(false)
                 }
-              }
-              e.stopPropagation()
-            }}
-          />
+              }}
+            />
+          ) : (
+            <div>
+              <Button
+                className="tl-shape-links-panel-add-button"
+                onClick={() => setShowQuickSearch(true)}
+              >
+                <TablerIcon name="plus" />
+                Add a new link
+              </Button>
+            </div>
+          )}
+          <div className="h-2" />
           <div className="flex flex-col items-stretch gap-2">
             {refs.map((ref, i) => {
               return (

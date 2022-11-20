@@ -56,7 +56,11 @@ export const PopoverButton = observer(
 
     return (
       <Popover.Root onOpenChange={o => setIsOpen(o)}>
-        <Popover.Trigger {...rest} data-border={border} className="tl-popover-trigger-button">
+        <Popover.Trigger
+          {...rest}
+          data-border={border}
+          className="tl-button tl-popover-trigger-button"
+        >
           {label}
         </Popover.Trigger>
 
