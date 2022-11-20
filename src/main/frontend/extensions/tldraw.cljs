@@ -31,7 +31,11 @@
 
 (rum/defc breadcrumb
   [props]
-  (block/breadcrumb {:preview? true} (state/get-current-repo) (uuid (gobj/get props "blockId")) {:end-separator? true}))
+  (block/breadcrumb {:preview? true}
+                    (state/get-current-repo)
+                    (uuid (gobj/get props "blockId"))
+                    {:end-separator? true
+                     :level-limit (gobj/get props "levelLimit" 3)}))
 
 (rum/defc page-name-link
   [props]

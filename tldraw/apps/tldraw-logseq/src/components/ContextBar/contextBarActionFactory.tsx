@@ -20,6 +20,7 @@ import { Button } from '../Button'
 import { TablerIcon } from '../icons'
 import { ColorInput } from '../inputs/ColorInput'
 import { SelectInput, type SelectOption } from '../inputs/SelectInput'
+import { ShapeLinksInput } from '../inputs/ShapeLinksInput'
 import { TextInput } from '../inputs/TextInput'
 import {
   ToggleGroupInput,
@@ -364,7 +365,6 @@ const SwatchAction = observer(() => {
       popoverSide="top"
       color={color}
       opacity={shapes[0].props.opacity}
-      collisionRef={document.getElementById('main-content-container')}
       setOpacity={handleSetOpacity}
       setColor={handleSetColor}
     />
@@ -504,80 +504,20 @@ const LinksAction = observer(() => {
   const app = useApp<Shape>()
   const shape = app.selectedShapesArray[0]
 
-  const [value, setValue] = React.useState('')
-
-  const [show, setShow] = React.useState(false)
-
-  const { handlers } = React.useContext(LogseqContext)
-
-  const handleChange = () => {
-    const refs = shape.props.refs ?? []
-    if (refs.includes(value)) return
-    shape.update({ refs: [...refs, value] })
+  const handleChange = (refs: string[]) => {
+    shape.update({ refs: refs })
     app.persist()
   }
 
-  const hasLinks = shape.props.refs && shape.props.refs.length > 0
-
   return (
-    <span className="flex gap-3 relative">
-      <ToggleInput
-        className="px-2 tl-button"
-        pressed={show}
-        onPressedChange={s => setShow(s)}
-        title="Open References & Links"
-      >
-        <TablerIcon name="link" />
-        {hasLinks && <div className="tl-shape-links-count">{shape.props.refs?.length}</div>}
-      </ToggleInput>
-
-      {show && (
-        <div className="tl-shape-links-panel">
-          <TextInput
-            title="Website Url"
-            className="tl-iframe-src"
-            value={value}
-            onChange={e => {
-              setValue(e.target.value)
-            }}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                handleChange()
-              }
-              e.stopPropagation()
-            }}
-          />
-          <div className="text-xs font-bold inline-flex gap-1 items-center">
-            <TablerIcon name="link" />
-            Your Links
-          </div>
-          {shape.props.refs?.map((ref, i) => {
-            return (
-              <div className="tl-shape-links-panel-item">
-                <div>{ref}</div>
-                <div className="flex-1" />
-                <Button
-                  title="Open Page in Right Sidebar"
-                  type="button"
-                  onClick={() => handlers?.sidebarAddBlock(ref, validUUID(ref) ? 'block' : 'page')}
-                >
-                  <TablerIcon name="layout-sidebar-right" />
-                </Button>
-                <button
-                  className="hover:opacity-60"
-                  onClick={() => {
-                    shape.update({ refs: shape.props.refs?.filter((_, j) => j !== i) })
-                    app.persist()
-                  }}
-                >
-                  <TablerIcon name="x" />
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </span>
+    <ShapeLinksInput
+      onRefsChange={handleChange}
+      refs={shape.props.refs ?? []}
+      shapeType={shape.props.type}
+      side="right"
+      pageId={shape.props.type === 'logseq-portal' ? shape.props.pageId : undefined}
+      portalType={shape.props.type === 'logseq-portal' ? shape.props.blockType : undefined}
+    />
   )
 })
 
