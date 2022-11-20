@@ -1,6 +1,9 @@
 import type { Side } from '@radix-ui/react-popper'
-import { validUUID } from '@tldraw/core'
+import Mousetrap from 'mousetrap'
+import { MOD_KEY, validUUID } from '@tldraw/core'
 import React from 'react'
+import { NIL as NIL_UUID } from 'uuid'
+
 import { LogseqContext } from '../../lib/logseq-context'
 import { Button } from '../Button'
 import { TablerIcon } from '../icons'
@@ -68,6 +71,54 @@ export function ShapeLinksInput({
   const noOfLinks = refs.length + (pageId ? 1 : 0)
   const [showQuickSearch, setShowQuickSearch] = React.useState(false)
 
+  const addNewRef = (value?: string) => {
+    if (value && !refs.includes(value)) {
+      onRefsChange([...refs, value])
+      setShowQuickSearch(false)
+    }
+  }
+
+  React.useEffect(() => {
+    if (!showQuickSearch) {
+      const callback = (keyboardEvent: Mousetrap.ExtendedKeyboardEvent, combo: string) => {
+        keyboardEvent.preventDefault()
+        keyboardEvent.stopPropagation()
+        ;(async () => {
+          // TODO: thinking about how to make this more generic with usePaste hook
+          // TODO: handle whiteboard shapes?
+          const items = await navigator.clipboard.read()
+          if (items.length > 0) {
+            const blob = await items[0].getType('text/plain')
+            const rawText = (await blob.text()).trim()
+
+            if (rawText) {
+              const text = rawText.trim()
+              let newValue: string | undefined
+              if (/^\(\(.*\)\)$/.test(rawText) && rawText.length === NIL_UUID.length + 4) {
+                const blockRef = rawText.slice(2, -2)
+                if (validUUID(blockRef)) {
+                  newValue = blockRef
+                }
+              } else if (/^\[\[.*\]\]$/.test(rawText)) {
+                newValue = rawText.slice(2, -2)
+              }
+              addNewRef(newValue)
+            }
+          }
+        })()
+      }
+
+      Mousetrap.bind(`mod+shift+v`, callback, 'keydown')
+
+      return () => {
+        Mousetrap.unbind(`mod+shift+v`, 'keydown')
+      }
+    }
+    return () => {}
+  }, [showQuickSearch])
+
+  const showReferencePanel = !!(pageId && portalType)
+
   return (
     <PopoverButton
       {...rest}
@@ -79,8 +130,8 @@ export function ShapeLinksInput({
         </div>
       }
     >
-      <div className="color-level rounded-lg">
-        {pageId && portalType && (
+      <div className="color-level rounded-lg" data-show-reference-panel={showReferencePanel}>
+        {showReferencePanel && (
           <div className="tl-shape-links-reference-panel">
             <div className="text-base font-bold inline-flex gap-1 items-center">
               <TablerIcon name="external-link" />
@@ -111,12 +162,7 @@ export function ShapeLinksInput({
               }}
               onBlur={() => setShowQuickSearch(false)}
               placeholder="Start typing to search..."
-              onChange={newValue => {
-                if (newValue && !refs.includes(newValue)) {
-                  onRefsChange([...refs, newValue])
-                  setShowQuickSearch(false)
-                }
-              }}
+              onChange={addNewRef}
             />
           ) : (
             <div>
@@ -127,23 +173,34 @@ export function ShapeLinksInput({
                 <TablerIcon name="plus" />
                 Add a new link
               </Button>
+              <div className="h-2" />
+              <div className="text-center">
+                <span className="opacity-50 mr-1">Paste from clipboard with</span>
+                <span className="keyboard-shortcut">
+                  <code>{MOD_KEY}</code> <code>⇧</code> <code>V</code>
+                </span>
+              </div>
             </div>
           )}
-          <div className="h-2" />
-          <div className="flex flex-col items-stretch gap-2">
-            {refs.map((ref, i) => {
-              return (
-                <ShapeLinkItem
-                  key={ref}
-                  id={ref}
-                  type={validUUID(ref) ? 'B' : 'P'}
-                  onRemove={() => {
-                    onRefsChange(refs.filter((_, j) => i !== j))
-                  }}
-                />
-              )
-            })}
-          </div>
+          {refs.length > 0 && (
+            <>
+              <div className="h-2" />
+              <div className="flex flex-col items-stretch gap-2">
+                {refs.map((ref, i) => {
+                  return (
+                    <ShapeLinkItem
+                      key={ref}
+                      id={ref}
+                      type={validUUID(ref) ? 'B' : 'P'}
+                      onRemove={() => {
+                        onRefsChange(refs.filter((_, j) => i !== j))
+                      }}
+                    />
+                  )
+                })}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </PopoverButton>
