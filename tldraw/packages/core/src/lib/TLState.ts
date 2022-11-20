@@ -205,18 +205,6 @@ export abstract class TLRootState<S extends TLShape, K extends TLEventMap>
     },
 
     /**
-     * Respond to wheel events forwarded to the state by its parent. Run the current active child
-     * state's handler, then the state's own handler.
-     *
-     * @param info The event info from TLInputs.
-     * @param event The DOM event.
-     */
-    onWheel: (info, event) => {
-      this.onWheel?.(info, event)
-      this.forwardEvent('onWheel', info, event)
-    },
-
-    /**
      * Respond to pointer down events forwarded to the state by its parent. Run the current active
      * child state's handler, then the state's own handler.
      *
@@ -382,7 +370,6 @@ export abstract class TLRootState<S extends TLShape, K extends TLEventMap>
   onEnter?: TLStateEvents<S, K>['onEnter']
   onExit?: TLStateEvents<S, K>['onExit']
   onTransition?: TLStateEvents<S, K>['onTransition']
-  onWheel?: TLEvents<S, K>['wheel']
   onPointerDown?: TLEvents<S, K>['pointer']
   onPointerUp?: TLEvents<S, K>['pointer']
   onPointerMove?: TLEvents<S, K>['pointer']

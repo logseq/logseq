@@ -48,12 +48,6 @@ html[data-theme='dark'] {
   --ls-block-properties-background-color: #06323e;
   --ls-page-properties-background-color: #02171d;
   --ls-block-ref-link-text-color: #1a6376;
-  --ls-search-background-color: linear-gradient(
-    to right,
-    #021c23 0,
-    #021b21 200px,
-    #002b36 100%
-  );
   --ls-border-color: #0e5263;
   --ls-secondary-border-color: #126277;
   --ls-tertiary-border-color: rgba(0, 2, 0, 0.10);
@@ -86,12 +80,10 @@ html[data-theme='dark'] {
   --ls-scrollbar-foreground-color: #11505f;
   --ls-scrollbar-background-color: rgba(30, 60, 67, 0.1);
   --ls-scrollbar-thumb-hover-color: rgba(255, 255, 255, 0.2);
-  --ls-head-text-color: var(--ls-link-text-color);
   --ls-cloze-text-color: #8fbc8f;
   --ls-icon-color: var(--ls-link-text-color);
   --ls-search-icon-color: var(--ls-link-text-color);
   --ls-a-chosen-bg: var(--ls-secondary-background-color);
-  --ls-right-sidebar-code-bg-color: #04303c;
   --ls-pie-bg-color: #01303b;
   --ls-pie-fg-color: #0b5869;
   --ls-highlight-color-gray: var(--color-gray-900);
@@ -133,7 +125,6 @@ html[data-theme='light'] {
   --ls-block-properties-background-color: #f7f7f7;
   --ls-page-properties-background-color: #f7f7f7;
   --ls-block-ref-link-text-color: #d8e1e8;
-  --ls-search-background-color: var(--ls-primary-background-color);
   --ls-border-color: #ccc;
   --ls-secondary-border-color: #e2e2e2;
   --ls-tertiary-border-color: rgba(200, 200, 200, 0.30);
@@ -153,6 +144,7 @@ html[data-theme='light'] {
   --ls-block-bullet-color: rgba(67, 63, 56, 0.25);
   --ls-block-highlight-color: #c0e6fd;
   --ls-selection-background-color: #e4f2ff;
+  --ls-selection-text-color: var(--ls-secondary-text-color);
   --ls-page-checkbox-color: #9dbbd8;
   --ls-page-checkbox-border-color: var(--ls-page-checkbox-color);
   --ls-page-blockquote-color: var(--ls-primary-text-color);
@@ -165,12 +157,10 @@ html[data-theme='light'] {
   --ls-scrollbar-foreground-color: rgba(0, 0, 0, 0.1);
   --ls-scrollbar-background-color: rgba(0, 0, 0, 0.05);
   --ls-scrollbar-thumb-hover-color: rgba(0, 0, 0, 0.2);
-  --ls-head-text-color: var(--ls-link-text-color);
   --ls-cloze-text-color: #0000cd;
   --ls-icon-color: #646464;
   --ls-search-icon-color: var(--ls-icon-color);
   --ls-a-chosen-bg: #f7f7f7;
-  --ls-right-sidebar-code-bg-color: var(--ls-secondary-background-color);
   --ls-pie-bg-color: #e1e1e1;
   --ls-pie-fg-color: #0a4a5d;
   --ls-highlight-color-gray: var(--color-gray-100);

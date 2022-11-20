@@ -61,6 +61,7 @@
             [frontend.util.drawer :as drawer]
             [frontend.util.property :as property]
             [frontend.util.text :as text-util]
+            [frontend.handler.notification :as notification]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -264,14 +265,6 @@
     (when (seq images)
       (lightbox/preview-images! images))))
 
-(defn copy-image-to-clipboard
-  [src]
-  (-> (js/fetch src)
-      (.then (fn [data]
-               (-> (.blob data)
-                   (.then (fn [blob]
-                            (js/navigator.clipboard.write (clj->js [(js/ClipboardItem. (clj->js {(.-type blob) blob}))])))))))))
-
 (defonce *resizing-image? (atom false))
 (rum/defcs resizable-image <
   (rum/local nil ::size)
@@ -353,12 +346,13 @@
             (ui/icon "trash")]
 
            [:button.asset-action-btn
-            {:title (t :asset/copy)
-             :tabIndex "-1"
+            {:title         (t :asset/copy)
+             :tabIndex      "-1"
              :on-mouse-down util/stop
-             :on-click (fn [e]
-                         (util/stop e)
-                         (copy-image-to-clipboard image-src))}
+             :on-click      (fn [e]
+                              (util/stop e)
+                              (-> (util/copy-image-to-clipboard image-src)
+                                  (p/then #(notification/show! "Copied!" :success))))}
             (ui/icon "copy")]
 
            [:button.asset-action-btn
@@ -1045,7 +1039,7 @@
         [:a.asset-ref.is-pdf
          {:on-mouse-down (fn [_event]
                            (when-let [current (pdf-assets/inflate-asset s)]
-                             (state/set-state! :pdf/current current)))}
+                             (state/set-current-pdf! current)))}
          (or label-text
              (->elem :span (map-inline config label)))]
 
@@ -2540,7 +2534,7 @@
                             (filterv identity)
                             (map (fn [x] (if (vector? x)
                                            (let [[block label] x]
-                                             (breadcrumb-fragment config block label opts))
+                                             (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
                                            [:span.opacity-70 "⋯"])))
                             (interpose (breadcrumb-separator)))]
         [:div.breadcrumb.block-parents.flex-row.flex-1
@@ -3252,9 +3246,9 @@
              :else
              [:<>
               (lazy-editor/editor config (str (d/squuid)) attr code options)
-              (let [options (:options options)]
+              (let [options (:options options) block (:block config)]
                 (when (and (= language "clojure") (contains? (set options) ":results"))
-                  (sci/eval-result code)))])])))))
+                  (sci/eval-result code block)))])])))))
 
 (defn ^:large-vars/cleanup-todo markup-element-cp
   [{:keys [html-export?] :as config} item]
@@ -3609,7 +3603,7 @@
             (when (seq blocks)
               (let [alias? (:block/alias? page)
                     page (db/entity (:db/id page))
-                    whiteboard? (= "whiteboard" (:block/type page))]
+                    whiteboard? (model/whiteboard-page? page)]
                 [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                              (:ref? config)
                              (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))

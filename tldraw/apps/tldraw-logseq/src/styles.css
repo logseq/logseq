@@ -17,8 +17,8 @@
   --color-text: var(--ls-primary-text-color);
   --color-text-inverted: var(--ls-tertiary-background-color);
   --color-hover: var(--ls-secondary-background-color);
-  --color-selectedStroke: rgb(42, 123, 253);
-  --color-selectedFill: #4285f4;
+  --color-selectedStroke: var(--color-indigo-900);
+  --color-selectedFill: var(--color-indigo-500);
   --color-selectedContrast: #fff;
   --shadow-small: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-medium: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
@@ -230,7 +230,7 @@ html[data-theme='light'] {
 }
 
 .tl-statusbar {
-  @apply absolute flex items-center w-full bottom-0;
+  @apply fixed flex items-center w-full bottom-0;
 
   font-family: monospace;
   font-size: 10px;
@@ -331,20 +331,22 @@ button.tl-select-input-trigger {
 
 .tl-geometry-tools-pane-anchor {
   @apply relative;
+
+  &[aria-expanded='true'] {
+    .tl-popover-indicator {
+      transform: rotate(180deg);
+      color: #000;
+    }
+  }
 }
 
-.tl-geometry-tools-pane {
-  @apply absolute rounded-lg flex flex-col items-center justify-center;
-  right: 100%;
-  top: calc(50% - 54px);
-  background-color: var(--ls-secondary-background-color);
-  padding: 4px;
-  gap: 8px;
-  box-shadow: var(--shadow-small);
+.tl-popover-indicator {
+  @apply absolute text-2xs;
 
-  .tl-button:not([data-selected='true']):hover {
-    background-color: var(--ls-tertiary-background-color);
-  }
+  opacity: 0.8;
+  pointer-events: none;
+  left: 0;
+  bottom: -3px;
 }
 
 .floating-panel[data-tool-locked='true'] > .tl-button[data-selected='true']::after {
@@ -651,6 +653,7 @@ button.tl-select-input-trigger {
   padding: 8px 16px;
   cursor: pointer;
   gap: 0.5em;
+  user-select: none;
 
   &[data-focused='true'] {
     background-color: var(--ls-menu-hover-color, #f4f5f7);
@@ -658,7 +661,8 @@ button.tl-select-input-trigger {
 }
 
 .tl-quick-search-option-row {
-  display: flex;
+  @apply flex items-center;
+
   gap: 0.5em;
 
   .breadcrumb {
@@ -667,13 +671,18 @@ button.tl-select-input-trigger {
 }
 
 .tl-quick-search-option-placeholder {
-  width: 20px;
+  width: 24px;
   flex-shrink: 0;
 }
 
 .tl-quick-search-option-breadcrumb {
   opacity: 0.5;
 }
+
+/* This will breaks block selection
+[data-inner-events=false] * {
+  user-select: none;
+} */
 
 .tl-logseq-portal-container {
   @apply flex flex-col rounded-lg absolute;
@@ -729,8 +738,8 @@ button.tl-select-input-trigger {
   @apply flex items-center justify-center rounded text-base;
 
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   line-height: 1;
   color: #fff;
   background: rgba(0, 0, 0, 0.5);
@@ -867,6 +876,11 @@ html[data-theme='dark'] {
   background-color: var(--ls-border-color);
   width: 1px;
   opacity: 0.5;
+
+  &[data-orientation='horizontal'] {
+    height: 1px;
+    width: auto;
+  }
 }
 
 .tl-youtube-link,
@@ -893,10 +907,13 @@ html[data-theme='dark'] {
 .tl-popover-content {
   @apply rounded-sm drop-shadow-md;
 
-  padding: 4px;
-  width: 160px;
   background-color: var(--ls-secondary-background-color);
   z-index: 100000;
+}
+
+.tl-geometry-toolbar {
+  box-shadow: none;
+  flex-flow: column;
 }
 
 .tl-popover-arrow {
@@ -904,14 +921,14 @@ html[data-theme='dark'] {
 }
 
 .tl-color-palette {
-  @apply flex flex-wrap;
+  @apply grid grid-cols-4;
 }
 
 .tl-color-drip {
   @apply rounded text-sm;
 
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   padding: 3px;
   border: 1px solid var(--ls-secondary-border-color);
   color: var(--ls-secondary-text-color);

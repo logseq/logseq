@@ -34,7 +34,15 @@ export const ContextMenu = observer(function ContextMenu({
   }, [])
 
   return (
-    <ReactContextMenu.Root>
+    <ReactContextMenu.Root
+      onOpenChange={open => {
+        if (open && !app.isIn('select.contextMenu')) {
+          app.transition('select').selectedTool.transition('contextMenu')
+        } else if (!open && app.isIn('select.contextMenu')) {
+          app.selectedTool.transition('idle')
+        }
+      }}
+    >
       <ReactContextMenu.Trigger>{children}</ReactContextMenu.Trigger>
       <ReactContextMenu.Content
         className="tl-menu tl-context-menu"

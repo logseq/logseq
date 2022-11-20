@@ -1419,3 +1419,13 @@
               (<= (+ (.-bottom r) 64)
                   (or (.-innerHeight js/window)
                       (js/document.documentElement.clientHeight))))))))
+
+#?(:cljs
+   (defn copy-image-to-clipboard
+     [src]
+     (-> (js/fetch src)
+         (.then (fn [data]
+                  (-> (.blob data)
+                      (.then (fn [blob]
+                               (js/navigator.clipboard.write (clj->js [(js/ClipboardItem. (clj->js {(.-type blob) blob}))]))))
+                      (.catch js/console.error)))))))

@@ -14,6 +14,7 @@ pom.xml.asc
 node_modules/
 static/
 tmp
+cljs-test-runner-out
 
 .cpcache/
 /src/gen
@@ -49,3 +50,5 @@ startup.png
 
 ios/App/App/capacitor.config.json
 android/app/src/main/assets/capacitor.config.json
+
+*.sublime-*

@@ -32,6 +32,8 @@ export class CreatingState<
       type: Shape.id,
       parentId: currentPage.id,
       point: [...originPoint],
+      fill: this.app.settings.color,
+      stroke: this.app.settings.color,
       size: Vec.abs(Vec.sub(currentPoint, originPoint)),
     })
     this.initialBounds = {
@@ -86,14 +88,7 @@ export class CreatingState<
     if (this.creatingShape) {
       this.app.setSelectedShapes([this.creatingShape as unknown as S])
     }
-    if (!this.app.settings.isToolLocked) {
-      this.app.transition('select')
-    }
     this.app.persist()
-  }
-
-  onWheel: TLStateEvents<S, K>['onWheel'] = (info, e) => {
-    this.onPointerMove(info, e)
   }
 
   onKeyDown: TLStateEvents<S>['onKeyDown'] = (info, e) => {

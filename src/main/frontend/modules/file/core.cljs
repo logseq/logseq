@@ -4,10 +4,12 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
+            [frontend.modules.file.uprint :as up]
             [frontend.state :as state]
             [frontend.util.property :as property]
             [frontend.util.fs :as fs-util]
-            [frontend.handler.file :as file-handler]))
+            [frontend.handler.file :as file-handler]
+            [frontend.db.model :as model]))
 
 (defn- indented-block-content
   [content spaces-tabs]
@@ -110,7 +112,7 @@
       (let [format (name (get page :block/format
                               (state/get-preferred-format)))
             title (string/capitalize (:block/name page))
-            whiteboard-page? (= "whiteboard" (:block/type page))
+            whiteboard-page? (model/whiteboard-page? page)
             format (if whiteboard-page? "edn" format)
             journal-page? (date/valid-journal-title? title)
             journal-title (date/normalize-journal-title title)
@@ -140,8 +142,10 @@
         file-path (-> (db-utils/entity file-db-id) :file/path)]
     (if (and (string? file-path) (not-empty file-path))
       (let [new-content (if (= "whiteboard" (:block/type page-block))
-                          (pr-str {:blocks tree
-                                   :pages (list (remove-transit-ids page-block))})
+                          (->
+                           (up/ugly-pr-str {:blocks tree
+                                            :pages (list (remove-transit-ids page-block))})
+                           (string/triml))
                           (tree->file-content tree {:init-level init-level}))
             files [[file-path new-content]]
             repo (state/get-current-repo)]

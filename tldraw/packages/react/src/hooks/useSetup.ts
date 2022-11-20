@@ -54,7 +54,6 @@ export function useSetup<
     if (onPaste) unsubs.push(app.subscribe('paste', onPaste))
     if (onCanvasDBClick) unsubs.push(app.subscribe('canvas-dbclick', onCanvasDBClick))
     // Kind of unusual, is this the right pattern?
-
     return () => unsubs.forEach(unsub => unsub())
   }, [app, onPersist, onSave, onSaveAs, onError])
 }

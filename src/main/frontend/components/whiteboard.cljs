@@ -74,7 +74,23 @@
                 :min-height "40px"
                 :max-height "420px"
                 :left offset-x
-                :top offset-y}} children])]))
+                :top offset-y}}
+       (when d-open children)])]))
+
+(rum/defc dropdown-menu
+  [{:keys [label children classname hover?]}]
+  (let [[open-flag set-open-flag] (rum/use-state 0)
+        open? (> open-flag (if hover? 0 1))
+        d-open-flag (rum/use-memo #(util/debounce 200 set-open-flag) [])]
+    (dropdown
+     [:div {:class (str classname (when open? " open"))
+            :on-mouse-enter (fn [] (d-open-flag #(if (= % 0) 1 %)))
+            :on-mouse-leave (fn [] (d-open-flag #(if (= % 2) % 0)))
+            :on-click (fn [e]
+                        (util/stop e)
+                        (d-open-flag (fn [o] (if (not= o 2) 2 0))))}
+      (if (fn? label) (label open?) label)]
+     children open? #(set-open-flag 0))))
 
 (rum/defc page-refs-count < rum/static
   ([page-name classname]
@@ -82,24 +98,15 @@
   ([page-name classname render-fn]
    (let [page-entity (model/get-page page-name)
          block-uuid (:block/uuid page-entity)
-         refs-count (count (:block/_refs page-entity))
-         [open-flag set-open-flag] (rum/use-state 0)
-         open? (not= open-flag 0)
-         d-open-flag (rum/use-memo #(util/debounce 200 set-open-flag) [])]
+         refs-count (count (:block/_refs page-entity))]
      (when (> refs-count 0)
-       (dropdown
-        [:div.flex.items-center.gap-2.whiteboard-page-refs-count
-         {:class (str classname (when open? " open"))
-          :on-mouse-enter (fn [] (d-open-flag #(if (= % 0) 1 %)))
-          :on-mouse-leave (fn [] (d-open-flag #(if (= % 2) % 0)))
-          :on-click (fn [e]
-                      (util/stop e)
-                      (d-open-flag (fn [o] (if (not= o 2) 2 0))))}
-         [:div.open-page-ref-link refs-count]
-         (when render-fn (render-fn open? refs-count))]
-        (reference/block-linked-references block-uuid)
-        open?
-        #(set-open-flag 0))))))
+       (dropdown-menu {:classname classname
+                       :label (fn [open?]
+                                [:div.flex.items-center.gap-2
+                                 [:div.open-page-ref-link refs-count]
+                                 (when render-fn (render-fn open? refs-count))])
+                       :hover? true
+                       :children (reference/block-linked-references block-uuid)})))))
 
 (defn- get-page-display-name
   [page-name]

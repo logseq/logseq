@@ -19,7 +19,7 @@ test('enable whiteboards', async ({ page }) => {
 test('create new whiteboard', async ({ page }) => {
     await page.click('.nav-header .whiteboard')
     await page.click('#tl-create-whiteboard')
-    await expect(page.locator('.logseq-tldraw')).toHaveCount(1)
+    await expect(page.locator('.logseq-tldraw')).toBeVisible()
 })
 
 test('check if the page contains the onboarding whiteboard', async ({ page }) => {
@@ -40,11 +40,11 @@ test('can right click title to show context menu', async ({ page }) => {
     await page.click('.whiteboard-page-title', {
         button: 'right',
     })
-  
+
     await expect(page.locator('#custom-context-menu')).toBeVisible()
-  
+
     await page.keyboard.press('Escape')
-  
+
     await expect(page.locator('#custom-context-menu')).toHaveCount(0)
 })
 
@@ -69,7 +69,7 @@ test('set whiteboard title', async ({ page }) => {
 })
 
 test('select rectangle tool', async ({ page }) => {
-    await page.keyboard.press('8')
+    await page.keyboard.press('7')
     await expect(page.locator('.tl-geometry-tools-pane-anchor [title*="Rectangle"]')).toHaveAttribute('data-selected', 'true')
 })
 
@@ -77,7 +77,7 @@ test('draw a rectangle', async ({ page }) => {
     const canvas = await page.waitForSelector('.logseq-tldraw');
     const bounds = (await canvas.boundingBox())!;
 
-    await page.keyboard.press('8')
+    await page.keyboard.press('7')
 
     await page.mouse.move(bounds.x + 5, bounds.y + 5);
     await page.mouse.down();
@@ -112,11 +112,11 @@ test('quick add another whiteboard', async ({ page }) => {
     // create a new board first
     await page.click('.nav-header .whiteboard')
     await page.click('#tl-create-whiteboard')
-    
+
     await page.click('.whiteboard-page-title')
     await page.fill('.whiteboard-page-title input', "my-whiteboard-3")
     await page.keyboard.press('Enter')
-    
+
     const canvas = await page.waitForSelector('.logseq-tldraw');
     await canvas.dblclick({
         position: {
@@ -138,7 +138,7 @@ test('quick add another whiteboard', async ({ page }) => {
 test('go to another board and check reference', async ({ page }) => {
     await page.locator('.tl-logseq-portal-container >> text=my-whiteboard-2').click()
     await expect(page.locator('.whiteboard-page-title .title')).toContainText("my-whiteboard-2");
-  
+
     const pageRefCount$ = page.locator('.whiteboard-page-refs-count')
     await expect(pageRefCount$.locator('.open-page-ref-link')).toContainText('1')
 

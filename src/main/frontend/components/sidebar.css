@@ -72,6 +72,7 @@
 #main-content-container[data-is-margin-less-pages=true] {
   padding: 0 !important;
   position: relative;
+  overflow: hidden;
 }
 
 .left-sidebar-inner {

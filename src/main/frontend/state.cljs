@@ -9,6 +9,7 @@
             [electron.ipc :as ipc]
             [frontend.mobile.util :as mobile-util]
             [frontend.storage :as storage]
+            [frontend.spec.storage :as storage-spec]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
@@ -172,7 +173,7 @@
      ;; plugin
      :plugin/enabled                        (and (util/electron?)
                                                  ;; true false :theme-only
-                                                 ((fnil identity true) (storage/get :lsp-core-enabled)))
+                                                 ((fnil identity true) (storage/get ::storage-spec/lsp-core-enabled)))
      :plugin/preferences                    nil
      :plugin/indicator-text                 nil
      :plugin/installed-plugins              {}
@@ -294,10 +295,6 @@
 ;; TODO: Refactor our access to be more data driven. Currently each getter
 ;;  (re-)fetches get-current-repo needlessly
 ;; TODO: Add consistent validation. Only a few config options validate at get time
-
-(defn get-current-pdf
-  []
-  (:pdf/current @state))
 
 (def default-config
   "Default config for a repo-specific, user config"
@@ -1966,3 +1963,16 @@ Similar to re-frame subscriptions"
   []
   (when (mobile-util/native-ios?)
     (get-in @state [:mobile/container-urls :iCloudContainerUrl])))
+
+(defn get-current-pdf
+  []
+  (:pdf/current @state))
+
+(defn set-current-pdf!
+  [inflated-file]
+  (let [settle-file! #(set-state! :pdf/current inflated-file)]
+    (if-not (get-current-pdf)
+      (settle-file!)
+      (when (apply not= (map :identity [inflated-file (get-current-pdf)]))
+        (set-state! :pdf/current nil)
+        (js/setTimeout #(settle-file!) 16)))))

@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as React from 'react'
-import { HTMLContainer, TLComponentProps } from '@tldraw/react'
 import { TLAsset, TLImageShape, TLImageShapeProps } from '@tldraw/core'
+import { HTMLContainer, TLComponentProps } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
+import * as React from 'react'
 import { LogseqContext } from '../logseq-context'
 import { BindingIndicator } from './BindingIndicator'
 
@@ -90,6 +90,7 @@ export class ImageShape extends TLImageShape<ImageShapeProps> {
     const asset = assets.find(ass => ass.id === assetId)
 
     if (asset) {
+      // TODO: add clipping
       const [t, r, b, l] = Array.isArray(clipping)
         ? clipping
         : [clipping, clipping, clipping, clipping]
@@ -97,22 +98,11 @@ export class ImageShape extends TLImageShape<ImageShapeProps> {
       const make_asset_url = window.logseq?.api?.make_asset_url
 
       return (
-        <foreignObject width={bounds.width} height={bounds.height}>
-          <img
-            src={make_asset_url ? make_asset_url(asset.src) : asset.src}
-            draggable={false}
-            loading="lazy"
-            style={{
-              position: 'relative',
-              top: -t,
-              left: -l,
-              width: w + (l - r),
-              height: h + (t - b),
-              objectFit: this.props.objectFit,
-              pointerEvents: 'all',
-            }}
-          />
-        </foreignObject>
+        <image
+          width={bounds.width}
+          height={bounds.height}
+          href={make_asset_url ? make_asset_url(asset.src) : asset.src}
+        />
       )
     } else {
       return super.getShapeSVGJsx({})

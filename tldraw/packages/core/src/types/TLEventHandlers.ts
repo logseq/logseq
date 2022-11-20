@@ -8,7 +8,6 @@ export interface TLEventHandlers<
   K extends TLEventMap = TLEventMap,
   E extends TLEventInfo<S> = TLEventInfo<S>
 > {
-  onWheel: TLEvents<S, K, E>['wheel']
   onPointerDown: TLEvents<S, K, E>['pointer']
   onPointerUp: TLEvents<S, K, E>['pointer']
   onPointerMove: TLEvents<S, K, E>['pointer']

@@ -248,7 +248,7 @@ export function usePaste() {
       }
 
       function tryCreateClonedShapesFromJSON(rawText: string) {
-        const result = app.api.getClonedShapesFromTldrString(rawText, point)
+        const result = app.api.getClonedShapesFromTldrString(decodeURIComponent(rawText), point)
         if (result) {
           const { shapes, assets, bindings } = result
           assetsToClone.push(...assets)
@@ -310,6 +310,8 @@ export function usePaste() {
                 point: [point[0], point[1]],
                 size: [400, 0], // use 0 here to enable auto-resize
                 pageId: blockRef,
+                fill: app.settings.color,
+                stroke: app.settings.color,
                 blockType: 'B' as 'B',
               },
             ]
@@ -324,6 +326,8 @@ export function usePaste() {
               point: [point[0], point[1]],
               size: [400, 0], // use 0 here to enable auto-resize
               pageId: pageName,
+              fill: app.settings.color,
+              stroke: app.settings.color,
               blockType: 'P' as 'P',
             },
           ]
@@ -339,6 +343,8 @@ export function usePaste() {
               size: [400, 0], // use 0 here to enable auto-resize
               point: [point[0], point[1]],
               pageId: uuid,
+              fill: app.settings.color,
+              stroke: app.settings.color,
               blockType: 'B' as 'B',
               compact: true,
             },
@@ -371,13 +377,15 @@ export function usePaste() {
         }
       })
 
+      const filesOnly = dataTransfer?.types.every(t => t === 'Files')
+
       app.wrapUpdate(() => {
         const allAssets = [...imageAssetsToCreate, ...assetsToClone]
         if (allAssets.length > 0) {
           app.createAssets(allAssets)
         }
-        if (newShapes.length > 0) {
-          app.createShapes(newShapes)
+        if (allShapesToAdd.length > 0) {
+          app.createShapes(allShapesToAdd)
         }
         app.currentPage.updateBindings(Object.fromEntries(bindingsToCreate.map(b => [b.id, b])))
 
@@ -391,7 +399,7 @@ export function usePaste() {
         app.selectedTool.transition('idle') // clears possible editing states
         app.cursors.setCursor(TLCursor.Default)
 
-        if (fromDrop) {
+        if (fromDrop || filesOnly) {
           app.packIntoRectangle()
         }
       })

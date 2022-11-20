@@ -359,10 +359,10 @@ html.is-mobile {
 }
 
 .type-icon {
-  @apply text-xs text-center flex items-center justify-center rounded border mr-2 relative;
+  @apply text-base text-center flex items-center justify-center rounded border mr-2 relative;
 
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   border-color: var(--ls-primary-background-color);
   overflow: hidden;

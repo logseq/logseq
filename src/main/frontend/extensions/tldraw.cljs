@@ -18,7 +18,7 @@
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
-(def generate-preview (gobj/get TldrawLogseq "generateJSXFromApp"))
+(def generate-preview (gobj/get TldrawLogseq "generateJSXFromModel"))
 
 (rum/defc page-cp
   [props]
@@ -65,6 +65,8 @@
    :isWhiteboardPage model/whiteboard-page?
    :saveAsset save-asset-handler
    :makeAssetUrl editor-handler/make-asset-url
+   :addNewWhiteboard (fn [page-name]
+                       (whiteboard-handler/create-new-whiteboard-page! page-name))
    :addNewBlock (fn [content]
                   (str (whiteboard-handler/add-new-block! name content)))
    :sidebarAddBlock (fn [uuid type]

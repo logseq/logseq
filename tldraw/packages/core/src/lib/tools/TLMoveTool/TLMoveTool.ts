@@ -1,4 +1,4 @@
-import { type TLEventMap, TLCursor, type TLStateEvents } from '../../../types'
+import { type TLEventMap, TLCursor, type TLStateEvents, TLEvents } from '../../../types'
 import type { TLShape } from '../../shapes'
 import type { TLApp } from '../../TLApp'
 import { TLTool } from '../../TLTool'
@@ -10,7 +10,7 @@ export class TLMoveTool<
   R extends TLApp<S, K> = TLApp<S, K>
 > extends TLTool<S, K, R> {
   static id = 'move'
-  static shortcut = ['2']
+  static shortcut = ['9']
 
   static states = [IdleState, IdleHoldState, PanningState, PinchingState]
 
@@ -31,5 +31,9 @@ export class TLMoveTool<
         break
       }
     }
+  }
+
+  onPinchStart: TLEvents<S>['pinch'] = (info, event) => {
+    this.transition('pinching', { info, event })
   }
 }
