@@ -99,7 +99,7 @@
         (editor-handler/save-current-block!))
       (state/set-mobile-app-state-change is-active?))))
 
-(defn- app-active?
+(defn app-active?
   "Returns a promise"
   []
   (let [app ^js (gobj/get Plugins "App")]
