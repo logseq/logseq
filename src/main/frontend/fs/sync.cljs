@@ -685,6 +685,12 @@
 
           :else
           (- (.-size item)))))))
+;;; ### path-normalize
+(def path-normalize
+  (if (util/electron?)
+    gp-util/path-normalize
+    (partial capacitor-fs/normalize-file-protocol-path nil)))
+
 
 ;;; ### APIs
 ;; `RSAPI` call apis through rsapi package, supports operations on files
@@ -791,7 +797,7 @@
           (->> r
                js->clj
                (map (fn [[path metadata]]
-                      (->FileMetadata (get metadata "size") (get metadata "md5") (gp-util/path-normalize path)
+                      (->FileMetadata (get metadata "size") (get metadata "md5") (path-normalize path)
                                       (get metadata "encryptedFname") (get metadata "mtime") false nil)))
                set)))))
   (<get-local-files-meta [_ graph-uuid base-path filepaths]
@@ -801,12 +807,12 @@
         (->> r
              js->clj
              (map (fn [[path metadata]]
-                    (->FileMetadata (get metadata "size") (get metadata "md5") (gp-util/path-normalize path)
+                    (->FileMetadata (get metadata "size") (get metadata "md5") (path-normalize path)
                                     (get metadata "encryptedFname") (get metadata "mtime") false nil)))))))
   (<rename-local-file [_ graph-uuid base-path from to]
     (<retry-rsapi #(p->c (ipc/ipc "rename-local-file" graph-uuid base-path
-                                  (gp-util/path-normalize from)
-                                  (gp-util/path-normalize to)))))
+                                  (path-normalize from)
+                                  (path-normalize to)))))
   (<update-local-files [this graph-uuid base-path filepaths]
     (println "update-local-files" graph-uuid base-path filepaths)
     (go
@@ -821,14 +827,14 @@
         r)))
 
   (<delete-local-files [_ graph-uuid base-path filepaths]
-    (let [normalized-filepaths (mapv gp-util/path-normalize filepaths)]
+    (let [normalized-filepaths (mapv path-normalize filepaths)]
       (go
         (println "delete-local-files" filepaths)
         (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "delete-local-files" graph-uuid base-path normalized-filepaths))))]
           r))))
 
   (<update-remote-files [this graph-uuid base-path filepaths local-txid]
-    (let [normalized-filepaths (mapv gp-util/path-normalize filepaths)]
+    (let [normalized-filepaths (mapv path-normalize filepaths)]
       (go
         (<! (<rsapi-cancel-all-requests))
         (let [token (<! (<get-token this))]
@@ -836,7 +842,7 @@
                #(p->c (ipc/ipc "update-remote-files" graph-uuid base-path normalized-filepaths local-txid token))))))))
 
   (<delete-remote-files [this graph-uuid base-path filepaths local-txid]
-    (let [normalized-filepaths (mapv gp-util/path-normalize filepaths)]
+    (let [normalized-filepaths (mapv path-normalize filepaths)]
       (go
         (let [token (<! (<get-token this))]
           (<!
@@ -884,7 +890,9 @@
           (->> (.-result r)
                js->clj
                (map (fn [[path metadata]]
-                      (->FileMetadata (get metadata "size") (get metadata "md5") (capacitor-fs/normalize-file-protocol-path nil path)
+                      (->FileMetadata (get metadata "size") (get metadata "md5")
+                                      ;; return decoded path, keep it consistent with RSAPI
+                                      (path-normalize path)
                                       (get metadata "encryptedFname") (get metadata "mtime") false nil)))
                set)))))
 
@@ -898,7 +906,9 @@
         (->> (.-result r)
              js->clj
              (map (fn [[path metadata]]
-                    (->FileMetadata (get metadata "size") (get metadata "md5") (capacitor-fs/normalize-file-protocol-path nil path)
+                    (->FileMetadata (get metadata "size") (get metadata "md5")
+                                    ;; return decoded path, keep it consistent with RSAPI
+                                    (path-normalize path)
                                     (get metadata "encryptedFname") (get metadata "mtime") false nil)))
              set))))
 
@@ -906,13 +916,13 @@
     (p->c (.renameLocalFile mobile-util/file-sync
                             (clj->js {:graphUUID graph-uuid
                                       :basePath base-path
-                                      :from (capacitor-fs/normalize-file-protocol-path nil from)
-                                      :to (capacitor-fs/normalize-file-protocol-path nil to)}))))
+                                      :from (path-normalize from)
+                                      :to (path-normalize to)}))))
 
   (<update-local-files [this graph-uuid base-path filepaths]
     (go
       (let [token (<! (<get-token this))
-            filepaths' (map #(capacitor-fs/normalize-file-protocol-path % nil :normalize? false) filepaths)]
+            filepaths' (map path-normalize filepaths)]
         (<! (p->c (.updateLocalFiles mobile-util/file-sync (clj->js {:graphUUID graph-uuid
                                                                      :basePath base-path
                                                                      :filePaths filepaths'
@@ -930,7 +940,7 @@
         r)))
 
   (<delete-local-files [_ graph-uuid base-path filepaths]
-    (let [normalized-filepaths (mapv #(capacitor-fs/normalize-file-protocol-path nil %) filepaths)]
+    (let [normalized-filepaths (mapv path-normalize filepaths)]
       (go
         (let [r (<! (<retry-rsapi #(p->c (.deleteLocalFiles mobile-util/file-sync
                                                             (clj->js {:graphUUID graph-uuid
@@ -939,7 +949,7 @@
           r))))
 
   (<update-remote-files [this graph-uuid base-path filepaths local-txid]
-    (let [normalized-filepaths (mapv #(capacitor-fs/normalize-file-protocol-path nil %) filepaths)]
+    (let [normalized-filepaths (mapv path-normalize filepaths)]
       (go
         (let [token (<! (<get-token this))
               r (<! (p->c (.updateRemoteFiles mobile-util/file-sync
@@ -954,7 +964,7 @@
             (get (js->clj r) "txid"))))))
 
   (<delete-remote-files [this graph-uuid _base-path filepaths local-txid]
-    (let [normalized-filepaths (mapv #(capacitor-fs/normalize-file-protocol-path nil %) filepaths)]
+    (let [normalized-filepaths (mapv path-normalize filepaths)]
       (go
         (let [token (<! (<get-token this))
               r (<! (p->c (.deleteRemoteFiles mobile-util/file-sync
@@ -1151,6 +1161,24 @@
     (user/<wrap-ensure-id&access-token
      (state/get-auth-id-token))))
 
+(defn- filter-files-with-unnormalized-path
+  [file-meta-list encrypted-path->path-map]
+  (let [path->encrypted-path-map (set/map-invert encrypted-path->path-map)
+        raw-paths (vals encrypted-path->path-map)
+        *encrypted-paths-to-drop (transient [])]
+    (loop [[raw-path & other-paths] raw-paths]
+      (when raw-path
+        (let [normalized-path (path-normalize raw-path)]
+          (when (and (not= normalized-path raw-path)
+                     (get path->encrypted-path-map normalized-path))
+            ;; raw-path is un-normalized path and there are related normalized version one,
+            ;; then filter out this raw-path
+            (println :filter-files-with-unnormalized-path raw-path)
+            (conj! *encrypted-paths-to-drop (get path->encrypted-path-map raw-path))))
+        (recur other-paths)))
+    (let [encrypted-paths-to-drop (set (persistent! *encrypted-paths-to-drop))]
+      (filterv #(not (contains? encrypted-paths-to-drop (:encrypted-path %))) file-meta-list))))
+
 (extend-type RemoteAPI
   IRemoteAPI
   (<user-info [this]
@@ -1189,19 +1217,16 @@
                path-list-or-exp     (<! (<decrypt-fnames rsapi graph-uuid encrypted-path-list*))]
            (if (instance? ExceptionInfo path-list-or-exp)
              path-list-or-exp
-             (let [encrypted-path->path-map (zipmap encrypted-path-list*
-                                                    (mapv
-                                                     #(capacitor-fs/normalize-file-protocol-path nil %)
-                                                     path-list-or-exp))]
+             (let [encrypted-path->path-map (zipmap encrypted-path-list* path-list-or-exp)]
                (set
                 (mapv
                  #(->FileMetadata (:size %)
                                   (:checksum %)
-                                  (get encrypted-path->path-map (:encrypted-path %))
+                                  (path-normalize (get encrypted-path->path-map (:encrypted-path %)))
                                   (:encrypted-path %)
                                   (:last-modified %)
                                   true nil)
-                 file-meta-list*)))))))))
+                 (filter-files-with-unnormalized-path file-meta-list* encrypted-path->path-map))))))))))
 
   (<get-remote-files-meta [this graph-uuid filepaths]
     {:pre [(coll? filepaths)]}
@@ -1221,7 +1246,7 @@
                       (map #(->FileMetadata (:Size %)
                                             (:Checksum %)
                                             (some->> (get encrypted-path->path-map (:FilePath %))
-                                                     (capacitor-fs/normalize-file-protocol-path nil ))
+                                                     path-normalize)
                                             (:FilePath %)
                                             (:LastModified %)
                                             true nil)))
@@ -1703,11 +1728,12 @@
         (when (sync-state--valid-to-accept-filewatcher-event? sync-state)
           (when (or (:mtime stat) (= type "unlink"))
             (go
-              (let [path (remove-dir-prefix dir path)
+              (let [path (path-normalize (remove-dir-prefix dir path))
                     files-meta (and (not= "unlink" type)
                                     (<! (<get-local-files-meta
                                          rsapi (:current-syncing-graph-uuid sync-state) dir [path])))
                     checksum (and (coll? files-meta) (some-> files-meta first :etag))]
+                (println :files-watch (->FileChangeEvent type dir path stat checksum))
                 (>! local-changes-chan (->FileChangeEvent type dir path stat checksum))))))))))
 
 (defn local-changes-revised-chan-builder
@@ -2432,7 +2458,7 @@
        (fn [e]
          (go
            (and (rsapi-ready? rsapi graph-uuid)
-                (<! (<fast-filter-e-fn e))
+                 (<! (<fast-filter-e-fn e))
                 (do
                   (swap! *sync-state sync-state--add-queued-local->remote-files e)
                   (let [v (<! (<filter-local-changes-pred e base-path graph-uuid))]
