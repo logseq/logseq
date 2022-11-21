@@ -1172,10 +1172,7 @@
                   r
                   (let [next-continuation-token (:NextContinuationToken r)
                         objs                    (:Objects r)]
-                    (apply conj! encrypted-path-list (map (comp #(capacitor-fs/normalize-file-protocol-path nil %)
-                                                                remove-user-graph-uuid-prefix
-                                                                :Key)
-                                                          objs))
+                    (apply conj! encrypted-path-list (map (comp remove-user-graph-uuid-prefix :Key) objs))
                     (apply conj! file-meta-list
                            (map
                             #(hash-map :checksum (:checksum %)
@@ -1192,7 +1189,10 @@
                path-list-or-exp     (<! (<decrypt-fnames rsapi graph-uuid encrypted-path-list*))]
            (if (instance? ExceptionInfo path-list-or-exp)
              path-list-or-exp
-             (let [encrypted-path->path-map (zipmap encrypted-path-list* path-list-or-exp)]
+             (let [encrypted-path->path-map (zipmap encrypted-path-list*
+                                                    (mapv
+                                                     #(capacitor-fs/normalize-file-protocol-path nil %)
+                                                     path-list-or-exp))]
                (set
                 (mapv
                  #(->FileMetadata (:size %)
