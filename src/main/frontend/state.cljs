@@ -308,7 +308,7 @@
 (declare get-current-repo sub set-state!)
 
 (defn merge-configs
-  "Merges user configs in given orders. All values are overriden except for maps
+  "Merges user configs in given orders. All values are overridden except for maps
   which are merged."
   [& configs]
   (apply merge-with
@@ -646,9 +646,9 @@ Similar to re-frame subscriptions"
   []
   (:editor/logical-outdenting? (sub-config)))
 
-(defn perferred-pasting-file?
+(defn preferred-pasting-file?
   []
-  (:editor/perferred-pasting-file? (sub-config)))
+  (:editor/preferred-pasting-file? (sub-config)))
 
 (defn doc-mode-enter-for-new-line?
   []
@@ -1545,11 +1545,11 @@ Similar to re-frame subscriptions"
     (if-let [tldraw-app (active-tldraw-app)]
       (let [last-time (:block/updated-at whiteboard-page)
             now (util/time-ms)
-            ellapsed (- now last-time)
+            elapsed (- now last-time)
             select-idle (.. tldraw-app (isIn "select.idle"))
             tool-idle (.. tldraw-app -selectedTool (isIn "idle"))]
-        (or (and select-idle (>= ellapsed select-idle-ms))
-            (and (not select-idle) tool-idle (>= ellapsed tool-idle-ms))))
+        (or (and select-idle (>= elapsed select-idle-ms))
+            (and (not select-idle) tool-idle (>= elapsed tool-idle-ms))))
       true)))
 
 (defn set-nfs-refreshing!

@@ -149,7 +149,7 @@
                        (remove-boundary-slashes)
                        ;; Windows reserved path characters
                        (string/replace #"[:\\*\\?\"<>|]+" "_")
-                       ;; for android filesystem compatiblity
+                       ;; for android filesystem compatibility
                        (string/replace #"[\\#|%]+" "_")
                        (normalize))]
       (string/replace page #"/" "."))))
@@ -161,7 +161,7 @@
   (let [url-encode #(some-> % str (js/encodeURIComponent) (.replace "+" "%20"))]
     (some-> page-name
             gp-util/page-name-sanity
-             ;; for android filesystem compatiblity
+             ;; for android filesystem compatibility
             (string/replace #"[\\#|%]+" url-encode)
              ;; Windows reserved path characters
             (string/replace #"[:\\*\\?\"<>|]+" url-encode)

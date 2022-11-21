@@ -742,7 +742,7 @@
           (filter (fn [b] (some? (gobj/get b "offsetParent")))))))
 
 #?(:cljs
-   (defn remove-embeded-blocks [blocks]
+   (defn remove-embedded-blocks [blocks]
      (->> blocks
           (remove (fn [b] (= "true" (d/attr b "data-embed")))))))
 
@@ -822,7 +822,7 @@
    (defn get-prev-block-non-collapsed-non-embed
      [block]
      (when-let [blocks (->> (get-blocks-noncollapse)
-                            remove-embeded-blocks)]
+                            remove-embedded-blocks)]
        (let [block-id (.-id block)
              block-ids (mapv #(.-id %) blocks)]
          (when-let [index (.indexOf block-ids block-id)]
