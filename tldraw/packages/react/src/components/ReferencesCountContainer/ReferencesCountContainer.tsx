@@ -32,7 +32,6 @@ export const ReferencesCountContainer = observer(function ReferencesCountContain
     <Container
       bounds={bounds}
       className="tl-references-count-container"
-      aria-label="references-count-container"
     >
       <HTMLContainer>
         <span
