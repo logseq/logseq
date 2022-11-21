@@ -145,7 +145,7 @@ export function ShapeLinksInput({
         )}
         <div className="tl-shape-links-panel color-level">
           <div className="text-base font-bold inline-flex gap-1 items-center">
-            <TablerIcon className="opacity-50" name="link" />
+            <TablerIcon className="opacity-50" name="add-link" />
             Your links
           </div>
           <div className="h-2" />
