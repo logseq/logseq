@@ -335,9 +335,7 @@
 
   left: 0;
   z-index: var(--ls-z-index-level-5);
-  width: 8px;
-
-  background: rgba(255, 0, 0, 0.32);
+  width: 10px;
 
   a {
     @apply opacity-90 hover:opacity-100;
@@ -356,10 +354,24 @@
     left: 0;
     bottom: 0;
     right: 0;
-    z-index: -1;
+    z-index: 1;
     opacity: 0;
     transition: opacity .4s;
     touch-action: none;
+  }
+
+  &.is-touching {
+    width: 100%;
+    transition: none;
+
+    .left-sidebar-inner {
+      transition: none !important;
+    }
+
+    > .shade-mask {
+      opacity: .3;
+      z-index: 1;
+    }
   }
 
   &.is-open {
