@@ -226,7 +226,7 @@
 (defn close-sidebar-on-mobile!
   []
   (and (util/sm-breakpoint?)
-    (state/toggle-left-sidebar!)))
+       (state/toggle-left-sidebar!)))
 
 (defn create-dropdown
   []
@@ -257,8 +257,10 @@
    {}))
 
 (rum/defc sidebar-nav
-  [route-match close-modal-fn left-sidebar-open? srs-open? *closing?]
+  [route-match close-modal-fn left-sidebar-open? srs-open? *closing? touching-x-offset]
   (let [[local-closing? set-local-closing?] (rum/use-state false)
+        [el-rect set-el-rect!] (rum/use-state nil)
+        ref-el              (rum/use-ref nil)
         ref-open?           (rum/use-ref left-sidebar-open?)
         default-home        (get-default-home-if-valid)
         route-name          (get-in route-match [:data :name])
@@ -270,7 +272,20 @@
                                  (if (> top 2)
                                    (.add cls cls')
                                    (.remove cls cls'))))
-        close-fn            #(set-local-closing? true)]
+        close-fn            #(set-local-closing? true)
+        touching-x-offset (when (and (number? touching-x-offset)
+                                     (> touching-x-offset 0))
+                            (min touching-x-offset (:width el-rect)))]
+
+    (rum/use-effect!
+     #(js/setTimeout
+       (fn [] (some-> (rum/deref ref-el)
+                      (.getBoundingClientRect)
+                      (.toJSON)
+                      (js->clj :keywordize-keys true)
+                      (set-el-rect!)))
+       16)
+     [])
 
     (rum/use-layout-effect!
      (fn []
@@ -282,7 +297,11 @@
 
     [:<>
      [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
-      {:on-transition-end (fn []
+      {:ref               ref-el
+       :style             (cond-> {}
+                            (number? touching-x-offset)
+                            (assoc :transform (str "translate3d(calc(" touching-x-offset "px - 100%), 0, 0)")))
+       :on-transition-end (fn []
                             (when local-closing?
                               (reset! *closing? false)
                               (set-local-closing? false)
@@ -293,11 +312,12 @@
                                (close-fn)))}
 
       [:div.flex.flex-col.wrap.gap-1.relative
-       (when (mobile-util/native-platform?)
-         [:div.fake-bar.absolute
-          [:button
-           {:on-click state/toggle-left-sidebar!}
-           (ui/icon "menu-2" {:size ui/icon-size})]])
+       ;; temporarily remove fake hamburger menu
+       ;(when (mobile-util/native-platform?)
+       ;  [:div.fake-bar.absolute
+       ;   [:button
+       ;    {:on-click state/toggle-left-sidebar!}
+       ;    (ui/icon "menu-2" {:size ui/icon-size})]])
 
        [:nav.px-4.flex.flex-col.gap-1.cp__menubar-repos
         {:aria-label "Navigation menu"}
@@ -354,10 +374,9 @@
 
        [:div.nav-contents-container.flex.flex-col.gap-1.pt-1
         {:on-scroll on-contents-scroll}
-        (when left-sidebar-open?
-          (favorites t))
+        (favorites t)
 
-        (when (and left-sidebar-open? (not config/publishing?))
+        (when (not config/publishing?)
           (recent-pages t))]
 
        [:footer.px-2 {:class "create"}
@@ -375,16 +394,40 @@
 
 (rum/defcs left-sidebar < rum/reactive
   (rum/local false ::closing?)
+  (rum/local nil ::touch-state)
   [s {:keys [left-sidebar-open? route-match]}]
-  (let [close-fn #(state/set-left-sidebar-open! false)
-        *closing? (::closing? s)
-        srs-open? (= :srs (state/sub :modal/id))]
+  (let [close-fn          #(state/set-left-sidebar-open! false)
+        *closing?         (::closing? s)
+        *touch-state      (::touch-state s)
+        touch-point-fn    (fn [^js e] (some-> (gobj/get e "touches") (aget 0) (#(hash-map :x (.-clientX %) :y (.-clientY %)))))
+        srs-open?         (= :srs (state/sub :modal/id))
+        touching-x-offset (some->> @*touch-state
+                                   ((juxt :after :before))
+                                   (map :x) (apply -))
+        touch-pending?    (> touching-x-offset 20)]
+
     [:div#left-sidebar.cp__sidebar-left-layout
-     {:class (util/classnames [{:is-open left-sidebar-open?
-                                :is-closing @*closing?}])}
+     {:class (util/classnames [{:is-open     left-sidebar-open?
+                                :is-closing  @*closing?
+                                :is-touching touch-pending?}])
+      :on-touch-start
+      (fn [^js e]
+        (when-not left-sidebar-open?
+          (reset! *touch-state {:before (touch-point-fn e)})))
+      :on-touch-move
+      (fn [^js e]
+        (when @*touch-state
+          (some-> *touch-state (swap! assoc :after (touch-point-fn e)))))
+      :on-touch-end
+      (fn []
+        (when (and touch-pending?
+                   (> touching-x-offset 120))
+          (state/set-left-sidebar-open! true))
+        (reset! *touch-state nil))}
 
      ;; sidebar contents
-     (sidebar-nav route-match close-fn left-sidebar-open? srs-open? *closing?)]))
+     (sidebar-nav route-match close-fn left-sidebar-open? srs-open? *closing?
+                  (and touch-pending? touching-x-offset))]))
 
 (rum/defc recording-bar
   []
@@ -594,7 +637,6 @@
                   :exit 300}}
        (render-custom-context-menu links position)))))
 
-
 (rum/defc new-block-mode < rum/reactive
   []
   (when (state/sub [:document/mode?])
@@ -640,7 +682,8 @@
                           (state/close-modal!)
                           (hide-context-menu-and-clear-selection e)))))))
   {:did-mount (fn [state]
-                (swipe/setup-listeners!)
+                (when (mobile-util/native-android?)
+                  (swipe/setup-listeners!))
                 state)}
   [state route-match main-content]
   (let [{:keys [open-fn]} state
