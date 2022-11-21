@@ -13,13 +13,6 @@ interface PopoverButton extends React.HTMLAttributes<HTMLButtonElement> {
   arrow?: boolean
 }
 
-const sideAndOpposite = {
-  top: 'bottom',
-  bottom: 'top',
-  left: 'right',
-  right: 'left',
-} as const
-
 export const PopoverButton = observer(
   ({ side, label, arrow, children, border, ...rest }: PopoverButton) => {
     const contentRef = React.useRef<HTMLDivElement>(null)
