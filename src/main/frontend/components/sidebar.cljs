@@ -256,115 +256,135 @@
                            :extension? true})}])
    {}))
 
-(rum/defc sidebar-nav < rum/reactive
-  [route-match close-modal-fn left-sidebar-open? srs-open?]
-  (let [default-home (get-default-home-if-valid)
-        route-name (get-in route-match [:data :name])
+(rum/defc sidebar-nav
+  [route-match close-modal-fn left-sidebar-open? srs-open? *closing?]
+  (let [[local-closing? set-local-closing?] (rum/use-state false)
+        ref-open?           (rum/use-ref left-sidebar-open?)
+        default-home        (get-default-home-if-valid)
+        route-name          (get-in route-match [:data :name])
         enable-whiteboards? (state/enable-whiteboards?)
-        on-contents-scroll #(when-let [^js el (.-target %)]
-                              (let [top (.-scrollTop el)
-                                    cls (.-classList el)
-                                    cls' "is-scrolled"]
-                                (if (> top 2)
-                                  (.add cls cls')
-                                  (.remove cls cls'))))]
+        on-contents-scroll  #(when-let [^js el (.-target %)]
+                               (let [top  (.-scrollTop el)
+                                     cls  (.-classList el)
+                                     cls' "is-scrolled"]
+                                 (if (> top 2)
+                                   (.add cls cls')
+                                   (.remove cls cls'))))
+        close-fn            #(set-local-closing? true)]
 
-    [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
-     {:on-click #(when-let [^js target (and (util/sm-breakpoint?) (.-target %))]
-                   (when (some (fn [sel] (boolean (.closest target sel)))
-                               [".favorites .bd" ".recent .bd" ".dropdown-wrapper" ".nav-header"])
-                     (close-modal-fn)))}
+    (rum/use-layout-effect!
+     (fn []
+       (when (and (rum/deref ref-open?) local-closing?)
+         (reset! *closing? true))
+       (rum/set-ref! ref-open? left-sidebar-open?)
+       #())
+     [local-closing? left-sidebar-open?])
 
-     [:div.flex.flex-col.wrap.gap-1.relative
-      (when (mobile-util/native-platform?)
-        [:div.fake-bar.absolute
-         [:button
-          {:on-click state/toggle-left-sidebar!}
-          (ui/icon "menu-2" {:size ui/icon-size})]])
+    [:<>
+     [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
+      {:on-transition-end (fn []
+                            (when local-closing?
+                              (reset! *closing? false)
+                              (set-local-closing? false)
+                              (close-modal-fn)))
+       :on-click          #(when-let [^js target (and (util/sm-breakpoint?) (.-target %))]
+                             (when (some (fn [sel] (boolean (.closest target sel)))
+                                         [".favorites .bd" ".recent .bd" ".dropdown-wrapper" ".nav-header"])
+                               (close-fn)))}
 
-      [:nav.px-4.flex.flex-col.gap-1.cp__menubar-repos
-       {:aria-label "Navigation menu"}
-       (repo/repos-dropdown)
+      [:div.flex.flex-col.wrap.gap-1.relative
+       (when (mobile-util/native-platform?)
+         [:div.fake-bar.absolute
+          [:button
+           {:on-click state/toggle-left-sidebar!}
+           (ui/icon "menu-2" {:size ui/icon-size})]])
 
-       [:div.nav-header.flex.gap-1.flex-col
-        (let [page (:page default-home)]
-          (if (and page (not (state/enable-journals? (state/get-current-repo))))
-            (sidebar-item
-             {:class            "home-nav"
-              :title            page
-              :on-click-handler route-handler/redirect-to-home!
-              :active           (and (not srs-open?)
-                                     (= route-name :page)
-                                     (= page (get-in route-match [:path-params :name])))
-              :icon             "home"})
-            (sidebar-item
-             {:class            "journals-nav"
-              :active           (and (not srs-open?)
-                                     (or (= route-name :all-journals) (= route-name :home)))
-              :title            (t :left-side-bar/journals)
-              :on-click-handler (fn [e]
-                                  (if (gobj/get e "shiftKey")
-                                    (route-handler/sidebar-journals!)
-                                    (route-handler/go-to-journals!)))
-              :icon             "calendar"})))
+       [:nav.px-4.flex.flex-col.gap-1.cp__menubar-repos
+        {:aria-label "Navigation menu"}
+        (repo/repos-dropdown)
 
-        (when (state/enable-flashcards? (state/get-current-repo))
-          [:div.flashcards-nav
-           (flashcards srs-open?)])
+        [:div.nav-header.flex.gap-1.flex-col
+         (let [page (:page default-home)]
+           (if (and page (not (state/enable-journals? (state/get-current-repo))))
+             (sidebar-item
+              {:class            "home-nav"
+               :title            page
+               :on-click-handler route-handler/redirect-to-home!
+               :active           (and (not srs-open?)
+                                      (= route-name :page)
+                                      (= page (get-in route-match [:path-params :name])))
+               :icon             "home"})
+             (sidebar-item
+              {:class            "journals-nav"
+               :active           (and (not srs-open?)
+                                      (or (= route-name :all-journals) (= route-name :home)))
+               :title            (t :left-side-bar/journals)
+               :on-click-handler (fn [e]
+                                   (if (gobj/get e "shiftKey")
+                                     (route-handler/sidebar-journals!)
+                                     (route-handler/go-to-journals!)))
+               :icon             "calendar"})))
 
-        (sidebar-item
-         {:class  "graph-view-nav"
-          :title  (t :right-side-bar/graph-view)
-          :href   (rfe/href :graph)
-          :active (and (not srs-open?) (= route-name :graph))
-          :icon   "hierarchy"})
+         (when (state/enable-flashcards? (state/get-current-repo))
+           [:div.flashcards-nav
+            (flashcards srs-open?)])
 
-        (sidebar-item
-         {:class  "all-pages-nav"
-          :title  (t :right-side-bar/all-pages)
-          :href   (rfe/href :all-pages)
-          :active (and (not srs-open?) (= route-name :all-pages))
-          :icon   "files"})
+         (sidebar-item
+          {:class  "graph-view-nav"
+           :title  (t :right-side-bar/graph-view)
+           :href   (rfe/href :graph)
+           :active (and (not srs-open?) (= route-name :graph))
+           :icon   "hierarchy"})
 
-        (when enable-whiteboards?
-          (sidebar-item
-           {:class "whiteboard"
-            :title (t :right-side-bar/whiteboards)
-            :href  (rfe/href :whiteboards)
-            :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
-            :icon  "whiteboard"
-            :icon-extension? true}))]]
+         (sidebar-item
+          {:class  "all-pages-nav"
+           :title  (t :right-side-bar/all-pages)
+           :href   (rfe/href :all-pages)
+           :active (and (not srs-open?) (= route-name :all-pages))
+           :icon   "files"})
 
-      [:div.nav-contents-container.flex.flex-col.gap-1.pt-1
-       {:on-scroll on-contents-scroll}
-       (when left-sidebar-open?
-         (favorites t))
+         (when enable-whiteboards?
+           (sidebar-item
+            {:class           "whiteboard"
+             :title           (t :right-side-bar/whiteboards)
+             :href            (rfe/href :whiteboards)
+             :active          (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
+             :icon            "whiteboard"
+             :icon-extension? true}))]]
 
-       (when (and left-sidebar-open? (not config/publishing?))
-         (recent-pages t))]
+       [:div.nav-contents-container.flex.flex-col.gap-1.pt-1
+        {:on-scroll on-contents-scroll}
+        (when left-sidebar-open?
+          (favorites t))
 
-      [:footer.px-2 {:class "create"}
-       (when-not config/publishing?
-         (if enable-whiteboards?
-           (create-dropdown)
-           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
-            {:on-click (fn []
-                         (and (util/sm-breakpoint?)
-                              (state/toggle-left-sidebar!))
-                         (state/pub-event! [:go/search]))}
-            (ui/icon "circle-plus" {:style {:font-size 20}})
-            [:span.flex-1 (t :right-side-bar/new-page)]]))]]]))
+        (when (and left-sidebar-open? (not config/publishing?))
+          (recent-pages t))]
 
-(rum/defc left-sidebar < rum/reactive
-  [{:keys [left-sidebar-open? route-match]}]
+       [:footer.px-2 {:class "create"}
+        (when-not config/publishing?
+          (if enable-whiteboards?
+            (create-dropdown)
+            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
+             {:on-click (fn []
+                          (and (util/sm-breakpoint?)
+                               (state/toggle-left-sidebar!))
+                          (state/pub-event! [:go/search]))}
+             (ui/icon "circle-plus" {:style {:font-size 20}})
+             [:span.flex-1 (t :right-side-bar/new-page)]]))]]]
+     [:span.shade-mask {:on-click close-fn}]]))
+
+(rum/defcs left-sidebar < rum/reactive
+  (rum/local false ::closing?)
+  [s {:keys [left-sidebar-open? route-match]}]
   (let [close-fn #(state/set-left-sidebar-open! false)
+        *closing? (::closing? s)
         srs-open? (= :srs (state/sub :modal/id))]
     [:div#left-sidebar.cp__sidebar-left-layout
-     {:class (util/classnames [{:is-open left-sidebar-open?}])}
+     {:class (util/classnames [{:is-open left-sidebar-open?
+                                :is-closing @*closing?}])}
 
      ;; sidebar contents
-     (sidebar-nav route-match close-fn left-sidebar-open? srs-open?)
-     [:span.shade-mask {:on-click close-fn}]]))
+     (sidebar-nav route-match close-fn left-sidebar-open? srs-open? *closing?)]))
 
 (rum/defc recording-bar
   []
