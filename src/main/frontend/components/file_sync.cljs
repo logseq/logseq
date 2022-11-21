@@ -379,20 +379,19 @@
                                                         (first @graphs-txid)))))
                                            nil
 
-                                           (and synced-file-graph?
-                                                (second @graphs-txid)
+                                           (and (second @graphs-txid)
                                                 (fs-sync/graph-sync-off? (second @graphs-txid))
                                                 (async/<! (fs-sync/<check-remote-graph-exists (second @graphs-txid))))
                                            (fs-sync/<sync-start)
 
                                            ;; remote graph already has been deleted, clear repos first, then create-remote-graph
-                                           synced-file-graph?  ; <check-remote-graph-exists -> false
+                                           (second @graphs-txid) ; <check-remote-graph-exists -> false
                                            (do (state/set-repos!
                                                 (map (fn [r]
                                                        (if (= (:url r) current-repo)
                                                          (dissoc r :GraphUUID :GraphName :remote?)
                                                          r))
-                                                     (state/get-repos)))
+                                                  (state/get-repos)))
                                                (create-remote-graph-fn))
 
                                            (second @graphs-txid) ; sync not started yet
