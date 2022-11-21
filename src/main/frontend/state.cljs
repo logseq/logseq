@@ -1865,7 +1865,7 @@ Similar to re-frame subscriptions"
   (set-state! :auth/access-token access-token))
 
 (defn get-auth-id-token []
-  (:auth/id-token @state))
+  (sub :auth/id-token))
 
 (defn get-auth-refresh-token []
   (:auth/refresh-token @state))
