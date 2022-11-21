@@ -2769,7 +2769,7 @@
           pause
           (<! (.schedule this ::pause nil nil))
           :else
-          (<! (.schedule this ::stop nil nil))))))
+          nil))))
 
   (full-sync [this]
     (go
