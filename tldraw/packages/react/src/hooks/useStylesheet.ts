@@ -421,6 +421,13 @@ const tlcss = css`
     color: var(--tl-background);
   }
 
+  .tl-grid-canvas {
+    position: absolute;
+    touch-action: none;
+    pointer-events: none;
+    user-select: none;
+  }
+
   .tl-grid {
     position: absolute;
     width: 100%;

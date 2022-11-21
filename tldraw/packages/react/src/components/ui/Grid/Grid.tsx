@@ -1,4 +1,4 @@
-import { modulate } from '@tldraw/core'
+import { modulate, clamp } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import { useRendererContext } from '../../../hooks'
 import type { TLGridProps } from '../../../types'
@@ -10,7 +10,7 @@ const STEPS = [
   [0.7, 2.5, 1],
 ]
 
-export const Grid = observer(function Grid({ size }: TLGridProps) {
+const SVGGrid = observer(function CanvasGrid({ size }: TLGridProps) {
   const {
     viewport: {
       camera: { point, zoom },
@@ -25,7 +25,9 @@ export const Grid = observer(function Grid({ size }: TLGridProps) {
           const yo = point[1] * zoom
           const gxo = xo > 0 ? xo % s : s + (xo % s)
           const gyo = yo > 0 ? yo % s : s + (yo % s)
-          const opacity = zoom < mid ? modulate(zoom, [min, mid], [0, 1]) : 1
+          const opacity = modulate(zoom, [min, mid], [0, 1])
+
+          const hide = opacity > 2 || opacity < 0.1
 
           return (
             <pattern
@@ -35,7 +37,9 @@ export const Grid = observer(function Grid({ size }: TLGridProps) {
               height={s}
               patternUnits="userSpaceOnUse"
             >
-              <circle className={`tl-grid-dot`} cx={gxo} cy={gyo} r={1.5} opacity={opacity} />
+              {!hide && (
+                <circle className={`tl-grid-dot`} cx={gxo} cy={gyo} r={1.5} opacity={clamp(opacity, 0, 1)} />
+              )}
             </pattern>
           )
         })}
@@ -45,4 +49,8 @@ export const Grid = observer(function Grid({ size }: TLGridProps) {
       ))}
     </svg>
   )
+})
+
+export const Grid = observer(function Grid({ size }: TLGridProps) {
+  return <SVGGrid size={size} />
 })

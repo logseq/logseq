@@ -4,6 +4,6 @@ import { TextShape, type Shape } from '../shapes'
 
 export class TextTool extends TLTextTool<TextShape, Shape, TLReactEventMap> {
   static id = 'text'
-  static shortcut = ['7']
+  static shortcut = ['6']
   Shape = TextShape
 }

@@ -27,6 +27,7 @@
             [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.encrypt :as encrypt]
+            [logseq.graph-parser.util :as gp-util]
             [medley.core :refer [dedupe-by]]
             [rum.core :as rum]
             [promesa.core :as p]
@@ -155,6 +156,8 @@
                  :exception-decrypt-failed
                  :remote->local-full-sync-failed
                  :local->remote-full-sync-failed
+                 :get-remote-graph-failed
+                 :get-deletion-logs-failed
                  })
 
 (s/def ::sync-event (s/keys :req-un [::event ::data]))
@@ -682,6 +685,12 @@
 
           :else
           (- (.-size item)))))))
+;;; ### path-normalize
+(def path-normalize
+  (if (util/electron?)
+    gp-util/path-normalize
+    (partial capacitor-fs/normalize-file-protocol-path nil)))
+
 
 ;;; ### APIs
 ;; `RSAPI` call apis through rsapi package, supports operations on files
@@ -788,7 +797,7 @@
           (->> r
                js->clj
                (map (fn [[path metadata]]
-                      (->FileMetadata (get metadata "size") (get metadata "md5") path
+                      (->FileMetadata (get metadata "size") (get metadata "md5") (path-normalize path)
                                       (get metadata "encryptedFname") (get metadata "mtime") false nil)))
                set)))))
   (<get-local-files-meta [_ graph-uuid base-path filepaths]
@@ -798,10 +807,12 @@
         (->> r
              js->clj
              (map (fn [[path metadata]]
-                    (->FileMetadata (get metadata "size") (get metadata "md5") path
+                    (->FileMetadata (get metadata "size") (get metadata "md5") (path-normalize path)
                                     (get metadata "encryptedFname") (get metadata "mtime") false nil)))))))
   (<rename-local-file [_ graph-uuid base-path from to]
-    (<retry-rsapi #(p->c (ipc/ipc "rename-local-file" graph-uuid base-path from to))))
+    (<retry-rsapi #(p->c (ipc/ipc "rename-local-file" graph-uuid base-path
+                                  (path-normalize from)
+                                  (path-normalize to)))))
   (<update-local-files [this graph-uuid base-path filepaths]
     (println "update-local-files" graph-uuid base-path filepaths)
     (go
@@ -816,24 +827,27 @@
         r)))
 
   (<delete-local-files [_ graph-uuid base-path filepaths]
-    (go
-      (println "delete-local-files" filepaths)
-      (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "delete-local-files" graph-uuid base-path filepaths))))]
-        r)))
+    (let [normalized-filepaths (mapv path-normalize filepaths)]
+      (go
+        (println "delete-local-files" filepaths)
+        (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "delete-local-files" graph-uuid base-path normalized-filepaths))))]
+          r))))
 
   (<update-remote-files [this graph-uuid base-path filepaths local-txid]
-    (go
-      (<! (<rsapi-cancel-all-requests))
-      (let [token (<! (<get-token this))]
-        (<! (<retry-rsapi
-             #(p->c (ipc/ipc "update-remote-files" graph-uuid base-path filepaths local-txid token)))))))
+    (let [normalized-filepaths (mapv path-normalize filepaths)]
+      (go
+        (<! (<rsapi-cancel-all-requests))
+        (let [token (<! (<get-token this))]
+          (<! (<retry-rsapi
+               #(p->c (ipc/ipc "update-remote-files" graph-uuid base-path normalized-filepaths local-txid token))))))))
 
   (<delete-remote-files [this graph-uuid base-path filepaths local-txid]
-    (go
-      (let [token (<! (<get-token this))]
-        (<!
-         (<retry-rsapi
-          #(p->c (ipc/ipc "delete-remote-files" graph-uuid base-path filepaths local-txid token)))))))
+    (let [normalized-filepaths (mapv path-normalize filepaths)]
+      (go
+        (let [token (<! (<get-token this))]
+          (<!
+           (<retry-rsapi
+            #(p->c (ipc/ipc "delete-remote-files" graph-uuid base-path normalized-filepaths local-txid token))))))))
   (<encrypt-fnames [_ graph-uuid fnames] (go (js->clj (<! (p->c (ipc/ipc "encrypt-fnames" graph-uuid fnames))))))
   (<decrypt-fnames [_ graph-uuid fnames] (go
                                            (let [r (<! (p->c (ipc/ipc "decrypt-fnames" graph-uuid fnames)))]
@@ -876,7 +890,9 @@
           (->> (.-result r)
                js->clj
                (map (fn [[path metadata]]
-                      (->FileMetadata (get metadata "size") (get metadata "md5") path
+                      (->FileMetadata (get metadata "size") (get metadata "md5")
+                                      ;; return decoded path, keep it consistent with RSAPI
+                                      (path-normalize path)
                                       (get metadata "encryptedFname") (get metadata "mtime") false nil)))
                set)))))
 
@@ -890,7 +906,9 @@
         (->> (.-result r)
              js->clj
              (map (fn [[path metadata]]
-                    (->FileMetadata (get metadata "size") (get metadata "md5") path
+                    (->FileMetadata (get metadata "size") (get metadata "md5")
+                                    ;; return decoded path, keep it consistent with RSAPI
+                                    (path-normalize path)
                                     (get metadata "encryptedFname") (get metadata "mtime") false nil)))
              set))))
 
@@ -898,15 +916,16 @@
     (p->c (.renameLocalFile mobile-util/file-sync
                             (clj->js {:graphUUID graph-uuid
                                       :basePath base-path
-                                      :from from
-                                      :to to}))))
+                                      :from (path-normalize from)
+                                      :to (path-normalize to)}))))
 
   (<update-local-files [this graph-uuid base-path filepaths]
     (go
-      (let [token (<! (<get-token this))]
+      (let [token (<! (<get-token this))
+            filepaths' (map path-normalize filepaths)]
         (<! (p->c (.updateLocalFiles mobile-util/file-sync (clj->js {:graphUUID graph-uuid
                                                                      :basePath base-path
-                                                                     :filePaths filepaths
+                                                                     :filePaths filepaths'
                                                                      :token token})))))))
 
   (<download-version-files [this graph-uuid base-path filepaths]
@@ -921,38 +940,41 @@
         r)))
 
   (<delete-local-files [_ graph-uuid base-path filepaths]
-    (go
-      (let [r (<! (<retry-rsapi #(p->c (.deleteLocalFiles mobile-util/file-sync
-                                                          (clj->js {:graphUUID graph-uuid
-                                                                    :basePath base-path
-                                                                    :filePaths filepaths})))))]
-        r)))
+    (let [normalized-filepaths (mapv path-normalize filepaths)]
+      (go
+        (let [r (<! (<retry-rsapi #(p->c (.deleteLocalFiles mobile-util/file-sync
+                                                            (clj->js {:graphUUID graph-uuid
+                                                                      :basePath base-path
+                                                                      :filePaths normalized-filepaths})))))]
+          r))))
 
   (<update-remote-files [this graph-uuid base-path filepaths local-txid]
-    (go
-      (let [token (<! (<get-token this))
-            r (<! (p->c (.updateRemoteFiles mobile-util/file-sync
-                                            (clj->js {:graphUUID graph-uuid
-                                                      :basePath base-path
-                                                      :filePaths filepaths
-                                                      :txid local-txid
-                                                      :token token
-                                                      :fnameEncryption true}))))]
-        (if (instance? ExceptionInfo r)
-          r
-          (get (js->clj r) "txid")))))
+    (let [normalized-filepaths (mapv path-normalize filepaths)]
+      (go
+        (let [token (<! (<get-token this))
+              r (<! (p->c (.updateRemoteFiles mobile-util/file-sync
+                                              (clj->js {:graphUUID graph-uuid
+                                                        :basePath base-path
+                                                        :filePaths normalized-filepaths
+                                                        :txid local-txid
+                                                        :token token
+                                                        :fnameEncryption true}))))]
+          (if (instance? ExceptionInfo r)
+            r
+            (get (js->clj r) "txid"))))))
 
   (<delete-remote-files [this graph-uuid _base-path filepaths local-txid]
-    (go
-      (let [token (<! (<get-token this))
-            r (<! (p->c (.deleteRemoteFiles mobile-util/file-sync
-                                            (clj->js {:graphUUID graph-uuid
-                                                      :filePaths filepaths
-                                                      :txid local-txid
-                                                      :token token}))))]
-        (if (instance? ExceptionInfo r)
-          r
-          (get (js->clj r) "txid")))))
+    (let [normalized-filepaths (mapv path-normalize filepaths)]
+      (go
+        (let [token (<! (<get-token this))
+              r (<! (p->c (.deleteRemoteFiles mobile-util/file-sync
+                                              (clj->js {:graphUUID graph-uuid
+                                                        :filePaths normalized-filepaths
+                                                        :txid local-txid
+                                                        :token token}))))]
+          (if (instance? ExceptionInfo r)
+            r
+            (get (js->clj r) "txid"))))))
 
   (<encrypt-fnames [_ graph-uuid fnames]
     (go
@@ -1139,6 +1161,24 @@
     (user/<wrap-ensure-id&access-token
      (state/get-auth-id-token))))
 
+(defn- filter-files-with-unnormalized-path
+  [file-meta-list encrypted-path->path-map]
+  (let [path->encrypted-path-map (set/map-invert encrypted-path->path-map)
+        raw-paths (vals encrypted-path->path-map)
+        *encrypted-paths-to-drop (transient [])]
+    (loop [[raw-path & other-paths] raw-paths]
+      (when raw-path
+        (let [normalized-path (path-normalize raw-path)]
+          (when (and (not= normalized-path raw-path)
+                     (get path->encrypted-path-map normalized-path))
+            ;; raw-path is un-normalized path and there are related normalized version one,
+            ;; then filter out this raw-path
+            (println :filter-files-with-unnormalized-path raw-path)
+            (conj! *encrypted-paths-to-drop (get path->encrypted-path-map raw-path))))
+        (recur other-paths)))
+    (let [encrypted-paths-to-drop (set (persistent! *encrypted-paths-to-drop))]
+      (filterv #(not (contains? encrypted-paths-to-drop (:encrypted-path %))) file-meta-list))))
+
 (extend-type RemoteAPI
   IRemoteAPI
   (<user-info [this]
@@ -1182,11 +1222,11 @@
                 (mapv
                  #(->FileMetadata (:size %)
                                   (:checksum %)
-                                  (get encrypted-path->path-map (:encrypted-path %))
+                                  (path-normalize (get encrypted-path->path-map (:encrypted-path %)))
                                   (:encrypted-path %)
                                   (:last-modified %)
                                   true nil)
-                 file-meta-list*)))))))))
+                 (filter-files-with-unnormalized-path file-meta-list* encrypted-path->path-map))))))))))
 
   (<get-remote-files-meta [this graph-uuid filepaths]
     {:pre [(coll? filepaths)]}
@@ -1205,7 +1245,8 @@
                       (filter #(not= "filepath too long" (:Error %)))
                       (map #(->FileMetadata (:Size %)
                                             (:Checksum %)
-                                            (get encrypted-path->path-map (:FilePath %))
+                                            (some->> (get encrypted-path->path-map (:FilePath %))
+                                                     path-normalize)
                                             (:FilePath %)
                                             (:LastModified %)
                                             true nil)))
@@ -1687,11 +1728,12 @@
         (when (sync-state--valid-to-accept-filewatcher-event? sync-state)
           (when (or (:mtime stat) (= type "unlink"))
             (go
-              (let [path (remove-dir-prefix dir path)
+              (let [path (path-normalize (remove-dir-prefix dir path))
                     files-meta (and (not= "unlink" type)
                                     (<! (<get-local-files-meta
                                          rsapi (:current-syncing-graph-uuid sync-state) dir [path])))
                     checksum (and (coll? files-meta) (some-> files-meta first :etag))]
+                (println :files-watch (->FileChangeEvent type dir path stat checksum))
                 (>! local-changes-chan (->FileChangeEvent type dir path stat checksum))))))))))
 
 (defn local-changes-revised-chan-builder
@@ -2416,7 +2458,7 @@
        (fn [e]
          (go
            (and (rsapi-ready? rsapi graph-uuid)
-                (<! (<fast-filter-e-fn e))
+                 (<! (<fast-filter-e-fn e))
                 (do
                   (swap! *sync-state sync-state--add-queued-local->remote-files e)
                   (let [v (<! (<filter-local-changes-pred e base-path graph-uuid))]
@@ -2737,7 +2779,7 @@
 
   (idle [this]
     (go
-      (let [{:keys [stop remote->local local->remote local->remote-full-sync remote->local-full-sync pause]}
+      (let [{:keys [stop remote->local local->remote local->remote-full-sync remote->local-full-sync pause] :as result}
             (<! ops-chan)]
         (cond
           stop
@@ -2753,7 +2795,11 @@
           pause
           (<! (.schedule this ::pause nil nil))
           :else
-          (<! (.schedule this ::stop nil nil))))))
+          (do
+            (state/pub-event! [:instrument {:type :sync/wrong-ops-chan-when-idle
+                                            :payload {:ops-chan-result result
+                                                      :state state}}])
+            nil)))))
 
   (full-sync [this]
     (go
@@ -2782,6 +2828,10 @@
           (.schedule this ::stop nil nil)
           unknown
           (do
+            (state/pub-event! [:instrument {:type :sync/unknown
+                                            :event :local->remote-full-sync-failed
+                                            :graph-uuid graph-uuid
+                                            :payload {:error unknown}}])
             (put-sync-event! {:event :local->remote-full-sync-failed
                               :data  {:graph-uuid graph-uuid
                                       :epoch      (tc/to-epoch (t/now))}})
@@ -2805,12 +2855,20 @@
               (.schedule this ::pause nil nil))
           unknown
           (do
+            (state/pub-event! [:instrument {:type :sync/unknown
+                                            :event :remote->local-full-sync-failed
+                                            :graph-uuid graph-uuid
+                                            :payload {:error unknown}}])
             (put-sync-event! {:event :remote->local-full-sync-failed
                               :data  {:graph-uuid graph-uuid
                                       :exp        unknown
                                       :epoch      (tc/to-epoch (t/now))}})
-            ;; if any exception occurred, re-exec remote->local-full-sync
-            (.schedule this ::remote->local-full-sync nil nil))))))
+            (let [next-state (if (string/includes? (str (ex-cause unknown)) "404 Not Found")
+                               ;; TODO: this should never happen
+                               ::pause
+                               ;; if any other exception occurred, re-exec remote->local-full-sync
+                               ::remote->local-full-sync)]
+              (.schedule this next-state nil nil)))))))
 
   (remote->local [this _next-state {remote-val :remote}]
     (go
@@ -2841,6 +2899,10 @@
                 (.schedule this ::pause nil nil))
             unknown
             (do (prn "remote->local err" unknown)
+                (state/pub-event! [:instrument {:type :sync/unknown
+                                                :event :remote->local
+                                                :graph-uuid graph-uuid
+                                                :payload {:error unknown}}])
                 (.schedule this ::idle nil nil)))))))
 
   (local->remote [this {local-changes :local}]
@@ -2900,6 +2962,10 @@
           unknown
           (do
             (debug/pprint "local->remote" unknown)
+            (state/pub-event! [:instrument {:type :sync/unknown
+                                            :event :local->remote
+                                            :graph-uuid graph-uuid
+                                            :payload {:error unknown}}])
             (.schedule this ::idle nil nil))))))
   IStoppable
   (-stop! [_]
@@ -2986,43 +3052,6 @@
   (when-let [sm ^SyncManager (state/get-file-sync-manager (state/get-current-file-sync-graph-uuid))]
     (.need-password sm)))
 
-(def app-state-changed-cursor (rum/cursor state/state :mobile/app-state-change))
-
-(def finished-local->remote-chan (chan 1))
-(add-watch app-state-changed-cursor "sync"
-           (fn [_ _ _ {:keys [is-active?]}]
-             (prn "is-active? " is-active?)
-             (cond
-               (mobile-util/native-android?)
-               ;; TODO: support background task on Android
-               (offer! pause-resume-chan is-active?)
-
-               (mobile-util/native-ios?)
-               (let [*task-id (atom nil)]
-                 (if is-active?
-                   (offer! pause-resume-chan is-active?)
-                   (when (state/get-current-file-sync-graph-uuid)
-                     (p/let [task-id (.beforeExit ^js BackgroundTask
-                                                  (fn []
-                                                    (prn "before exit")
-                                                    (go
-                                                      ;; Wait for file watcher events
-                                                      (<! (timeout 2000))
-                                                      (util/drain-chan finished-local->remote-chan)
-                                                      (<! (<sync-local->remote-now))
-                                                      ;; wait at most 20s
-                                                      (async/alts! [finished-local->remote-chan (timeout 20000)])
-                                                      (offer! pause-resume-chan false) ; pause
-                                                      (<! (timeout 5000))
-                                                      (prn "finish task: " @*task-id)
-                                                      (let [opt #js {:taskId @*task-id}]
-                                                        (.finish ^js BackgroundTask opt)))))]
-
-                       (reset! *task-id task-id)))))
-
-               :else
-               nil)))
-
 (defn check-graph-belong-to-current-user
   [current-user-uuid graph-user-uuid]
   (cond
@@ -3087,8 +3116,9 @@
             repo                        (state/get-current-repo)]
         (when-not (instance? ExceptionInfo current-user-uuid)
           (when (and repo
-                     (graph-sync-off? repo) @network-online-cursor
+                     @network-online-cursor
                      user-uuid graph-uuid txid
+                     (graph-sync-off? graph-uuid)
                      (user/logged-in?)
                      (not (config/demo-graph? repo)))
             (try
@@ -3117,6 +3147,52 @@
                 (prn "Sync start error: ")
                 (log/error :exception e)))))
         (reset! *sync-entered? false)))))
+
+(defn- restart-if-stopped!
+  [is-active?]
+  (cond
+    (and is-active? (graph-sync-off? (second @graphs-txid)))
+    (<sync-start)
+
+    :else
+    (offer! pause-resume-chan is-active?)))
+
+(def app-state-changed-cursor (rum/cursor state/state :mobile/app-state-change))
+
+(def finished-local->remote-chan (chan 1))
+
+(add-watch app-state-changed-cursor "sync"
+           (fn [_ _ _ {:keys [is-active?]}]
+             (cond
+               (mobile-util/native-android?)
+               ;; TODO: support background task on Android
+               (restart-if-stopped! is-active?)
+
+               (mobile-util/native-ios?)
+               (let [*task-id (atom nil)]
+                 (if is-active?
+                   (restart-if-stopped! is-active?)
+                   (when (state/get-current-file-sync-graph-uuid)
+                     (p/let [task-id (.beforeExit ^js BackgroundTask
+                                                  (fn []
+                                                    (go
+                                                      ;; Wait for file watcher events
+                                                      (<! (timeout 2000))
+                                                      (util/drain-chan finished-local->remote-chan)
+                                                      (<! (<sync-local->remote-now))
+                                                      ;; wait at most 20s
+                                                      (async/alts! [finished-local->remote-chan (timeout 20000)])
+                                                      (p/let [active? (mobile-util/app-active?)]
+                                                        (when-not active?
+                                                          (offer! pause-resume-chan is-active?)))
+                                                      (<! (timeout 5000))
+                                                      (prn "finish task: " @*task-id)
+                                                      (let [opt #js {:taskId @*task-id}]
+                                                        (.finish ^js BackgroundTask opt)))))]
+                       (reset! *task-id task-id)))))
+
+               :else
+               nil)))
 
 ;;; ### some add-watches
 
