@@ -45,56 +45,6 @@
           "[[https://github.com/logseq/logseq][logseq]] is #awesome :)" 0 editor/url-regex))
       "Finds url in org link correctly"))
 
-(defn- keydown-not-matched-handler
-  "Spied version of editor/keydown-not-matched-handler"
-  [{:keys [value key format cursor-pos] :or {key "#" format "markdown"}}]
-  ;; Reset editor action in order to test result
-  (state/set-editor-action! nil)
-  ;; Default cursor pos to end of line
-  (let [pos (or cursor-pos (count value))]
-    (with-redefs [util/get-selected-text (constantly false)
-                  state/get-input (constantly #js {:value value})
-                  cursor/pos (constantly pos)
-                  cursor/get-caret-pos (constantly {})]
-      ((editor/keydown-not-matched-handler format)
-       #js {:key key} nil))))
-
-(deftest keydown-not-matched-handler-test
-  (testing "Tag autocompletion"
-    (keydown-not-matched-handler {:value "Some words "})
-    (is (= :page-search-hashtag (state/get-editor-action))
-        "Autocomplete tags if starting new word")
-
-    (keydown-not-matched-handler {:value ""})
-    (is (= :page-search-hashtag (state/get-editor-action))
-        "Autocomplete tags if starting a new line")
-
-    (keydown-not-matched-handler {:value "Some words" :cursor-pos 0})
-    (is (= :page-search-hashtag (state/get-editor-action))
-        "Autocomplete tags if there is are existing words and cursor is at start of line")
-
-    (keydown-not-matched-handler {:value "Some words" :cursor-pos 5})
-    (is (= :page-search-hashtag (state/get-editor-action))
-        "Autocomplete tags if there is whitespace before cursor")
-
-    (keydown-not-matched-handler {:value "String"})
-    (is (= nil (state/get-editor-action))
-        "Don't autocomplete tags if at end of word")
-
-    (keydown-not-matched-handler {:value "String" :cursor-pos 3})
-    (is (= nil (state/get-editor-action))
-        "Don't autocomplete tags if in middle of word")
-
-    (keydown-not-matched-handler {:value "`One backtick "})
-    (is (= :page-search-hashtag (state/get-editor-action))
-        "Autocomplete tags if only one backtick")
-
-    (keydown-not-matched-handler {:value "`String#gsub and String`"
-                                  :cursor-pos (dec (count "`String#gsub and String`"))})
-    (is (= nil (state/get-editor-action))
-        "Don't autocomplete tags within backticks")
-    (state/set-editor-action! nil)))
-
 (defn- set-marker
   "Spied version of editor/set-marker"
   [marker content format]
