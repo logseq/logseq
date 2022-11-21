@@ -13,7 +13,6 @@
             [frontend.util :as util]
             [cljs-bean.core :as bean]))
 
-
 (def *url (atom nil))
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
 ;; The following two variable atoms are used to compare whether
@@ -113,7 +112,7 @@
 
   (.addListener mobile-util/fs-watcher "watcher"
                 (fn [event]
-                  (state/pub-event! [:file-watcher/changed event])))
+                  (state/pub-event! [:mobile-file-watcher/changed event])))
 
   (.addListener Keyboard "keyboardWillShow"
                 (fn [^js info]

@@ -237,7 +237,7 @@
      :reactive/query-dbs                    {}
 
      ;; login, userinfo, token, ...
-     :auth/refresh-token                    nil
+     :auth/refresh-token                    (storage/get "refresh-token")
      :auth/access-token                     nil
      :auth/id-token                         nil
 
@@ -1768,12 +1768,12 @@ Similar to re-frame subscriptions"
     (get-in @state [:plugin/installed-plugins id])))
 
 (defn get-enabled?-installed-plugins
-  ([theme?] (get-enabled?-installed-plugins theme? true false))
-  ([theme? enabled? include-unpacked?]
+  ([theme?] (get-enabled?-installed-plugins theme? true false false))
+  ([theme? enabled? include-unpacked? include-all?]
    (filterv
      #(and (if include-unpacked? true (:iir %))
            (if-not (boolean? enabled?) true (= (not enabled?) (boolean (get-in % [:settings :disabled]))))
-           (= (boolean theme?) (:theme %)))
+           (or include-all? (= (boolean theme?) (:theme %))))
      (vals (:plugin/installed-plugins @state)))))
 
 (defn lsp-enabled?-or-theme
@@ -1875,7 +1875,7 @@ Similar to re-frame subscriptions"
   (set-state! :auth/access-token access-token))
 
 (defn get-auth-id-token []
-  (:auth/id-token @state))
+  (sub :auth/id-token))
 
 (defn get-auth-refresh-token []
   (:auth/refresh-token @state))
@@ -1900,14 +1900,6 @@ Similar to re-frame subscriptions"
   (when v (s/assert :frontend.fs.sync/sync-state v))
   (set-state! [:file-sync/graph-state graph-uuid :file-sync/sync-state] v))
 
-(defn get-file-sync-state
-  [graph-uuid]
-  (get-in @state [:file-sync/graph-state graph-uuid :file-sync/sync-state]))
-
-(defn sub-file-sync-state
-  [graph-uuid]
-  (sub [:file-sync/graph-state graph-uuid :file-sync/sync-state]))
-
 (defn get-current-file-sync-graph-uuid
   []
   (get-in @state [:file-sync/graph-state :current-graph-uuid]))
@@ -1915,6 +1907,16 @@ Similar to re-frame subscriptions"
 (defn sub-current-file-sync-graph-uuid
   []
   (sub [:file-sync/graph-state :current-graph-uuid]))
+
+(defn get-file-sync-state
+  ([]
+   (get-file-sync-state (get-current-file-sync-graph-uuid)))
+  ([graph-uuid]
+   (get-in @state [:file-sync/graph-state graph-uuid :file-sync/sync-state])))
+
+(defn sub-file-sync-state
+  [graph-uuid]
+  (sub [:file-sync/graph-state graph-uuid :file-sync/sync-state]))
 
 (defn reset-parsing-state!
   []
