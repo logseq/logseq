@@ -1771,7 +1771,7 @@
 
   (handle-command-input-close id))
 
-(defn close-autocomplete-if-outside
+(defn- close-autocomplete-if-outside
   [input]
   (when (and input
              (contains? #{:page-search :page-search-hashtag :block-search} (state/get-editor-action))
@@ -1825,7 +1825,9 @@
     ;; TODO: is it cross-browser compatible?
     ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
     (cond
-      (= last-input-char (state/get-editor-command-trigger))
+      ;; By default, "/" is also used as namespace separator in Logseq.
+      (and (= last-input-char (state/get-editor-command-trigger))
+           (not (contains? #{:page-search-hashtag} (state/sub :editor/action))))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (commands/reinit-matched-commands!)
@@ -1855,6 +1857,13 @@
 
       (and (= last-input-char commands/colon) (= :property-search (state/get-editor-action)))
       (state/clear-editor-action!)
+
+      ;; Open "Search page or New page" auto-complete
+      (= last-input-char commands/hashtag)
+      (do
+        (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
+        (state/set-editor-last-pos! pos)
+        (state/set-editor-action! :page-search-hashtag))
 
       :else
       nil)))
@@ -2671,6 +2680,7 @@
     nil))
 
 (defn ^:large-vars/cleanup-todo keydown-not-matched-handler
+  "NOTE: Keydown cannot be used on Android platform"
   [format]
   (fn [e _key-code]
     (let [input-id (state/get-edit-input-id)
@@ -2750,14 +2760,6 @@
             (if (and (= key "`") (= "`" curr) (not= "`" prev))
               (cursor/move-cursor-forward input)
               (autopair input-id key format nil)))
-
-        (and hashtag? (or (zero? pos) (re-matches #"\s" (get value (dec pos)))))
-        (do
-          (commands/handle-step [:editor/search-page-hashtag])
-          (if (= key "#")
-            (state/set-editor-last-pos! (inc (cursor/pos input))) ;; In keydown handler, the `#` is not inserted yet.
-            (state/set-editor-last-pos! (cursor/pos input)))
-          (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
         (let [sym "$"]
           (and (= key sym)
