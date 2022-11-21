@@ -66,7 +66,7 @@
     (uuid s)
 
     :else
-    (throw (js/Error. (str s " is not a valid UUID.")))))
+    (throw (js/Error. (str s " is not a valid UUID string.")))))
 
 (defn- parse-hiccup-ui
   [input]
