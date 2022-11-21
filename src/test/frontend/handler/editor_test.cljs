@@ -1,7 +1,6 @@
 (ns frontend.handler.editor-test
   (:require [frontend.handler.editor :as editor]
             [clojure.test :refer [deftest is testing are]]
-            [frontend.util :as util]
             [frontend.state :as state]
             [frontend.util.cursor :as cursor]))
 
