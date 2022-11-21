@@ -410,6 +410,13 @@
       (.removeEventListener js/window "blur" clear-all)
       (.removeEventListener js/window "visibilitychange" clear-all))))
 
+(defn setup-viewport-listeners! []
+  (when-let [^js vw (gobj/get js/window "visualViewport")]
+    (let [handler #(state/set-state! :ui/viewport {:width (.-width vw) :height (.-height vw) :scale (.-scale vw)})]
+      (.addEventListener js/window.visualViewport "resize" handler)
+      (handler)
+      #(.removeEventListener js/window.visualViewport "resize" handler))))
+
 (defonce last-scroll-top (atom 0))
 
 (defn scroll-down?
