@@ -18,6 +18,7 @@
             [frontend.handler.user :as user]
             [frontend.state :as state]
             [frontend.mobile.util :as mobile-util]
+            [frontend.mobile.core :as mobile-core]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [frontend.util.fs :as fs-util]
@@ -3161,44 +3162,38 @@
 
 (def finished-local->remote-chan (chan 1))
 
-(let [*resumed? (atom false)
-      *into-background? (atom false)]
-  (add-watch app-state-changed-cursor "sync"
-            (fn [_ _ _ {:keys [is-active?]}]
-              (cond
-                (mobile-util/native-android?)
-                ;; TODO: support background task on Android
-                (restart-if-stopped! is-active?)
+(add-watch app-state-changed-cursor "sync"
+           (fn [_ _ _ {:keys [is-active?]}]
+             (cond
+               (mobile-util/native-android?)
+               ;; TODO: support background task on Android
+               (restart-if-stopped! is-active?)
 
-                (mobile-util/native-ios?)
-                (let [*task-id (atom nil)]
-                  (if is-active?
-                    (do
-                      (when @*into-background?
-                        (reset! *into-background? false)
-                        (reset! *resumed? true))
-                      (restart-if-stopped! is-active?))
-                    (when (state/get-current-file-sync-graph-uuid)
-                      (p/let [task-id (.beforeExit ^js BackgroundTask
-                                                   (fn []
-                                                     (reset! *resumed? false)
-                                                     (reset! *into-background? true)
-                                                     (go
-                                                       ;; Wait for file watcher events
-                                                       (<! (timeout 2000))
-                                                       (util/drain-chan finished-local->remote-chan)
-                                                       (<! (<sync-local->remote-now))
-                                                       ;; wait at most 20s
-                                                       (async/alts! [finished-local->remote-chan (timeout 20000)])
-                                                       (when-not @*resumed? (offer! pause-resume-chan is-active?))
-                                                       (<! (timeout 5000))
-                                                       (prn "finish task: " @*task-id)
-                                                       (let [opt #js {:taskId @*task-id}]
-                                                         (.finish ^js BackgroundTask opt)))))]
-                        (reset! *task-id task-id)))))
+               (mobile-util/native-ios?)
+               (let [*task-id (atom nil)]
+                 (if is-active?
+                   (restart-if-stopped! is-active?)
+                   (when (state/get-current-file-sync-graph-uuid)
+                     (p/let [task-id (.beforeExit ^js BackgroundTask
+                                                  (fn []
+                                                    (go
+                                                      ;; Wait for file watcher events
+                                                      (<! (timeout 2000))
+                                                      (util/drain-chan finished-local->remote-chan)
+                                                      (<! (<sync-local->remote-now))
+                                                      ;; wait at most 20s
+                                                      (async/alts! [finished-local->remote-chan (timeout 20000)])
+                                                      (p/let [active? (mobile-core/app-active?)]
+                                                        (when-not active?
+                                                          (offer! pause-resume-chan is-active?)))
+                                                      (<! (timeout 5000))
+                                                      (prn "finish task: " @*task-id)
+                                                      (let [opt #js {:taskId @*task-id}]
+                                                        (.finish ^js BackgroundTask opt)))))]
+                       (reset! *task-id task-id)))))
 
-                :else
-                nil))))
+               :else
+               nil)))
 
 ;;; ### some add-watches
 
