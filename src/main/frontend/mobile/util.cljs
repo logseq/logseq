@@ -1,9 +1,10 @@
 (ns frontend.mobile.util
-  (:require ["@capacitor/core" :refer [Capacitor registerPlugin]]
+  (:require ["@capacitor/core" :refer [Capacitor registerPlugin ^js Plugins]]
             ["@capacitor/splash-screen" :refer [SplashScreen]]
             ["@logseq/capacitor-file-sync" :refer [FileSync]]
             [clojure.string :as string]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [goog.object :as gobj]))
 
 (defn platform []
   (.getPlatform Capacitor))
@@ -93,3 +94,9 @@
   [path]
   (string/includes? path "iCloud~com~logseq~logseq"))
 
+(defn app-active?
+  "Whether the app is active. This function returns a promise."
+  []
+  (let [app ^js (gobj/get Plugins "App")]
+    (p/let [state (.getState app)]
+      (gobj/get state "isActive"))))

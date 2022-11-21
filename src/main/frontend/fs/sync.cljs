@@ -18,7 +18,6 @@
             [frontend.handler.user :as user]
             [frontend.state :as state]
             [frontend.mobile.util :as mobile-util]
-            [frontend.mobile.core :as mobile-core]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [frontend.util.fs :as fs-util]
@@ -3183,7 +3182,7 @@
                                                       (<! (<sync-local->remote-now))
                                                       ;; wait at most 20s
                                                       (async/alts! [finished-local->remote-chan (timeout 20000)])
-                                                      (p/let [active? (mobile-core/app-active?)]
+                                                      (p/let [active? (mobile-util/app-active?)]
                                                         (when-not active?
                                                           (offer! pause-resume-chan is-active?)))
                                                       (<! (timeout 5000))
