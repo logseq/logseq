@@ -331,11 +331,11 @@
 
 .cp__sidebar-left-layout {
   position: fixed;
-  width: 0;
   top: var(--ls-headbar-inner-top-padding);
   left: 0;
   z-index: var(--ls-z-index-level-5);
-  transition: width .3s;
+  background-color: rgba(255, 0, 0, 0.18);
+  width: 8px;
 
   a {
     color: var(--ls-header-button-background);
@@ -360,8 +360,7 @@
   }
 
   &.is-open {
-    transition: none;
-    width: 100%;
+    width: 100% !important;
 
     .left-sidebar-inner {
       transform: translate3d(0, 0, 0);
@@ -370,6 +369,18 @@
 
     > .shade-mask {
       opacity: 1;
+      z-index: 1;
+    }
+  }
+
+  &.is-closing {
+    .left-sidebar-inner {
+      transition: transform .2s;
+      transform: translate3d(-100%, 0, 0) !important;
+    }
+
+    > .shade-mask {
+      opacity: .2;
       z-index: 1;
     }
   }
