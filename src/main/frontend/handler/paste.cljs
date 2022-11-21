@@ -203,5 +203,5 @@
                                           (util/stop e))))]
            (cond
              (and (string/blank? text) (string/blank? html)) (paste-file-if-exist)
-             (and (seq files) (state/perferred-pasting-file?)) (paste-file-if-exist)
+             (and (seq files) (state/preferred-pasting-file?)) (paste-file-if-exist)
              :else (paste-text-or-blocks-aux input e text html))))))))

@@ -138,7 +138,7 @@ returns selected tests and namespaces to run"
     :multi true
     :update-fn conj
     :desc "Exclude tests that have this keyword"]
-   ;; --test is long name for compatability with older runner
+   ;; --test is long name for compatibility with older runner
    ["-v" "--test VAR" "Fully qualified var to test"
     :id :vars
     :default #{}
