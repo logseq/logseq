@@ -42,7 +42,6 @@ export const contextBarActionTypes = [
   'IFrameSource',
   'LogseqPortalViewMode',
   'ArrowMode',
-  'OpenPage',
   'Links',
 ] as const
 
@@ -51,7 +50,6 @@ const singleShapeActions: ContextBarActionType[] = [
   'Edit',
   'YoutubeLink',
   'IFrameSource',
-  'OpenPage',
   'Links',
 ]
 
@@ -65,7 +63,6 @@ export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
     'Edit',
     'LogseqPortalViewMode',
     'ScaleLevel',
-    'OpenPage',
     'AutoResizing',
     'Links',
   ],
@@ -228,29 +225,6 @@ const ScaleLevelAction = observer(() => {
         app.persist()
       }}
     />
-  )
-})
-
-const OpenPageAction = observer(() => {
-  const { handlers } = React.useContext(LogseqContext)
-  const app = useApp<Shape>()
-  const shapes = filterShapeByAction<LogseqPortalShape>(app.selectedShapesArray, 'OpenPage')
-  const shape = shapes[0]
-  const { pageId, blockType } = shape.props
-
-  return (
-    <span className="flex gap-1">
-      <Button
-        title="Open Page in Right Sidebar"
-        type="button"
-        onClick={() => handlers?.sidebarAddBlock(pageId, blockType === 'B' ? 'block' : 'page')}
-      >
-        <TablerIcon name="layout-sidebar-right" />
-      </Button>
-      <Button title="Open Page" type="button" onClick={() => handlers?.redirectToPage(pageId)}>
-        <TablerIcon name="external-link" />
-      </Button>
-    </span>
   )
 })
 
@@ -525,7 +499,6 @@ contextBarActionMapping.set('Edit', EditAction)
 contextBarActionMapping.set('AutoResizing', AutoResizingAction)
 contextBarActionMapping.set('LogseqPortalViewMode', LogseqPortalViewModeAction)
 contextBarActionMapping.set('ScaleLevel', ScaleLevelAction)
-contextBarActionMapping.set('OpenPage', OpenPageAction)
 contextBarActionMapping.set('YoutubeLink', YoutubeLinkAction)
 contextBarActionMapping.set('IFrameSource', IFrameSourceAction)
 contextBarActionMapping.set('NoFill', NoFillAction)
