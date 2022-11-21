@@ -66,6 +66,9 @@
      :modal/close-backdrop?                 true
      :modal/subsets                         []
 
+     ;; ui
+     :ui/viewport                           {}
+     
      ;; left sidebar
      :ui/navigation-item-collapsed?         {}
 
