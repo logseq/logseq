@@ -336,7 +336,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   ReactComponent = observer((componentProps: TLComponentProps) => {
     const { events, isErasing, isEditing, isBinding } = componentProps
     const {
-      props: { opacity, pageId, stroke, fill, scaleLevel, strokeWidth, size },
+      props: { opacity, pageId, fill, scaleLevel, strokeWidth, size },
     } = this
 
     const app = useApp<Shape>()
@@ -444,8 +444,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             <LogseqQuickSearch
               onChange={onPageNameChanged}
               onAddBlock={uuid => {
-                app.api.editShape(this)
-                window.logseq?.api?.edit_block?.(uuid)
+                // wait until the editor is mounted
+                setTimeout(() => {
+                  app.api.editShape(this)
+                  window.logseq?.api?.edit_block?.(uuid)
+                })
               }}
               placeholder="Create or search your graph..."
             />

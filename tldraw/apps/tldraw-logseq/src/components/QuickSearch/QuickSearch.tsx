@@ -101,7 +101,6 @@ export const LogseqQuickSearch = observer(
     )
     const rInput = React.useRef<HTMLInputElement>(null)
     const { handlers, renderers } = React.useContext(LogseqContext)
-    const app = useApp<Shape>()
 
     const finishSearching = React.useCallback((id: string) => {
       onChange(id)
@@ -117,10 +116,7 @@ export const LogseqQuickSearch = observer(
         const uuid = handlers?.addNewBlock(content)
         if (uuid) {
           finishSearching(uuid)
-          // wait until the editor is mounted
-          setTimeout(() => {
-            onAddBlock?.(uuid)
-          })
+          onAddBlock?.(uuid)
         }
         return uuid
       },

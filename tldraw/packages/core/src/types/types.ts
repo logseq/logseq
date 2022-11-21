@@ -183,7 +183,7 @@ export type TLSubscriptionEvent =
     }
   | {
       event: 'paste'
-      info: { point: number[]; shiftKey: boolean; dataTransfer?: DataTransfer, fromDrop?: boolean }
+      info: { point: number[]; shiftKey: boolean; dataTransfer?: DataTransfer; fromDrop?: boolean }
     }
   | {
       event: 'create-assets'
