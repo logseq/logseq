@@ -443,8 +443,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           {isCreating ? (
             <LogseqQuickSearch
               onChange={onPageNameChanged}
-              create
-              shape={this}
+              onAddBlock={uuid => {
+                app.api.editShape(this)
+                window.logseq?.api?.edit_block?.(uuid)
+              }}
               placeholder="Create or search your graph..."
             />
           ) : (

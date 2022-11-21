@@ -173,15 +173,18 @@ export function ShapeLinksInput({
                 <TablerIcon name="plus" />
                 Add a new link
               </Button>
-              <div className="h-2" />
-              <div className="text-center">
-                <span className="opacity-50 mr-1">Paste from clipboard with</span>
-                <span className="keyboard-shortcut">
-                  <code>{MOD_KEY}</code> <code>⇧</code> <code>V</code>
-                </span>
-              </div>
             </div>
           )}
+          <div className="h-2" />
+          <div
+            className="text-center"
+            style={{ visibility: !showQuickSearch ? 'visible' : 'hidden' }}
+          >
+            <span className="opacity-50 mr-1">Paste from clipboard with</span>
+            <span className="keyboard-shortcut">
+              <code>{MOD_KEY}</code> <code>⇧</code> <code>V</code>
+            </span>
+          </div>
           {refs.length > 0 && (
             <>
               <div className="h-2" />

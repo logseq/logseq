@@ -11,11 +11,10 @@ import { TextInput } from '../inputs/TextInput'
 interface LogseqQuickSearchProps {
   onChange: (id: string) => void
   className?: string
-  create?: boolean
   placeholder?: string
   style?: React.CSSProperties
   onBlur?: () => void
-  shape?: LogseqPortalShape
+  onAddBlock?: (uuid: string) => void
 }
 
 const LogseqTypeTag = ({
@@ -95,7 +94,7 @@ const useSearch = (q: string, searchFilter: 'B' | 'P' | null) => {
 }
 
 export const LogseqQuickSearch = observer(
-  ({ className, style, placeholder, create, onChange, onBlur, shape }: LogseqQuickSearchProps) => {
+  ({ className, style, placeholder, onChange, onBlur, onAddBlock }: LogseqQuickSearchProps) => {
     const [q, setQ] = React.useState(LogseqPortalShape.defaultSearchQuery)
     const [searchFilter, setSearchFilter] = React.useState<'B' | 'P' | null>(
       LogseqPortalShape.defaultSearchFilter
@@ -113,21 +112,19 @@ export const LogseqQuickSearch = observer(
       }
     }, [])
 
-    // TODO: should move this implementation to LogseqPortalShape
-    const onAddBlock = React.useCallback(
+    const handleAddBlock = React.useCallback(
       (content: string) => {
         const uuid = handlers?.addNewBlock(content)
         if (uuid) {
           finishSearching(uuid)
           // wait until the editor is mounted
           setTimeout(() => {
-            app.api.editShape(shape)
-            window.logseq?.api?.edit_block?.(uuid)
+            onAddBlock?.(uuid)
           })
         }
         return uuid
       },
-      [shape]
+      [onAddBlock]
     )
 
     const optionsWrapperRef = React.useRef<HTMLDivElement>(null)
@@ -165,12 +162,12 @@ export const LogseqQuickSearch = observer(
         return []
       }
 
-      if (create) {
+      if (onAddBlock) {
         // New block option
         options.push({
           actionIcon: 'circle-plus',
           onChosen: () => {
-            return !!onAddBlock(q)
+            return !!handleAddBlock(q)
           },
           element: (
             <div className="tl-quick-search-option-row">
@@ -189,7 +186,7 @@ export const LogseqQuickSearch = observer(
       }
 
       // New page or whiteboard option when no exact match
-      if (!searchResult?.pages?.some(p => p.toLowerCase() === q.toLowerCase()) && q && create) {
+      if (!searchResult?.pages?.some(p => p.toLowerCase() === q.toLowerCase()) && q) {
         options.push(
           {
             actionIcon: 'circle-plus',
@@ -389,6 +386,7 @@ export const LogseqQuickSearch = observer(
               if (e.key === 'Enter') {
                 finishSearching(q)
               }
+              e.stopPropagation()
             }}
             onBlur={onBlur}
           />
