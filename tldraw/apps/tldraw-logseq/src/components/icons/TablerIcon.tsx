@@ -1,8 +1,11 @@
 const extendedIcons = [
+  'add-link',
   'object-compact',
   'object-expanded',
+  'open-as-page',
   'block',
   'block-search',
+  'internal-link',
   'page',
   'page-search',
   'references-hide',

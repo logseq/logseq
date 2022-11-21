@@ -41,7 +41,7 @@ function ShapeLinkItem({
       </div>
       <div className="flex-1" />
       <Button title="Open Page" type="button" onClick={() => handlers?.redirectToPage(id)}>
-        <TablerIcon name="external-link" />
+        <TablerIcon name="open-as-page" />
       </Button>
       <Button
         title="Open Page in Right Sidebar"
@@ -125,7 +125,7 @@ export function ShapeLinksInput({
       side={side}
       label={
         <div className="flex gap-1 relative items-center justify-center px-1">
-          <TablerIcon name="link" />
+          <TablerIcon name={noOfLinks > 0 ? "link" : "add-link"} />
           {noOfLinks > 0 && <div className="tl-shape-links-count">{noOfLinks}</div>}
         </div>
       }
@@ -134,8 +134,8 @@ export function ShapeLinksInput({
         {showReferencePanel && (
           <div className="tl-shape-links-reference-panel">
             <div className="text-base font-bold inline-flex gap-1 items-center">
-              <TablerIcon name="external-link" />
-              Your Reference
+              <TablerIcon className="opacity-50" name="internal-link" />
+              References
             </div>
             <div className="h-2" />
             <ShapeLinkItem type={portalType} id={pageId} />
@@ -143,8 +143,8 @@ export function ShapeLinksInput({
         )}
         <div className="tl-shape-links-panel color-level">
           <div className="text-base font-bold inline-flex gap-1 items-center">
-            <TablerIcon name="link" />
-            Your Links
+            <TablerIcon className="opacity-50" name="link" />
+            Your links
           </div>
           <div className="h-2" />
           <div className="whitespace-pre-wrap">
