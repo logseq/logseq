@@ -2753,7 +2753,7 @@
 
   (idle [this]
     (go
-      (let [{:keys [stop remote->local local->remote local->remote-full-sync remote->local-full-sync pause]}
+      (let [{:keys [stop remote->local local->remote local->remote-full-sync remote->local-full-sync pause] :as result}
             (<! ops-chan)]
         (cond
           stop
@@ -2768,10 +2768,12 @@
           (<! (.schedule this ::remote->local-full-sync nil nil))
           pause
           (<! (.schedule this ::pause nil nil))
-          (= state ::idle)
-          nil
           :else
-          (<! (.schedule this ::stop nil nil))))))
+          (do
+            (state/pub-event! [:instrument {:type :sync/wrong-ops-chan-when-idle
+                                            :payload {:ops-chan-result result
+                                                      :state state}}])
+            nil)))))
 
   (full-sync [this]
     (go
@@ -3142,8 +3144,8 @@
 
                (mobile-util/native-ios?)
                (let [*task-id (atom nil)]
-                 (restart-if-stopped! is-active?)
-                 (when-not is-active?
+                 (if is-active?
+                   (restart-if-stopped! is-active?)
                    (when (state/get-current-file-sync-graph-uuid)
                      (p/let [task-id (.beforeExit ^js BackgroundTask
                                                   (fn []
@@ -3154,6 +3156,8 @@
                                                       (<! (<sync-local->remote-now))
                                                       ;; wait at most 20s
                                                       (async/alts! [finished-local->remote-chan (timeout 20000)])
+                                                      (offer! pause-resume-chan is-active?)
+                                                      (<! (timeout 5000))
                                                       (prn "finish task: " @*task-id)
                                                       (let [opt #js {:taskId @*task-id}]
                                                         (.finish ^js BackgroundTask opt)))))]
