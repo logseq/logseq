@@ -2,6 +2,7 @@
   "Main ns for handling mobile start"
   (:require ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
+            ["@capacitor/core" :refer [^js Plugins]]
             [clojure.string :as string]
             [promesa.core :as p]
             [frontend.fs.capacitor-fs :as capacitor-fs]
@@ -11,7 +12,8 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [goog.object :as gobj]))
 
 
 (def *url (atom nil))
@@ -96,6 +98,13 @@
       (when-not is-active?
         (editor-handler/save-current-block!))
       (state/set-mobile-app-state-change is-active?))))
+
+(defn- app-active?
+  "Returns a promise"
+  []
+  (let [app ^js (gobj/get Plugins "App")]
+    (p/let [state (.getState app)]
+      (gobj/get state "isActive"))))
 
 (defn- general-init
   "Initialize event listeners used by both iOS and Android"
