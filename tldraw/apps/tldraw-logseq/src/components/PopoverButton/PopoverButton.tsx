@@ -1,5 +1,5 @@
 import * as Popover from '@radix-ui/react-popover'
-import type { Side } from '@radix-ui/react-popper'
+import type { Side, Align } from '@radix-ui/react-popper'
 import { BoundsUtils } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
@@ -7,6 +7,8 @@ import * as React from 'react'
 
 interface PopoverButton extends React.HTMLAttributes<HTMLButtonElement> {
   side: Side // default side
+  align?: Align
+  alignOffset?: number
   label: React.ReactNode
   children: React.ReactNode
   border?: boolean
@@ -14,7 +16,7 @@ interface PopoverButton extends React.HTMLAttributes<HTMLButtonElement> {
 }
 
 export const PopoverButton = observer(
-  ({ side, label, arrow, children, border, ...rest }: PopoverButton) => {
+  ({ side, align, alignOffset, label, arrow, children, border, ...rest }: PopoverButton) => {
     const contentRef = React.useRef<HTMLDivElement>(null)
 
     const [isOpen, setIsOpen] = React.useState(false)
@@ -62,6 +64,8 @@ export const PopoverButton = observer(
           key={'popover-content-' + tick}
           ref={contentRef}
           className="tl-popover-content"
+          align={align}
+          alignOffset={alignOffset}
           side={side}
           sideOffset={15}
           collisionBoundary={document.querySelector('.logseq-tldraw')}

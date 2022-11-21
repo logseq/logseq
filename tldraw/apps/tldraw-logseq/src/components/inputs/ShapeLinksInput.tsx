@@ -123,6 +123,8 @@ export function ShapeLinksInput({
     <PopoverButton
       {...rest}
       side={side}
+      align="start"
+      alignOffset={-6}
       label={
         <div className="flex gap-1 relative items-center justify-center px-1">
           <TablerIcon name={noOfLinks > 0 ? "link" : "add-link"} />
