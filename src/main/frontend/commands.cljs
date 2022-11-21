@@ -28,6 +28,7 @@
 ;; TODO: move to frontend.handler.editor.commands
 
 (defonce angle-bracket "<")
+(defonce hashtag "#")
 (defonce colon ":")
 (defonce *current-command (atom nil))
 
