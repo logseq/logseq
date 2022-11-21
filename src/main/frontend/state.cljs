@@ -1890,14 +1890,6 @@ Similar to re-frame subscriptions"
   (when v (s/assert :frontend.fs.sync/sync-state v))
   (set-state! [:file-sync/graph-state graph-uuid :file-sync/sync-state] v))
 
-(defn get-file-sync-state
-  [graph-uuid]
-  (get-in @state [:file-sync/graph-state graph-uuid :file-sync/sync-state]))
-
-(defn sub-file-sync-state
-  [graph-uuid]
-  (sub [:file-sync/graph-state graph-uuid :file-sync/sync-state]))
-
 (defn get-current-file-sync-graph-uuid
   []
   (get-in @state [:file-sync/graph-state :current-graph-uuid]))
@@ -1905,6 +1897,16 @@ Similar to re-frame subscriptions"
 (defn sub-current-file-sync-graph-uuid
   []
   (sub [:file-sync/graph-state :current-graph-uuid]))
+
+(defn get-file-sync-state
+  ([]
+   (get-file-sync-state (get-current-file-sync-graph-uuid)))
+  ([graph-uuid]
+   (get-in @state [:file-sync/graph-state graph-uuid :file-sync/sync-state])))
+
+(defn sub-file-sync-state
+  [graph-uuid]
+  (sub [:file-sync/graph-state graph-uuid :file-sync/sync-state]))
 
 (defn reset-parsing-state!
   []

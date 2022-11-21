@@ -2753,7 +2753,7 @@
 
   (idle [this]
     (go
-      (let [{:keys [stop remote->local local->remote local->remote-full-sync remote->local-full-sync pause]}
+      (let [{:keys [stop remote->local local->remote local->remote-full-sync remote->local-full-sync pause] :as result}
             (<! ops-chan)]
         (cond
           stop
@@ -3022,43 +3022,6 @@
   (when-let [sm ^SyncManager (state/get-file-sync-manager (state/get-current-file-sync-graph-uuid))]
     (.need-password sm)))
 
-(def app-state-changed-cursor (rum/cursor state/state :mobile/app-state-change))
-
-(def finished-local->remote-chan (chan 1))
-(add-watch app-state-changed-cursor "sync"
-           (fn [_ _ _ {:keys [is-active?]}]
-             (prn "is-active? " is-active?)
-             (cond
-               (mobile-util/native-android?)
-               ;; TODO: support background task on Android
-               (offer! pause-resume-chan is-active?)
-
-               (mobile-util/native-ios?)
-               (let [*task-id (atom nil)]
-                 (if is-active?
-                   (offer! pause-resume-chan is-active?)
-                   (when (state/get-current-file-sync-graph-uuid)
-                     (p/let [task-id (.beforeExit ^js BackgroundTask
-                                                  (fn []
-                                                    (prn "before exit")
-                                                    (go
-                                                      ;; Wait for file watcher events
-                                                      (<! (timeout 2000))
-                                                      (util/drain-chan finished-local->remote-chan)
-                                                      (<! (<sync-local->remote-now))
-                                                      ;; wait at most 20s
-                                                      (async/alts! [finished-local->remote-chan (timeout 20000)])
-                                                      (offer! pause-resume-chan false) ; pause
-                                                      (<! (timeout 5000))
-                                                      (prn "finish task: " @*task-id)
-                                                      (let [opt #js {:taskId @*task-id}]
-                                                        (.finish ^js BackgroundTask opt)))))]
-
-                       (reset! *task-id task-id)))))
-
-               :else
-               nil)))
-
 (defn check-graph-belong-to-current-user
   [current-user-uuid graph-user-uuid]
   (cond
@@ -3123,8 +3086,9 @@
             repo                        (state/get-current-repo)]
         (when-not (instance? ExceptionInfo current-user-uuid)
           (when (and repo
-                     (graph-sync-off? repo) @network-online-cursor
+                     @network-online-cursor
                      user-uuid graph-uuid txid
+                     (graph-sync-off? graph-uuid)
                      (user/logged-in?)
                      (not (config/demo-graph? repo)))
             (try
@@ -3153,6 +3117,48 @@
                 (prn "Sync start error: ")
                 (log/error :exception e)))))
         (reset! *sync-entered? false)))))
+
+(defn- restart-if-stopped!
+  [is-active?]
+  (cond
+    (and is-active? (graph-sync-off? (second @graphs-txid)))
+    (<sync-start)
+
+    :else
+    (offer! pause-resume-chan is-active?)))
+
+(def app-state-changed-cursor (rum/cursor state/state :mobile/app-state-change))
+
+(def finished-local->remote-chan (chan 1))
+
+(add-watch app-state-changed-cursor "sync"
+           (fn [_ _ _ {:keys [is-active?]}]
+             (cond
+               (mobile-util/native-android?)
+               ;; TODO: support background task on Android
+               (restart-if-stopped! is-active?)
+
+               (mobile-util/native-ios?)
+               (let [*task-id (atom nil)]
+                 (restart-if-stopped! is-active?)
+                 (when-not is-active?
+                   (when (state/get-current-file-sync-graph-uuid)
+                     (p/let [task-id (.beforeExit ^js BackgroundTask
+                                                  (fn []
+                                                    (go
+                                                      ;; Wait for file watcher events
+                                                      (<! (timeout 2000))
+                                                      (util/drain-chan finished-local->remote-chan)
+                                                      (<! (<sync-local->remote-now))
+                                                      ;; wait at most 20s
+                                                      (async/alts! [finished-local->remote-chan (timeout 20000)])
+                                                      (prn "finish task: " @*task-id)
+                                                      (let [opt #js {:taskId @*task-id}]
+                                                        (.finish ^js BackgroundTask opt)))))]
+                       (reset! *task-id task-id)))))
+
+               :else
+               nil)))
 
 ;;; ### some add-watches
 
