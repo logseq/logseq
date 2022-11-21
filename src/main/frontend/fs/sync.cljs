@@ -2753,7 +2753,7 @@
 
   (idle [this]
     (go
-      (let [{:keys [stop remote->local local->remote local->remote-full-sync remote->local-full-sync pause] :as result}
+      (let [{:keys [stop remote->local local->remote local->remote-full-sync remote->local-full-sync pause]}
             (<! ops-chan)]
         (cond
           stop
@@ -2768,8 +2768,10 @@
           (<! (.schedule this ::remote->local-full-sync nil nil))
           pause
           (<! (.schedule this ::pause nil nil))
+          (= state ::idle)
+          nil
           :else
-          nil))))
+          (<! (.schedule this ::stop nil nil))))))
 
   (full-sync [this]
     (go
