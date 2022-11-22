@@ -22,7 +22,6 @@
             [frontend.extensions.srs :as srs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.mobile.swipe :as swipe]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
