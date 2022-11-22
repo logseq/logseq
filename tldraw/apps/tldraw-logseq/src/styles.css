@@ -726,7 +726,6 @@ button.tl-select-input-trigger {
 
   .page-ref {
     color: var(--ls-title-text-color);
-    background: var(--ls-tertiary-background-color);
   }
 
   .breadcrumb {
