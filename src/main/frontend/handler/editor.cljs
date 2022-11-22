@@ -2409,7 +2409,7 @@
       (scroll-to-block sibling-block)
       (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
 
-(defn- move-cross-boundrary-up-down
+(defn- move-cross-boundary-up-down
   [direction]
   (let [input (state/get-input)
         line-pos (util/get-first-or-last-line-pos input)
@@ -2448,14 +2448,14 @@
 
       (or (and up? (cursor/textarea-cursor-first-row? input))
           (and down? (cursor/textarea-cursor-last-row? input)))
-      (move-cross-boundrary-up-down direction)
+      (move-cross-boundary-up-down direction)
 
       :else
       (if up?
         (cursor/move-cursor-up input)
         (cursor/move-cursor-down input)))))
 
-(defn- move-to-block-when-cross-boundrary
+(defn- move-to-block-when-cross-boundary
   [direction]
   (let [up? (= :left direction)
         pos (if up? :max 0)
@@ -2491,7 +2491,7 @@
 
         (or (and left? (cursor/start? input))
             (and right? (cursor/end? input)))
-        (move-to-block-when-cross-boundrary direction)
+        (move-to-block-when-cross-boundary direction)
 
         :else
         (if left?

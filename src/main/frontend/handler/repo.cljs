@@ -244,7 +244,7 @@
                                               :file/content)]
                      (repo-config-handler/read-repo-config repo-url content))
                    (state/get-config repo-url))
-        ;; NOTE: Use config while parsing. Make sure it's the corrent journal title format
+        ;; NOTE: Use config while parsing. Make sure it's the current journal title format
         _ (state/set-config! repo-url config)
         relate-path-fn (fn [m k]
                          (some-> (get m k)
