@@ -909,9 +909,10 @@ html[data-theme='dark'] {
 }
 
 .tl-popover-content {
-  @apply rounded-lg drop-shadow-md;
+  @apply rounded-lg;
 
   background-color: var(--ls-secondary-background-color);
+  box-shadow: var(--shadow-large);
   z-index: 100000;
 }
 
