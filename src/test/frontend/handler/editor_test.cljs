@@ -96,4 +96,24 @@
     (handle-last-input-handler {:value "first \nfoo::bar"
                                 :cursor-pos (dec (count "first "))})
     (is (= nil (state/get-editor-action))
-        "Don't autocomplete properties if typing in a block where properties already exist")))
+        "Don't autocomplete properties if typing in a block where properties already exist")
+
+    (handle-last-input-handler {:value "#"
+                                :cursor-pos 1})
+    (is (= :page-search-hashtag (state/get-editor-action))
+        "Page search if only hashtags has been typed")
+
+    (handle-last-input-handler {:value "foo bar#"
+                                :cursor-pos 8})
+    (is (= :page-search-hashtag (state/get-editor-action))
+        "Page search if hashtags has been typed as EOL")
+
+    (handle-last-input-handler {:value "foo #"
+                                :cursor-pos 5})
+    (is (= :page-search-hashtag (state/get-editor-action))
+        "Page search if hashtags has been typed after a space")
+
+    (handle-last-input-handler {:value "foo#bar"
+                                :cursor-pos 4})
+    (is (= :page-search-hashtag (state/get-editor-action))
+        "Page search if hashtags has been typed in the middle of a line")))
