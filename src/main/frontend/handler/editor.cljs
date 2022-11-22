@@ -1847,7 +1847,9 @@
       (state/clear-editor-action!)
 
       ;; Open "Search page or New page" auto-complete
-      (= last-input-char commands/hashtag)
+      (and (= last-input-char commands/hashtag)
+           ;; Only trigger at beginning of line or before whitespace
+           (or (= 1 pos) (contains? #{" " "\t"} (get (.-value input) (- pos 2)))))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (state/set-editor-last-pos! pos)
@@ -3249,7 +3251,7 @@
         repo (state/get-current-repo)
         value (boolean value)]
     (when repo
-      (save-current-block!) ;; Save the input contents before collapsing 
+      (save-current-block!) ;; Save the input contents before collapsing
       (outliner-tx/transact! ;; Save the new collapsed state as an undo transaction (if it changed)
         {:outliner-op :collapse-expand-blocks}
         (doseq [block-id block-ids]
