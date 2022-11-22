@@ -6,6 +6,7 @@ const extendedIcons = [
   'block',
   'block-search',
   'internal-link',
+  'move-to-sidebar-right',
   'page',
   'page-search',
   'references-hide',
