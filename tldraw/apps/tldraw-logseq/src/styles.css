@@ -1030,7 +1030,7 @@ html[data-theme='dark'] {
 .tl-shape-links-panel,
 .tl-shape-links-reference-panel {
   @apply p-3;
-  width: 340px;
+  min-width: 340px;
   color: var(--ls-primary-text-color);
 }
 
