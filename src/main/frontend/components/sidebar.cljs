@@ -256,7 +256,7 @@
                            :extension? true})}])
    {}))
 
-(rum/defc sidebar-nav
+(rum/defc ^:large-vars/cleanup-todo sidebar-nav
   [route-match close-modal-fn left-sidebar-open? srs-open?
    *closing? close-signal touching-x-offset]
   (let [[local-closing? set-local-closing?] (rum/use-state false)
