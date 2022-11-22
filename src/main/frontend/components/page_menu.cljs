@@ -113,7 +113,8 @@
             {:title   (t :page/delete)
              :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 
-          (when-not (mobile-util/native-platform?)
+          (when (and (not (mobile-util/native-platform?)) 
+                     (state/get-current-page))
             {:title (t :page/presentation-mode)
              :options {:on-click (fn []
                                    (state/sidebar-add-block!

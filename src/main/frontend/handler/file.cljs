@@ -93,7 +93,8 @@
                            re-render-root? false
                            from-disk? false
                            skip-compare? false}}]
-  (let [original-content (db/get-file repo path)
+  (let [path (gp-util/path-normalize path)
+        original-content (db/get-file repo path)
         write-file! (if from-disk?
                       #(p/resolved nil)
                       #(let [path-dir (if (and
@@ -164,7 +165,8 @@
   [repo files {:keys [finish-handler]} file->content]
   (let [write-file-f (fn [[path content]]
                        (when path
-                         (let [original-content (get file->content path)]
+                         (let [path (gp-util/path-normalize path)
+                               original-content (get file->content path)]
                           (-> (p/let [_ (or
                                          (util/electron?)
                                          (nfs/check-directory-permission! repo))]

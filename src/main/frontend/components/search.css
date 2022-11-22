@@ -11,12 +11,35 @@
   }
 }
 
-
 #search-wrapper {
-    transition: .3s;
-    padding-right: 12px;
+  transition: .3s;
+  padding-right: 12px;
 }
 
 .search-item svg {
-    transform: scale(0.8);
+  transform: scale(0.8);
+}
+
+.search-results-engines {
+  &-tabs {
+    @apply flex list-none -mx-2 mb-2;
+
+    background: var(--ls-primary-background-color);
+
+    > li {
+      @apply p-0 m-0 min-w-[150px] flex-1;
+
+      .ui__button {
+        @apply w-full h-full justify-center border;
+
+        background: transparent;
+        border-radius: 0;
+        line-height: 1;
+      }
+
+      &.is-active .ui__button {
+        background: var(--ls-quaternary-background-color);
+      }
+    }
+  }
 }

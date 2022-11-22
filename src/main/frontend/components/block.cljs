@@ -2534,7 +2534,7 @@
                             (filterv identity)
                             (map (fn [x] (if (vector? x)
                                            (let [[block label] x]
-                                             (breadcrumb-fragment config block label opts))
+                                             (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
                                            [:span.opacity-70 "⋯"])))
                             (interpose (breadcrumb-separator)))]
         [:div.breadcrumb.block-parents.flex-row.flex-1
@@ -2757,7 +2757,8 @@
                         (block-handler/on-touch-move event block uuid edit? *show-left-menu? *show-right-menu?))
        :on-touch-end (fn [event]
                        (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
-       :on-touch-cancel block-handler/on-touch-cancel
+       :on-touch-cancel (fn [_e]
+                          (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
        :on-mouse-over (fn [e]
                         (block-mouse-over e *control-show? block-id doc-mode?))
        :on-mouse-leave (fn [e]
@@ -3603,7 +3604,7 @@
             (when (seq blocks)
               (let [alias? (:block/alias? page)
                     page (db/entity (:db/id page))
-                    whiteboard? (= "whiteboard" (:block/type page))]
+                    whiteboard? (model/whiteboard-page? page)]
                 [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                              (:ref? config)
                              (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))

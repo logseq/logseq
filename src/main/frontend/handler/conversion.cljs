@@ -100,7 +100,7 @@
      {:status        :informal | :breaking | :unreachable
       :target        the new file name
       :old-title     the old title
-      :chagned-title the new title} | nil"
+      :changed-title the new title} | nil"
   [page path old-format new-format]
   (let [prop-title (get-in page [:block/properties :title])
         file-body  (gp-util/path->file-body path)

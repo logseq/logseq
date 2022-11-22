@@ -12,7 +12,7 @@
   --ls-headbar-height: 3rem;
   --ls-headbar-inner-top-padding: 0px;
   --ls-left-sidebar-width: 246px;
-  --ls-left-sidebar-sm-width: 70%;
+  --ls-left-sidebar-sm-width: 74vw;
   --ls-left-sidebar-nav-btn-size: 38px;
   --ls-error-color: var(--color-red-500);
   --ls-warning-color: var(--color-orange-500);
@@ -145,6 +145,7 @@ html[data-theme='light'] {
   --ls-block-bullet-color: rgba(67, 63, 56, 0.25);
   --ls-block-highlight-color: #c0e6fd;
   --ls-selection-background-color: #e4f2ff;
+  --ls-selection-text-color: var(--ls-secondary-text-color);
   --ls-page-checkbox-color: #9dbbd8;
   --ls-page-checkbox-border-color: var(--ls-page-checkbox-color);
   --ls-page-blockquote-color: var(--ls-primary-text-color);

@@ -178,7 +178,7 @@
      (create-new-whiteboard-page! nil))))
 
 (defn- get-whiteboard-blocks
-  "Given a page, return all the logseq blocks (exlude all shapes)"
+  "Given a page, return all the logseq blocks (exclude all shapes)"
   [page-name]
   (let [blocks (model/get-page-blocks-no-cache page-name)]
     (remove gp-whiteboard/shape-block? blocks)))
@@ -261,4 +261,4 @@
           (clone-whiteboard-from-edn edn api)
           (state/set-onboarding-whiteboard! true))
         (p/catch
-         (fn [e] (js/console.warn "Faield to populate onboarding whiteboard" e))))))
+         (fn [e] (js/console.warn "Failed to populate onboarding whiteboard" e))))))

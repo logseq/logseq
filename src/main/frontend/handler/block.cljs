@@ -242,7 +242,7 @@
           (reset! *swipe nil))))))
 
 (defn on-touch-cancel
-  [_event *show-left-menu? *show-right-menu?]
+  [*show-left-menu? *show-right-menu?]
   (reset! *show-left-menu? false)
   (reset! *show-right-menu? false)
   (reset! *swipe nil))

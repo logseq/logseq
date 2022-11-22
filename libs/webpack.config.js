@@ -2,6 +2,7 @@ const pkg = require('./package.json')
 const path = require('path')
 const webpack = require('webpack')
 const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin
+const TerserPlugin = require('terser-webpack-plugin')
 
 module.exports = {
   entry: './src/LSPlugin.user.ts',
@@ -9,13 +10,26 @@ module.exports = {
     rules: [
       {
         test: /\.tsx?$/,
-        use: 'ts-loader',
+        use: [
+          {
+            loader: 'babel-loader'
+          },
+          {
+            loader: 'ts-loader'
+          }
+        ],
         exclude: /node_modules/,
-      },
+      }
     ],
   },
   resolve: {
     extensions: ['.tsx', '.ts', '.js'],
+  },
+  optimization: {
+    minimize: true,
+    minimizer: [
+      new TerserPlugin()
+    ]
   },
   plugins: [
     new webpack.ProvidePlugin({

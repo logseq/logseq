@@ -39,9 +39,9 @@
            api #(str "https://api.github.com/repos/" repo "/" %)
            endpoint (api url-suffix)
            ^js res (fetch endpoint)
+           _ (debug "[Release URL] " endpoint "[Response Status/Text]" (.-status res) "-")
            res (response-transform res)
            res (.json res)
-           _ (debug "[Release URL] " endpoint)
            res (bean/->clj res)
            version (:tag_name res)
            asset (first (filter #(string/ends-with? (:name %) ".zip") (:assets res)))]
