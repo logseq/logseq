@@ -144,23 +144,14 @@ export const ShapeLinksInput = observer(function ShapeLinksInput({
           <div className="h-2" />
 
           {canAddLink && (
-            <>
-              <LogseqQuickSearch
-                style={{
-                  width: 'calc(100% - 46px)',
-                  marginLeft: '46px',
-                }}
-                placeholder="Start typing to search..."
-                onChange={addNewRef}
-              />
-              <div className="h-2" />
-              <div className="text-center">
-                <span className="opacity-50 mr-1">Paste from clipboard with</span>
-                <span className="keyboard-shortcut">
-                  <code>{MOD_KEY}</code> <code>⇧</code> <code>V</code>
-                </span>
-              </div>
-            </>
+            <LogseqQuickSearch
+              style={{
+                width: 'calc(100% - 46px)',
+                marginLeft: '46px',
+              }}
+              placeholder="Start typing to search..."
+              onChange={addNewRef}
+            />
           )}
 
           {refs.length > 0 && (
