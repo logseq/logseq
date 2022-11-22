@@ -83,7 +83,7 @@ We have [a dedicated overview page](https://github.com/logseq/logseq/blob/master
 ## Set up development environment
 * For setting up web app / desktop app development environment on macOS / Linux, please refer to [Develop Logseq](docs/develop-logseq.md).
 
-* For Windows users, please refer to [Develop LogSeq on Windows](docs/develop-logseq-on-windows.md) in addition.
+* For Windows users, please refer to [Develop Logseq on Windows](docs/develop-logseq-on-windows.md) in addition.
 
 There are more guides in [docs/](docs/), e.g. the [Guide for contributing to translations](docs/contributing-to-translations.md) and the [Docker web app guide](docs/docker-web-app-guide.md)
 
