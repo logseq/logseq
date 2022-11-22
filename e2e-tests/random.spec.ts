@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
 import {
-  createRandomPage, randomInt, randomInsert, randomEditDelete, randomEditMoveUpDown, IsMac, randomString,
+  createRandomPage, randomInt, IsMac, randomString,
 } from './utils'
 
 /**
@@ -175,7 +175,5 @@ test('Random editor operations', async ({ page, block }) => {
 
     // FIXME: CHECK await block.waitForBlocks(expectedBlocks)
     await page.waitForTimeout(50)
-
   }
-
 })

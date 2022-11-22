@@ -329,6 +329,16 @@
     (swap! state/state medley/dissoc-in [:plugin/installed-resources pid])
     true))
 
+(defn register-plugin-search-service
+  [pid name opts]
+  (when-let [pid (and name (keyword pid))]
+    (state/install-plugin-service pid :search name opts)))
+
+(defn unregister-plugin-search-services
+  [pid]
+  (when-let [pid (keyword pid)]
+    (state/uninstall-plugin-service pid :search)))
+
 (defn unregister-plugin-themes
   ([pid] (unregister-plugin-themes pid true))
   ([pid effect]
@@ -564,7 +574,7 @@
     (when-not (= text "END")
       [:div.flex.align-items.justify-center.h-screen.w-full.preboot-loading
        [:span.flex.items-center.justify-center.w-60.flex-col
-        [:small.scale-250.opacity-70.mb-10.animate-pulse (svg/logo false)]
+        [:small.scale-250.opacity-70.mb-10.animate-pulse (svg/logo)]
         [:small.block.text-sm.relative.opacity-50 {:style {:right "-8px"}} text]]])))
 
 (defn ^:large-vars/cleanup-todo init-plugins!
@@ -586,7 +596,8 @@
                                 (invoke-exported-api "unregister_plugin_simple_command" pid)
                                 (invoke-exported-api "uninstall_plugin_hook" pid)
                                 (unregister-plugin-ui-items pid)
-                                (unregister-plugin-resources pid))
+                                (unregister-plugin-resources pid)
+                                (unregister-plugin-search-services pid))
 
               _               (doto js/LSPluginCore
                                 (.on "registered"

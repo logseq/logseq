@@ -279,6 +279,7 @@ class LSPluginCaller extends EventEmitter {
             debug(`[user -> *host] `, type, payload)
 
             this._pluginLocal?.emit(type, payload || {})
+            this._pluginLocal?.caller.emit(type, payload || {})
           })
 
           this._call = async (...args: any) => {

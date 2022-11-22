@@ -146,6 +146,9 @@
 (def textarea-ref-name "textarea")
 (def codemirror-ref-name "codemirror-instance")
 
+;; export CodeMirror to global scope
+(set! js/window -CodeMirror cm)
+
 (defn- extra-codemirror-options []
   (get (state/get-config)
        :editor/extra-codemirror-options {}))

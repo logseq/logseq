@@ -13,6 +13,7 @@
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.utils :as db-utils]
+            [frontend.db.react :refer [sub-key-value]]
             [frontend.db.query-react :as query-react]
             [frontend.fs :as fs]
             [frontend.handler.dnd :as editor-dnd-handler]
@@ -94,11 +95,23 @@
 (defn ^:export get_state_from_store
   [^js path]
   (when-let [path (if (string? path) [path] (bean/->clj path))]
-    (->> path
-         (map #(if (string/starts-with? % "@")
-                 (subs % 1)
-                 (keyword %)))
-         (get-in @state/state))))
+    (some->> path
+             (map #(if (string/starts-with? % "@")
+                     (subs % 1)
+                     (keyword %)))
+             (get-in @state/state)
+             (normalize-keyword-for-json)
+             (bean/->js))))
+
+(defn ^:export set_state_from_store
+  [^js path ^js value]
+  (when-let [path (if (string? path) [path] (bean/->clj path))]
+    (some->> path
+             (map #(if (string/starts-with? % "@")
+                     (subs % 1)
+                     (keyword %)))
+             (into [])
+             (#(state/set-state! % (bean/->clj value))))))
 
 (defn ^:export get_app_info
   ;; get app base info
@@ -129,6 +142,20 @@
     (some-> (state/get-config)
             (normalize-keyword-for-json)
             (bean/->js))))
+
+(def ^:export get_current_graph_favorites
+  (fn []
+    (some->> (:favorites (state/get-config))
+             (remove string/blank?)
+             (filter string?)
+             (bean/->js))))
+
+(def ^:export get_current_graph_recent
+  (fn []
+    (some->> (sub-key-value :recent/pages)
+             (remove string/blank?)
+             (filter string?)
+             (bean/->js))))
 
 (def ^:export get_current_graph
   (fn []
@@ -370,6 +397,14 @@
           (js/console.debug :shortcut/unregister-shortcut cmd)
           (st/unregister-shortcut! (:handler-id cmd) (:id cmd)))))))
 
+(defn ^:export register_search_service
+  [pid name ^js opts]
+  (plugin-handler/register-plugin-search-service pid name (bean/->clj opts)))
+
+(defn ^:export unregister_search_services
+  [pid]
+  (plugin-handler/unregister-plugin-search-services pid))
+
 (def ^:export register_plugin_ui_item
   (fn [pid type ^js opts]
     (when-let [opts (bean/->clj opts)]
@@ -413,6 +448,13 @@
     (if (= flag "toggle")
       (state/toggle-sidebar-open?!)
       (state/set-state! :ui/sidebar-open? (boolean flag)))
+    nil))
+
+(def ^:export clear_right_sidebar_blocks
+  (fn [^js opts]
+    (state/clear-sidebar-blocks!)
+    (when-let [opts (and opts (bean/->clj opts))]
+      (and (:close opts) (state/hide-right-sidebar!)))
     nil))
 
 (def ^:export push_state
@@ -802,7 +844,11 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [db (db/get-db repo)]
       (let [query (cljs.reader/read-string query)
-            resolved-inputs (map (comp query-react/resolve-input cljs.reader/read-string) inputs)
+            resolved-inputs (map #(cond
+                                    (string? %)
+                                    (some-> % (cljs.reader/read-string) (query-react/resolve-input))
+                                    :else %)
+                                 inputs)
             result (apply d/q query db resolved-inputs)]
         (bean/->js (normalize-keyword-for-json result false))))))
 
