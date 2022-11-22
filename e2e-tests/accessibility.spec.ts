@@ -11,9 +11,5 @@ test('should not have any automatically detectable accessibility issues', async 
         .setLegacyMode()
         .analyze()
 
-    try {
         expect(accessibilityScanResults.violations).toEqual([]);
-    } catch (e) {
-        console.debug(e)
-    }
 })
