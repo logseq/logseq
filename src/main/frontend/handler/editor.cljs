@@ -421,8 +421,7 @@
 (declare save-current-block!)
 (defn outliner-insert-block!
   [config current-block new-block {:keys [sibling? keep-uuid?
-                                          replace-empty-target?]
-                                   :or {save-current-block? true}}]
+                                          replace-empty-target?]}]
   (let [ref-query-top-block? (and (or (:ref? config)
                                       (:custom-query? config))
                                   (not (:ref-query-child? config)))
@@ -555,8 +554,7 @@
                    custom-uuid replace-empty-target? edit-block?]
             :or {sibling? false
                  before? false
-                 edit-block? true}
-            :as args}]
+                 edit-block? true}}]
   (when (or page block-uuid)
     (let [before? (if page false before?)
           sibling? (boolean sibling?)
