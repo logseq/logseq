@@ -6,6 +6,7 @@ import type { Shape } from '../../lib'
 import { LogseqContext } from '../../lib/logseq-context'
 import { TablerIcon } from '../icons'
 
+// TODO: share to other components?
 const BlockLink = ({ type, id }: { type?: 'P' | 'B'; id: string }) => {
   const {
     handlers: { isWhiteboardPage, redirectToPage, sidebarAddBlock },

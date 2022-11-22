@@ -83,10 +83,15 @@
                       (state/sidebar-add-block! (state/get-current-repo)
                                                 (:db/id (model/get-page uuid))
                                                 (keyword type)))
-   :redirectToPage (fn [page-name]
-                     (if (model/whiteboard-page? page-name)
-                       (route-handler/redirect-to-whiteboard! page-name)
-                       (route-handler/redirect-to-page! page-name)))})
+   :redirectToPage (fn [page-name-or-uuid]
+                     (prn (:block/name (model/get-block-parent (parse-uuid page-name-or-uuid))))
+                     (let [page-name (if (util/uuid-string? page-name-or-uuid)
+                                       (:block/name (model/get-block-parent (parse-uuid page-name-or-uuid)))
+                                       page-name-or-uuid)
+                           whiteboard? (model/whiteboard-page? page-name)]
+                       (if whiteboard? (route-handler/redirect-to-whiteboard!
+                                        page-name {:block-id page-name-or-uuid})
+                           (route-handler/redirect-to-page! page-name-or-uuid))))})
 
 (rum/defc tldraw-app
   [page-name block-id]
