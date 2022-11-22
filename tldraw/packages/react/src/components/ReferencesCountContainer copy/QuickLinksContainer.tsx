@@ -51,7 +51,6 @@ export const QuickLinksContainer = observer(function QuickLinksContainer<S exten
           }}
           {...events}
           onPointerDown={stop}
-          onWheelCapture={stop}
           title="Shape Quick Links"
         >
           <QuickLinks
