@@ -8,16 +8,37 @@ import { TablerIcon } from '../icons'
 
 const BlockLink = ({ type, id }: { type?: 'P' | 'B'; id: string }) => {
   const {
+    handlers: { isWhiteboardPage, redirectToPage, sidebarAddBlock },
     renderers: { Breadcrumb, PageNameLink },
   } = React.useContext(LogseqContext)
 
   type = type ?? (validUUID(id) ? 'B' : 'P')
 
   return (
-    <>
-      <TablerIcon name={type === 'P' ? 'link-to-page' : 'link-to-block'} />
-      {type === 'P' ? <PageNameLink pageName={id} /> : <Breadcrumb levelLimit={1} blockId={id} />}
-    </>
+    <button
+      className="inline-flex gap-1 items-center w-full"
+      onPointerDown={e => {
+        e.stopPropagation()
+        if (e.shiftKey) {
+          sidebarAddBlock(id, type === 'B' ? 'block' : 'page')
+        } else {
+          redirectToPage(id)
+        }
+      }}
+    >
+      <TablerIcon
+        name={
+          type === 'P'
+            ? isWhiteboardPage(id)
+              ? 'link-to-whiteboard'
+              : 'link-to-page'
+            : 'link-to-block'
+        }
+      />
+      <span className='pointer-events-none'>
+        {type === 'P' ? <PageNameLink pageName={id} /> : <Breadcrumb levelLimit={1} blockId={id} />}
+      </span>
+    </button>
   )
 }
 
@@ -38,7 +59,7 @@ export const QuickLinks: TLQuickLinksComponent<Shape> = observer(({ id, shape })
       )}
       {refs.map(ref => {
         return (
-          <div key={ref} className="tl-quick-links-row">
+          <div key={ref} className="tl-quick-links-row tl-quick-links-row-secondary">
             <BlockLink id={ref} />
           </div>
         )

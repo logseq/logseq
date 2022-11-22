@@ -6,6 +6,7 @@ const extendedIcons = [
   'internal-link',
   'link-to-block',
   'link-to-page',
+  'link-to-whiteboard',
   'move-to-sidebar-right',
   'object-compact',
   'object-expanded',

@@ -1088,10 +1088,14 @@ html[data-theme='dark'] {
 }
 
 .tl-quick-links-row {
-  @apply flex px-2 items-center gap-1;
+  @apply flex;
   min-height: 26px;
 
-  > .breadcrumb {
+  > button {
+    @apply px-2;
+  }
+
+  .breadcrumb {
     margin: 0;
   }
 
@@ -1105,10 +1109,24 @@ html[data-theme='dark'] {
 }
 
 .tl-quick-links-row-primary {
-  @apply rounded;
-  background-color: var(--color-selectedFill);
+  @apply rounded bg-indigo-600;
   color: #fff;
 }
+
 .tl-quick-links-row-secondary {
+  @apply opacity-50;
   color: var(--ls-secondary-text-color);
+
+  &:hover {
+    @apply opacity-100;
+  }
+}
+
+.tl-quick-links:hover {
+  .tl-quick-links-row-primary:not(:hover) {
+    @apply opacity-50;
+  }
+  .tl-quick-links-row-primary:hover {
+    @apply bg-indigo-500;
+  }
 }

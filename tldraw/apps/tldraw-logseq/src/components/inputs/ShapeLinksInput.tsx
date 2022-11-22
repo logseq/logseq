@@ -71,12 +71,9 @@ export function ShapeLinksInput({
   const noOfLinks = refs.length + (pageId ? 1 : 0)
   const canAddLink = refs.length === 0
 
-  const [showQuickSearch, setShowQuickSearch] = React.useState(canAddLink)
-
   const addNewRef = (value?: string) => {
     if (value && !refs.includes(value)) {
       onRefsChange([...refs, value])
-      setShowQuickSearch(false)
     }
   }
 
@@ -144,39 +141,20 @@ export function ShapeLinksInput({
         <div className="tl-shape-links-panel color-level">
           <div className="text-base font-bold inline-flex gap-1 items-center">
             <TablerIcon className="opacity-50" name="add-link" />
-            Your link
+            Link to any page or block
           </div>
-          <div className="h-2" />
-          <div className="whitespace-pre-wrap">
-            This <strong>{shapeType}</strong> can be linked to any other block, page or whiteboard
-            element you have stored in Logseq.
-          </div>
-
           <div className="h-2" />
 
           {canAddLink && (
             <>
-              {showQuickSearch ? (
-                <LogseqQuickSearch
-                  style={{
-                    width: 'calc(100% - 46px)',
-                    marginLeft: '46px',
-                  }}
-                  onBlur={() => setShowQuickSearch(false)}
-                  placeholder="Start typing to search..."
-                  onChange={addNewRef}
-                />
-              ) : (
-                <div>
-                  <Button
-                    className="tl-shape-links-panel-add-button"
-                    onClick={() => setShowQuickSearch(true)}
-                  >
-                    <TablerIcon name="plus" />
-                    Add a new link
-                  </Button>
-                </div>
-              )}
+              <LogseqQuickSearch
+                style={{
+                  width: 'calc(100% - 46px)',
+                  marginLeft: '46px',
+                }}
+                placeholder="Start typing to search..."
+                onChange={addNewRef}
+              />
               <div className="h-2" />
               <div className="text-center">
                 <span className="opacity-50 mr-1">Paste from clipboard with</span>
