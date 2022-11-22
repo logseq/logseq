@@ -5,16 +5,16 @@ import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { NOOP } from '../../constants'
 import {
-  useRendererContext,
   useApp,
-  useStylesheet,
-  usePreventNavigation,
-  useResizeObserver,
-  useGestureEvents,
-  useCursor,
-  useZoom,
   useCanvasEvents,
+  useCursor,
+  useGestureEvents,
+  usePreventNavigation,
+  useRendererContext,
+  useResizeObserver,
   useRestoreCamera,
+  useStylesheet,
+  useZoom,
 } from '../../hooks'
 import { useKeyboardEvents } from '../../hooks/useKeyboardEvents'
 import type { TLReactShape } from '../../lib'
@@ -22,7 +22,7 @@ import { Container } from '../Container'
 import { ContextBarContainer } from '../ContextBarContainer'
 import { HTMLLayer } from '../HTMLLayer'
 import { Indicator } from '../Indicator'
-import { ReferencesCountContainer } from '../ReferencesCountContainer'
+import { ReferencesContainer } from '../ReferencesCountContainer'
 import { SelectionDetailContainer } from '../SelectionDetailContainer'
 import { Shape } from '../Shape'
 import { SVGContainer } from '../SVGContainer'
@@ -110,6 +110,8 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
   const erasingShapesSet = React.useMemo(() => new Set(erasingShapes || []), [erasingShapes])
   const singleSelectedShape = selectedShapes?.length === 1 ? selectedShapes[0] : undefined
 
+  const selectedOrHooveredShape = hoveredShape || singleSelectedShape
+
   return (
     <div ref={rContainer} className={`tl-container ${className ?? ''}`}>
       <div tabIndex={-1} className="tl-absolute tl-canvas" {...events}>
@@ -152,8 +154,15 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                 isSelected={true}
               />
             ))}
-          {hoveredShape && app.isInAny('creating') && (
+          {hoveredShape && (
             <Indicator key={'hovered_indicator_' + hoveredShape.id} shape={hoveredShape} />
+          )}
+          {selectedOrHooveredShape && components.ReferencesCount && (
+            <ReferencesContainer
+              hidden={false}
+              bounds={selectedOrHooveredShape.bounds}
+              shape={selectedOrHooveredShape}
+            />
           )}
           {brush && components.Brush && <components.Brush bounds={brush} />}
           {selectedShapes && selectionBounds && (
@@ -171,13 +180,6 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                     showRotateHandles={showRotateHandles}
                   />
                 </Container>
-              )}
-              {showSelection && singleSelectedShape && components.ReferencesCount && (
-                <ReferencesCountContainer
-                  hidden={false}
-                  bounds={singleSelectedShape.bounds}
-                  shape={singleSelectedShape}
-                />
               )}
               {showHandles && onlySelectedShapeWithHandles && components.Handle && (
                 <Container

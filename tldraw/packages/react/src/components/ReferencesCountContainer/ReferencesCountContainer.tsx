@@ -1,6 +1,6 @@
 import type { TLBounds } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
-import { useRendererContext } from '../../hooks'
+import { useApp, useRendererContext } from '../../hooks'
 import type { TLReactShape } from '../../lib'
 import { Container } from '../Container'
 import { HTMLContainer } from '../HTMLContainer'
@@ -12,7 +12,7 @@ export interface TLReferencesCountContainerProps<S extends TLReactShape> {
 }
 
 // backlinks
-export const ReferencesCountContainer = observer(function ReferencesCountContainer<
+export const ReferencesContainer = observer(function ReferencesCountContainer<
   S extends TLReactShape
 >({ bounds, hidden, shape }: TLReferencesCountContainerProps<S>) {
   const {
@@ -22,17 +22,16 @@ export const ReferencesCountContainer = observer(function ReferencesCountContain
     components: { ReferencesCount },
   } = useRendererContext()
 
+  const app = useApp<S>()
+
   if (!ReferencesCount) throw Error('Expected a ReferencesCount component.')
 
   const stop: React.EventHandler<any> = e => e.stopPropagation()
 
-  const rounded = bounds.height * zoom < 50
+  const rounded = bounds.height * zoom < 50 || !app.selectedShapesArray.includes(shape)
 
   return (
-    <Container
-      bounds={bounds}
-      className="tl-references-count-container"
-    >
+    <Container bounds={bounds} className="tl-references-count-container">
       <HTMLContainer>
         <span
           style={{
