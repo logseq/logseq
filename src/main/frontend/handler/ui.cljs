@@ -20,10 +20,6 @@
   [var-name]
   (.getPropertyValue (js/getComputedStyle (.-documentElement js/document)) var-name))
 
-(defn vw-small?
-  ([] (vw-small? (state/sub :ui/viewport)))
-  ([vw] (some-> (:width vw) (<= 640))))
-
 ;; sidebars
 (defn- get-right-sidebar-width
   []
