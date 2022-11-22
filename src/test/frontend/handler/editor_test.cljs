@@ -96,24 +96,45 @@
     (handle-last-input-handler {:value "first \nfoo::bar"
                                 :cursor-pos (dec (count "first "))})
     (is (= nil (state/get-editor-action))
-        "Don't autocomplete properties if typing in a block where properties already exist")
+        "Don't autocomplete properties if typing in a block where properties already exist"))
 
+  (testing "Tag autocompletion"
     (handle-last-input-handler {:value "#"
                                 :cursor-pos 1})
     (is (= :page-search-hashtag (state/get-editor-action))
-        "Page search if only hashtags has been typed")
-
-    (handle-last-input-handler {:value "foo bar#"
-                                :cursor-pos 8})
-    (is (= :page-search-hashtag (state/get-editor-action))
-        "Page search if hashtags has been typed as EOL")
+        "Page search if only hashtag has been typed")
 
     (handle-last-input-handler {:value "foo #"
                                 :cursor-pos 5})
     (is (= :page-search-hashtag (state/get-editor-action))
-        "Page search if hashtags has been typed after a space")
+        "Page search if hashtag has been typed at EOL")
 
-    (handle-last-input-handler {:value "foo#bar"
-                                :cursor-pos 4})
+    (handle-last-input-handler {:value "#Some words"
+                                :cursor-pos 1})
     (is (= :page-search-hashtag (state/get-editor-action))
-        "Page search if hashtags has been typed in the middle of a line")))
+        "Page search if hashtag is at start of line and there are existing words")
+
+    (handle-last-input-handler {:value "foo #"
+                                :cursor-pos 5})
+    (is (= :page-search-hashtag (state/get-editor-action))
+        "Page search if hashtag is at EOL and after a space")
+
+    (handle-last-input-handler {:value "foo #bar"
+                                :cursor-pos 5})
+    (is (= :page-search-hashtag (state/get-editor-action))
+        "Page search if hashtag is in middle of line and after a space")
+
+    (handle-last-input-handler {:value "String#" :cursor-pos 7})
+    (is (= nil (state/get-editor-action))
+        "No page search if hashtag has been typed at end of a word")
+
+    (handle-last-input-handler {:value "foo#bar" :cursor-pos 4})
+    (is (= nil (state/get-editor-action))
+        "No page search if hashtag is in middle of word")
+
+    (handle-last-input-handler {:value "`String#gsub and String#`"
+                                :cursor-pos (dec (count "`String#gsub and String#`"))})
+    (is (= nil (state/get-editor-action))
+        "No page search within backticks"))
+  ;; Reset state
+  (state/set-editor-action! nil))
