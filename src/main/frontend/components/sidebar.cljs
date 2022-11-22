@@ -273,9 +273,15 @@
                                    (.add cls cls')
                                    (.remove cls cls'))))
         close-fn            #(set-local-closing? true)
-        touching-x-offset (when (and (number? touching-x-offset)
-                                     (> touching-x-offset 0))
-                            (min touching-x-offset (:width el-rect)))]
+        touching-x-offset (when (number? touching-x-offset)
+                            (if-not left-sidebar-open?
+                              (when (> touching-x-offset 0)
+                                (min touching-x-offset (:width el-rect)))
+                              (when (< touching-x-offset 0)
+                                (max touching-x-offset (- 0 (:width el-rect))))))
+        offset-ratio (and (number? touching-x-offset)
+                            (some->> (:width el-rect)
+                                     (/ touching-x-offset)))]
 
     (rum/use-effect!
      #(js/setTimeout
@@ -299,8 +305,13 @@
      [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
       {:ref               ref-el
        :style             (cond-> {}
-                            (number? touching-x-offset)
-                            (assoc :transform (str "translate3d(calc(" touching-x-offset "px - 100%), 0, 0)")))
+                            (and (number? offset-ratio)
+                                 (> touching-x-offset 0))
+                            (assoc :transform (str "translate3d(calc(" touching-x-offset "px - 100%), 0, 0)"))
+
+                            (and (number? offset-ratio)
+                                 (< touching-x-offset 0))
+                            (assoc :transform (str "translate3d(" (* offset-ratio 100) "%, 0, 0)")))
        :on-transition-end (fn []
                             (when local-closing?
                               (reset! *closing? false)
@@ -401,10 +412,11 @@
         *touch-state      (::touch-state s)
         touch-point-fn    (fn [^js e] (some-> (gobj/get e "touches") (aget 0) (#(hash-map :x (.-clientX %) :y (.-clientY %)))))
         srs-open?         (= :srs (state/sub :modal/id))
-        touching-x-offset (some->> @*touch-state
-                                   ((juxt :after :before))
-                                   (map :x) (apply -))
-        touch-pending?    (> touching-x-offset 20)]
+        touching-x-offset (and (some-> @*touch-state :after)
+                               (some->> @*touch-state
+                                        ((juxt :after :before))
+                                        (map :x) (apply -)))
+        touch-pending?    (> (abs touching-x-offset) 20)]
 
     [:div#left-sidebar.cp__sidebar-left-layout
      {:class (util/classnames [{:is-open     left-sidebar-open?
@@ -412,17 +424,22 @@
                                 :is-touching touch-pending?}])
       :on-touch-start
       (fn [^js e]
-        (when-not left-sidebar-open?
-          (reset! *touch-state {:before (touch-point-fn e)})))
+        (prn "===> touch start:" (touch-point-fn e))
+        (reset! *touch-state {:before (touch-point-fn e)}))
       :on-touch-move
       (fn [^js e]
+        (prn "===> touch move:" (touch-point-fn e))
         (when @*touch-state
           (some-> *touch-state (swap! assoc :after (touch-point-fn e)))))
       :on-touch-end
       (fn []
-        (when (and touch-pending?
-                   (> touching-x-offset 120))
-          (state/set-left-sidebar-open! true))
+        (when touch-pending?
+          (cond
+            (and (not left-sidebar-open?) (> touching-x-offset 120))
+            (state/set-left-sidebar-open! true)
+
+            (and left-sidebar-open? (< touching-x-offset -50))
+            (state/set-left-sidebar-open! false)))
         (reset! *touch-state nil))}
 
      ;; sidebar contents
