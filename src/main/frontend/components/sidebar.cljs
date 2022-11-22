@@ -447,10 +447,10 @@
       (fn []
         (when touch-pending?
           (cond
-            (and (not left-sidebar-open?) (> touching-x-offset 120))
+            (and (not left-sidebar-open?) (> touching-x-offset 40))
             (state/set-left-sidebar-open! true)
 
-            (and left-sidebar-open? (< touching-x-offset -50))
+            (and left-sidebar-open? (< touching-x-offset -30))
             (reset! *close-signal (inc @*close-signal))))
         (reset! *touch-state nil))}
 
