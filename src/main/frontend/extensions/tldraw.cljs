@@ -84,7 +84,6 @@
                                                 (:db/id (model/get-page uuid))
                                                 (keyword type)))
    :redirectToPage (fn [page-name-or-uuid]
-                     (prn (:block/name (model/get-block-parent (parse-uuid page-name-or-uuid))))
                      (let [page-name (if (util/uuid-string? page-name-or-uuid)
                                        (:block/name (model/get-block-parent (parse-uuid page-name-or-uuid)))
                                        page-name-or-uuid)

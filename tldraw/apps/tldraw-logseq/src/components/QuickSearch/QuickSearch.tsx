@@ -1,8 +1,8 @@
-import { useApp, useDebouncedValue } from '@tldraw/react'
+import { useDebouncedValue } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import React from 'react'
 import { Virtuoso } from 'react-virtuoso'
-import { LogseqPortalShape, type Shape } from '../../lib'
+import { LogseqPortalShape } from '../../lib'
 import { LogseqContext, SearchResult } from '../../lib/logseq-context'
 import { CircleButton } from '../Button'
 import { TablerIcon } from '../icons'
@@ -132,7 +132,7 @@ export const LogseqQuickSearch = observer(
     const [prefixIcon, setPrefixIcon] = React.useState<string>('circle-plus')
 
     React.useEffect(() => {
-      // autofocus seems not to be working
+      // autofocus attr seems not to be working
       setTimeout(() => {
         rInput.current?.focus()
       })

@@ -1,10 +1,12 @@
 import type { Side } from '@radix-ui/react-popper'
-import Mousetrap from 'mousetrap'
 import { MOD_KEY, validUUID } from '@tldraw/core'
+import Mousetrap from 'mousetrap'
 import React from 'react'
 import { NIL as NIL_UUID } from 'uuid'
 
+import { observer } from 'mobx-react-lite'
 import { LogseqContext } from '../../lib/logseq-context'
+import { BlockLink } from '../BlockLink'
 import { Button } from '../Button'
 import { TablerIcon } from '../icons'
 import { PopoverButton } from '../PopoverButton'
@@ -28,16 +30,12 @@ function ShapeLinkItem({
   type: 'B' | 'P'
   onRemove?: () => void
 }) {
-  const {
-    handlers,
-    renderers: { Breadcrumb, PageNameLink },
-  } = React.useContext(LogseqContext)
+  const { handlers } = React.useContext(LogseqContext)
 
   return (
     <div className="tl-shape-links-panel-item color-level">
-      <TablerIcon name={type === 'P' ? 'page' : 'block'} />
       <div className="whitespace-pre break-all overflow-hidden text-ellipsis">
-        {type === 'P' ? <PageNameLink pageName={id} /> : <Breadcrumb levelLimit={1} blockId={id} />}
+        <BlockLink id={id} type={type} />
       </div>
       <div className="flex-1" />
       <Button title="Open Page" type="button" onClick={() => handlers?.redirectToPage(id)}>
@@ -59,7 +57,7 @@ function ShapeLinkItem({
   )
 }
 
-export function ShapeLinksInput({
+export const ShapeLinksInput = observer(function ShapeLinksInput({
   pageId,
   portalType,
   shapeType,
@@ -72,7 +70,7 @@ export function ShapeLinksInput({
   const canAddLink = refs.length === 0
 
   const addNewRef = (value?: string) => {
-    if (value && !refs.includes(value)) {
+    if (value && !refs.includes(value) && canAddLink) {
       onRefsChange([...refs, value])
     }
   }
@@ -188,4 +186,4 @@ export function ShapeLinksInput({
       </div>
     </PopoverButton>
   )
-}
+})
