@@ -32,6 +32,8 @@ export class CreatingState<
       type: Shape.id,
       parentId: this.app.currentPage.id,
       point: originPoint,
+      fill: this.app.settings.color,
+      stroke: this.app.settings.color,
     })
     this.initialShape = toJS(shape.props)
     this.currentShape = shape

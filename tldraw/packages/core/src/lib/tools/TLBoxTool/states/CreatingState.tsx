@@ -32,6 +32,8 @@ export class CreatingState<
       type: Shape.id,
       parentId: currentPage.id,
       point: [...originPoint],
+      fill: this.app.settings.color,
+      stroke: this.app.settings.color,
       size: Vec.abs(Vec.sub(currentPoint, originPoint)),
     })
     this.initialBounds = {

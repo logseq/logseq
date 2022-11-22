@@ -13,7 +13,7 @@
 ;; To maintain backward compatibility
 
 
-(def store (atom nil))
+(defonce store (atom nil))
 
 (defn clear-idb!
   []

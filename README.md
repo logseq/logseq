@@ -87,6 +87,13 @@ We have [a dedicated overview page](https://github.com/logseq/logseq/blob/master
 
 There are more guides in [docs/](docs/), e.g. the [Guide for contributing to translations](docs/contributing-to-translations.md) and the [Docker web app guide](docs/docker-web-app-guide.md)
 
+## How to contribute with a PR
+If you would like to contribute by solving an open issue, please fork this repository and then create a branch for the fix.
+
+Once you push your code to your fork you we'll be able to open a PR into Logseq repository. For more info you can follow this guide from [Github docs](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork)
+
+And here a list of some [good firt issues](https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)!
+
 ## Thanks
 
 [![JetBrains](docs/assets/jetbrains.svg)](https://www.jetbrains.com/?from=logseq)

@@ -234,7 +234,7 @@
      :reactive/query-dbs                    {}
 
      ;; login, userinfo, token, ...
-     :auth/refresh-token                    nil
+     :auth/refresh-token                    (storage/get "refresh-token")
      :auth/access-token                     nil
      :auth/id-token                         nil
 
@@ -296,10 +296,6 @@
 ;;  (re-)fetches get-current-repo needlessly
 ;; TODO: Add consistent validation. Only a few config options validate at get time
 
-(defn get-current-pdf
-  []
-  (:pdf/current @state))
-
 (def default-config
   "Default config for a repo-specific, user config"
   {:feature/enable-search-remove-accents? true
@@ -312,7 +308,7 @@
 (declare get-current-repo sub set-state!)
 
 (defn merge-configs
-  "Merges user configs in given orders. All values are overriden except for maps
+  "Merges user configs in given orders. All values are overridden except for maps
   which are merged."
   [& configs]
   (apply merge-with
@@ -650,9 +646,9 @@ Similar to re-frame subscriptions"
   []
   (:editor/logical-outdenting? (sub-config)))
 
-(defn perferred-pasting-file?
+(defn preferred-pasting-file?
   []
-  (:editor/perferred-pasting-file? (sub-config)))
+  (:editor/preferred-pasting-file? (sub-config)))
 
 (defn doc-mode-enter-for-new-line?
   []
@@ -1118,7 +1114,7 @@ Similar to re-frame subscriptions"
 
 (defn set-theme-mode!
   [mode]
-  (when (mobile-util/native-ios?)
+  (when (mobile-util/native-platform?)
     (if (= mode "light")
       (util/set-theme-light)
       (util/set-theme-dark)))
@@ -1141,7 +1137,7 @@ Similar to re-frame subscriptions"
       (set-state! :ui/system-theme? false)
       (storage/set :ui/system-theme? false))))
 
-(defn toggle-theme
+(defn- toggle-theme
   [theme]
   (if (= theme "dark") "light" "dark"))
 
@@ -1155,6 +1151,17 @@ Similar to re-frame subscriptions"
   ([mode theme]
    (set-state! (if mode [:ui/custom-theme (keyword mode)] :ui/custom-theme) theme)
    (storage/set :ui/custom-theme (:ui/custom-theme @state))))
+
+(defn restore-mobile-theme!
+  "Restore mobile theme setting from local storage"
+  []
+  (let [mode (or (storage/get :ui/theme) "light")
+        system-theme? (storage/get :ui/system-theme?)]
+    (when (and (not system-theme?)
+               (mobile-util/native-platform?))
+      (if (= mode "light")
+        (util/set-theme-light)
+        (util/set-theme-dark)))))
 
 (defn set-editing-block-dom-id!
   [block-dom-id]
@@ -1538,11 +1545,11 @@ Similar to re-frame subscriptions"
     (if-let [tldraw-app (active-tldraw-app)]
       (let [last-time (:block/updated-at whiteboard-page)
             now (util/time-ms)
-            ellapsed (- now last-time)
+            elapsed (- now last-time)
             select-idle (.. tldraw-app (isIn "select.idle"))
             tool-idle (.. tldraw-app -selectedTool (isIn "idle"))]
-        (or (and select-idle (>= ellapsed select-idle-ms))
-            (and (not select-idle) tool-idle (>= ellapsed tool-idle-ms))))
+        (or (and select-idle (>= elapsed select-idle-ms))
+            (and (not select-idle) tool-idle (>= elapsed tool-idle-ms))))
       true)))
 
 (defn set-nfs-refreshing!
@@ -1758,12 +1765,12 @@ Similar to re-frame subscriptions"
     (get-in @state [:plugin/installed-plugins id])))
 
 (defn get-enabled?-installed-plugins
-  ([theme?] (get-enabled?-installed-plugins theme? true false))
-  ([theme? enabled? include-unpacked?]
+  ([theme?] (get-enabled?-installed-plugins theme? true false false))
+  ([theme? enabled? include-unpacked? include-all?]
    (filterv
      #(and (if include-unpacked? true (:iir %))
            (if-not (boolean? enabled?) true (= (not enabled?) (boolean (get-in % [:settings :disabled]))))
-           (= (boolean theme?) (:theme %)))
+           (or include-all? (= (boolean theme?) (:theme %))))
      (vals (:plugin/installed-plugins @state)))))
 
 (defn lsp-enabled?-or-theme
@@ -1865,7 +1872,7 @@ Similar to re-frame subscriptions"
   (set-state! :auth/access-token access-token))
 
 (defn get-auth-id-token []
-  (:auth/id-token @state))
+  (sub :auth/id-token))
 
 (defn get-auth-refresh-token []
   (:auth/refresh-token @state))
@@ -1890,14 +1897,6 @@ Similar to re-frame subscriptions"
   (when v (s/assert :frontend.fs.sync/sync-state v))
   (set-state! [:file-sync/graph-state graph-uuid :file-sync/sync-state] v))
 
-(defn get-file-sync-state
-  [graph-uuid]
-  (get-in @state [:file-sync/graph-state graph-uuid :file-sync/sync-state]))
-
-(defn sub-file-sync-state
-  [graph-uuid]
-  (sub [:file-sync/graph-state graph-uuid :file-sync/sync-state]))
-
 (defn get-current-file-sync-graph-uuid
   []
   (get-in @state [:file-sync/graph-state :current-graph-uuid]))
@@ -1905,6 +1904,16 @@ Similar to re-frame subscriptions"
 (defn sub-current-file-sync-graph-uuid
   []
   (sub [:file-sync/graph-state :current-graph-uuid]))
+
+(defn get-file-sync-state
+  ([]
+   (get-file-sync-state (get-current-file-sync-graph-uuid)))
+  ([graph-uuid]
+   (get-in @state [:file-sync/graph-state graph-uuid :file-sync/sync-state])))
+
+(defn sub-file-sync-state
+  [graph-uuid]
+  (sub [:file-sync/graph-state graph-uuid :file-sync/sync-state]))
 
 (defn reset-parsing-state!
   []
@@ -1967,3 +1976,16 @@ Similar to re-frame subscriptions"
   []
   (when (mobile-util/native-ios?)
     (get-in @state [:mobile/container-urls :iCloudContainerUrl])))
+
+(defn get-current-pdf
+  []
+  (:pdf/current @state))
+
+(defn set-current-pdf!
+  [inflated-file]
+  (let [settle-file! #(set-state! :pdf/current inflated-file)]
+    (if-not (get-current-pdf)
+      (settle-file!)
+      (when (apply not= (map :identity [inflated-file (get-current-pdf)]))
+        (set-state! :pdf/current nil)
+        (js/setTimeout #(settle-file!) 16)))))

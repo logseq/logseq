@@ -92,10 +92,13 @@
                        (let [{:keys [page-name block-id file]} (bean/->clj data)]
                          (cond
                            page-name
-                           (let [db-page-name (db-model/get-redirect-page-name page-name)]
+                           (let [db-page-name (db-model/get-redirect-page-name page-name)
+                                 whiteboard? (db-model/whiteboard-page? db-page-name)]
                              ;; No error handling required, as a page name is always valid
                              ;; Open new page if the page does not exist
-                             (editor-handler/insert-first-page-block-if-not-exists! db-page-name))
+                             (if whiteboard?
+                               (route-handler/redirect-to-whiteboard! page-name {:block-id block-id})
+                               (editor-handler/insert-first-page-block-if-not-exists! db-page-name)))
 
                            block-id
                            (if (db-model/get-block-by-uuid block-id)

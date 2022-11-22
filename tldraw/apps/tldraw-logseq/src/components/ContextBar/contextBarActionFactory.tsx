@@ -356,6 +356,7 @@ const SwatchAction = observer(() => {
   return (
     <ColorInput
       title="Color Picker"
+      popoverSide="top"
       color={color}
       opacity={shapes[0].props.opacity}
       collisionRef={document.getElementById('main-content-container')}

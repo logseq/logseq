@@ -8,6 +8,10 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.assets :as assets-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.ui :as ui]
+            [frontend.context.i18n :refer [t]]
+            [frontend.extensions.lightbox :as lightbox]
             [frontend.util.page-property :as page-property]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -59,11 +63,11 @@
         data))))
 
 (defn persist-hls-data$
-  [{:keys [hls-file]} highlights]
+  [{:keys [hls-file]} highlights extra]
   (when hls-file
     (let [repo-cur (state/get-current-repo)
           repo-dir (config/get-repo-dir repo-cur)
-          data (pr-str {:highlights highlights})]
+          data (pr-str {:highlights highlights :extra extra})]
       (fs/write-file! repo-cur repo-dir hls-file data {:skip-compare? true}))))
 
 (defn resolve-hls-data-by-key$
@@ -226,7 +230,7 @@
             (do
               (state/set-state! :pdf/ref-highlight matched)
               ;; open pdf viewer
-              (state/set-state! :pdf/current (inflate-asset file-path)))
+              (state/set-current-pdf! (inflate-asset file-path)))
             (js/console.debug "[Unmatched highlight ref]" block)))))))
 
 (defn goto-block-ref!
@@ -242,32 +246,57 @@
    (when-let [name (:key current)]
      (rfe/push-state :page {:name (str "hls__" name)} (if id {:anchor (str "block-content-" + id)} nil)))))
 
+(defn open-lightbox
+  [e]
+  (let [images (js/document.querySelectorAll ".hl-area img")
+        images (to-array images)
+        images (if-not (= (count images) 1)
+                 (let [^js image (.closest (.-target e) ".hl-area")
+                       image (. image querySelector "img")]
+                   (->> images
+                        (sort-by (juxt #(.-y %) #(.-x %)))
+                        (split-with (complement #{image}))
+                        reverse
+                        (apply concat)))
+                 images)
+        images (for [^js it images] {:src (.-src it)
+                                     :w (.-naturalWidth it)
+                                     :h (.-naturalHeight it)})]
+
+    (when (seq images)
+      (lightbox/preview-images! images))))
+
 (rum/defc area-display
   [block]
   (when-let [asset-path' (and block (pdf-utils/get-area-block-asset-url
                                      block (db-utils/pull (:db/id (:block/page block)))))]
-    (let [asset-path     (editor-handler/make-asset-url asset-path')]
+    (let [asset-path (editor-handler/make-asset-url asset-path')]
       [:span.hl-area
-       [:img {:src asset-path}]])))
+       [:span.actions
+        (when-not config/publishing?
+          [:button.asset-action-btn.px-1
+           {:title         (t :asset/copy)
+            :tabIndex      "-1"
+            :on-mouse-down util/stop
+            :on-click      (fn [e]
+                             (util/stop e)
+                             (-> (util/copy-image-to-clipboard (gp-config/remove-asset-protocol asset-path))
+                                 (p/then #(notification/show! "Copied!" :success))))}
+           (ui/icon "copy")])
 
-(defn fix-local-asset-pagename
-  [filename]
-  (when-not (string/blank? filename)
-    (let [local-asset? (re-find #"[0-9]{13}_\d$" filename)
-          hls?         (re-find #"^hls__" filename)
-          len          (count filename)]
-      (if (or local-asset? hls?)
-        (-> filename
-            (subs 0 (if local-asset? (- len 15) len))
-            (string/replace #"^hls__" "")
-            (string/replace "_" " ")
-            (string/trimr))
-        filename))))
+        [:button.asset-action-btn.px-1
+         {:title         (t :asset/maximize)
+          :tabIndex      "-1"
+          :on-mouse-down util/stop
+          :on-click      open-lightbox}
+
+         (ui/icon "maximize")]]
+       [:img {:src asset-path}]])))
 
 (defn human-page-name
   [page-name]
   (cond
     (string/starts-with? page-name "hls__")
-    (fix-local-asset-pagename page-name)
+    (pdf-utils/fix-local-asset-pagename page-name)
 
     :else (util/trim-safe page-name)))
