@@ -1,51 +1,60 @@
 import type { TLBounds } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import { useApp, useRendererContext } from '../../hooks'
+import { useShapeEvents } from '../../hooks/useShapeEvents'
 import type { TLReactShape } from '../../lib'
 import { Container } from '../Container'
 import { HTMLContainer } from '../HTMLContainer'
 
-export interface TLBacklinksCountContainerProps<S extends TLReactShape> {
+export interface TLQuickLinksContainerProps<S extends TLReactShape> {
   hidden: boolean
   bounds: TLBounds
   shape: S
 }
 
 // backlinks
-export const BacklinksCountContainer = observer(function BacklinksCountContainer<
-  S extends TLReactShape
->({ bounds, shape }: TLBacklinksCountContainerProps<S>) {
+export const QuickLinksContainer = observer(function QuickLinksContainer<S extends TLReactShape>({
+  bounds,
+  shape,
+}: TLQuickLinksContainerProps<S>) {
   const {
     viewport: {
       camera: { zoom },
     },
-    components: { BacklinksCount },
+    components: { QuickLinks },
   } = useRendererContext()
 
   const app = useApp<S>()
 
-  if (!BacklinksCount) throw Error('Expected a ReferencesCount component.')
+  const events = useShapeEvents(shape)
+
+  if (!QuickLinks) throw Error('Expected a QuickLinks component.')
 
   const stop: React.EventHandler<any> = e => e.stopPropagation()
 
   const rounded = bounds.height * zoom < 50 || !app.selectedShapesArray.includes(shape)
 
   return (
-    <Container bounds={bounds} className="tl-backlinks-count-container">
+    <Container bounds={bounds} className="tl-quick-links-container">
       <HTMLContainer>
         <span
           style={{
             position: 'absolute',
-            left: '100%',
+            top: '100%',
             pointerEvents: 'all',
             transformOrigin: 'left top',
-            transform: 'translateY(6px) scale(var(--tl-scale))',
+            paddingTop: '8px',
+            // anti-scale the container so that it always show in 100% for the user
+            transform: 'scale(var(--tl-scale))',
+            // Make it a little bit easier to click
+            minWidth: '320px',
           }}
+          {...events}
           onPointerDown={stop}
           onWheelCapture={stop}
-          title="Shape Backlinks"
+          title="Shape Quick Links"
         >
-          <BacklinksCount
+          <QuickLinks
             className={'tl-backlinks-count ' + (rounded ? 'tl-backlinks-count-rounded' : '')}
             id={shape.id}
             shape={shape}

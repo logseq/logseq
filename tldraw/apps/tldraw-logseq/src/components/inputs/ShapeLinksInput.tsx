@@ -69,7 +69,9 @@ export function ShapeLinksInput({
   ...rest
 }: ShapeLinksInputProps) {
   const noOfLinks = refs.length + (pageId ? 1 : 0)
-  const [showQuickSearch, setShowQuickSearch] = React.useState(false)
+  const canAddLink = refs.length === 0
+
+  const [showQuickSearch, setShowQuickSearch] = React.useState(canAddLink)
 
   const addNewRef = (value?: string) => {
     if (value && !refs.includes(value)) {
@@ -79,43 +81,39 @@ export function ShapeLinksInput({
   }
 
   React.useEffect(() => {
-    if (!showQuickSearch) {
-      const callback = (keyboardEvent: Mousetrap.ExtendedKeyboardEvent, combo: string) => {
-        keyboardEvent.preventDefault()
-        keyboardEvent.stopPropagation()
-        ;(async () => {
-          // TODO: thinking about how to make this more generic with usePaste hook
-          // TODO: handle whiteboard shapes?
-          const items = await navigator.clipboard.read()
-          if (items.length > 0) {
-            const blob = await items[0].getType('text/plain')
-            const rawText = (await blob.text()).trim()
+    const callback = (keyboardEvent: Mousetrap.ExtendedKeyboardEvent, combo: string) => {
+      keyboardEvent.preventDefault()
+      keyboardEvent.stopPropagation()
+      ;(async () => {
+        // TODO: thinking about how to make this more generic with usePaste hook
+        // TODO: handle whiteboard shapes?
+        const items = await navigator.clipboard.read()
+        if (items.length > 0) {
+          const blob = await items[0].getType('text/plain')
+          const rawText = (await blob.text()).trim()
 
-            if (rawText) {
-              const text = rawText.trim()
-              let newValue: string | undefined
-              if (/^\(\(.*\)\)$/.test(rawText) && rawText.length === NIL_UUID.length + 4) {
-                const blockRef = rawText.slice(2, -2)
-                if (validUUID(blockRef)) {
-                  newValue = blockRef
-                }
-              } else if (/^\[\[.*\]\]$/.test(rawText)) {
-                newValue = rawText.slice(2, -2)
+          if (rawText) {
+            let newValue: string | undefined
+            if (/^\(\(.*\)\)$/.test(rawText) && rawText.length === NIL_UUID.length + 4) {
+              const blockRef = rawText.slice(2, -2)
+              if (validUUID(blockRef)) {
+                newValue = blockRef
               }
-              addNewRef(newValue)
+            } else if (/^\[\[.*\]\]$/.test(rawText)) {
+              newValue = rawText.slice(2, -2)
             }
+            addNewRef(newValue)
           }
-        })()
-      }
-
-      Mousetrap.bind(`mod+shift+v`, callback, 'keydown')
-
-      return () => {
-        Mousetrap.unbind(`mod+shift+v`, 'keydown')
-      }
+        }
+      })()
     }
-    return () => {}
-  }, [showQuickSearch])
+
+    Mousetrap.bind(`mod+shift+v`, callback, 'keydown')
+
+    return () => {
+      Mousetrap.unbind(`mod+shift+v`, 'keydown')
+    }
+  }, [])
 
   const showReferencePanel = !!(pageId && portalType)
 
@@ -127,7 +125,7 @@ export function ShapeLinksInput({
       alignOffset={-6}
       label={
         <div className="flex gap-1 relative items-center justify-center px-1">
-          <TablerIcon name={noOfLinks > 0 ? "link" : "add-link"} />
+          <TablerIcon name={noOfLinks > 0 ? 'link' : 'add-link'} />
           {noOfLinks > 0 && <div className="tl-shape-links-count">{noOfLinks}</div>}
         </div>
       }
@@ -146,7 +144,7 @@ export function ShapeLinksInput({
         <div className="tl-shape-links-panel color-level">
           <div className="text-base font-bold inline-flex gap-1 items-center">
             <TablerIcon className="opacity-50" name="add-link" />
-            Your links
+            Your link
           </div>
           <div className="h-2" />
           <div className="whitespace-pre-wrap">
@@ -156,37 +154,39 @@ export function ShapeLinksInput({
 
           <div className="h-2" />
 
-          {showQuickSearch ? (
-            <LogseqQuickSearch
-              style={{
-                width: 'calc(100% - 46px)',
-                marginLeft: '46px',
-              }}
-              onBlur={() => setShowQuickSearch(false)}
-              placeholder="Start typing to search..."
-              onChange={addNewRef}
-            />
-          ) : (
-            <div>
-              <Button
-                className="tl-shape-links-panel-add-button"
-                onClick={() => setShowQuickSearch(true)}
-              >
-                <TablerIcon name="plus" />
-                Add a new link
-              </Button>
-            </div>
+          {canAddLink && (
+            <>
+              {showQuickSearch ? (
+                <LogseqQuickSearch
+                  style={{
+                    width: 'calc(100% - 46px)',
+                    marginLeft: '46px',
+                  }}
+                  onBlur={() => setShowQuickSearch(false)}
+                  placeholder="Start typing to search..."
+                  onChange={addNewRef}
+                />
+              ) : (
+                <div>
+                  <Button
+                    className="tl-shape-links-panel-add-button"
+                    onClick={() => setShowQuickSearch(true)}
+                  >
+                    <TablerIcon name="plus" />
+                    Add a new link
+                  </Button>
+                </div>
+              )}
+              <div className="h-2" />
+              <div className="text-center">
+                <span className="opacity-50 mr-1">Paste from clipboard with</span>
+                <span className="keyboard-shortcut">
+                  <code>{MOD_KEY}</code> <code>⇧</code> <code>V</code>
+                </span>
+              </div>
+            </>
           )}
-          <div className="h-2" />
-          <div
-            className="text-center"
-            style={{ visibility: !showQuickSearch ? 'visible' : 'hidden' }}
-          >
-            <span className="opacity-50 mr-1">Paste from clipboard with</span>
-            <span className="keyboard-shortcut">
-              <code>{MOD_KEY}</code> <code>⇧</code> <code>V</code>
-            </span>
-          </div>
+
           {refs.length > 0 && (
             <>
               <div className="h-2" />

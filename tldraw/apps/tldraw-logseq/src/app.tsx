@@ -5,7 +5,6 @@ import {
   AppCanvas,
   AppProvider,
   TLReactCallbacks,
-  TLReactComponents,
   TLReactToolConstructor,
   useApp,
 } from '@tldraw/react'
@@ -13,6 +12,7 @@ import * as React from 'react'
 import { AppUI } from './components/AppUI'
 import { ContextBar } from './components/ContextBar'
 import { ContextMenu } from './components/ContextMenu'
+import { QuickLinks } from './components/QuickLinks'
 import { useDrop } from './hooks/useDrop'
 import { usePaste } from './hooks/usePaste'
 import { useQuickAdd } from './hooks/useQuickAdd'
@@ -21,6 +21,7 @@ import {
   EllipseTool,
   HighlighterTool,
   HTMLTool,
+  IFrameTool,
   LineTool,
   LogseqPortalTool,
   NuEraseTool,
@@ -29,14 +30,12 @@ import {
   shapes,
   TextTool,
   YouTubeTool,
-  IFrameTool,
   type Shape,
 } from './lib'
 import { LogseqContext, type LogseqContextValue } from './lib/logseq-context'
 
 const tools: TLReactToolConstructor<Shape>[] = [
   BoxTool,
-  // DotTool,
   EllipseTool,
   PolygonTool,
   NuEraseTool,
@@ -73,6 +72,7 @@ const AppImpl = () => {
     () => ({
       ContextBar,
       ReferencesCount,
+      QuickLinks,
     }),
     []
   )
