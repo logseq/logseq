@@ -8,7 +8,6 @@ import { TablerIcon } from '../icons'
 
 const BlockLink = ({ type, id }: { type?: 'P' | 'B'; id: string }) => {
   const {
-    handlers,
     renderers: { Breadcrumb, PageNameLink },
   } = React.useContext(LogseqContext)
 
@@ -16,7 +15,7 @@ const BlockLink = ({ type, id }: { type?: 'P' | 'B'; id: string }) => {
 
   return (
     <>
-      <TablerIcon name={type === 'P' ? 'page' : 'block'} />
+      <TablerIcon name={type === 'P' ? 'link-to-page' : 'link-to-block'} />
       {type === 'P' ? <PageNameLink pageName={id} /> : <Breadcrumb levelLimit={1} blockId={id} />}
     </>
   )
