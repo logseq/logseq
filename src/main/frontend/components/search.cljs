@@ -420,7 +420,7 @@
         timeout 300
         in-page-search? (= search-mode :page)]
     [:div.cp__palette.cp__palette-main
-     [:div.ls-search.p-2
+     [:div.ls-search.p-2.md:p-0
       [:div.input-wrap
       [:input.cp__palette-input.w-full
        {:type          "text"
