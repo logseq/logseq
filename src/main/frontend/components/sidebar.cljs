@@ -710,10 +710,6 @@
                                    (:editor/editing? @state/state))))
                           (state/close-modal!)
                           (hide-context-menu-and-clear-selection e)))))))
-  {:did-mount (fn [state]
-                (when (mobile-util/native-android?)
-                  (swipe/setup-listeners!))
-                state)}
   [state route-match main-content]
   (let [{:keys [open-fn]} state
         current-repo (state/sub :git/current-repo)
