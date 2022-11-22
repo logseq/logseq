@@ -175,7 +175,7 @@
                          (if (and (state/get-edit-block) (not state/editing?)) ; changed to not so that block is created at the end of the page
                            (editor-handler/insert content)
                            (editor-handler/api-insert-new-block! content {:page page
-                                                                          :edit-block? true
+                                                                          :edit-block? false
                                                                           :replace-empty-target? true})))))
 
 
