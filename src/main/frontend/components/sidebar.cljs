@@ -257,7 +257,8 @@
    {}))
 
 (rum/defc sidebar-nav
-  [route-match close-modal-fn left-sidebar-open? srs-open? *closing? touching-x-offset]
+  [route-match close-modal-fn left-sidebar-open? srs-open?
+   *closing? close-signal touching-x-offset]
   (let [[local-closing? set-local-closing?] (rum/use-state false)
         [el-rect set-el-rect!] (rum/use-state nil)
         ref-el              (rum/use-ref nil)
@@ -300,6 +301,12 @@
        (rum/set-ref! ref-open? left-sidebar-open?)
        #())
      [local-closing? left-sidebar-open?])
+
+    (rum/use-effect!
+     (fn []
+       (when-not (neg? close-signal)
+         (close-fn)))
+     [close-signal])
 
     [:<>
      [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
@@ -401,22 +408,29 @@
                           (state/pub-event! [:go/search]))}
              (ui/icon "circle-plus" {:style {:font-size 20}})
              [:span.flex-1 (t :right-side-bar/new-page)]]))]]]
-     [:span.shade-mask {:on-click close-fn}]]))
+     [:span.shade-mask
+      (cond-> {:on-click close-fn}
+        (number? offset-ratio)
+        (assoc :style {:opacity (cond-> offset-ratio
+                                  (neg? offset-ratio)
+                                  (+ 1))}))]]))
 
 (rum/defcs left-sidebar < rum/reactive
   (rum/local false ::closing?)
+  (rum/local -1 ::close-signal)
   (rum/local nil ::touch-state)
   [s {:keys [left-sidebar-open? route-match]}]
-  (let [close-fn          #(state/set-left-sidebar-open! false)
-        *closing?         (::closing? s)
-        *touch-state      (::touch-state s)
-        touch-point-fn    (fn [^js e] (some-> (gobj/get e "touches") (aget 0) (#(hash-map :x (.-clientX %) :y (.-clientY %)))))
-        srs-open?         (= :srs (state/sub :modal/id))
-        touching-x-offset (and (some-> @*touch-state :after)
-                               (some->> @*touch-state
-                                        ((juxt :after :before))
-                                        (map :x) (apply -)))
-        touch-pending?    (> (abs touching-x-offset) 20)]
+  (let [close-fn             #(state/set-left-sidebar-open! false)
+        *closing?            (::closing? s)
+        *touch-state         (::touch-state s)
+        *close-signal        (::close-signal s)
+        touch-point-fn       (fn [^js e] (some-> (gobj/get e "touches") (aget 0) (#(hash-map :x (.-clientX %) :y (.-clientY %)))))
+        srs-open?            (= :srs (state/sub :modal/id))
+        touching-x-offset    (and (some-> @*touch-state :after)
+                                  (some->> @*touch-state
+                                           ((juxt :after :before))
+                                           (map :x) (apply -)))
+        touch-pending?       (> (abs touching-x-offset) 20)]
 
     [:div#left-sidebar.cp__sidebar-left-layout
      {:class (util/classnames [{:is-open     left-sidebar-open?
@@ -424,11 +438,9 @@
                                 :is-touching touch-pending?}])
       :on-touch-start
       (fn [^js e]
-        (prn "===> touch start:" (touch-point-fn e))
         (reset! *touch-state {:before (touch-point-fn e)}))
       :on-touch-move
       (fn [^js e]
-        (prn "===> touch move:" (touch-point-fn e))
         (when @*touch-state
           (some-> *touch-state (swap! assoc :after (touch-point-fn e)))))
       :on-touch-end
@@ -439,12 +451,12 @@
             (state/set-left-sidebar-open! true)
 
             (and left-sidebar-open? (< touching-x-offset -50))
-            (state/set-left-sidebar-open! false)))
+            (reset! *close-signal (inc @*close-signal))))
         (reset! *touch-state nil))}
 
      ;; sidebar contents
      (sidebar-nav route-match close-fn left-sidebar-open? srs-open? *closing?
-                  (and touch-pending? touching-x-offset))]))
+                  @*close-signal (and touch-pending? touching-x-offset))]))
 
 (rum/defc recording-bar
   []
