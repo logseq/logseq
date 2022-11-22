@@ -420,7 +420,9 @@
 
 (declare save-current-block!)
 (defn outliner-insert-block!
-  [config current-block new-block {:keys [sibling? keep-uuid? replace-empty-target?]}]
+  [config current-block new-block {:keys [sibling? keep-uuid?
+                                          replace-empty-target?]
+                                   :or {save-current-block? true}}]
   (let [ref-query-top-block? (and (or (:ref? config)
                                       (:custom-query? config))
                                   (not (:ref-query-child? config)))
@@ -439,7 +441,7 @@
                    (not has-children?))]
     (outliner-tx/transact!
      {:outliner-op :insert-blocks}
-     (save-current-block! {:current-block current-block})
+      (save-current-block! {:current-block current-block})
      (outliner-core/insert-blocks! [new-block] current-block {:sibling? sibling?
                                                               :keep-uuid? keep-uuid?
                                                               :replace-empty-target? replace-empty-target?}))))
@@ -553,7 +555,8 @@
                    custom-uuid replace-empty-target? edit-block?]
             :or {sibling? false
                  before? false
-                 edit-block? true}}]
+                 edit-block? true}
+            :as args}]
   (when (or page block-uuid)
     (let [before? (if page false before?)
           sibling? (boolean sibling?)
@@ -1255,7 +1258,8 @@
    (save-current-block! {}))
   ([{:keys [force? skip-properties? current-block] :as opts}]
    ;; non English input method
-   (when-not (state/editor-in-composition?)
+   (when-not (or (state/editor-in-composition?)
+                 (:editor/skip-saving-current-block? @state/state))
      (when (state/get-current-repo)
        (when-not (state/get-editor-action)
          (try
@@ -1285,7 +1289,8 @@
                             (string/trim value)))
                  (save-block-aux! db-block value opts))))
            (catch :default error
-             (log/error :save-block-failed error))))))))
+             (log/error :save-block-failed error))))))
+   (state/set-state! :editor/skip-saving-current-block? false)))
 
 (defn- clean-content!
   [format content]
@@ -3247,7 +3252,7 @@
         repo (state/get-current-repo)
         value (boolean value)]
     (when repo
-      (save-current-block!) ;; Save the input contents before collapsing 
+      (save-current-block!) ;; Save the input contents before collapsing
       (outliner-tx/transact! ;; Save the new collapsed state as an undo transaction (if it changed)
         {:outliner-op :collapse-expand-blocks}
         (doseq [block-id block-ids]

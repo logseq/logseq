@@ -125,6 +125,9 @@
      ;; for audio record
      :editor/record-status                  "NONE"
 
+     ;; Whether to skip saving the current block
+     :editor/skip-saving-current-block?     false
+
      :db/last-transact-time                 {}
      ;; whether database is persisted
      :db/persisted?                         {}
