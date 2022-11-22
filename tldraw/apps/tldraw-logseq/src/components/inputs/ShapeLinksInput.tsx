@@ -48,7 +48,7 @@ function ShapeLinkItem({
         type="button"
         onClick={() => handlers?.sidebarAddBlock(id, type === 'B' ? 'block' : 'page')}
       >
-        <TablerIcon name="layout-sidebar-right" />
+        <TablerIcon name="move-to-sidebar-right" />
       </Button>
       {onRemove && (
         <Button title="Remove link" type="button" onClick={onRemove}>
