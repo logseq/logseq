@@ -22,7 +22,8 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [reitit.frontend.easy :as rfe]
-            [frontend.modules.shortcut.core :as shortcut]))
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.util.text :as text-util]))
 
 (defn highlight-exact-query
   [content q]
@@ -62,41 +63,23 @@
                              (conj result [:span content])))]
             [:p {:class "m-0"} elements]))))))
 
-;; (def fts-mark)
-
-;; (defn highlight-page-content-query
-;;   [content q]
-;;   (if (or (string/blank? content) (string/blank? q))
-;;     content
-;;     (if (and (string/includes? )
-;;              (not (util/safe-re-find #" " q)))
-;;       (let [i (string/index-of lc-content lc-q)
-;;             [before after] [(subs content 0 i) (subs content (+ i (count q)))]]
-;;         [:div
-;;          (when-not (string/blank? before)
-;;            [:span before])
-;;          [:mark.p-0.rounded-none (subs content i (+ i (count q)))]
-;;          (when-not (string/blank? after)
-;;            [:span after])])
-;;       (let [elements (loop [words q-words
-;;                             content content
-;;                             result []]
-;;                        (if (and (seq words) content)
-;;                          (let [word (first words)
-;;                                lc-word (util/search-normalize word (state/enable-search-remove-accents?))
-;;                                lc-content (util/search-normalize content (state/enable-search-remove-accents?))]
-;;                            (if-let [i (string/index-of lc-content lc-word)]
-;;                              (recur (rest words)
-;;                                     (subs content (+ i (count word)))
-;;                                     (vec
-;;                                      (concat result
-;;                                              [[:span (subs content 0 i)]
-;;                                               [:mark.p-0.rounded-none (subs content i (+ i (count word)))]])))
-;;                              (recur nil
-;;                                     content
-;;                                     result)))
-;;                          (conj result [:span content])))]
-;;         [:p {:class "m-0"} elements]))))
+(defn highlight-page-content-query
+  "Return hiccup of highlighted page content FTS result"
+  [content q]
+  (when-not (or (string/blank? content) (string/blank? q))
+    [:div (loop [content content
+                 result  []]
+            (let [_ (prn "content" content "result" result)
+                  [b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
+                  hiccups-add [(when-not (string/blank? b-cut)
+                                 [:span b-cut])
+                               (when-not (string/blank? hl-cut)
+                                 [:mark.p-0.rounded-none hl-cut])]
+                  hiccups-add (remove nil? hiccups-add)
+                  new-result (concat result hiccups-add)]
+              (if-not (string/blank? e-cut)
+                (recur e-cut new-result)
+                new-result)))]))
 
 (rum/defc search-result-item
   [icon content]
@@ -105,7 +88,7 @@
    [:.self-center content]])
 
 (rum/defc page-content-search-result-item
-  [repo uuid snippet _q search-mode]
+  [repo uuid format snippet q search-mode]
   [:div
    (when (not= search-mode :page)
      [:div {:class "mb-1" :key "parents"}
@@ -116,9 +99,7 @@
                         (clojure.core/uuid uuid)
                         {:indent? false})])
    [:div {:class "font-medium" :key "content"}
-    ;; (highlight-page-content-query snippet q)
-    snippet
-    ]])
+    (highlight-page-content-query (search-handler/sanity-search-content format snippet) q)]])
 
 (rum/defc block-search-result-item
   [repo uuid format content q search-mode]
@@ -309,13 +290,14 @@
        :page-content
        (let [{:block/keys [snippet uuid]} data  ;; content here is normalized
              repo (state/sub :git/current-repo)
-             page (model/query-block-by-uuid uuid)] ;; it's actually a page
+             page (model/query-block-by-uuid uuid)  ;; it's actually a page
+             format (db/get-page-format page)]
          [:span {:data-block-ref uuid}
           (search-result-item {:name "page"
                                :title (t :search-item/page)
                                :extension? true}
                               (if page
-                                (page-content-search-result-item repo uuid snippet search-q search-mode)
+                                (page-content-search-result-item repo uuid format snippet search-q search-mode)
                                 (do (log/error "search result with non-existing uuid: " data)
                                     (str "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."))))])
 

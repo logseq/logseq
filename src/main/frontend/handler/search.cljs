@@ -45,8 +45,7 @@
                         page-db-id)
            opts (if page-db-id (assoc opts :page (str page-db-id)) opts)]
        (p/let [blocks (search/block-search repo q opts)
-               pages-content (search/page-content-search repo q opts)
-               _ (prn pages-content)]
+               pages-content (search/page-content-search repo q opts)]
          (let [result (merge
                        {:blocks blocks
                         :has-more? (= limit (count blocks))}
