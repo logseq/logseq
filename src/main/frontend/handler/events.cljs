@@ -359,7 +359,13 @@
       (when-not dir-exists?
         (state/pub-event! [:graph/dir-gone dir]))))
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
-  (repo-handler/graph-ready! repo))
+  (repo-handler/graph-ready! repo)
+  (when (and (util/electron?)
+             (not (config/demo-graph?))
+             (= :legacy (state/get-filename-format))
+             (not (get-in (state/get-config) [:file/name-format-skip-check] false)))
+    (state/pub-event! [:ui/notify-outdated-filename-format []]))
+  )
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
@@ -738,7 +744,8 @@
     (when (= dir (config/get-repo-dir repo))
       (fs/watch-dir! dir))))
 
-(defmethod handle :ui/notify-files-with-reserved-chars [[_ paths]]
+(defmethod handle :ui/notify-outdated-filename-format [[_ paths]]
+  ;; paths - the affected paths that contains reserved characters
   (notification/show!
    [:div
     [:div.mb-4
@@ -747,8 +754,9 @@
      [:div
       [:p
        "We suggest you upgrade now to avoid some potential bugs."]
-      [:p
-       "For example, the files below have reserved characters can't be synced on some platforms."]]
+      (when (seq? paths)
+        [:p
+         "For example, the files below have reserved characters can't be synced on some platforms."])]
      ]
     (ui/button
       "Update filename format"
@@ -757,9 +765,10 @@
                   (state/set-modal!
                   (fn [_] (conversion-component/files-breaking-changed))
                   {:id :filename-format-panel :center? true})))
-    [:ol.my-2
-     (for [path paths]
-       [:li path])]]
+    (when (seq? paths)
+      [:ol.my-2
+       (for [path paths]
+         [:li path])])]
    :warning
    false))
 
