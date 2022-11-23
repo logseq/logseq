@@ -59,7 +59,9 @@
             [logseq.db.schema :as db-schema]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.graph-parser.config :as gp-config]))
+            [logseq.graph-parser.config :as gp-config]
+            [cljs-bean.core :as bean]
+            ["@sentry/react" :as Sentry]))
 
 ;; TODO: should we move all events here?
 
@@ -407,6 +409,10 @@
   (when-not (empty? (dissoc opts :type :payload))
     (js/console.error "instrument data-map should only contains [:type :payload]"))
   (posthog/capture type payload))
+
+(defmethod handle :capture-error [[_ {:keys [error payload]}]]
+  (Sentry/captureException error
+                           (bean/->js {:extra payload})))
 
 (defmethod handle :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))
@@ -860,8 +866,8 @@
 
                              :else
                              (do
-                               (state/pub-event! [:instrument {:type :file/parse-and-load-error
-                                                               :payload error}])
+                               (state/pub-event! [:capture-error {:error error
+                                                                  :payload {:type :file/parse-and-load-error}}])
                                [:li.my-1 {:key file}
                                 [:a {:on-click #(js/window.apis.openPath file)} file]
                                 [:p (.-message error)]]))))]

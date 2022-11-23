@@ -511,11 +511,12 @@
         tx (insert-blocks-aux blocks' target-block' insert-opts)]
     (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/left b)))) tx)
       (do
-        (state/pub-event! [:instrument {:type :outliner/invalid-structure
-                                        :payload {:blocks blocks
-                                                  :target-block target-block'
-                                                  :opt opts
-                                                  :data (mapv #(dissoc % :block/content) tx)}}])
+        (state/pub-event! [:capture-error {:error "Outliner invalid structure"
+                                           :payload {:type :outliner/invalid-structure
+                                                     :blocks blocks
+                                                     :target-block target-block'
+                                                     :opt opts
+                                                     :data (mapv #(dissoc % :block/content) tx)}}])
         (throw (ex-info "Invalid outliner data"
                         {:opts insert-opts
                          :tx (vec tx)

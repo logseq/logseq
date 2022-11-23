@@ -2816,10 +2816,11 @@
           (<! (.schedule this ::pause nil nil))
           :else
           (do
-            (state/pub-event! [:instrument {:type :sync/wrong-ops-chan-when-idle
-                                            :payload {:ops-chan-result result
-                                                      :user-id user-uuid
-                                                      :graph-id graph-uuid}}])
+            (state/pub-event! [:capture-error {:error (js/Error. "sync/wrong-ops-chan-when-idle")
+                                               :payload {:type :sync/wrong-ops-chan-when-idle
+                                                         :ops-chan-result result
+                                                         :user-id user-uuid
+                                                         :graph-id graph-uuid}}])
             nil)))))
 
   (full-sync [this]
@@ -2849,11 +2850,11 @@
           (.schedule this ::stop nil nil)
           unknown
           (do
-            (state/pub-event! [:instrument {:type :sync/unknown
-                                            :payload {:error unknown
-                                                      :event :local->remote-full-sync-failed
-                                                      :user-id user-uuid
-                                                      :graph-uuid graph-uuid}}])
+            (state/pub-event! [:capture-error {:error unknown
+                                               :payload {:type :sync/unknown
+                                                         :event :local->remote-full-sync-failed
+                                                         :user-id user-uuid
+                                                         :graph-uuid graph-uuid}}])
             (put-sync-event! {:event :local->remote-full-sync-failed
                               :data  {:graph-uuid graph-uuid
                                       :epoch      (tc/to-epoch (t/now))}})
@@ -2877,11 +2878,11 @@
               (.schedule this ::pause nil nil))
           unknown
           (do
-            (state/pub-event! [:instrument {:type :sync/unknown
-                                            :payload {:event :remote->local-full-sync-failed
-                                                      :graph-uuid graph-uuid
-                                                      :user-id user-uuid
-                                                      :error unknown}}])
+            (state/pub-event! [:capture-error {:error unknown
+                                               :payload {:event :remote->local-full-sync-failed
+                                                         :type :sync/unknown
+                                                         :graph-uuid graph-uuid
+                                                         :user-id user-uuid}}])
             (put-sync-event! {:event :remote->local-full-sync-failed
                               :data  {:graph-uuid graph-uuid
                                       :exp        unknown
@@ -2922,11 +2923,11 @@
                 (.schedule this ::pause nil nil))
             unknown
             (do (prn "remote->local err" unknown)
-                (state/pub-event! [:instrument {:type :sync/unknown
-                                                :payload {:event :remote->local
-                                                          :user-id user-uuid
-                                                          :graph-uuid graph-uuid
-                                                          :error unknown}}])
+                (state/pub-event! [:capture-error {:error unknown
+                                                   :payload {:type :sync/unknown
+                                                             :event :remote->local
+                                                             :user-id user-uuid
+                                                             :graph-uuid graph-uuid}}])
                 (.schedule this ::idle nil nil)))))))
 
   (local->remote [this {local-changes :local}]
@@ -2986,11 +2987,11 @@
           unknown
           (do
             (debug/pprint "local->remote" unknown)
-            (state/pub-event! [:instrument {:type :sync/unknown
-                                            :payload {:event :local->remote
-                                                      :user-id user-uuid
-                                                      :graph-uuid graph-uuid
-                                                      :error unknown}}])
+            (state/pub-event! [:capture-error {:error unknown
+                                               :payload {:event :local->remote
+                                                         :type :sync/unknown
+                                                         :user-id user-uuid
+                                                         :graph-uuid graph-uuid}}])
             (.schedule this ::idle nil nil))))))
   IStoppable
   (-stop! [_]

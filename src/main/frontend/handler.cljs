@@ -73,11 +73,7 @@
 (defn- instrument!
   []
   (let [total (srs/get-srs-cards-total)]
-    (state/set-state! :srs/cards-due-count total)
-    (state/pub-event! [:instrument {:type :flashcards/count
-                                    :payload {:total (or total 0)}}])
-    (state/pub-event! [:instrument {:type :blocks/count
-                                    :payload {:total (db/blocks-count)}}])))
+    (state/set-state! :srs/cards-due-count total)))
 
 (defn restore-and-setup!
   [repos]
