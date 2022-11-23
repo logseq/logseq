@@ -1299,7 +1299,7 @@
         :left-side-bar/new-whiteboard "Nouveau tableau blanc"
         :linked-references/filter-search "Rechercher dans les pages liées"
         :on-boarding/add-graph "Ajouter un graphe"
-        :on-boarding/demo-graph "Il s'agit d'un graphe de démo, les changements ne seront pas enregistrés à moins que vous n'ouvrir un dossier local."
+        :on-boarding/demo-graph "Il s'agit d'un graphe de démo, les changements ne seront pas enregistrés à moins que vous n'ouvriez un dossier local."
         :on-boarding/new-graph-desc-1 "Logseq supporte à la fois le Markdown et l'Org-mode. Vous pouvez ouvrir un dossier existant ou en créer un nouveau sur cet appareil. Vos données seront enregistrées uniquement sur cet appareil."
         :on-boarding/new-graph-desc-2 "Après avoir ouvert votre dossier, cela créera 3 sous-dossiers :"
         :on-boarding/new-graph-desc-3 "/journals - contient vos pages du journal"
