@@ -292,3 +292,40 @@
     (let [name (get-in route-match [:parameters :path :name])
           {:keys [block-id]} (get-in route-match [:parameters :query])]
       (whiteboard-page name block-id))))
+
+(defn onboarding-show
+  []
+  (when-not (get (state/sub :whiteboard/onboarding?) (keyword type))
+    (try
+      (let [login? (boolean (state/sub :auth/id-token))]
+        (when login?
+          (state/pub-event! [:whiteboard/onboarding])
+          (state/set-state! [:whiteboard/onboarding?] true)))
+      (catch :default e
+        (js/console.warn "[onboarding SKIP] " e)))))
+
+(rum/defc onboarding-welcome
+  [close-fn]
+
+  (let [[loading? set-loading?] (rum/use-state false)]
+    [:div.cp__whiteboards-welcome
+     [:span.head-bg
+
+      [:strong "CLOSED ALPHA"]]
+
+     [:h1.text-2xl.font-bold.flex-col.sm:flex-row.opacity-80
+       "A new canvas for your thoughts."]
+
+     [:h2
+      "Whiteboards are a great tool for brainstorming and organization.
+       Now you can place any of your thoughts from the knowledge base or new ones next to each other on a spatial canvas to connect, associate and understand in new ways."]
+
+     [:div.pt-6.flex.justify-center.space-x-2.sm:justify-end
+      (ui/button "Later" :on-click close-fn :background "gray" :class "opacity-60")
+      (ui/button "Start whiteboarding"
+                 :disabled loading?
+                 :on-click (fn []
+                             (set-loading? true)
+                             ;; enable whiteboards and initiate onboaring
+                             (close-fn)
+                             (set-loading? false)))]]))

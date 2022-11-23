@@ -222,3 +222,29 @@ html:is(.is-ios, is-native-ios, is-native-ipad) [data-page="whiteboard"] * {
   -ms-user-select: none;
   user-select: none;
 }
+
+.cp__whiteboards-welcome {
+  > .head-bg {
+    @apply flex m-auto mb-10 w-auto sm:w-[500px];
+
+    background-image: url("../img/whiteboard-welcome-dark.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    padding-top: 86px;
+    max-width: 90vw;
+
+    > strong {
+      @apply block bg-gray-200 rounded text-gray-700 text-[10px] font-semibold px-2 py-0.5 opacity-40
+      m-auto translate-y-8;
+    }
+  }
+
+  > h1, > h2 {
+    @apply flex justify-center text-center;
+  }
+
+  > h2 {
+    @apply text-sm opacity-80 pt-3;
+  }
+}
