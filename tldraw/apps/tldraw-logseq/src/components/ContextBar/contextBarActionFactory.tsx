@@ -1,32 +1,33 @@
-import { Decoration, isNonNullable, Color } from '@tldraw/core'
+import { Decoration, isNonNullable, validUUID } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import React from 'react'
 import type {
-  Shape,
-  LogseqPortalShape,
-  TextShape,
+  BoxShape,
+  EllipseShape,
   HTMLShape,
   IFrameShape,
-  YouTubeShape,
-  BoxShape,
-  PolygonShape,
-  EllipseShape,
   LineShape,
+  LogseqPortalShape,
   PencilShape,
+  PolygonShape,
+  Shape,
+  TextShape,
+  YouTubeShape,
 } from '../../lib'
 import { LogseqContext } from '../../lib/logseq-context'
+import { Button } from '../Button'
 import { TablerIcon } from '../icons'
 import { ColorInput } from '../inputs/ColorInput'
-import { type SelectOption, SelectInput } from '../inputs/SelectInput'
+import { SelectInput, type SelectOption } from '../inputs/SelectInput'
+import { ShapeLinksInput } from '../inputs/ShapeLinksInput'
 import { TextInput } from '../inputs/TextInput'
 import {
-  type ToggleGroupInputOption,
   ToggleGroupInput,
   ToggleGroupMultipleInput,
+  type ToggleGroupInputOption,
 } from '../inputs/ToggleGroupInput'
 import { ToggleInput } from '../inputs/ToggleInput'
-import { Button } from '../Button'
 
 export const contextBarActionTypes = [
   // Order matters
@@ -41,7 +42,7 @@ export const contextBarActionTypes = [
   'IFrameSource',
   'LogseqPortalViewMode',
   'ArrowMode',
-  'OpenPage',
+  'Links',
 ] as const
 
 type ContextBarActionType = typeof contextBarActionTypes[number]
@@ -49,32 +50,34 @@ const singleShapeActions: ContextBarActionType[] = [
   'Edit',
   'YoutubeLink',
   'IFrameSource',
-  'OpenPage',
+  'Links',
 ]
 
 const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 
 type ShapeType = Shape['props']['type']
 
-export const shapeMapping: Partial<Record<ShapeType, ContextBarActionType[]>> = {
+export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
   'logseq-portal': [
     'Swatch',
     'Edit',
     'LogseqPortalViewMode',
     'ScaleLevel',
-    'OpenPage',
     'AutoResizing',
+    'Links',
   ],
-  youtube: ['YoutubeLink'],
-  iframe: ['IFrameSource'],
-  box: ['Swatch', 'NoFill', 'StrokeType'],
-  ellipse: ['Swatch', 'NoFill', 'StrokeType'],
-  polygon: ['Swatch', 'NoFill', 'StrokeType'],
-  line: ['Edit', 'Swatch', 'ArrowMode'],
-  pencil: ['Swatch'],
-  highlighter: ['Swatch'],
-  text: ['Edit', 'Swatch', 'ScaleLevel', 'AutoResizing', 'TextStyle'],
-  html: ['ScaleLevel', 'AutoResizing'],
+  youtube: ['YoutubeLink', 'Links'],
+  iframe: ['IFrameSource', 'Links'],
+  box: ['Swatch', 'NoFill', 'StrokeType', 'Links'],
+  ellipse: ['Swatch', 'NoFill', 'StrokeType', 'Links'],
+  polygon: ['Swatch', 'NoFill', 'StrokeType', 'Links'],
+  line: ['Edit', 'Swatch', 'ArrowMode', 'Links'],
+  pencil: ['Swatch', 'Links'],
+  highlighter: ['Swatch', 'Links'],
+  text: ['Edit', 'Swatch', 'ScaleLevel', 'AutoResizing', 'TextStyle', 'Links'],
+  html: ['ScaleLevel', 'AutoResizing', 'Links'],
+  image: ['Links'],
+  video: ['Links'],
 }
 
 export const withFillShapes = Object.entries(shapeMapping)
@@ -225,29 +228,6 @@ const ScaleLevelAction = observer(() => {
   )
 })
 
-const OpenPageAction = observer(() => {
-  const { handlers } = React.useContext(LogseqContext)
-  const app = useApp<Shape>()
-  const shapes = filterShapeByAction<LogseqPortalShape>(app.selectedShapesArray, 'OpenPage')
-  const shape = shapes[0]
-  const { pageId, blockType } = shape.props
-
-  return (
-    <span className="flex gap-1">
-      <Button
-        title="Open Page in Right Sidebar"
-        type="button"
-        onClick={() => handlers?.sidebarAddBlock(pageId, blockType === 'B' ? 'block' : 'page')}
-      >
-        <TablerIcon name="layout-sidebar-right" />
-      </Button>
-      <Button title="Open Page" type="button" onClick={() => handlers?.redirectToPage(pageId)}>
-        <TablerIcon name="external-link" />
-      </Button>
-    </span>
-  )
-})
-
 const IFrameSourceAction = observer(() => {
   const app = useApp<Shape>()
   const shape = filterShapeByAction<IFrameShape>(app.selectedShapesArray, 'IFrameSource')[0]
@@ -356,9 +336,9 @@ const SwatchAction = observer(() => {
   return (
     <ColorInput
       title="Color Picker"
+      popoverSide="top"
       color={color}
       opacity={shapes[0].props.opacity}
-      collisionRef={document.getElementById('main-content-container')}
       setOpacity={handleSetOpacity}
       setColor={handleSetColor}
     />
@@ -494,11 +474,31 @@ const TextStyleAction = observer(() => {
   )
 })
 
+const LinksAction = observer(() => {
+  const app = useApp<Shape>()
+  const shape = app.selectedShapesArray[0]
+
+  const handleChange = (refs: string[]) => {
+    shape.update({ refs: refs })
+    app.persist()
+  }
+
+  return (
+    <ShapeLinksInput
+      onRefsChange={handleChange}
+      refs={shape.props.refs ?? []}
+      shapeType={shape.props.type}
+      side="right"
+      pageId={shape.props.type === 'logseq-portal' ? shape.props.pageId : undefined}
+      portalType={shape.props.type === 'logseq-portal' ? shape.props.blockType : undefined}
+    />
+  )
+})
+
 contextBarActionMapping.set('Edit', EditAction)
 contextBarActionMapping.set('AutoResizing', AutoResizingAction)
 contextBarActionMapping.set('LogseqPortalViewMode', LogseqPortalViewModeAction)
 contextBarActionMapping.set('ScaleLevel', ScaleLevelAction)
-contextBarActionMapping.set('OpenPage', OpenPageAction)
 contextBarActionMapping.set('YoutubeLink', YoutubeLinkAction)
 contextBarActionMapping.set('IFrameSource', IFrameSourceAction)
 contextBarActionMapping.set('NoFill', NoFillAction)
@@ -506,12 +506,13 @@ contextBarActionMapping.set('Swatch', SwatchAction)
 contextBarActionMapping.set('StrokeType', StrokeTypeAction)
 contextBarActionMapping.set('ArrowMode', ArrowModeAction)
 contextBarActionMapping.set('TextStyle', TextStyleAction)
+contextBarActionMapping.set('Links', LinksAction)
 
 const getContextBarActionTypes = (type: ShapeType) => {
   return (shapeMapping[type] ?? []).filter(isNonNullable)
 }
 
-export const getContextBarActionsForTypes = (shapes: Shape[]) => {
+export const getContextBarActionsForShapes = (shapes: Shape[]) => {
   const types = shapes.map(s => s.props.type)
   const actionTypes = new Set(shapes.length > 0 ? getContextBarActionTypes(types[0]) : [])
   for (let i = 1; i < types.length && actionTypes.size > 0; i++) {

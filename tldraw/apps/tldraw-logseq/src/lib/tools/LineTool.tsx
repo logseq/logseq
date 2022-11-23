@@ -6,6 +6,6 @@ import { LineShape, type Shape } from '../shapes'
 export class LineTool extends TLLineTool<LineShape, Shape, TLReactEventMap> {
   static id = 'line'
   // not sure why "c" is not working in Logseq?
-  static shortcut = ['6']
+  static shortcut = ['5']
   Shape = LineShape
 }

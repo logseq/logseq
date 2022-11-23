@@ -166,25 +166,26 @@
     {:d         "M0 384.662V127.338c0-17.818 21.543-26.741 34.142-14.142l128.662 128.662c7.81 7.81 7.81 20.474 0 28.284L34.142 398.804C21.543 411.404 0 402.48 0 384.662z"
      :fill-rule "evenodd"}]])
 
-(rum/defc logo
-  [_dark?]
-  [:svg
-   {:fill "currentColor", :view-box "0 0 21 21", :height "21", :width "21"}
-   [:ellipse
-    {:transform
-         "matrix(0.987073 0.160274 -0.239143 0.970984 11.7346 2.59206)"
-     :ry "2.04373"
-     :rx "3.29236"}]
-   [:ellipse
-    {:transform
-         "matrix(-0.495846 0.868411 -0.825718 -0.564084 3.97209 5.54515)"
-     :ry "3.37606"
-     :rx "2.95326"}]
-   [:ellipse
-    {:transform
-         "matrix(0.987073 0.160274 -0.239143 0.970984 13.0843 14.72)"
-     :ry "6.13006"
-     :rx "7.78547"}]])
+(defn logo
+  ([] (logo 20))
+  ([size]
+   [:svg
+    {:fill "currentColor", :view-box "0 0 21 21", :height size, :width size}
+    [:ellipse
+     {:transform
+      "matrix(0.987073 0.160274 -0.239143 0.970984 11.7346 2.59206)"
+      :ry "2.04373"
+      :rx "3.29236"}]
+    [:ellipse
+     {:transform
+      "matrix(-0.495846 0.868411 -0.825718 -0.564084 3.97209 5.54515)"
+      :ry "3.37606"
+      :rx "2.95326"}]
+    [:ellipse
+     {:transform
+      "matrix(0.987073 0.160274 -0.239143 0.970984 13.0843 14.72)"
+      :ry "6.13006"
+      :rx "7.78547"}]]))
 
 (def page
   [:svg.h-5.w-4 {:viewBox "0 0 24 24", :fill "none", :xmlns "http://www.w3.org/2000/svg"}

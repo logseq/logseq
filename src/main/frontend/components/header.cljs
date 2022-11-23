@@ -166,17 +166,17 @@
         custom-home-page? (and (state/custom-home-page?)
                                (= (state/sub-default-home-page) (state/get-current-page)))
         sync-enabled? (file-sync-handler/enable-sync?)]
-    [:div.cp__header#head
+    [:div.cp__header.drag-region#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
                                           :native-android (mobile-util/native-android?)}])
       :on-double-click (fn [^js e]
                          (when-let [target (.-target e)]
                            (when (and (util/electron?)
-                                      (.. target -classList (contains "cp__header")))
+                                      (.. target -classList (contains "drag-region")))
                              (js/window.apis.toggleMaxOrMinActiveWindow))))
       :style           {:fontSize  50}}
-     [:div.l.flex
+     [:div.l.flex.drag-region
       (when-not (mobile-util/native-platform?)
         [left-menu
          (when current-repo ;; this is for the Search button
@@ -196,7 +196,7 @@
              {:title "Go back" :on-click #(js/window.history.back)}
              (ui/icon "chevron-left" {:size 26})])))]
 
-     [:div.r.flex
+     [:div.r.flex.drag-region
       (when (and current-repo
                  (not (config/demo-graph? current-repo))
                  (user-handler/alpha-or-beta-user?))

@@ -42,7 +42,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     label: '',
   }
 
-  hideSelection = true
+  hideSelection = false
   canEdit = true
 
   ReactComponent = observer(({ events, isErasing, isEditing, onEditingEnd }: TLComponentProps) => {

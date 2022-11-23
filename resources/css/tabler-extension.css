@@ -28,82 +28,114 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-.tie-app-feature::before {
+.tie-add-link::before {
   content: "\ea01";
 }
 
-.tie-block::before {
+.tie-app-feature::before {
   content: "\ea02";
 }
 
-.tie-block-search::before {
+.tie-block::before {
   content: "\ea03";
 }
 
-.tie-connector::before {
+.tie-block-search::before {
   content: "\ea04";
 }
 
-.tie-h-auto::before {
+.tie-connector::before {
   content: "\ea05";
 }
 
-.tie-heading-off::before {
+.tie-h-auto::before {
   content: "\ea06";
 }
 
-.tie-new-block::before {
+.tie-heading-off::before {
   content: "\ea07";
 }
 
-.tie-new-page::before {
+.tie-internal-link::before {
   content: "\ea08";
 }
 
-.tie-new-whiteboard::before {
+.tie-link-to-block::before {
   content: "\ea09";
 }
 
-.tie-new-whiteboard-element::before {
+.tie-link-to-page::before {
   content: "\ea0a";
 }
 
-.tie-object-compact::before {
+.tie-link-to-whiteboard::before {
   content: "\ea0b";
 }
 
-.tie-object-expanded::before {
+.tie-move-to-sidebar-right::before {
   content: "\ea0c";
 }
 
-.tie-page::before {
+.tie-new-block::before {
   content: "\ea0d";
 }
 
-.tie-page-search::before {
+.tie-new-page::before {
   content: "\ea0e";
 }
 
-.tie-references-hide::before {
+.tie-new-whiteboard::before {
   content: "\ea0f";
 }
 
-.tie-references-show::before {
+.tie-new-whiteboard-element::before {
   content: "\ea10";
 }
 
-.tie-select-cursor::before {
+.tie-object-compact::before {
   content: "\ea11";
 }
 
-.tie-text::before {
+.tie-object-expanded::before {
   content: "\ea12";
 }
 
-.tie-whiteboard::before {
+.tie-open-as-page::before {
   content: "\ea13";
 }
 
-.tie-whiteboard-element::before {
+.tie-page::before {
   content: "\ea14";
+}
+
+.tie-page-search::before {
+  content: "\ea15";
+}
+
+.tie-references-hide::before {
+  content: "\ea16";
+}
+
+.tie-references-show::before {
+  content: "\ea17";
+}
+
+.tie-select-cursor::before {
+  content: "\ea18";
+}
+
+.tie-text::before {
+  content: "\ea19";
+}
+
+.tie-whiteboard::before {
+  content: "\ea1a";
+}
+
+.tie-whiteboard-element::before {
+  content: "\ea1b";
+}
+
+.tie-whiteboard-search::before {
+  content: "\ea1c";
 }

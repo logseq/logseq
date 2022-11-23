@@ -164,6 +164,19 @@ export const ContextMenu = observer(function ContextMenu({
               </span>
             </div>
           </ReactContextMenu.Item>
+          {app.selectedShapes?.size === 1 && (
+          <ReactContextMenu.Item
+            className="tl-menu-item"
+            onClick={() => runAndTransition(() => app.paste(undefined, true))}
+          >
+            Paste as link
+            <div className="tl-menu-right-slot">
+              <span className="keyboard-shortcut">
+                <code>{MOD_KEY}</code> <code>⇧</code> <code>V</code>
+              </span>
+            </div>
+          </ReactContextMenu.Item>
+          )}
           <ReactContextMenu.Separator className="menu-separator" />
           <ReactContextMenu.Item
             className="tl-menu-item"
