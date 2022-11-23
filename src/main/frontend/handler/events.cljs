@@ -362,10 +362,8 @@
   (repo-handler/graph-ready! repo)
   (when (and (util/electron?)
              (not (config/demo-graph?))
-             (= :legacy (state/get-filename-format))
-             (not (get-in (state/get-config) [:file/name-format-skip-check] false)))
-    (state/pub-event! [:ui/notify-outdated-filename-format []]))
-  )
+             (= :legacy (state/get-filename-format)))
+    (state/pub-event! [:ui/notify-outdated-filename-format []])))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
