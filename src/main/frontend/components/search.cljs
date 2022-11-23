@@ -189,6 +189,21 @@
         (println "[Error] Block page missing: "
                  {:block-id block-uuid
                   :block (db/pull [:block/uuid block-uuid])})))
+
+    :page-content
+    (let [page-uuid (uuid (:block/uuid data))
+          page (model/get-block-by-uuid page-uuid)
+          page-name (:block/name page)]
+      (if page
+        (cond
+          (model/whiteboard-page? page-name)
+          (route/redirect-to-whiteboard! page-name)
+          :else
+          (route/redirect-to-page! page-name))
+        ;; search indice outdated
+        (println "[Error] page missing: "
+                 {:page-uuid page-uuid
+                  :page page})))
     nil)
   (state/close-modal!))
 
@@ -204,6 +219,19 @@
          repo
          (:db/id page)
          :page)))
+    
+    :page-content
+    (let [page-uuid (uuid (:block/uuid data))
+          page (model/get-block-by-uuid page-uuid)]
+      (if page
+        (state/sidebar-add-block!
+         repo
+         (:db/id page)
+         :page)
+        ;; search indice outdated
+        (println "[Error] page missing: "
+                 {:page-uuid page-uuid
+                  :page page})))
 
     :block
     (let [block-uuid (uuid (:block/uuid data))
