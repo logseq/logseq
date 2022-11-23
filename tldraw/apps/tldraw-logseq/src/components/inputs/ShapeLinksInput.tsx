@@ -33,9 +33,9 @@ function ShapeLinkItem({
   const { handlers } = React.useContext(LogseqContext)
 
   return (
-    <div className="tl-shape-links-panel-item color-level">
+    <div className="tl-shape-links-panel-item color-level relative">
       <div className="whitespace-pre break-all overflow-hidden text-ellipsis">
-        <BlockLink id={id} type={type} />
+        <BlockLink id={id} />
       </div>
       <div className="flex-1" />
       <Button title="Open Page" type="button" onClick={() => handlers?.redirectToPage(id)}>
@@ -49,8 +49,13 @@ function ShapeLinkItem({
         <TablerIcon name="move-to-sidebar-right" />
       </Button>
       {onRemove && (
-        <Button title="Remove link" type="button" onClick={onRemove}>
-          <TablerIcon name="x" />
+        <Button
+          className="tl-shape-links-panel-item-remove-button"
+          title="Remove link"
+          type="button"
+          onClick={onRemove}
+        >
+          <TablerIcon name="x" className='!translate-y-0' />
         </Button>
       )}
     </div>
@@ -132,7 +137,6 @@ export const ShapeLinksInput = observer(function ShapeLinksInput({
               <TablerIcon className="opacity-50" name="internal-link" />
               References
             </div>
-            <div className="h-2" />
             <ShapeLinkItem type={portalType} id={pageId} />
           </div>
         )}
@@ -141,7 +145,6 @@ export const ShapeLinksInput = observer(function ShapeLinksInput({
             <TablerIcon className="opacity-50" name="add-link" />
             Link to any page or block
           </div>
-          <div className="h-2" />
 
           {canAddLink && (
             <LogseqQuickSearch
@@ -155,23 +158,20 @@ export const ShapeLinksInput = observer(function ShapeLinksInput({
           )}
 
           {refs.length > 0 && (
-            <>
-              <div className="h-2" />
-              <div className="flex flex-col items-stretch gap-2">
-                {refs.map((ref, i) => {
-                  return (
-                    <ShapeLinkItem
-                      key={ref}
-                      id={ref}
-                      type={validUUID(ref) ? 'B' : 'P'}
-                      onRemove={() => {
-                        onRefsChange(refs.filter((_, j) => i !== j))
-                      }}
-                    />
-                  )
-                })}
-              </div>
-            </>
+            <div className="flex flex-col items-stretch gap-2">
+              {refs.map((ref, i) => {
+                return (
+                  <ShapeLinkItem
+                    key={ref}
+                    id={ref}
+                    type={validUUID(ref) ? 'B' : 'P'}
+                    onRemove={() => {
+                      onRefsChange(refs.filter((_, j) => i !== j))
+                    }}
+                  />
+                )
+              })}
+            </div>
           )}
         </div>
       </div>

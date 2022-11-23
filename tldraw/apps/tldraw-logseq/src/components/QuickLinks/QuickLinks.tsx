@@ -1,26 +1,27 @@
 import type { TLQuickLinksComponent } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
+import React from 'react'
 import type { Shape } from '../../lib'
 import { BlockLink } from '../BlockLink'
 
 export const QuickLinks: TLQuickLinksComponent<Shape> = observer(({ id, shape }) => {
-  const refs = shape.props.refs ?? []
-  const portalType = shape.props.type === 'logseq-portal' && shape.props.blockType
+  const links = React.useMemo(() => {
+    const links = [...(shape.props.refs ?? [])]
 
-  if (refs.length === 0 && !portalType) return null
+    if (shape.props.type === 'logseq-portal' && shape.props.pageId) {
+      links.unshift(shape.props.pageId)
+    }
+
+    return links
+  }, [shape.props.type, shape.props.parentId, shape.props.refs])
+
+  if (links.length === 0) return null
 
   return (
     <div className="tl-quick-links">
-      {portalType && shape.props.type === 'logseq-portal' && (
-        <>
-          <div className="tl-quick-links-row tl-quick-links-row-primary">
-            <BlockLink id={shape.props.pageId} type={portalType} />
-          </div>
-        </>
-      )}
-      {refs.map(ref => {
+      {links.map(ref => {
         return (
-          <div key={ref} className="tl-quick-links-row tl-quick-links-row-secondary">
+          <div key={ref} className="tl-quick-links-row">
             <BlockLink id={ref} />
           </div>
         )

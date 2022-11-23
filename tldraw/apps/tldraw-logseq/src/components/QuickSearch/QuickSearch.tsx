@@ -131,6 +131,8 @@ export const LogseqQuickSearch = observer(
 
     const [prefixIcon, setPrefixIcon] = React.useState<string>('circle-plus')
 
+    const [showPanel, setShowPanel] = React.useState<boolean>(false)
+
     React.useEffect(() => {
       // autofocus attr seems not to be working
       setTimeout(() => {
@@ -384,7 +386,13 @@ export const LogseqQuickSearch = observer(
               }
               e.stopPropagation()
             }}
-            onBlur={onBlur}
+            onFocus={() => {
+              setShowPanel(true)
+            }}
+            onBlur={() => {
+              setShowPanel(false)
+              onBlur?.()
+            }}
           />
         </div>
         {/* TODO: refactor to radix-ui popover */}
@@ -393,6 +401,11 @@ export const LogseqQuickSearch = observer(
             onWheelCapture={e => e.stopPropagation()}
             className="tl-quick-search-options"
             ref={optionsWrapperRef}
+            style={{
+              // not using display: none so we can persist the scroll position
+              visibility: showPanel ? 'visible' : 'hidden',
+              pointerEvents: showPanel ? 'all' : 'none',
+            }}
           >
             <Virtuoso
               style={{ height: Math.min(Math.max(1, options.length), 12) * 40 }}

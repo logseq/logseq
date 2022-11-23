@@ -3,14 +3,14 @@ import React from 'react'
 import { LogseqContext } from '../../lib/logseq-context'
 import { TablerIcon } from '../icons'
 
-export const BlockLink = ({ type, id }: { type?: 'P' | 'B'; id: string }) => {
+export const BlockLink = ({ id }: { id: string }) => {
   const {
     handlers: { isWhiteboardPage, redirectToPage, sidebarAddBlock, queryBlockByUUID },
     renderers: { Breadcrumb, PageNameLink },
   } = React.useContext(LogseqContext)
 
   let iconName = ''
-  type = type ?? (validUUID(id) ? 'B' : 'P')
+  let linkType = validUUID(id) ? 'B' : 'P'
 
   if (validUUID(id)) {
     if (queryBlockByUUID(id)?.properties?.['ls-type'] === 'whiteboard-shape') {
@@ -32,7 +32,7 @@ export const BlockLink = ({ type, id }: { type?: 'P' | 'B'; id: string }) => {
       onPointerDown={e => {
         e.stopPropagation()
         if (e.shiftKey) {
-          sidebarAddBlock(id, type === 'B' ? 'block' : 'page')
+          sidebarAddBlock(id, linkType === 'B' ? 'block' : 'page')
         } else {
           redirectToPage(id)
         }
@@ -40,7 +40,11 @@ export const BlockLink = ({ type, id }: { type?: 'P' | 'B'; id: string }) => {
     >
       <TablerIcon name={iconName} />
       <span className="pointer-events-none">
-        {type === 'P' ? <PageNameLink pageName={id} /> : <Breadcrumb levelLimit={1} blockId={id} />}
+        {linkType === 'P' ? (
+          <PageNameLink pageName={id} />
+        ) : (
+          <Breadcrumb levelLimit={1} blockId={id} />
+        )}
       </span>
     </button>
   )
