@@ -87,17 +87,17 @@ export function Headbar () {
   const rightLinks = [
     {
       label: 'Jobs',
-      link: 'https://logseq.com',
+      link: 'https://blog.logseq.com/jobs',
       icon: <ArrowSquareOut size={15} weight={'bold'}/>,
     },
     {
       label: 'Community Hub',
-      link: 'https://discord.com/invite/KpN4eHY',
+      link: 'https://hub.logseq.com',
       icon: <ArrowSquareOut size={15} weight={'bold'}/>,
     },
     {
       label: 'Blog',
-      link: 'https://blog.logseq.com/',
+      link: 'https://blog.logseq.com',
       icon: <ArrowSquareOut size={15} weight={'bold'}/>,
     },
   ]
