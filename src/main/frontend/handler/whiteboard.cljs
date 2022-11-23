@@ -66,10 +66,14 @@
                                       (block-ids (:block/uuid (:block/parent block)))
                                       (not (gp-whiteboard/shape-block? block)))))
                                existing-blocks)
+        ;; always recalcuate refs for now. 
+        ;; todo: optimize in frontend.modules.outliner.pipeline/compute-block-path-refs?
+        refs-tx (mapcat (fn [m] [[:db/retract (:db/id m) :block/path-refs]
+                                 [:db/retract (:db/id m) :block/refs]]) existing-blocks)
         delete-blocks-tx (mapv (fn [s] [:db/retractEntity (:db/id s)]) delete-blocks)
         page-and-blocks (->> (cons page-block blocks)
                              (map outliner/block-with-timestamps))]
-    (concat page-and-blocks delete-blocks-tx)))
+    (concat refs-tx page-and-blocks delete-blocks-tx)))
 
 (defn- get-whiteboard-clj [page-name]
   (when (model/page-exists? page-name)
@@ -78,7 +82,7 @@
           blocks (model/get-page-blocks-no-cache page-name)]
       [page-block blocks])))
 
-(defn- whiteboard-clj->tldr [page-block blocks shape-id]
+(defn- whiteboard-clj->tldr [page-block blocks]
   (let [id (str (:block/uuid page-block))
         shapes (->> blocks
                     (filter gp-whiteboard/shape-block?)
@@ -89,7 +93,7 @@
         tldr-page (dissoc tldr-page :assets)]
     (clj->js {:currentPageId id
               :assets (or assets #js[])
-              :selectedIds (if (not-empty shape-id) #js[shape-id] #js[])
+              :selectedIds #js[]
               :pages [(merge tldr-page
                              {:id id
                               :name "page"
@@ -169,11 +173,9 @@
 
 (defn page-name->tldr!
   ([page-name]
-   (page-name->tldr! page-name nil))
-  ([page-name shape-id]
    (if page-name
      (if-let [[page-block blocks] (get-whiteboard-clj page-name)]
-       (whiteboard-clj->tldr page-block blocks shape-id)
+       (whiteboard-clj->tldr page-block blocks)
        (create-new-whiteboard-page! page-name))
      (create-new-whiteboard-page! nil))))
 

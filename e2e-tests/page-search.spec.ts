@@ -41,6 +41,7 @@ import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastBlo
   const results = await page.$$('#ui__ac-inner>div')
   expect(results.length).toEqual(3) // 2 blocks + 1 page
   await page.keyboard.press("Escape")
+  await page.keyboard.press("Escape")
 })
 
 async function alias_test(page: Page, page_name: string, search_kws: string[]) {

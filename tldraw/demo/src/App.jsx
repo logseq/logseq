@@ -68,11 +68,15 @@ const Block = () => {
   )
 }
 
-const Breadcrumb = props => {
+const Breadcrumb = ({ endSeparator }) => {
+  return <div className="font-mono">Breadcrumb {endSeparator ? ' > ' : ''}</div>
+}
+
+const BlockReference = props => {
   return <div className="font-mono">{props.blockId}</div>
 }
 
-const PageNameLink = props => {
+const PageName = props => {
   const [value, setValue] = React.useState(JSON.stringify(props))
   return (
     <input
@@ -80,6 +84,14 @@ const PageNameLink = props => {
       value={value}
       onChange={e => setValue(e.target.value)}
     />
+  )
+}
+
+const BacklinksCount = props => {
+  return (
+    <div className={props.className}>
+      <div className={'open-page-ref-link rounded bg-gray-400 p-0.5 '}>3</div>
+    </div>
   )
 }
 
@@ -201,7 +213,7 @@ export default function App() {
   }, [])
 
   return (
-    <div className={`h-screen w-screen`}>
+    <div className={`h-screen w-screen`} id="main-content-container">
       <ThemeSwitcher />
       <PreviewButton model={model} />
       <TldrawApp
@@ -209,7 +221,9 @@ export default function App() {
           Page,
           Block,
           Breadcrumb,
-          PageNameLink,
+          PageName,
+          BacklinksCount,
+          BlockReference,
         }}
         handlers={{
           search: searchHandler,

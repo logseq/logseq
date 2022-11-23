@@ -246,7 +246,7 @@
            [:div.flex-shrink-0
             svg]
            [:div.ml-3.w-0.flex-1
-            [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}}
+            [:div.text-sm.leading-6.font-medium.whitespace-pre-line {:style {:margin 0}}
              content]]
            [:div.ml-4.flex-shrink-0.flex
             [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150.notification-close-button
@@ -942,24 +942,24 @@
   (memoize (fn [klass] (r/adapt-class klass))))
 
 (defn icon
-  ([class] (icon class nil))
-  ([class {:keys [extension? font?] :as opts}]
-   (when-not (string/blank? class)
+  ([name] (icon name nil))
+  ([name {:keys [extension? font? class] :as opts}]
+   (when-not (string/blank? name)
      (let [^js jsTablerIcons (gobj/get js/window "tablerIcons")]
        (if (or extension? font? (not jsTablerIcons))
          [:span.ui__icon (merge {:class
                                  (util/format
-                                  (str "%s-" class
+                                  (str "%s-" name
                                        (when (:class opts)
                                          (str " " (string/trim (:class opts)))))
                                   (if extension? "tie tie" "ti ti"))}
                                 (dissoc opts :class :extension? :font?))]
 
          ;; tabler svg react
-         (when-let [klass (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase class)))]
+         (when-let [klass (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase name)))]
            (let [f (get-adapt-icon-class klass)]
              [:span.ui__icon.ti
-              {:class (str "ls-icon-" class)}
+              {:class (str "ls-icon-" name " " class)}
               (f (merge {:size 18} (r/map-keys->camel-case (dissoc opts :class))))])))))))
 
 (defn button

@@ -181,7 +181,9 @@
         chan (async/to-chan! indexed-files)
         graph-added-chan (async/promise-chan)
         total (count supported-files)
-        large-graph? (> total 1000)]
+        large-graph? (> total 1000)
+        *page-names (atom #{})
+        *page-name->path (atom {})]
     (when (seq delete-data) (db/transact! repo-url delete-data))
     (state/set-current-repo! repo-url)
     (state/set-parsing-state! {:total (count supported-files)})
@@ -215,7 +217,23 @@
                           (assoc opts' :skip-db-transact? false)
                           opts')
                   result (parse-and-load-file! repo-url file opts')
-                  tx' (if whiteboard? tx (concat tx result))
+                  page-name (some (fn [x] (and (map? x) (:block/name x))) result)
+                  page-exists? (and page-name (get @*page-names page-name))
+                  tx' (cond
+                        whiteboard? tx
+                        page-exists? (do
+                                       (state/pub-event! [:notification/show
+                                                          {:content [:div
+                                                                     (util/format "The file \"%s\" will be skipped because another file \"%s\" has the same page title."
+                                                                                  (:file/path file)
+                                                                                  (get @*page-name->path page-name))]
+                                                           :status :warning
+                                                           :clear? false}])
+                                       tx)
+                        :else (concat tx result))
+                  _ (when (and page-name (not page-exists?))
+                      (swap! *page-names conj page-name)
+                      (swap! *page-name->path assoc page-name (:file/path file)))
                   tx' (if (or whiteboard? (zero? (rem (inc idx) 100)))
                         (do (db/transact! repo-url tx' {:from-disk? true})
                             [])

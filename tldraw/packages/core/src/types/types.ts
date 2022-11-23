@@ -134,6 +134,13 @@ export interface TLAsset {
   src: string
 }
 
+export type TLPasteEventInfo = {
+  point: number[]
+  shiftKey: boolean
+  dataTransfer?: DataTransfer
+  fromDrop?: boolean
+}
+
 /* --------------------- Events --------------------- */
 
 export type TLSubscriptionEvent =
@@ -183,7 +190,7 @@ export type TLSubscriptionEvent =
     }
   | {
       event: 'paste'
-      info: { point: number[]; shiftKey: boolean; dataTransfer?: DataTransfer, fromDrop?: boolean }
+      info: TLPasteEventInfo
     }
   | {
       event: 'create-assets'
