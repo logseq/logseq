@@ -9,13 +9,13 @@
 
 (defn get-registered-engines
   [repo]
-  (-> (if (util/electron?)
-        (search-node/->Node repo)
-        (search-browser/->Browser repo))
-      (cons
-       [(when state/lsp-enabled?
-          (for [s (state/get-all-plugin-services-with-type :search)]
-            (search-plugin/->Plugin s repo)))])))
+  (concat
+   [(if (util/electron?)
+      (search-node/->Node repo)
+      (search-browser/->Browser repo))]
+   (when state/lsp-enabled?
+     (for [s (state/get-all-plugin-services-with-type :search)]
+       (search-plugin/->Plugin s repo)))))
 
 (deftype Agency [repo]
   protocol/Engine
@@ -48,5 +48,3 @@
     (println "D:Search > Remove Db!" repo)
     (doseq [e (flatten (get-registered-engines repo))]
       (protocol/remove-db! e))))
-
-
