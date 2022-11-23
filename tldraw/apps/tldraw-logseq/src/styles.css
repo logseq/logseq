@@ -1054,10 +1054,14 @@ html[data-theme='dark'] {
   .page-ref {
     color: var(--ls-title-text-color);
   }
+
+  button {
+    @apply text-left;
+  }
 }
 
 button.tl-shape-links-panel-item-remove-button {
-  @apply rounded-full w-6 h-6 min-w-0 -ml-4;
+  @apply rounded-full w-6 h-6 min-w-0 -ml-4 flex-shrink-0;
 
   transform: translate(16px, -16px);
 
@@ -1106,7 +1110,7 @@ button.tl-shape-links-panel-item-remove-button {
   min-height: 26px;
 
   > button {
-    @apply px-2;
+    @apply px-2 text-left;
   }
 
   .breadcrumb {
@@ -1146,7 +1150,8 @@ button.tl-shape-links-panel-item-remove-button {
 }
 
 .block-link-reference-row {
+  @apply block;
   > * {
-    display: inline;
+    @apply inline;
   }
 }

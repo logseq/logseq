@@ -28,7 +28,7 @@ export const BlockLink = ({ id }: { id: string }) => {
 
   return (
     <button
-      className="inline-flex gap-1 items-baseline w-full"
+      className="inline-flex gap-1 items-center w-full"
       onPointerDown={e => {
         e.stopPropagation()
         if (e.shiftKey) {
@@ -39,14 +39,14 @@ export const BlockLink = ({ id }: { id: string }) => {
       }}
     >
       <TablerIcon name={iconName} />
-      <span className="pointer-events-none">
+      <span className="pointer-events-none block-link-reference-row">
         {linkType === 'P' ? (
           <PageName pageName={id} />
         ) : (
-          <span className="block-link-reference-row">
+          <>
             <Breadcrumb levelLimit={1} blockId={id} endSeparator />
             <BlockReference blockId={id} />
-          </span>
+          </>
         )}
       </span>
     </button>

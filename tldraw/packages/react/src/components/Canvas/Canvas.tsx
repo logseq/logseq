@@ -165,7 +165,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
               shape={selectedOrHooveredShape}
             />
           )}
-          {hoveredShape && components.QuickLinks && (
+          {hoveredShape && hoveredShape !== singleSelectedShape && components.QuickLinks && (
             <QuickLinksContainer hidden={false} bounds={hoveredShape.bounds} shape={hoveredShape} />
           )}
           {brush && components.Brush && <components.Brush bounds={brush} />}

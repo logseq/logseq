@@ -96,7 +96,7 @@ export const ShapeLinksInput = observer(function ShapeLinksInput({
       <div className="color-level rounded-lg" data-show-reference-panel={showReferencePanel}>
         {showReferencePanel && (
           <div className="tl-shape-links-reference-panel">
-            <div className="text-base font-bold inline-flex gap-1 items-center">
+            <div className="text-base inline-flex gap-1 items-center">
               <TablerIcon className="opacity-50" name="internal-link" />
               References
             </div>
@@ -104,7 +104,7 @@ export const ShapeLinksInput = observer(function ShapeLinksInput({
           </div>
         )}
         <div className="tl-shape-links-panel color-level">
-          <div className="text-base font-bold inline-flex gap-1 items-center">
+          <div className="text-base inline-flex gap-1 items-center">
             <TablerIcon className="opacity-50" name="add-link" />
             Link to any page or block
           </div>
