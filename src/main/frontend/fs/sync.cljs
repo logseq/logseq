@@ -2798,7 +2798,6 @@
           (do
             (state/pub-event! [:instrument {:type :sync/wrong-ops-chan-when-idle
                                             :payload {:ops-chan-result result
-                                                      :state state
                                                       :user-id user-uuid
                                                       :graph-id graph-uuid}}])
             nil)))))
