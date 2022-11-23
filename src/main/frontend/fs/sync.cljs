@@ -2633,7 +2633,7 @@
 ;;; ### put all stuff together
 
 (defrecord ^:large-vars/cleanup-todo
-  SyncManager [graph-uuid base-path *sync-state
+  SyncManager [user-uuid graph-uuid base-path *sync-state
                ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer remoteapi
                ^:mutable ratelimit-local-changes-chan
                *txid ^:mutable state ^:mutable remote-change-chan ^:mutable *ws *stopped? *paused?
@@ -2798,7 +2798,9 @@
           (do
             (state/pub-event! [:instrument {:type :sync/wrong-ops-chan-when-idle
                                             :payload {:ops-chan-result result
-                                                      :state state}}])
+                                                      :state state
+                                                      :user-id user-uuid
+                                                      :graph-id graph-uuid}}])
             nil)))))
 
   (full-sync [this]
@@ -2829,9 +2831,10 @@
           unknown
           (do
             (state/pub-event! [:instrument {:type :sync/unknown
-                                            :event :local->remote-full-sync-failed
-                                            :graph-uuid graph-uuid
-                                            :payload {:error unknown}}])
+                                            :payload {:error unknown
+                                                      :event :local->remote-full-sync-failed
+                                                      :user-id user-uuid
+                                                      :graph-uuid graph-uuid}}])
             (put-sync-event! {:event :local->remote-full-sync-failed
                               :data  {:graph-uuid graph-uuid
                                       :epoch      (tc/to-epoch (t/now))}})
@@ -2856,9 +2859,10 @@
           unknown
           (do
             (state/pub-event! [:instrument {:type :sync/unknown
-                                            :event :remote->local-full-sync-failed
-                                            :graph-uuid graph-uuid
-                                            :payload {:error unknown}}])
+                                            :payload {:event :remote->local-full-sync-failed
+                                                      :graph-uuid graph-uuid
+                                                      :user-id user-uuid
+                                                      :error unknown}}])
             (put-sync-event! {:event :remote->local-full-sync-failed
                               :data  {:graph-uuid graph-uuid
                                       :exp        unknown
@@ -2900,9 +2904,10 @@
             unknown
             (do (prn "remote->local err" unknown)
                 (state/pub-event! [:instrument {:type :sync/unknown
-                                                :event :remote->local
-                                                :graph-uuid graph-uuid
-                                                :payload {:error unknown}}])
+                                                :payload {:event :remote->local
+                                                          :user-id user-uuid
+                                                          :graph-uuid graph-uuid
+                                                          :error unknown}}])
                 (.schedule this ::idle nil nil)))))))
 
   (local->remote [this {local-changes :local}]
@@ -2963,9 +2968,10 @@
           (do
             (debug/pprint "local->remote" unknown)
             (state/pub-event! [:instrument {:type :sync/unknown
-                                            :event :local->remote
-                                            :graph-uuid graph-uuid
-                                            :payload {:error unknown}}])
+                                            :payload {:event :local->remote
+                                                      :user-id user-uuid
+                                                      :graph-uuid graph-uuid
+                                                      :error unknown}}])
             (.schedule this ::idle nil nil))))))
   IStoppable
   (-stop! [_]
@@ -3015,7 +3021,7 @@
     (.set-remote->local-syncer! local->remote-syncer remote->local-syncer)
     (.set-local->remote-syncer! remote->local-syncer local->remote-syncer)
     (swap! *sync-state sync-state--update-current-syncing-graph-uuid graph-uuid)
-    (->SyncManager graph-uuid base-path *sync-state local->remote-syncer remote->local-syncer remoteapi-with-stop
+    (->SyncManager user-uuid graph-uuid base-path *sync-state local->remote-syncer remote->local-syncer remoteapi-with-stop
                    nil *txid nil nil nil *stopped? *paused? nil (chan 1) (chan 1) (chan 1) (chan 1) (chan 1))))
 
 (defn sync-manager-singleton
