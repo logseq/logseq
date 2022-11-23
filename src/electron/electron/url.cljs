@@ -63,11 +63,21 @@
   [^js win ^js/URL parsed-url]
   (let [action (.-pathname parsed-url)]
     (cond
+      ;; url:     (string) Page url
+      ;; title:   (stirng) Page title
+      ;; content: (string) Highlighted text
+      ;; page:    (string) Page name to insert to, use "TODAY" to insert to today page
+      ;; append:  (bool)   Append to the end of the page, default to false(current editing position)
       (= action "/quickCapture")
-      (let [[url title content] (get-URL-decoded-params parsed-url ["url" "title" "content"])]
+      (let [[url title content page append] (get-URL-decoded-params parsed-url ["url" "title" "content" "page" "append"])]
         (send-to-focused-renderer "quickCapture" {:url url
                                                   :title title
-                                                  :content content} win))
+                                                  :content content
+                                                  :page page
+                                                  :append (if (nil? append)
+                                                            append
+                                                            (= append "true"))}
+                                  win))
 
       :else
       (send-to-focused-renderer "notification" {:type "error"

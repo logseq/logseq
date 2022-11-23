@@ -37,7 +37,7 @@
   given page name and file path. This function is required when a file is being
   parsed from disk; before saving the parsed, blocks from the previous version
   of that file need to be retracted.
-  
+
   The 'Page' parsed from the new file version is passed separately from the
   file-path, as the page name can be set via properties in the file, and thus
   can change between versions. If it has changed, existing blocks for both the
@@ -56,7 +56,7 @@
         tx (retract-blocks-tx blocks retain-uuids)]
     (when-let [current-file (page-exists-in-another-file repo-url file-page file-path)]
       (when (not= file-path current-file)
-        (let [error (str "Page already exists with another file: " current-file ", current file: " file-path)]
+        (let [error (str "Page already exists with another file: " current-file ", current file: " file-path ". Please keep only one of them and re-index your graph.")]
           (state/pub-event! [:notification/show
                              {:content error
                               :status :error

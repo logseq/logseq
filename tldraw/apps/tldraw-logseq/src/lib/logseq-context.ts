@@ -25,7 +25,7 @@ export interface LogseqContextValue {
     BlockReference: React.FC<{
       blockId: string
     }>
-    ReferencesCount: React.FC<{
+    BacklinksCount: React.FC<{
       id: string
       className?: string
       options?: {
