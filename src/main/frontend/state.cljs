@@ -2052,3 +2052,12 @@ Similar to re-frame subscriptions"
       (when (apply not= (map :identity [inflated-file (get-current-pdf)]))
         (set-state! :pdf/current nil)
         (js/setTimeout #(settle-file!) 16)))))
+
+(defn focus-whiteboard-shape
+  ([shape-id]
+   (focus-whiteboard-shape (active-tldraw-app) shape-id))
+  ([tln shape-id]
+   (when-let [^js api (gobj/get tln "api")]
+     (when (and shape-id (parse-uuid shape-id))
+       (. api selectShapes shape-id)
+       (. api zoomToSelection)))))

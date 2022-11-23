@@ -5,6 +5,7 @@
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
             [frontend.context.i18n :refer [t]]
+            [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
@@ -46,39 +47,53 @@
     (when generate-preview
       (generate-preview tldr))))
 
+;; TODO: use frontend.ui instead of making a new one
 (rum/defc dropdown
-  [label children show? outside-click-hander]
+  [label children show? outside-click-hander portal?]
   (let [[anchor-ref anchor-rect] (use-bounding-client-rect show?)
         [content-ref content-rect] (use-bounding-client-rect show?)
         offset-x (when (and anchor-rect content-rect)
-                   (let [offset-x (+ (* 0.5 (- (.-width anchor-rect) (.-width content-rect)))
-                                     (.-x anchor-rect))
-                         vp-w (.-innerWidth js/window)
-                         right (+ offset-x (.-width content-rect) 16)
-                         offset-x (if (> right vp-w) (- offset-x (- right vp-w)) offset-x)]
-                     offset-x))
+                   (if portal?
+                     (let [offset-x (+ (* 0.5 (- (.-width anchor-rect) (.-width content-rect)))
+                                       (.-x anchor-rect))
+                           vp-w (.-innerWidth js/window)
+                           right (+ offset-x (.-width content-rect) 16)
+                           offset-x (if (> right vp-w) (- offset-x (- right vp-w)) offset-x)]
+                       offset-x)
+                     (* 0.5 (- (.-width anchor-rect) (.-width content-rect)))))
         offset-y (when (and anchor-rect content-rect)
                    (+ (.-y anchor-rect) (.-height anchor-rect) 8))
         click-outside-ref (use-click-outside outside-click-hander)
         [d-open set-d-open] (rum/use-state false)
         _ (rum/use-effect! (fn [] (js/setTimeout #(set-d-open show?) 100))
                            [show?])]
-    [:div.dropdown-anchor {:ref anchor-ref}
+    [:div.inline-block.dropdown-anchor {:ref anchor-ref}
      label
-     (ui/portal
-      [:div.fixed.shadow-lg.color-level.px-2.rounded-lg.transition.md:w-64.lg:w-128.overflow-auto
-       {:ref (juxt content-ref click-outside-ref)
-        :style {:opacity (if d-open 1 0)
-                :pointer-events (if d-open "auto" "none")
-                :transform (str "translateY(" (if d-open 0 10) "px)")
-                :min-height "40px"
-                :max-height "420px"
-                :left offset-x
-                :top offset-y}}
-       (when d-open children)])]))
+     (if portal?
+       ;; FIXME: refactor the following code ...
+       (ui/portal
+        [:div.fixed.shadow-lg.color-level.px-2.rounded-lg.transition.md:w-64.lg:w-128.overflow-auto
+         {:ref (juxt content-ref click-outside-ref)
+          :style {:opacity (if d-open 1 0)
+                  :pointer-events (if d-open "auto" "none")
+                  :transform (str "translateY(" (if d-open 0 10) "px)")
+                  :min-height "40px"
+                  :max-height "420px"
+                  :left offset-x
+                  :top offset-y}}
+         (when d-open children)])
+       [:div.absolute.shadow-lg.color-level.px-2.rounded-lg.transition.md:w-64.lg:w-128.overflow-auto
+        {:ref (juxt content-ref click-outside-ref)
+         :style {:opacity (if d-open 1 0)
+                 :pointer-events (if d-open "auto" "none")
+                 :transform (str "translateY(" (if d-open 0 10) "px)")
+                 :min-height "40px"
+                 :max-height "420px"
+                 :left offset-x}}
+        (when d-open children)])]))
 
 (rum/defc dropdown-menu
-  [{:keys [label children classname hover?]}]
+  [{:keys [label children classname hover? portal?]}]
   (let [[open-flag set-open-flag] (rum/use-state 0)
         open? (> open-flag (if hover? 0 1))
         d-open-flag (rum/use-memo #(util/debounce 200 set-open-flag) [])]
@@ -90,22 +105,29 @@
                         (util/stop e)
                         (d-open-flag (fn [o] (if (not= o 2) 2 0))))}
       (if (fn? label) (label open?) label)]
-     children open? #(set-open-flag 0))))
+     children open? #(set-open-flag 0) portal?)))
 
-(rum/defc page-refs-count < rum/static
-  ([page-name classname]
-   (page-refs-count page-name classname nil))
-  ([page-name classname render-fn]
-   (let [page-entity (model/get-page page-name)
+;; TODO: move to frontend.components.reference
+(rum/defc references-count < rum/reactive db-mixins/query
+  "Shows a references count for any block or page.
+   When clicked, a dropdown menu will show the reference details"
+  ([page-name-or-uuid classname]
+   (references-count page-name-or-uuid classname nil))
+  ([page-name-or-uuid classname {:keys [render-fn
+                                        hover?
+                                        portal?]
+                                 :or {portal? true}}]
+   (let [page-entity (model/get-page page-name-or-uuid)
          block-uuid (:block/uuid page-entity)
-         refs-count (count (:block/_refs page-entity))]
+         refs-count (model/get-block-references-count block-uuid)]
      (when (> refs-count 0)
        (dropdown-menu {:classname classname
                        :label (fn [open?]
-                                [:div.flex.items-center.gap-2
+                                [:div.inline-flex.items-center.gap-2
                                  [:div.open-page-ref-link refs-count]
                                  (when render-fn (render-fn open? refs-count))])
-                       :hover? true
+                       :hover? hover?
+                       :portal? portal?
                        :children (reference/block-linked-references block-uuid)})))))
 
 (defn- get-page-display-name
@@ -151,7 +173,7 @@
     [:div.flex.w-full.opacity-50
      [:div (get-page-human-update-time page-name)]
      [:div.flex-1]
-     (page-refs-count page-name nil)]]
+     (references-count page-name nil {:hover? true})]]
    [:div.p-4.h-64.flex.justify-center
     (tldraw-preview page-name)]])
 
@@ -255,12 +277,13 @@
                         false)]
 
       [:div.whiteboard-page-refs
-       (page-refs-count page-name
-                        "text-md px-3 py-2 cursor-default whiteboard-page-refs-count"
-                        (fn [open? refs-count] [:span.whiteboard-page-refs-count-label
-                                                (if (> refs-count 1) "References" "Reference")
-                                                (ui/icon (if open? "references-hide" "references-show")
-                                                         {:extension? true})]))]]
+       (references-count page-name
+                         "text-md px-3 py-2 cursor-default whiteboard-page-refs-count"
+                         {:hover? true
+                          :render-fn (fn [open? refs-count] [:span.whiteboard-page-refs-count-label
+                                                             (if (> refs-count 1) "References" "Reference")
+                                                             (ui/icon (if open? "references-hide" "references-show")
+                                                                      {:extension? true})])})]]
      (tldraw-app page-name block-id)]))
 
 (rum/defc whiteboard-route

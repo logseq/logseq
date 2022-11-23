@@ -200,7 +200,6 @@
                                                                             :edit-block? true
                                                                             :replace-empty-target? true}))))))
 
-
   (js/window.apis.on "openNewWindowOfGraph"
                      ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage
                      ;; No db cache persisting ensured. Should be handled by the caller

@@ -681,10 +681,7 @@
           inner (page-inner config
                             page-name-in-block
                             page-name
-                            redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?)
-          inner (if whiteboard-page?
-                  [:<> [:span.text-gray-500 (ui/icon "whiteboard" {:extension? true}) " "] inner]
-                  inner)]
+                            redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?)]
       (cond
         (:breadcrumb? config)
         (or (:block/original-name page)

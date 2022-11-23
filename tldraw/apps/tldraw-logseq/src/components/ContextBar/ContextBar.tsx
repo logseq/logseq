@@ -1,3 +1,4 @@
+import * as Separator from '@radix-ui/react-separator'
 import {
   getContextBarTranslation,
   HTMLContainer,
@@ -5,11 +6,10 @@ import {
   useApp,
 } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
-import * as Separator from '@radix-ui/react-separator'
 
 import * as React from 'react'
-import type { Shape } from '~lib/shapes'
-import { getContextBarActionsForTypes as getContextBarActionsForShapes } from './contextBarActionFactory'
+import type { Shape } from '../../lib'
+import { getContextBarActionsForShapes } from './contextBarActionFactory'
 
 const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) => {
   const app = useApp()

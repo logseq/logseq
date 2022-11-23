@@ -16,14 +16,14 @@ import { YouTubeShape } from './YouTubeShape'
 import type { PenShape } from './PenShape'
 
 export type Shape =
+  // | PenShape
+  // | DotShape
   | BoxShape
-  | DotShape
   | EllipseShape
   | HighlighterShape
   | ImageShape
   | VideoShape
   | LineShape
-  | PenShape
   | PencilShape
   | PolygonShape
   | TextShape
@@ -48,8 +48,8 @@ export * from './TextShape'
 export * from './YouTubeShape'
 
 export const shapes: TLReactShapeConstructor<Shape>[] = [
+  // DotShape,
   BoxShape,
-  DotShape,
   EllipseShape,
   HighlighterShape,
   ImageShape,
