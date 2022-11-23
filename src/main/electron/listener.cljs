@@ -157,11 +157,18 @@
   (js/window.apis.on "quickCapture"
                      (fn [args]
                        (let [{:keys [url title content page append]} (bean/->clj args)
-                             page (if (= page "TODAY")
-                                    (string/lower-case (date/journal-name))
+                             insert-today? (get-in (state/get-config)
+                                                   [:quick-capture-options :insert-today]
+                                                   false)
+                             today-page (when (state/enable-journals?)
+                                          (string/lower-case (date/today)))
+                             page (if (or (= page "TODAY")
+                                          (and (string/blank? page) insert-today?))
+                                    today-page
                                     (or (not-empty page)
                                         (state/get-current-page)
-                                        (string/lower-case (date/journal-name))))
+                                        today-page))
+                             page (or page "quick capture") ;; default to quick capture page, if journals are not enabled
                              format (db/get-page-format page)
                              time (date/get-current-time)
                              text (or (and content (not-empty (string/trim content))) "")
@@ -176,9 +183,16 @@
                              content (-> template
                                          (string/replace "{time}" time)
                                          (string/replace "{url}" link)
-                                         (string/replace "{text}" text))]
-                         (if (and (state/get-edit-block) state/editing? (false? append))
-                           (editor-handler/insert content)
+                                         (string/replace "{text}" text))
+                             edit-content (state/get-edit-content)
+                             edit-content-blank? (string/blank? edit-content)
+                             edit-content-include-capture? (and (not-empty edit-content)
+                                                                (string/includes? edit-content "[[quick capture]]"))]
+                         (if (and (state/editing?) (not append) (not edit-content-include-capture?))
+                           (if edit-content-blank?
+                             (editor-handler/insert content)
+                             (editor-handler/insert (str "\n" content)))
+
                            (do
                              (when (not= page (state/get-current-page))
                                (page-handler/create! page {:redirect? true}))

@@ -74,7 +74,10 @@
                                                   :title title
                                                   :content content
                                                   :page page
-                                                  :append (= append "true")} win))
+                                                  :append (if (nil? append)
+                                                            append
+                                                            (= append "true"))}
+                                  win))
 
       :else
       (send-to-focused-renderer "notification" {:type "error"
