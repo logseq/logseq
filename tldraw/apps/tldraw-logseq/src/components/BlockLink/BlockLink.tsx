@@ -43,7 +43,7 @@ export const BlockLink = ({ id }: { id: string }) => {
         {linkType === 'P' ? (
           <PageName pageName={id} />
         ) : (
-          <span className="inline-flex items-center">
+          <span className="block-link-reference-row">
             <Breadcrumb levelLimit={1} blockId={id} endSeparator />
             <BlockReference blockId={id} />
           </span>

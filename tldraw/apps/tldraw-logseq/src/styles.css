@@ -1144,3 +1144,9 @@ button.tl-shape-links-panel-item-remove-button {
     @apply bg-indigo-500;
   }
 }
+
+.block-link-reference-row {
+  > * {
+    display: inline;
+  }
+}
