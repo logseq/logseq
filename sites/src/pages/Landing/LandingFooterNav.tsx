@@ -211,8 +211,8 @@ export function LandingFooterDesc (props: {
               <span className="opacity-50">{appState.discord?.approximate_presence_count.get() || '-'} users online currently</span>
             </span>)],
             [<Globe size={34} weight={'duotone'}/>, 'Localization', 'Translated in many languages'],
-            [<PuzzlePiece size={34} weight={'duotone'}/>, '250+ Plugins', 'Extend functionality to your needs'],
-            [<Swatches size={34} weight={'duotone'}/>, '70+ Themes', 'Customize look and feel'],
+            [<PuzzlePiece size={34} weight={'duotone'}/>, '150+ Plugins', 'Extend functionality to your needs'],
+            [<Swatches size={34} weight={'duotone'}/>, '30+ Themes', 'Customize look and feel'],
           ].map(([icon, title, desc]) => {
             if (typeof desc === 'string') {
               desc = (<span className="opacity-50">{desc}</span>)
