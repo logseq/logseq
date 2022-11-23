@@ -235,16 +235,33 @@ html:is(.is-ios, is-native-ios, is-native-ipad) [data-page="whiteboard"] * {
     max-width: 90vw;
 
     > strong {
-      @apply block bg-gray-200 rounded text-gray-700 text-[10px] font-semibold px-2 py-0.5 opacity-40
+      @apply block rounded text-gray-700 text-[10px] font-semibold px-2 py-0.5
       m-auto translate-y-8;
+
+      background-color: var(--ls-link-text-color);
     }
   }
 
-  > h1, > h2 {
+  > h1 {
+    color: var(--ls-title-text-color);
+  }
+
+  > h1, p {
     @apply flex justify-center text-center;
   }
 
-  > h2 {
-    @apply text-sm opacity-80 pt-3;
+  > p {
+    @apply text-sm mx-10;
+
+    max-width: 540px;
+  }
+}
+
+
+html[data-theme='light'] {
+  .cp__whiteboards-welcome {
+    > .head-bg {
+      background-image: url("../img/whiteboard-welcome-light.png");
+    }
   }
 }

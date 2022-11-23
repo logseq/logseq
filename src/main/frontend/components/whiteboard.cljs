@@ -313,15 +313,15 @@
 
       [:strong "CLOSED ALPHA"]]
 
-     [:h1.text-2xl.font-bold.flex-col.sm:flex-row.opacity-80
+     [:h1.text-2xl.font-bold.flex-col.sm:flex-row
        "A new canvas for your thoughts."]
 
-     [:h2
+     [:p
       "Whiteboards are a great tool for brainstorming and organization.
        Now you can place any of your thoughts from the knowledge base or new ones next to each other on a spatial canvas to connect, associate and understand in new ways."]
 
      [:div.pt-6.flex.justify-center.space-x-2.sm:justify-end
-      (ui/button "Later" :on-click close-fn :background "gray" :class "opacity-60")
+      (ui/button "Later" :on-click close-fn :background "--ls-primary-background-color" :class "opacity-60")
       (ui/button "Start whiteboarding"
                  :disabled loading?
                  :on-click (fn []
