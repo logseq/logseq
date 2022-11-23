@@ -160,7 +160,12 @@
                              insert-today? (get-in (state/get-config)
                                                    [:quick-capture-options :insert-today]
                                                    false)
-                             page (if (true? insert-today?) (string/lower-case (date/journal-name)) (state/get-current-page))
+                             today-page (string/lower-case (date/today))
+                             page (if (true? insert-today?)
+                                    today-page
+                                    (or (state/get-current-page)
+                                        today-page
+                                        "Quick Capture"))
                              format (db/get-page-format page)
                              time (date/get-current-time)
                              text (or (and content (not-empty (string/trim content))) "")
@@ -171,9 +176,11 @@
                              content (-> template
                                          (string/replace "{time}" time)
                                          (string/replace "{url}" link)
-                                         (string/replace "{text}" text))]
-                         (if (and (state/get-edit-block) (not state/editing?)) ; changed to not so that block is created at the end of the page
-                           (editor-handler/insert content)
+                                         (string/replace "{text}" text))
+                             edit-content (state/get-edit-content)
+                             edit-content-include-capture? (and edit-content (string/includes? edit-content "[[quick capture]]"))]
+                         (if (and (state/editing?) (not edit-content-include-capture?))
+                           (editor-handler/insert (str "\n" content))
                            (editor-handler/api-insert-new-block! content {:page page
                                                                           :edit-block? false
                                                                           :replace-empty-target? true})))))
