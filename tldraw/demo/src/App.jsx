@@ -1,7 +1,7 @@
 import { uniqueId, fileToBase64 } from '@tldraw/core'
 import React from 'react'
 import ReactDOM from 'react-dom'
-import { App as TldrawApp } from '@tldraw/logseq'
+import { App as TldrawApp, generateJSXFromModel } from '@tldraw/logseq'
 
 const storingKey = 'playground.index'
 
@@ -83,16 +83,17 @@ const PageNameLink = props => {
   )
 }
 
-const ThemeSwitcher = ({ theme, setTheme }) => {
+const StatusBarSwitcher = ({ label, onClick }) => {
   const [anchor, setAnchor] = React.useState(null)
   React.useEffect(() => {
     if (anchor) {
       return
     }
-    let el = document.querySelector('#theme-switcher')
+    const id = 'status-bar-switcher-' + uniqueId()
+    let el = document.getElementById(id)
     if (!el) {
       el = document.createElement('div')
-      el.id = 'theme-switcher'
+      el.id = id
       let timer = setInterval(() => {
         const statusBarAnchor = document.querySelector('#tl-statusbar-anchor')
         if (statusBarAnchor) {
@@ -104,23 +105,73 @@ const ThemeSwitcher = ({ theme, setTheme }) => {
     }
   })
 
-  React.useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-  }, [theme])
-
   if (!anchor) {
     return null
   }
 
   return ReactDOM.createPortal(
     <button
-      className="flex items-center justify-center mx-2 bg-grey"
+      className="flex items-center justify-center bg-grey border px-1"
       style={{ fontSize: '1em' }}
-      onClick={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
+      onClick={onClick}
     >
-      {theme} theme
+      {label}
     </button>,
     anchor
+  )
+}
+
+const ThemeSwitcher = () => {
+  const [theme, setTheme] = React.useState('light')
+
+  React.useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+  }, [theme])
+
+  return (
+    <StatusBarSwitcher
+      label={theme + ' theme'}
+      onClick={() => {
+        setTheme(t => (t === 'dark' ? 'light' : 'dark'))
+      }}
+    />
+  )
+}
+
+const PreviewButton = ({ model }) => {
+  const [show, setShow] = React.useState(false)
+
+  const [[w, h], setSize] = React.useState([window.innerWidth, window.innerHeight])
+
+  React.useEffect(() => {
+    const onResize = () => {
+      setSize([window.innerWidth, window.innerHeight])
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  const preview = React.useMemo(() => {
+    return show ? generateJSXFromModel(model, w / h) : null
+  }, [show, model, w, h])
+
+  return (
+    <>
+      {preview ? (
+        <div
+          className="fixed inset-0 flex items-center justify-center pointer-events-none h-screen w-screen"
+          style={{ zIndex: '10000' }}
+        >
+          <div className="w-1/2 h-1/2 border bg-white">{preview}</div>
+        </div>
+      ) : null}
+      <StatusBarSwitcher
+        label="Preview"
+        onClick={() => {
+          setShow(s => !s)
+        }}
+      />
+    </>
   )
 }
 
@@ -136,8 +187,6 @@ const searchHandler = q => {
 }
 
 export default function App() {
-  const [theme, setTheme] = React.useState('light')
-
   const [model, setModel] = React.useState(documentModel)
 
   // Mimic external reload event
@@ -153,7 +202,8 @@ export default function App() {
 
   return (
     <div className={`h-screen w-screen`}>
-      <ThemeSwitcher theme={theme} setTheme={setTheme} />
+      <ThemeSwitcher />
+      <PreviewButton model={model} />
       <TldrawApp
         renderers={{
           Page,
@@ -170,7 +220,10 @@ export default function App() {
           makeAssetUrl: a => a,
         }}
         model={model}
-        onPersist={onPersist}
+        onPersist={app => {
+          onPersist(app)
+          setModel(app.serialized)
+        }}
       />
     </div>
   )

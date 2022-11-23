@@ -7,9 +7,8 @@
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.regex :as regex]
-            [frontend.search.browser :as search-browser]
+            [frontend.search.agency :as search-agency]
             [frontend.search.db :as search-db :refer [indices]]
-            [frontend.search.node :as search-node]
             [frontend.search.protocol :as protocol]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -19,9 +18,7 @@
 
 (defn get-engine
   [repo]
-  (if (util/electron?)
-    (search-node/->Node repo)
-    (search-browser/->Browser repo)))
+  (search-agency/->Agency repo))
 
 ;; Copied from https://gist.github.com/vaughnd/5099299
 (defn str-len-distance

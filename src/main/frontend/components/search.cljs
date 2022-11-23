@@ -13,7 +13,7 @@
             [frontend.db.model :as model]
             [frontend.handler.search :as search-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.ui :as ui]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
@@ -203,7 +203,7 @@
 (defn- search-item-render
   [search-q {:keys [type data alias]}]
   (let [search-mode (state/get-search-mode)
-        data (if (string? data) (pdf-assets/fix-local-asset-pagename data) data)]
+        data (if (string? data) (pdf-utils/fix-local-asset-pagename data) data)]
     [:div {:class "py-2"}
      (case type
        :graph-add-filter
@@ -231,25 +231,33 @@
                            (highlight-exact-query data search-q))
 
        :block
-       (let [{:block/keys [page uuid]} data  ;; content here is normalized
+       (let [{:block/keys [page uuid content]} data  ;; content here is normalized
              page (util/get-page-original-name page)
              repo (state/sub :git/current-repo)
              format (db/get-page-format page)
-             block (model/query-block-by-uuid uuid)
-             content (:block/content block)]
+             block (when-not (string/blank? uuid)
+                     (model/query-block-by-uuid uuid))
+             content' (if block (:block/content block) content)]
          [:span {:data-block-ref uuid}
           (search-result-item {:name "block"
                                :title (t :search-item/block)
                                :extension? true}
-                              (if block
-                                (block-search-result-item repo uuid format content search-q search-mode)
+
+                              (cond
+                                (some? block)
+                                (block-search-result-item repo uuid format content' search-q search-mode)
+
+                                (not (string/blank? content'))
+                                content'
+
+                                :else
                                 (do (log/error "search result with non-existing uuid: " data)
                                     (str "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."))))])
 
        nil)]))
 
 (rum/defc search-auto-complete
-  [{:keys [pages files blocks has-more?] :as result} search-q all?]
+  [{:keys [engine pages files blocks has-more?] :as result} search-q all?]
   (let [pages (when-not all? (map (fn [page]
                                     (let [alias (model/get-redirect-page-name page)]
                                       (cond->
@@ -264,6 +272,7 @@
         blocks (map (fn [block] {:type :block :data block}) blocks)
         search-mode (state/sub :search/mode)
         new-page (if (or
+                      (some? engine)
                       (and (seq pages)
                            (= (util/safe-page-name-sanity-lc search-q)
                               (util/safe-page-name-sanity-lc (:data (first pages)))))
@@ -401,14 +410,17 @@
       state
       :on-hide (fn []
                  (search-handler/clear-search!)))))
+  (rum/local nil ::active-engine-tab)
   [state]
   (let [search-result (state/sub :search/result)
         search-q (state/sub :search/q)
         search-mode (state/sub :search/mode)
+        engines (state/sub :search/engines)
+        *active-engine-tab (::active-engine-tab state)
         timeout 300
         in-page-search? (= search-mode :page)]
     [:div.cp__palette.cp__palette-main
-     [:div.ls-search.p-2
+     [:div.ls-search.p-2.md:p-0
       [:div.input-wrap
       [:input.cp__palette-input.w-full
        {:type          "text"
@@ -421,7 +433,12 @@
                          (default-placeholder search-mode))
         :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
         :value         search-q
-        :on-change     (fn [e]
+        :on-key-down   (fn [^js e]
+                         (when (= 27 (.-keyCode e))
+                           (when-not (string/blank? search-q)
+                             (util/stop e)
+                             (search-handler/clear-search!))))
+        :on-change     (fn [^js e]
                          (when @search-timeout
                            (js/clearTimeout @search-timeout))
                          (let [value (util/evalue e)
@@ -443,9 +460,35 @@
                                             (search-handler/search (state/get-current-repo) value)))
                                         timeout))))))}]]
       [:div.search-results-wrap
-       (if (seq search-result)
-         (search-auto-complete search-result search-q false)
-         (recent-search-and-pages in-page-search?))]]]))
+        ;; list registered search engines
+       (when (seq engines)
+         [:ul.search-results-engines-tabs
+          [:li
+           {:class (when-not @*active-engine-tab "is-active")}
+           (ui/button
+            [:span.flex.items-center
+             (svg/logo 14) [:span.pl-2 "Default"]]
+            :background "orange"
+            :on-click #(reset! *active-engine-tab nil))]
+
+          (for [[k v] engines]
+            [:li
+             {:key k
+              :class (if (= k @*active-engine-tab) "is-active" "")}
+             (ui/button [:span.flex.items-center
+                         [:span.pr-2 (ui/icon "puzzle")]
+                         (:name v)
+                         (when-let [result (and v (:result v))]
+                           (str " (" (count (:blocks result)) ")"))]
+                        :on-click #(reset! *active-engine-tab k))])])
+
+       (if-not (nil? @*active-engine-tab)
+         (let [active-engine-result (get-in engines [@*active-engine-tab :result])]
+           (search-auto-complete
+            (merge active-engine-result {:engine @*active-engine-tab}) search-q false))
+         (if (seq search-result)
+           (search-auto-complete search-result search-q false)
+           (recent-search-and-pages in-page-search?)))]]]))
 
 (rum/defc more < rum/reactive
   [route]

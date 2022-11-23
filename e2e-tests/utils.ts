@@ -2,7 +2,7 @@ import { Page, Locator } from 'playwright'
 import { expect, ConsoleMessage } from '@playwright/test'
 import * as process from 'process'
 import { Block } from './types'
-import pathlib from 'path'
+import * as pathlib from 'path'
 
 export const IsMac = process.platform === 'darwin'
 export const IsLinux = process.platform === 'linux'

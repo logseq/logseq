@@ -84,6 +84,15 @@ export const DevTools = observer(() => {
     .map(p => p.join(''))
     .join('|')
 
+  const originPoint = canvasAnchorRef.current
+    ? ReactDOM.createPortal(
+        <svg className="tl-renderer-dev-tools tl-grid">
+          <circle cx={point[0] * zoom} cy={point[1] * zoom} r="4" fill="red" />
+        </svg>,
+        canvasAnchorRef.current
+      )
+    : null
+
   const rendererStatus = statusbarAnchorRef.current
     ? ReactDOM.createPortal(
         <div
@@ -101,6 +110,7 @@ export const DevTools = observer(() => {
 
   return (
     <>
+      {originPoint}
       {rendererStatus}
       <HistoryStack />
     </>

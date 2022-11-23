@@ -366,10 +366,12 @@
 (defn apply-custom-theme-effect! [theme]
   (when config/lsp-enabled?
     (when-let [custom-theme (state/sub [:ui/custom-theme (keyword theme)])]
-      (when-let [url (:url custom-theme)]
+      ;; If the name is nil, the user has not set a custom theme (initially {:mode light/dark}).
+      ;; The url is not used because the default theme does not have an url.
+      (if (some? (:name custom-theme))
         (js/LSPluginCore.selectTheme (bean/->js custom-theme)
-                                     (bean/->js {:emit true}))
-        (state/set-state! :plugin/selected-theme url)))))
+                                     (bean/->js {:emit false}))
+        (state/set-state! :plugin/selected-theme (:url custom-theme))))))
 
 (defn setup-system-theme-effect!
   []
@@ -407,6 +409,13 @@
       (.removeEventListener js/window "keyup" keyup-handler)
       (.removeEventListener js/window "blur" clear-all)
       (.removeEventListener js/window "visibilitychange" clear-all))))
+
+(defn setup-viewport-listeners! []
+  (when-let [^js vw (gobj/get js/window "visualViewport")]
+    (let [handler #(state/set-state! :ui/viewport {:width (.-width vw) :height (.-height vw) :scale (.-scale vw)})]
+      (.addEventListener js/window.visualViewport "resize" handler)
+      (handler)
+      #(.removeEventListener js/window.visualViewport "resize" handler))))
 
 (defonce last-scroll-top (atom 0))
 
@@ -939,25 +948,25 @@
      (let [^js jsTablerIcons (gobj/get js/window "tablerIcons")]
        (if (or extension? font? (not jsTablerIcons))
          [:span.ui__icon (merge {:class
-                     (util/format
-                      (str "%s-" class
-                           (when (:class opts)
-                             (str " " (string/trim (:class opts)))))
-                      (if extension? "tie tie" "ti ti"))}
-                    (dissoc opts :class :extension? :font?))]
+                                 (util/format
+                                  (str "%s-" class
+                                       (when (:class opts)
+                                         (str " " (string/trim (:class opts)))))
+                                  (if extension? "tie tie" "ti ti"))}
+                                (dissoc opts :class :extension? :font?))]
 
          ;; tabler svg react
          (when-let [klass (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase class)))]
            (let [f (get-adapt-icon-class klass)]
              [:span.ui__icon.ti
               {:class (str "ls-icon-" class)}
-              (f (merge {:size 18} (r/map-keys->camel-case opts)))])))))))
+              (f (merge {:size 18} (r/map-keys->camel-case (dissoc opts :class))))])))))))
 
 (defn button
   [text & {:keys [background href class intent on-click small? large? title icon icon-props disabled?]
            :or   {small? false large? false}
            :as   option}]
-  (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center")
+  (let [klass (if-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center" intent)
         klass (if background (string/replace klass "indigo" background) klass)
         klass (if small? (str klass ".px-2.py-1") klass)
         klass (if large? (str klass ".text-base") klass)

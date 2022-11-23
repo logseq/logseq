@@ -101,15 +101,21 @@ input::-webkit-inner-spin-button {
 
         > .nu {
           padding-right: 4px;
-
+          
           input {
             user-select: inherit;
             width: 35px;
             text-align: right;
             padding-right: 4px;
+            padding-left: 2px;
             height: 18px;
             border: none;
             background: transparent;
+            font-size: 15px;
+            
+            &.is-long {
+              font-size: 12px;
+            }
           }
         }
 
@@ -840,6 +846,16 @@ input::-webkit-inner-spin-button {
       border-radius: 4px;
       overflow: hidden;
       margin-top: 4px;
+
+      .actions {
+        @apply absolute right-1 top-1 flex opacity-0 transition-opacity;
+      }
+
+      &:hover {
+        .actions {
+          @apply opacity-100;
+        }
+      }
 
       img {
         margin: 0;
