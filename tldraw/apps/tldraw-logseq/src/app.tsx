@@ -129,6 +129,7 @@ export const App = function App({ renderers, handlers, ...rest }: LogseqTldrawPr
       })
     )
   }, [])
+
   const contextValue = {
     renderers: memoRenders,
     handlers: handlers,

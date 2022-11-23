@@ -34,7 +34,13 @@
   (block/breadcrumb {:preview? true}
                     (state/get-current-repo)
                     (uuid (gobj/get props "blockId"))
-                    {:level-limit (gobj/get props "levelLimit" 3)}))
+                    {:end-separator? (gobj/get props "endSeparator")
+                     :level-limit (gobj/get props "levelLimit" 3)}))
+
+(rum/defc block-reference
+  [props]
+  (println "page-name-linkpage-name-linkpage-name-linkpage-name-link" props)
+  (block/block-reference {} (gobj/get props "blockId") nil))
 
 (rum/defc page-name-link
   [props]
@@ -66,8 +72,9 @@
 (def tldraw-renderers {:Page page-cp
                        :Block block-cp
                        :Breadcrumb breadcrumb
-                       :PageNameLink page-name-link
-                       :ReferencesCount references-count})
+                       :PageName page-name-link
+                       :ReferencesCount references-count
+                       :BlockReference block-reference})
 
 (defn get-tldraw-handlers [current-whiteboard-name]
   {:search search-handler
@@ -95,16 +102,17 @@
 (rum/defc tldraw-app
   [page-name block-id]
   (let [populate-onboarding?  (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
-        data (whiteboard-handler/page-name->tldr! page-name block-id)
-        [loaded? set-loaded?] (rum/use-state false)
+        data (whiteboard-handler/page-name->tldr! page-name)
+        [loaded-app set-loaded-app] (rum/use-state nil)
         on-mount (fn [tln]
                    (when-let [^js api (gobj/get tln "api")]
                      (p/then (when populate-onboarding?
                                (whiteboard-handler/populate-onboarding-whiteboard api))
-                             #(do (when (and block-id (parse-uuid block-id))
-                                    (. api selectShapes block-id)
-                                    (. api zoomToSelection))
-                                  (set-loaded? true)))))]
+                             #(do (state/focus-whiteboard-shape tln block-id)
+                                  (set-loaded-app tln)))))]
+    (rum/use-effect! (fn [] (when (and loaded-app block-id)
+                              (state/focus-whiteboard-shape loaded-app block-id)) #())
+                     [block-id loaded-app])
 
     (when data
       [:div.draw.tldraw.whiteboard.relative.w-full.h-full
@@ -116,7 +124,7 @@
         :on-wheel util/stop-propagation}
 
        (when
-        (and populate-onboarding? (not loaded?))
+        (and populate-onboarding? (not loaded-app))
          [:div.absolute.inset-0.flex.items-center.justify-center
           {:style {:z-index 200}}
           (ui/loading "Loading onboarding whiteboard ...")])

@@ -51,7 +51,6 @@ export const QuickLinksContainer = observer(function QuickLinksContainer<S exten
           }}
           {...events}
           onPointerDown={stop}
-          title="Shape Quick Links"
         >
           <QuickLinks
             className={'tl-backlinks-count ' + (rounded ? 'tl-backlinks-count-rounded' : '')}

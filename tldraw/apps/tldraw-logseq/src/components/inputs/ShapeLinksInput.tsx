@@ -1,8 +1,6 @@
 import type { Side } from '@radix-ui/react-popper'
-import { MOD_KEY, validUUID } from '@tldraw/core'
-import Mousetrap from 'mousetrap'
+import { validUUID } from '@tldraw/core'
 import React from 'react'
-import { NIL as NIL_UUID } from 'uuid'
 
 import { observer } from 'mobx-react-lite'
 import { LogseqContext } from '../../lib/logseq-context'
@@ -55,7 +53,7 @@ function ShapeLinkItem({
           type="button"
           onClick={onRemove}
         >
-          <TablerIcon name="x" className='!translate-y-0' />
+          <TablerIcon name="x" className="!translate-y-0" />
         </Button>
       )}
     </div>
@@ -79,41 +77,6 @@ export const ShapeLinksInput = observer(function ShapeLinksInput({
       onRefsChange([...refs, value])
     }
   }
-
-  React.useEffect(() => {
-    const callback = (keyboardEvent: Mousetrap.ExtendedKeyboardEvent, combo: string) => {
-      keyboardEvent.preventDefault()
-      keyboardEvent.stopPropagation()
-      ;(async () => {
-        // TODO: thinking about how to make this more generic with usePaste hook
-        // TODO: handle whiteboard shapes?
-        const items = await navigator.clipboard.read()
-        if (items.length > 0) {
-          const blob = await items[0].getType('text/plain')
-          const rawText = (await blob.text()).trim()
-
-          if (rawText) {
-            let newValue: string | undefined
-            if (/^\(\(.*\)\)$/.test(rawText) && rawText.length === NIL_UUID.length + 4) {
-              const blockRef = rawText.slice(2, -2)
-              if (validUUID(blockRef)) {
-                newValue = blockRef
-              }
-            } else if (/^\[\[.*\]\]$/.test(rawText)) {
-              newValue = rawText.slice(2, -2)
-            }
-            addNewRef(newValue)
-          }
-        }
-      })()
-    }
-
-    Mousetrap.bind(`mod+shift+v`, callback, 'keydown')
-
-    return () => {
-      Mousetrap.unbind(`mod+shift+v`, 'keydown')
-    }
-  }, [])
 
   const showReferencePanel = !!(pageId && portalType)
 

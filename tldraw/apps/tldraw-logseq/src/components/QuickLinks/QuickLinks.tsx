@@ -18,7 +18,7 @@ export const QuickLinks: TLQuickLinksComponent<Shape> = observer(({ id, shape })
   if (links.length === 0) return null
 
   return (
-    <div className="tl-quick-links">
+    <div className="tl-quick-links" title="Shape Quick Links">
       {links.map(ref => {
         return (
           <div key={ref} className="tl-quick-links-row">

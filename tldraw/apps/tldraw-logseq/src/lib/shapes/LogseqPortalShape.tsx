@@ -419,7 +419,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       return null // not being correctly configured
     }
 
-    const { Breadcrumb, PageNameLink } = renderers
+    const { Breadcrumb, PageName } = renderers
 
     return (
       <HTMLContainer
@@ -474,7 +474,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                     opacity={opacity}
                   >
                     {this.props.blockType === 'P' ? (
-                      <PageNameLink pageName={pageId} />
+                      <PageName pageName={pageId} />
                     ) : (
                       <Breadcrumb blockId={pageId} />
                     )}

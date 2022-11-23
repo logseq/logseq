@@ -68,11 +68,15 @@ const Block = () => {
   )
 }
 
-const Breadcrumb = props => {
+const Breadcrumb = ({ endSeparator }) => {
+  return <div className="font-mono">Breadcrumb {endSeparator ? ' > ' : ''}</div>
+}
+
+const BlockReference = props => {
   return <div className="font-mono">{props.blockId}</div>
 }
 
-const PageNameLink = props => {
+const PageName = props => {
   const [value, setValue] = React.useState(JSON.stringify(props))
   return (
     <input
@@ -217,8 +221,9 @@ export default function App() {
           Page,
           Block,
           Breadcrumb,
-          PageNameLink,
+          PageName,
           ReferencesCount,
+          BlockReference,
         }}
         handlers={{
           search: searchHandler,

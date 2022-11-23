@@ -17,9 +17,13 @@ export interface LogseqContextValue {
     Breadcrumb: React.FC<{
       blockId: string
       levelLimit?: number
+      endSeparator?: boolean
     }>
-    PageNameLink: React.FC<{
+    PageName: React.FC<{
       pageName: string
+    }>
+    BlockReference: React.FC<{
+      blockId: string
     }>
     ReferencesCount: React.FC<{
       id: string

@@ -6,7 +6,7 @@ import { TablerIcon } from '../icons'
 export const BlockLink = ({ id }: { id: string }) => {
   const {
     handlers: { isWhiteboardPage, redirectToPage, sidebarAddBlock, queryBlockByUUID },
-    renderers: { Breadcrumb, PageNameLink },
+    renderers: { Breadcrumb, PageName, BlockReference },
   } = React.useContext(LogseqContext)
 
   let iconName = ''
@@ -41,9 +41,12 @@ export const BlockLink = ({ id }: { id: string }) => {
       <TablerIcon name={iconName} />
       <span className="pointer-events-none">
         {linkType === 'P' ? (
-          <PageNameLink pageName={id} />
+          <PageName pageName={id} />
         ) : (
-          <Breadcrumb levelLimit={1} blockId={id} />
+          <span className="inline-flex items-center">
+            <Breadcrumb levelLimit={1} blockId={id} endSeparator />
+            <BlockReference blockId={id} />
+          </span>
         )}
       </span>
     </button>
