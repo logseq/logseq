@@ -1297,6 +1297,24 @@
                                (sort-by-left-recursive))]
          (db-utils/group-by-page query-result))))))
 
+(defn get-block-references-count
+  [block-uuid]
+  (when-let [repo (state/get-current-repo)]
+    (when (conn/get-db repo)
+      (let [block (db-utils/entity [:block/uuid block-uuid])
+            query-result (->> (react/q repo [:frontend.db.react/refs
+                                             (:db/id block)]
+                                       {}
+                                       '[:find [(pull ?ref-block ?block-attrs) ...]
+                                         :in $ ?block-uuid ?block-attrs
+                                         :where
+                                         [?block :block/uuid ?block-uuid]
+                                         [?ref-block :block/refs ?block]]
+                                       block-uuid
+                                       block-attrs)
+                              react)]
+        (count query-result)))))
+
 (defn journal-page?
   "sanitized page-name only"
   [page-name]

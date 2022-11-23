@@ -3,12 +3,12 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.handler.ui :as ui-handler]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.search :as search-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
-            [logseq.graph-parser.text :as text]
             [frontend.util :as util]
+            [logseq.graph-parser.text :as text]
             [reitit.frontend.easy :as rfe]))
 
 (defn redirect!
@@ -65,9 +65,11 @@
    (redirect-to-whiteboard! name nil))
   ([name {:keys [block-id]}]
    (recent-handler/add-page-to-recent! (state/get-current-repo) name false)
-   (redirect! {:to :whiteboard
-               :path-params {:name (str name)}
-               :query-params (merge {:block-id block-id})})))
+   (if (= name (state/get-current-whiteboard))
+     (state/focus-whiteboard-shape block-id)
+     (redirect! {:to :whiteboard
+                 :path-params {:name (str name)}
+                 :query-params (merge {:block-id block-id})}))))
 
 (defn get-title
   [name path-params]
