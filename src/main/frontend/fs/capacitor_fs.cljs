@@ -229,9 +229,9 @@
 
       :else
       (do
-        (state/pub-event! [:instrument {:type :error/ios-path-missing-slashes
-                                        ;; respect user's privacy
-                                        :path (gp-util/safe-subs path 10)}])
+        (state/pub-event! [:capture-error {:error (js/Error. "ios path missing slashes")
+                                           :payload {:type :error/ios-path-missing-slashes
+                                                     :path (gp-util/safe-subs (str path) 12)}}])
         path))
     path))
 
