@@ -752,7 +752,7 @@
      [:div
       [:p
        "We suggest you upgrade now to avoid some potential bugs."]
-      (when (seq? paths)
+      (when (seq paths)
         [:p
          "For example, the files below have reserved characters can't be synced on some platforms."])]
      ]
@@ -763,7 +763,7 @@
                   (state/set-modal!
                   (fn [_] (conversion-component/files-breaking-changed))
                   {:id :filename-format-panel :center? true})))
-    (when (seq? paths)
+    (when (seq paths)
       [:ol.my-2
        (for [path paths]
          [:li path])])]
