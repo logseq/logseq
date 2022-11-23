@@ -403,7 +403,9 @@
 (defmethod handle :redirect-to-home [_]
   (page-handler/create-today-journal!))
 
-(defmethod handle :instrument [[_ {:keys [type payload]}]]
+(defmethod handle :instrument [[_ {:keys [type payload] :as opts}]]
+  (when-not (empty? (dissoc opts :type :payload))
+    (js/console.error "instrument data-map should only contains [:type :payload]"))
   (posthog/capture type payload))
 
 (defmethod handle :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
