@@ -1421,7 +1421,7 @@
         :settings-page/preferred-outdenting "Mise en retrait logique"
         :settings-page/shortcut-settings "Personnaliser les raccourcis"
         :settings-page/show-brackets "Montrer les parenthèses, crochets et accolades"
-        :settings-page/spell-checker "Vérification autographique"
+        :settings-page/spell-checker "Vérification orthographique"
         :settings-page/sync "Synchronisation"
         :settings-page/tab-advanced "Advancé"
         :settings-page/tab-assets "Pièces-jointes"
