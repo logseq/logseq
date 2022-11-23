@@ -32,7 +32,7 @@ function ShapeLinkItem({
 
   return (
     <div className="tl-shape-links-panel-item color-level relative">
-      <div className="whitespace-pre break-all overflow-hidden text-ellipsis">
+      <div className="whitespace-pre break-all overflow-hidden text-ellipsis inline-flex">
         <BlockLink id={id} />
       </div>
       <div className="flex-1" />
