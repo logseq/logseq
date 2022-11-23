@@ -39,7 +39,6 @@
 
 (rum/defc block-reference
   [props]
-  (println "page-name-linkpage-name-linkpage-name-linkpage-name-link" props)
   (block/block-reference {} (gobj/get props "blockId") nil))
 
 (rum/defc page-name-link
@@ -73,7 +72,7 @@
                        :Block block-cp
                        :Breadcrumb breadcrumb
                        :PageName page-name-link
-                       :ReferencesCount references-count
+                       :BacklinksCount references-count
                        :BlockReference block-reference})
 
 (defn get-tldraw-handlers [current-whiteboard-name]

@@ -87,7 +87,7 @@ const PageName = props => {
   )
 }
 
-const ReferencesCount = props => {
+const BacklinksCount = props => {
   return (
     <div className={props.className}>
       <div className={'open-page-ref-link rounded bg-gray-400 p-0.5 '}>3</div>
@@ -222,7 +222,7 @@ export default function App() {
           Block,
           Breadcrumb,
           PageName,
-          ReferencesCount,
+          BacklinksCount,
           BlockReference,
         }}
         handlers={{
