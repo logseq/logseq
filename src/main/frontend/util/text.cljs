@@ -120,7 +120,9 @@
 
 (defn cut-by
   "Cut string by specifid wrapping symbols, only match the first occurrence.
-     value - string to cut"
+     value - string to cut
+     before - cutting symbol (before)
+     end - cutting symbol (end)"
   [value before end]
   (let [b-pos (string/index-of value before)
         b-len (count before)]

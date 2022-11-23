@@ -67,10 +67,9 @@
   "Return hiccup of highlighted page content FTS result"
   [content q]
   (when-not (or (string/blank? content) (string/blank? q))
-    [:div (loop [content content
+    [:div (loop [content content ;; why recur? because there might be multiple matches
                  result  []]
-            (let [_ (prn "content" content "result" result)
-                  [b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
+            (let [[b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
                   hiccups-add [(when-not (string/blank? b-cut)
                                  [:span b-cut])
                                (when-not (string/blank? hl-cut)
