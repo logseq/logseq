@@ -22,8 +22,8 @@ import { Container } from '../Container'
 import { ContextBarContainer } from '../ContextBarContainer'
 import { HTMLLayer } from '../HTMLLayer'
 import { Indicator } from '../Indicator'
-import { QuickLinksContainer } from '../ReferencesCountContainer copy'
-import { BacklinksCountContainer } from '../ReferencesCountContainer'
+import { QuickLinksContainer } from '../QuickLinksContainer'
+import { BacklinksCountContainer } from '../BacklinksCountContainer'
 import { SelectionDetailContainer } from '../SelectionDetailContainer'
 import { Shape } from '../Shape'
 import { SVGContainer } from '../SVGContainer'
@@ -158,11 +158,11 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
           {hoveredShape && (
             <Indicator key={'hovered_indicator_' + hoveredShape.id} shape={hoveredShape} />
           )}
-          {selectedOrHooveredShape && components.BacklinksCount && (
+          {singleSelectedShape && components.BacklinksCount && (
             <BacklinksCountContainer
               hidden={false}
-              bounds={selectedOrHooveredShape.bounds}
-              shape={selectedOrHooveredShape}
+              bounds={singleSelectedShape.bounds}
+              shape={singleSelectedShape}
             />
           )}
           {hoveredShape && hoveredShape !== singleSelectedShape && components.QuickLinks && (
