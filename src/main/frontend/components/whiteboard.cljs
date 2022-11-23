@@ -10,6 +10,7 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.config :as config-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.rum :refer [use-bounding-client-rect use-breakpoint
                                   use-click-outside]]
@@ -295,37 +296,27 @@
 
 (defn onboarding-show
   []
-  (when-not (get (state/sub :whiteboard/onboarding?) (keyword type))
-    (try
-      (let [login? (boolean (state/sub :auth/id-token))]
-        (when login?
-          (state/pub-event! [:whiteboard/onboarding])
-          (state/set-state! [:whiteboard/onboarding?] true)))
-      (catch :default e
-        (js/console.warn "[onboarding SKIP] " e)))))
+  (when (and (user-handler/feature-available? :whiteboard)
+             (not (or (state/enable-whiteboards?)
+                      (state/sub :whiteboard/onboarding?))))
+    (state/pub-event! [:whiteboard/onboarding])
+    (state/set-state! [:whiteboard/onboarding?] true)))
 
 (rum/defc onboarding-welcome
   [close-fn]
+  [:div.cp__whiteboards-welcome
+   [:span.head-bg
 
-  (let [[loading? set-loading?] (rum/use-state false)]
-    [:div.cp__whiteboards-welcome
-     [:span.head-bg
+    [:strong (t :on-boarding/closed-feature (name (:whiteboard user-handler/feature-matrix)))]]
 
-      [:strong "CLOSED ALPHA"]]
+   [:h1.text-2xl.font-bold.flex-col.sm:flex-row
+    (t :on-boarding/welcome-whiteboard-modal-title)]
 
-     [:h1.text-2xl.font-bold.flex-col.sm:flex-row
-       "A new canvas for your thoughts."]
+   [:p (t :on-boarding/welcome-whiteboard-modal-description)]
 
-     [:p
-      "Whiteboards are a great tool for brainstorming and organization.
-       Now you can place any of your thoughts from the knowledge base or new ones next to each other on a spatial canvas to connect, associate and understand in new ways."]
-
-     [:div.pt-6.flex.justify-center.space-x-2.sm:justify-end
-      (ui/button "Later" :on-click close-fn :background "--ls-primary-background-color" :class "opacity-60")
-      (ui/button "Start whiteboarding"
-                 :disabled loading?
-                 :on-click (fn []
-                             (set-loading? true)
-                             ;; enable whiteboards and initiate onboaring
-                             (close-fn)
-                             (set-loading? false)))]]))
+   [:div.pt-6.flex.justify-center.space-x-2.sm:justify-end
+    (ui/button (t :on-boarding/welcome-whiteboard-modal-later) :on-click close-fn :background "gray" :class "opacity-60")
+    (ui/button (t :on-boarding/welcome-whiteboard-modal-start)
+               :on-click (fn []
+                           (config-handler/set-config! :feature/enable-whiteboards? true)
+                           (close-fn)))]])

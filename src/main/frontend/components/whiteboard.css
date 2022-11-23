@@ -236,7 +236,7 @@ html:is(.is-ios, is-native-ios, is-native-ipad) [data-page="whiteboard"] * {
 
     > strong {
       @apply block rounded text-gray-700 text-[10px] font-semibold px-2 py-0.5
-      m-auto translate-y-8;
+      m-auto translate-y-8 uppercase;
 
       background-color: var(--ls-link-text-color);
     }

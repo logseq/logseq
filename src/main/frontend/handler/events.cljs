@@ -98,8 +98,7 @@
                     (sync/<sync-start)))))
             (ui-handler/re-render-root!)
             (file-sync/maybe-onboarding-show status)
-            (when (user-handler/alpha-or-beta-user?)
-              (whiteboard/onboarding-show))))))))
+            (whiteboard/onboarding-show)))))))
 
 (defmethod handle :user/logout [[_]]
   (file-sync-handler/reset-session-graphs)
