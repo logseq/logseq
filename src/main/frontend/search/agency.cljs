@@ -9,13 +9,17 @@
 
 (defn get-registered-engines
   [repo]
-  (concat
-   [(if (util/electron?)
-      (search-node/->Node repo)
-      (search-browser/->Browser repo))]
+  [(if (util/electron?)
+     (search-node/->Node repo)
+     (search-browser/->Browser repo))
    (when state/lsp-enabled?
      (for [s (state/get-all-plugin-services-with-type :search)]
-       (search-plugin/->Plugin s repo)))))
+       (search-plugin/->Plugin s repo)))])
+
+(defn- get-flatten-registered-engines
+  [repo]
+  (->> (flatten (get-registered-engines repo))
+       (remove nil?)))
 
 (deftype Agency [repo]
   protocol/Engine
@@ -36,15 +40,15 @@
 
   (transact-blocks! [_this data]
     (println "D:Search > Transact blocks!:" repo)
-    (doseq [e (flatten (get-registered-engines repo))]
+    (doseq [e (get-flatten-registered-engines repo)]
       (protocol/transact-blocks! e data)))
 
   (truncate-blocks! [_this]
     (println "D:Search > Truncate blocks!" repo)
-    (doseq [e (flatten (get-registered-engines repo))]
+    (doseq [e (get-flatten-registered-engines repo)]
       (protocol/truncate-blocks! e)))
 
   (remove-db! [_this]
     (println "D:Search > Remove Db!" repo)
-    (doseq [e (flatten (get-registered-engines repo))]
+    (doseq [e (get-flatten-registered-engines repo)]
       (protocol/remove-db! e))))
