@@ -358,7 +358,7 @@ export function TutorialTips () {
                 href={`https://discuss.logseq.com/`}
                 className={'w-full sm:w-auto'}
               >
-                Community Hub
+                Knowledge Hub
               </Button>
               <span
                 className="hidden sm:inline-block text-[11px] pt-2 text-center w-full text-gray-400/80">
