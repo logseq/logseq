@@ -13,7 +13,12 @@ export const BlockLink = ({ id }: { id: string }) => {
   let linkType = validUUID(id) ? 'B' : 'P'
 
   if (validUUID(id)) {
-    if (queryBlockByUUID(id)?.properties?.['ls-type'] === 'whiteboard-shape') {
+    const block = queryBlockByUUID(id)
+    if (!block) {
+      return <span className='p-2'>Invalid reference. Did you remove it?</span>
+    }
+
+    if (block.properties?.['ls-type'] === 'whiteboard-shape') {
       iconName = 'link-to-whiteboard'
     } else {
       iconName = 'link-to-block'
