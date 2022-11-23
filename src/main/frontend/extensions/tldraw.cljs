@@ -91,7 +91,8 @@
                                                 (keyword type)))
    :redirectToPage (fn [page-name-or-uuid]
                      (let [page-name (or (when (util/uuid-string? page-name-or-uuid)
-                                           (:block/name (model/get-block-parent (parse-uuid page-name-or-uuid))))
+                                           (:block/name (model/get-block-page (state/get-current-repo)
+                                                                              (parse-uuid page-name-or-uuid))))
                                          page-name-or-uuid)
                            page-exists? (model/page-exists? page-name)
                            whiteboard? (model/whiteboard-page? page-name)]
