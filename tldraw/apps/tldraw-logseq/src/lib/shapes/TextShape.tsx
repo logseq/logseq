@@ -309,7 +309,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
   getShapeSVGJsx() {
     if (isSafari()) {
       // Safari doesn't support foreignObject well
-      return super.getShapeSVGJsx(null);
+      return super.getShapeSVGJsx(null)
     }
     const {
       props: { text, stroke, fontSize, fontFamily },

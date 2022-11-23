@@ -91,7 +91,7 @@
  ;; Setup custom shortcuts under `:shortcuts` key
  ;; Syntax:
  ;; 1. `+` means keys pressing simultaneously. eg: `ctrl+shift+a`
- ;; 2. ` ` empty space between keys represents key chords. eg: `t s` means press `s` follow by `t`
+ ;; 2. ` ` empty space between keys represents key chords. eg: `t s` means press `t` followed by `s`
  ;; 3. `mod` means `Ctrl` for Windows/Linux  and `Command` for Mac
  ;; 4. use `false` to disable particular shortcut
  ;; 4. you can define multiple bindings for one action, eg `["ctrl+j" "down"]`

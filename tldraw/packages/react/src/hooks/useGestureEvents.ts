@@ -15,6 +15,7 @@ export function useGestureEvents(ref: React.RefObject<HTMLDivElement>) {
 
   const rOriginPoint = React.useRef<number[] | undefined>(undefined)
   const rDelta = React.useRef<number[]>([0, 0])
+  const rWheelTs = React.useRef<number>(0)
 
   const events = React.useMemo(() => {
     const onWheel: Handler<'wheel', WheelEvent> = gesture => {
@@ -23,9 +24,11 @@ export function useGestureEvents(ref: React.RefObject<HTMLDivElement>) {
 
       const [x, y, z] = normalizeWheel(event)
 
-      if (inputs.state === 'pinching') {
+      if (inputs.state === 'pinching' || rWheelTs.current >= event.timeStamp) {
         return
       }
+
+      rWheelTs.current = event.timeStamp
 
       if ((event.altKey || event.ctrlKey || event.metaKey) && event.buttons === 0) {
         const bounds = viewport.bounds

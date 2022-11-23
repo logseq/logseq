@@ -1,45 +1,49 @@
 (ns electron.listener
   "System-component-like ns that defines listeners by event name to receive ipc
   messages from electron's main process"
-  (:require [frontend.state :as state]
-            [frontend.context.i18n :refer [t]]
-            [frontend.date :as date]
-            [frontend.handler.route :as route-handler]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.handler.file-sync :as file-sync-handler]
-            [frontend.config :as config]
-            [clojure.string :as string]
-            [cljs-bean.core :as bean]
-            [frontend.fs.watcher-handler :as watcher-handler]
-            [frontend.fs.sync :as sync]
-            [frontend.db :as db]
-            [frontend.db.model :as db-model]
-            [datascript.core :as d]
-            [electron.ipc :as ipc]
-            [frontend.ui :as ui]
-            [frontend.handler.notification :as notification]
-            [frontend.handler.repo :as repo-handler]
-            [frontend.handler.user :as user]
-            [dommy.core :as dom]))
+  (:require
+    [cljs-bean.core :as bean]
+    [clojure.string :as string]
+    [datascript.core :as d]
+    [dommy.core :as dom]
+    [electron.ipc :as ipc]
+    [frontend.config :as config]
+    [frontend.context.i18n :refer [t]]
+    [frontend.date :as date]
+    [frontend.db :as db]
+    [frontend.db.model :as db-model]
+    [frontend.fs.sync :as sync]
+    [frontend.fs.watcher-handler :as watcher-handler]
+    [frontend.handler.editor :as editor-handler]
+    [frontend.handler.file-sync :as file-sync-handler]
+    [frontend.handler.notification :as notification]
+    [frontend.handler.repo :as repo-handler]
+    [frontend.handler.route :as route-handler]
+    [frontend.handler.ui :as ui-handler]
+    [frontend.handler.user :as user]
+    [frontend.state :as state]
+    [frontend.ui :as ui]))
+
 
 (defn persist-dbs!
   []
   ;; only persist current db!
   ;; TODO rename the function and event to persist-db
   (repo-handler/persist-db! {:before     #(notification/show!
-                                           (ui/loading (t :graph/persist))
-                                           :warning)
+                                            (ui/loading (t :graph/persist))
+                                            :warning)
                              :on-success #(ipc/ipc "persistent-dbs-saved")
                              :on-error   #(ipc/ipc "persistent-dbs-error")}))
+
 
 (defn listen-persistent-dbs!
   []
   ;; TODO: move "file-watcher" to electron.ipc.channels
   (js/window.apis.on
-   "persistent-dbs"
-   (fn [_req]
-     (persist-dbs!))))
+    "persistent-dbs"
+    (fn [_req]
+      (persist-dbs!))))
+
 
 (defn ^:large-vars/cleanup-todo listen-to-electron!
   []
@@ -92,10 +96,13 @@
                        (let [{:keys [page-name block-id file]} (bean/->clj data)]
                          (cond
                            page-name
-                           (let [db-page-name (db-model/get-redirect-page-name page-name)]
+                           (let [db-page-name (db-model/get-redirect-page-name page-name)
+                                 whiteboard? (db-model/whiteboard-page? db-page-name)]
                              ;; No error handling required, as a page name is always valid
                              ;; Open new page if the page does not exist
-                             (editor-handler/insert-first-page-block-if-not-exists! db-page-name))
+                             (if whiteboard?
+                               (route-handler/redirect-to-whiteboard! page-name {:block-id block-id})
+                               (editor-handler/insert-first-page-block-if-not-exists! db-page-name)))
 
                            block-id
                            (if (db-model/get-block-by-uuid block-id)
@@ -121,14 +128,14 @@
                      (fn [data]
                        (let [repo (bean/->clj data)
                              before-f #(notification/show!
-                                        (ui/loading (t :graph/persist))
-                                        :warning)
+                                         (ui/loading (t :graph/persist))
+                                         :warning)
                              after-f #(ipc/ipc "broadcastPersistGraphDone")
                              error-f (fn []
                                        (after-f)
                                        (notification/show!
-                                        (t :graph/persist-error)
-                                        :error))
+                                         (t :graph/persist-error)
+                                         :error))
                              handlers {:before     before-f
                                        :on-success after-f
                                        :on-error   error-f}]
@@ -150,30 +157,41 @@
   (js/window.apis.on "quickCapture"
                      (fn [args]
                        (let [{:keys [url title content]} (bean/->clj args)
-                             page (or (state/get-current-page)
-                                      (string/lower-case (date/journal-name)))
+                             insert-today? (get-in (state/get-config)
+                                                   [:quick-capture-options :insert-today]
+                                                   false)
+                             today-page (string/lower-case (date/today))
+                             page (if (true? insert-today?)
+                                    today-page
+                                    (or (state/get-current-page)
+                                        today-page
+                                        "Quick Capture"))
                              format (db/get-page-format page)
                              time (date/get-current-time)
                              text (or (and content (not-empty (string/trim content))) "")
-                             link (if (not-empty title) (config/link-format format title url) url)
+                             link (if (string/includes? url "www.youtube.com/watch") (str title " {{video " url "}}") (if (not-empty title) (config/link-format format title url) url))
                              template (get-in (state/get-config)
                                               [:quick-capture-templates :text]
                                               "**{time}** [[quick capture]]: {text} {url}")
                              content (-> template
                                          (string/replace "{time}" time)
                                          (string/replace "{url}" link)
-                                         (string/replace "{text}" text))]
-                         (if (and (state/get-edit-block) (state/editing?))
-                           (editor-handler/insert content)
+                                         (string/replace "{text}" text))
+                             edit-content (state/get-edit-content)
+                             edit-content-include-capture? (and edit-content (string/includes? edit-content "[[quick capture]]"))]
+                         (if (and (state/editing?) (not edit-content-include-capture?))
+                           (editor-handler/insert (str "\n" content))
                            (editor-handler/api-insert-new-block! content {:page page
                                                                           :edit-block? false
                                                                           :replace-empty-target? true})))))
+
 
   (js/window.apis.on "openNewWindowOfGraph"
                      ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage
                      ;; No db cache persisting ensured. Should be handled by the caller
                      (fn [repo]
                        (ui-handler/open-new-window! repo))))
+
 
 (defn listen!
   []

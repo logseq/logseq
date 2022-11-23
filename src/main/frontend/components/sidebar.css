@@ -72,6 +72,7 @@
 #main-content-container[data-is-margin-less-pages=true] {
   padding: 0 !important;
   position: relative;
+  overflow: auto;
 }
 
 .left-sidebar-inner {
@@ -90,7 +91,7 @@
 
   > .wrap {
     height: calc(100vh - var(--ls-headbar-inner-top-padding) - 50px);
-    margin-top: 40px;
+    margin-top: 30px;
     width: 100%;
 
     > .fake-bar {
@@ -330,36 +331,50 @@
 
 .cp__sidebar-left-layout {
   position: fixed;
-  width: 0;
-  top: var(--ls-headbar-inner-top-padding);
+  top: 0;
+
   left: 0;
   z-index: var(--ls-z-index-level-5);
-  transition: width .3s;
+  width: 10px;
 
   a {
+    @apply opacity-90 hover:opacity-100;
+
     color: var(--ls-header-button-background);
-    opacity: 0.9;
   }
 
-  a:hover {
-    opacity: 1;
+  > .left-sidebar-inner {
+    padding-top: var(--ls-headbar-inner-top-padding);
   }
 
   > .shade-mask {
-    background-color: rgba(0, 0, 0, .5);
+    background-color: rgba(0, 0, 0, .7);
     position: absolute;
     top: 0;
     left: 0;
     bottom: 0;
     right: 0;
-    z-index: -1;
+    z-index: 1;
     opacity: 0;
-    transition: opacity .1s;
+    transition: opacity .4s;
     touch-action: none;
   }
 
-  &.is-open {
+  &.is-touching {
+    width: 100%;
     transition: none;
+
+    .left-sidebar-inner {
+      transition: none !important;
+    }
+
+    > .shade-mask {
+      transition: none !important;
+      z-index: 1;
+    }
+  }
+
+  &.is-open {
     width: 100%;
 
     .left-sidebar-inner {
@@ -369,6 +384,18 @@
 
     > .shade-mask {
       opacity: 1;
+      z-index: 1;
+    }
+  }
+
+  &.is-closing {
+    .left-sidebar-inner {
+      transition: transform .3s;
+      transform: translate3d(-100%, 0, 0) !important;
+    }
+
+    > .shade-mask {
+      opacity: 0;
       z-index: 1;
     }
   }
@@ -387,6 +414,7 @@
   @screen sm {
     width: 0;
     z-index: var(--ls-z-index-level-1);
+    transition: width .3s;
 
     &:before {
       background-color: var(--ls-secondary-background-color);

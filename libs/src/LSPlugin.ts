@@ -289,6 +289,34 @@ export type ExternalCommandType =
 
 export type UserProxyTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets'
 
+export type SearchIndiceInitStatus = boolean
+export type SearchBlockItem = { id: EntityID, uuid: BlockIdentity, content: string, page: EntityID }
+export type SearchPageItem = string
+export type SearchFileItem = string
+
+export interface IPluginSearchServiceHooks {
+  name: string
+  options?: Record<string, any>
+
+  onQuery: (
+    graph: string,
+    key: string,
+    opts: Partial<{ limit: number }>
+  ) =>
+    Promise<{
+      graph: string,
+      key: string,
+      blocks?: Array<Partial<SearchBlockItem>>,
+      pages?: Array<SearchPageItem>,
+      files?: Array<SearchFileItem>
+    }>
+
+  onIndiceInit: (graph: string) => Promise<SearchIndiceInitStatus>
+  onIndiceReset: (graph: string) => Promise<void>
+  onBlocksChanged: (graph: string, changes: { added: Array<SearchBlockItem>, removed: Array<BlockEntity> }) => Promise<void>
+  onGraphRemoved: (graph: string, opts?: {}) => Promise<any>
+}
+
 /**
  * App level APIs
  */
@@ -301,6 +329,9 @@ export interface IAppProxy {
 
   getUserInfo: () => Promise<AppUserInfo | null>
   getUserConfigs: () => Promise<AppUserConfigs>
+
+  // services
+  registerSearchService<T extends IPluginSearchServiceHooks>(s: T): void
 
   // commands
   registerCommand: (
@@ -352,6 +383,7 @@ export interface IAppProxy {
    * @param path
    */
   getStateFromStore: <T = any>(path: string | Array<string>) => Promise<T>
+  setStateFromStore: (path: string | Array<string>, value: any) => Promise<void>
 
   // native
   relaunch: () => Promise<void>
@@ -367,6 +399,9 @@ export interface IAppProxy {
 
   // graph
   getCurrentGraph: () => Promise<AppGraphInfo | null>
+  getCurrentGraphConfigs: () => Promise<any>
+  getCurrentGraphFavorites: () => Promise<Array<string> | null>
+  getCurrentGraphRecent: () => Promise<Array<string> | null>
 
   // router
   pushState: (
@@ -403,6 +438,7 @@ export interface IAppProxy {
   setFullScreen: (flag: boolean | 'toggle') => void
   setLeftSidebarVisible: (flag: boolean | 'toggle') => void
   setRightSidebarVisible: (flag: boolean | 'toggle') => void
+  clearRightSidebarBlocks: (opts?: { close: boolean }) => void
 
   registerUIItem: (
     type: 'toolbar' | 'pagebar',
@@ -592,6 +628,7 @@ export interface IEditorProxy extends Record<string, any> {
       before: boolean
       sibling: boolean
       isPageBlock: boolean
+      focus: boolean
       customUUID: string
       properties: {}
     }>
@@ -804,14 +841,14 @@ export interface IAssetsProxy {
    * @added 0.0.2
    * @param exts
    */
-  listFilesOfCurrentGraph(exts?: string | string[]): Promise<{
+  listFilesOfCurrentGraph(exts?: string | string[]): Promise<Array<{
     path: string
     size: number
     accessTime: number
     modifiedTime: number
     changeTime: number
     birthTime: number
-  }>
+  }>>
 
   /**
    * @example https://github.com/logseq/logseq/pull/6488

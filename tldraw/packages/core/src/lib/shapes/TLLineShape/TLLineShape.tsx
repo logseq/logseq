@@ -21,6 +21,9 @@ export class TLLineShape<
     makeObservable(this)
   }
 
+  hideResizeHandles = true
+  hideRotateHandle = true
+
   static id = 'line'
 
   static defaultProps: TLLineShapeProps = {
