@@ -751,10 +751,10 @@
 
      [:div
       [:p
-       "We suggest you upgrade now to avoid some potential bugs."]
+       "We suggest you upgrade now to avoid potential bugs."]
       (when (seq paths)
         [:p
-         "For example, the files below have reserved characters can't be synced on some platforms."])]
+         "For example, the files below have reserved characters that can't be synced on some platforms."])]
      ]
     (ui/button
       "Update filename format"
