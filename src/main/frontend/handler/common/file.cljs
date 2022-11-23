@@ -27,7 +27,7 @@
                        (distinct))]
     (when-let [current-file (page-exists-in-another-file repo-url first-page file)]
       (when (not= file current-file)
-        (let [error (str "Page already exists with another file: " current-file ", current file: " file)]
+        (let [error (str "Page already exists with another file: " current-file ", current file: " file ". Please keep only one of them and re-index your graph.")]
           (state/pub-event! [:notification/show
                              {:content error
                               :status :error
