@@ -141,6 +141,10 @@ body {
 .app-link-active {
 }
 
+.app-toaster {
+  @apply !bg-logseq-500 !text-gray-100;
+}
+
 .app-logo {
   @apply flex items-center justify-center
   bg-logseq-700 overflow-hidden border-logseq-800
@@ -148,5 +152,19 @@ body {
 
   img {
     @apply translate-y-0.5;
+  }
+}
+
+.app-privacy-banner {
+  @apply fixed left-0 bottom-0 right-0 p-6 flex justify-center
+  z-50 bg-logseq-300/10 backdrop-blur-5xl;
+
+  .r {
+    @apply flex space-x-4 py-3
+    justify-center sm:py-0;
+
+    > button {
+      @apply justify-center;
+    }
   }
 }

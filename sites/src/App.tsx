@@ -2,8 +2,15 @@ import { Route, Routes } from 'react-router-dom'
 import { HomePage } from './pages/Home'
 import { DownloadsPage } from './pages/Downloads'
 import { Headbar } from './components/Headbar'
-import { checkSmBreakPoint, useAppState, useDiscordState, useReleasesState } from './state'
+import {
+  checkSmBreakPoint,
+  useAppState,
+  useDiscordState,
+  useReleasesState,
+} from './state'
 import { useEffect } from 'react'
+import { PrivacyBanner } from './components/PrivacyBanner'
+import { Toaster } from 'react-hot-toast'
 
 export function App () {
   const appState = useAppState()
@@ -15,7 +22,7 @@ export function App () {
   useEffect(() => {
     const resizeHandler = () => {
       appState.sm.set(
-        checkSmBreakPoint()
+        checkSmBreakPoint(),
       )
     }
 
@@ -27,6 +34,13 @@ export function App () {
 
   return (
     <div id="app" className={'flex justify-center'}>
+      <Toaster
+        position={'top-right'}
+        toastOptions={{
+          className: 'app-toaster',
+        }}
+      />
+
       <div className="app-container">
         <Headbar/>
 
@@ -34,6 +48,8 @@ export function App () {
           <Route path={'/'} element={<HomePage/>}/>
           <Route path={'/downloads'} element={<DownloadsPage/>}/>
         </Routes>
+
+        <PrivacyBanner/>
       </div>
     </div>
   )

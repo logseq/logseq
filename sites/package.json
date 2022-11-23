@@ -33,6 +33,7 @@
     "platform-detect": "3.0.1",
     "react": "18.2.0",
     "react-dom": "18.2.0",
+    "react-hot-toast": "^2.4.0",
     "react-intersection-observer": "9.4.0",
     "react-router-dom": "6.3.0",
     "swiper": "8.3.2"
