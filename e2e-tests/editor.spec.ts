@@ -41,27 +41,11 @@ test('hashtag search page auto-complete', async ({ page, block }) => {
   await block.mustFill("done")
 
   await enterNextBlock(page)
-  await page.type('textarea >> nth=0', 'Some#', { delay: 100 })
-  await page.waitForSelector('text="Search for a page"', { state: 'visible' })
-  await page.keyboard.press('Escape', { delay: 50 })
-
-  await block.mustFill("done")
-
-  await enterNextBlock(page)
   await page.type('textarea >> nth=0', 'Some #', { delay: 100 })
   await page.waitForSelector('text="Search for a page"', { state: 'visible' })
   await page.keyboard.press('Escape', { delay: 50 })
 
   await block.mustFill("done")
-
-  await enterNextBlock(page)
-  await page.type('textarea >> nth=0', 'SomeInner', { delay: 100 })
-  for (let i = 0; i < 5; i++) {
-    await page.press('textarea >> nth=0', 'ArrowLeft', { delay: 50 })
-  }
-  await page.type('textarea >> nth=0', '#', { delay: 50 })
-  await page.waitForSelector('text="Search for a page"', { state: 'visible' })
-  await page.keyboard.press('Escape', { delay: 50 })
 })
 
 test('disappeared children #4814', async ({ page, block }) => {
