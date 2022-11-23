@@ -17,7 +17,8 @@
   []
   (try
     (comp
-     (ui/setup-active-keystroke!))
+     (ui/setup-active-keystroke!)
+     (ui/setup-viewport-listeners!))
     (catch :default _e
       nil)))
 

@@ -181,7 +181,7 @@
      result
      {:on-chosen   chosen-handler
       :on-enter    non-exist-block-handler
-      :empty-placeholder   [:div.text-gray-500.pl-4.pr-4 (t :editor/block-search)]
+      :empty-placeholder   [:div.text-gray-500.text-sm.px-4.py-2 (t :editor/block-search)]
       :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
                      (let [page (or (:block/original-name page)
                                     (:block/name page))
@@ -191,7 +191,7 @@
                            content (:block/content block)]
                        (when-not (string/blank? content)
                          [:.py-2 (search/block-search-result-item repo uuid format content q :block)])))
-      :class       "black"})))
+      :class       "ac-block-search"})))
 
 (rum/defcs block-search < rum/reactive
   {:will-unmount (fn [state]
@@ -339,10 +339,14 @@
 
 (rum/defc absolute-modal < rum/static
   [cp modal-name set-default-width? {:keys [top left rect]}]
-  (let [max-height 370
-        max-width 300
-        offset-top 24
+  (let [vw-width js/window.innerWidth
         vw-height js/window.innerHeight
+        vw-max-width (- vw-width (:left rect))
+        vw-max-height (- vw-height (:top rect))
+        sm? (< vw-width 415)
+        max-height (min (- vw-max-height 20) 800)
+        max-width (if sm? 300 (min (max 400 (/ vw-max-width 2)) 600))
+        offset-top 24
         to-max-height (if (and (seq rect) (> vw-height max-height))
                         (let [delta-height (- vw-height (+ (:top rect) top offset-top))]
                           (if (< delta-height max-height)

@@ -185,6 +185,10 @@ html.is-native-android {
       }
     }
   }
+
+  .cp__sidebar-left-layout {
+    bottom: 0;
+  }
 }
 
 html.is-zoomed-native-ios {
@@ -198,7 +202,6 @@ html.is-zoomed-native-ios {
     }
   }
 }
-
 
 .cp__graph-picker {
   button.toggle-item {

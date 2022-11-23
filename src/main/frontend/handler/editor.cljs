@@ -420,7 +420,8 @@
 
 (declare save-current-block!)
 (defn outliner-insert-block!
-  [config current-block new-block {:keys [sibling? keep-uuid? replace-empty-target?]}]
+  [config current-block new-block {:keys [sibling? keep-uuid?
+                                          replace-empty-target?]}]
   (let [ref-query-top-block? (and (or (:ref? config)
                                       (:custom-query? config))
                                   (not (:ref-query-child? config)))
@@ -439,7 +440,7 @@
                    (not has-children?))]
     (outliner-tx/transact!
      {:outliner-op :insert-blocks}
-     (save-current-block! {:current-block current-block})
+      (save-current-block! {:current-block current-block})
      (outliner-core/insert-blocks! [new-block] current-block {:sibling? sibling?
                                                               :keep-uuid? keep-uuid?
                                                               :replace-empty-target? replace-empty-target?}))))
@@ -1255,7 +1256,8 @@
    (save-current-block! {}))
   ([{:keys [force? skip-properties? current-block] :as opts}]
    ;; non English input method
-   (when-not (state/editor-in-composition?)
+   (when-not (or (state/editor-in-composition?)
+                 (:editor/skip-saving-current-block? @state/state))
      (when (state/get-current-repo)
        (when-not (state/get-editor-action)
          (try
@@ -1285,7 +1287,8 @@
                             (string/trim value)))
                  (save-block-aux! db-block value opts))))
            (catch :default error
-             (log/error :save-block-failed error))))))))
+             (log/error :save-block-failed error))))))
+   (state/set-state! :editor/skip-saving-current-block? false)))
 
 (defn- clean-content!
   [format content]
@@ -1570,6 +1573,15 @@
           pos (cursor/pos input)]
       (text-util/surround-by? value pos before end))))
 
+(defn- autopair-left-paren?
+  [input key]
+  (and (= key "(")
+       (or
+         (surround-by? input :start "")
+         (surround-by? input " " "")
+         (surround-by? input "]" "")
+         (surround-by? input "(" ""))))
+
 (defn wrapped-by?
   [input before end]
   (when input
@@ -1759,7 +1771,7 @@
 
   (handle-command-input-close id))
 
-(defn close-autocomplete-if-outside
+(defn- close-autocomplete-if-outside
   [input]
   (when (and input
              (contains? #{:page-search :page-search-hashtag :block-search} (state/get-editor-action))
@@ -1813,7 +1825,9 @@
     ;; TODO: is it cross-browser compatible?
     ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
     (cond
-      (= last-input-char (state/get-editor-command-trigger))
+      ;; By default, "/" is also used as namespace separator in Logseq.
+      (and (= last-input-char (state/get-editor-command-trigger))
+           (not (contains? #{:page-search-hashtag} (state/sub :editor/action))))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (commands/reinit-matched-commands!)
@@ -1843,6 +1857,15 @@
 
       (and (= last-input-char commands/colon) (= :property-search (state/get-editor-action)))
       (state/clear-editor-action!)
+
+      ;; Open "Search page or New page" auto-complete
+      (and (= last-input-char commands/hashtag)
+           ;; Only trigger at beginning of line or before whitespace
+           (or (= 1 pos) (contains? #{" " "\t"} (get (.-value input) (- pos 2)))))
+      (do
+        (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
+        (state/set-editor-last-pos! pos)
+        (state/set-editor-action! :page-search-hashtag))
 
       :else
       nil)))
@@ -2409,7 +2432,7 @@
       (scroll-to-block sibling-block)
       (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
 
-(defn- move-cross-boundrary-up-down
+(defn- move-cross-boundary-up-down
   [direction]
   (let [input (state/get-input)
         line-pos (util/get-first-or-last-line-pos input)
@@ -2448,14 +2471,14 @@
 
       (or (and up? (cursor/textarea-cursor-first-row? input))
           (and down? (cursor/textarea-cursor-last-row? input)))
-      (move-cross-boundrary-up-down direction)
+      (move-cross-boundary-up-down direction)
 
       :else
       (if up?
         (cursor/move-cursor-up input)
         (cursor/move-cursor-down input)))))
 
-(defn- move-to-block-when-cross-boundrary
+(defn- move-to-block-when-cross-boundary
   [direction]
   (let [up? (= :left direction)
         pos (if up? :max 0)
@@ -2491,7 +2514,7 @@
 
         (or (and left? (cursor/start? input))
             (and right? (cursor/end? input)))
-        (move-to-block-when-cross-boundrary direction)
+        (move-to-block-when-cross-boundary direction)
 
         :else
         (if left?
@@ -2659,6 +2682,7 @@
     nil))
 
 (defn ^:large-vars/cleanup-todo keydown-not-matched-handler
+  "NOTE: Keydown cannot be used on Android platform"
   [format]
   (fn [e _key-code]
     (let [input-id (state/get-edit-input-id)
@@ -2727,21 +2751,17 @@
 
         ;; If you type `xyz`, the last backtick should close the first and not add another autopair
         ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)
-        (contains? (set (keys autopair-map)) key)
+        (-> (keys autopair-map)
+            set
+            (disj "(")
+            (contains? key)
+            (or (autopair-left-paren? input key)))
         (let [curr (get-current-input-char input)
                   prev (util/nth-safe value (dec pos))]
             (util/stop e)
             (if (and (= key "`") (= "`" curr) (not= "`" prev))
               (cursor/move-cursor-forward input)
               (autopair input-id key format nil)))
-
-        (and hashtag? (or (zero? pos) (re-matches #"\s" (get value (dec pos)))))
-        (do
-          (commands/handle-step [:editor/search-page-hashtag])
-          (if (= key "#")
-            (state/set-editor-last-pos! (inc (cursor/pos input))) ;; In keydown handler, the `#` is not inserted yet.
-            (state/set-editor-last-pos! (cursor/pos input)))
-          (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
         (let [sym "$"]
           (and (= key sym)
@@ -3247,7 +3267,7 @@
         repo (state/get-current-repo)
         value (boolean value)]
     (when repo
-      (save-current-block!) ;; Save the input contents before collapsing 
+      (save-current-block!) ;; Save the input contents before collapsing
       (outliner-tx/transact! ;; Save the new collapsed state as an undo transaction (if it changed)
         {:outliner-op :collapse-expand-blocks}
         (doseq [block-id block-ids]

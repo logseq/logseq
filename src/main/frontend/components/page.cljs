@@ -1051,6 +1051,7 @@
                                              (swap! *checks update idx not))})]
 
                 [:td.name [:a {:on-click (fn [e]
+                                          (.preventDefault e)
                                            (let [repo (state/get-current-repo)]
                                              (when (gobj/get e "shiftKey")
                                                (state/sidebar-add-block!

@@ -84,7 +84,7 @@
 
      (when-not onboarding-and-home?
        [:h1.flex.items-center
-        [:span.scale-75 (svg/logo false)]
+        [:span.scale-75 (svg/logo)]
         [:span.pl-1 "Set up a graph"]])
 
      (case step

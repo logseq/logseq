@@ -170,9 +170,7 @@
 
                                    (string? (first children))
                                    (let [pattern (config/get-code format)]
-                                     (str " "
-                                          pattern (map-join children) pattern
-                                          " "))
+                                     (str pattern (map-join children) pattern))
 
                                    ;; skip monospace style, since it has more complex children
                                    :else
