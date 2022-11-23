@@ -71,12 +71,12 @@
        (remove-level-space-aux! text block-pattern space? trim-left?)))))
 
 (defn namespace-page?
-  [p]
-  (and (string? p)
-       (string/includes? p "/")
-       (not (string/starts-with? p "../"))
-       (not (string/starts-with? p "./"))
-       (not (gp-util/url? p))))
+  [page-name]
+  (and (string? page-name)
+       (string/includes? page-name "/")
+       (not (string/starts-with? page-name "../"))
+       (not (string/starts-with? page-name "./"))
+       (not (gp-util/url? page-name))))
 
 (defn parse-non-string-property-value
   "Return parsed non-string property value or nil if none is found"
