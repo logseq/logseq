@@ -28,7 +28,7 @@ export const BlockLink = ({ id }: { id: string }) => {
 
   return (
     <button
-      className="inline-flex gap-1 items-center w-full"
+      className="inline-flex gap-1 items-baseline w-full"
       onPointerDown={e => {
         e.stopPropagation()
         if (e.shiftKey) {
