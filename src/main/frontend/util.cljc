@@ -11,6 +11,7 @@
             ["remove-accents" :as removeAccents]
             ["sanitize-filename" :as sanitizeFilename]
             ["check-password-strength" :refer [passwordStrength]]
+            ["path-complete-extname" :as pathCompleteExtname]
             [frontend.loader :refer [load]]
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
@@ -43,7 +44,7 @@
        (-write writer (str "\"" (.toString sym) "\"")))))
 
 #?(:cljs (defonce ^js node-path utils/nodePath))
-#?(:cljs (defonce ^js full-path-extname utils/fullPathExtname))
+#?(:cljs (defonce ^js full-path-extname pathCompleteExtname))
 #?(:cljs (defn app-scroll-container-node
            ([]
             (gdom/getElement "main-content-container"))
