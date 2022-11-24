@@ -1,7 +1,6 @@
 :root {
   scrollbar-width: thin;
-  scrollbar-color: var(--ls-scrollbar-foreground-color)
-    var(--ls-scrollbar-background-color);
+  scrollbar-color: var(--ls-scrollbar-foreground-color) var(--ls-scrollbar-background-color);
 
   --ls-z-index-level-0: 0;
   --ls-z-index-level-1: 9;
@@ -111,6 +110,37 @@ html.is-resizing-buf {
   &.cursor-w-resize {
     * {
       cursor: w-resize !important;
+    }
+  }
+}
+
+main.ls-fold-arrow-on-right {
+  #main-content-container {
+    padding: 0 15px;
+
+
+    .page-blocks-inner {
+      margin-left: 0 !important;
+    }
+  }
+
+  .cp__sidebar-left-layout {
+    width: 16px;
+  }
+
+  .ls-block {
+    .block-control {
+      @apply absolute -right-2 top-1 bottom-1 bg-yellow-300;
+
+      .rotating-arrow.collapsed svg {
+        transform: rotate(180deg);
+      }
+    }
+
+    &[haschild="true"] {
+      .control-hide {
+        display: block !important;
+      }
     }
   }
 }

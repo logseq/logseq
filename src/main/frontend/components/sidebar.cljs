@@ -732,6 +732,7 @@
         edit? (:editor/editing? @state/state)
         default-home (get-default-home-if-valid)
         logged? (user-handler/logged-in?)
+        fold-arrow-on-right? (state/sub :mobile/fold-arrow-on-right-enabled?)
         show-action-bar? (state/sub :mobile/show-action-bar?)
         show-recording-bar? (state/sub :mobile/show-recording-bar?)
         preferred-language (state/sub [:preferred-language])]
@@ -757,6 +758,7 @@
       {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?
                                  :ls-right-sidebar-open sidebar-open?
                                  :ls-wide-mode wide-mode?
+                                 :ls-fold-arrow-on-right (and (util/sm-breakpoint?) fold-arrow-on-right?)
                                  :ls-hl-colored ls-block-hl-colored?}])}
 
       [:button#skip-to-main

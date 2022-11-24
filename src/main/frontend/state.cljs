@@ -166,6 +166,7 @@
      :assets/alias-dirs                     (or (storage/get :assets/alias-dirs) [])
 
      ;; mobile
+     :mobile/fold-arrow-on-right-enabled?   true
      :mobile/container-urls                 nil
      :mobile/show-action-bar?               false
      :mobile/actioned-block                 nil

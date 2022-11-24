@@ -361,7 +361,7 @@
   }
 
   &.is-touching {
-    width: 100%;
+    width: 100% !important;
     transition: none;
 
     .left-sidebar-inner {
@@ -375,7 +375,7 @@
   }
 
   &.is-open {
-    width: 100%;
+    width: 100% !important;
 
     .left-sidebar-inner {
       transform: translate3d(0, 0, 0);
