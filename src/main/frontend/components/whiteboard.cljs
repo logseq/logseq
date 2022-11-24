@@ -324,8 +324,8 @@
                              (do (quick-tour/ready
                                   (fn []
                                     (quick-tour/start-whiteboard)
-                                    (state/set-state! :feature/enable-whiteboards? true)))
-                                 (throw (js/Error. nil)))
-                             (close-fn)))]]
+                                    (state/set-state! :whiteboard/onboarding? true)
+                                    (close-fn)))
+                                 (throw (js/Error. nil)))))]]
     (catch :default e
       (js/console.warn "[Whiteboard onboarding SKIP] " (name type) e))))

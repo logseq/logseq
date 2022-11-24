@@ -151,6 +151,34 @@
                                     {:name    "offset"
                                      :options {:offset [0, 15]}}]}}])
 
+(defn- create-steps-whiteboard! [^js jsTour]
+  [;; step 1
+   {:id                "whiteboard-home"
+    :text              (h/render-html [:section [:h2 "🖼  Home for your whiteboards"]
+                                       [:p "Whiteboards have their own section in the app where you can see them at a glance, create new ones or delete them easily."]])
+    :attachTo          {:element ".nav-header .whiteboard" :on "right"}
+    :beforeShowPromise #(if (state/sub :ui/sidebar-open?)
+                          (wait-target state/hide-right-sidebar! 700)
+                          (p/resolved true))
+    :canClickTarget    true
+    :buttons           [{:text "Next" :action (do (router-handler/redirect-to-whiteboard-dashboard!)
+                                                  (.-next jsTour))}]
+    :popperOptions     {:modifiers [{:name    "preventOverflow"
+                                     :options {:padding 20}}
+                                    {:name    "offset"
+                                     :options {:offset [0, 10]}}]}}
+
+   ;; step 2
+   {:id                "whiteboard-new"
+    :text              (h/render-html [:section [:h2 "🆕️  Create new whiteboard"]
+                                       [:p "There is multiple ways of creating a new whiteboard. One of them is always right here in the dashboard."]])
+    :beforeShowPromise #((if-not (state/sub :ui/left-sidebar-open?)
+                          (wait-target state/toggle-left-sidebar! 500)
+                          (p/resolved true)))
+    :attachTo          {:element "#tl-create-whiteboard" :on "bottom"}
+    :buttons           [{:text "Back" :classes "back" :action (.-back jsTour)}
+                        {:text "Finish" :action (.-complete jsTour)}]}])
+
 (defn start
   []
   (let [^js jsTour (js/Shepherd.Tour.
@@ -216,7 +244,7 @@
                      {:useModalOverlay    true
                       :defaultStepOptions {:classes  "cp__onboarding-quick-tour"
                                            :scrollTo false}}))
-        steps      (create-steps! jsTour)
+        steps      (create-steps-whiteboard! jsTour)
         steps      (map-indexed #(assoc %2 :text (str (:text %2) (inject-steps-indicator (inc %1) (count steps)))) steps)
         [show-skip! hide-skip!] (make-skip-fns jsTour)]
 
