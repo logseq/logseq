@@ -39,7 +39,6 @@
 
 (rum/defc block-reference
   [props]
-  (println "page-name-linkpage-name-linkpage-name-linkpage-name-link" props)
   (block/block-reference {} (gobj/get props "blockId") nil))
 
 (rum/defc page-name-link
@@ -73,7 +72,7 @@
                        :Block block-cp
                        :Breadcrumb breadcrumb
                        :PageName page-name-link
-                       :ReferencesCount references-count
+                       :BacklinksCount references-count
                        :BlockReference block-reference})
 
 (defn get-tldraw-handlers [current-whiteboard-name]
@@ -91,13 +90,16 @@
                                                 (:db/id (model/get-page uuid))
                                                 (keyword type)))
    :redirectToPage (fn [page-name-or-uuid]
-                     (let [page-name (if (util/uuid-string? page-name-or-uuid)
-                                       (:block/name (model/get-block-parent (parse-uuid page-name-or-uuid)))
-                                       page-name-or-uuid)
+                     (let [page-name (or (when (util/uuid-string? page-name-or-uuid)
+                                           (:block/name (model/get-block-page (state/get-current-repo)
+                                                                              (parse-uuid page-name-or-uuid))))
+                                         page-name-or-uuid)
+                           page-exists? (model/page-exists? page-name)
                            whiteboard? (model/whiteboard-page? page-name)]
-                       (if whiteboard? (route-handler/redirect-to-whiteboard!
-                                        page-name {:block-id page-name-or-uuid})
-                           (route-handler/redirect-to-page! page-name-or-uuid))))})
+                       (when page-exists?
+                         (if whiteboard? (route-handler/redirect-to-whiteboard!
+                                          page-name {:block-id page-name-or-uuid})
+                             (route-handler/redirect-to-page! page-name-or-uuid)))))})
 
 (rum/defc tldraw-app
   [page-name block-id]

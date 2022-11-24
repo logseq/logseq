@@ -74,7 +74,7 @@
     "aaa__bbb__cccon" "aaa/bbb/cccon"  true
     "aaa.bbb.ccc"     "adbcde/aks/sdf" true
     "a__.bbb.ccc"     "adbcde/aks/sdf" true
-    ))
+    "aaa__bbb__ccc" nil false))
 
 (deftest rename-previous-tests
   (are [x y] (= y (#'conversion-handler/calc-previous-name :legacy :triple-lowbar x))

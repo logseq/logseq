@@ -57,12 +57,12 @@ interface LogseqTldrawProps {
   onPersist?: TLReactCallbacks<Shape>['onPersist']
 }
 
-const ReferencesCount: LogseqContextValue['renderers']['ReferencesCount'] = props => {
+const BacklinksCount: LogseqContextValue['renderers']['BacklinksCount'] = props => {
   const { renderers } = React.useContext(LogseqContext)
 
   const options = { 'portal?': false }
 
-  return <renderers.ReferencesCount {...props} options={options} />
+  return <renderers.BacklinksCount {...props} options={options} />
 }
 
 const AppImpl = () => {
@@ -71,7 +71,7 @@ const AppImpl = () => {
   const components = React.useMemo(
     () => ({
       ContextBar,
-      ReferencesCount,
+      BacklinksCount,
       QuickLinks,
     }),
     []

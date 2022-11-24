@@ -89,6 +89,11 @@ yarn electron-watch
 yarn e2e-test # or npx playwright test
 ```
 
+If e2e failed after first running:
+- `rm -rdf ~/.logseq`
+- `rm -rdf <repo dir>/tmp/`  
+- `rm -rdf <appData dir>/Electron`  (Reference: https://www.electronjs.org/de/docs/latest/api/app#appgetpathname)
+
 ### Unit Testing
 
 Our unit tests use the [shadow-cljs test-runner](https://shadow-cljs.github.io/docs/UsersGuide.html#_testing). To run them:

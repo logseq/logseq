@@ -24,7 +24,7 @@ export const BacklinksCountContainer = observer(function BacklinksCountContainer
 
   const app = useApp<S>()
 
-  if (!BacklinksCount) throw Error('Expected a ReferencesCount component.')
+  if (!BacklinksCount) throw Error('Expected a BacklinksCount component.')
 
   const stop: React.EventHandler<any> = e => e.stopPropagation()
 

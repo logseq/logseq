@@ -23,13 +23,14 @@
                       (log/error :photo/get-failed {:error error})))
           filename (str (date/get-date-time-string-2) ".jpeg")
           path (editor-handler/get-asset-path filename)
-          _file (p/catch
-                    (.writeFile Filesystem (clj->js {:data (.-base64String photo)
-                                                     :path path
-                                                     :recursive true}))
-                    (fn [error]
-                      (log/error :file/write-failed {:path path
-                                                     :error error})))]
+          _file (when photo
+                  (p/catch
+                     (.writeFile Filesystem (clj->js {:data (.-base64String photo)
+                                                      :path path
+                                                      :recursive true}))
+                     (fn [error]
+                       (log/error :file/write-failed {:path path
+                                                      :error error}))))]
     (p/resolved filename)))
 
 (defn embed-photo [id]

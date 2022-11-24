@@ -161,7 +161,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       <>
         <Arrow
           style={{
-            stroke: getComputedColor(stroke, 'stroke'),
+            stroke: getComputedColor(stroke, 'text'),
             fill,
             strokeWidth,
             strokeType,

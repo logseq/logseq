@@ -1,0 +1,44 @@
+# This file contains the fastlane.tools configuration
+# You can find the documentation at https://docs.fastlane.tools
+#
+# For a list of all available actions, check out
+#
+#     https://docs.fastlane.tools/actions
+#
+# For a list of all available plugins, check out
+#
+#     https://docs.fastlane.tools/plugins/available-plugins
+#
+
+# Uncomment the line if you want fastlane to automatically update itself
+# update_fastlane
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Push a new beta build to TestFlight"
+  lane :beta do
+    # Set from env
+    app_store_connect_api_key
+
+    increment_build_number(
+      xcodeproj: "App.xcodeproj",
+      build_number: latest_testflight_build_number + 1,
+      skip_info_plist: true
+    )
+
+    build_app(
+      workspace: "App.xcworkspace",
+      configuration: "Release",
+      destination: "generic/platform=iOS",
+      scheme: "Logseq"
+    )
+
+    upload_to_testflight(
+      skip_submission: true,
+      skip_waiting_for_build_processing: true,
+    )
+
+    slack(message: "App successfully uploaded to TestFlight 🎉!")
+  end
+end

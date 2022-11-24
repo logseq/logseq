@@ -100,7 +100,7 @@
 (defn- create-title-property?
   [journal? page-name]
   (and (not journal?)
-       (not= (state/get-filename-format) :triple-lowbar)
+       (= (state/get-filename-format) :legacy) ;; reduce title computation
        (fs-util/create-title-property? page-name)))
 
 (defn- build-page-tx [format properties page journal? whiteboard?]
