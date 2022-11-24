@@ -4,7 +4,6 @@
             [frontend.config :as config]
             ["@sentry/react" :as Sentry]
             ["@sentry/tracing" :refer [BrowserTracing]]
-            ["posthog-js" :as posthog]
             [frontend.mobile.util :as mobile-util]))
 
 (def config
@@ -21,8 +20,8 @@
                                (mobile-util/native-platform?) "mobile"
                                :else "web")
                    :publishing config/publishing?}}
-   :integrations [(new posthog/SentryIntegration posthog "logseq" 5311485)
-                  (new BrowserTracing)]
+   ;; :integrations [(new posthog/SentryIntegration posthog "logseq" 5311485)
+   ;;                (new BrowserTracing)]
    :debug config/dev?
    :tracesSampleRate 1.0
    :beforeSend (fn [^js event]
