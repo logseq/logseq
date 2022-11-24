@@ -728,6 +728,12 @@
   (<get-graph-encrypt-keys [this graph-uuid])
   (<upload-graph-encrypt-keys [this graph-uuid public-key encrypted-private-key]))
 
+
+(defprotocol IRemoteControlAPI
+  "api functions provided for outside the sync process"
+  (<delete-remote-files-control [this graph-uuid filepaths])
+  )
+
 (defprotocol IToken
   (<get-token [this]))
 
@@ -1359,6 +1365,20 @@
      (<! (.<request this "upload_graph_encrypt_keys" {:GraphUUID             graph-uuid
                                                       :public-key            public-key
                                                       :encrypted-private-key encrypted-private-key})))))
+
+(extend-type RemoteAPI
+  IRemoteControlAPI
+  (<delete-remote-files-control [this graph-uuid filepaths]
+    (user/<wrap-ensure-id&access-token
+     (let [current-txid (:TXId (<! (<get-remote-graph this nil graph-uuid)))
+           files (<! (<encrypt-fnames rsapi graph-uuid filepaths))]
+       (<! (.<request this "delete_files" {:GraphUUID graph-uuid :TXId current-txid :Files files}))))))
+
+(comment
+  (declare remoteapi)
+  (<delete-remote-files-control remoteapi (second @graphs-txid) ["pages/aa.md"])
+
+  )
 
 (def remoteapi (->RemoteAPI nil))
 
