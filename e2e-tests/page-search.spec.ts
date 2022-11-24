@@ -39,7 +39,7 @@ import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastBlo
 
   await page.waitForTimeout(500)
   const results = await page.$$('#ui__ac-inner>div')
-  expect(results.length).toEqual(3) // 2 blocks + 1 page
+  expect(results.length).toEqual(5) // 2 blocks + 1 page + 2 page content
   await page.keyboard.press("Escape")
   await page.keyboard.press("Escape")
 })

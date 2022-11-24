@@ -77,10 +77,10 @@
     ["prop" "" "value"]
     (text-util/cut-by "prop::value" "::" "")
 
-    ["some" "content" "here"]
+    ["some " "content" " here"]
     (text-util/cut-by "some $pfts>$content$pfts<$ here" "$pfts>$" "$pfts<$")
 
-    ["some" "content$pft" nil]
+    ["some " "content$pft" nil]
     (text-util/cut-by "some $pfts>$content$pft" "$pfts>$" "$pfts<$")
 
     ["some $pf" nil nil]
