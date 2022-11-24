@@ -1721,20 +1721,25 @@
 (defonce local-changes-chan (chan (async/dropping-buffer 1000)))
 (defn file-watch-handler
   "file-watcher callback"
-  [type {:keys [dir path _content stat] :as _payload}]
+  [type {:keys [dir path content stat]}]
   (when-let [current-graph (state/get-current-repo)]
     (when (string/ends-with? current-graph dir)
-      (when-let [sync-state (state/get-file-sync-state (state/get-current-file-sync-graph-uuid))]
-        (when (sync-state--valid-to-accept-filewatcher-event? sync-state)
-          (when (or (:mtime stat) (= type "unlink"))
-            (go
-              (let [path (path-normalize (remove-dir-prefix dir path))
-                    files-meta (and (not= "unlink" type)
-                                    (<! (<get-local-files-meta
-                                         rsapi (:current-syncing-graph-uuid sync-state) dir [path])))
-                    checksum (and (coll? files-meta) (some-> files-meta first :etag))]
-                (println :files-watch (->FileChangeEvent type dir path stat checksum))
-                (>! local-changes-chan (->FileChangeEvent type dir path stat checksum))))))))))
+      (let [full-path (path-normalize path)
+            path (path-normalize (remove-dir-prefix dir path))]
+        (when (and
+               ;; db exists
+               (db/get-db current-graph)
+               (not= content (db/get-file full-path)))
+          (when-let [sync-state (state/get-file-sync-state (state/get-current-file-sync-graph-uuid))]
+            (when (sync-state--valid-to-accept-filewatcher-event? sync-state)
+              (when (or (:mtime stat) (= type "unlink"))
+                (go
+                  (let [files-meta (and (not= "unlink" type)
+                                        (<! (<get-local-files-meta
+                                             rsapi (:current-syncing-graph-uuid sync-state) dir [path])))
+                        checksum (and (coll? files-meta) (some-> files-meta first :etag))]
+                    (println :files-watch (->FileChangeEvent type dir path stat checksum))
+                    (>! local-changes-chan (->FileChangeEvent type dir path stat checksum))))))))))))
 
 (defn local-changes-revised-chan-builder
   "return chan"
@@ -2739,9 +2744,10 @@
           ;;      file-watcher will send a lot of file-change-events,
           ;;      actually, each file corresponds to a file-change-event,
           ;;      we need to ignore all of them.
-          (<! (timeout 3000))
-          (println :drain-local-changes-chan-at-starting
-                   (count (util/drain-chan local-changes-revised-chan))))
+          ;; (<! (timeout 3000))
+          ;; (println :drain-local-changes-chan-at-starting
+          ;;          (count (util/drain-chan local-changes-revised-chan)))
+          )
         (if @*stopped?
           (.schedule this ::stop nil nil)
           (.schedule this next-state nil nil)))))
