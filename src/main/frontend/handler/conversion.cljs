@@ -59,8 +59,6 @@
 ;;   - the special rule in `is-manual-title-prop?`
 (defonce supported-filename-formats [:triple-lowbar :legacy])
 
-;; In case of recovering this check in future
-#_:clj-kondo/ignore
 (defn- is-manual-title-prop?
   "If it's an user defined title property instead of the generated one"
   [format file-body prop-title]
@@ -104,6 +102,17 @@
   [page path old-format new-format]
   (let [prop-title (get-in page [:block/properties :title])
         file-body  (gp-util/path->file-body path)
-        journal?   (:block/journal? page)]
-    (when (not journal?)
-      (calc-rename-target-impl old-format new-format file-body prop-title))))
+        journal?   (:block/journal? page)
+        manual-prop-title? (is-manual-title-prop? old-format file-body prop-title)]
+    (cond
+      (and (not journal?)
+           (not manual-prop-title?))
+      (calc-rename-target-impl old-format new-format file-body prop-title)
+
+      (and (not journal?)
+           manual-prop-title?
+           (fs-util/include-reserved-chars? file-body))
+      {:status        :informal
+       :target        (fs-util/file-name-sanity file-body new-format)
+       :old-title     prop-title
+       :changed-title prop-title})))
