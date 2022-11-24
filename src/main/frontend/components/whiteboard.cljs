@@ -2,6 +2,7 @@
   "Whiteboard related components"
   (:require [cljs.math :as math]
             [frontend.components.content :as content]
+            [frontend.components.onboarding.quick-tour :as quick-tour]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
             [frontend.context.i18n :refer [t]]
@@ -304,19 +305,27 @@
 
 (rum/defc onboarding-welcome
   [close-fn]
-  [:div.cp__whiteboards-welcome
-   [:span.head-bg
+  (try
+    [:div.cp__whiteboard-welcome
+     [:span.head-bg
 
-    [:strong (t :on-boarding/closed-feature (name (:whiteboard user-handler/feature-matrix)))]]
+      [:strong (t :on-boarding/closed-feature (name (:whiteboard user-handler/feature-matrix)))]]
 
-   [:h1.text-2xl.font-bold.flex-col.sm:flex-row
-    (t :on-boarding/welcome-whiteboard-modal-title)]
+     [:h1.text-2xl.font-bold.flex-col.sm:flex-row
+      (t :on-boarding/welcome-whiteboard-modal-title)]
 
-   [:p (t :on-boarding/welcome-whiteboard-modal-description)]
+     [:p (t :on-boarding/welcome-whiteboard-modal-description)]
 
-   [:div.pt-6.flex.justify-center.space-x-2.sm:justify-end
-    (ui/button (t :on-boarding/welcome-whiteboard-modal-later) :on-click close-fn :background "gray" :class "opacity-60")
-    (ui/button (t :on-boarding/welcome-whiteboard-modal-start)
-               :on-click (fn []
-                           (config-handler/set-config! :feature/enable-whiteboards? true)
-                           (close-fn)))]])
+     [:div.pt-6.flex.justify-center.space-x-2.sm:justify-end
+      (ui/button (t :on-boarding/welcome-whiteboard-modal-later) :on-click close-fn :background "gray" :class "opacity-60")
+      (ui/button (t :on-boarding/welcome-whiteboard-modal-start)
+                 :on-click (fn []
+                             (config-handler/set-config! :feature/enable-whiteboards? true)
+                             (do (quick-tour/ready
+                                  (fn []
+                                    (quick-tour/start-whiteboard)
+                                    (state/set-state! :feature/enable-whiteboards? true)))
+                                 (throw (js/Error. nil)))
+                             (close-fn)))]]
+    (catch :default e
+      (js/console.warn "[Whiteboard onboarding SKIP] " (name type) e))))

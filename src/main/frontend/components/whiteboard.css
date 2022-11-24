@@ -223,7 +223,7 @@ html:is(.is-ios, is-native-ios, is-native-ipad) [data-page="whiteboard"] * {
   user-select: none;
 }
 
-.cp__whiteboards-welcome {
+.cp__whiteboard-welcome {
   > .head-bg {
     @apply flex m-auto mb-10 w-auto sm:w-[500px];
 
@@ -239,6 +239,7 @@ html:is(.is-ios, is-native-ios, is-native-ipad) [data-page="whiteboard"] * {
       m-auto translate-y-8 uppercase;
 
       background-color: var(--ls-link-text-color);
+      color: var(--ls-primary-background-color);
     }
   }
 
@@ -259,7 +260,7 @@ html:is(.is-ios, is-native-ios, is-native-ipad) [data-page="whiteboard"] * {
 
 
 html[data-theme='light'] {
-  .cp__whiteboards-welcome {
+  .cp__whiteboard-welcome {
     > .head-bg {
       background-image: url("../img/whiteboard-welcome-light.png");
     }

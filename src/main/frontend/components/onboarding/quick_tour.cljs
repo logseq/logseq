@@ -209,6 +209,29 @@
     ;(.start jsTour)
     ))
 
+(defn start-whiteboard
+  []
+  (let [^js jsTour (js/Shepherd.Tour.
+                    (bean/->js
+                     {:useModalOverlay    true
+                      :defaultStepOptions {:classes  "cp__onboarding-quick-tour"
+                                           :scrollTo false}}))
+        steps      (create-steps! jsTour)
+        steps      (map-indexed #(assoc %2 :text (str (:text %2) (inject-steps-indicator (inc %1) (count steps)))) steps)
+        [show-skip! hide-skip!] (make-skip-fns jsTour)]
+
+    ;; events
+    (doto jsTour
+      (.on "show" show-skip!)
+      (.on "hide" hide-skip!)
+      (.on "complete" hide-skip!)
+      (.on "cancel" hide-skip!))
+
+    (doseq [step steps]
+      (.addStep jsTour (bean/->js step)))
+
+    (.start jsTour)))
+
 (defn ready
   [callback]
   (p/then
