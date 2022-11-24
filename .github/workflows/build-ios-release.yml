@@ -1,5 +1,4 @@
-# This workflow tries to build iOS app if any changes detected on the iOS source tree,
-# ensuring at least it builds.
+# This workflow build iOS App as a .ipa file and upload it to TestFlight.
 
 name: Build-iOS
 
