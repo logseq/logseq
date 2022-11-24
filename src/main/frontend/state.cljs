@@ -69,7 +69,7 @@
 
      ;; ui
      :ui/viewport                           {}
-     
+
      ;; left sidebar
      :ui/navigation-item-collapsed?         {}
 
@@ -2061,3 +2061,13 @@ Similar to re-frame subscriptions"
      (when (and shape-id (parse-uuid shape-id))
        (. api selectShapes shape-id)
        (. api zoomToSelection)))))
+
+(defn set-remote-graph-files-metadata!
+  [graph-uuid path->checksum]
+  (set-state! [:file-sync/graph-state graph-uuid :remote-files-metadata]
+              path->checksum))
+
+(defn update-remote-graph-files-metadata!
+  [graph-uuid path->checksum]
+  (update-state! [:file-sync/graph-state graph-uuid :remote-files-metadata]
+                 #(merge % path->checksum)))

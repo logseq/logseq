@@ -1217,16 +1217,21 @@
                path-list-or-exp     (<! (<decrypt-fnames rsapi graph-uuid encrypted-path-list*))]
            (if (instance? ExceptionInfo path-list-or-exp)
              path-list-or-exp
-             (let [encrypted-path->path-map (zipmap encrypted-path-list* path-list-or-exp)]
-               (set
-                (mapv
-                 #(->FileMetadata (:size %)
-                                  (:checksum %)
-                                  (path-normalize (get encrypted-path->path-map (:encrypted-path %)))
-                                  (:encrypted-path %)
-                                  (:last-modified %)
-                                  true nil)
-                 (filter-files-with-unnormalized-path file-meta-list* encrypted-path->path-map))))))))))
+             (let [encrypted-path->path-map (zipmap encrypted-path-list* path-list-or-exp)
+                   result (set
+                           (mapv
+                            #(->FileMetadata (:size %)
+                                             (:checksum %)
+                                             (path-normalize (get encrypted-path->path-map (:encrypted-path %)))
+                                             (:encrypted-path %)
+                                             (:last-modified %)
+                                             true nil)
+                            (filter-files-with-unnormalized-path file-meta-list* encrypted-path->path-map)))]
+               (state/set-remote-graph-files-metadata! graph-uuid
+                                                       (zipmap
+                                                        (map :path result)
+                                                        (map :etag result)))
+               result)))))))
 
   (<get-remote-files-meta [this graph-uuid filepaths]
     {:pre [(coll? filepaths)]}
@@ -1719,27 +1724,33 @@
 
 (declare sync-state--valid-to-accept-filewatcher-event?)
 (defonce local-changes-chan (chan (async/dropping-buffer 1000)))
+(defn- file-checksum-matched?
+  [graph-uuid path local-checksum]
+  (let [remote-checksum (get-in @state/state [:file-sync/graph-state graph-uuid :remote-files-metadata path])]
+    (and remote-checksum (= remote-checksum local-checksum))))
+
 (defn file-watch-handler
   "file-watcher callback"
   [type {:keys [dir path content stat]}]
   (when-let [current-graph (state/get-current-repo)]
     (when (string/ends-with? current-graph dir)
-      (let [full-path (path-normalize path)
-            path (path-normalize (remove-dir-prefix dir path))]
-        (when (and
-               ;; db exists
-               (db/get-db current-graph)
-               (not= content (db/get-file full-path)))
-          (when-let [sync-state (state/get-file-sync-state (state/get-current-file-sync-graph-uuid))]
-            (when (sync-state--valid-to-accept-filewatcher-event? sync-state)
-              (when (or (:mtime stat) (= type "unlink"))
-                (go
-                  (let [files-meta (and (not= "unlink" type)
-                                        (<! (<get-local-files-meta
-                                             rsapi (:current-syncing-graph-uuid sync-state) dir [path])))
-                        checksum (and (coll? files-meta) (some-> files-meta first :etag))]
-                    (println :files-watch (->FileChangeEvent type dir path stat checksum))
-                    (>! local-changes-chan (->FileChangeEvent type dir path stat checksum))))))))))))
+      (let [graph-uuid (state/get-current-file-sync-graph-uuid)]
+        (when graph-uuid
+          (let [full-path (path-normalize path)
+                path (path-normalize (remove-dir-prefix dir path))]
+            (when-let [sync-state (state/get-file-sync-state graph-uuid)]
+              (when (sync-state--valid-to-accept-filewatcher-event? sync-state)
+                (when (or (:mtime stat) (= type "unlink"))
+                  (go
+                    (let [files-meta (and (not= "unlink" type)
+                                          (<! (<get-local-files-meta
+                                               rsapi (:current-syncing-graph-uuid sync-state) dir [path])))
+                          checksum (and (coll? files-meta) (some-> files-meta first :etag))]
+                      ;; Delete or file changed (either file updated or created)
+                      (when (or (= "unlink" type)
+                                (not (file-checksum-matched? graph-uuid path checksum)))
+                        (println :files-watch (->FileChangeEvent type dir path stat checksum))
+                        (>! local-changes-chan (->FileChangeEvent type dir path stat checksum))))))))))))))
 
 (defn local-changes-revised-chan-builder
   "return chan"
@@ -2537,9 +2548,14 @@
               succ?                   ; succ
               (do
                 (println "sync-local->remote! update txid" r*)
+                ;; update cached metadata
+                (state/update-remote-graph-files-metadata! graph-uuid
+                                                           (zipmap (map :path es**)
+                                                                   (map :checksum es**)))
                 ;; persist txid
                 (<! (<update-graphs-txid! r* graph-uuid user-uuid repo))
                 (reset! *txid r*)
+
                 {:succ true})
 
               :else
