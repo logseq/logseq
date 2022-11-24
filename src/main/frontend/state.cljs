@@ -166,7 +166,6 @@
      :assets/alias-dirs                     (or (storage/get :assets/alias-dirs) [])
 
      ;; mobile
-     :mobile/fold-arrow-on-right-enabled?   true
      :mobile/container-urls                 nil
      :mobile/show-action-bar?               false
      :mobile/actioned-block                 nil
@@ -564,6 +563,10 @@ Similar to re-frame subscriptions"
 (defn enable-timetracking?
   []
   (not (false? (:feature/enable-timetracking? (sub-config)))))
+
+(defn enable-fold-button-right?
+  []
+  (true? (:feature/enable-fold-button-on-right? (sub-config))))
 
 (defn enable-journals?
   ([]
