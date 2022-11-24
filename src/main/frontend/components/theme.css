@@ -116,16 +116,16 @@ html.is-resizing-buf {
 
 main.ls-fold-button-on-right {
   #main-content-container {
-    padding: 0 15px;
-
-
+    padding-right:12px;
+    padding-left: 12px;
+    
     .page-blocks-inner {
       margin-left: 0 !important;
     }
   }
 
   .cp__sidebar-left-layout {
-    width: 16px;
+    width: 15px;
   }
 
   .ls-block {
@@ -141,6 +141,10 @@ main.ls-fold-button-on-right {
       .control-hide {
         display: block !important;
       }
+    }
+
+    .block-content-wrapper {
+      width: 100%;
     }
   }
 }
