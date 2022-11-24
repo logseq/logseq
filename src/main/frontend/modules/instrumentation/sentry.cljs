@@ -3,7 +3,6 @@
             [frontend.util :as util]
             [frontend.config :as config]
             ["@sentry/react" :as Sentry]
-            ["@sentry/tracing" :refer [BrowserTracing]]
             [frontend.mobile.util :as mobile-util]))
 
 (def config
