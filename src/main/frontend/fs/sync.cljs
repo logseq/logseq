@@ -1597,6 +1597,10 @@
               (when (and *txid (number? latest-txid))
                 (reset! *txid latest-txid)
                 (<! (<update-graphs-txid! latest-txid graph-uuid user-uuid repo)))
+              ;; update cached metadata
+              (state/update-remote-graph-files-metadata! graph-uuid
+                                                         (zipmap (map relative-path filetxns)
+                                                                 (map -checksum filetxns)))
               (recur (next filetxns-partitions*)))))))))
 
 (defmulti need-sync-remote? (fn [v] (cond
