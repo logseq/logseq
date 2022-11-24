@@ -39,6 +39,6 @@ platform :ios do
       skip_waiting_for_build_processing: true,
     )
 
-    slack(message: "App successfully upload to TestFlight 🎉!")
+    slack(message: "App successfully uploaded to TestFlight 🎉!")
   end
 end
