@@ -566,7 +566,8 @@ Similar to re-frame subscriptions"
 
 (defn enable-fold-button-right?
   []
-  (true? (:feature/enable-fold-button-on-right? (sub-config))))
+  (and (mobile-util/native-platform?)
+       (true? (:feature/enable-fold-button-on-right? (sub-config)))))
 
 (defn enable-journals?
   ([]

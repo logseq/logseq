@@ -375,7 +375,7 @@
   }
 
   &.is-open {
-    width: 100% !important;
+    width: 100%;
 
     .left-sidebar-inner {
       transform: translate3d(0, 0, 0);

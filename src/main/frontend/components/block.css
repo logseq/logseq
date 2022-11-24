@@ -1,6 +1,4 @@
 .block-content-wrapper {
-  @apply border border-red-400;
-
   /* 38px is the width of block-control */
   width: calc(100% - 22px);
 
@@ -11,8 +9,6 @@
 }
 
 .block-content {
-  @apply border border-blue-400;
-
   min-height: 24px;
   max-width: 100%;
   overflow: initial;
@@ -328,7 +324,7 @@
 
 .ls-block {
   @apply border border-dashed border-green-600;
-  
+
   position: relative;
   min-height: 24px;
   padding: 2px 0;
