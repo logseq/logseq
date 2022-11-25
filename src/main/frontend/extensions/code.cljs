@@ -306,7 +306,7 @@
      (when-not (= mode "calc")
        [:div
         [:div.extensions__code-lang
-         (if (contains? (shell-handler/get-commands) (string/lower-case mode))
+         (if (contains? (shell-handler/get-code-block-commands) (string/lower-case mode))
            [:a {:title (str "Run command " mode)
                 :on-click (fn [_e]
                             (let [editor-atom (:editor-atom state)]

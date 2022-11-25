@@ -42,11 +42,20 @@
 (def dangerous-commands
   #{"rm" "mv" "rename" "dd" ">" "command" "sudo"})
 
+(def code-block-commands-whitelist
+  #{"alda"})
+
 (defn get-commands
   []
   (set/union (map (comp #(remove string/blank? %) string/lower-case str)
                (:commands-whitelist (state/get-config)))
              commands-whitelist))
+
+(defn get-code-block-commands
+  []
+  (set/union (map (comp #(remove string/blank? %) string/lower-case str)
+               (:code-block/command-whitelist (state/get-config)))
+             code-block-commands-whitelist))
 
 (defn run-command!
   [command]
