@@ -750,7 +750,6 @@
       (when (some-> r first :path (not= filepath))
         (-> r first :path)))))
 
-
 (defn <local-file-not-exist?
   [graph-uuid irsapi base-path filepath]
   (go
@@ -795,7 +794,7 @@
     (set! private-key' private-key)
     (set! public-key' public-key)
     (p->c (ipc/ipc "set-env" graph-uuid (if prod? "prod" "dev") private-key public-key)))
-  (<get-local-all-files-meta [_ graph-uuid base-path]
+  (<get-local-all-files-meta [this graph-uuid base-path]
     (go
       (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "get-local-all-files-meta" graph-uuid base-path))))]
         (if (instance? ExceptionInfo r)
@@ -803,18 +802,26 @@
           (->> r
                js->clj
                (map (fn [[path metadata]]
-                      (->FileMetadata (get metadata "size") (get metadata "md5") (path-normalize path)
-                                      (get metadata "encryptedFname") (get metadata "mtime") false nil)))
+                      (let [normalized-path (path-normalize path)
+                            encryptedFname (if (not= path normalized-path)
+                                             (first (<! (<encrypt-fnames this graph-uuid [normalized-path])))
+                                             (get metadata "encryptedFname"))]
+                        (->FileMetadata (get metadata "size") (get metadata "md5") normalized-path
+                                        encryptedFname (get metadata "mtime") false nil))))
                set)))))
-  (<get-local-files-meta [_ graph-uuid base-path filepaths]
+  (<get-local-files-meta [this graph-uuid base-path filepaths]
     (go
       (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "get-local-files-meta" graph-uuid base-path filepaths))))]
         (assert (not (instance? ExceptionInfo r)) "get-local-files-meta shouldn't return exception")
         (->> r
              js->clj
              (map (fn [[path metadata]]
-                    (->FileMetadata (get metadata "size") (get metadata "md5") (path-normalize path)
-                                    (get metadata "encryptedFname") (get metadata "mtime") false nil)))))))
+                    (let [normalized-path (path-normalize path)
+                          encryptedFname (if (not= path normalized-path)
+                                           (first (<! (<encrypt-fnames this graph-uuid [normalized-path])))
+                                           (get metadata "encryptedFname"))]
+                      (->FileMetadata (get metadata "size") (get metadata "md5") normalized-path
+                                      encryptedFname (get metadata "mtime") false nil))))))))
   (<rename-local-file [_ graph-uuid base-path from to]
     (<retry-rsapi #(p->c (ipc/ipc "rename-local-file" graph-uuid base-path
                                   (path-normalize from)
@@ -887,7 +894,7 @@
                                                    :secretKey secret-key
                                                    :publicKey public-key}))))
 
-  (<get-local-all-files-meta [_ graph-uuid base-path]
+  (<get-local-all-files-meta [this graph-uuid base-path]
     (go
       (let [r (<! (p->c (.getLocalAllFilesMeta mobile-util/file-sync (clj->js {:graphUUID graph-uuid
                                                                                :basePath base-path}))))]
@@ -896,13 +903,15 @@
           (->> (.-result r)
                js->clj
                (map (fn [[path metadata]]
-                      (->FileMetadata (get metadata "size") (get metadata "md5")
-                                      ;; return decoded path, keep it consistent with RSAPI
-                                      (path-normalize path)
-                                      (get metadata "encryptedFname") (get metadata "mtime") false nil)))
+                      (let [normalized-path (path-normalize path)
+                            encryptedFname (if (not= path normalized-path)
+                                             (first (<! (<encrypt-fnames this graph-uuid [normalized-path])))
+                                             (get metadata "encryptedFname"))]
+                        (->FileMetadata (get metadata "size") (get metadata "md5") normalized-path
+                                        encryptedFname (get metadata "mtime") false nil))))
                set)))))
 
-  (<get-local-files-meta [_ graph-uuid base-path filepaths]
+  (<get-local-files-meta [this graph-uuid base-path filepaths]
     (go
       (let [r (<! (p->c (.getLocalFilesMeta mobile-util/file-sync
                                             (clj->js {:graphUUID graph-uuid
@@ -912,11 +921,12 @@
         (->> (.-result r)
              js->clj
              (map (fn [[path metadata]]
-                    (->FileMetadata (get metadata "size") (get metadata "md5")
-                                    ;; return decoded path, keep it consistent with RSAPI
-                                    (path-normalize path)
-                                    (get metadata "encryptedFname") (get metadata "mtime") false nil)))
-             set))))
+                    (let [normalized-path (path-normalize path)
+                          encryptedFname (if (not= path normalized-path)
+                                           (first (<! (<encrypt-fnames this graph-uuid [normalized-path])))
+                                           (get metadata "encryptedFname"))]
+                      (->FileMetadata (get metadata "size") (get metadata "md5") normalized-path
+                                      encryptedFname (get metadata "mtime") false nil))))))))
 
   (<rename-local-file [_ graph-uuid base-path from to]
     (p->c (.renameLocalFile mobile-util/file-sync
@@ -1228,7 +1238,7 @@
                 (mapv
                  #(->FileMetadata (:size %)
                                   (:checksum %)
-                                  (path-normalize (get encrypted-path->path-map (:encrypted-path %)))
+                                  (get encrypted-path->path-map (:encrypted-path %))
                                   (:encrypted-path %)
                                   (:last-modified %)
                                   true nil)
