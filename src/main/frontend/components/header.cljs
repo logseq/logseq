@@ -172,10 +172,14 @@
                                           :native-android (mobile-util/native-android?)}])
       :on-double-click (fn [^js e]
                          (when-let [target (.-target e)]
-                           (when (and (util/electron?)
-                                      (.. target -classList (contains "drag-region")))
-                             (js/window.apis.toggleMaxOrMinActiveWindow))))
-      :style           {:fontSize  50}}
+                           (cond
+                             (and (util/electron?)
+                                  (.. target -classList (contains "drag-region")))
+                             (js/window.apis.toggleMaxOrMinActiveWindow)
+
+                             (mobile-util/native-platform?)
+                             (util/scroll-to-top true))))
+      :style           {:fontSize 50}}
      [:div.l.flex.drag-region
       (when-not (mobile-util/native-platform?)
         [left-menu
