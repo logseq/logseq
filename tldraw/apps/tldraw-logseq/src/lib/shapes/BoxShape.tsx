@@ -11,6 +11,8 @@ export interface BoxShapeProps extends TLBoxShapeProps, CustomStyleProps {
   borderRadius: number
   type: 'box'
   label: string
+  fontWeight: number
+  italic: boolean
 }
 
 const font = '18px / 1 var(--ls-font-family)'
@@ -28,6 +30,8 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
     stroke: '',
     fill: '',
     noFill: false,
+    fontWeight: 400,
+    italic: false,
     strokeType: 'line',
     strokeWidth: 2,
     opacity: 1,
@@ -46,6 +50,8 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
         borderRadius,
         opacity,
         label,
+        italic,
+        fontWeight,
       },
     } = this
 
@@ -81,6 +87,8 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
           isEditing={isEditing}
           onChange={handleLabelChange}
           onBlur={onEditingEnd}
+          fontStyle={italic ? 'italic' : 'normal'}
+          fontWeight={fontWeight}
         />
         <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
           {isBinding && <BindingIndicator mode="svg" strokeWidth={strokeWidth} size={[w, h]} />}
