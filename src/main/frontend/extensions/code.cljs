@@ -315,7 +315,7 @@
                                                    (string/lower-case mode)
                                                    (.getValue editor)]))))}
             (if (= mode "alda")
-              (ui/icon "player-play" {:style {:font-size 20}})
+              (ui/icon "player-play" {:size 20})
               "Run")]
            (string/lower-case mode))]]))
    [:div.code-editor.flex.flex-1.flex-row.w-full
