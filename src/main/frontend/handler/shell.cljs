@@ -38,7 +38,7 @@
   #{"git" "pandoc" "ag" "grep" "alda"})
 
 (def dangerous-commands
-  #{"rm" "move" "rename" "dd" ">" "command" "sudo"})
+  #{"rm" "mv" "rename" "dd" ">" "command" "sudo"})
 
 (defn run-command!
   [command]
