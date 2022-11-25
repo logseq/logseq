@@ -66,11 +66,6 @@
     "http://localhost:3000"
     (util/format "https://%s.com" app-name)))
 
-(def api
-  (if dev?
-    "http://localhost:3000/api/v1/"
-    (str website "/api/v1/")))
-
 (def asset-domain (util/format "https://asset.%s.com"
                                app-name))
 
@@ -132,7 +127,7 @@
    *** Warning!!! ***
    For UX logic only! Don't use for FS logic
    iPad / Android Pad doesn't trigger!
-   
+
    Same as config/mobile?"
   (when-not util/node-test?
     (util/safe-re-find #"Mobi" js/navigator.userAgent)))
