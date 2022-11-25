@@ -68,7 +68,7 @@ export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
   ],
   youtube: ['YoutubeLink', 'Links'],
   iframe: ['IFrameSource', 'Links'],
-  box: ['Swatch', 'NoFill', 'StrokeType', 'Links'],
+  box: ['Edit', 'Swatch', 'NoFill', 'StrokeType', 'Links'],
   ellipse: ['Swatch', 'NoFill', 'StrokeType', 'Links'],
   polygon: ['Swatch', 'NoFill', 'StrokeType', 'Links'],
   line: ['Edit', 'Swatch', 'ArrowMode', 'Links'],

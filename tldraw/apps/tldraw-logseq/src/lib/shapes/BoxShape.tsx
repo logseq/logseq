@@ -1,14 +1,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { SVGContainer, TLComponentProps, useApp } from '@tldraw/react'
-import { TLBoxShape, TLBoxShapeProps, getComputedColor } from '@tldraw/core'
+import { TLBoxShape, TLBoxShapeProps, getComputedColor, getTextLabelSize } from '@tldraw/core'
+import Vec from '@tldraw/vec'
+import * as React from 'react'
 import { observer } from 'mobx-react-lite'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 import { BindingIndicator } from './BindingIndicator'
-
+import { TextLabel } from './text/TextLabel'
 export interface BoxShapeProps extends TLBoxShapeProps, CustomStyleProps {
   borderRadius: number
   type: 'box'
+  label: string
 }
+
+const font = '18px / 1 var(--ls-font-family)'
 
 export class BoxShape extends TLBoxShape<BoxShapeProps> {
   static id = 'box'
@@ -26,9 +31,10 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
     strokeType: 'line',
     strokeWidth: 2,
     opacity: 1,
+    label: '',
   }
 
-  ReactComponent = observer(({ events, isErasing, isBinding, isSelected }: TLComponentProps) => {
+  ReactComponent = observer(({ events, isErasing, isBinding, isSelected, isEditing, onEditingEnd }: TLComponentProps) => {
     const {
       props: {
         size: [w, h],
@@ -39,35 +45,69 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
         strokeType,
         borderRadius,
         opacity,
+        label,
       },
     } = this
 
+    const labelSize = label || isEditing ? getTextLabelSize(label, font, 4) : [0, 0]
+    const midPoint =  Vec.mul(this.props.size, 0.5)
+    const dist = Vec.dist([0, 0], this.props.size)
+    const scale = Math.max(
+      0.5,
+      Math.min(1, Math.max(dist / (labelSize[1] + 128), dist / (labelSize[0] + 128)))
+    )
+    const bounds = this.getBounds()
+
+    const offset = React.useMemo(() => {
+      return Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
+    }, [bounds, scale, midPoint])
+
+    const handleLabelChange = React.useCallback(
+      (label: string) => {
+        this.update?.({ label })
+      },
+      [label]
+    )
+
     return (
-      <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
-        {isBinding && <BindingIndicator mode="svg" strokeWidth={strokeWidth} size={[w, h]} />}
-        <rect
-          className={isSelected || !noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
-          x={strokeWidth / 2}
-          y={strokeWidth / 2}
-          rx={borderRadius}
-          ry={borderRadius}
-          width={Math.max(0.01, w - strokeWidth)}
-          height={Math.max(0.01, h - strokeWidth)}
-          pointerEvents="all"
+      <div {...events} style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+        <TextLabel
+          font={font}
+          text={label}
+          color={getComputedColor(stroke, 'text')}
+          offsetX={offset[0]}
+          offsetY={offset[1]}
+          scale={scale}
+          isEditing={isEditing}
+          onChange={handleLabelChange}
+          onBlur={onEditingEnd}
         />
-        <rect
-          x={strokeWidth / 2}
-          y={strokeWidth / 2}
-          rx={borderRadius}
-          ry={borderRadius}
-          width={Math.max(0.01, w - strokeWidth)}
-          height={Math.max(0.01, h - strokeWidth)}
-          strokeWidth={strokeWidth}
-          stroke={getComputedColor(stroke, 'stroke')}
-          strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
-          fill={noFill ? 'none' : getComputedColor(fill, 'background')}
-        />
-      </SVGContainer>
+        <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
+          {isBinding && <BindingIndicator mode="svg" strokeWidth={strokeWidth} size={[w, h]} />}
+          <rect
+            className={isSelected || !noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
+            x={strokeWidth / 2}
+            y={strokeWidth / 2}
+            rx={borderRadius}
+            ry={borderRadius}
+            width={Math.max(0.01, w - strokeWidth)}
+            height={Math.max(0.01, h - strokeWidth)}
+            pointerEvents="all"
+          />
+          <rect
+            x={strokeWidth / 2}
+            y={strokeWidth / 2}
+            rx={borderRadius}
+            ry={borderRadius}
+            width={Math.max(0.01, w - strokeWidth)}
+            height={Math.max(0.01, h - strokeWidth)}
+            strokeWidth={strokeWidth}
+            stroke={getComputedColor(stroke, 'stroke')}
+            strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
+            fill={noFill ? 'none' : getComputedColor(fill, 'background')}
+          />
+        </SVGContainer>
+      </div>
     )
   })
 
