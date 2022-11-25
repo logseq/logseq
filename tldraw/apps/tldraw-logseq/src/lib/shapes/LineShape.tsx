@@ -14,6 +14,8 @@ import { TextLabel } from './text/TextLabel'
 interface LineShapeProps extends CustomStyleProps, TLLineShapeProps {
   type: 'line'
   label: string
+  fontWeight: number
+  italic: boolean
 }
 
 const font = '18px / 1 var(--ls-font-family)'
@@ -33,6 +35,8 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     stroke: '',
     fill: '',
     noFill: true,
+    fontWeight: 400,
+    italic: false,
     strokeType: 'line',
     strokeWidth: 1,
     opacity: 1,
@@ -51,6 +55,8 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       handles: { start, end },
       opacity,
       label,
+      italic,
+      fontWeight,
       id,
     } = this.props
     const labelSize = label || isEditing ? getTextLabelSize(label, font, 4) : [0, 0]
@@ -83,6 +89,8 @@ export class LineShape extends TLLineShape<LineShapeProps> {
           isEditing={isEditing}
           onChange={handleLabelChange}
           onBlur={onEditingEnd}
+          fontStyle={italic ? 'italic' : 'normal'}
+          fontWeight={fontWeight}
         />
         <SVGContainer opacity={isErasing ? 0.2 : opacity} id={id + '_svg'}>
           <LabelMask id={id} bounds={bounds} labelSize={labelSize} offset={offset} scale={scale} />

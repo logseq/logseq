@@ -68,13 +68,13 @@ export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
   ],
   youtube: ['YoutubeLink', 'Links'],
   iframe: ['IFrameSource', 'Links'],
-  box: ['Edit', 'Swatch', 'NoFill', 'StrokeType', 'Links'],
-  ellipse: ['Swatch', 'NoFill', 'StrokeType', 'Links'],
-  polygon: ['Swatch', 'NoFill', 'StrokeType', 'Links'],
-  line: ['Edit', 'Swatch', 'ArrowMode', 'Links'],
+  box: ['Edit', 'TextStyle', 'Swatch', 'NoFill', 'StrokeType', 'Links'],
+  ellipse: ['Edit', 'TextStyle', 'Swatch', 'NoFill', 'StrokeType', 'Links'],
+  polygon: ['Edit', 'TextStyle', 'Swatch', 'NoFill', 'StrokeType', 'Links'],
+  line: ['Edit', 'TextStyle', 'Swatch', 'ArrowMode', 'Links'],
   pencil: ['Swatch', 'Links'],
   highlighter: ['Swatch', 'Links'],
-  text: ['Edit', 'Swatch', 'ScaleLevel', 'AutoResizing', 'TextStyle', 'Links'],
+  text: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'AutoResizing', 'Links'],
   html: ['ScaleLevel', 'AutoResizing', 'Links'],
   image: ['Links'],
   video: ['Links'],
@@ -112,7 +112,7 @@ const EditAction = observer(() => {
         }
       }}
     >
-      <TablerIcon name="text" />
+      <TablerIcon name={shape.props.label || shape.props.text ? "forms" : "text"} />
     </Button>
   )
 })

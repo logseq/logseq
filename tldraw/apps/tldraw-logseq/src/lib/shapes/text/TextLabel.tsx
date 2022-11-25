@@ -9,6 +9,8 @@ export interface TextLabelProps {
   font: string
   text: string
   color: string
+  fontStyle: string
+  fontWeight: number
   onBlur?: () => void
   onChange: (text: string) => void
   offsetY?: number
@@ -21,6 +23,8 @@ export const TextLabel = React.memo(function TextLabel({
   font,
   text,
   color,
+  fontStyle,
+  fontWeight,
   offsetX = 0,
   offsetY = 0,
   scale = 1,
@@ -121,7 +125,7 @@ export const TextLabel = React.memo(function TextLabel({
   React.useLayoutEffect(() => {
     const elm = rInnerWrapper.current
     if (!elm) return
-    const size = getTextLabelSize(text, font, 4)
+    const size = getTextLabelSize(text, { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight }, 4)
     elm.style.transform = `scale(${scale}, ${scale}) translate(${offsetX}px, ${offsetY}px)`
     elm.style.width = size[0] + 1 + 'px'
     elm.style.height = size[1] + 1 + 'px'
@@ -134,6 +138,8 @@ export const TextLabel = React.memo(function TextLabel({
         ref={rInnerWrapper}
         style={{
           font,
+          fontStyle,
+          fontWeight,
           color,
           pointerEvents: text ? 'all' : 'none',
           userSelect: isEditing ? 'text' : 'none',
