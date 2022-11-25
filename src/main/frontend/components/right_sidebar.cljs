@@ -27,7 +27,7 @@
       [:button.button.icon.toggle-right-sidebar
        {:title "Toggle right sidebar"
         :on-click ui-handler/toggle-right-sidebar!}
-       (ui/icon "layout-sidebar-right" {:style {:fontSize "20px"}})])))
+       (ui/icon "layout-sidebar-right" {:size 20})])))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]
