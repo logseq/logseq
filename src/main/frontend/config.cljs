@@ -112,7 +112,8 @@
   ([input] (extname-of-supported?
             input
             [image-formats doc-formats audio-formats
-             video-formats markup-formats html-render-formats]))
+             video-formats markup-formats html-render-formats
+             (gp-config/text-formats)]))
   ([input formats]
    (when-let [input (some->
                      (cond-> input
