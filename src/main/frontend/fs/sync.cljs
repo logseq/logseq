@@ -494,7 +494,8 @@
         reserved-paths (filter f paths)]
     (when (seq reserved-paths)
       (let [paths (if path-string? reserved-paths (map -relative-path reserved-paths))]
-        (state/pub-event! [:ui/notify-outdated-filename-format paths])
+        (when (seq paths)
+          (state/pub-event! [:ui/notify-outdated-filename-format paths]))
         (prn "Skipped uploading those file paths with reserved chars: " paths)))
     (vec (remove f paths))))
 
