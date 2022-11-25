@@ -11,6 +11,8 @@
             ["diff-match-patch" :as google-diff]
             ["/electron/utils" :as js-utils]
             ["abort-controller" :as AbortController]
+            ["child_process" :as child-process]
+            ["command-exists" :as command-exists]
             [electron.fs-watcher :as watcher]
             [electron.configs :as cfgs]
             [promesa.core :as p]
@@ -410,6 +412,26 @@
   (when (seq args)
     (git/init!)
     (git/run-git2! (clj->js args))))
+
+(defmethod handle :runCli [window [_ {:keys [command args returnResult]}]]
+  (when command
+    (if ((.-sync command-exists) command)
+      (let [job (child-process/spawn (str command " " args)
+                                     #js []
+                                     #js {:shell true :detached true})
+            handler (fn [message]
+                      (let [result (str "Running " command ": " message)]
+                        (println result)
+                        (when returnResult
+                          (utils/send-to-renderer window "notification"
+                                                  {:type "success"
+                                                   :payload result}))))]
+        (.on (.-stderr job) "data" handler)
+        (.on (.-stdout job) "data" handler))
+      (utils/send-to-renderer window "notification"
+                              {:type "error"
+                               :payload (str "Program " command " not found!")}))
+    nil))
 
 (defmethod handle :gitCommitAll [_ [_ message]]
   (git/add-all-and-commit! message))

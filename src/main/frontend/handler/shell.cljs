@@ -17,14 +17,15 @@
   [command]
   (ipc/ipc "runGitWithinCurrentGraph" command))
 
-;; TODO: export to pdf/html/word
-(defn run-pandoc-command!
-  [command]
-  (ipc/ipc "runPandoc" command))
+(defn run-cli-command!
+  [command args]
+  (ipc/ipc "runCli" {:command command
+                     :args args
+                     :returnResult true}))
 
 (defn wrap-notification!
   [command f args]
-  (p/let [result (f args)]
+  (p/let [result (f command args)]
     (notification/show!
      (if (string/blank? result)
        [:p [:code.mr-1 (str command " " args) ]
@@ -33,22 +34,34 @@
      :success
      false)))
 
+(def commands-whitelist
+  #{"git" "pandoc" "ag" "grep" "alda"})
+
+(def dangerous-commands
+  #{"rm" "move" "rename" "dd" ">" "command" "sudo"})
+
 (defn run-command!
   [command]
   (let [[command args] (gp-util/split-first " " command)
         command (and command (string/lower-case command))]
     (when (and (not (string/blank? command)) (not (string/blank? args)))
       (let [args (string/trim args)]
-        (case (keyword command)
-         :git
-         (wrap-notification! command run-git-command! args)
+        (cond
+          (contains? dangerous-commands command)
+          (notification/show!
+           [:div (str command " is too dangerous!")]
+           :error)
 
-         ;; :pandoc
-         ;; (wrap-notification! command run-pandoc-command! args)
+          (= "git" command)
+          (wrap-notification! command (fn [_ args] (run-git-command! args)) args)
 
-         (notification/show!
-          [:div (str command " is not supported yet!")]
-          :error))))))
+          (contains? commands-whitelist command)
+          (run-cli-command! command args)
+
+          :else
+          (notification/show!
+           [:div (str command " is not supported yet!")]
+           :error))))))
 
 ;; git show $REV:$FILE
 (defn- get-versioned-file-content

@@ -40,7 +40,8 @@
     "posthog-js": "1.10.2",
     "@logseq/rsapi": "0.0.50",
     "electron-deeplink": "1.0.10",
-    "abort-controller": "3.0.0"
+    "abort-controller": "3.0.0",
+    "command-exists": "1.2.9"
   },
   "devDependencies": {
     "@electron-forge/cli": "^6.0.0-beta.57",
