@@ -4,13 +4,13 @@ import type { TLEventMap } from './TLEventMap'
 import type { TLHandle } from './TLHandle'
 
 export enum Color {
-  Gray = 'gray',
-  Red = 'red',
   Yellow = 'yellow',
+  Red = 'red',
+  Pink = 'pink',
   Green = 'green',
   Blue = 'blue',
   Purple = 'purple',
-  Pink = 'pink',
+  Gray = 'gray',
   Default = '',
 }
 
