@@ -1360,9 +1360,12 @@
   IRemoteControlAPI
   (<delete-remote-files-control [this graph-uuid filepaths]
     (user/<wrap-ensure-id&access-token
-     (let [current-txid (:TXId (<! (<get-remote-graph this nil graph-uuid)))
-           files (<! (<encrypt-fnames rsapi graph-uuid filepaths))]
-       (<! (.<request this "delete_files" {:GraphUUID graph-uuid :TXId current-txid :Files files}))))))
+     (let [partitioned-files (partition-all 20 (<! (<encrypt-fnames rsapi graph-uuid filepaths)))]
+       (loop [[files & others] partitioned-files]
+         (when files
+           (let [current-txid (:TXId (<! (<get-remote-graph this nil graph-uuid)))]
+             (<! (.<request this "delete_files" {:GraphUUID graph-uuid :TXId current-txid :Files files}))
+             (recur others))))))))
 
 (comment
   (declare remoteapi)
