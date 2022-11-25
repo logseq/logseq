@@ -116,8 +116,8 @@ html.is-resizing-buf {
 
 main.ls-fold-button-on-right {
   #main-content-container {
-    padding-right:15px;
-    padding-left: 15px;
+    padding-right:18px;
+    padding-left: 18px;
     
     .page-blocks-inner {
       margin-left: 0 !important;
@@ -134,7 +134,7 @@ main.ls-fold-button-on-right {
 
   .ls-block {
     .block-control {
-      @apply absolute -right-2 top-1 bottom-1 bg-yellow-300;
+      @apply absolute -right-3 pr-2 top-1 bottom-1;
 
       .rotating-arrow.collapsed svg {
         transform: rotate(180deg);

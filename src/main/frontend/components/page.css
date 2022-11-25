@@ -311,7 +311,7 @@ html.is-native-ipad,
 html.is-native-iphone,
 html.is-native-iphone-without-notch {
   .ls-page-title {
-    margin: 0 0 24px -15px;
+    margin: 0 0 10px -15px;
     padding: 0 !important;
   }
 }
