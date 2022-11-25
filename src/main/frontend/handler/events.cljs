@@ -364,7 +364,7 @@
   (repo-handler/graph-ready! repo)
   (when (and (util/electron?)
              (not (config/demo-graph?))
-             (= :legacy (state/get-filename-format)))
+             (= :legacy (state/get-filename-format repo)))
     (state/pub-event! [:ui/notify-outdated-filename-format []])))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
@@ -460,7 +460,9 @@
       (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
         (set! (.. left-sidebar-node -style -bottom) "0px"))
       (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
-        (set! (.. right-sidebar-node -style -paddingBottom) "150px")))))
+        (set! (.. right-sidebar-node -style -paddingBottom) "150px"))
+      (when-let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
+        (set! (.. toolbar -style -bottom) 0)))))
 
 (defn update-file-path [deprecated-repo current-repo deprecated-app-id current-app-id]
   (let [files (db-model/get-files-entity deprecated-repo)
