@@ -122,6 +122,11 @@ main.ls-fold-button-on-right {
     .page-blocks-inner {
       margin-left: 0 !important;
     }
+
+    .block-control-wrap {
+      height: unset;
+      background: transparent;
+    }
   }
 
   .cp__sidebar-left-layout {

@@ -172,6 +172,11 @@
   }
 }
 
+.block-control-wrap {
+  height: 24px;
+  margin-top: 0;
+}
+
 .block-control, .block-control:hover {
   text-decoration: none;
   cursor: default;
@@ -521,6 +526,10 @@ a:hover > .bullet-container {
 
   .block-children-left-border {
     display: none;
+  }
+
+  .block-children {
+    border-left: none;
   }
 
   .hide-inner-bullet .bullet {

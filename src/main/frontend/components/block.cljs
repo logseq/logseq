@@ -1712,11 +1712,7 @@
         ref? (:ref? config)
         empty-content? (block-content-empty? block)
         fold-button-right? (state/enable-fold-button-right?)]
-    [:div.mr-1.flex.flex-row.items-center.sm:mr-2
-     {:style {:height 24
-              :margin-top 0
-              :float "left"}}
-
+    [:div.block-control-wrap.mr-1.flex.flex-row.items-center.sm:mr-2
      (when (or (not fold-button-right?) has-child?)
        [:a.block-control
         {:id       (str "control-" uuid)
