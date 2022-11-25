@@ -7,7 +7,9 @@
             [promesa.core :as p]
             [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.util :as util]
+            [clojure.set :as set]))
 
 (defn run-git-command!
   [command]
@@ -40,6 +42,12 @@
 (def dangerous-commands
   #{"rm" "mv" "rename" "dd" ">" "command" "sudo"})
 
+(defn get-commands
+  []
+  (set/union (map (comp #(remove string/blank? %) string/lower-case str)
+               (:commands-whitelist (state/get-config)))
+             commands-whitelist))
+
 (defn run-command!
   [command]
   (let [[command args] (gp-util/split-first " " command)
@@ -55,9 +63,7 @@
           (= "git" command)
           (wrap-notification! command (fn [_ args] (run-git-command! args)) args)
 
-          (contains? (merge (map (comp #(remove string/blank? %) string/lower-case str)
-                              (:commands-whitelist (state/get-config)))
-                            commands-whitelist) command)
+          (contains? (get-commands) command)
           (run-cli-command! command args)
 
           :else
@@ -105,3 +111,11 @@
     (notification/show!
      [:div "git config successfully!"]
      :success)))
+
+(defn run-cli-command-wrapper!
+  [command content]
+  (let [args (case command
+               "alda" (util/format "play -c \"%s\"" content)
+               ;; TODO: plugin slot
+               content)]
+    (run-cli-command! command args)))
