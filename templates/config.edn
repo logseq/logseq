@@ -284,7 +284,7 @@
  ;; Decide the way to escape the special characters in the page title.
  ;; Warning:
  ;;   This is a dangerous operation. If you want to change the setting,
- ;;   should access the setting `Filename format` and follow the instructions. 
+ ;;   should access the setting `Filename format` and follow the instructions.
  ;;   Or you have to rename all the affected files manually then re-index on all
  ;;   clients after the files are synced. Wrong handling may cause page titles
  ;;   containing special characters to be messy.
@@ -296,4 +296,7 @@
  ;;     ;use Percent-encoding for slash and other invalid characters
  ;;     ;parse `.` in file name as slash `/` in page title
  :file/name-format :triple-lowbar
+
+ ;; Commands that are allowed to be invoked from Logseq.
+ :shell/command-whitelist #{}
  }

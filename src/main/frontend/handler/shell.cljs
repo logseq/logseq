@@ -55,7 +55,9 @@
           (= "git" command)
           (wrap-notification! command (fn [_ args] (run-git-command! args)) args)
 
-          (contains? commands-whitelist command)
+          (contains? (merge (map (comp #(remove string/blank? %) string/lower-case str)
+                              (:commands-whitelist (state/get-config)))
+                            commands-whitelist) command)
           (run-cli-command! command args)
 
           :else
