@@ -92,7 +92,7 @@ If you would like to contribute by solving an open issue, please fork this repos
 
 Once you push your code to your fork you we'll be able to open a PR into Logseq repository. For more info you can follow this guide from [Github docs](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork)
 
-And here a list of some [good firt issues](https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)!
+And here a list of some [good first issues](https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)!
 
 ## Thanks
 
