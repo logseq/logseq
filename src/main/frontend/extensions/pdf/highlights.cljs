@@ -178,7 +178,7 @@
                     (action-fn! action true)))}
 
      [:li.item-colors
-      (for [it ["yellow", "blue", "green", "red", "purple"]]
+      (for [it ["yellow", "red", "green", "blue", "purple"]]
         [:a {:key it :data-color it :data-action it} it])]
 
 

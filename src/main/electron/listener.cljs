@@ -160,6 +160,9 @@
                              insert-today? (get-in (state/get-config)
                                                    [:quick-capture-options :insert-today]
                                                    false)
+                             redirect-page? (get-in (state/get-config)
+                                                   [:quick-capture-options :redirect-page]
+                                                   false)
                              today-page (when (state/enable-journals?)
                                           (string/lower-case (date/today)))
                              page (if (or (= page "TODAY")
@@ -195,7 +198,7 @@
 
                            (do
                              (when (not= page (state/get-current-page))
-                               (page-handler/create! page {:redirect? true}))
+                               (page-handler/create! page {:redirect? redirect-page?}))
                              (editor-handler/api-insert-new-block! content {:page page
                                                                             :edit-block? true
                                                                             :replace-empty-target? true}))))))

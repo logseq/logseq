@@ -361,7 +361,16 @@
                                      (route-handler/sidebar-journals!)
                                      (route-handler/go-to-journals!)))
                :icon             "calendar"})))
-
+         
+         (when enable-whiteboards?
+           (sidebar-item
+            {:class           "whiteboard"
+             :title           (t :right-side-bar/whiteboards)
+             :href            (rfe/href :whiteboards)
+             :active          (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
+             :icon            "whiteboard"
+             :icon-extension? true}))
+         
          (when (state/enable-flashcards? (state/get-current-repo))
            [:div.flashcards-nav
             (flashcards srs-open?)])
@@ -378,16 +387,7 @@
            :title  (t :right-side-bar/all-pages)
            :href   (rfe/href :all-pages)
            :active (and (not srs-open?) (= route-name :all-pages))
-           :icon   "files"})
-
-         (when enable-whiteboards?
-           (sidebar-item
-            {:class           "whiteboard"
-             :title           (t :right-side-bar/whiteboards)
-             :href            (rfe/href :whiteboards)
-             :active          (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
-             :icon            "whiteboard"
-             :icon-extension? true}))]]
+           :icon   "files"})]]
 
        [:div.nav-contents-container.flex.flex-col.gap-1.pt-1
         {:on-scroll on-contents-scroll}
