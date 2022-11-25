@@ -777,6 +777,22 @@
 
 (declare <rsapi-cancel-all-requests)
 
+(defn- build-local-file-metadatas
+  [this graph-uuid result]
+  (loop [[[path metadata] & others] (js->clj result)
+         result #{}]
+    (if-not (and path metadata)
+      ;; finish
+      result
+      (let [normalized-path (path-normalize path)
+            encryptedFname (if (not= path normalized-path)
+                             (first (<! (<encrypt-fnames this graph-uuid [normalized-path])))
+                             (get metadata "encryptedFname"))]
+        (recur others
+               (conj result
+                     (->FileMetadata (get metadata "size") (get metadata "md5") normalized-path
+                                     encryptedFname (get metadata "mtime") false nil)))))))
+
 (deftype RSAPI [^:mutable graph-uuid' ^:mutable private-key' ^:mutable public-key']
   IToken
   (<get-token [_this]
@@ -799,36 +815,12 @@
       (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "get-local-all-files-meta" graph-uuid base-path))))]
         (if (instance? ExceptionInfo r)
           r
-          (loop [[[path metadata] & others] (js->clj r)
-                 result #{}]
-            (if-not (and path metadata)
-              ;; finish
-              result
-              (let [normalized-path (path-normalize path)
-                    encryptedFname (if (not= path normalized-path)
-                                     (first (<! (<encrypt-fnames this graph-uuid [normalized-path])))
-                                     (get metadata "encryptedFname"))]
-                (recur others
-                       (conj result
-                             (->FileMetadata (get metadata "size") (get metadata "md5") normalized-path
-                                             encryptedFname (get metadata "mtime") false nil))))))))))
+          (build-local-file-metadatas this graph-uuid r)))))
   (<get-local-files-meta [this graph-uuid base-path filepaths]
     (go
       (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "get-local-files-meta" graph-uuid base-path filepaths))))]
         (assert (not (instance? ExceptionInfo r)) "get-local-files-meta shouldn't return exception")
-        (loop [[[path metadata] & others] (js->clj r)
-               result []]
-          (if-not (and path metadata)
-            ;; finish
-            result
-            (let [normalized-path (path-normalize path)
-                  encryptedFname (if (not= path normalized-path)
-                                   (first (<! (<encrypt-fnames this graph-uuid [normalized-path])))
-                                   (get metadata "encryptedFname"))]
-              (recur others
-                     (conj result
-                           (->FileMetadata (get metadata "size") (get metadata "md5") normalized-path
-                                           encryptedFname (get metadata "mtime") false nil)))))))))
+        (build-local-file-metadatas this graph-uuid r))))
   (<rename-local-file [_ graph-uuid base-path from to]
     (<retry-rsapi #(p->c (ipc/ipc "rename-local-file" graph-uuid base-path
                                   (path-normalize from)
@@ -907,18 +899,7 @@
                                                                                :basePath base-path}))))]
         (if (instance? ExceptionInfo r)
           r
-          (loop [[[path metadata] & others] (js->clj (.-result r))
-                 result #{}]
-            (if-not (and path metadata)
-              ;; finish
-              result
-              (let [normalized-path (path-normalize path)
-                    encryptedFname (if (not= path normalized-path)
-                                     (first (<! (<encrypt-fnames this graph-uuid [normalized-path])))
-                                     (get metadata "encryptedFname"))]
-                (recur others
-                       (conj result (->FileMetadata (get metadata "size") (get metadata "md5") normalized-path
-                                                    encryptedFname (get metadata "mtime") false nil))))))))))
+          (build-local-file-metadatas this graph-uuid (.-result r))))))
 
   (<get-local-files-meta [this graph-uuid base-path filepaths]
     (go
@@ -927,19 +908,7 @@
                                                       :basePath base-path
                                                       :filePaths filepaths}))))]
         (assert (not (instance? ExceptionInfo r)) "get-local-files-meta shouldn't return exception")
-        (loop [[[path metadata] & others] (js->clj (.-result r))
-               result []]
-          (if-not (and path metadata)
-            ;; finish
-            result
-            (let [normalized-path (path-normalize path)
-                  encryptedFname (if (not= path normalized-path)
-                                   (first (<! (<encrypt-fnames this graph-uuid [normalized-path])))
-                                   (get metadata "encryptedFname"))]
-              (recur others
-                     (conj result
-                           (->FileMetadata (get metadata "size") (get metadata "md5") normalized-path
-                                           encryptedFname (get metadata "mtime") false nil)))))))))
+        (build-local-file-metadatas this graph-uuid (.-result r)))))
 
   (<rename-local-file [_ graph-uuid base-path from to]
     (p->c (.renameLocalFile mobile-util/file-sync
