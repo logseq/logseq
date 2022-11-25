@@ -385,8 +385,12 @@
             share-fn (fn [event]
                        (util/stop event)
                        (when (mobile-util/native-platform?)
-                         (.share Share #js {:url path
-                                            :title "Open file with your favorite app"})))]
+                         ;; File URL must be legal, so filename muse be URI-encoded
+                         (let [[rel-dir basename] (util/get-dir-and-basename href)
+                               basename (js/encodeURIComponent basename)
+                               asset-url (str repo-dir rel-dir "/" basename)]
+                           (.share Share (clj->js {:url asset-url
+                                                   :title "Open file with your favorite app"})))))]
 
         (cond
           (contains? config/audio-formats ext)
@@ -401,7 +405,7 @@
           [:a.asset-ref.is-plaintext {:href (rfe/href :file {:path path})
                                       :on-click (fn [_event]
                                                   (p/let [result (fs/read-file repo-dir path)]
-                                                    (db/set-file-content! repo path result )))}
+                                                    (db/set-file-content! repo path result)))}
            title]
 
           (= ext :pdf)
