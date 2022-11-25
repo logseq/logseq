@@ -335,7 +335,6 @@ button.tl-select-input-trigger {
   &[aria-expanded='true'] {
     .tl-popover-indicator {
       transform: rotate(180deg);
-      color: #000;
     }
   }
 }
@@ -347,6 +346,10 @@ button.tl-select-input-trigger {
   pointer-events: none;
   left: 0;
   bottom: -3px;
+
+  &[data-selected='true'] {
+    color: #000;
+  }
 }
 
 .floating-panel[data-tool-locked='true'] > .tl-button[data-selected='true']::after {
