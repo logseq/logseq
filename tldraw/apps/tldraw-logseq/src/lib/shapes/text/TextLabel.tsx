@@ -151,6 +151,8 @@ export const TextLabel = React.memo(function TextLabel({
             style={{
               font,
               color,
+              fontStyle,
+              fontWeight,
             }}
             className="tl-text-label-textarea"
             name="text"
