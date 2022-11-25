@@ -1677,23 +1677,22 @@
     (when (and (coll? children)
                (seq children)
                (not collapsed?))
-      (let [doc-mode? (state/sub :document/mode?)]
-        [:div.block-children-container.flex {:style {:margin-left (if doc-mode? 18 29)}}
-         [:div.block-children-left-border
-          {:on-click (fn [_]
-                       (editor-handler/toggle-open-block-children! (:block/uuid block)))}]
-         [:div.block-children.w-full {:style    {:display     (if collapsed? "none" "")}}
-          (for [child children]
-            (when (map? child)
-              (let [child (dissoc child :block/meta)
-                    config (cond->
-                            (-> config
-                                (assoc :block/uuid (:block/uuid child))
-                                (dissoc :breadcrumb-show? :embed-parent))
-                             (or ref? query?)
-                             (assoc :ref-query-child? true))]
-                (rum/with-key (block-container config child)
-                  (:block/uuid child)))))]]))))
+      [:div.block-children-container.flex
+       [:div.block-children-left-border
+        {:on-click (fn [_]
+                     (editor-handler/toggle-open-block-children! (:block/uuid block)))}]
+       [:div.block-children.w-full {:style {:display (if collapsed? "none" "")}}
+        (for [child children]
+          (when (map? child)
+            (let [child  (dissoc child :block/meta)
+                  config (cond->
+                           (-> config
+                               (assoc :block/uuid (:block/uuid child))
+                               (dissoc :breadcrumb-show? :embed-parent))
+                           (or ref? query?)
+                           (assoc :ref-query-child? true))]
+              (rum/with-key (block-container config child)
+                            (:block/uuid child)))))]])))
 
 (defn- block-content-empty?
   [{:block/keys [properties title body]}]

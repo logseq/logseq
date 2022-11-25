@@ -137,6 +137,7 @@
 
 .block-children-container {
   position: relative;
+  margin-left: 29px;
 }
 
 .block-children-left-border {
@@ -323,8 +324,6 @@
 }
 
 .ls-block {
-  @apply border border-dashed border-green-600;
-
   position: relative;
   min-height: 24px;
   padding: 2px 0;
@@ -517,7 +516,7 @@ a:hover > .bullet-container {
   background-color: var(--ls-block-bullet-border-color, #ced9e0);
 }
 
-.doc-mode {
+.content.doc-mode {
   margin-left: -16px;
 
   .block-children-left-border {
@@ -526,6 +525,10 @@ a:hover > .bullet-container {
 
   .hide-inner-bullet .bullet {
     display: none;
+  }
+
+  .block-children-container {
+    margin-left: 18px;
   }
 }
 
