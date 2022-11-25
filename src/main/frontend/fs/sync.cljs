@@ -1762,7 +1762,9 @@
             ;; add 2 simulated file-watcher events
             (>! ch (->FileChangeEvent "unlink" repo-dir (:old-path rename-event*) nil nil))
             (>! ch (->FileChangeEvent "add" repo-dir (:new-path rename-event*)
-                                      {:mtime (tc/to-long (t/now))} "fake-checksum"))
+                                      {:mtime (tc/to-long (t/now))
+                                       :size 1 ; add a fake size
+                                       } "fake-checksum"))
             (recur))
           local-change
           (cond
