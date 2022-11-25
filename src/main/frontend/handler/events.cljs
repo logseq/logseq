@@ -88,7 +88,8 @@
           (state/set-state! :user/info result)
           (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
-              (file-sync-handler/set-sync-enabled! true)
+              (when-not (false? (state/enable-sync?)) ; user turns it off
+                (file-sync-handler/set-sync-enabled! true))
               (async/<! (file-sync-handler/load-session-graphs))
               (p/let [repos (repo-handler/refresh-repos!)]
                 (when-let [repo (state/get-current-repo)]
