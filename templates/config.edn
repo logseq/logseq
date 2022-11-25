@@ -254,7 +254,7 @@
  ;; ignore #+keyword: for parsing page references in orgmode
  ;; :ignored-page-references-keywords #{"author" "startup"}
 
- ;; Quick capture templates on mobile for recieving contents from other apps.
+ ;; Quick capture templates for recieving contents from other apps.
  ;; Each template contains three elements {time}, {text} and {url}, which can be auto-expanded
  ;; by received contents from other apps. Note: the {} cannot be omitted.
  ;; - {time}: capture time
@@ -265,6 +265,9 @@
  ;; :quick-capture-templates
  ;; {:text "[[quick capture]] **{time}**: {text} from {url}"
  ;;  :media "[[quick capture]] **{time}**: {url}"}
+
+ ;; Quick capture options
+ ;; :quick-capture-options {:insert-today? false :redirect-page? false}
 
  ;; File sync options
  ;; Ignore these files when syncing, regexp is supported.
@@ -284,7 +287,7 @@
  ;; Decide the way to escape the special characters in the page title.
  ;; Warning:
  ;;   This is a dangerous operation. If you want to change the setting,
- ;;   should access the setting `Filename format` and follow the instructions. 
+ ;;   should access the setting `Filename format` and follow the instructions.
  ;;   Or you have to rename all the affected files manually then re-index on all
  ;;   clients after the files are synced. Wrong handling may cause page titles
  ;;   containing special characters to be messy.
