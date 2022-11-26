@@ -38,13 +38,13 @@
 
  [frontend.db.model
   blocks-count blocks-count-cache clean-export! delete-blocks get-pre-block
-  delete-file-blocks! delete-page-blocks delete-files delete-pages-by-files
+  delete-files delete-pages-by-files
   filter-only-public-pages-and-blocks get-all-block-contents get-all-tagged-pages
   get-all-templates get-block-and-children get-block-by-uuid get-block-children sort-by-left
   get-block-parent get-block-parents parents-collapsed? get-block-referenced-blocks get-all-referenced-blocks-uuid
   get-block-children-ids get-block-immediate-children get-block-page
   get-custom-css get-date-scheduled-or-deadlines
-  get-file-blocks get-file-last-modified-at get-file get-file-page get-file-page-id file-exists?
+  get-file-last-modified-at get-file get-file-page get-file-page-id file-exists?
   get-files get-files-blocks get-files-full get-journals-length get-pages-with-file
   get-latest-journals get-page get-page-alias get-page-alias-names get-paginated-blocks
   get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-properties

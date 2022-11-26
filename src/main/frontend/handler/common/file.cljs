@@ -6,7 +6,6 @@
             [frontend.db :as db]
             ["/frontend/utils" :as utils]
             [frontend.mobile.util :as mobile-util]
-            [logseq.db.schema :as db-schema]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
@@ -20,49 +19,20 @@
       (when (not= file current-file)
         current-file))))
 
-(defn- retract-blocks-tx
-  [blocks retain-uuids]
-  (let [tx-for-block (fn [block] (let [{uuid :block/uuid eid :db/id} block
-                                       should-retain? (and uuid (contains? retain-uuids uuid))]
-                                   (cond
-                                     should-retain?
-                                     (map (fn [attr] [:db.fn/retractAttribute eid attr]) db-schema/retract-attributes)
-                                     :else
-                                     [[:db.fn/retractEntity eid]])))]
-    (mapcat tx-for-block (distinct blocks)))
-  )
+(defn- validate-existing-file
+  [repo-url file-page file-path]
+  (when-let [current-file (page-exists-in-another-file repo-url file-page file-path)]
+    (when (not= file-path current-file)
+      (let [error (str "Page already exists with another file: " current-file ", current file: " file-path ". Please keep only one of them and re-index your graph.")]
+        (state/pub-event! [:notification/show
+                           {:content error
+                            :status :error
+                            :clear? false}])))))
 
-(defn- retract-file-blocks-tx
-  "Returns the transactional operations to retract blocks belonging to the
-  given page name and file path. This function is required when a file is being
-  parsed from disk; before saving the parsed, blocks from the previous version
-  of that file need to be retracted.
-
-  The 'Page' parsed from the new file version is passed separately from the
-  file-path, as the page name can be set via properties in the file, and thus
-  can change between versions. If it has changed, existing blocks for both the
-  old and new page name will be retracted.
-
-  Blocks are by default fully cleared via retractEntity. However, a collection
-  of block UUIDs to retain can be passed, and any blocks with matching uuids
-  will instead have their attributes cleared individually via
-  'retractAttribute'. This will preserve block references to the retained
-  UUIDs."
-  [repo-url file-page file-path retain-uuid-blocks]
-  (let [existing-file-page (db/get-file-page file-path)
-        pages-to-clear (distinct (filter some? [existing-file-page (:block/name file-page)]))
-        blocks (mapcat (fn [page] (db/get-page-blocks-no-cache repo-url page {:pull-keys [:db/id :block/uuid]})) pages-to-clear)
-        retain-uuids (if (seq retain-uuid-blocks) (set (filter some? (map :block/uuid retain-uuid-blocks))) [])
-        tx (retract-blocks-tx blocks retain-uuids)]
-    (when-let [current-file (page-exists-in-another-file repo-url file-page file-path)]
-      (when (not= file-path current-file)
-        (let [error (str "Page already exists with another file: " current-file ", current file: " file-path ". Please keep only one of them and re-index your graph.")]
-          (state/pub-event! [:notification/show
-                             {:content error
-                              :status :error
-                              :clear? false}]))))
-    tx
-    ))
+(defn- validate-and-get-blocks-to-delete
+  [repo-url db file-page file-path retain-uuid-blocks]
+  (validate-existing-file repo-url file-page file-path)
+  (graph-parser/get-blocks-to-delete db file-page file-path retain-uuid-blocks))
 
 (defn reset-file!
   "Main fn for updating a db with the results of a parsed file"
@@ -92,7 +62,7 @@
          new? (nil? (db/entity [:file/path file]))
          options (merge (dissoc options :verbose)
                         {:new? new?
-                         :delete-blocks-fn (partial retract-file-blocks-tx repo-url)
+                         :delete-blocks-fn (partial validate-and-get-blocks-to-delete repo-url)
                          :extract-options (merge
                                            {:user-config (state/get-config)
                                             :date-formatter (state/get-date-formatter)

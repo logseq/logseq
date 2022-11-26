@@ -32,3 +32,5 @@ logseq.graph-parser.property/->block-content
 logseq.graph-parser.property/property-value-from-content
 ;; API
 logseq.graph-parser.whiteboard/page-block->tldr-page
+;; API
+logseq.graph-parser/get-blocks-to-delete
