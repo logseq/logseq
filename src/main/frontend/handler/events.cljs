@@ -59,7 +59,9 @@
             [logseq.db.schema :as db-schema]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.graph-parser.config :as gp-config]))
+            [logseq.graph-parser.config :as gp-config]
+            [cljs-bean.core :as bean]
+            ["@sentry/react" :as Sentry]))
 
 ;; TODO: should we move all events here?
 
@@ -362,7 +364,7 @@
   (repo-handler/graph-ready! repo)
   (when (and (util/electron?)
              (not (config/demo-graph?))
-             (= :legacy (state/get-filename-format)))
+             (= :legacy (state/get-filename-format repo)))
     (state/pub-event! [:ui/notify-outdated-filename-format []])))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
@@ -403,8 +405,14 @@
 (defmethod handle :redirect-to-home [_]
   (page-handler/create-today-journal!))
 
-(defmethod handle :instrument [[_ {:keys [type payload]}]]
+(defmethod handle :instrument [[_ {:keys [type payload] :as opts}]]
+  (when-not (empty? (dissoc opts :type :payload))
+    (js/console.error "instrument data-map should only contains [:type :payload]"))
   (posthog/capture type payload))
+
+(defmethod handle :capture-error [[_ {:keys [error payload]}]]
+  (Sentry/captureException error
+                           (bean/->js {:extra payload})))
 
 (defmethod handle :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))
@@ -452,7 +460,9 @@
       (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
         (set! (.. left-sidebar-node -style -bottom) "0px"))
       (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
-        (set! (.. right-sidebar-node -style -paddingBottom) "150px")))))
+        (set! (.. right-sidebar-node -style -paddingBottom) "150px"))
+      (when-let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
+        (set! (.. toolbar -style -bottom) 0)))))
 
 (defn update-file-path [deprecated-repo current-repo deprecated-app-id current-app-id]
   (let [files (db-model/get-files-entity deprecated-repo)
@@ -858,8 +868,8 @@
 
                              :else
                              (do
-                               (state/pub-event! [:instrument {:type :file/parse-and-load-error
-                                                               :payload error}])
+                               (state/pub-event! [:capture-error {:error error
+                                                                  :payload {:type :file/parse-and-load-error}}])
                                [:li.my-1 {:key file}
                                 [:a {:on-click #(js/window.apis.openPath file)} file]
                                 [:p (.-message error)]]))))]
@@ -876,9 +886,9 @@
           (catch :default error
             (let [type :handle-system-events/failed]
               (js/console.error (str type) (clj->js payload) "\n" error)
-              (state/pub-event! [:instrument {:type    type
-                                              :payload payload
-                                              :error error}])))))
+              (state/pub-event! [:capture-error {:error error
+                                                 :payload {:type type
+                                                           :payload payload}}])))))
       (recur))
     chan))
 

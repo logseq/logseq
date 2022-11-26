@@ -16,9 +16,6 @@
                         :code-editor
                         {:entries    [frontend.extensions.code]
                          :depends-on #{:main}}
-                        :age-encryption
-                        {:entries    [frontend.extensions.age-encryption]
-                         :depends-on #{:main}}
                         :excalidraw
                         {:entries    [frontend.extensions.excalidraw]
                          :depends-on #{:main}}
@@ -82,9 +79,6 @@
                                {:init-fn    frontend.publishing/init}
                                :code-editor
                                {:entries    [frontend.extensions.code]
-                                :depends-on #{:main}}
-                               :age-encryption
-                               {:entries    [frontend.extensions.age-encryption]
                                 :depends-on #{:main}}
                                :excalidraw
                                {:entries    [frontend.extensions.excalidraw]

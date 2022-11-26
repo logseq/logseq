@@ -69,7 +69,7 @@
 
      ;; ui
      :ui/viewport                           {}
-     
+
      ;; left sidebar
      :ui/navigation-item-collapsed?         {}
 
@@ -307,10 +307,7 @@
 (def default-config
   "Default config for a repo-specific, user config"
   {:feature/enable-search-remove-accents? true
-   :default-arweave-gateway "https://arweave.net"
-
-   ;; For flushing the settings of old versions. Don't bump this value.
-   :file/name-format :legacy})
+   :default-arweave-gateway "https://arweave.net"})
 
 ;; State that most user config is dependent on
 (declare get-current-repo sub set-state!)

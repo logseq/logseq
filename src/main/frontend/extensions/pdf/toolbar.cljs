@@ -519,6 +519,8 @@
         [:span.nu.flex.items-center.opacity-70
          [:input {:ref            *page-ref
                   :type           "number"
+                  :min            1
+                  :max            total-page-num
                   :class          (util/classnames [{:is-long (> (util/safe-parse-int current-page-num) 999)}])
                   :default-value  current-page-num
                   :on-mouse-enter #(.select ^js (.-target %))
