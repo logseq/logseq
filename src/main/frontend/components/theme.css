@@ -124,7 +124,8 @@ main.ls-fold-button-on-right {
     }
 
     .block-control-wrap {
-      height: unset;
+      /* hack for toggling enable-opts */
+      height: 23px;
       background: transparent;
     }
   }
