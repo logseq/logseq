@@ -307,7 +307,8 @@
 (def default-config
   "Default config for a repo-specific, user config"
   {:feature/enable-search-remove-accents? true
-   :default-arweave-gateway "https://arweave.net"})
+   :default-arweave-gateway "https://arweave.net"
+   :file/name-format :triple-lowbar})
 
 ;; State that most user config is dependent on
 (declare get-current-repo sub set-state!)
