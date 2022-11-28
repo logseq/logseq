@@ -141,7 +141,7 @@
       (go
         (<! (<refresh-id-token&access-token))
         ;; refresh remote graph list by pub login event
-        (when (user-uuid) (state/pub-event! [:user/login]))))))
+        (when (user-uuid) (state/pub-event! [:user/fetch-info-and-graphs]))))))
 
 (defn login-callback [code]
   (state/set-state! [:ui/loading? :login] true)
@@ -152,7 +152,7 @@
         (-> resp
             :body
             (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $)))
-            (#(state/pub-event! [:user/login])))
+            (#(state/pub-event! [:user/fetch-info-and-graphs])))
         (debug/pprint "login-callback" resp)))))
 
 (defn logout []
