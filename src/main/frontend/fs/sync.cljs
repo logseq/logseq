@@ -494,7 +494,8 @@
         reserved-paths (filter f paths)]
     (when (seq reserved-paths)
       (let [paths (if path-string? reserved-paths (map -relative-path reserved-paths))]
-        (state/pub-event! [:ui/notify-outdated-filename-format paths])
+        (when (seq paths)
+          (state/pub-event! [:ui/notify-outdated-filename-format paths]))
         (prn "Skipped uploading those file paths with reserved chars: " paths)))
     (vec (remove f paths))))
 
@@ -750,7 +751,6 @@
       (when (some-> r first :path (not= filepath))
         (-> r first :path)))))
 
-
 (defn <local-file-not-exist?
   [graph-uuid irsapi base-path filepath]
   (go
@@ -778,6 +778,22 @@
 
 (declare <rsapi-cancel-all-requests)
 
+(defn- build-local-file-metadatas
+  [this graph-uuid result]
+  (loop [[[path metadata] & others] (js->clj result)
+         result #{}]
+    (if-not (and path metadata)
+      ;; finish
+      result
+      (let [normalized-path (path-normalize path)
+            encryptedFname (if (not= path normalized-path)
+                             (first (<! (<encrypt-fnames this graph-uuid [normalized-path])))
+                             (get metadata "encryptedFname"))]
+        (recur others
+               (conj result
+                     (->FileMetadata (get metadata "size") (get metadata "md5") normalized-path
+                                     encryptedFname (get metadata "mtime") false nil)))))))
+
 (deftype RSAPI [^:mutable graph-uuid' ^:mutable private-key' ^:mutable public-key']
   IToken
   (<get-token [_this]
@@ -795,26 +811,17 @@
     (set! private-key' private-key)
     (set! public-key' public-key)
     (p->c (ipc/ipc "set-env" graph-uuid (if prod? "prod" "dev") private-key public-key)))
-  (<get-local-all-files-meta [_ graph-uuid base-path]
+  (<get-local-all-files-meta [this graph-uuid base-path]
     (go
       (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "get-local-all-files-meta" graph-uuid base-path))))]
         (if (instance? ExceptionInfo r)
           r
-          (->> r
-               js->clj
-               (map (fn [[path metadata]]
-                      (->FileMetadata (get metadata "size") (get metadata "md5") (path-normalize path)
-                                      (get metadata "encryptedFname") (get metadata "mtime") false nil)))
-               set)))))
-  (<get-local-files-meta [_ graph-uuid base-path filepaths]
+          (build-local-file-metadatas this graph-uuid r)))))
+  (<get-local-files-meta [this graph-uuid base-path filepaths]
     (go
       (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "get-local-files-meta" graph-uuid base-path filepaths))))]
         (assert (not (instance? ExceptionInfo r)) "get-local-files-meta shouldn't return exception")
-        (->> r
-             js->clj
-             (map (fn [[path metadata]]
-                    (->FileMetadata (get metadata "size") (get metadata "md5") (path-normalize path)
-                                    (get metadata "encryptedFname") (get metadata "mtime") false nil)))))))
+        (build-local-file-metadatas this graph-uuid r))))
   (<rename-local-file [_ graph-uuid base-path from to]
     (<retry-rsapi #(p->c (ipc/ipc "rename-local-file" graph-uuid base-path
                                   (path-normalize from)
@@ -887,36 +894,22 @@
                                                    :secretKey secret-key
                                                    :publicKey public-key}))))
 
-  (<get-local-all-files-meta [_ graph-uuid base-path]
+  (<get-local-all-files-meta [this graph-uuid base-path]
     (go
       (let [r (<! (p->c (.getLocalAllFilesMeta mobile-util/file-sync (clj->js {:graphUUID graph-uuid
                                                                                :basePath base-path}))))]
         (if (instance? ExceptionInfo r)
           r
-          (->> (.-result r)
-               js->clj
-               (map (fn [[path metadata]]
-                      (->FileMetadata (get metadata "size") (get metadata "md5")
-                                      ;; return decoded path, keep it consistent with RSAPI
-                                      (path-normalize path)
-                                      (get metadata "encryptedFname") (get metadata "mtime") false nil)))
-               set)))))
+          (build-local-file-metadatas this graph-uuid (.-result r))))))
 
-  (<get-local-files-meta [_ graph-uuid base-path filepaths]
+  (<get-local-files-meta [this graph-uuid base-path filepaths]
     (go
       (let [r (<! (p->c (.getLocalFilesMeta mobile-util/file-sync
                                             (clj->js {:graphUUID graph-uuid
                                                       :basePath base-path
                                                       :filePaths filepaths}))))]
         (assert (not (instance? ExceptionInfo r)) "get-local-files-meta shouldn't return exception")
-        (->> (.-result r)
-             js->clj
-             (map (fn [[path metadata]]
-                    (->FileMetadata (get metadata "size") (get metadata "md5")
-                                    ;; return decoded path, keep it consistent with RSAPI
-                                    (path-normalize path)
-                                    (get metadata "encryptedFname") (get metadata "mtime") false nil)))
-             set))))
+        (build-local-file-metadatas this graph-uuid (.-result r)))))
 
   (<rename-local-file [_ graph-uuid base-path from to]
     (p->c (.renameLocalFile mobile-util/file-sync
@@ -1175,10 +1168,7 @@
     (loop [[raw-path & other-paths] raw-paths]
       (when raw-path
         (let [normalized-path (path-normalize raw-path)]
-          (when (and (not= normalized-path raw-path)
-                     (get path->encrypted-path-map normalized-path))
-            ;; raw-path is un-normalized path and there are related normalized version one,
-            ;; then filter out this raw-path
+          (when (not= normalized-path raw-path)
             (println :filter-files-with-unnormalized-path raw-path)
             (conj! *encrypted-paths-to-drop (get path->encrypted-path-map raw-path))))
         (recur other-paths)))
@@ -1228,7 +1218,7 @@
                 (mapv
                  #(->FileMetadata (:size %)
                                   (:checksum %)
-                                  (path-normalize (get encrypted-path->path-map (:encrypted-path %)))
+                                  (get encrypted-path->path-map (:encrypted-path %))
                                   (:encrypted-path %)
                                   (:last-modified %)
                                   true nil)
@@ -1370,9 +1360,12 @@
   IRemoteControlAPI
   (<delete-remote-files-control [this graph-uuid filepaths]
     (user/<wrap-ensure-id&access-token
-     (let [current-txid (:TXId (<! (<get-remote-graph this nil graph-uuid)))
-           files (<! (<encrypt-fnames rsapi graph-uuid filepaths))]
-       (<! (.<request this "delete_files" {:GraphUUID graph-uuid :TXId current-txid :Files files}))))))
+     (let [partitioned-files (partition-all 20 (<! (<encrypt-fnames rsapi graph-uuid filepaths)))]
+       (loop [[files & others] partitioned-files]
+         (when files
+           (let [current-txid (:TXId (<! (<get-remote-graph this nil graph-uuid)))]
+             (<! (.<request this "delete_files" {:GraphUUID graph-uuid :TXId current-txid :Files files}))
+             (recur others))))))))
 
 (comment
   (declare remoteapi)
@@ -1753,7 +1746,6 @@
                                     (<! (<get-local-files-meta
                                          rsapi (:current-syncing-graph-uuid sync-state) dir [path])))
                     checksum (and (coll? files-meta) (some-> files-meta first :etag))]
-                (println :files-watch (->FileChangeEvent type dir path stat checksum))
                 (>! local-changes-chan (->FileChangeEvent type dir path stat checksum))))))))))
 
 (defn local-changes-revised-chan-builder
@@ -3125,50 +3117,51 @@
 
 (defn <sync-start
   []
-  (go
-    (when (false? @*sync-entered?)
-      (reset! *sync-entered? true)
-      (let [*sync-state                 (atom (sync-state))
-            current-user-uuid           (<! (user/<user-uuid))
-            ;; put @graph-uuid & get-current-repo together,
-            ;; prevent to get older repo dir and current graph-uuid.
-            _                           (<! (p->c (persist-var/-load graphs-txid)))
-            [user-uuid graph-uuid txid] @graphs-txid
-            txid                        (or txid 0)
-            repo                        (state/get-current-repo)]
-        (when-not (instance? ExceptionInfo current-user-uuid)
-          (when (and repo
-                     @network-online-cursor
-                     user-uuid graph-uuid txid
-                     (graph-sync-off? graph-uuid)
-                     (user/logged-in?)
-                     (not (config/demo-graph? repo)))
-            (try
-              (when-let [sm (sync-manager-singleton current-user-uuid graph-uuid
-                                                    (config/get-repo-dir repo) repo
-                                                    txid *sync-state)]
-                (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
-                  (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
-                    (clear-graphs-txid! repo)
-                    (do
-                      (state/set-file-sync-state graph-uuid @*sync-state)
-                      (state/set-file-sync-manager graph-uuid sm)
+  (when-not (false? (state/enable-sync?))
+    (go
+      (when (false? @*sync-entered?)
+        (reset! *sync-entered? true)
+        (let [*sync-state                 (atom (sync-state))
+              current-user-uuid           (<! (user/<user-uuid))
+              ;; put @graph-uuid & get-current-repo together,
+              ;; prevent to get older repo dir and current graph-uuid.
+              _                           (<! (p->c (persist-var/-load graphs-txid)))
+              [user-uuid graph-uuid txid] @graphs-txid
+              txid                        (or txid 0)
+              repo                        (state/get-current-repo)]
+          (when-not (instance? ExceptionInfo current-user-uuid)
+            (when (and repo
+                       @network-online-cursor
+                       user-uuid graph-uuid txid
+                       (graph-sync-off? graph-uuid)
+                       (user/logged-in?)
+                       (not (config/demo-graph? repo)))
+              (try
+                (when-let [sm (sync-manager-singleton current-user-uuid graph-uuid
+                                                      (config/get-repo-dir repo) repo
+                                                      txid *sync-state)]
+                  (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
+                    (if-not (<! (<check-remote-graph-exists graph-uuid)) ; remote graph has been deleted
+                      (clear-graphs-txid! repo)
+                      (do
+                        (state/set-file-sync-state graph-uuid @*sync-state)
+                        (state/set-file-sync-manager graph-uuid sm)
 
-                      ;; update global state when *sync-state changes
-                      (add-watch *sync-state ::update-global-state
-                                 (fn [_ _ _ n]
-                                   (state/set-file-sync-state graph-uuid n)))
+                        ;; update global state when *sync-state changes
+                        (add-watch *sync-state ::update-global-state
+                                   (fn [_ _ _ n]
+                                     (state/set-file-sync-state graph-uuid n)))
 
-                      (state/set-state! [:file-sync/graph-state :current-graph-uuid] graph-uuid)
+                        (state/set-state! [:file-sync/graph-state :current-graph-uuid] graph-uuid)
 
-                      (.start sm)
+                        (.start sm)
 
-                      (offer! remote->local-full-sync-chan true)
-                      (offer! full-sync-chan true)))))
-              (catch :default e
-                (prn "Sync start error: ")
-                (log/error :exception e)))))
-        (reset! *sync-entered? false)))))
+                        (offer! remote->local-full-sync-chan true)
+                        (offer! full-sync-chan true)))))
+                (catch :default e
+                  (prn "Sync start error: ")
+                  (log/error :exception e)))))
+          (reset! *sync-entered? false))))))
 
 (defn- restart-if-stopped!
   [is-active?]

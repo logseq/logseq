@@ -88,7 +88,8 @@
           (state/set-state! :user/info result)
           (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
-              (file-sync-handler/set-sync-enabled! true)
+              (when-not (false? (state/enable-sync?)) ; user turns it off
+                (file-sync-handler/set-sync-enabled! true))
               (async/<! (file-sync-handler/load-session-graphs))
               (p/let [repos (repo-handler/refresh-repos!)]
                 (when-let [repo (state/get-current-repo)]
@@ -362,10 +363,14 @@
         (state/pub-event! [:graph/dir-gone dir]))))
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo)
-  (when (and (util/electron?)
-             (not (config/demo-graph?))
-             (= :legacy (state/get-filename-format)))
-    (state/pub-event! [:ui/notify-outdated-filename-format []])))
+  (js/setTimeout
+   (fn []
+     (let [filename-format (state/get-filename-format repo)]
+       (when (and (util/electron?)
+                  (not (config/demo-graph?))
+                  (not= filename-format :triple-lowbar))
+         (state/pub-event! [:ui/notify-outdated-filename-format []]))))
+   3000))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
@@ -460,7 +465,9 @@
       (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
         (set! (.. left-sidebar-node -style -bottom) "0px"))
       (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
-        (set! (.. right-sidebar-node -style -paddingBottom) "150px")))))
+        (set! (.. right-sidebar-node -style -paddingBottom) "150px"))
+      (when-let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
+        (set! (.. toolbar -style -bottom) 0)))))
 
 (defn update-file-path [deprecated-repo current-repo deprecated-app-id current-app-id]
   (let [files (db-model/get-files-entity deprecated-repo)
