@@ -16,6 +16,7 @@
             [frontend.rum :refer [use-bounding-client-rect use-breakpoint
                                   use-click-outside]]
             [frontend.state :as state]
+            [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [promesa.core :as p]
@@ -298,34 +299,30 @@
 (defn onboarding-show
   []
   (when (and (user-handler/feature-available? :whiteboard)
-             (not (or (state/enable-whiteboards?)
-                      (state/sub :whiteboard/onboarding?))))
+             (not (or (state/sub :whiteboard/onboarding?)
+                      (state/enable-whiteboards?))))
     (state/pub-event! [:whiteboard/onboarding])
-    (state/set-state! [:whiteboard/onboarding?] true)))
+    (state/set-state! [:whiteboard/onboarding?] true)
+    (storage/set :whiteboard-onboarding? true)))
 
 (rum/defc onboarding-welcome
   [close-fn]
-  (try
-    [:div.cp__whiteboard-welcome
-     [:span.head-bg
+  [:div.cp__whiteboard-welcome
+   [:span.head-bg
 
-      [:strong (t :on-boarding/closed-feature (name (:whiteboard user-handler/feature-matrix)))]]
+    [:strong (t :on-boarding/closed-feature (name (:whiteboard user-handler/feature-matrix)))]]
 
-     [:h1.text-2xl.font-bold.flex-col.sm:flex-row
-      (t :on-boarding/welcome-whiteboard-modal-title)]
+   [:h1.text-2xl.font-bold.flex-col.sm:flex-row
+    (t :on-boarding/welcome-whiteboard-modal-title)]
 
-     [:p (t :on-boarding/welcome-whiteboard-modal-description)]
+   [:p (t :on-boarding/welcome-whiteboard-modal-description)]
 
-     [:div.pt-6.flex.justify-center.space-x-2.sm:justify-end
-      (ui/button (t :on-boarding/welcome-whiteboard-modal-later) :on-click close-fn :background "gray" :class "opacity-60")
-      (ui/button (t :on-boarding/welcome-whiteboard-modal-start)
-                 :on-click (fn []
-                             (config-handler/set-config! :feature/enable-whiteboards? true)
-                             (do (quick-tour/ready
-                                  (fn []
-                                    (quick-tour/start-whiteboard)
-                                    (state/set-state! :whiteboard/onboarding? true)
-                                    (close-fn)))
-                                 (throw (js/Error. nil)))))]]
-    (catch :default e
-      (js/console.warn "[Whiteboard onboarding SKIP] " (name type) e))))
+   [:div.pt-6.flex.justify-center.space-x-2.sm:justify-end
+    (ui/button (t :on-boarding/welcome-whiteboard-modal-later) :on-click close-fn :background "gray" :class "opacity-60")
+    (ui/button (t :on-boarding/welcome-whiteboard-modal-start)
+               :on-click (fn []
+                           (config-handler/set-config! :feature/enable-whiteboards? true)
+                           (quick-tour/ready
+                            (fn []
+                              (quick-tour/start-whiteboard)
+                              (close-fn)))))]])

@@ -157,12 +157,12 @@
     :text              (h/render-html [:section [:h2 "🖼  Home for your whiteboards"]
                                        [:p "Whiteboards have their own section in the app where you can see them at a glance, create new ones or delete them easily."]])
     :attachTo          {:element ".nav-header .whiteboard" :on "right"}
-    :beforeShowPromise #(if (state/sub :ui/sidebar-open?)
-                          (wait-target state/hide-right-sidebar! 700)
-                          (p/resolved true))
+    :beforeShowPromise (fn []
+                         (when-not (state/sub :ui/left-sidebar-open?)
+                           (state/toggle-left-sidebar!))
+                         (wait-target ".nav-header .whiteboard" 500))
     :canClickTarget    true
-    :buttons           [{:text "Next" :action (do (router-handler/redirect-to-whiteboard-dashboard!)
-                                                  (.-next jsTour))}]
+    :buttons           [{:text "Next" :action (.-next jsTour)}]
     :popperOptions     {:modifiers [{:name    "preventOverflow"
                                      :options {:padding 20}}
                                     {:name    "offset"
@@ -172,12 +172,16 @@
    {:id                "whiteboard-new"
     :text              (h/render-html [:section [:h2 "🆕️  Create new whiteboard"]
                                        [:p "There is multiple ways of creating a new whiteboard. One of them is always right here in the dashboard."]])
-    :beforeShowPromise #((if-not (state/sub :ui/left-sidebar-open?)
-                          (wait-target state/toggle-left-sidebar! 500)
-                          (p/resolved true)))
-    :attachTo          {:element "#tl-create-whiteboard" :on "bottom"}
+    :beforeShowPromise (fn []
+                         (router-handler/redirect-to-whiteboard-dashboard!)
+                         (wait-target ".dashboard-create-card" 500))
+    :attachTo          {:element ".dashboard-create-card" :on "bottom"}
     :buttons           [{:text "Back" :classes "back" :action (.-back jsTour)}
-                        {:text "Finish" :action (.-complete jsTour)}]}])
+                        {:text "Finish" :action (.-complete jsTour)}]
+    :popperOptions     {:modifiers [{:name    "preventOverflow"
+                                     :options {:padding 20}}
+                                    {:name    "offset"
+                                     :options {:offset [0, 10]}}]}}])
 
 (defn start
   []
