@@ -133,24 +133,15 @@
           (set-tokens! (:id_token (:body resp)) (:access_token (:body resp)))))))))
 
 (defn restore-tokens-from-localstorage
-  "Restore id-token, access-token, refresh-token from localstorage,
-  and refresh id-token&access-token if necessary.
-  return nil when tokens are not available."
+  "Refresh id-token&access-token, pull latest repos, returns nil when tokens are not available."
   []
   (println "restore-tokens-from-localstorage")
-  (let [id-token (js/localStorage.getItem "id-token")
-        access-token (js/localStorage.getItem "access-token")
-        refresh-token (js/localStorage.getItem "refresh-token")]
+  (let [refresh-token (js/localStorage.getItem "refresh-token")]
     (when refresh-token
-      (set-tokens! id-token access-token refresh-token)
-      (when (or (nil? id-token) (nil? access-token)
-                (-> id-token parse-jwt almost-expired?)
-                (-> access-token parse-jwt almost-expired?))
-        (go
-          ;; id-token or access-token expired
-          (<! (<refresh-id-token&access-token))
-          ;; refresh remote graph list by pub login event
-          (when (user-uuid) (state/pub-event! [:user/login])))))))
+      (go
+        (<! (<refresh-id-token&access-token))
+        ;; refresh remote graph list by pub login event
+        (when (user-uuid) (state/pub-event! [:user/login]))))))
 
 (defn login-callback [code]
   (state/set-state! [:ui/loading? :login] true)

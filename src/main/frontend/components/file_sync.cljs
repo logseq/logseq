@@ -409,7 +409,6 @@
                  (str "status-of-" (and (keyword? status) (name status)))])}
        (when (and (not config/publishing?)
                   (user-handler/logged-in?))
-
          (ui/dropdown-with-links
           ;; trigger
           (fn [{:keys [toggle-fn]}]
@@ -428,21 +427,21 @@
                (ui/icon "cloud-off" {:size ui/icon-size})]))
 
           ;; links
-          (cond-> []
+          (cond-> (vec
+                   (when-not (and no-active-files? idle?)
+                     (cond
+                       need-password?
+                       [{:title   [:div.file-item.flex.items-center.leading-none.pt-3
+                                   {:style {:margin-left -8}}
+                                   (ui/icon "lock" {:size 20}) [:span.pl-1.font-semibold "Password is required"]]
+                         :options {:on-click fs-sync/sync-need-password!}}]
+
+                       ;; head of upcoming sync
+                       (not no-active-files?)
+                       [{:title   [:div.file-item.is-first ""]
+                         :options {:class "is-first-placeholder"}}])))
             synced-file-graph?
             (concat
-             (when-not (and no-active-files? idle?)
-               (cond
-                 need-password?
-                 [{:title   [:div.file-item.flex.items-center.leading-none.pt-3
-                             (ui/icon "lock" {:size 20}) [:span.pl-1.font-semibold "Password is required"]]
-                   :options {:on-click fs-sync/sync-need-password!}}]
-
-                 ;; head of upcoming sync
-                 (not no-active-files?)
-                 [{:title   [:div.file-item.is-first ""]
-                   :options {:class "is-first-placeholder"}}]))
-
              (map (fn [f] {:title [:div.file-item
                                    {:key (str "downloading-" f)}
                                    (gp-util/safe-decode-uri-component f)]
