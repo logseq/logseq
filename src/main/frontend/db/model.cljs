@@ -263,6 +263,7 @@
   (db-utils/entity [:block/uuid (if (uuid? id) id (uuid id))]))
 
 (defn query-block-by-uuid
+  "Return block or page entity, depends on the uuid"
   [id]
   (db-utils/pull [:block/uuid (if (uuid? id) id (uuid id))]))
 
@@ -774,6 +775,8 @@
         react)))))
 
 (defn get-page-blocks-no-cache
+  "Return blocks of the designated page, without using cache.
+   page - name / title of the page"
   ([page]
    (get-page-blocks-no-cache (state/get-current-repo) page nil))
   ([repo-url page]
@@ -1517,6 +1520,7 @@
             assets (get-assets datoms)]
         [@(d/conn-from-datoms datoms db-schema/schema) assets]))))
 
+;; Deprecated?
 (defn delete-blocks
   [repo-url files _delete-page?]
   (when (seq files)

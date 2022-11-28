@@ -2497,12 +2497,14 @@
 (rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
 
 (defn breadcrumb
+  "block-id - uuid of the target block of breadcrumb. page uuid is also acceptable"
   [config repo block-id {:keys [show-page? indent? end-separator? level-limit _navigating-block]
                          :or {show-page? true
                               level-limit 3}
                          :as opts}]
   (let [parents (db/get-block-parents repo block-id (inc level-limit))
-        page (db/get-block-page repo block-id)
+        page (or (db/get-block-page repo block-id) ;; only return for block uuid
+                 (model/query-block-by-uuid block-id)) ;; return page entity when received page uuid
         page-name (:block/name page)
         page-original-name (:block/original-name page)
         show? (or (seq parents) show-page? page-name)

@@ -37,11 +37,12 @@ import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastBlo
   await page.waitForSelector('[placeholder="Search or create page"]')
   await page.fill('[placeholder="Search or create page"]', 'Einführung in die Allgemeine Sprachwissenschaft' + rand)
 
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(2000) // wait longer for search contents to render
   const results = await page.$$('#ui__ac-inner>div')
-  expect(results.length).toEqual(3) // 2 blocks + 1 page
+  expect(results.length).toBeGreaterThan(3) // 2 blocks + 1 page + 2 page content
   await page.keyboard.press("Escape")
   await page.keyboard.press("Escape")
+  await page.waitForTimeout(1000) // wait for modal disappear
 })
 
 async function alias_test(page: Page, page_name: string, search_kws: string[]) {
