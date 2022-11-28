@@ -118,7 +118,7 @@
                (t :open-a-directory)
                :on-click #(state/pub-event! [:graph/setup-a-repo]))])]]
 
-        (when (seq remote-graphs)
+        (when (file-sync/enable-sync?)
           [:div
            [:hr]
            [:div.flex.align-items.justify-between
