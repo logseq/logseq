@@ -180,7 +180,10 @@
          (log/error :write-file-failed error))))
 
     ;; Compare with disk content and backup if not equal
-    (p/let [disk-content (<read-file-with-utf8 path)
+    (p/let [disk-content (p/catch
+                             (<read-file-with-utf8 path)
+                             (fn [_e]
+                               nil))
             disk-content (or disk-content "")
             repo-dir (config/get-local-dir repo)
             ext (util/get-file-ext path)
