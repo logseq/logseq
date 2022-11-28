@@ -520,7 +520,6 @@ i.ti {
 h1.title {
   margin-bottom: 1.5rem;
   color: var(--ls-title-text-color, #222);
-  font-family: -apple-system, system-ui, var(--ls-font-family), sans-serif;
   font-size: var(--ls-page-title-size, 36px);
   font-weight: 500;
 }
