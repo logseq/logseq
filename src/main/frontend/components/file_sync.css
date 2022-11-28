@@ -196,6 +196,10 @@
 
     .ti {
       @apply translate-y-0;
+
+      &.ls-icon-thumb-up {
+        @apply translate-x-[0.5px];
+      }
     }
 
     > .a {

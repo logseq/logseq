@@ -434,8 +434,8 @@
              (when-not (and no-active-files? idle?)
                (cond
                  need-password?
-                 [{:title   [:div.file-item
-                             (ui/icon "lock") "Password is required"]
+                 [{:title   [:div.file-item.flex.items-center.leading-none.pt-3
+                             (ui/icon "lock" {:size 20}) [:span.pl-1.font-semibold "Password is required"]]
                    :options {:on-click fs-sync/sync-need-password!}}]
 
                  ;; head of upcoming sync
