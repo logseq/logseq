@@ -24,7 +24,7 @@
         :on-boarding/tour-whiteboard-home "{1} Home for your whiteboards"
         :on-boarding/tour-whiteboard-home-description "Whiteboards have their own section in the app where you can see them at a glance, create new ones or delete them easily."
         :on-boarding/tour-whiteboard-new "{1} Create new whiteboard"
-        :on-boarding/tour-whiteboard-new-description "There is multiple ways of creating a new whiteboard. One of them is always right here in the dashboard."
+        :on-boarding/tour-whiteboard-new-description "There are multiple ways of creating a new whiteboard. One of them is always right here in the dashboard."
         :help/start "Getting started"
         :help/about "About Logseq"
         :help/roadmap "Roadmap"
