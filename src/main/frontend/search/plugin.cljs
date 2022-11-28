@@ -39,7 +39,7 @@
 
   (transact-pages! [_this data]
     (let [{:keys [pages-to-remove-set pages-to-add]} data]
-      (call-service! service "search:transactpages"
+      (call-service! service "search:transactPages"
                      {:data {:added   pages-to-add
                              :removed pages-to-remove-set}})))
 

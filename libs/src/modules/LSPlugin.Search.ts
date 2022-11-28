@@ -37,6 +37,8 @@ export class LSPluginSearchService {
             return data
           }
         },
+        queryPage: { f: 'onQueryPage', args: ['graph', 'q', true], reply: true },
+        transactPages: { f: 'onPagesChanged', args: ['graph', 'data'] },
         rebuildBlocksIndice: { f: 'onIndiceInit', args: ['graph', 'blocks'] },
         transactBlocks: { f: 'onBlocksChanged', args: ['graph', 'data'] },
         truncateBlocks: { f: 'onIndiceReset', args: ['graph'] },

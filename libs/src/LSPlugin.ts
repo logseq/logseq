@@ -311,6 +311,13 @@ export interface IPluginSearchServiceHooks {
       files?: Array<SearchFileItem>
     }>
 
+  onQueryPage: (
+    graph: string,
+    key: string,
+    opts: Partial<{}>
+  ) => Promise<unknown>
+
+  onPagesChanged: (graph: string, data: any) => Promise<void>
   onIndiceInit: (graph: string) => Promise<SearchIndiceInitStatus>
   onIndiceReset: (graph: string) => Promise<void>
   onBlocksChanged: (graph: string, changes: { added: Array<SearchBlockItem>, removed: Array<BlockEntity> }) => Promise<void>
