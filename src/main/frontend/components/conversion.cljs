@@ -13,6 +13,7 @@
             [frontend.context.i18n :refer [t]]
             [rum.core :as rum]
             [frontend.handler.file-sync :as file-sync-handler]
+            [frontend.fs.sync :as sync]
             [frontend.handler.notification :as notification]))
 
 (defn- ask-for-re-index
@@ -28,15 +29,26 @@
 
 (defn- <close-modal-on-done
   "Ask users to re-index when the modal is exited"
-  [sync?]
-  (async/go (state/close-settings!)
-            (async/<! (async/timeout 100)) ;; modal race condition requires investigation
-            (if sync?
-              (notification/show!
-               [:div "Please re-index this graph after all the changes are synced."]
-               :warning
-               false)
-              (ask-for-re-index))))
+  [sync? rename-items]
+  (async/go
+    (state/close-modal!)
+    (async/<! (async/timeout 100)) ;; modal race condition requires investigation
+    (let [renamed-paths (keep (fn [{:keys [file file-name target]}]
+                                (when (not= file-name target)
+                                  (sync/relative-path (:file/path file)))) rename-items)
+          graph-txid (second @sync/graphs-txid)]
+      (when (and (seq renamed-paths) sync? graph-txid)
+        (async/<!
+         (sync/<delete-remote-files-control
+          sync/remoteapi
+          graph-txid
+          renamed-paths))))
+    (if sync?
+      (notification/show!
+       [:div "Please re-index this graph after all the changes are synced."]
+       :warning
+       false)
+      (ask-for-re-index))))
 
 (rum/defc legacy-warning
   [repo *target-format *dir-format *solid-format]
@@ -123,10 +135,11 @@
                                         (merge ret {:page page :file file}))))
                                (remove nil?))
             sync? (file-sync-handler/current-graph-sync-on?)
-            <rename-all   #(async/go (doseq [{:keys [file target status]} rename-items]
-                                       (when (not= status :unreachable)
-                                         (async/<! (p->c (page-handler/rename-file! file target (constantly nil) true)))))
-                                     (<close-modal-on-done sync?))]
+            <rename-all   #(async/go
+                             (doseq [{:keys [file target status]} rename-items]
+                               (when (not= status :unreachable)
+                                 (async/<! (p->c (page-handler/rename-file! file target (constantly nil) true)))))
+                             (<close-modal-on-done sync? rename-items))]
 
         (if (not-empty rename-items)
           [:div ;; Normal UX stage 2: close stage 1 UI, show the action description as admolition
@@ -154,12 +167,7 @@
                      rename-fn      #(page-handler/rename-file! file target rm-item-fn)
                      rename-but     [:a {:on-click rename-fn
                                          :title (t :file-rn/apply-rename)}
-                                     [:span (t :file-rn/rename src-file-name tgt-file-name)]]
-                     rename-but-sm  (ui/button
-                                     (t :file-rn/rename-sm)
-                                     :on-click rename-fn
-                                     :class "text-sm p-1 mr-1"
-                                     :style {:word-break "normal"})]
+                                     [:span (t :file-rn/rename src-file-name tgt-file-name)]]]
                  [:tr {:key (:block/name page)}
                   [:td [:div [:p "📄 " old-title]]
                    (case status
@@ -168,6 +176,5 @@
                       [:p (t :file-rn/otherwise-breaking) " \"" changed-title \"]]
                      :unreachable
                      [:div [:p "🔴 " (t :file-rn/unreachable-title changed-title)]]
-                     [:div [:p "🟢 " (t :file-rn/optional-rename) rename-but]])]
-                  [:td rename-but-sm]]))]]]
+                     [:div [:p "🟢 " (t :file-rn/optional-rename) rename-but]])]]))]]]
           [:div "🎉 " (t :file-rn/no-action)]))]]))
