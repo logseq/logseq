@@ -264,10 +264,13 @@
          (storage/set :ui/file-sync-active-file-list? list-active?)))
      [list-active?])
 
-    [:div.cp__file-sync-indicator-progress-pane
-     {:ref *el-ref
-      :class (when (and syncing? progressing?) "is-progress-active")}
-     (let [idle-&-no-active? (and idle? no-active-files?)]
+    (let [idle-&-no-active? (and idle? no-active-files?)
+          waiting? (not (or (not online?)
+                            idle-&-no-active?
+                            syncing?))]
+      [:div.cp__file-sync-indicator-progress-pane
+       {:ref *el-ref
+        :class (when (and syncing? progressing?) "is-progress-active")}
        [:div.a
         [:div.al
          [:strong
@@ -285,30 +288,31 @@
             :else "Waiting..."
             )]]
         [:div.ar
-         (when queuing? (sync-now))]])
+         (when queuing? (sync-now))]]
 
-     [:div.b.dark:text-gray-200
-      [:div.bl
-       [:span.flex.items-center
-        (if no-active-files?
-          [:span.opacity-100.pr-1 "Successfully processed"]
-          [:span.opacity-60.pr-1 "Processed"])]
+       (when-not waiting?
+         [:div.b.dark:text-gray-200
+          [:div.bl
+           [:span.flex.items-center
+            (if no-active-files?
+              [:span.opacity-100.pr-1 "Successfully processed"]
+              [:span.opacity-60.pr-1 "Processed"])]
 
-       (first tip-b&p)]
+           (first tip-b&p)]
 
-      [:div.br
-       [:small.opacity-50
-        (when syncing?
-          (calc-time-left))]]]
+          [:div.br
+           [:small.opacity-50
+            (when syncing?
+              (calc-time-left))]]])
 
-     [:div.c
-      (second tip-b&p)
-      (when (or history-files? (not no-active-files?))
-        [:span.inline-flex.ml-1.active:opacity-50
-         {:on-click #(set-list-active? (not list-active?))}
-         (if list-active?
-           (ui/icon "chevron-up" {:style {:font-size 24}})
-           (ui/icon "chevron-left" {:style {:font-size 24}}))])]]))
+       [:div.c
+        (second tip-b&p)
+        (when (or history-files? (not no-active-files?))
+          [:span.inline-flex.ml-1.active:opacity-50
+           {:on-click #(set-list-active? (not list-active?))}
+           (if list-active?
+             (ui/icon "chevron-up" {:style {:font-size 24}})
+             (ui/icon "chevron-left" {:style {:font-size 24}}))])]])))
 
 (defn- sort-files
   [files]
