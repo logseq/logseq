@@ -143,9 +143,9 @@
         refresh-token (js/localStorage.getItem "refresh-token")]
     (when refresh-token
       (set-tokens! id-token access-token refresh-token)
-      (when-not (or (nil? id-token) (nil? access-token)
-                    (-> id-token parse-jwt almost-expired?)
-                    (-> access-token parse-jwt almost-expired?))
+      (when (or (nil? id-token) (nil? access-token)
+                (-> id-token parse-jwt almost-expired?)
+                (-> access-token parse-jwt almost-expired?))
         (go
           ;; id-token or access-token expired
           (<! (<refresh-id-token&access-token))
