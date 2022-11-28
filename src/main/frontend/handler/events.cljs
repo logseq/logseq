@@ -769,13 +769,13 @@
        "We suggest you upgrade now to avoid potential bugs."]
       (when (seq paths)
         [:p
-         "For example, the files below have reserved characters that can't be synced on some platforms."])]
-     ]
+         "For example, the files below have reserved characters that can't be synced on some platforms."])]]
     (ui/button
-      "Update filename format"
-      :on-click (fn []
-                  (notification/clear-all!)
-                  (state/set-modal!
+     "Update filename format"
+     :aria-label "Update filename format"
+     :on-click (fn []
+                 (notification/clear-all!)
+                 (state/set-modal!
                   (fn [_] (conversion-component/files-breaking-changed))
                   {:id :filename-format-panel :center? true})))
     (when (seq paths)
