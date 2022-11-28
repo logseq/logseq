@@ -2,6 +2,7 @@
   (:require [promesa.core :as p]
             [cljs-bean.core :as bean]
             [frontend.state :as state]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.util :as util]
             [frontend.handler.route :as router-handler]
@@ -154,8 +155,8 @@
 (defn- create-steps-whiteboard! [^js jsTour]
   [;; step 1
    {:id                "whiteboard-home"
-    :text              (h/render-html [:section [:h2 "🖼  Home for your whiteboards"]
-                                       [:p "Whiteboards have their own section in the app where you can see them at a glance, create new ones or delete them easily."]])
+    :text              (h/render-html [:section [:h2  (t :on-boarding/tour-whiteboard-home "🖼")]
+                                       [:p (t :on-boarding/tour-whiteboard-home-description)]])
     :attachTo          {:element ".nav-header .whiteboard" :on "right"}
     :beforeShowPromise (fn []
                          (when-not (state/sub :ui/left-sidebar-open?)
@@ -170,8 +171,8 @@
 
    ;; step 2
    {:id                "whiteboard-new"
-    :text              (h/render-html [:section [:h2 "🆕️  Create new whiteboard"]
-                                       [:p "There is multiple ways of creating a new whiteboard. One of them is always right here in the dashboard."]])
+    :text              (h/render-html [:section [:h2 (t :on-boarding/tour-whiteboard-new "🆕️")]
+                                       [:p (t :on-boarding/tour-whiteboard-new-description)]])
     :beforeShowPromise (fn []
                          (router-handler/redirect-to-whiteboard-dashboard!)
                          (wait-target ".dashboard-create-card" 500))
