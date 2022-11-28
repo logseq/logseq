@@ -364,7 +364,7 @@
         (state/pub-event! [:graph/dir-gone dir]))))
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo)
-  (when-not (config/test?)
+  (when-not config/test?
     (js/setTimeout
      (fn []
        (let [filename-format (state/get-filename-format repo)]
