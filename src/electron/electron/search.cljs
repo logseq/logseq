@@ -222,20 +222,35 @@
        (.all ^object stmt  input limit))
      :keywordize-keys true)))
 
+(defn- get-match-inputs
+  [q]
+  (let [match-input (-> q
+                        (string/replace " and " " AND ")
+                        (string/replace " & " " AND ")
+                        (string/replace " or " " OR ")
+                        (string/replace " | " " OR ")
+                        (string/replace " not " " NOT "))]
+    (if (not= q match-input)
+      [(string/replace match-input "," "")]
+      [q
+       (str "\"" match-input "\"")])))
+
+(defn distinct-by
+  [f col]
+  (reduce
+   (fn [acc x]
+     (if (some #(= (f x) (f %)) acc)
+       acc
+       (vec (conj acc x))))
+   []
+   col))
+
 (defn search-blocks
   ":page - the page to specificly search on"
   [repo q {:keys [limit page]}]
   (when-let [database (get-db repo)]
     (when-not (string/blank? q)
-      (let [match-input (-> q
-                            (string/replace " and " " AND ")
-                            (string/replace " & " " AND ")
-                            (string/replace " or " " OR ")
-                            (string/replace " | " " OR ")
-                            (string/replace " not " " NOT "))
-            match-input (if (not= q match-input)
-                          (string/replace match-input "," "")
-                          (str "\"" match-input "\""))
+      (let [match-inputs (get-match-inputs q)
             non-match-input (str "%" (string/replace q #"\s+" "%") "%")
             limit  (or limit 20)
             select "select rowid, uuid, content, page from blocks_fts where "
@@ -245,12 +260,17 @@
                            " content match ? order by rank limit ?")
             non-match-sql (str select
                                pg-sql
-                               " content like ? limit ?")]
+                               " content like ? limit ?")
+            matched-result (->>
+                            (map
+                              (fn [match-input]
+                                (search-blocks-aux database match-sql match-input page limit))
+                              match-inputs)
+                            (apply concat))]
         (->>
-         (concat
-          (search-blocks-aux database match-sql match-input page limit)
-          (search-blocks-aux database non-match-sql non-match-input page limit))
-         (distinct)
+         (concat matched-result
+                 (search-blocks-aux database non-match-sql non-match-input page limit))
+         (distinct-by :id)
          (take limit)
          (vec))))))
 
@@ -273,15 +293,7 @@
   [repo q {:keys [limit]}]
   (when-let [database (get-db repo)]
     (when-not (string/blank? q)
-      (let [match-input (-> q
-                            (string/replace " and " " AND ")
-                            (string/replace " & " " AND ")
-                            (string/replace " or " " OR ")
-                            (string/replace " | " " OR ")
-                            (string/replace " not " " NOT "))
-            match-input (if (not= q match-input)
-                          (string/replace match-input "," "")
-                          (str "\"" match-input "\""))
+      (let [match-inputs (get-match-inputs q)
             non-match-input (str "%" (string/replace q #"\s+" "%") "%")
             limit  (or limit 20)
             ;; https://www.sqlite.org/fts5.html#the_highlight_function
@@ -293,13 +305,17 @@
             match-sql (str select
                            " content match ? order by rank limit ?")
             non-match-sql (str select
-                               " content like ? limit ?")]
+                               " content like ? limit ?")
+            matched-result (->>
+                            (map
+                              (fn [match-input]
+                                (search-pages-aux database match-sql match-input limit))
+                              match-inputs)
+                            (apply concat))]
         (->>
-         (concat
-          (search-pages-aux database match-sql match-input limit)
+         (concat matched-result
           (search-pages-aux database non-match-sql non-match-input limit))
-         ;; distinct by :id
-         (group-by :id) (vals) (map first)
+         (distinct-by :id)
          (take limit)
          (vec))))))
 
