@@ -300,7 +300,8 @@
   []
   (when (and (user-handler/feature-available? :whiteboard)
              (not (or (state/sub :whiteboard/onboarding?)
-                      (state/enable-whiteboards?))))
+                      (state/enable-whiteboards?)
+                      (util/mobile?))))
     (state/pub-event! [:whiteboard/onboarding])
     (state/set-state! [:whiteboard/onboarding?] true)
     (storage/set :whiteboard-onboarding? true)))
