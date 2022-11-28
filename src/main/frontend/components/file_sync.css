@@ -159,6 +159,10 @@
       .title-wrap {
         flex: 1;
       }
+
+      .menu-link {
+        @apply px-2;
+      }
     }
 
     &.is-enabled-progress-pane {
@@ -468,7 +472,7 @@
       &.strength-wrap {
         @apply flex-wrap;
       }
-      
+
       .strength-item {
         @apply whitespace-nowrap flex items-center leading-none opacity-60;
 
