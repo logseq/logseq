@@ -353,7 +353,8 @@
   (state/set-modal! #(git-component/file-specific-version path hash content)))
 
 ;; Hook on a graph is ready to be shown to the user.
-;; It's different from :graph/resotred, as :graph/restored is for window reloaded
+;; It's different from :graph/restored, as :graph/restored is for window reloaded
+;; FIXME: config may not be loaded when the graph is ready.
 (defmethod handle :graph/ready
   [[_ repo]]
   (when (config/local-db? repo)
@@ -363,14 +364,15 @@
         (state/pub-event! [:graph/dir-gone dir]))))
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo)
-  (js/setTimeout
-   (fn []
-     (let [filename-format (state/get-filename-format repo)]
-       (when (and (util/electron?)
-                  (not (config/demo-graph?))
-                  (not= filename-format :triple-lowbar))
-         (state/pub-event! [:ui/notify-outdated-filename-format []]))))
-   3000))
+  (when-not (config/test?)
+    (js/setTimeout
+     (fn []
+       (let [filename-format (state/get-filename-format repo)]
+         (when (and (util/electron?)
+                    (not (config/demo-graph?))
+                    (not= filename-format :triple-lowbar))
+           (state/pub-event! [:ui/notify-outdated-filename-format []]))))
+     3000)))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
