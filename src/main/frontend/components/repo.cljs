@@ -118,7 +118,7 @@
                (t :open-a-directory)
                :on-click #(state/pub-event! [:graph/setup-a-repo]))])]]
 
-        (when (file-sync/enable-sync?)
+        (when (and (file-sync/enable-sync?) login?)
           [:div
            [:hr]
            [:div.flex.align-items.justify-between
@@ -232,7 +232,7 @@
                            (> (count repos) 1)              ; show switch to if there are multiple repos
                            (assoc :links-header [:div.font-medium.text-sm.opacity-70.px-4.pt-2.pb-1.flex.flex-row.justify-between.items-center
                                                  [:div "Switch to:"]
-                                                 (when (file-sync/enable-sync?)
+                                                 (when (and (file-sync/enable-sync?) login?)
                                                    (if remotes-loading?
                                                      (ui/loading "")
                                                      [:a.flex {:title "Refresh remote graphs"
