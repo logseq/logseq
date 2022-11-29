@@ -100,7 +100,12 @@
     align-items: center;
     overflow-x: overlay;
     overflow-y: hidden;
+    overflow-scrolling: touch;
     width: 95%;
+
+    &::-webkit-scrollbar {
+      height: 4px;
+    }
   }
 
   .toolbar-hide-keyboard {
