@@ -8,7 +8,7 @@ import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastBlo
  * Consider diacritics
  ***/
 
- test('Search page and blocks (diacritics)', async ({ page }) => {
+test('Search page and blocks (diacritics)', async ({ page, block }) => {
   let hotkeyOpenLink = 'Control+o'
   let hotkeyBack = 'Control+['
   if (IsMac) {
@@ -21,15 +21,17 @@ import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastBlo
   // diacritic opening test
   await createRandomPage(page)
 
-  await page.fill('textarea >> nth=0', '[[Einführung in die Allgemeine Sprachwissenschaft' + rand + ']] diacritic-block-1')
+  await block.mustType('[[Einführung in die Allgemeine Sprachwissenschaft' + rand + ']] diacritic-block-1', {delay: 10})
   await page.keyboard.press(hotkeyOpenLink)
 
-  // build target Page with diacritics
-  await lastBlock(page)
-  await page.type('textarea >> nth=0', 'Diacritic title test content')
+  await page.waitForTimeout(500)
 
-  await page.keyboard.press('Enter')
-  await page.fill('textarea >> nth=0', '[[Einführung in die Allgemeine Sprachwissenschaft' + rand + ']] diacritic-block-2')
+  // build target Page with diacritics
+  await block.activeEditing(0)
+  await block.mustType('Diacritic title test content', {delay: 10})
+
+  await block.enterNext()
+  await block.mustType('[[Einführung in die Allgemeine Sprachwissenschaft' + rand + ']] diacritic-block-2', {delay: 10})
   await page.keyboard.press(hotkeyBack)
 
   // check if diacritics are indexed
@@ -38,11 +40,13 @@ import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastBlo
   await page.fill('[placeholder="Search or create page"]', 'Einführung in die Allgemeine Sprachwissenschaft' + rand)
 
   await page.waitForTimeout(2000) // wait longer for search contents to render
-  const results = await page.$$('#ui__ac-inner>div')
-  expect(results.length).toBeGreaterThan(3) // 2 blocks + 1 page + 2 page content
-  await page.keyboard.press("Escape")
-  await page.waitForTimeout(1000) // wait for modal disappear
-  await page.keyboard.press("Escape")
+  // 2 blocks + 1 page + 1 page content
+  const searchResults = page.locator('#ui__ac-inner>div')
+  await expect(searchResults).toHaveCount(4)
+
+  await page.keyboard.press("Escape") // escape search box typing
+  await page.waitForTimeout(500)
+  await page.keyboard.press("Escape") // escape modal
 })
 
 async function alias_test(page: Page, page_name: string, search_kws: string[]) {

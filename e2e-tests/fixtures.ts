@@ -118,6 +118,12 @@ base.beforeEach(async () => {
     await page.keyboard.press('Escape')
     await page.keyboard.press('Escape')
 
+    const locator = page.locator('.notification-close-button').first()
+    while (await locator.isVisible()) {
+      await locator.click()
+      expect(locator.isVisible()).resolves.toBe(false)
+    }
+
     const rightSidebar = page.locator('.cp__right-sidebar-inner')
     if (await rightSidebar.isVisible()) {
       await page.click('button.toggle-right-sidebar', {delay: 100})
