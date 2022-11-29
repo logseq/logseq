@@ -110,7 +110,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
   const selectedShapesSet = React.useMemo(() => new Set(selectedShapes || []), [selectedShapes])
   const erasingShapesSet = React.useMemo(() => new Set(erasingShapes || []), [erasingShapes])
   const singleSelectedShape = selectedShapes?.length === 1 ? selectedShapes[0] : undefined
-  const selectedOrHoveredShape = hoveredShape || singleSelectedShape
+  const selectedOrHooveredShape = hoveredShape || singleSelectedShape
 
   return (
     <div ref={rContainer} className={`tl-container ${className ?? ''}`}>
@@ -139,7 +139,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                 isSelected={selectedShapesSet.has(shape)}
                 isErasing={erasingShapesSet.has(shape)}
                 meta={meta}
-                zIndex={selectedOrHoveredShape === shape ? 10000 : 1000 + i}
+                zIndex={selectedOrHooveredShape === shape ? 10000 : 1000 + i}
                 onEditingEnd={onEditingEnd}
               />
             ))}
