@@ -51,7 +51,7 @@
      :journals-length                       3
 
      :search/q                              ""
-     :search/mode                           :global
+     :search/mode                           :global  ;; inner page or full graph? {:page :global}
      :search/result                         nil
      :search/graph-filters                  []
      :search/engines                        {}
@@ -307,7 +307,13 @@
 (def default-config
   "Default config for a repo-specific, user config"
   {:feature/enable-search-remove-accents? true
-   :default-arweave-gateway "https://arweave.net"})
+   :default-arweave-gateway "https://arweave.net"
+
+   ;; For flushing the settings of old versions. Don't bump this value.
+   ;; There are only two kinds of graph, one is not upgraded (:legacy) and one is upgraded (:triple-lowbar)
+   ;; For not upgraded graphs, the config will have no key `:file/name-format`
+   ;; Then the default value is applied
+   :file/name-format :legacy})
 
 ;; State that most user config is dependent on
 (declare get-current-repo sub set-state!)
