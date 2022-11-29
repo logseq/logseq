@@ -215,12 +215,12 @@
                               (state/pub-event! [:go/search]))}
               (ui/icon "search" {:size ui/icon-size})]))])
       (when (mobile-util/native-platform?)
-        (if (or (state/home?) custom-home-page?)
-          left-menu
-          (ui/with-shortcut :go/backward "bottom"
-            [:button.it.navigation.nav-left.button.icon.opacity-70
-             {:title "Go back" :on-click #(js/window.history.back)}
-             (ui/icon "chevron-left" {:size 26})])))]
+        [left-menu
+         (when-not (or (state/home?) custom-home-page? (state/whiteboard-dashboard?))
+           (ui/with-shortcut :go/backward "bottom"
+             [:button.it.navigation.nav-left.button.icon.opacity-70
+              {:title "Go back" :on-click #(js/window.history.back)}
+              (ui/icon "chevron-left" {:size 26})]))])]
 
      [:div.r.flex.drag-region
       (when (and current-repo
