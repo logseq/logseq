@@ -8,6 +8,7 @@ import { randomString, createRandomPage } from './utils'
 test('create page and blocks, save to disk', async ({ page, block, graphDir }) => {
   const pageTitle = await createRandomPage(page)
 
+  await block.activeEditing(0)
   // do editing
   await page.keyboard.type('first bullet')
   await block.enterNext()
