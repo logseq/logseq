@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { SVGContainer, TLComponentProps, useApp } from '@tldraw/react'
+import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import { TLBoxShape, TLBoxShapeProps, getComputedColor, getTextLabelSize } from '@tldraw/core'
 import Vec from '@tldraw/vec'
 import * as React from 'react'
