@@ -32,10 +32,10 @@
   ([q]
    (search (state/get-current-repo) q))
   ([repo q]
-   (search repo q {:limit 20}))
+   (search repo q {:limit 10}))
   ([repo q {:keys [page-db-id limit more?]
             :or {page-db-id nil
-                 limit 20}
+                 limit 10}
             :as opts}]
    (when-not (string/blank? q)
      (let [page-db-id (if (string? page-db-id)
