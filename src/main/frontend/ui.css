@@ -231,6 +231,7 @@ html.is-mobile {
 
   .ui__modal-panel .panel-content {
     width: calc(98vw - 2rem);
+    padding-top: 24px;
     padding-bottom: 0;
   }
 }
