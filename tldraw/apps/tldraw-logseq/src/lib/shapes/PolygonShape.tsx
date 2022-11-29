@@ -1,12 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { TLPolygonShape, TLPolygonShapeProps, getComputedColor } from '@tldraw/core'
+import { TLPolygonShape, TLPolygonShapeProps, getComputedColor, getTextLabelSize } from '@tldraw/core'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
+import Vec from '@tldraw/vec'
+import * as React from 'react'
 import { observer } from 'mobx-react-lite'
 import { CustomStyleProps, withClampedStyles } from './style-props'
+import { TextLabel } from './text/TextLabel'
 
 interface PolygonShapeProps extends TLPolygonShapeProps, CustomStyleProps {
   type: 'polygon'
+  label: string
+  fontWeight: number
+  italic: boolean
 }
+
+const font = '18px / 1 var(--ls-font-family)'
 
 export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
   static id = 'polygon'
@@ -22,37 +30,74 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
     isFlippedY: false,
     stroke: '',
     fill: '',
+    fontWeight: 400,
+    italic: false,
     noFill: false,
     strokeType: 'line',
     strokeWidth: 2,
     opacity: 1,
+    label: '',
   }
 
-  ReactComponent = observer(({ events, isErasing, isSelected }: TLComponentProps) => {
+  ReactComponent = observer(({ events, isErasing, isSelected, isEditing, onEditingEnd }: TLComponentProps) => {
     const {
       offset: [x, y],
-      props: { stroke, fill, noFill, strokeWidth, opacity, strokeType },
+      props: { stroke, fill, noFill, strokeWidth, opacity, strokeType, label, italic, fontWeight, },
     } = this
+
     const path = this.getVertices(strokeWidth / 2).join()
+
+    const labelSize = label || isEditing ? getTextLabelSize(label, font, 4) : [0, 0]
+    const midPoint =  this.centroid
+    const dist = Math.min(this.props.size[0], this.props.size[1])
+    const scale = Math.max(0.5, Math.min(1, Math.max(dist / (labelSize[1] + 128), dist / (labelSize[0] + 128))))
+    const bounds = this.getBounds()
+
+    const offset = React.useMemo(() => {
+      return Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
+    }, [bounds, scale, midPoint])
+
+    const handleLabelChange = React.useCallback(
+      (label: string) => {
+        this.update?.({ label })
+      },
+      [label]
+    )
+
     return (
-      <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
-        <g transform={`translate(${x}, ${y})`}>
-          <polygon
-            className={isSelected || !noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
-            points={path}
-          />
-          <polygon
-            points={path}
-            stroke={getComputedColor(stroke, 'stroke')}
-            fill={noFill ? 'none' : getComputedColor(fill, 'background')}
-            strokeWidth={strokeWidth}
-            rx={2}
-            ry={2}
-            strokeLinejoin="round"
-            strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
-          />
-        </g>
-      </SVGContainer>
+      <div {...events} style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+        <TextLabel
+          font={font}
+          text={label}
+          color={getComputedColor(stroke, 'text')}
+          offsetX={offset[0]}
+          offsetY={offset[1]}
+          scale={scale}
+          isEditing={isEditing}
+          onChange={handleLabelChange}
+          onBlur={onEditingEnd}
+          fontStyle={italic ? 'italic' : 'normal'}
+          fontWeight={fontWeight}
+        />
+        <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
+          <g transform={`translate(${x}, ${y})`}>
+            <polygon
+              className={isSelected || !noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
+              points={path}
+            />
+            <polygon
+              points={path}
+              stroke={getComputedColor(stroke, 'stroke')}
+              fill={noFill ? 'none' : getComputedColor(fill, 'background')}
+              strokeWidth={strokeWidth}
+              rx={2}
+              ry={2}
+              strokeLinejoin="round"
+              strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
+            />
+          </g>
+        </SVGContainer>
+      </div>
     )
   })
 
