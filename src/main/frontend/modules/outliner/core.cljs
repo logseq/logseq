@@ -267,9 +267,30 @@
           (recur (rest blocks) (first blocks))
           matched)))))
 
-(defn- compute-block-parent
-  [block parent target-block prev-hop top-level? sibling? get-new-id]
+(defn- get-id
+  [x]
   (cond
+    (map? x)
+    (:db/id x)
+
+    (vector? x)
+    (second x)
+
+    :else
+    x))
+
+(defn- compute-block-parent
+  [block parent target-block prev-hop top-level? sibling? get-new-id outliner-op]
+  (cond
+    ;; replace existing block
+    (and (= outliner-op :paste)
+         (string/blank? (:block/content target-block))
+         (= (get-id (:block/parent target-block))
+            (get-id (:block/parent block)))
+         (= (get-id (:block/left target-block))
+            (get-id (:block/left block))))
+    (get-id (:block/parent target-block))
+
     prev-hop
     (:db/id (:block/parent prev-hop))
 
@@ -455,7 +476,7 @@
                                                  (not= (:block/parent block) (:block/parent target-block)))
                            prev-hop (if outdented-block? (find-outdented-block-prev-hop block blocks) nil)
                            left-exists-in-blocks? (contains? ids (:db/id (:block/left block)))
-                           parent (compute-block-parent block parent target-block prev-hop top-level? sibling? get-new-id)
+                           parent (compute-block-parent block parent target-block prev-hop top-level? sibling? get-new-id outliner-op)
                            left (compute-block-left blocks block left target-block prev-hop idx replace-empty-target? left-exists-in-blocks? get-new-id)]
                        (cond->
                          (merge block {:block/uuid uuid
