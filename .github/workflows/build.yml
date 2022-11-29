@@ -189,4 +189,4 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: e2e-test-report
-          path: artifacts.zip
+          path: e2e-dump/*
