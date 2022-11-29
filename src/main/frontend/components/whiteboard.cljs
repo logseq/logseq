@@ -299,12 +299,12 @@
 (defn onboarding-show
   []
   (when (and (user-handler/feature-available? :whiteboard)
-             (not (or (state/sub :whiteboard/onboarding?)
+             (not (or (state/sub :whiteboard/onboarding-tour?)
                       (state/enable-whiteboards?)
                       (util/mobile?))))
     (state/pub-event! [:whiteboard/onboarding])
-    (state/set-state! [:whiteboard/onboarding?] true)
-    (storage/set :whiteboard-onboarding? true)))
+    (state/set-state! [:whiteboard/onboarding-tour?] true)
+    (storage/set :whiteboard-onboarding-tour? true)))
 
 (rum/defc onboarding-welcome
   [close-fn]
