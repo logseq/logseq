@@ -1907,6 +1907,11 @@
          (edit-block! last-block' :max (:block/uuid last-block')))))
    0))
 
+(defn- nested-blocks
+  [blocks]
+  (let [ids (set (map :db/id blocks))]
+    (some? (some #(ids (:db/id (:block/parent %))) blocks))))
+
 (defn paste-blocks
   "Given a vec of blocks, insert them into the target page.
    keep-uuid?: if true, keep the uuid provided in the block structure."
@@ -1926,12 +1931,25 @@
         block (db/entity (:db/id target-block))
         page (if (:block/name block) block
                  (when target-block (:block/page (db/entity (:db/id target-block)))))
-        target-block (or target-block editing-block)
+        empty-target? (string/blank? (:block/content target-block))
+        paste-nested-blocks? (nested-blocks blocks)
+        target-block-has-children? (db/has-children? (:block/uuid target-block))
+        replace-empty-target? (if (and paste-nested-blocks? empty-target?
+                                       target-block-has-children?)
+                                false
+                                true)
+        target-block' (if replace-empty-target? target-block
+                          (db/pull (:db/id (:block/left target-block))))
         sibling? (cond
+                   (and paste-nested-blocks? empty-target?)
+                   (if (= (:block/parent target-block') (:block/parent target-block))
+                     true
+                     false)
+
                    (some? sibling?)
                    sibling?
 
-                   (db/has-children? (:block/uuid target-block))
+                   target-block-has-children?
                    false
 
                    :else
@@ -1944,15 +1962,15 @@
 
     (outliner-tx/transact!
       {:outliner-op :insert-blocks}
-      (when target-block
-        (let [format (or (:block/format target-block) (state/get-preferred-format))
+      (when target-block'
+        (let [format (or (:block/format target-block') (state/get-preferred-format))
               blocks' (map (fn [block]
                              (paste-block-cleanup block page exclude-properties format content-update-fn))
                            blocks)
-              result (outliner-core/insert-blocks! blocks' target-block {:sibling? sibling?
-                                                                         :outliner-op :paste
-                                                                         :replace-empty-target? true
-                                                                         :keep-uuid? keep-uuid?})]
+              result (outliner-core/insert-blocks! blocks' target-block' {:sibling? sibling?
+                                                                          :outliner-op :paste
+                                                                          :replace-empty-target? replace-empty-target?
+                                                                          :keep-uuid? keep-uuid?})]
           (edit-last-block-after-inserted! result))))))
 
 (defn- block-tree->blocks

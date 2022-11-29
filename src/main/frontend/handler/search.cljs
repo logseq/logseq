@@ -26,18 +26,16 @@
 (defn sanity-search-content
   "Convert a block to the display contents for searching"
   [format content]
-  (->> (text/remove-level-spaces content format (config/get-block-pattern format))
-       (drawer/remove-logbook)
-       (property/remove-built-in-properties format)))
+  (text/remove-level-spaces content format (config/get-block-pattern format)))
 
 (defn search
   ([q]
    (search (state/get-current-repo) q))
   ([repo q]
-   (search repo q {:limit 20}))
+   (search repo q {:limit 10}))
   ([repo q {:keys [page-db-id limit more?]
             :or {page-db-id nil
-                 limit 20}
+                 limit 10}
             :as opts}]
    (when-not (string/blank? q)
      (let [page-db-id (if (string? page-db-id)
