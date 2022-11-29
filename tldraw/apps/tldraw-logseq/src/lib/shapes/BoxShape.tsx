@@ -57,11 +57,8 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
 
     const labelSize = label || isEditing ? getTextLabelSize(label, font, 4) : [0, 0]
     const midPoint =  Vec.mul(this.props.size, 0.5)
-    const dist = Vec.dist([0, 0], this.props.size)
-    const scale = Math.max(
-      0.5,
-      Math.min(1, Math.max(dist / (labelSize[1] + 128), dist / (labelSize[0] + 128)))
-    )
+    const dist = Math.min(this.props.size[0], this.props.size[1])
+    const scale = Math.max(0.5, Math.min(1, Math.max(dist / (labelSize[1] + 128), dist / (labelSize[0] + 128))))
     const bounds = this.getBounds()
 
     const offset = React.useMemo(() => {
