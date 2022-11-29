@@ -458,7 +458,7 @@ button.tl-select-input-trigger {
   backface-visibility: hidden;
   display: inline-block;
   pointer-events: all;
-  background: transparent;
+  background: transparent !important;
   user-select: text;
   -webkit-font-smoothing: subpixel-antialiased;
   white-space: pre-wrap;
