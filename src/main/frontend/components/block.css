@@ -368,14 +368,14 @@
 
 .ls-block h3,
 .editor-inner .h3.uniline-block {
-  font-size: 1.17em;
-  min-height: 1.17em;
+  font-size: 1.2em;
+  min-height: 1.2em;
 }
 
 .ls-block h4,
 .editor-inner .h4.uniline-block {
-  font-size: 1.12em;
-  min-height: 1.12em;
+  font-size: 1em;
+  min-height: 1em;
 }
 
 .ls-block h5,
@@ -399,7 +399,8 @@
 .ls-block :is(h1, h2),
 .editor-inner .uniline-block:is(.h1, .h2) {
   border-bottom: 1px solid var(--ls-quaternary-background-color);
-  margin: 0.4em 0 0;
+  margin: 0.125em 0;
+  padding-bottom: 0.125em;
 }
 
 .block-ref .ls-block :is(h1, h2),

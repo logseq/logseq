@@ -118,6 +118,7 @@ main.ls-fold-button-on-right {
   #main-content-container {
     padding-right:18px;
     padding-left: 18px;
+    padding-top: 4px;
     
     .page-blocks-inner {
       margin-left: 0 !important;
