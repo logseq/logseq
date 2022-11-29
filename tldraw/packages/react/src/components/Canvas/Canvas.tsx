@@ -110,7 +110,6 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
   const selectedShapesSet = React.useMemo(() => new Set(selectedShapes || []), [selectedShapes])
   const erasingShapesSet = React.useMemo(() => new Set(erasingShapes || []), [erasingShapes])
   const singleSelectedShape = selectedShapes?.length === 1 ? selectedShapes[0] : undefined
-  const selectedOrHooveredShape = hoveredShape || singleSelectedShape
 
   return (
     <div ref={rContainer} className={`tl-container ${className ?? ''}`}>
