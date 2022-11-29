@@ -320,8 +320,7 @@
                               match-inputs)
                             (apply concat))]
         (->>
-         (concat matched-result
-          (search-pages-aux database non-match-sql non-match-input limit))
+         matched-result
          (distinct-by :id)
          (take limit)
          (vec))))))
