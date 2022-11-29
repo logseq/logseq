@@ -369,6 +369,7 @@
      (fn []
        (let [filename-format (state/get-filename-format repo)]
          (when (and (util/electron?)
+                    (not (util/ci?))
                     (not (config/demo-graph?))
                     (not= filename-format :triple-lowbar))
            (state/pub-event! [:ui/notify-outdated-filename-format []]))))

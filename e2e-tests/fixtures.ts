@@ -70,6 +70,16 @@ base.beforeAll(async () => {
   console.log("Test start with:", info)
 
   page = await electronApp.firstWindow()
+
+  // inject testing flags
+  await page.evaluate(
+    () => {
+      Object.assign(window, {
+        __E2E_TESTING__: true,
+      })
+    },
+  )
+
   // Direct Electron console to watcher
   page.on('console', consoleLogWatcher)
   page.on('crash', () => {
