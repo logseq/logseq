@@ -159,10 +159,6 @@
       .title-wrap {
         flex: 1;
       }
-
-      .menu-link {
-        @apply px-2;
-      }
     }
 
     &.is-enabled-progress-pane {

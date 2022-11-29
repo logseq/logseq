@@ -76,7 +76,7 @@
   (async/go (async/<! (p->c (persist-var/load-vars)))
             (async/<! (sync/<sync-stop))))
 
-(defmethod handle :user/login [[_]]
+(defmethod handle :user/fetch-info-and-graphs [[_]]
   (state/set-state! [:ui/loading? :login] false)
   (async/go
     (let [result (async/<! (sync/<user-info sync/remoteapi))]
@@ -353,7 +353,8 @@
   (state/set-modal! #(git-component/file-specific-version path hash content)))
 
 ;; Hook on a graph is ready to be shown to the user.
-;; It's different from :graph/resotred, as :graph/restored is for window reloaded
+;; It's different from :graph/restored, as :graph/restored is for window reloaded
+;; FIXME: config may not be loaded when the graph is ready.
 (defmethod handle :graph/ready
   [[_ repo]]
   (when (config/local-db? repo)
@@ -363,14 +364,15 @@
         (state/pub-event! [:graph/dir-gone dir]))))
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo)
-  (js/setTimeout
-   (fn []
-     (let [filename-format (state/get-filename-format repo)]
-       (when (and (util/electron?)
-                  (not (config/demo-graph?))
-                  (not= filename-format :triple-lowbar))
-         (state/pub-event! [:ui/notify-outdated-filename-format []]))))
-   3000))
+  (when-not config/test?
+    (js/setTimeout
+     (fn []
+       (let [filename-format (state/get-filename-format repo)]
+         (when (and (util/electron?)
+                    (not (config/demo-graph?))
+                    (not= filename-format :triple-lowbar))
+           (state/pub-event! [:ui/notify-outdated-filename-format []]))))
+     3000)))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
@@ -769,13 +771,13 @@
        "We suggest you upgrade now to avoid potential bugs."]
       (when (seq paths)
         [:p
-         "For example, the files below have reserved characters that can't be synced on some platforms."])]
-     ]
+         "For example, the files below have reserved characters that can't be synced on some platforms."])]]
     (ui/button
-      "Update filename format"
-      :on-click (fn []
-                  (notification/clear-all!)
-                  (state/set-modal!
+     "Update filename format"
+     :aria-label "Update filename format"
+     :on-click (fn []
+                 (notification/clear-all!)
+                 (state/set-modal!
                   (fn [_] (conversion-component/files-breaking-changed))
                   {:id :filename-format-panel :center? true})))
     (when (seq paths)

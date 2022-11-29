@@ -18,7 +18,8 @@
 
 (reset! state/publishing? publishing?)
 
-(def test? false)
+(goog-define TEST false)
+(def test? TEST)
 
 (goog-define ENABLE-FILE-SYNC-PRODUCTION false)
 
