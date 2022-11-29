@@ -330,6 +330,37 @@
 
       (is (= [19 20] (get-children 18))))))
 
+(deftest test-paste-into-empty-block
+  (testing "
+    Paste a block into the first block (its content is empty)
+    [[22 [[2 [[3 [[4]
+                [5]]]
+            [6 [[7 [[8]]]]]
+            [9 [[10]
+                [11]]]]]
+        [12 [[13]
+             [14]
+             [15]]]
+        [16 [[17]]]]]]
+ "
+    (transact-tree! tree)
+    (db/transact! test-db [{:block/uuid 22
+                            :block/content ""}])
+    (let [target-block (get-block 22)]
+      (outliner-tx/transact!
+        {:graph test-db}
+        (outliner-core/insert-blocks! [{:block/left [:block/uuid 1]
+                                        :block/content "test"
+                                        :block/parent [:block/uuid 1]
+                                        :block/page 1}]
+                                      target-block
+                                      {:sibling? false
+                                       :outliner-op :paste
+                                       :replace-empty-target? true}))
+      (is (= "test" (:block/content (get-block 22))))
+      (is (= [22] (get-children 1)))
+      (is (= [2 12 16] (get-children 22))))))
+
 (deftest test-batch-transact
   (testing "add 4, 5 after 2 and delete 3"
     (let [tree [[1 [[2] [3]]]]]
@@ -691,6 +722,6 @@
 
   (do
     (frontend.test.fixtures/reset-datascript test-db)
-    (cljs.test/test-vars [#'random-deletes]))
+    (cljs.test/test-vars [#'test-paste-first-empty-block]))
 
   )
