@@ -142,7 +142,7 @@ jobs:
       - name: Run Playwright test
         run: xvfb-run -- npx playwright test --reporter github --shard=${{ matrix.shard }}/3
         env:
-          CI: true
+          LOGSEQ_CI: true
           DEBUG: "pw:api"
           RELEASE: true # skip dev only test
 

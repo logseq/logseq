@@ -181,7 +181,7 @@ jobs:
       - name: Run Playwright test
         run: xvfb-run -- yarn e2e-test
         env:
-          CI: true
+          LOGSEQ_CI: true
           DEBUG: "pw:api"
 
       - name: Save test artifacts
