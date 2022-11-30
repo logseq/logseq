@@ -106,13 +106,38 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
   ReactIndicator = observer(() => {
     const {
       offset: [x, y],
-      props: { strokeWidth },
+      props: { label, strokeWidth, fontWeight },
     } = this
+
+    const bounds = this.getBounds()
+    const labelSize = label ? getTextLabelSize(label, { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight }, 4) : [0, 0]
+    const midPoint =  [this.props.size[0] / 2, this.props.size[1] * 2/3]
+    const dist = Math.min(this.props.size[0], this.props.size[1])
+    const scale = Math.max(0.5, Math.min(1, Math.max(dist / (labelSize[1] + 128), dist / (labelSize[0] + 128))))
+
+    const offset = React.useMemo(() => {
+      const offset = Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
+      return offset
+    }, [bounds, scale, midPoint])
+
     return (
-      <polygon
-        transform={`translate(${x}, ${y})`}
-        points={this.getVertices(strokeWidth / 2).join()}
-      />
+      <g>
+        <polygon
+          transform={`translate(${x}, ${y})`}
+          points={this.getVertices(strokeWidth / 2).join()}
+        />
+        {label && (
+          <rect
+            x={bounds.width / 2 - (labelSize[0] / 2) * scale + offset[0]}
+            y={bounds.height / 2 - (labelSize[1] / 2) * scale + offset[1]}
+            width={labelSize[0] * scale}
+            height={labelSize[1] * scale}
+            rx={4 * scale}
+            ry={4 * scale}
+            fill="transparent"
+          />
+        )}
+      </g>
     )
   })
 
