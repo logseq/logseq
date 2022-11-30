@@ -273,9 +273,13 @@
         (->>
          (concat matched-result
                  (search-blocks-aux database non-match-sql non-match-input page limit))
-         (distinct-by :id)
+         (distinct-by :rowid)
          (take limit)
          (vec))))))
+
+(defn- snippet-by
+  [content length]
+  (str (subs content 0 length) "..."))
 
 (defn- search-pages-res-unpack
   [arr]
@@ -283,7 +287,9 @@
     {:id      rowid
      :uuid    uuid
      :content content
-     :snippet snippet}))
+     :snippet (if (string/includes? snippet "$pfts_2lqh>$ ")
+                snippet
+                (snippet-by snippet 250))}))
 
 (defn- search-pages-aux
   [database sql input limit]
@@ -317,7 +323,8 @@
                               match-inputs)
                             (apply concat))]
         (->>
-         matched-result
+         (concat matched-result
+                 (search-pages-aux database non-match-sql non-match-input limit))
          (distinct-by :id)
          (take limit)
          (vec))))))
