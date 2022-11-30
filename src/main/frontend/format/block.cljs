@@ -1,7 +1,6 @@
 (ns frontend.format.block
   "Block code needed by app but not graph-parser"
-  (:require ["@sentry/react" :as Sentry]
-            [cljs-time.format :as tf]
+  (:require [cljs-time.format :as tf]
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.date :as date]
