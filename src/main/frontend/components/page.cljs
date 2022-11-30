@@ -286,8 +286,9 @@
                   [:a.asset-ref (pdf-utils/fix-local-asset-pagename title)]
                   (if fmt-journal? (date/journal-title->custom-format title) title))
           old-name (or title page-name)]
-      [:h1.title.page-title.flex.cursor-pointer.gap-1.w-full
-       {:on-mouse-down (fn [e]
+      [:h1.page-title.flex.cursor-pointer.gap-1.w-full
+       {:class (when-not whiteboard-page? "title")
+        :on-mouse-down (fn [e]
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page page-name})))
         :on-click (fn [e]
