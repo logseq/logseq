@@ -547,8 +547,8 @@ test('should show text after soft return when node is collapsed #5074', async ({
   await expect(page.locator('textarea >> nth=0')).toHaveText('Before soft return\nAfter soft return')
 
   // zoom into the block
-  await page.click('a.block-control + a')
-  await page.waitForTimeout(delay)
+  page.click('a.block-control + a')
+  await page.waitForNavigation()
 
   // select the block that has the soft return
   await page.keyboard.press('ArrowDown')
