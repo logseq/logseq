@@ -103,46 +103,52 @@ async function alias_test( block: Block, page: Page, page_name: string, search_k
   //   alias_test_content_1,
   //   alias_test_content_2, and
   //   alias_test_content_3 sequentialy, to validate the target page state
-  await page.type('textarea >> nth=0', 'alias:: [[' + alias_name)
-  await page.press('textarea >> nth=0', 'Enter') // Enter for finishing selection
-  await page.press('textarea >> nth=0', 'Enter') // double Enter for exit property editing
-  await page.press('textarea >> nth=0', 'Enter') // double Enter for exit property editing
-  await lastBlock(page)
+  await page.type('textarea >> nth=0', 'alias:: [[' + alias_name, {delay: 10})
+  await page.keyboard.press('Enter', {delay: 200}) // Enter for finishing selection
+  await page.keyboard.press('Enter', {delay: 200}) // double Enter for exit property editing
+  await page.keyboard.press('Enter', {delay: 200}) // double Enter for exit property editing
+  await page.waitForTimeout(200)
+  await block.activeEditing(1)
   await page.type('textarea >> nth=0', alias_test_content_1)
   await lastBlock(page)
-  await page.keyboard.press(hotkeyBack)
+  page.keyboard.press(hotkeyBack)
 
-  await page.waitForTimeout(100) // await navigation
+  await page.waitForNavigation()
   // create alias ref in origin Page
-  await newBlock(page)
-  await page.type('textarea >> nth=0', '[[' + alias_name)
-  await page.press('textarea >> nth=0', 'Enter') // Enter for finishing selection
+  await block.activeEditing(0)
+  await block.enterNext()
+  await page.type('textarea >> nth=0', '[[' + alias_name, {delay: 20})
+  await page.keyboard.press('Enter') // Enter for finishing selection
   await page.waitForTimeout(100)
 
-  await page.keyboard.press(hotkeyOpenLink)
-  await page.waitForTimeout(100) // await navigation
+  page.keyboard.press(hotkeyOpenLink)
+  await page.waitForNavigation()
 
   // shortcut opening test
-  await lastBlock(page)
+  await block.activeEditing(1)
   expect(await page.inputValue('textarea >> nth=0')).toBe(alias_test_content_1)
 
   await enterNextBlock(page)
   await page.type('textarea >> nth=0', alias_test_content_2)
-  await page.keyboard.press(hotkeyBack)
+  page.keyboard.press(hotkeyBack)
 
+  await page.waitForNavigation()
   // pressing enter on alias opening test
-  await lastBlock(page)
+  await block.activeEditing(1)
   await page.press('textarea >> nth=0', 'ArrowLeft')
   await page.press('textarea >> nth=0', 'ArrowLeft')
   await page.press('textarea >> nth=0', 'ArrowLeft')
-  await page.press('textarea >> nth=0', 'Enter')
-  await lastBlock(page)
+  page.press('textarea >> nth=0', 'Enter')
+  await page.waitForNavigation()
+  await block.activeEditing(2)
   expect(await page.inputValue('textarea >> nth=0')).toBe(alias_test_content_2)
   await newInnerBlock(page)
   await page.type('textarea >> nth=0', alias_test_content_3)
-  await page.keyboard.press(hotkeyBack)
-
+  page.keyboard.press(hotkeyBack)
+  
+  await page.waitForNavigation()
   // clicking alias ref opening test
+  await block.activeEditing(1)
   await block.enterNext()
   await page.waitForSelector('.page-blocks-inner .ls-block .page-ref >> nth=-1')
   await page.click('.page-blocks-inner .ls-block .page-ref >> nth=-1')
@@ -172,7 +178,6 @@ async function alias_test( block: Block, page: Page, page_name: string, search_k
     // test search entering (page)
     page.keyboard.press("Enter")
     await page.waitForNavigation()
-    await page.waitForTimeout(100)
     await lastBlock(page)
     expect(await page.inputValue('textarea >> nth=0')).toBe(alias_test_content_3)
 
@@ -181,10 +186,9 @@ async function alias_test( block: Block, page: Page, page_name: string, search_k
     await page.waitForSelector('[placeholder="Search or create page"]')
     await page.fill('[placeholder="Search or create page"]', kw_name)
     await page.waitForTimeout(500)
-    page.click(":nth-match(.menu-link, 2)")
+    page.click(":nth-match(.search-result, 3)")
     await page.waitForNavigation()
-    await page.waitForTimeout(500)
-    await lastBlock(page)
+    await block.activeEditing(1)
     expect(await page.inputValue('textarea >> nth=0')).toBe("[[" + alias_name + "]]")
     await page.keyboard.press(hotkeyBack)
   }
