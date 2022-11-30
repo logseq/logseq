@@ -9,7 +9,8 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [cljs-http.client :as http]
-            [cljs.core.async :as async :refer [go <!]]))
+            [cljs.core.async :as async :refer [go <!]]
+            [frontend.handler.notification :as notification]))
 
 (defn set-preferred-format!
   [format]
@@ -126,7 +127,8 @@
           nil                           ; do nothing
 
           (not (http/unexceptional-status? (:status resp)))
-          (clear-tokens true)
+          (do (notification/show! (str "unstable network, refresh token: " (:status resp)) :warning)
+              (clear-tokens true))
 
           :else                         ; ok
         (when (and (:id_token (:body resp)) (:access_token (:body resp)))

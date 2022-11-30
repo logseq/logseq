@@ -82,7 +82,8 @@
     (let [result (async/<! (sync/<user-info sync/remoteapi))]
       (cond
         (instance? ExceptionInfo result)
-        nil
+        (do (notification/show! ":user/fetch-info-and-graphs failed" :warning)
+            nil)
         (map? result)
         (do
           (state/set-state! :user/info result)

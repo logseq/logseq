@@ -102,7 +102,7 @@
                   :target "_blank"}
         :icon (ui/icon "brand-discord")}
 
-       (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
+       (when (user-handler/logged-in?)
          {:title (str (t :logout) " (" (user-handler/email) ")")
           :options {:on-click #(user-handler/logout)}
           :icon  (ui/icon "logout")})]
