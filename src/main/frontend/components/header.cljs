@@ -197,6 +197,7 @@
              (ui/icon "chevron-left" {:size 26})])))]
 
      [:div.r.flex.drag-region
+      (fs-sync/unstable-network)
       (when (and current-repo
                  (not (config/demo-graph? current-repo))
                  (user-handler/alpha-or-beta-user?))

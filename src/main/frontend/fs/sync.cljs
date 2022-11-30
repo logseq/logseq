@@ -288,6 +288,9 @@
      (if (and *stop @*stop (contains? stoppable-apis api-name))
        :stop
        (let [resp (<! (<request-once api-name body token))]
+         (if (= 0 (get-in resp [:resp :status]))
+           (state/pub-event! [:network/unstable false])
+           (state/pub-event! [:network/unstable true]))
          (if (and
               (= 401 (get-in resp [:resp :status]))
               (= "Unauthorized" (:message (get-json-body (get-in resp [:resp :body])))))

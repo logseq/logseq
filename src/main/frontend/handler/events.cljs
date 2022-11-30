@@ -119,7 +119,7 @@
     (fs/watch-dir! dir-name))
   (file-sync-restart!))
 
-(defmethod handle :graph/unlinked [repo current-repo]
+(defmethod handle :graph/unlinked [[repo current-repo]]
   (when (= (:url repo) current-repo)
     (file-sync-restart!)))
 
@@ -888,6 +888,10 @@
                                 [:p (.-message error)]]))))]
                        [:p "Don't forget to re-index your graph when all the conflicts are resolved."]]
                       :status :error}]))
+
+(defmethod handle :network/unstable [[_ recover?]]
+  (reset! file-sync/*unstable-network (not recover?)))
+
 
 (defn run!
   []

@@ -35,6 +35,15 @@
 (declare maybe-onboarding-show)
 (declare open-icloud-graph-clone-picker)
 
+
+(def *unstable-network (atom false))
+
+(rum/defc unstable-network < rum/reactive
+  []
+  (let [unstable-network (rum/react *unstable-network)]
+    (when unstable-network
+      [:div.text-sm "unstable network"])))
+
 (rum/defc clone-local-icloud-graph-panel
   [repo graph-name close-fn]
 
