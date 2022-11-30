@@ -146,9 +146,10 @@ jobs:
           DEBUG: "pw:api"
           RELEASE: true # skip dev only test
 
-      # - name: Save test artifacts
-      #   if: ${{ failure() }}
-      #   uses: actions/upload-artifact@v2
-      #   with:
-      #     name: e2e-test-report
-      #     path: artifacts.zip
+      - name: Save e2e artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: e2e-repeat-report-${{ matrix.shard}}-${{ matrix.repeat }}
+          path: e2e-dump/*
+          retention-days: 1
