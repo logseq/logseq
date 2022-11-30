@@ -47,7 +47,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
 
     const path = this.getVertices(strokeWidth / 2).join()
 
-    const labelSize = label || isEditing ? getTextLabelSize(label, font, 4) : [0, 0]
+    const labelSize = label || isEditing ? getTextLabelSize(label, { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight }, 4) : [0, 0]
     // Using the centroid of the polygon as the label position is preferable in this case
     // This shape is an isosceles triangle at the time of writing this comment
     const midPoint =  [this.props.size[0] / 2, this.props.size[1] * 2/3]
