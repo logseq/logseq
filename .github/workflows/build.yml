@@ -178,15 +178,23 @@ jobs:
       - name: Ensure static yarn.lock is up to date
         run: git diff --exit-code static/yarn.lock
 
-      - name: Run Playwright test
-        run: xvfb-run -- yarn e2e-test
+      - name: Run Playwright test - 1/2
+        run: xvfb-run -- npx playwright test --reporter github --shard=1/2
         env:
-          CI: true
+          LOGSEQ_CI: true
           DEBUG: "pw:api"
+          RELEASE: true # skip dev only test
+
+      - name: Run Playwright test - 2/2
+        run: xvfb-run -- npx playwright test --reporter github --shard=2/2
+        env:
+          LOGSEQ_CI: true
+          DEBUG: "pw:api"
+          RELEASE: true # skip dev only test
 
       - name: Save test artifacts
         if: ${{ failure() }}
         uses: actions/upload-artifact@v2
         with:
           name: e2e-test-report
-          path: artifacts.zip
+          path: e2e-dump/*
