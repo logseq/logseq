@@ -30,13 +30,14 @@
 (defn page->index
   "Convert a page name to the index for searching (page content level)
    Generate index based on the DB content AT THE POINT OF TIME"
-  [{:block/keys [uuid _original-name] :as page}]
+  [{:block/keys [uuid original-name] :as page}]
   (when-let [content (some-> (:block/file page)
                              (:file/content))]
     (when-not (> (count content) (* (max-len) 10))
       {:id   (:db/id page)
        :uuid (str uuid)
-       :content (sanitize content)})))
+       ;; Add page name to the index
+       :content (sanitize (str "$pfts_f6ld>$ " original-name " $<pfts_f6ld$ " content))})))
 
 (defn build-blocks-indice
   ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection

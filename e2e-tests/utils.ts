@@ -115,6 +115,7 @@ export async function newInnerBlock(page: Page): Promise<Locator> {
   return page.locator('textarea >> nth=0')
 }
 
+// Deprecated by block.enterNext
 export async function newBlock(page: Page): Promise<Locator> {
   let blockNumber = await page.locator('.page-blocks-inner .ls-block').count()
   await lastBlock(page)
