@@ -77,8 +77,15 @@
                :else
                nil)]
 
-       [:div.text-sm
-        {:title (str "Revision: " config/revison)}
+       [:div.text-sm.cursor
+        {:title (str "Revision: " config/revison)
+         :on-click (fn []
+                     (notification/show! [:div "Current Revision: "
+                                          [:a {:target "_blank"
+                                               :href (str "https://github.com/logseq/logseq/commit/" config/revison)}
+                                           config/revison]]
+                                         :info
+                                         false))}
         version]
 
        [:a.text-sm.fade-link.underline.inline
@@ -308,7 +315,7 @@
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "custom_date_format"}
     (t :settings-page/custom-date-format)
-    (ui/tippy {:html        (t :settings-page/custom-date-format-warning)     
+    (ui/tippy {:html        (t :settings-page/custom-date-format-warning)
                :class       "tippy-hover ml-2"
                :interactive true
                :disabled    false}
