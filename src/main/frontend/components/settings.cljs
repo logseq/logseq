@@ -77,7 +77,9 @@
                :else
                nil)]
 
-       [:div.text-sm version]
+       [:div.text-sm
+        {:title (str "Revision: " config/revison)}
+        version]
 
        [:a.text-sm.fade-link.underline.inline
         {:target "_blank"

@@ -16,6 +16,9 @@
 (goog-define PUBLISHING false)
 (defonce publishing? PUBLISHING)
 
+(goog-define REVISION "unknown")
+(defonce revison REVISION)
+
 (reset! state/publishing? publishing?)
 
 (goog-define TEST false)
