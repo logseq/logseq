@@ -307,6 +307,7 @@
   (when-let [database (get-db repo)]
     (when-not (string/blank? q)
       (let [match-inputs (get-match-inputs q)
+            non-match-input (str "%" (string/replace q #"\s+" "%") "%")
             limit  (or limit 20)
             ;; https://www.sqlite.org/fts5.html#the_highlight_function
             ;; the 2nd column in pages_fts (content)
@@ -316,6 +317,8 @@
             select (str "select rowid, uuid, content, " snippet-aux " from pages_fts where ")
             match-sql (str select
                            " content match ? order by rank limit ?")
+            non-match-sql (str select
+                               " content like ? limit ?")
             matched-result (->>
                             (map
                               (fn [match-input]
