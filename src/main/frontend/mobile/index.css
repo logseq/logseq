@@ -79,22 +79,17 @@
 
   button {
     padding: 7px 10px;
+  }
 
-    .submenu {
-      background-color: red;
-      z-index: 100;
-      background-color: var(--ls-secondary-background-color);
-      border-radius: 5px;
-      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02);
-      overflow-x: overlay;
-      overflow-y: hidden;
-      left: 0px;
-      height: 40px;
-    }
-
-    .show-submenu {
-      display: block;
-    }
+  .submenu {
+    z-index: 100;
+    background-color: var(--ls-secondary-background-color);
+    overflow-x: overlay;
+    overflow-y: hidden;
+    height: 45px;
+  }
+  .show-submenu {
+    display: flex;
   }
 
   .toolbar-commands {
