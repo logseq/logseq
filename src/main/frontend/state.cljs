@@ -41,6 +41,7 @@
      :instrument/disabled?                  (storage/get "instrument-disabled")
      ;; TODO: how to detect the network reliably?
      :network/online?         true
+     :network/unstable?       false
      :indexeddb/support?      true
      :me                      nil
      :git/current-repo        current-graph
@@ -1426,6 +1427,10 @@ Similar to re-frame subscriptions"
 (defn set-online!
   [value]
   (set-state! :network/online? value))
+
+(defn set-network-unstable!
+  [value]
+  (set-state! :network/unstable? value))
 
 (defn get-plugins-commands
   []

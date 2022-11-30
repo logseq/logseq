@@ -889,8 +889,8 @@
                        [:p "Don't forget to re-index your graph when all the conflicts are resolved."]]
                       :status :error}]))
 
-(defmethod handle :network/unstable [[_ recover?]]
-  (reset! file-sync/*unstable-network (not recover?)))
+(defmethod handle :network/unstable [[_ value]]
+  (state/set-network-unstable! value))
 
 
 (defn run!

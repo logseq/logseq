@@ -36,11 +36,9 @@
 (declare open-icloud-graph-clone-picker)
 
 
-(def *unstable-network (atom false))
-
 (rum/defc unstable-network < rum/reactive
   []
-  (let [unstable-network (rum/react *unstable-network)]
+  (let [unstable-network (state/sub :network/unstable?)]
     (when unstable-network
       [:div.text-sm "unstable network"])))
 
