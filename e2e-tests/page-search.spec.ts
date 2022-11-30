@@ -8,14 +8,14 @@ import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastBlo
  * Consider diacritics
  ***/
 
-test('Search page and blocks (diacritics)', async ({ page, block }) => {
-  let hotkeyOpenLink = 'Control+o'
-  let hotkeyBack = 'Control+['
-  if (IsMac) {
-    hotkeyOpenLink = 'Meta+o'
-    hotkeyBack = 'Meta+['
-  }
+ let hotkeyOpenLink = 'Control+o'
+ let hotkeyBack = 'Control+['
+ if (IsMac) {
+   hotkeyOpenLink = 'Meta+o'
+   hotkeyBack = 'Meta+['
+ }
 
+test('Search page and blocks (diacritics)', async ({ page, block }) => {
   const rand = randomString(20)
 
   // diacritic opening test
@@ -52,14 +52,36 @@ test('Search page and blocks (diacritics)', async ({ page, block }) => {
   await page.keyboard.press("Escape") // escape modal
 })
 
-async function alias_test(page: Page, page_name: string, search_kws: string[]) {
-  let hotkeyOpenLink = 'Control+o'
-  let hotkeyBack = 'Control+['
-  if (IsMac) {
-    hotkeyOpenLink = 'Meta+o'
-    hotkeyBack = 'Meta+['
-  }
+test('Search CJK', async ({ page, block }) => {
+  const rand = randomString(20)
 
+  // diacritic opening test
+  await createRandomPage(page)
+
+  await block.mustType('[[今日daytime进度条' + rand + ']] diacritic-block-1', { delay: 10 })
+  await page.keyboard.press(hotkeyOpenLink)
+
+  const pageTitle = page.locator('.page-title').first()
+  expect(await pageTitle.innerText()).toEqual('Einführung in die Allgemeine Sprachwissenschaft' + rand)
+
+  await page.waitForTimeout(500)
+
+  // check if diacritics are indexed
+  await page.click('#search-button')
+  await page.waitForSelector('[placeholder="Search or create page"]')
+  await page.type('[placeholder="Search or create page"]', '进度' + rand, { delay: 10 })
+
+  await page.waitForTimeout(2000) // wait longer for search contents to render
+  // 2 blocks + 1 page + 1 page content
+  const searchResults = page.locator('#ui__ac-inner>div')
+  await expect(searchResults).toHaveCount(3)
+
+  await page.keyboard.press("Escape") // escape search box typing
+  await page.waitForTimeout(500)
+  await page.keyboard.press("Escape") // escape modal
+})
+
+async function alias_test(page: Page, page_name: string, search_kws: string[]) {
   const rand = randomString(10)
   let target_name = page_name + ' target ' + rand
   let alias_name = page_name + ' alias ' + rand
