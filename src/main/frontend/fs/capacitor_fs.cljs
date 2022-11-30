@@ -228,11 +228,7 @@
         (str prefix "///private/" others))
 
       :else
-      (do
-        (state/pub-event! [:capture-error {:error (js/Error. "ios path missing slashes")
-                                           :payload {:type :error/ios-path-missing-slashes
-                                                     :path (gp-util/safe-subs (str path) 12)}}])
-        path))
+      path)
     path))
 
 (defn normalize-file-protocol-path [dir path]
