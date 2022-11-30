@@ -222,3 +222,47 @@ html:is(.is-ios, is-native-ios, is-native-ipad) [data-page="whiteboard"] * {
   -ms-user-select: none;
   user-select: none;
 }
+
+.cp__whiteboard-welcome {
+  > .head-bg {
+    @apply flex m-auto mb-10 w-auto sm:w-[500px];
+
+    background-image: url("../img/whiteboard-welcome-dark.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    padding-top: 86px;
+    max-width: 90vw;
+
+    > strong {
+      @apply block rounded text-gray-700 text-[10px] font-semibold px-2 py-0.5
+      m-auto translate-y-8 uppercase;
+
+      background-color: var(--ls-link-text-color);
+      color: var(--ls-primary-background-color);
+    }
+  }
+
+  > h1 {
+    color: var(--ls-title-text-color);
+  }
+
+  > h1, p {
+    @apply flex justify-center text-center;
+  }
+
+  > p {
+    @apply text-sm mx-10;
+
+    max-width: 540px;
+  }
+}
+
+
+html[data-theme='light'] {
+  .cp__whiteboard-welcome {
+    > .head-bg {
+      background-image: url("../img/whiteboard-welcome-light.png");
+    }
+  }
+}

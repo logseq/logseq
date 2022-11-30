@@ -778,17 +778,17 @@
 
 (declare <rsapi-cancel-all-requests)
 
-(defn- build-local-file-metadatas
-  [this graph-uuid result read-chan!]
-  (loop [[[path metadata] & others] (js->clj result)
-         result #{}]
+(defn- <build-local-file-metadatas
+  [this graph-uuid r]
+  (go-loop [[[path metadata] & others] (js->clj r)
+            result #{}]
     (if-not (and path metadata)
       ;; finish
       result
       (let [normalized-path (path-normalize path)
-            encryptedFname (if (not= path normalized-path)
-                             (first (read-chan! (<encrypt-fnames this graph-uuid [normalized-path])))
-                             (get metadata "encryptedFname"))]
+            encryptedFname  (if (not= path normalized-path)
+                              (first (<! (<encrypt-fnames this graph-uuid [normalized-path])))
+                              (get metadata "encryptedFname"))]
         (recur others
                (conj result
                      (->FileMetadata (get metadata "size") (get metadata "md5") normalized-path
@@ -816,12 +816,12 @@
       (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "get-local-all-files-meta" graph-uuid base-path))))]
         (if (instance? ExceptionInfo r)
           r
-          (build-local-file-metadatas this graph-uuid r <!)))))
+          (<! (<build-local-file-metadatas this graph-uuid r))))))
   (<get-local-files-meta [this graph-uuid base-path filepaths]
     (go
       (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "get-local-files-meta" graph-uuid base-path filepaths))))]
         (assert (not (instance? ExceptionInfo r)) "get-local-files-meta shouldn't return exception")
-        (build-local-file-metadatas this graph-uuid r <!))))
+        (<! (<build-local-file-metadatas this graph-uuid r)))))
   (<rename-local-file [_ graph-uuid base-path from to]
     (<retry-rsapi #(p->c (ipc/ipc "rename-local-file" graph-uuid base-path
                                   (path-normalize from)
@@ -900,7 +900,7 @@
                                                                                :basePath base-path}))))]
         (if (instance? ExceptionInfo r)
           r
-          (build-local-file-metadatas this graph-uuid (.-result r) <!)))))
+          (<! (<build-local-file-metadatas this graph-uuid (.-result r)))))))
 
   (<get-local-files-meta [this graph-uuid base-path filepaths]
     (go
@@ -909,7 +909,7 @@
                                                       :basePath base-path
                                                       :filePaths filepaths}))))]
         (assert (not (instance? ExceptionInfo r)) "get-local-files-meta shouldn't return exception")
-        (build-local-file-metadatas this graph-uuid (.-result r) <!))))
+        (<! (<build-local-file-metadatas this graph-uuid (.-result r))))))
 
   (<rename-local-file [_ graph-uuid base-path from to]
     (p->c (.renameLocalFile mobile-util/file-sync

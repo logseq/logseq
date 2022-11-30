@@ -8,6 +8,7 @@
                           :default "tutorial-en.md")
         :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-en.md")
                                  :default "dummy-notes-en.md")
+        :on-boarding/closed-feature "Closed {1}"
         :on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
         :on-boarding/add-graph "Add a graph"
         :on-boarding/open-local-dir "Open a local directory"
@@ -16,6 +17,14 @@
         :on-boarding/new-graph-desc-3 "/journals - store your journal pages"
         :on-boarding/new-graph-desc-4 "/pages - store the other pages"
         :on-boarding/new-graph-desc-5 "/logseq - store configuration, custom.css, and some metadata."
+        :on-boarding/welcome-whiteboard-modal-title "A new canvas for your thoughts."
+        :on-boarding/welcome-whiteboard-modal-description "Whiteboards are a great tool for brainstorming and organization. Now you can place any of your thoughts from the knowledge base or new ones next to each other on a spatial canvas to connect, associate and understand in new ways."
+        :on-boarding/welcome-whiteboard-modal-later "Later"
+        :on-boarding/welcome-whiteboard-modal-start "Start whiteboarding"
+        :on-boarding/tour-whiteboard-home "{1} Home for your whiteboards"
+        :on-boarding/tour-whiteboard-home-description "Whiteboards have their own section in the app where you can see them at a glance, create new ones or delete them easily."
+        :on-boarding/tour-whiteboard-new "{1} Create new whiteboard"
+        :on-boarding/tour-whiteboard-new-description "There are multiple ways of creating a new whiteboard. One of them is always right here in the dashboard."
         :help/start "Getting started"
         :help/about "About Logseq"
         :help/roadmap "Roadmap"

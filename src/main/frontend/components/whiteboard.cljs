@@ -2,6 +2,7 @@
   "Whiteboard related components"
   (:require [cljs.math :as math]
             [frontend.components.content :as content]
+            [frontend.components.onboarding.quick-tour :as quick-tour]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
             [frontend.context.i18n :refer [t]]
@@ -10,10 +11,12 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.config :as config-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.rum :refer [use-bounding-client-rect use-breakpoint
                                   use-click-outside]]
             [frontend.state :as state]
+            [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [promesa.core :as p]
@@ -292,3 +295,35 @@
     (let [name (get-in route-match [:parameters :path :name])
           {:keys [block-id]} (get-in route-match [:parameters :query])]
       (whiteboard-page name block-id))))
+
+(defn onboarding-show
+  []
+  (when (and (user-handler/feature-available? :whiteboard)
+             (not (or (state/sub :whiteboard/onboarding-tour?)
+                      (state/enable-whiteboards?)
+                      (util/mobile?))))
+    (state/pub-event! [:whiteboard/onboarding])
+    (state/set-state! [:whiteboard/onboarding-tour?] true)
+    (storage/set :whiteboard-onboarding-tour? true)))
+
+(rum/defc onboarding-welcome
+  [close-fn]
+  [:div.cp__whiteboard-welcome
+   [:span.head-bg
+
+    [:strong (t :on-boarding/closed-feature (name (:whiteboard user-handler/feature-matrix)))]]
+
+   [:h1.text-2xl.font-bold.flex-col.sm:flex-row
+    (t :on-boarding/welcome-whiteboard-modal-title)]
+
+   [:p (t :on-boarding/welcome-whiteboard-modal-description)]
+
+   [:div.pt-6.flex.justify-center.space-x-2.sm:justify-end
+    (ui/button (t :on-boarding/welcome-whiteboard-modal-later) :on-click close-fn :background "gray" :class "opacity-60")
+    (ui/button (t :on-boarding/welcome-whiteboard-modal-start)
+               :on-click (fn []
+                           (config-handler/set-config! :feature/enable-whiteboards? true)
+                           (quick-tour/ready
+                            (fn []
+                              (quick-tour/start-whiteboard)
+                              (close-fn)))))]])
