@@ -29,7 +29,8 @@ and handles unexpected failure."
                               :date-formatter (state/get-date-formatter)})
     (catch :default e
       (log/error :exception e)
-      (Sentry/captureException e)
+      (state/pub-event! [:capture-error {:error e
+                                         :payload {:type "Extract-blocks"}}])
       (notification/show! "An unexpected error occurred during block extraction." :error)
       [])))
 
