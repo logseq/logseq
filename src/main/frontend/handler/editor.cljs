@@ -1,6 +1,5 @@
 (ns ^:no-doc frontend.handler.editor
-  (:require ["path" :as path]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
             [dommy.core :as dom]
@@ -1329,20 +1328,18 @@
              (util/format "[[%s][%s]]" url file-name))
       nil)))
 
-(defn ensure-assets-dir!
+(defn- ensure-assets-dir!
   [repo]
-  (let [repo-dir (config/get-repo-dir repo)
-        assets-dir "assets"]
-    (p/then
-     (fs/mkdir-if-not-exists (str repo-dir "/" assets-dir))
-     (fn [] [repo-dir assets-dir]))))
+  (p/let [repo-dir (config/get-repo-dir repo)
+          assets-dir "assets"
+          _ (fs/mkdir-if-not-exists (str repo-dir "/" assets-dir))]
+    [repo-dir assets-dir]))
 
-(defn get-asset-path [filename]
-  (p/let [[repo-dir assets-dir] (ensure-assets-dir! (state/get-current-repo))
-          path (path/join repo-dir assets-dir filename)]
-    (if (mobile-util/native-android?)
-      path
-      (js/encodeURI (js/decodeURI path)))))
+(defn get-asset-path
+  "Get asset path from filename, ensure assets dir exists"
+  [filename]
+  (p/let [[repo-dir assets-dir] (ensure-assets-dir! (state/get-current-repo))]
+    (util/safe-path-join repo-dir assets-dir filename)))
 
 (defn save-assets!
   ([_ repo files]
