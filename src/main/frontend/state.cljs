@@ -275,7 +275,7 @@
      :graph/importing-state                 {}
 
      :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
-     })))
+     :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)})))
 
 ;; Block ast state
 ;; ===============

@@ -70,6 +70,16 @@ base.beforeAll(async () => {
   console.log("Test start with:", info)
 
   page = await electronApp.firstWindow()
+
+  // inject testing flags
+  await page.evaluate(
+    () => {
+      Object.assign(window, {
+        __E2E_TESTING__: true,
+      })
+    },
+  )
+
   // Direct Electron console to watcher
   page.on('console', consoleLogWatcher)
   page.on('crash', () => {
@@ -108,6 +118,12 @@ base.beforeEach(async () => {
     await page.keyboard.press('Escape')
     await page.keyboard.press('Escape')
 
+    const locator = page.locator('.notification-close-button').first()
+    while (await locator.isVisible()) {
+      await locator.click()
+      expect(locator.isVisible()).resolves.toBe(false)
+    }
+
     const rightSidebar = page.locator('.cp__right-sidebar-inner')
     if (await rightSidebar.isVisible()) {
       await page.click('button.toggle-right-sidebar', {delay: 100})
@@ -119,6 +135,8 @@ base.afterAll(async () => {
   // if (electronApp) {
   //  await electronApp.close()
   //}
+  // use .dump as extension to avoid unfolded when zip by github
+  await context.tracing.stop({ path: 'e2e-dump/trace.zip.dump' });
 })
 
 // hijack electron app into the test context

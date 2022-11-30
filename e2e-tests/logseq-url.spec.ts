@@ -10,7 +10,7 @@ test("Logseq URLs (same graph)", async ({ page, block }) => {
   await block.mustFill(identify_text)
 
   // paste current page's URL to another page, then redirect throught the URL
-  await page.click('.ui__dropdown-trigger')
+  await page.click('.ui__dropdown-trigger .toolbar-dots-btn')
   await page.locator("text=Copy page URL").click()
   await createRandomPage(page)
   await block.mustFill("") // to enter editing mode

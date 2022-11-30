@@ -9,8 +9,6 @@
             [frontend.util :as util]
             [promesa.core :as p]
             [logseq.graph-parser.text :as text]
-            [frontend.util.drawer :as drawer]
-            [frontend.util.property :as property]
             [electron.ipc :as ipc]
             [goog.functions :refer [debounce]]
             [dommy.core :as dom]))
