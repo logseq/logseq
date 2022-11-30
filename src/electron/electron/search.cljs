@@ -279,7 +279,7 @@
 
 (defn- snippet-by
   [content length]
-  (str (subs content 0 length) "..."))
+  (str (subs content 0 length) (when (> (count content) 250) "...")))
 
 (defn- search-pages-res-unpack
   [arr]
@@ -287,9 +287,19 @@
     {:id      rowid
      :uuid    uuid
      :content content
-     :snippet (if (string/includes? snippet "$pfts_2lqh>$ ")
-                snippet
-                (snippet-by snippet 250))}))
+     ;; post processing
+     :snippet (let [;; Remove title from snippet
+                    flag-title " $<pfts_f6ld$ "
+                    flag-title-pos (string/index-of snippet flag-title)
+                    snippet (if flag-title-pos
+                              (subs snippet (+ flag-title-pos (count flag-title)))
+                              snippet)
+                    ;; Cut snippet to 250 chars for non-matched results
+                    flag-highlight "$pfts_2lqh>$ "
+                    snippet (if (string/includes? snippet flag-highlight)
+                              snippet
+                              (snippet-by snippet 250))]
+                snippet)}))
 
 (defn- search-pages-aux
   [database sql input limit]

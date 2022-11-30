@@ -1,5 +1,6 @@
 import { expect, Page } from '@playwright/test'
 import { test } from './fixtures'
+import { Block } from './types'
 import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastBlock, enterNextBlock } from './utils'
 
 /***
@@ -45,7 +46,7 @@ test('Search page and blocks (diacritics)', async ({ page, block }) => {
   await page.waitForTimeout(2000) // wait longer for search contents to render
   // 2 blocks + 1 page + 1 page content
   const searchResults = page.locator('#ui__ac-inner>div')
-  await expect(searchResults).toHaveCount(4)
+  await expect(searchResults).toHaveCount(5) // 1 page + 2 block + 2 page content
 
   await page.keyboard.press("Escape") // escape search box typing
   await page.waitForTimeout(500)
@@ -62,26 +63,26 @@ test('Search CJK', async ({ page, block }) => {
   await page.keyboard.press(hotkeyOpenLink)
 
   const pageTitle = page.locator('.page-title').first()
-  expect(await pageTitle.innerText()).toEqual('Einführung in die Allgemeine Sprachwissenschaft' + rand)
+  expect(await pageTitle.innerText()).toEqual('今日daytime进度条' + rand)
 
   await page.waitForTimeout(500)
 
   // check if diacritics are indexed
   await page.click('#search-button')
   await page.waitForSelector('[placeholder="Search or create page"]')
-  await page.type('[placeholder="Search or create page"]', '进度' + rand, { delay: 10 })
+  await page.type('[placeholder="Search or create page"]', '进度', { delay: 10 })
 
   await page.waitForTimeout(2000) // wait longer for search contents to render
   // 2 blocks + 1 page + 1 page content
   const searchResults = page.locator('#ui__ac-inner>div')
-  await expect(searchResults).toHaveCount(3)
+  await expect(searchResults).toHaveCount(4) // 1 new page + 1 page + 1 block + 1 page content
 
   await page.keyboard.press("Escape") // escape search box typing
   await page.waitForTimeout(500)
   await page.keyboard.press("Escape") // escape modal
 })
 
-async function alias_test(page: Page, page_name: string, search_kws: string[]) {
+async function alias_test( block: Block, page: Page, page_name: string, search_kws: string[] ) {
   const rand = randomString(10)
   let target_name = page_name + ' target ' + rand
   let alias_name = page_name + ' alias ' + rand
@@ -129,7 +130,7 @@ async function alias_test(page: Page, page_name: string, search_kws: string[]) {
   await page.type('textarea >> nth=0', alias_test_content_2)
   await page.keyboard.press(hotkeyBack)
 
-  // pressing enter opening test
+  // pressing enter on alias opening test
   await lastBlock(page)
   await page.press('textarea >> nth=0', 'ArrowLeft')
   await page.press('textarea >> nth=0', 'ArrowLeft')
@@ -141,8 +142,8 @@ async function alias_test(page: Page, page_name: string, search_kws: string[]) {
   await page.type('textarea >> nth=0', alias_test_content_3)
   await page.keyboard.press(hotkeyBack)
 
-  // clicking opening test
-  await newBlock(page)
+  // clicking alias ref opening test
+  await block.enterNext()
   await page.waitForSelector('.page-blocks-inner .ls-block .page-ref >> nth=-1')
   await page.click('.page-blocks-inner .ls-block .page-ref >> nth=-1')
   await lastBlock(page)
@@ -160,15 +161,13 @@ async function alias_test(page: Page, page_name: string, search_kws: string[]) {
     await page.waitForTimeout(500)
 
     const results = await page.$$('#ui__ac-inner>div')
-    expect(results.length).toEqual(3) // page + block + alias property
+    expect(results.length).toEqual(5) // page + block + alias property + page content
 
     // test search results
     expect(await results[0].innerText()).toContain("Alias -> " + target_name)
     expect(await results[0].innerText()).toContain(alias_name)
-    expect(await results[1].innerText()).toContain(parent_title)
     expect(await results[1].innerText()).toContain("[[" + alias_name + "]]")
-    expect(await results[2].innerText()).toContain(target_name)
-    expect(await results[2].innerText()).toContain("alias:: [[" + alias_name + "]]")
+    expect(await results[2].innerText()).toContain("[[" + alias_name + "]]")
 
     // test search entering (page)
     page.keyboard.press("Enter")
@@ -193,6 +192,6 @@ async function alias_test(page: Page, page_name: string, search_kws: string[]) {
   // TODO: search clicking (alias property)
 }
 
-test.skip('page diacritic alias', async ({ page }) => {
-  await alias_test(page, "ü", ["ü", "ü", "Ü"])
+test.skip('page diacritic alias', async ({ block, page }) => {
+  await alias_test(block, page, "ü", ["ü", "ü", "Ü"])
 })
