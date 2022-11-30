@@ -371,6 +371,7 @@
      (fn []
        (let [filename-format (state/get-filename-format repo)]
          (when (and (util/electron?)
+                    (not (util/ci?))
                     (not (config/demo-graph?))
                     (not= filename-format :triple-lowbar))
            (state/pub-event! [:ui/notify-outdated-filename-format []]))))
@@ -420,8 +421,13 @@
   (posthog/capture type payload))
 
 (defmethod handle :capture-error [[_ {:keys [error payload]}]]
-  (Sentry/captureException error
-                           (bean/->js {:extra payload})))
+  (let [[user-uuid graph-uuid tx-id] @sync/graphs-txid
+        payload (assoc payload
+                       :user-id user-uuid
+                       :graph-id graph-uuid
+                       :tx-id tx-id)]
+    (Sentry/captureException error
+                            (bean/->js {:extra payload}))))
 
 (defmethod handle :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))

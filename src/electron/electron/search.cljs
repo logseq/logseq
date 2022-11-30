@@ -215,12 +215,15 @@
 
 (defn- search-blocks-aux
   [database sql input page limit]
-  (let [stmt (prepare database sql)]
-    (js->clj
-     (if page
-       (.all ^object stmt (int page) input limit)
-       (.all ^object stmt  input limit))
-     :keywordize-keys true)))
+  (try
+    (let [stmt (prepare database sql)]
+      (js->clj
+       (if page
+         (.all ^object stmt (int page) input limit)
+         (.all ^object stmt  input limit))
+       :keywordize-keys true))
+    (catch :default e
+      (logger/error "Search blocks failed: " (str e)))))
 
 (defn- get-match-inputs
   [q]
@@ -285,27 +288,28 @@
 (defn- search-pages-aux
   [database sql input limit]
   (let [stmt (prepare database sql)]
-    (map search-pages-res-unpack (-> (.raw ^object stmt)
-                                     (.all input limit)
-                                     (js->clj)))))
+    (try
+      (doall
+       (map search-pages-res-unpack (-> (.raw ^object stmt)
+                                        (.all input limit)
+                                        (js->clj))))
+      (catch :default e
+        (logger/error "Search page failed: " (str e))))))
 
 (defn search-pages
   [repo q {:keys [limit]}]
   (when-let [database (get-db repo)]
     (when-not (string/blank? q)
       (let [match-inputs (get-match-inputs q)
-            non-match-input (str "%" (string/replace q #"\s+" "%") "%")
             limit  (or limit 20)
             ;; https://www.sqlite.org/fts5.html#the_highlight_function
             ;; the 2nd column in pages_fts (content)
             ;; pfts_2lqh is a key for retrieval
             ;; highlight and snippet only works for some matching with high rank
-            snippet-aux "snippet(pages_fts, 1, '$pfts_2lqh>$', '$<pfts_2lqh$', '...', 32)"
+            snippet-aux "snippet(pages_fts, 1, ' $pfts_2lqh>$ ', ' $<pfts_2lqh$ ', '...', 32)"
             select (str "select rowid, uuid, content, " snippet-aux " from pages_fts where ")
             match-sql (str select
                            " content match ? order by rank limit ?")
-            non-match-sql (str select
-                               " content like ? limit ?")
             matched-result (->>
                             (map
                               (fn [match-input]
@@ -313,8 +317,7 @@
                               match-inputs)
                             (apply concat))]
         (->>
-         (concat matched-result
-          (search-pages-aux database non-match-sql non-match-input limit))
+         matched-result
          (distinct-by :id)
          (take limit)
          (vec))))))
