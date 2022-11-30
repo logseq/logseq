@@ -104,14 +104,21 @@
    (state/set-auth-refresh-token refresh-token)
    (set-token-to-localstorage! id-token access-token refresh-token)))
 
+(defn- <httpget-wrapper
+  [url]
+  (go
+    (let [resp (<! (http/get url {:with-credentials? false}))
+          network-unstable (= 0 (:status resp))]
+      (state/set-network-unstable! network-unstable)
+      resp)))
 
 (defn <refresh-id-token&access-token
   "Refresh id-token and access-token"
   []
   (go
     (when-let [refresh-token (state/get-auth-refresh-token)]
-      (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_refresh_token?refresh_token=" refresh-token)
-                               {:with-credentials? false}))]
+      (let [resp (<! (<httpget-wrapper
+                      (str "https://" config/API-DOMAIN "/auth_refresh_token?refresh_token=" refresh-token)))]
         (cond
           (and (<= 400 (:status resp))
                (> 500 (:status resp)))
@@ -129,8 +136,8 @@
           (clear-tokens true)
 
           :else                         ; ok
-        (when (and (:id_token (:body resp)) (:access_token (:body resp)))
-          (set-tokens! (:id_token (:body resp)) (:access_token (:body resp)))))))))
+          (when (and (:id_token (:body resp)) (:access_token (:body resp)))
+            (set-tokens! (:id_token (:body resp)) (:access_token (:body resp)))))))))
 
 (defn restore-tokens-from-localstorage
   "Refresh id-token&access-token, pull latest repos, returns nil when tokens are not available."
@@ -146,8 +153,7 @@
 (defn login-callback [code]
   (state/set-state! [:ui/loading? :login] true)
   (go
-    (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_callback?code=" code)
-                             {:with-credentials? false}))]
+    (let [resp (<! (<httpget-wrapper (str "https://" config/API-DOMAIN "/auth_callback?code=" code)))]
       (if (= 200 (:status resp))
         (-> resp
             :body

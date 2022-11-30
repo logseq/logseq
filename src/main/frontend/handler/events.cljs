@@ -889,10 +889,6 @@
                        [:p "Don't forget to re-index your graph when all the conflicts are resolved."]]
                       :status :error}]))
 
-(defmethod handle :network/unstable [[_ value]]
-  (state/set-network-unstable! value))
-
-
 (defn run!
   []
   (let [chan (state/get-events-chan)]
