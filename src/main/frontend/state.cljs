@@ -263,7 +263,7 @@
      :file-sync/graph-state                 {:current-graph-uuid nil
                                              ;; graph-uuid -> ...
                                              }
-
+     :user/info                             {:UserGroups (storage/get :user-groups)}
      :encryption/graph-parsing?             false
 
      :ui/loading?                           {}
@@ -2064,3 +2064,11 @@ Similar to re-frame subscriptions"
      (when (and shape-id (parse-uuid shape-id))
        (. api selectShapes shape-id)
        (. api zoomToSelection)))))
+
+(defn set-user-info!
+  [info]
+  (when info
+    (set-state! :user/info info)
+    (let [groups (:UserGroups info)]
+      (when (seq groups)
+        (storage/set :user-groups groups)))))
