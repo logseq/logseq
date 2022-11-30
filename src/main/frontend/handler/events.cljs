@@ -55,6 +55,7 @@
             [frontend.components.file-sync :as file-sync]
             [frontend.components.encryption :as encryption]
             [frontend.components.conversion :as conversion-component]
+            [frontend.components.whiteboard :as whiteboard]
             [goog.dom :as gdom]
             [logseq.db.schema :as db-schema]
             [promesa.core :as p]
@@ -99,7 +100,8 @@
                                     (util/uuid-string? (second (:sync-meta %)))) repos)
                     (sync/<sync-start)))))
             (ui-handler/re-render-root!)
-            (file-sync/maybe-onboarding-show status)))))))
+            (file-sync/maybe-onboarding-show status)
+            (whiteboard/onboarding-show)))))))
 
 (defmethod handle :user/logout [[_]]
   (file-sync-handler/reset-session-graphs)
@@ -714,6 +716,12 @@
           (route-handler/redirect! {:to :page
                                     :path-params {:name (:block/name page-entity)}}))))))
 
+(defmethod handle :whiteboard/onboarding [[_ opts]]
+  (state/set-modal!
+   (fn [close-fn] (whiteboard/onboarding-welcome close-fn))
+   (merge {:close-btn?      false
+           :center?         true
+           :close-backdrop? false} opts)))
 
 (defmethod handle :file-sync/onboarding-tip [[_ type opts]]
   (let [type (keyword type)]
