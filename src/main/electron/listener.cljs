@@ -16,13 +16,13 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user]
             [frontend.state :as state]
-            [frontend.ui :as ui]
-            [frontend.handler.page :as page-handler]))
+            [frontend.ui :as ui]))
 
 
 (defn persist-dbs!
@@ -199,6 +199,7 @@
                            (do
                              (when (not= page (state/get-current-page))
                                (page-handler/create! page {:redirect? redirect-page?}))
+                             (editor-handler/escape-editing)
                              (editor-handler/api-insert-new-block! content {:page page
                                                                             :edit-block? true
                                                                             :replace-empty-target? true}))))))
