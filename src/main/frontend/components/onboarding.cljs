@@ -1,8 +1,8 @@
 (ns frontend.components.onboarding
   (:require [frontend.context.i18n :refer [t]]
-            [frontend.handler.route :as route-handler]
             [rum.core :as rum]
             [frontend.ui :as ui]
+            [frontend.state :as state]
             [frontend.components.onboarding.setups :as setups]))
 
 (rum/defc intro
@@ -18,7 +18,7 @@
          list
          [{:title "Usage"
            :children [[[:a
-                        {:on-click (fn [] (route-handler/redirect! {:to :shortcut-setting}))}
+                        {:on-click (fn [] (state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings))}
                         [:div.flex-row.inline-flex.items-center
                          [:span.mr-1 (t :help/shortcuts)]
                          (ui/icon "command" {:style {:font-size 20}})]]]
