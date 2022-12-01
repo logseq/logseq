@@ -168,7 +168,7 @@ jobs:
       - name: Prepare E2E test build
         run: |
           yarn gulp:build && clojure -M:cljs compile app publishing electron
-          (cd static && yarn install && yarn rebuild:better-sqlite3)
+          (cd static && yarn install && yarn rebuild:all)
 
       # Exits with 0 if yarn.lock is up to date or 1 if we forgot to update it
       - name: Ensure static yarn.lock is up to date
