@@ -208,8 +208,6 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
 
   await expect(page.locator('.block-ref >> text="Some random text"')).toHaveCount(0);
   await expect(page.locator('text="Some random text"')).toHaveCount(2);
-
-  await page.waitForTimeout(10000)
 })
 
 test('copy and paste block after editing new block #5962', async ({ page, block }) => {
@@ -228,6 +226,7 @@ test('copy and paste block after editing new block #5962', async ({ page, block 
 
   await page.keyboard.press('Enter')
   await expect(page.locator('.ls-block.selected')).toHaveCount(0)
+  await expect(page.locator('textarea >> nth=0')).toBeVisible()
   await page.keyboard.press('Enter')
   await block.waitForBlocks(2)
 
