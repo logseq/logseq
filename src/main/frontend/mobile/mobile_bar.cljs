@@ -48,23 +48,23 @@
      [:button.bottom-action
       {:on-mouse-down (fn [event]
                         (util/stop event)
-                        (let [target (gdom/getNextElementSibling (.-target event))]
+                        (let [target (gdom/getNextElementSibling (gdom/getParentElement (.-target event)))]
                           (dom/add-class! target "show-submenu")))}
-      (ui/icon "calendar" {:size ui/icon-size})
-      [:div.submenu.fixed.hidden.flex.flex-col.w-full.justify-evenly
-       {:style {:bottom @util/keyboard-height}}
-       (command-cp #(let [today (page-handler/get-page-ref-text (date/today))]
-                      (commands/simple-insert! parent-id today {}))
-                   "Today")
-       (command-cp #(let [tomorrow (page-handler/get-page-ref-text (date/tomorrow))]
-                      (commands/simple-insert! parent-id tomorrow {}))
-                   "Tomorrow")
-       (command-cp #(let [yesterday (page-handler/get-page-ref-text (date/yesterday))]
-                      (commands/simple-insert! parent-id yesterday {}))
-                   "Yesterday")
-       (command-cp #(let [timestamp (date/get-current-time)]
-                      (commands/simple-insert! parent-id timestamp {}))
-                   "Time")]]]))
+      (ui/icon "calendar" {:size ui/icon-size})]
+     [:div.submenu.fixed.left-0.bottom-0.hidden.w-full.flex-row.justify-evenly.items-center
+      {:style {:bottom @util/keyboard-height}}
+      (command-cp #(let [today (page-handler/get-page-ref-text (date/today))]
+                     (commands/simple-insert! parent-id today {}))
+                  "Today")
+      (command-cp #(let [tomorrow (page-handler/get-page-ref-text (date/tomorrow))]
+                     (commands/simple-insert! parent-id tomorrow {}))
+                  "Tomorrow")
+      (command-cp #(let [yesterday (page-handler/get-page-ref-text (date/yesterday))]
+                     (commands/simple-insert! parent-id yesterday {}))
+                  "Yesterday")
+      (command-cp #(let [timestamp (date/get-current-time)]
+                     (commands/simple-insert! parent-id timestamp {}))
+                  "Time")]]))
 
 (defn commands
   [parent-id]

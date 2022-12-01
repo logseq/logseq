@@ -10,7 +10,7 @@ export const StatusBar = observer(function StatusBar() {
     <div className="tl-statusbar">
       {app.selectedTool.id} | {app.selectedTool.currentState.id}
       <div style={{ flex: 1 }} />
-      <div id="tl-statusbar-anchor" className='flex gap-1' />
+      <div id="tl-statusbar-anchor" className="flex gap-1" />
     </div>
   )
 })

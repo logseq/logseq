@@ -146,6 +146,9 @@
 (def textarea-ref-name "textarea")
 (def codemirror-ref-name "codemirror-instance")
 
+;; export CodeMirror to global scope
+(set! js/window -CodeMirror cm)
+
 (defn- extra-codemirror-options []
   (get (state/get-config)
        :editor/extra-codemirror-options {}))
@@ -187,6 +190,7 @@
 
 (defn- save-file-or-block-when-blur-or-esc!
   [editor textarea config state]
+  (state/set-state! :editor/skip-saving-current-block? true)
   (state/set-block-component-editing-mode! false)
   (save-file-or-block! editor textarea config state))
 
@@ -293,8 +297,7 @@
                 state)
    :did-update (fn [state]
                  (reset! (:code-options state) (last (:rum/args state)))
-                 state)
-   }
+                 state)}
   [state _config id attr code _theme _options]
   [:div.extensions__code
    (when-let [mode (:data-lang attr)]

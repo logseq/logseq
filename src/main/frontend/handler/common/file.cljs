@@ -19,20 +19,20 @@
       (when (not= file current-file)
         current-file))))
 
-(defn- get-delete-blocks [repo-url first-page file]
-  (let [delete-blocks (->
-                       (concat
-                        (db/delete-file-blocks! repo-url file)
-                        (when first-page (db/delete-page-blocks repo-url (:block/name first-page))))
-                       (distinct))]
-    (when-let [current-file (page-exists-in-another-file repo-url first-page file)]
-      (when (not= file current-file)
-        (let [error (str "Page already exists with another file: " current-file ", current file: " file)]
-          (state/pub-event! [:notification/show
-                             {:content error
-                              :status :error
-                              :clear? false}]))))
-    delete-blocks))
+(defn- validate-existing-file
+  [repo-url file-page file-path]
+  (when-let [current-file (page-exists-in-another-file repo-url file-page file-path)]
+    (when (not= file-path current-file)
+      (let [error (str "Page already exists with another file: " current-file ", current file: " file-path ". Please keep only one of them and re-index your graph.")]
+        (state/pub-event! [:notification/show
+                           {:content error
+                            :status :error
+                            :clear? false}])))))
+
+(defn- validate-and-get-blocks-to-delete
+  [repo-url db file-page file-path retain-uuid-blocks]
+  (validate-existing-file repo-url file-page file-path)
+  (graph-parser/get-blocks-to-delete db file-page file-path retain-uuid-blocks))
 
 (defn reset-file!
   "Main fn for updating a db with the results of a parsed file"
@@ -62,7 +62,7 @@
          new? (nil? (db/entity [:file/path file]))
          options (merge (dissoc options :verbose)
                         {:new? new?
-                         :delete-blocks-fn (partial get-delete-blocks repo-url)
+                         :delete-blocks-fn (partial validate-and-get-blocks-to-delete repo-url)
                          :extract-options (merge
                                            {:user-config (state/get-config)
                                             :date-formatter (state/get-date-formatter)

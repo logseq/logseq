@@ -1,6 +1,5 @@
 (ns ^:no-doc frontend.handler.editor
-  (:require ["path" :as path]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
             [dommy.core :as dom]
@@ -17,13 +16,11 @@
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.export :as export]
-            [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.assets :as assets-handler]
             [frontend.idb :as idb]
-            [frontend.image :as image]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.transaction :as outliner-tx]
@@ -420,7 +417,8 @@
 
 (declare save-current-block!)
 (defn outliner-insert-block!
-  [config current-block new-block {:keys [sibling? keep-uuid? replace-empty-target?]}]
+  [config current-block new-block {:keys [sibling? keep-uuid?
+                                          replace-empty-target?]}]
   (let [ref-query-top-block? (and (or (:ref? config)
                                       (:custom-query? config))
                                   (not (:ref-query-child? config)))
@@ -439,7 +437,7 @@
                    (not has-children?))]
     (outliner-tx/transact!
      {:outliner-op :insert-blocks}
-     (save-current-block! {:current-block current-block})
+      (save-current-block! {:current-block current-block})
      (outliner-core/insert-blocks! [new-block] current-block {:sibling? sibling?
                                                               :keep-uuid? keep-uuid?
                                                               :replace-empty-target? replace-empty-target?}))))
@@ -1255,7 +1253,8 @@
    (save-current-block! {}))
   ([{:keys [force? skip-properties? current-block] :as opts}]
    ;; non English input method
-   (when-not (state/editor-in-composition?)
+   (when-not (or (state/editor-in-composition?)
+                 (:editor/skip-saving-current-block? @state/state))
      (when (state/get-current-repo)
        (when-not (state/get-editor-action)
          (try
@@ -1285,7 +1284,8 @@
                             (string/trim value)))
                  (save-block-aux! db-block value opts))))
            (catch :default error
-             (log/error :save-block-failed error))))))))
+             (log/error :save-block-failed error))))))
+   (state/set-state! :editor/skip-saving-current-block? false)))
 
 (defn- clean-content!
   [format content]
@@ -1319,28 +1319,27 @@
 
 (defn get-asset-file-link
   [format url file-name image?]
-  (let [pdf? (and url (string/ends-with? (string/lower-case url) ".pdf"))]
+  (let [pdf? (and url (string/ends-with? (string/lower-case url) ".pdf"))
+        video? (and url (util/ext-of-video? url))]
     (case (keyword format)
-      :markdown (util/format (str (when (or image? pdf?) "!") "[%s](%s)") file-name url)
+      :markdown (util/format (str (when (or image? video? pdf?) "!") "[%s](%s)") file-name url)
       :org (if image?
              (util/format "[[%s]]" url)
              (util/format "[[%s][%s]]" url file-name))
       nil)))
 
-(defn ensure-assets-dir!
+(defn- ensure-assets-dir!
   [repo]
-  (let [repo-dir (config/get-repo-dir repo)
-        assets-dir "assets"]
-    (p/then
-     (fs/mkdir-if-not-exists (str repo-dir "/" assets-dir))
-     (fn [] [repo-dir assets-dir]))))
+  (p/let [repo-dir (config/get-repo-dir repo)
+          assets-dir "assets"
+          _ (fs/mkdir-if-not-exists (str repo-dir "/" assets-dir))]
+    [repo-dir assets-dir]))
 
-(defn get-asset-path [filename]
-  (p/let [[repo-dir assets-dir] (ensure-assets-dir! (state/get-current-repo))
-          path (path/join repo-dir assets-dir filename)]
-    (if (mobile-util/native-android?)
-      path
-      (js/encodeURI (js/decodeURI path)))))
+(defn get-asset-path
+  "Get asset path from filename, ensure assets dir exists"
+  [filename]
+  (p/let [[repo-dir assets-dir] (ensure-assets-dir! (state/get-current-repo))]
+    (util/safe-path-join repo-dir assets-dir filename)))
 
 (defn save-assets!
   ([_ repo files]
@@ -1461,7 +1460,7 @@
   [id ^js files format uploading? drop-or-paste?]
   (let [repo (state/get-current-repo)
         block (state/get-edit-block)]
-    (if (config/local-db? repo)
+    (when (config/local-db? repo)
       (-> (save-assets! block repo (js->clj files))
           (p/then
            (fn [res]
@@ -1484,28 +1483,7 @@
             (fn []
               (reset! uploading? false)
               (reset! *asset-uploading? false)
-              (reset! *asset-uploading-process 0))))
-      (image/upload
-       files
-       (fn [file file-name file-type]
-         (image-handler/request-presigned-url
-          file file-name file-type
-          uploading?
-          (fn [signed-url]
-            (insert-command! id
-                             (get-asset-file-link format signed-url file-name true)
-                             format
-                             {:last-pattern (if drop-or-paste? "" (state/get-editor-command-trigger))
-                              :restore?     true})
-
-            (reset! *asset-uploading? false)
-            (reset! *asset-uploading-process 0))
-          (fn [e]
-            (let [process (* (/ (gobj/get e "loaded")
-                                (gobj/get e "total"))
-                             100)]
-              (reset! *asset-uploading? false)
-              (reset! *asset-uploading-process process)))))))))
+              (reset! *asset-uploading-process 0)))))))
 
 ;; Editor should track some useful information, like editor modes.
 ;; For example:
@@ -1569,6 +1547,15 @@
     (let [value (gobj/get input "value")
           pos (cursor/pos input)]
       (text-util/surround-by? value pos before end))))
+
+(defn- autopair-left-paren?
+  [input key]
+  (and (= key "(")
+       (or
+         (surround-by? input :start "")
+         (surround-by? input " " "")
+         (surround-by? input "]" "")
+         (surround-by? input "(" ""))))
 
 (defn wrapped-by?
   [input before end]
@@ -1759,7 +1746,7 @@
 
   (handle-command-input-close id))
 
-(defn close-autocomplete-if-outside
+(defn- close-autocomplete-if-outside
   [input]
   (when (and input
              (contains? #{:page-search :page-search-hashtag :block-search} (state/get-editor-action))
@@ -1813,7 +1800,9 @@
     ;; TODO: is it cross-browser compatible?
     ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
     (cond
-      (= last-input-char (state/get-editor-command-trigger))
+      ;; By default, "/" is also used as namespace separator in Logseq.
+      (and (= last-input-char (state/get-editor-command-trigger))
+           (not (contains? #{:page-search-hashtag} (state/sub :editor/action))))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (commands/reinit-matched-commands!)
@@ -1843,6 +1832,15 @@
 
       (and (= last-input-char commands/colon) (= :property-search (state/get-editor-action)))
       (state/clear-editor-action!)
+
+      ;; Open "Search page or New page" auto-complete
+      (and (= last-input-char commands/hashtag)
+           ;; Only trigger at beginning of line or before whitespace
+           (or (= 1 pos) (contains? #{" " "\t"} (get (.-value input) (- pos 2)))))
+      (do
+        (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
+        (state/set-editor-last-pos! pos)
+        (state/set-editor-action! :page-search-hashtag))
 
       :else
       nil)))
@@ -1906,6 +1904,11 @@
          (edit-block! last-block' :max (:block/uuid last-block')))))
    0))
 
+(defn- nested-blocks
+  [blocks]
+  (let [ids (set (map :db/id blocks))]
+    (some? (some #(ids (:db/id (:block/parent %))) blocks))))
+
 (defn paste-blocks
   "Given a vec of blocks, insert them into the target page.
    keep-uuid?: if true, keep the uuid provided in the block structure."
@@ -1925,12 +1928,25 @@
         block (db/entity (:db/id target-block))
         page (if (:block/name block) block
                  (when target-block (:block/page (db/entity (:db/id target-block)))))
-        target-block (or target-block editing-block)
+        empty-target? (string/blank? (:block/content target-block))
+        paste-nested-blocks? (nested-blocks blocks)
+        target-block-has-children? (db/has-children? (:block/uuid target-block))
+        replace-empty-target? (if (and paste-nested-blocks? empty-target?
+                                       target-block-has-children?)
+                                false
+                                true)
+        target-block' (if replace-empty-target? target-block
+                          (db/pull (:db/id (:block/left target-block))))
         sibling? (cond
+                   (and paste-nested-blocks? empty-target?)
+                   (if (= (:block/parent target-block') (:block/parent target-block))
+                     true
+                     false)
+
                    (some? sibling?)
                    sibling?
 
-                   (db/has-children? (:block/uuid target-block))
+                   target-block-has-children?
                    false
 
                    :else
@@ -1943,15 +1959,15 @@
 
     (outliner-tx/transact!
       {:outliner-op :insert-blocks}
-      (when target-block
-        (let [format (or (:block/format target-block) (state/get-preferred-format))
+      (when target-block'
+        (let [format (or (:block/format target-block') (state/get-preferred-format))
               blocks' (map (fn [block]
                              (paste-block-cleanup block page exclude-properties format content-update-fn))
                            blocks)
-              result (outliner-core/insert-blocks! blocks' target-block {:sibling? sibling?
-                                                                         :outliner-op :paste
-                                                                         :replace-empty-target? true
-                                                                         :keep-uuid? keep-uuid?})]
+              result (outliner-core/insert-blocks! blocks' target-block' {:sibling? sibling?
+                                                                          :outliner-op :paste
+                                                                          :replace-empty-target? replace-empty-target?
+                                                                          :keep-uuid? keep-uuid?})]
           (edit-last-block-after-inserted! result))))))
 
 (defn- block-tree->blocks
@@ -2409,7 +2425,7 @@
       (scroll-to-block sibling-block)
       (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
 
-(defn- move-cross-boundrary-up-down
+(defn- move-cross-boundary-up-down
   [direction]
   (let [input (state/get-input)
         line-pos (util/get-first-or-last-line-pos input)
@@ -2448,14 +2464,14 @@
 
       (or (and up? (cursor/textarea-cursor-first-row? input))
           (and down? (cursor/textarea-cursor-last-row? input)))
-      (move-cross-boundrary-up-down direction)
+      (move-cross-boundary-up-down direction)
 
       :else
       (if up?
         (cursor/move-cursor-up input)
         (cursor/move-cursor-down input)))))
 
-(defn- move-to-block-when-cross-boundrary
+(defn- move-to-block-when-cross-boundary
   [direction]
   (let [up? (= :left direction)
         pos (if up? :max 0)
@@ -2491,7 +2507,7 @@
 
         (or (and left? (cursor/start? input))
             (and right? (cursor/end? input)))
-        (move-to-block-when-cross-boundrary direction)
+        (move-to-block-when-cross-boundary direction)
 
         :else
         (if left?
@@ -2659,6 +2675,7 @@
     nil))
 
 (defn ^:large-vars/cleanup-todo keydown-not-matched-handler
+  "NOTE: Keydown cannot be used on Android platform"
   [format]
   (fn [e _key-code]
     (let [input-id (state/get-edit-input-id)
@@ -2727,21 +2744,17 @@
 
         ;; If you type `xyz`, the last backtick should close the first and not add another autopair
         ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)
-        (contains? (set (keys autopair-map)) key)
+        (-> (keys autopair-map)
+            set
+            (disj "(")
+            (contains? key)
+            (or (autopair-left-paren? input key)))
         (let [curr (get-current-input-char input)
                   prev (util/nth-safe value (dec pos))]
             (util/stop e)
             (if (and (= key "`") (= "`" curr) (not= "`" prev))
               (cursor/move-cursor-forward input)
               (autopair input-id key format nil)))
-
-        (and hashtag? (or (zero? pos) (re-matches #"\s" (get value (dec pos)))))
-        (do
-          (commands/handle-step [:editor/search-page-hashtag])
-          (if (= key "#")
-            (state/set-editor-last-pos! (inc (cursor/pos input))) ;; In keydown handler, the `#` is not inserted yet.
-            (state/set-editor-last-pos! (cursor/pos input)))
-          (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
         (let [sym "$"]
           (and (= key sym)
@@ -3247,7 +3260,7 @@
         repo (state/get-current-repo)
         value (boolean value)]
     (when repo
-      (save-current-block!) ;; Save the input contents before collapsing 
+      (save-current-block!) ;; Save the input contents before collapsing
       (outliner-tx/transact! ;; Save the new collapsed state as an undo transaction (if it changed)
         {:outliner-op :collapse-expand-blocks}
         (doseq [block-id block-ids]

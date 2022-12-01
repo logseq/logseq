@@ -60,7 +60,7 @@ export class LSPluginExperiments {
   }
 
   registerExtensionsEnhancer<T = any>(
-    type: 'katex',
+    type: 'katex' | 'codemirror',
     enhancer: (v: T) => Promise<any>
   ) {
     const host = this.ensureHostScope()

@@ -499,7 +499,9 @@ export class TLApp<
       navigator.clipboard.write([
         new ClipboardItem({
           'text/html': new Blob([tldrawString], { type: 'text/html' }),
-          // ??? what plain text should be used here?
+          'text/plain': new Blob([`((${this.selectedShapesArray[0].props.id}))`], {
+            type: 'text/plain',
+          }),
         }),
       ])
     }

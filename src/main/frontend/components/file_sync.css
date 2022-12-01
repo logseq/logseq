@@ -196,6 +196,10 @@
 
     .ti {
       @apply translate-y-0;
+
+      &.ls-icon-thumb-up {
+        @apply translate-x-[0.5px];
+      }
     }
 
     > .a {
@@ -464,7 +468,7 @@
       &.strength-wrap {
         @apply flex-wrap;
       }
-      
+
       .strength-item {
         @apply whitespace-nowrap flex items-center leading-none opacity-60;
 

@@ -1,27 +1,29 @@
 (ns electron.listener
   "System-component-like ns that defines listeners by event name to receive ipc
   messages from electron's main process"
-  (:require [frontend.state :as state]
+  (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
+            [datascript.core :as d]
+            [dommy.core :as dom]
+            [electron.ipc :as ipc]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
-            [frontend.handler.route :as route-handler]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.handler.file-sync :as file-sync-handler]
-            [frontend.config :as config]
-            [clojure.string :as string]
-            [cljs-bean.core :as bean]
-            [frontend.fs.watcher-handler :as watcher-handler]
-            [frontend.fs.sync :as sync]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
-            [datascript.core :as d]
-            [electron.ipc :as ipc]
-            [frontend.ui :as ui]
+            [frontend.fs.sync :as sync]
+            [frontend.fs.watcher-handler :as watcher-handler]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user]
-            [dommy.core :as dom]))
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.handler.page :as page-handler]))
+
 
 (defn persist-dbs!
   []
@@ -33,6 +35,7 @@
                              :on-success #(ipc/ipc "persistent-dbs-saved")
                              :on-error   #(ipc/ipc "persistent-dbs-error")}))
 
+
 (defn listen-persistent-dbs!
   []
   ;; TODO: move "file-watcher" to electron.ipc.channels
@@ -40,6 +43,7 @@
    "persistent-dbs"
    (fn [_req]
      (persist-dbs!))))
+
 
 (defn ^:large-vars/cleanup-todo listen-to-electron!
   []
@@ -152,31 +156,59 @@
 
   (js/window.apis.on "quickCapture"
                      (fn [args]
-                       (let [{:keys [url title content]} (bean/->clj args)
-                             page (or (state/get-current-page)
-                                      (string/lower-case (date/journal-name)))
+                       (let [{:keys [url title content page append]} (bean/->clj args)
+                             insert-today? (get-in (state/get-config)
+                                                   [:quick-capture-options :insert-today?]
+                                                   false)
+                             redirect-page? (get-in (state/get-config)
+                                                   [:quick-capture-options :redirect-page?]
+                                                   false)
+                             today-page (when (state/enable-journals?)
+                                          (string/lower-case (date/today)))
+                             page (if (or (= page "TODAY")
+                                          (and (string/blank? page) insert-today?))
+                                    today-page
+                                    (or (not-empty page)
+                                        (state/get-current-page)
+                                        today-page))
+                             page (or page "quick capture") ;; default to quick capture page, if journals are not enabled
                              format (db/get-page-format page)
                              time (date/get-current-time)
                              text (or (and content (not-empty (string/trim content))) "")
-                             link (if (not-empty title) (config/link-format format title url) url)
+                             link (if (string/includes? url "www.youtube.com/watch")
+                                    (str title " {{video " url "}}")
+                                    (if (not-empty title)
+                                      (config/link-format format title url)
+                                      url))
                              template (get-in (state/get-config)
                                               [:quick-capture-templates :text]
                                               "**{time}** [[quick capture]]: {text} {url}")
                              content (-> template
                                          (string/replace "{time}" time)
                                          (string/replace "{url}" link)
-                                         (string/replace "{text}" text))]
-                         (if (and (state/get-edit-block) (state/editing?))
-                           (editor-handler/insert content)
-                           (editor-handler/api-insert-new-block! content {:page page
-                                                                          :edit-block? false
-                                                                          :replace-empty-target? true})))))
+                                         (string/replace "{text}" text))
+                             edit-content (state/get-edit-content)
+                             edit-content-blank? (string/blank? edit-content)
+                             edit-content-include-capture? (and (not-empty edit-content)
+                                                                (string/includes? edit-content "[[quick capture]]"))]
+                         (if (and (state/editing?) (not append) (not edit-content-include-capture?))
+                           (if edit-content-blank?
+                             (editor-handler/insert content)
+                             (editor-handler/insert (str "\n" content)))
+
+                           (do
+                             (when (not= page (state/get-current-page))
+                               (page-handler/create! page {:redirect? redirect-page?}))
+                             (editor-handler/api-insert-new-block! content {:page page
+                                                                            :edit-block? true
+                                                                            :replace-empty-target? true}))))))
 
   (js/window.apis.on "openNewWindowOfGraph"
                      ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage
                      ;; No db cache persisting ensured. Should be handled by the caller
                      (fn [repo]
                        (ui-handler/open-new-window! repo))))
+
 
 (defn listen!
   []

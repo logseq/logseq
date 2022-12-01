@@ -77,7 +77,16 @@
                :else
                nil)]
 
-       [:div.text-sm version]
+       [:div.text-sm.cursor
+        {:title (str "Revision: " config/revison)
+         :on-click (fn []
+                     (notification/show! [:div "Current Revision: "
+                                          [:a {:target "_blank"
+                                               :href (str "https://github.com/logseq/logseq/commit/" config/revison)}
+                                           config/revison]]
+                                         :info
+                                         false))}
+        version]
 
        [:a.text-sm.fade-link.underline.inline
         {:target "_blank"
@@ -306,7 +315,7 @@
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "custom_date_format"}
     (t :settings-page/custom-date-format)
-    (ui/tippy {:html        (t :settings-page/custom-date-format-warning)     
+    (ui/tippy {:html        (t :settings-page/custom-date-format-warning)
                :class       "tippy-hover ml-2"
                :interactive true
                :disabled    false}
@@ -357,11 +366,11 @@
           logical-outdenting?
           config-handler/toggle-logical-outdenting!))
 
-(defn perferred-pasting-file [t perferred-pasting-file?]
+(defn preferred-pasting-file [t preferred-pasting-file?]
   (toggle "preferred_pasting_file"
           (t :settings-page/preferred-pasting-file)
-          perferred-pasting-file?
-          config-handler/toggle-perferred-pasting-file!))
+          preferred-pasting-file?
+          config-handler/toggle-preferred-pasting-file!))
 
 (defn tooltip-row [t enable-tooltip?]
   (toggle "enable_tooltip"
@@ -572,7 +581,7 @@
         enable-timetracking? (state/enable-timetracking?)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)
-        perferred-pasting-file? (state/perferred-pasting-file?)
+        preferred-pasting-file? (state/preferred-pasting-file?)
         enable-tooltip? (state/enable-tooltip?)
         enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
         show-brackets? (state/show-brackets?)
@@ -586,7 +595,7 @@
      (show-brackets-row t show-brackets?)
      (when (util/electron?) (switch-spell-check-row t))
      (outdenting-row t logical-outdenting?)
-     (perferred-pasting-file t perferred-pasting-file?)
+     (preferred-pasting-file t preferred-pasting-file?)
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (shortcut-tooltip-row t enable-shortcut-tooltip?))
      (when-not (or (util/mobile?) (mobile-util/native-platform?))

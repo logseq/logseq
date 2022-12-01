@@ -228,11 +228,7 @@
         (str prefix "///private/" others))
 
       :else
-      (do
-        (state/pub-event! [:instrument {:type :error/ios-path-missing-slashes
-                                        ;; respect user's privacy
-                                        :path (gp-util/safe-subs path 10)}])
-        path))
+      path)
     path))
 
 (defn normalize-file-protocol-path [dir path]
@@ -243,14 +239,16 @@
                             (str "file://" (js/encodeURI dir)))
                           dir)
         path            (some-> path (string/replace #"^/+" ""))
+        normalize-f     gp-util/path-normalize
+        encodeURI-f     js/encodeURI
         safe-encode-url #(let [encoded-chars?
                                (and (string? %) (boolean (re-find #"(?i)%[0-9a-f]{2}" %)))]
                            (cond
                              (not encoded-chars?)
-                             (js/encodeURI %)
+                             (encodeURI-f (normalize-f %))
 
                              :else
-                             (js/encodeURI (js/decodeURI %))))
+                             (encodeURI-f (normalize-f (js/decodeURI %)))))
         path' (cond
                 (and path (string/starts-with? path "file:/"))
                 (safe-encode-url path)
