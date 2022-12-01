@@ -343,9 +343,12 @@ should be done through this fn in order to get global config and config defaults
       (get-in @state [:config repo-url]))
      (catch :default e
        (do
-         (log/error "Cannot parse config files" e)
-         (log/error "Restore default config")
-         default-config)))))
+         (log/error "Cannot parse global config file" e)
+         (log/error "Restore repo config")
+         ;; NOTE: Since repo config is guarded by a try-catch, we can safely failback to it
+         (merge-configs
+          default-config
+          (get-in @state [:config repo-url])))))))
 
 (defonce publishing? (atom nil))
 
