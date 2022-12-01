@@ -68,8 +68,9 @@
 
 (defn- get-whiteboard-tldr-from-text
   [text]
-  (when-let [matched-text (util/safe-re-find #"<whiteboard-tldr>(.*)</whiteboard-tldr>" text)]
-    (try-parse-as-json (gp-util/safe-decode-uri-component (second matched-text)))))
+  (when-let [matched-text (util/safe-re-find #"<whiteboard-tldr>(.*)</whiteboard-tldr>"
+                                             (gp-util/safe-decode-uri-component text))]
+    (try-parse-as-json (second matched-text))))
 
 (defn- get-whiteboard-shape-refs-text
   [text]
@@ -203,5 +204,5 @@
                                           (util/stop e))))]
            (cond
              (and (string/blank? text) (string/blank? html)) (paste-file-if-exist)
-             (and (seq files) (state/perferred-pasting-file?)) (paste-file-if-exist)
+             (and (seq files) (state/preferred-pasting-file?)) (paste-file-if-exist)
              :else (paste-text-or-blocks-aux input e text html))))))))

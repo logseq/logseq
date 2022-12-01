@@ -118,7 +118,7 @@
                (t :open-a-directory)
                :on-click #(state/pub-event! [:graph/setup-a-repo]))])]]
 
-        (when (seq remote-graphs)
+        (when (and (file-sync/enable-sync?) login?)
           [:div
            [:hr]
            [:div.flex.align-items.justify-between
@@ -194,7 +194,8 @@
   [state]
   (let [multiple-windows? (::electron-multiple-windows? state)
         current-repo (state/sub :git/current-repo)
-        login? (boolean (state/sub :auth/id-token))]
+        login? (boolean (state/sub :auth/id-token))
+        remotes-loading? (state/sub [:file-sync/remote-graphs :loading])]
     (when (or login? current-repo)
       (let [repos (state/sub [:me :repos])
             remotes (state/sub [:file-sync/remote-graphs :graphs])
@@ -229,7 +230,13 @@
                             :modal-class (util/hiccup->class
                                            "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")}
                            (> (count repos) 1)              ; show switch to if there are multiple repos
-                           (assoc :links-header [:div.font-medium.text-sm.opacity-60.px-4.pt-2.pb-1
-                                                 "Switch to:"]))]
+                           (assoc :links-header [:div.font-medium.text-sm.opacity-70.px-4.pt-2.pb-1.flex.flex-row.justify-between.items-center
+                                                 [:div "Switch to:"]
+                                                 (when (and (file-sync/enable-sync?) login?)
+                                                   (if remotes-loading?
+                                                     (ui/loading "")
+                                                     [:a.flex {:title "Refresh remote graphs"
+                                                               :on-click file-sync/load-session-graphs}
+                                                      (ui/icon "refresh")]))]))]
         (when (seq repos)
           (ui/dropdown-with-links render-content links links-header))))))

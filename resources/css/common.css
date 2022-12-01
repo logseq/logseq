@@ -12,7 +12,7 @@
   --ls-headbar-height: 3rem;
   --ls-headbar-inner-top-padding: 0px;
   --ls-left-sidebar-width: 246px;
-  --ls-left-sidebar-sm-width: 70%;
+  --ls-left-sidebar-sm-width: 74vw;
   --ls-left-sidebar-nav-btn-size: 38px;
   --ls-error-color: var(--color-red-500);
   --ls-warning-color: var(--color-orange-500);
@@ -48,12 +48,6 @@ html[data-theme='dark'] {
   --ls-block-properties-background-color: #06323e;
   --ls-page-properties-background-color: #02171d;
   --ls-block-ref-link-text-color: #1a6376;
-  --ls-search-background-color: linear-gradient(
-    to right,
-    #021c23 0,
-    #021b21 200px,
-    #002b36 100%
-  );
   --ls-border-color: #0e5263;
   --ls-secondary-border-color: #126277;
   --ls-tertiary-border-color: rgba(0, 2, 0, 0.10);
@@ -131,7 +125,6 @@ html[data-theme='light'] {
   --ls-block-properties-background-color: #f7f7f7;
   --ls-page-properties-background-color: #f7f7f7;
   --ls-block-ref-link-text-color: #d8e1e8;
-  --ls-search-background-color: var(--ls-primary-background-color);
   --ls-border-color: #ccc;
   --ls-secondary-border-color: #e2e2e2;
   --ls-tertiary-border-color: rgba(200, 200, 200, 0.30);
@@ -151,6 +144,7 @@ html[data-theme='light'] {
   --ls-block-bullet-color: rgba(67, 63, 56, 0.25);
   --ls-block-highlight-color: #c0e6fd;
   --ls-selection-background-color: #e4f2ff;
+  --ls-selection-text-color: var(--ls-secondary-text-color);
   --ls-page-checkbox-color: #9dbbd8;
   --ls-page-checkbox-border-color: var(--ls-page-checkbox-color);
   --ls-page-blockquote-color: var(--ls-primary-text-color);
@@ -189,6 +183,7 @@ html[data-theme='light'] {
   --color-level-3: var(--ls-quaternary-background-color);
   --color-level-4: #d0e6fa;
   --color-level-5: #bbdaf6;
+  --color-level-6: #a7cef1;
 }
 
 html:not(.is-native-android) {
@@ -525,7 +520,6 @@ i.ti {
 h1.title {
   margin-bottom: 1.5rem;
   color: var(--ls-title-text-color, #222);
-  font-family: -apple-system, system-ui, var(--ls-font-family), sans-serif;
   font-size: var(--ls-page-title-size, 36px);
   font-weight: 500;
 }
@@ -675,7 +669,7 @@ img.small {
 }
 
 a.tag {
-  font-size: 13px;
+  font-size: 0.9em;
   text-align: center;
   text-decoration: none;
   display: inline-block;

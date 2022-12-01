@@ -49,7 +49,8 @@ TODO: Fail fast when process exits 1"
     (mapv
      (fn [{:file/keys [path content]}]
        (let [{:keys [ast]}
-             (graph-parser/parse-file conn path content {:extract-options extract-options})]
+             (graph-parser/parse-file conn path content (merge {:extract-options extract-options}
+                                                               (:parse-file-options options)))]
          {:file path :ast ast}))
      files)))
 
@@ -59,12 +60,14 @@ TODO: Fail fast when process exits 1"
   as it can't assume that the metadata in logseq/ is up to date. Directory is
   assumed to be using git. This fn takes the following options:
 * :verbose - When enabled prints more information during parsing. Defaults to true
-* :files - Specific files to parse instead of parsing the whole directory"
+* :files - Specific files to parse instead of parsing the whole directory
+* :conn - Database connection to use instead of creating new one
+* :parse-file-options - Options map to pass to graph-parser/parse-file"
   ([dir]
    (parse-graph dir {}))
   ([dir options]
    (let [files (or (:files options) (build-graph-files dir))
-         conn (ldb/start-conn)
+         conn (or (:conn options) (ldb/start-conn))
          config (read-config dir)
         _ (when-not (:files options) (println "Parsing" (count files) "files..."))
          asts (parse-files conn files (merge options {:config config}))]

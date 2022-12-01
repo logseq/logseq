@@ -16,7 +16,7 @@
             [frontend.util :as util :refer [react]]
             [frontend.util.drawer :as drawer]
             [logseq.db.default :as default-db]
-            [logseq.db.rules :refer [rules]]
+            [logseq.db.rules :as rules]
             [logseq.db.schema :as db-schema]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.text :as text]
@@ -212,17 +212,6 @@
              (conn/get-db repo-url) pred)
         db-utils/seq-flatten)))
 
-(defn get-file-blocks
-  [repo-url path]
-  (-> (d/q '[:find ?block
-             :in $ ?path
-             :where
-             [?file :file/path ?path]
-             [?p :block/file ?file]
-             [?block :block/page ?p]]
-           (conn/get-db repo-url) path)
-      db-utils/seq-flatten))
-
 (defn set-file-last-modified-at!
   [repo path last-modified-at]
   (when (and repo path last-modified-at)
@@ -274,6 +263,7 @@
   (db-utils/entity [:block/uuid (if (uuid? id) id (uuid id))]))
 
 (defn query-block-by-uuid
+  "Return block or page entity, depends on the uuid"
   [id]
   (db-utils/pull [:block/uuid (if (uuid? id) id (uuid id))]))
 
@@ -300,16 +290,7 @@
             (alias ?page ?e)]
           (conn/get-db repo-url)
           (util/safe-page-name-sanity-lc page)
-          '[[(alias ?e2 ?e1)
-             [?e2 :block/alias ?e1]]
-            [(alias ?e2 ?e1)
-             [?e1 :block/alias ?e2]]
-            [(alias ?e1 ?e3)
-             [?e1 :block/alias ?e2]
-             [?e2 :block/alias ?e3]]
-            [(alias ?e3 ?e1)
-             [?e1 :block/alias ?e2]
-             [?e2 :block/alias ?e3]]])
+          (:alias rules/rules))
      db-utils/seq-flatten
      (set)
      (set/union #{page-id}))))
@@ -794,6 +775,8 @@
         react)))))
 
 (defn get-page-blocks-no-cache
+  "Return blocks of the designated page, without using cache.
+   page - name / title of the page"
   ([page]
    (get-page-blocks-no-cache (state/get-current-repo) page nil))
   ([repo-url page]
@@ -1306,6 +1289,24 @@
                                (sort-by-left-recursive))]
          (db-utils/group-by-page query-result))))))
 
+(defn get-block-references-count
+  [block-uuid]
+  (when-let [repo (state/get-current-repo)]
+    (when (conn/get-db repo)
+      (let [block (db-utils/entity [:block/uuid block-uuid])
+            query-result (->> (react/q repo [:frontend.db.react/refs
+                                             (:db/id block)]
+                                       {}
+                                       '[:find [(pull ?ref-block ?block-attrs) ...]
+                                         :in $ ?block-uuid ?block-attrs
+                                         :where
+                                         [?block :block/uuid ?block-uuid]
+                                         [?ref-block :block/refs ?block]]
+                                       block-uuid
+                                       block-attrs)
+                              react)]
+        (count query-result)))))
+
 (defn journal-page?
   "sanitized page-name only"
   [page-name]
@@ -1519,6 +1520,7 @@
             assets (get-assets datoms)]
         [@(d/conn-from-datoms datoms db-schema/schema) assets]))))
 
+;; Deprecated?
 (defn delete-blocks
   [repo-url files _delete-page?]
   (when (seq files)
@@ -1528,21 +1530,6 @@
 (defn delete-files
   [files]
   (mapv (fn [path] [:db.fn/retractEntity [:file/path path]]) files))
-
-(defn delete-file-blocks!
-  [repo-url path]
-  (let [blocks (get-file-blocks repo-url path)]
-    (mapv (fn [eid] [:db.fn/retractEntity eid]) blocks)))
-
-(defn delete-page-blocks
-  [repo-url page]
-  (when page
-    (when-let [db (conn/get-db repo-url)]
-      (let [page (db-utils/pull [:block/name (util/page-name-sanity-lc page)])]
-        (when page
-          (let [datoms (d/datoms db :avet :block/page (:db/id page))
-                block-eids (mapv :e datoms)]
-            (mapv (fn [eid] [:db.fn/retractEntity eid]) block-eids)))))))
 
 (defn delete-pages-by-files
   [files]
@@ -1585,7 +1572,7 @@
        [?p :block/name ?namespace]
        (namespace ?p ?c)]
      (conn/get-db repo)
-     rules
+     (:namespace rules/rules)
      namespace)))
 
 (defn- tree [flat-col root]
@@ -1677,13 +1664,21 @@
    macro-name))
 
 (defn whiteboard-page?
-  [page-name]
-  (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page-name)])]
-    (or
-     (= "whiteboard" (:block/type page))
-     (when-let [file (:block/file page)]
-       (when-let [path (:file/path (db-utils/entity (:db/id file)))]
-         (gp-config/whiteboard? path))))))
+  "Given a page name or a page object, check if it is a whiteboard page"
+  [page]
+  (cond
+    (string? page)
+    (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)])]
+      (or
+       (= "whiteboard" (:block/type page))
+       (when-let [file (:block/file page)]
+         (when-let [path (:file/path (db-utils/entity (:db/id file)))]
+           (gp-config/whiteboard? path)))))
+
+    (seq page)
+    (= "whiteboard" (:block/type page))
+
+    :else false))
 
 (defn get-all-whiteboards
   [repo]

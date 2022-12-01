@@ -131,7 +131,6 @@
          *repo (atom nil)
          dir (or dir nil)
          dir (some-> dir
-                     (string/replace "file:///" "file://")
                      (string/replace " " "%20"))]
      ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
      (->

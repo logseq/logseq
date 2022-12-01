@@ -2,7 +2,7 @@ import { Page, Locator } from 'playwright'
 import { expect, ConsoleMessage } from '@playwright/test'
 import * as process from 'process'
 import { Block } from './types'
-import pathlib from 'path'
+import * as pathlib from 'path'
 
 export const IsMac = process.platform === 'darwin'
 export const IsLinux = process.platform === 'linux'
@@ -115,6 +115,7 @@ export async function newInnerBlock(page: Page): Promise<Locator> {
   return page.locator('textarea >> nth=0')
 }
 
+// Deprecated by block.enterNext
 export async function newBlock(page: Page): Promise<Locator> {
   let blockNumber = await page.locator('.page-blocks-inner .ls-block').count()
   await lastBlock(page)

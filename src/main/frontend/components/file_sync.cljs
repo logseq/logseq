@@ -264,10 +264,13 @@
          (storage/set :ui/file-sync-active-file-list? list-active?)))
      [list-active?])
 
-    [:div.cp__file-sync-indicator-progress-pane
-     {:ref *el-ref
-      :class (when (and syncing? progressing?) "is-progress-active")}
-     (let [idle-&-no-active? (and idle? no-active-files?)]
+    (let [idle-&-no-active? (and idle? no-active-files?)
+          waiting? (not (or (not online?)
+                            idle-&-no-active?
+                            syncing?))]
+      [:div.cp__file-sync-indicator-progress-pane
+       {:ref *el-ref
+        :class (when (and syncing? progressing?) "is-progress-active")}
        [:div.a
         [:div.al
          [:strong
@@ -285,30 +288,31 @@
             :else "Waiting..."
             )]]
         [:div.ar
-         (when queuing? (sync-now))]])
+         (when queuing? (sync-now))]]
 
-     [:div.b.dark:text-gray-200
-      [:div.bl
-       [:span.flex.items-center
-        (if no-active-files?
-          [:span.opacity-100.pr-1 "Successfully processed"]
-          [:span.opacity-60.pr-1 "Processed"])]
+       (when-not waiting?
+         [:div.b.dark:text-gray-200
+          [:div.bl
+           [:span.flex.items-center
+            (if no-active-files?
+              [:span.opacity-100.pr-1 "Successfully processed"]
+              [:span.opacity-60.pr-1 "Processed"])]
 
-       (first tip-b&p)]
+           (first tip-b&p)]
 
-      [:div.br
-       [:small.opacity-50
-        (when syncing?
-          (calc-time-left))]]]
+          [:div.br
+           [:small.opacity-50
+            (when syncing?
+              (calc-time-left))]]])
 
-     [:div.c
-      (second tip-b&p)
-      (when (or history-files? (not no-active-files?))
-        [:span.inline-flex.ml-1.active:opacity-50
-         {:on-click #(set-list-active? (not list-active?))}
-         (if list-active?
-           (ui/icon "chevron-up" {:style {:font-size 24}})
-           (ui/icon "chevron-left" {:style {:font-size 24}}))])]]))
+       [:div.c
+        (second tip-b&p)
+        (when (or history-files? (not no-active-files?))
+          [:span.inline-flex.ml-1.active:opacity-50
+           {:on-click #(set-list-active? (not list-active?))}
+           (if list-active?
+             (ui/icon "chevron-up" {:style {:font-size 24}})
+             (ui/icon "chevron-left" {:style {:font-size 24}}))])]])))
 
 (defn- sort-files
   [files]
@@ -379,20 +383,19 @@
                                                         (first @graphs-txid)))))
                                            nil
 
-                                           (and synced-file-graph?
-                                                (second @graphs-txid)
+                                           (and (second @graphs-txid)
                                                 (fs-sync/graph-sync-off? (second @graphs-txid))
                                                 (async/<! (fs-sync/<check-remote-graph-exists (second @graphs-txid))))
                                            (fs-sync/<sync-start)
 
                                            ;; remote graph already has been deleted, clear repos first, then create-remote-graph
-                                           synced-file-graph?  ; <check-remote-graph-exists -> false
+                                           (second @graphs-txid) ; <check-remote-graph-exists -> false
                                            (do (state/set-repos!
                                                 (map (fn [r]
                                                        (if (= (:url r) current-repo)
                                                          (dissoc r :GraphUUID :GraphName :remote?)
                                                          r))
-                                                     (state/get-repos)))
+                                                  (state/get-repos)))
                                                (create-remote-graph-fn))
 
                                            (second @graphs-txid) ; sync not started yet
@@ -410,7 +413,6 @@
                  (str "status-of-" (and (keyword? status) (name status)))])}
        (when (and (not config/publishing?)
                   (user-handler/logged-in?))
-
          (ui/dropdown-with-links
           ;; trigger
           (fn [{:keys [toggle-fn]}]
@@ -429,21 +431,21 @@
                (ui/icon "cloud-off" {:size ui/icon-size})]))
 
           ;; links
-          (cond-> []
+          (cond-> (vec
+                   (when-not (and no-active-files? idle?)
+                     (cond
+                       need-password?
+                       [{:title   [:div.file-item.flex.items-center.leading-none.pt-3
+                                   {:style {:margin-left -8}}
+                                   (ui/icon "lock" {:size 20}) [:span.pl-1.font-semibold "Password is required"]]
+                         :options {:on-click fs-sync/sync-need-password!}}]
+
+                       ;; head of upcoming sync
+                       (not no-active-files?)
+                       [{:title   [:div.file-item.is-first ""]
+                         :options {:class "is-first-placeholder"}}])))
             synced-file-graph?
             (concat
-             (when-not (and no-active-files? idle?)
-               (cond
-                 need-password?
-                 [{:title   [:div.file-item
-                             (ui/icon "lock") "Password is required"]
-                   :options {:on-click fs-sync/sync-need-password!}}]
-
-                 ;; head of upcoming sync
-                 (not no-active-files?)
-                 [{:title   [:div.file-item.is-first ""]
-                   :options {:class "is-first-placeholder"}}]))
-
              (map (fn [f] {:title [:div.file-item
                                    {:key (str "downloading-" f)}
                                    (gp-util/safe-decode-uri-component f)]

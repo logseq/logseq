@@ -115,7 +115,7 @@
 
   (query-assertions-v067 db files))
 
-(defn- converst-to-triple-lowbar
+(defn- convert-to-triple-lowbar
   [path]
   (let [original-body (gp-util/path->file-body path)
         ;; only test file name parsing, don't consider title prop overriding
@@ -139,7 +139,7 @@
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.6.7")
         files (gp-cli/build-graph-files graph-dir)
         ;; Converting the v0.6.7 ver docs graph under the old namespace naming rule to the new one (:repo/dir-version 0->3)
-        files (convert-graph-files-path files converst-to-triple-lowbar)
+        files (convert-graph-files-path files convert-to-triple-lowbar)
         _ (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false :verbose false})
         db (conn/get-db test-helper/test-db)]
 

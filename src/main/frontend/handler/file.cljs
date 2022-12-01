@@ -93,7 +93,8 @@
                            re-render-root? false
                            from-disk? false
                            skip-compare? false}}]
-  (let [original-content (db/get-file repo path)
+  (let [path (gp-util/path-normalize path)
+        original-content (db/get-file repo path)
         write-file! (if from-disk?
                       #(p/resolved nil)
                       #(let [path-dir (if (and
@@ -148,11 +149,9 @@
 
                      (println "Write file failed, path: " path ", content: " content)
                      (log/error :write/failed error)
-                     (state/pub-event! [:instrument {:type :write-file/failed-for-alter-file
-                                                     :payload {:path path
-                                                               :content-length (count content)
-                                                               :error-str (str error)
-                                                               :error error}}])))
+                     (state/pub-event! [:capture-error
+                                        {:error error
+                                         :payload {:type :write-file/failed-for-alter-file}}])))
     result))
 
 (defn set-file-content!
@@ -164,7 +163,8 @@
   [repo files {:keys [finish-handler]} file->content]
   (let [write-file-f (fn [[path content]]
                        (when path
-                         (let [original-content (get file->content path)]
+                         (let [path (gp-util/path-normalize path)
+                               original-content (get file->content path)]
                           (-> (p/let [_ (or
                                          (util/electron?)
                                          (nfs/check-directory-permission! repo))]
@@ -176,11 +176,9 @@
                                                                            (str error))
                                                              :status :error
                                                              :clear? false}])
-                                         (state/pub-event! [:instrument {:type :write-file/failed
-                                                                         :payload {:path path
-                                                                                   :content-length (count content)
-                                                                                   :error-str (str error)
-                                                                                   :error error}}])
+                                         (state/pub-event! [:capture-error
+                                                            {:error error
+                                                             :payload {:type :write-file/failed}}])
                                          (log/error :write-file/failed {:path path
                                                                         :content content
                                                                         :error error})))))))

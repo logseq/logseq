@@ -61,7 +61,8 @@
     (gp-util/safe-subs s 0 200)))
 
 (defn get-page-file-path
-  ([] (get-page-file-path (state/get-current-page)))
+  ([] (get-page-file-path (or (state/get-current-page)
+                              (state/get-current-whiteboard))))
   ([page-name]
    (when page-name
      (let [page-name (util/page-name-sanity-lc page-name)]
@@ -99,6 +100,7 @@
 (defn- create-title-property?
   [journal? page-name]
   (and (not journal?)
+       (= (state/get-filename-format) :legacy) ;; reduce title computation
        (fs-util/create-title-property? page-name)))
 
 (defn- build-page-tx [format properties page journal? whiteboard?]
@@ -475,7 +477,7 @@
 
       ;; Redirect to the newly renamed page
       (when redirect?
-        (route-handler/redirect! {:to          (if (= "whiteboard" (:block/type page)) :whiteboard :page)
+        (route-handler/redirect! {:to          (if (model/whiteboard-page? page) :whiteboard :page)
                                   :push        false
                                   :path-params {:name new-page-name}}))
 

@@ -6,17 +6,19 @@
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
             ["@capacitor/status-bar" :refer [^js StatusBar Style]]
+            ["@hugotomazi/capacitor-navigation-bar" :refer [^js NavigationBar]]
             ["grapheme-splitter" :as GraphemeSplitter]
             ["remove-accents" :as removeAccents]
             ["sanitize-filename" :as sanitizeFilename]
             ["check-password-strength" :refer [passwordStrength]]
+            ["path-complete-extname" :as pathCompleteExtname]
             [frontend.loader :refer [load]]
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [clojure.pprint]
             [dommy.core :as d]
-            [frontend.mobile.util :refer [native-platform?]]
+            [frontend.mobile.util :as mobile-util]
             [logseq.graph-parser.util :as gp-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -42,7 +44,7 @@
        (-write writer (str "\"" (.toString sym) "\"")))))
 
 #?(:cljs (defonce ^js node-path utils/nodePath))
-#?(:cljs (defonce ^js full-path-extname utils/fullPathExtname))
+#?(:cljs (defonce ^js full-path-extname pathCompleteExtname))
 #?(:cljs (defn app-scroll-container-node
            ([]
             (gdom/getElement "main-content-container"))
@@ -91,7 +93,7 @@
 
 #?(:cljs
    (defn mobile?
-       "Triggering condition: Mobile phones
+     "Triggering condition: Mobile phones
         *** Warning!!! ***
         For UX logic only! Don't use for FS logic
         iPad / Android Pad doesn't trigger!"
@@ -112,9 +114,14 @@
      (when (electron?) (. js/window -__MOCKED_OPEN_DIR_PATH__))))
 
 #?(:cljs
+   (defn ci?
+     []
+     (boolean (. js/window -__E2E_TESTING__))))
+
+#?(:cljs
    (do
      (def nfs? (and (not (electron?))
-                    (not (native-platform?))))
+                    (not (mobile-util/native-platform?))))
      (def web-platform? nfs?)))
 
 #?(:cljs
@@ -163,17 +170,24 @@
      []
      (gobj/get js/window "innerWidth")))
 
+;; Keep the following colors in sync with common.css
 #?(:cljs
    (defn set-theme-light
      []
      (p/do!
-      (.setStyle StatusBar (clj->js {:style (.-Light Style)})))))
+      (.setStyle StatusBar (clj->js {:style (.-Light Style)}))
+      (when (mobile-util/native-android?)
+        (.setColor NavigationBar (clj->js {:color "#ffffff"}))
+        (.setBackgroundColor StatusBar (clj->js {:color "#ffffff"}))))))
 
 #?(:cljs
    (defn set-theme-dark
      []
      (p/do!
-      (.setStyle StatusBar (clj->js {:style (.-Dark Style)})))))
+      (.setStyle StatusBar (clj->js {:style (.-Dark Style)}))
+      (when (mobile-util/native-android?)
+        (.setColor NavigationBar (clj->js {:color "#002b36"}))
+        (.setBackgroundColor StatusBar (clj->js {:color "#002b36"}))))))
 
 (defn find-first
   [pred coll]
@@ -191,6 +205,11 @@
   (some #(-> (string/lower-case s)
              (string/ends-with? %))
         [".png" ".jpg" ".jpeg" ".bmp" ".gif" ".webp" ".svg"]))
+
+(defn ext-of-video? [s]
+  (some #(-> (string/lower-case s)
+             (string/ends-with? %))
+        [".mp4" ".mkv" ".mov" ".wmv" ".avi" ".webm" ".mpg" ".ts" ".ogg" ".flv"]))
 
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
 (defn hiccup->class
@@ -213,29 +232,6 @@
                            (.then bean/->clj)
                            (.then #(on-ok %)))
                        (on-failed resp)))))))))
-
-#?(:cljs
-   (defn upload
-     [url file on-ok on-failed on-progress]
-     (let [xhr (js/XMLHttpRequest.)]
-       (.open xhr "put" url)
-       (gobj/set xhr "onload" on-ok)
-       (gobj/set xhr "onerror" on-failed)
-       (when (and (gobj/get xhr "upload")
-                  on-progress)
-         (gobj/set (gobj/get xhr "upload")
-                   "onprogress"
-                   on-progress))
-       (.send xhr file))))
-
-#?(:cljs
-   (defn post
-     [url body on-ok on-failed]
-     (fetch url {:method "post"
-                 :headers {:Content-Type "application/json"}
-                 :body (js/JSON.stringify (clj->js body))}
-            on-ok
-            on-failed)))
 
 (defn zero-pad
   [n]
@@ -734,7 +730,7 @@
           (filter (fn [b] (some? (gobj/get b "offsetParent")))))))
 
 #?(:cljs
-   (defn remove-embeded-blocks [blocks]
+   (defn remove-embedded-blocks [blocks]
      (->> blocks
           (remove (fn [b] (= "true" (d/attr b "data-embed")))))))
 
@@ -814,13 +810,13 @@
    (defn get-prev-block-non-collapsed-non-embed
      [block]
      (when-let [blocks (->> (get-blocks-noncollapse)
-                            remove-embeded-blocks)]
+                            remove-embedded-blocks)]
        (let [block-id (.-id block)
              block-ids (mapv #(.-id %) blocks)]
          (when-let [index (.indexOf block-ids block-id)]
-          (let [idx (dec index)]
-            (when (>= idx 0)
-              (nth-safe blocks idx))))))))
+           (let [idx (dec index)]
+             (when (>= idx 0)
+               (nth-safe blocks idx))))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed
@@ -829,9 +825,9 @@
        (let [block-id (.-id block)
              block-ids (mapv #(.-id %) blocks)]
          (when-let [index (.indexOf block-ids block-id)]
-          (let [idx (inc index)]
-            (when (>= (count blocks) idx)
-              (nth-safe blocks idx))))))))
+           (let [idx (inc index)]
+             (when (>= (count blocks) idx)
+               (nth-safe blocks idx))))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed-skip
@@ -840,14 +836,14 @@
        (let [block-id (.-id block)
              block-ids (mapv #(.-id %) blocks)]
          (when-let [index (.indexOf block-ids block-id)]
-          (loop [idx (inc index)]
-            (when (>= (count blocks) idx)
-              (let [block (nth-safe blocks idx)
-                    nested? (->> (array-seq (gdom/getElementsByClass "selected"))
-                                 (some (fn [dom] (.contains dom block))))]
-                (if nested?
-                  (recur (inc idx))
-                  block)))))))))
+           (loop [idx (inc index)]
+             (when (>= (count blocks) idx)
+               (let [block (nth-safe blocks idx)
+                     nested? (->> (array-seq (gdom/getElementsByClass "selected"))
+                                  (some (fn [dom] (.contains dom block))))]
+                 (if nested?
+                   (recur (inc idx))
+                   block)))))))))
 
 (defn rand-str
   [n]
@@ -934,9 +930,9 @@
      "Normalize string for searching (loose)"
      [s remove-accents?]
      (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
-      (if remove-accents?
-        (removeAccents  normalize-str)
-        normalize-str))))
+       (if remove-accents?
+         (removeAccents  normalize-str)
+         normalize-str))))
 
 #?(:cljs
    (def page-name-sanity-lc
@@ -944,10 +940,10 @@
      gp-util/page-name-sanity-lc))
 
 #?(:cljs
- (defn safe-page-name-sanity-lc
-   [s]
-   (if (string? s)
-     (page-name-sanity-lc s) s)))
+   (defn safe-page-name-sanity-lc
+     [s]
+     (if (string? s)
+       (page-name-sanity-lc s) s)))
 
 (defn get-page-original-name
   [page]
@@ -1286,7 +1282,7 @@
 #?(:cljs
    (defn scroll-editor-cursor
      [^js/HTMLElement el & {:keys [to-vw-one-quarter?]}]
-     (when (and el (or (native-platform?) mobile?))
+     (when (and el (or (mobile-util/native-platform?) mobile?))
        (let [box-rect    (.getBoundingClientRect el)
              box-top     (.-top box-rect)
              box-bottom  (.-bottom box-rect)
@@ -1419,3 +1415,13 @@
               (<= (+ (.-bottom r) 64)
                   (or (.-innerHeight js/window)
                       (js/document.documentElement.clientHeight))))))))
+
+#?(:cljs
+   (defn copy-image-to-clipboard
+     [src]
+     (-> (js/fetch src)
+         (.then (fn [data]
+                  (-> (.blob data)
+                      (.then (fn [blob]
+                               (js/navigator.clipboard.write (clj->js [(js/ClipboardItem. (clj->js {(.-type blob) blob}))]))))
+                      (.catch js/console.error)))))))

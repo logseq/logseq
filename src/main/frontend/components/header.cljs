@@ -19,6 +19,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.version :refer [version]]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
@@ -73,6 +74,16 @@
       :on-click on-click}
      (ui/icon "menu-2" {:size ui/icon-size})]))
 
+(def bug-report-url
+  (let [platform (str "App Version: " version "\n"
+                      "Platform: " (.-userAgent js/navigator) "\n"
+                      "Language: " (.-language js/navigator))]
+    (str "https://github.com/logseq/logseq/issues/new?"
+         "title=&"
+         "template=bug_report.yaml&"
+         "platform="
+         (js/encodeURIComponent platform))))
+
 (rum/defc dropdown-menu < rum/reactive
   < {:key-fn #(identity "repos-dropdown-menu")}
   [{:keys [current-repo t]}]
@@ -117,6 +128,13 @@
                   :title (t :discourse-title)
                   :target "_blank"}
         :icon (ui/icon "brand-discord")}
+       
+       {:title [:div.flex-row.flex.justify-between.items-center
+                [:span "Bug report"]]
+        :options {:href bug-report-url
+                  :title "Fire a bug report on Github"
+                  :target "_blank"}
+        :icon (ui/icon "bug")} 
 
        (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
          {:title (str (t :logout) " (" (user-handler/email) ")")
@@ -182,17 +200,17 @@
         custom-home-page? (and (state/custom-home-page?)
                                (= (state/sub-default-home-page) (state/get-current-page)))
         sync-enabled? (file-sync-handler/enable-sync?)]
-    [:div.cp__header#head
+    [:div.cp__header.drag-region#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
                                           :native-android (mobile-util/native-android?)}])
       :on-double-click (fn [^js e]
                          (when-let [target (.-target e)]
                            (when (and (util/electron?)
-                                      (.. target -classList (contains "cp__header")))
+                                      (.. target -classList (contains "drag-region")))
                              (js/window.apis.toggleMaxOrMinActiveWindow))))
       :style           {:fontSize  50}}
-     [:div.l.flex
+     [:div.l.flex.drag-region
       (when-not (mobile-util/native-platform?)
         [left-menu
          (when current-repo ;; this is for the Search button
@@ -212,7 +230,7 @@
              {:title "Go back" :on-click #(js/window.history.back)}
              (ui/icon "chevron-left" {:size 26})])))]
 
-     [:div.r.flex
+     [:div.r.flex.drag-region
       (when (and current-repo
                  (not (config/demo-graph? current-repo))
                  (user-handler/alpha-or-beta-user?))

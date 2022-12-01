@@ -16,6 +16,7 @@
             [frontend.db.model :as model]
             [frontend.extensions.graph :as graph]
             [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.format.block :as block]
             [frontend.handler.common :as common-handler]
             [frontend.handler.config :as config-handler]
@@ -282,11 +283,12 @@
           whiteboard-page? (model/whiteboard-page? page-name)
           untitled? (and whiteboard-page? (parse-uuid page-name)) ;; normal page cannot be untitled right?
           title (if hls-page?
-                  [:a.asset-ref (pdf-assets/fix-local-asset-pagename title)]
+                  [:a.asset-ref (pdf-utils/fix-local-asset-pagename title)]
                   (if fmt-journal? (date/journal-title->custom-format title) title))
           old-name (or title page-name)]
       [:h1.page-title.flex.cursor-pointer.gap-1.w-full
-       {:on-mouse-down (fn [e]
+       {:class (when-not whiteboard-page? "title")
+        :on-mouse-down (fn [e]
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page page-name})))
         :on-click (fn [e]
@@ -369,8 +371,8 @@
           journal? (db/journal-page? page-name)
           fmt-journal? (boolean (date/journal-title->int page-name))
           sidebar? (:sidebar? option)
-          whiteboard? (:whiteboard? option)
-          whiteboard-page? (model/whiteboard-page? page-name)
+          whiteboard? (:whiteboard? option) ;; in a whiteboard portal shape?
+          whiteboard-page? (model/whiteboard-page? page-name) ;; is this page a whiteboard?
           route-page-name path-page-name
           page (if block?
                  (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
@@ -400,7 +402,7 @@
               {:key path-page-name
                :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
 
-       (if whiteboard-page?
+       (if (and whiteboard-page? (not sidebar?))
          [:div ((state/get-component :whiteboard/tldraw-preview) page-name)] ;; FIXME: this is not reactive
          [:div.relative
           (when (and (not sidebar?) (not block?))
@@ -414,8 +416,8 @@
                                    (page-mouse-leave e *control-show?))}
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when-not whiteboard?
-               [:div.flex-1.flex-row.w-full
-                [:h1.title.ls-page-title (page-title page-name icon title format fmt-journal?)]])
+               [:div.ls-page-title.flex-1.flex-row.w-full
+                (page-title page-name icon title format fmt-journal?)])
              (when (not config/publishing?)
                (when config/lsp-enabled?
                  [:div.flex.flex-row
@@ -1050,6 +1052,7 @@
                                              (swap! *checks update idx not))})]
 
                 [:td.name [:a {:on-click (fn [e]
+                                          (.preventDefault e)
                                            (let [repo (state/get-current-repo)]
                                              (when (gobj/get e "shiftKey")
                                                (state/sidebar-add-block!

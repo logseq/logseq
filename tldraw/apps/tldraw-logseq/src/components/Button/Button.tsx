@@ -2,6 +2,6 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   children: React.ReactNode
 }
 
-export function Button(props: ButtonProps) {
-  return <button className="tl-button" {...props} />
+export function Button({ className, ...rest }: ButtonProps) {
+  return <button className={'tl-button ' + (className ?? '')} {...rest} />
 }

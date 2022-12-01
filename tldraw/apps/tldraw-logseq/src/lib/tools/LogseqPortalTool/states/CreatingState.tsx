@@ -25,6 +25,8 @@ export class CreatingState extends TLToolState<
         parentId: this.app.currentPage.id,
         point: Vec.sub(this.app.inputs.originPoint, this.offset),
         size: LogseqPortalShape.defaultProps.size,
+        fill: this.app.settings.color,
+        stroke: this.app.settings.color,
       } as any)
       this.creatingShape = shape
       this.app.currentPage.addShapes(shape)

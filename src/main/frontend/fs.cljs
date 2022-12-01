@@ -76,18 +76,17 @@
 (defn write-file!
   [repo dir path content opts]
   (when content
-    (let [fs-record (get-fs dir)]
+    (let [path (gp-util/path-normalize path)
+          fs-record (get-fs dir)]
       (->
        (p/let [opts (assoc opts
                            :error-handler
                            (fn [error]
-                             (state/pub-event! [:instrument {:type :write-file/failed
-                                                             :payload {:fs (type fs-record)
-                                                                       :user-agent (when js/navigator js/navigator.userAgent)
-                                                                       :path path
-                                                                       :content-length (count content)
-                                                                       :error-str (str error)
-                                                                       :error error}}])))
+                             (state/pub-event! [:capture-error {:error error
+                                                                :payload {:type :write-file/failed
+                                                                          :fs (type fs-record)
+                                                                          :user-agent (when js/navigator js/navigator.userAgent)
+                                                                          :content-length (count content)}}])))
                _ (protocol/write-file! (get-fs dir) repo dir path content opts)]
          (when (= bfs-record fs-record)
            (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
@@ -111,18 +110,19 @@
 
 (defn rename!
   [repo old-path new-path]
-  (cond
+  (let [new-path (gp-util/path-normalize new-path)]
+    (cond
                                         ; See https://github.com/isomorphic-git/lightning-fs/issues/41
-    (= old-path new-path)
-    (p/resolved nil)
+     (= old-path new-path)
+     (p/resolved nil)
 
-    :else
-    (let [[old-path new-path]
-          (map #(if (or (util/electron?) (mobile-util/native-platform?))
-                  %
-                  (str (config/get-repo-dir repo) "/" %))
-               [old-path new-path])]
-      (protocol/rename! (get-fs old-path) repo old-path new-path))))
+     :else
+     (let [[old-path new-path]
+           (map #(if (or (util/electron?) (mobile-util/native-platform?))
+                   %
+                   (str (config/get-repo-dir repo) "/" %))
+             [old-path new-path])]
+       (protocol/rename! (get-fs old-path) repo old-path new-path)))))
 
 (defn copy!
   [repo old-path new-path]

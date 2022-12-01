@@ -79,12 +79,15 @@
   To add i18n support, prefix `id` with command and put that item in dict.
   Example: {:zh-CN {:command.document/open-logseq-doc \"打开文档\"}}"
   [{:keys [id] :as command}]
-  (spec/validate :command/command command)
-  (let [cmds (get-commands)]
-    (if (some (fn [existing-cmd] (= (:id existing-cmd) id)) cmds)
-      (log/error :command/register {:msg "Failed to register command. Command with same id already exist"
-                                    :id  id})
-      (state/set-state! :command-palette/commands (conj cmds command)))))
+  (if (:command/shortcut command)
+    (log/error :shortcut/missing (str "Shortcut is missing for " (:id command)))
+    (do
+      (spec/validate :command/command command)
+      (let [cmds (get-commands)]
+        (if (some (fn [existing-cmd] (= (:id existing-cmd) id)) cmds)
+          (log/error :command/register {:msg "Failed to register command. Command with same id already exist"
+                                        :id  id})
+          (state/set-state! :command-palette/commands (conj cmds command)))))))
 
 (defn unregister
   [id]

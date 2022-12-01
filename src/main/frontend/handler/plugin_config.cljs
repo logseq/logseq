@@ -125,7 +125,7 @@ returns map of plugins to install and uninstall"
     (js/window.apis.addListener "lsp-installed" listener)))
 
 (defn start
-  "This component has just one reponsibility on start, to create a plugins.edn
+  "This component has just one responsibility on start, to create a plugins.edn
   if none exists"
   []
   (create-plugin-config-file-if-not-exists))
