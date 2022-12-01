@@ -1875,23 +1875,25 @@
     (cursor/move-cursor-forward input 2)))
 
 (defn- paste-block-cleanup
-  [block page exclude-properties format content-update-fn]
+  [block page exclude-properties format content-update-fn keep-uuid?]
   (let [new-content
         (if content-update-fn
           (content-update-fn (:block/content block))
           (:block/content block))
         new-content
-        (->> new-content
-             (property/remove-property format "id")
-             (property/remove-property format "custom_id"))]
+        (cond->> new-content
+             (not keep-uuid?) (property/remove-property format "id")
+             true             (property/remove-property format "custom_id"))]
     (merge (dissoc block
                    :block/pre-block?
                    :block/meta)
            {:block/page {:db/id (:db/id page)}
             :block/format format
             :block/properties (apply dissoc (:block/properties block)
-                                (concat [:id :custom_id :custom-id]
-                                        exclude-properties))
+                                (concat 
+                                  (when (not keep-uuid?) [:id])
+                                  [:custom_id :custom-id]
+                                  exclude-properties))
             :block/content new-content})))
 
 (defn- edit-last-block-after-inserted!
@@ -1962,7 +1964,7 @@
       (when target-block'
         (let [format (or (:block/format target-block') (state/get-preferred-format))
               blocks' (map (fn [block]
-                             (paste-block-cleanup block page exclude-properties format content-update-fn))
+                             (paste-block-cleanup block page exclude-properties format content-update-fn keep-uuid?))
                            blocks)
               result (outliner-core/insert-blocks! blocks' target-block' {:sibling? sibling?
                                                                           :outliner-op :paste
@@ -2007,9 +2009,10 @@
 (defn insert-block-tree-after-target
   "`tree-vec`: a vector of blocks.
    A block element: {:content :properties :children [block-1, block-2, ...]}"
-  [target-block-id sibling? tree-vec format]
+  [target-block-id sibling? tree-vec format keep-uuid?]
   (insert-block-tree tree-vec format
                      {:target-block (db/pull target-block-id)
+                      :keep-uuid?   keep-uuid?
                       :sibling?     sibling?}))
 
 (defn insert-template!
@@ -2050,7 +2053,7 @@
              page (if (:block/name block) block
                       (when target (:block/page (db/entity (:db/id target)))))
              blocks' (map (fn [block]
-                            (paste-block-cleanup block page exclude-properties format content-update-fn))
+                            (paste-block-cleanup block page exclude-properties format content-update-fn false))
                           blocks)
              sibling? (:sibling? opts)
              sibling?' (cond
