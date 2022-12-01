@@ -523,7 +523,7 @@ test('press escape when link/image dialog is open, should restore focus to input
 })
 
 test('should show text after soft return when node is collapsed #5074', async ({ page, block }) => {
-  const delay = 100
+  const delay = 300
   await createRandomPage(page)
 
   await page.type('textarea >> nth=0', 'Before soft return', { delay: 10 })
@@ -549,6 +549,7 @@ test('should show text after soft return when node is collapsed #5074', async ({
   // zoom into the block
   page.click('a.block-control + a')
   await page.waitForNavigation()
+  await page.waitForTimeout(delay * 3)
 
   // select the block that has the soft return
   await page.keyboard.press('ArrowDown')

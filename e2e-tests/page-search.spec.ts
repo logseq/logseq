@@ -83,6 +83,8 @@ test('Search CJK', async ({ page, block }) => {
 })
 
 async function alias_test( block: Block, page: Page, page_name: string, search_kws: string[] ) {
+  await createRandomPage(page)
+
   const rand = randomString(10)
   let target_name = page_name + ' target ' + rand
   let alias_name = page_name + ' alias ' + rand
@@ -90,10 +92,7 @@ async function alias_test( block: Block, page: Page, page_name: string, search_k
   let alias_test_content_2 = randomString(20)
   let alias_test_content_3 = randomString(20)
 
-  // shortcut opening test
-  let parent_title = await createRandomPage(page)
-
-  await page.fill('textarea >> nth=0', '[[' + target_name + ']]')
+  await page.type('textarea >> nth=0', '[[' + target_name)
   await page.keyboard.press(hotkeyOpenLink)
 
   await lastBlock(page)
@@ -114,6 +113,7 @@ async function alias_test( block: Block, page: Page, page_name: string, search_k
   page.keyboard.press(hotkeyBack)
 
   await page.waitForNavigation()
+  await block.escapeEditing()
   // create alias ref in origin Page
   await block.activeEditing(0)
   await block.enterNext()
@@ -123,6 +123,7 @@ async function alias_test( block: Block, page: Page, page_name: string, search_k
 
   page.keyboard.press(hotkeyOpenLink)
   await page.waitForNavigation()
+  await block.escapeEditing()
 
   // shortcut opening test
   await block.activeEditing(1)
@@ -133,6 +134,7 @@ async function alias_test( block: Block, page: Page, page_name: string, search_k
   page.keyboard.press(hotkeyBack)
 
   await page.waitForNavigation()
+  await block.escapeEditing()
   // pressing enter on alias opening test
   await block.activeEditing(1)
   await page.press('textarea >> nth=0', 'ArrowLeft')
@@ -140,6 +142,7 @@ async function alias_test( block: Block, page: Page, page_name: string, search_k
   await page.press('textarea >> nth=0', 'ArrowLeft')
   page.press('textarea >> nth=0', 'Enter')
   await page.waitForNavigation()
+  await block.escapeEditing()
   await block.activeEditing(2)
   expect(await page.inputValue('textarea >> nth=0')).toBe(alias_test_content_2)
   await newInnerBlock(page)
@@ -147,6 +150,7 @@ async function alias_test( block: Block, page: Page, page_name: string, search_k
   page.keyboard.press(hotkeyBack)
   
   await page.waitForNavigation()
+  await block.escapeEditing()
   // clicking alias ref opening test
   await block.activeEditing(1)
   await block.enterNext()
@@ -163,7 +167,7 @@ async function alias_test( block: Block, page: Page, page_name: string, search_k
 
     await page.click('#search-button')
     await page.waitForSelector('[placeholder="Search or create page"]')
-    await page.fill('[placeholder="Search or create page"]', kw_name)
+    await page.type('[placeholder="Search or create page"]', kw_name)
     await page.waitForTimeout(500)
 
     const results = await page.$$('#ui__ac-inner>div')
@@ -178,18 +182,18 @@ async function alias_test( block: Block, page: Page, page_name: string, search_k
     // test search entering (page)
     page.keyboard.press("Enter")
     await page.waitForNavigation()
-    await lastBlock(page)
-    expect(await page.inputValue('textarea >> nth=0')).toBe(alias_test_content_3)
+    await page.waitForSelector('.ls-block span.inline')
+    expect(await page.locator('.ls-block span.inline >> nth=2').innerHTML()).toBe(alias_test_content_3)
 
     // test search clicking (block)
     await page.click('#search-button')
     await page.waitForSelector('[placeholder="Search or create page"]')
-    await page.fill('[placeholder="Search or create page"]', kw_name)
+    await page.type('[placeholder="Search or create page"]', kw_name)
     await page.waitForTimeout(500)
     page.click(":nth-match(.search-result, 3)")
     await page.waitForNavigation()
-    await block.activeEditing(1)
-    expect(await page.inputValue('textarea >> nth=0')).toBe("[[" + alias_name + "]]")
+    await page.waitForSelector('.selected a.page-ref')
+    expect(await page.locator('.selected a.page-ref').innerHTML()).toBe(alias_name)
     await page.keyboard.press(hotkeyBack)
   }
 

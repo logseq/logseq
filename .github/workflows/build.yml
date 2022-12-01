@@ -181,14 +181,6 @@ jobs:
           DEBUG: "pw:api"
           RELEASE: true # skip dev only test
 
-      - name: Save test artifacts - 1/2
-        if: ${{ failure() }}
-        uses: actions/upload-artifact@v3
-        with:
-          name: e2e-test-report-1-of-2
-          path: e2e-dump/*
-          retention-days: 1
-
       - name: Run Playwright test - 2/2
         run: xvfb-run -- npx playwright test --reporter github --shard=2/2
         env:
@@ -196,10 +188,10 @@ jobs:
           DEBUG: "pw:api"
           RELEASE: true # skip dev only test
 
-      - name: Save test artifacts - 2/2
+      - name: Save test artifacts
         if: ${{ failure() }}
         uses: actions/upload-artifact@v3
         with:
-          name: e2e-test-report-2-of-2
+          name: e2e-test-report
           path: e2e-dump/*
           retention-days: 1
