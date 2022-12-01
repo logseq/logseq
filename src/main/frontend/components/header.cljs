@@ -20,7 +20,8 @@
             [frontend.util :as util]
             [frontend.version :refer [version]]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [clojure.string :as string]))
 
 (rum/defc home-button
   < {:key-fn #(identity "home-button")}
@@ -59,8 +60,11 @@
      (ui/icon "menu-2" {:size ui/icon-size})]))
 
 (def bug-report-url
-  (let [platform (str "App Version: " version "\n"
-                      "Platform: " (.-userAgent js/navigator) "\n"
+  (let [ua (.-userAgent js/navigator)
+        safe-ua (string/replace ua #"[^_/a-zA-Z0-9\.\(\)]+" " ")
+        platform (str "App Version: " version "\n"
+                      "Git Revision: " config/REVISION "\n"
+                      "Platform: " safe-ua "\n"
                       "Language: " (.-language js/navigator))]
     (str "https://github.com/logseq/logseq/issues/new?"
          "title=&"
