@@ -4,7 +4,7 @@ body:
   - type: textarea
     id: problem
     attributes:
-      label: What happened?
+      label: What Happened?
       description: |
         Please provide as much info as possible. Not doing so may result in your bug not being addressed in a timely manner.
     validations:
@@ -41,7 +41,7 @@ body:
   - type: textarea
     id: platform
     attributes:
-      label: Desktop or mobile Platform Information
+      label: Desktop or Mobile Platform Information
       description: |
         Would you mind to tell us the system information about your desktop or mobile platform?
       placeholder: |
