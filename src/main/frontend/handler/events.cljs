@@ -86,7 +86,7 @@
         nil
         (map? result)
         (do
-          (state/set-state! :user/info result)
+          (state/set-user-info! result)
           (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
               (when-not (false? (state/enable-sync?)) ; user turns it off

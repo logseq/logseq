@@ -14,11 +14,14 @@
                          version)
    :environment (if config/dev? "development" "production")
    :initialScope {:tags
-                  {:platform (cond
-                               (util/electron?) "electron"
-                               (mobile-util/native-platform?) "mobile"
-                               :else "web")
-                   :publishing config/publishing?}}
+                  (merge
+                   (when (not-empty config/revison)
+                     {:revision config/revison})
+                   {:platform (cond
+                                (util/electron?) "electron"
+                                (mobile-util/native-platform?) "mobile"
+                                :else "web")
+                    :publishing config/publishing?})}
    ;; :integrations [(new posthog/SentryIntegration posthog "logseq" 5311485)
    ;;                (new BrowserTracing)]
    :debug config/dev?
