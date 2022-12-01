@@ -582,6 +582,7 @@
     (write-all w (str {:size size :etag etag :path path :remote? remote? :last-modified last-modified}))))
 
 
+(defrecord DelayedDeleteFileMetadata [path encrypted-path delete-epoch])
 
 (def ^:private higher-priority-remote-files
   "when diff all remote files and local files, following remote files always need to download(when checksum not matched),
@@ -715,6 +716,7 @@
 
 (defprotocol IRemoteAPI
   (<user-info [this] "user info")
+  (<get-remote-delay-deleted-files-meta [this graph-uuid] "get all remote delay-deleted files metadata")
   (<get-remote-all-files-meta [this graph-uuid] "get all remote files' metadata")
   (<get-remote-files-meta [this graph-uuid filepaths] "get remote files' metadata")
   (<get-remote-graph [this graph-name-opt graph-uuid-opt] "get graph info by GRAPH-NAME-OPT or GRAPH-UUID-OPT")
@@ -1180,32 +1182,66 @@
   (<user-info [this]
     (user/<wrap-ensure-id&access-token
      (<! (.<request this "user_info" {}))))
+  (<get-remote-delay-deleted-files-meta [this graph-uuid]
+    (user/<wrap-ensure-id&access-token
+     (let [file-meta-list      (transient #{})
+           encrypted-path-list (transient [])
+           exp-r
+           (<! (go-loop [continuation-token nil]
+                 (let [r (<! (.<request this "get_deleted_files_meta" {:GraphUUID graph-uuid
+                                                                       :ContinuationToken continuation-token}))]
+                   (if (instance? ExceptionInfo r)
+                     r
+                     (let [next-continuation-token (:NextContinuationToken r)
+                           objs                    (:Objects r)]
+                       (apply conj! encrypted-path-list (map (comp remove-user-graph-uuid-prefix :Key) objs))
+                       (apply conj! file-meta-list
+                              (mapv
+                               #(hash-map :encrypted-path (remove-user-graph-uuid-prefix (:Key %))
+                                          :delete-epoch (:DeleteEpoch %))
+                               objs))
+                       (when-not (empty? next-continuation-token)
+                         (recur next-continuation-token)))))))]
+       (if (instance? ExceptionInfo exp-r)
+         exp-r
+         (let [file-meta-list* (persistent! file-meta-list)
+               encrypted-path-list* (persistent! encrypted-path-list)
+               path-list-or-exp (<! (<decrypt-fnames rsapi graph-uuid encrypted-path-list*))]
+           (if (instance? ExceptionInfo path-list-or-exp)
+             path-list-or-exp
+             (let [encrypted-path->path-map (zipmap encrypted-path-list* path-list-or-exp)]
+               (mapv
+                #(->DelayedDeleteFileMetadata (get encrypted-path->path-map (:encrypted-path %))
+                                              (:encrypted-path %)
+                                              (:delete-epoch %))
+                (filter-files-with-unnormalized-path file-meta-list* encrypted-path->path-map)))))))))
+
   (<get-remote-all-files-meta [this graph-uuid]
     (user/<wrap-ensure-id&access-token
      (let [file-meta-list      (transient #{})
            encrypted-path-list (transient [])
            exp-r
-                               (<!
-                                (go-loop [continuation-token nil]
-                                  (let [r (<! (.<request this "get_all_files"
-                                                         (into
-                                                          {}
-                                                          (remove (comp nil? second)
-                                                                  {:GraphUUID graph-uuid :ContinuationToken continuation-token}))))]
-                                    (if (instance? ExceptionInfo r)
-                                      r
-                                      (let [next-continuation-token (:NextContinuationToken r)
-                                            objs                    (:Objects r)]
-                                        (apply conj! encrypted-path-list (map (comp remove-user-graph-uuid-prefix :Key) objs))
-                                        (apply conj! file-meta-list
-                                               (map
-                                                #(hash-map :checksum (:checksum %)
-                                                           :encrypted-path (remove-user-graph-uuid-prefix (:Key %))
-                                                           :size (:Size %)
-                                                           :last-modified (:LastModified %))
-                                                objs))
-                                        (when-not (empty? next-continuation-token)
-                                          (recur next-continuation-token)))))))]
+           (<!
+            (go-loop [continuation-token nil]
+              (let [r (<! (.<request this "get_all_files"
+                                     (into
+                                      {}
+                                      (remove (comp nil? second)
+                                              {:GraphUUID graph-uuid :ContinuationToken continuation-token}))))]
+                (if (instance? ExceptionInfo r)
+                  r
+                  (let [next-continuation-token (:NextContinuationToken r)
+                        objs                    (:Objects r)]
+                    (apply conj! encrypted-path-list (map (comp remove-user-graph-uuid-prefix :Key) objs))
+                    (apply conj! file-meta-list
+                           (map
+                            #(hash-map :checksum (:checksum %)
+                                       :encrypted-path (remove-user-graph-uuid-prefix (:Key %))
+                                       :size (:Size %)
+                                       :last-modified (:LastModified %))
+                            objs))
+                    (when-not (empty? next-continuation-token)
+                      (recur next-continuation-token)))))))]
        (if (instance? ExceptionInfo exp-r)
          exp-r
          (let [file-meta-list*      (persistent! file-meta-list)
@@ -1274,13 +1310,13 @@
          (let [txns-with-encrypted-paths (mapv #(update % :path remove-user-graph-uuid-prefix) (:Transactions r))
                encrypted-paths           (mapv :path txns-with-encrypted-paths)
                encrypted-path->path-map
-                                         (zipmap
-                                          encrypted-paths
-                                          (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths)))
+               (zipmap
+                encrypted-paths
+                (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths)))
                txns
-                                         (mapv
-                                          (fn [txn] (update txn :path #(get encrypted-path->path-map %)))
-                                          txns-with-encrypted-paths)]
+               (mapv
+                (fn [txn] (update txn :path #(get encrypted-path->path-map %)))
+                txns-with-encrypted-paths)]
            txns)))))
 
   (<get-diff [this graph-uuid from-txid]
@@ -1291,41 +1327,41 @@
          r
          (let [txns-with-encrypted-paths (sort-by :TXId (:Transactions r))
                txns-with-encrypted-paths*
-                                         (mapv
-                                          (fn [txn]
-                                            (assoc txn :TXContent
-                                                   (mapv
-                                                    (fn [[to-path from-path checksum]]
-                                                      [(remove-user-graph-uuid-prefix to-path)
-                                                       (some-> from-path remove-user-graph-uuid-prefix)
-                                                       checksum])
-                                                    (:TXContent txn))))
-                                          txns-with-encrypted-paths)
+               (mapv
+                (fn [txn]
+                  (assoc txn :TXContent
+                         (mapv
+                          (fn [[to-path from-path checksum]]
+                            [(remove-user-graph-uuid-prefix to-path)
+                             (some-> from-path remove-user-graph-uuid-prefix)
+                             checksum])
+                          (:TXContent txn))))
+                txns-with-encrypted-paths)
                encrypted-paths
-                                         (mapcat
-                                          (fn [txn]
-                                            (remove
-                                             #(or (nil? %) (not (string/starts-with? % "e.")))
-                                             (mapcat
-                                              (fn [[to-path from-path _checksum]] [to-path from-path])
-                                              (:TXContent txn))))
-                                          txns-with-encrypted-paths*)
+               (mapcat
+                (fn [txn]
+                  (remove
+                   #(or (nil? %) (not (string/starts-with? % "e.")))
+                   (mapcat
+                    (fn [[to-path from-path _checksum]] [to-path from-path])
+                    (:TXContent txn))))
+                txns-with-encrypted-paths*)
                encrypted-path->path-map
-                                         (zipmap
-                                          encrypted-paths
-                                          (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths)))
+               (zipmap
+                encrypted-paths
+                (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths)))
                txns
-                                         (mapv
-                                          (fn [txn]
-                                            (assoc
-                                              txn :TXContent
-                                              (mapv
-                                               (fn [[to-path from-path checksum]]
-                                                 [(get encrypted-path->path-map to-path to-path)
-                                                  (some->> from-path (get encrypted-path->path-map))
-                                                  checksum])
-                                               (:TXContent txn))))
-                                          txns-with-encrypted-paths*)]
+               (mapv
+                (fn [txn]
+                  (assoc
+                   txn :TXContent
+                   (mapv
+                    (fn [[to-path from-path checksum]]
+                      [(get encrypted-path->path-map to-path to-path)
+                       (some->> from-path (get encrypted-path->path-map))
+                       checksum])
+                    (:TXContent txn))))
+                txns-with-encrypted-paths*)]
            [txns
             (:TXId (last txns))
             (:TXId (first txns))])))))
