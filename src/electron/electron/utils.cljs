@@ -5,6 +5,7 @@
             [electron.configs :as cfgs]
             [electron.logger :as logger]
             [cljs-bean.core :as bean]
+            [electron.state :as state]
             ["electron" :refer [app BrowserWindow]]))
 
 (defonce *win (atom nil)) ;; The main window
@@ -57,7 +58,8 @@
   (reset! *fetchAgent
           (when (and protocol host port)
             (new HttpsProxyAgent (str protocol "://" host ":" port))))
-  (cfgs/set-item! :settings/agent opts))
+  (cfgs/set-item! :settings/agent opts)
+  (state/set-state! [:config :settings/agent] opts))
 
 (defn restore-user-fetch-agent
   []

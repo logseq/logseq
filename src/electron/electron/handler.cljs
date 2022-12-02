@@ -13,6 +13,7 @@
             ["abort-controller" :as AbortController]
             ["child_process" :as child-process]
             ["command-exists" :as command-exists]
+            [electron.shell :as shell]
             [electron.fs-watcher :as watcher]
             [electron.configs :as cfgs]
             [promesa.core :as p]
@@ -385,11 +386,12 @@
 
 (defmethod handle :userAppCfgs [_window [_ k v]]
   (let [config (cfgs/get-config)]
-    (if-not k
-      config
+    (if-let [k (and k (keyword k))]
       (if-not (nil? v)
-        (cfgs/set-item! (keyword k) v)
-        (cfgs/get-item (keyword k))))))
+        (do (cfgs/set-item! k v)
+            (state/set-state! [:config k] v))
+        (cfgs/get-item k))
+     config)))
 
 (defmethod handle :getDirname [_]
   js/__dirname)
@@ -433,24 +435,20 @@
     (git/run-git2! (clj->js args))))
 
 (defmethod handle :runCli [window [_ {:keys [command args returnResult]}]]
-  (when command
-    (if ((.-sync command-exists) command)
-      (let [job (child-process/spawn (str command " " args)
-                                     #js []
-                                     #js {:shell true :detached true})
-            handler (fn [message]
-                      (let [result (str "Running " command ": " message)]
-                        (println result)
-                        (when returnResult
-                          (utils/send-to-renderer window "notification"
-                                                  {:type "success"
-                                                   :payload result}))))]
-        (.on (.-stderr job) "data" handler)
-        (.on (.-stdout job) "data" handler))
+  (try
+    (let [handler (fn [message]
+                    (let [result (str "Running " command ": " message)]
+                      (println result)
+                      (when returnResult
+                        (utils/send-to-renderer window "notification"
+                                                {:type    "success"
+                                                 :payload result}))))
+          _job    (shell/run-command-safety! command args handler)])
+    (catch js/Error e
       (utils/send-to-renderer window "notification"
-                              {:type "error"
-                               :payload (str "Program " command " not found!")}))
-    nil))
+                              {:type    "error"
+                               :payload (.-message e)})))
+  nil)
 
 (defmethod handle :gitCommitAll [_ [_ message]]
   (git/add-all-and-commit! message))

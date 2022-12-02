@@ -21,9 +21,9 @@
 
 (defn run-cli-command!
   [command args]
-  (ipc/ipc "runCli" {:command command
-                     :args args
-                     :returnResult true}))
+  (ipc/ipc :runCli {:command      command
+                    :args         args
+                    :returnResult true}))
 
 (defn wrap-notification!
   [command f args]
@@ -36,26 +36,15 @@
      :success
      false)))
 
-(def commands-whitelist
-  #{"git" "pandoc" "ag" "grep" "alda"})
-
 (def dangerous-commands
   #{"rm" "mv" "rename" "dd" ">" "command" "sudo"})
 
 (def code-block-commands-whitelist
   #{"alda"})
 
-(defn get-commands
-  []
-  (set/union (map (comp #(remove string/blank? %) string/lower-case str)
-               (:commands-whitelist (state/get-config)))
-             commands-whitelist))
-
 (defn get-code-block-commands
   []
-  (set/union (map (comp #(remove string/blank? %) string/lower-case str)
-               (:code-block/command-whitelist (state/get-config)))
-             code-block-commands-whitelist))
+  code-block-commands-whitelist)
 
 (defn run-command!
   [command]
@@ -72,13 +61,8 @@
           (= "git" command)
           (wrap-notification! command (fn [_ args] (run-git-command! args)) args)
 
-          (contains? (get-commands) command)
-          (run-cli-command! command args)
-
           :else
-          (notification/show!
-           [:div (str command " is not supported yet!")]
-           :error))))))
+          (run-cli-command! command args))))))
 
 ;; git show $REV:$FILE
 (defn- get-versioned-file-content
