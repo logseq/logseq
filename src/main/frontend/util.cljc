@@ -113,6 +113,11 @@
      []
      (when (electron?) (. js/window -__MOCKED_OPEN_DIR_PATH__))))
 
+;; #?(:cljs
+;;    (defn ci?
+;;      []
+;;      (boolean (. js/window -__E2E_TESTING__))))
+
 #?(:cljs
    (do
      (def nfs? (and (not (electron?))

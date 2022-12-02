@@ -215,12 +215,15 @@
 
 (defn- search-blocks-aux
   [database sql input page limit]
-  (let [stmt (prepare database sql)]
-    (js->clj
-     (if page
-       (.all ^object stmt (int page) input limit)
-       (.all ^object stmt  input limit))
-     :keywordize-keys true)))
+  (try
+    (let [stmt (prepare database sql)]
+      (js->clj
+       (if page
+         (.all ^object stmt (int page) input limit)
+         (.all ^object stmt  input limit))
+       :keywordize-keys true))
+    (catch :default e
+      (logger/error "Search blocks failed: " (str e)))))
 
 (defn- get-match-inputs
   [q]
@@ -270,9 +273,13 @@
         (->>
          (concat matched-result
                  (search-blocks-aux database non-match-sql non-match-input page limit))
-         (distinct-by :id)
+         (distinct-by :rowid)
          (take limit)
          (vec))))))
+
+(defn- snippet-by
+  [content length]
+  (str (subs content 0 length) (when (> (count content) 250) "...")))
 
 (defn- search-pages-res-unpack
   [arr]
@@ -280,14 +287,30 @@
     {:id      rowid
      :uuid    uuid
      :content content
-     :snippet snippet}))
+     ;; post processing
+     :snippet (let [;; Remove title from snippet
+                    flag-title " $<pfts_f6ld$ "
+                    flag-title-pos (string/index-of snippet flag-title)
+                    snippet (if flag-title-pos
+                              (subs snippet (+ flag-title-pos (count flag-title)))
+                              snippet)
+                    ;; Cut snippet to 250 chars for non-matched results
+                    flag-highlight "$pfts_2lqh>$ "
+                    snippet (if (string/includes? snippet flag-highlight)
+                              snippet
+                              (snippet-by snippet 250))]
+                snippet)}))
 
 (defn- search-pages-aux
   [database sql input limit]
   (let [stmt (prepare database sql)]
-    (map search-pages-res-unpack (-> (.raw ^object stmt)
-                                     (.all input limit)
-                                     (js->clj)))))
+    (try
+      (doall
+       (map search-pages-res-unpack (-> (.raw ^object stmt)
+                                        (.all input limit)
+                                        (js->clj))))
+      (catch :default e
+        (logger/error "Search page failed: " (str e))))))
 
 (defn search-pages
   [repo q {:keys [limit]}]
@@ -300,7 +323,7 @@
             ;; the 2nd column in pages_fts (content)
             ;; pfts_2lqh is a key for retrieval
             ;; highlight and snippet only works for some matching with high rank
-            snippet-aux "snippet(pages_fts, 1, '$pfts_2lqh>$', '$<pfts_2lqh$', '...', 32)"
+            snippet-aux "snippet(pages_fts, 1, ' $pfts_2lqh>$ ', ' $<pfts_2lqh$ ', '...', 32)"
             select (str "select rowid, uuid, content, " snippet-aux " from pages_fts where ")
             match-sql (str select
                            " content match ? order by rank limit ?")
@@ -314,7 +337,7 @@
                             (apply concat))]
         (->>
          (concat matched-result
-          (search-pages-aux database non-match-sql non-match-input limit))
+                 (search-pages-aux database non-match-sql non-match-input limit))
          (distinct-by :id)
          (take limit)
          (vec))))))

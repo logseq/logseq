@@ -55,6 +55,7 @@
             [frontend.components.file-sync :as file-sync]
             [frontend.components.encryption :as encryption]
             [frontend.components.conversion :as conversion-component]
+            [frontend.components.whiteboard :as whiteboard]
             [goog.dom :as gdom]
             [logseq.db.schema :as db-schema]
             [promesa.core :as p]
@@ -76,7 +77,7 @@
   (async/go (async/<! (p->c (persist-var/load-vars)))
             (async/<! (sync/<sync-stop))))
 
-(defmethod handle :user/login [[_]]
+(defmethod handle :user/fetch-info-and-graphs [[_]]
   (state/set-state! [:ui/loading? :login] false)
   (async/go
     (let [result (async/<! (sync/<user-info sync/remoteapi))]
@@ -85,7 +86,7 @@
         nil
         (map? result)
         (do
-          (state/set-state! :user/info result)
+          (state/set-user-info! result)
           (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
               (when-not (false? (state/enable-sync?)) ; user turns it off
@@ -99,7 +100,8 @@
                                     (util/uuid-string? (second (:sync-meta %)))) repos)
                     (sync/<sync-start)))))
             (ui-handler/re-render-root!)
-            (file-sync/maybe-onboarding-show status)))))))
+            (file-sync/maybe-onboarding-show status)
+            (whiteboard/onboarding-show)))))))
 
 (defmethod handle :user/logout [[_]]
   (file-sync-handler/reset-session-graphs)
@@ -364,15 +366,18 @@
         (state/pub-event! [:graph/dir-gone dir]))))
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo)
-  (when-not config/test?
-    (js/setTimeout
-     (fn []
-       (let [filename-format (state/get-filename-format repo)]
-         (when (and (util/electron?)
-                    (not (config/demo-graph?))
-                    (not= filename-format :triple-lowbar))
-           (state/pub-event! [:ui/notify-outdated-filename-format []]))))
-     3000)))
+  ;; TODO: Notify user to update filename format when the UX is smooth enough
+  ;; (when-not config/test?
+  ;;   (js/setTimeout
+  ;;    (fn []
+  ;;      (let [filename-format (state/get-filename-format repo)]
+  ;;        (when (and (util/electron?)
+  ;;                   (not (util/ci?))
+  ;;                   (not (config/demo-graph?))
+  ;;                   (not= filename-format :triple-lowbar))
+  ;;          (state/pub-event! [:ui/notify-outdated-filename-format []]))))
+  ;;    3000))
+  )
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
@@ -418,8 +423,13 @@
   (posthog/capture type payload))
 
 (defmethod handle :capture-error [[_ {:keys [error payload]}]]
-  (Sentry/captureException error
-                           (bean/->js {:extra payload})))
+  (let [[user-uuid graph-uuid tx-id] @sync/graphs-txid
+        payload (assoc payload
+                       :user-id user-uuid
+                       :graph-id graph-uuid
+                       :tx-id tx-id)]
+    (Sentry/captureException error
+                            (bean/->js {:extra payload}))))
 
 (defmethod handle :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))
@@ -708,6 +718,12 @@
           (route-handler/redirect! {:to :page
                                     :path-params {:name (:block/name page-entity)}}))))))
 
+(defmethod handle :whiteboard/onboarding [[_ opts]]
+  (state/set-modal!
+   (fn [close-fn] (whiteboard/onboarding-welcome close-fn))
+   (merge {:close-btn?      false
+           :center?         true
+           :close-backdrop? false} opts)))
 
 (defmethod handle :file-sync/onboarding-tip [[_ type opts]]
   (let [type (keyword type)]

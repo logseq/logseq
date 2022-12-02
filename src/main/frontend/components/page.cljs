@@ -287,7 +287,8 @@
                   (if fmt-journal? (date/journal-title->custom-format title) title))
           old-name (or title page-name)]
       [:h1.page-title.flex.cursor-pointer.gap-1.w-full
-       {:on-mouse-down (fn [e]
+       {:class (when-not whiteboard-page? "title")
+        :on-mouse-down (fn [e]
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page page-name})))
         :on-click (fn [e]
@@ -415,8 +416,8 @@
                                    (page-mouse-leave e *control-show?))}
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when-not whiteboard?
-               [:div.flex-1.flex-row.w-full
-                [:h1.title.ls-page-title (page-title page-name icon title format fmt-journal?)]])
+               [:div.ls-page-title.flex-1.flex-row.w-full
+                (page-title page-name icon title format fmt-journal?)])
              (when (not config/publishing?)
                (when config/lsp-enabled?
                  [:div.flex.flex-row

@@ -1,7 +1,6 @@
 (ns frontend.format.block
   "Block code needed by app but not graph-parser"
-  (:require ["@sentry/react" :as Sentry]
-            [cljs-time.format :as tf]
+  (:require [cljs-time.format :as tf]
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -29,7 +28,8 @@ and handles unexpected failure."
                               :date-formatter (state/get-date-formatter)})
     (catch :default e
       (log/error :exception e)
-      (Sentry/captureException e)
+      (state/pub-event! [:capture-error {:error e
+                                         :payload {:type "Extract-blocks"}}])
       (notification/show! "An unexpected error occurred during block extraction." :error)
       [])))
 

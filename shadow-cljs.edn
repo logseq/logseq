@@ -33,10 +33,12 @@
                                                 "externs.js"]
                            :warnings           {:fn-deprecated false
                                                 :redef false}}
+        :build-hooks      [(shadow.hooks/git-revision-hook "--long --always --dirty")]
         :closure-defines  {goog.debug.LOGGING_ENABLED       true
-                           frontend.config/ENABLE-PLUGINS   #shadow/env ["ENABLE_PLUGINS"   :as :bool :default true]
+                           frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS"   :as :bool :default true]
                            frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
-                           frontend.config/TEST #shadow/env ["CI" :as :bool :default false]}
+                           frontend.config/TEST #shadow/env ["LOGSEQ_CI" :as :bool :default false]
+                           frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]} ;; set by git-revision-hook
 
         ;; NOTE: electron, browser/mobile-app use different asset-paths.
         ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).

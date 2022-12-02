@@ -9,8 +9,6 @@
             [frontend.util :as util]
             [promesa.core :as p]
             [logseq.graph-parser.text :as text]
-            [frontend.util.drawer :as drawer]
-            [frontend.util.property :as property]
             [electron.ipc :as ipc]
             [goog.functions :refer [debounce]]
             [dommy.core :as dom]))
@@ -26,18 +24,16 @@
 (defn sanity-search-content
   "Convert a block to the display contents for searching"
   [format content]
-  (->> (text/remove-level-spaces content format (config/get-block-pattern format))
-       (drawer/remove-logbook)
-       (property/remove-built-in-properties format)))
+  (text/remove-level-spaces content format (config/get-block-pattern format)))
 
 (defn search
   ([q]
    (search (state/get-current-repo) q))
   ([repo q]
-   (search repo q {:limit 20}))
+   (search repo q {:limit 10}))
   ([repo q {:keys [page-db-id limit more?]
             :or {page-db-id nil
-                 limit 20}
+                 limit 10}
             :as opts}]
    (when-not (string/blank? q)
      (let [page-db-id (if (string? page-db-id)
