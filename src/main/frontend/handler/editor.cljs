@@ -814,11 +814,12 @@
     (let [uuid->dom-block (zipmap block-uuids dom-blocks)
           block (first blocks)
           block-parent (get uuid->dom-block (:block/uuid block))
+          editing? (state/editing?) ;; Only move cursor when editing
           sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))]
       (outliner-tx/transact!
        {:outliner-op :delete-blocks}
        (outliner-core/delete-blocks! blocks {}))
-      (when sibling-block
+      (when (and editing? sibling-block)
         (move-to-prev-block repo sibling-block
                             (:block/format block)
                             (dom/attr sibling-block "id")

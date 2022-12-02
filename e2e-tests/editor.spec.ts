@@ -596,3 +596,27 @@ test('should not erase typed text when expanding block quickly after typing #389
     ''
   )
 })
+
+test('should not enter edit mode after cut selection', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  await block.mustType("some text")
+  await block.enterNext()
+
+  await block.mustType("some text")
+  await block.enterNext()
+
+  await block.mustType("some text")
+
+  await page.keyboard.press('Shift+ArrowUp')
+  await page.keyboard.press('Shift+ArrowUp')
+
+  if (IsMac) {
+    await page.keyboard.press('Meta+x')
+  } else {
+    await page.keyboard.press('Control+x')
+  }
+
+  await expect(page.locator('textarea >> nth=0')).not.toBeVisible()
+  await expect(page.locator('text="some text"')).toHaveCount(1)
+})
