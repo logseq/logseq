@@ -13,13 +13,20 @@
             [frontend.handler.config :as config-handler])
   (:import [goog.ui KeyboardShortcutHandler]))
 
-(defn get-bindings
-  []
-  (->> (vals @shortcut-config/config)
+;; function vals->bindings is too time-consuming. Here we cache the results.
+(defn- flatten-key-bindings
+  [config]
+  (->> config
        (into {})
        (map (fn [[k {:keys [binding]}]]
               {k binding}))
        (into {})))
+
+(def m-flatten-key-bindings (util/memoize-last flatten-key-bindings))
+
+(defn get-bindings
+  []
+  (m-flatten-key-bindings (vals @shortcut-config/config)))
 
 (defn- mod-key [shortcut]
   (str/replace shortcut #"(?i)mod"
@@ -48,11 +55,11 @@
 (defn normalize-user-keyname
   [k]
   (let [keynames {";" "semicolon"
-                   "=" "equals"
-                   "-" "dash"
-                   "[" "open-square-bracket"
-                   "]" "close-square-bracket"
-                   "'" "single-quote"}]
+                  "=" "equals"
+                  "-" "dash"
+                  "[" "open-square-bracket"
+                  "]" "close-square-bracket"
+                  "'" "single-quote"}]
     (some-> k
             (util/safe-lower-case)
             (str/replace #"[;=-\[\]']" (fn [s]
