@@ -759,7 +759,7 @@
   (let [*doc-ref       (rum/use-ref nil)
         [loader-state, set-loader-state!] (rum/use-state {:error nil :pdf-document nil :status nil})
         [hls-state, set-hls-state!] (rum/use-state {:initial-hls nil :latest-hls nil :extra nil :loaded false})
-        [initial-page, set-initial-page!] (rum/use-state 0)
+        [initial-page, set-initial-page!] (rum/use-state 1)
         set-dirty-hls! (fn [latest-hls]  ;; TODO: incremental
                          (set-hls-state! #(merge % {:initial-hls [] :latest-hls latest-hls})))
         set-hls-extra! (fn [extra]
@@ -771,7 +771,7 @@
        (p/catch
         (p/let [data (pdf-assets/load-hls-data$ pdf-current)
                 {:keys [highlights extra]} data]
-          (set-initial-page! (util/safe-parse-int (:page extra)))
+          (set-initial-page! (or (util/safe-parse-int (:page extra)) 1))
           (set-hls-state! {:initial-hls highlights :latest-hls highlights :extra extra :loaded true}))
 
         ;; error
