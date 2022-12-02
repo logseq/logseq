@@ -131,9 +131,11 @@
             [frontend.extensions.calc :as calc]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.shell :as shell-handler]
             [frontend.state :as state]
             [logseq.graph-parser.utf8 :as utf8]
             [frontend.util :as util]
+            [frontend.ui :as ui]
             [frontend.config :as config]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -302,8 +304,20 @@
   [:div.extensions__code
    (when-let [mode (:data-lang attr)]
      (when-not (= mode "calc")
-       [:div.extensions__code-lang
-        (string/lower-case mode)]))
+       [:div
+        [:div.extensions__code-lang
+         (if (contains? (shell-handler/get-code-block-commands) (string/lower-case mode))
+           [:a {:title (str "Run command " mode)
+                :on-click (fn [_e]
+                            (let [editor-atom (:editor-atom state)]
+                              (when-let [editor @editor-atom]
+                                (state/pub-event! [:run/cli-command
+                                                   (string/lower-case mode)
+                                                   (.getValue editor)]))))}
+            (if (= mode "alda")
+              (ui/icon "player-play" {:size 20})
+              "Run")]
+           (string/lower-case mode))]]))
    [:div.code-editor.flex.flex-1.flex-row.w-full
     [:textarea (merge {:id id
                        ;; Expose the textarea associated with the CodeMirror instance via

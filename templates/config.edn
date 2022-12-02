@@ -296,4 +296,10 @@
  ;;     ;use triple underscore `___` for slash `/` in page title
  ;;     ;use Percent-encoding for other invalid characters
  :file/name-format :triple-lowbar
+
+ ;; Commands that are allowed to be invoked from Logseq.
+ :shell/command-whitelist #{}
+
+ ;; Commands that could be executed in code blocks, e.g. alda, dot
+ :code-block/command-whitelist #{}
  }
