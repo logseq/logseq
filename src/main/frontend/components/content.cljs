@@ -31,29 +31,6 @@
 
 ;; TODO i18n support
 
-(defn- set-format-js-loading!
-  [format value]
-  (when format
-    (swap! state/state assoc-in [:format/loading format] value)))
-
-(defn- lazy-load
-  [format]
-  (let [format (gp-util/normalize-format format)]
-    (when-let [record (format/get-format-record format)]
-      (when-not (protocol/loaded? record)
-        (set-format-js-loading! format true)
-        (protocol/lazyLoad record
-                           (fn [_result]
-                             (set-format-js-loading! format false)))))))
-
-(defn lazy-load-js
-  [state]
-  (when-let [format (:format (last (:rum/args state)))]
-    (let [loader? (contains? config/html-render-formats format)]
-      (when loader?
-        (when-not (format/loaded? format)
-          (lazy-load format))))))
-
 (rum/defc custom-context-menu-content
   []
   [:.menu-links-wrapper
@@ -420,17 +397,13 @@
 
 (rum/defc non-hiccup-content < rum/reactive
   [id content on-click on-hide config format]
-  (let [edit? (state/sub [:editor/editing? id])
-        loading (state/sub :format/loading)]
+  (let [edit? (state/sub [:editor/editing? id])]
     (if edit?
       (editor/box {:on-hide on-hide
                    :format format}
                   id
                   config)
-      (let [format (gp-util/normalize-format format)
-            loading? (get loading format)
-            markup? (contains? config/html-render-formats format)
-            on-click (fn [e]
+      (let [on-click (fn [e]
                        (when-not (util/link? (gobj/get e "target"))
                          (util/stop e)
                          (editor-handler/reset-cursor-range! (gdom/getElement (str id)))
@@ -438,17 +411,12 @@
                          (state/set-edit-input-id! id)
                          (when on-click
                            (on-click e))))]
-        (cond
-          (and markup? loading?)
-          [:div "loading ..."]
-
-          :else                       ; other text formats
-          [:pre.cursor.content.pre-white-space
-           {:id id
-            :on-click on-click}
-           (if (string/blank? content)
-             [:div.cursor "Click to edit"]
-             content)])))))
+        [:pre.cursor.content.pre-white-space
+         {:id id
+          :on-click on-click}
+         (if (string/blank? content)
+           [:div.cursor "Click to edit"]
+           content)]))))
 
 (defn- set-draw-iframe-style!
   []
@@ -463,16 +431,12 @@
           (d/set-style! draw :margin-left (str (- (/ (- width 570) 2)) "px")))))))
 
 (rum/defcs content < rum/reactive
-  {:will-mount (fn [state]
-                 (lazy-load-js state)
-                 state)
-   :did-mount (fn [state]
+  {:did-mount (fn [state]
                 (set-draw-iframe-style!)
                 (image-handler/render-local-images!)
                 state)
    :did-update (fn [state]
                  (set-draw-iframe-style!)
-                 (lazy-load-js state)
                  (image-handler/render-local-images!)
                  state)}
   [state id {:keys [format
