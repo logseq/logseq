@@ -1,15 +1,13 @@
 (ns frontend.format
   "Main ns for providing common operations on file content like conversion to html
-and edn. Can handle org, markdown and adoc formats"
+and edn. Can handle org-mode and markdown formats"
   (:require [frontend.format.mldoc :refer [->MldocMode] :as mldoc]
-            [frontend.format.adoc :refer [->AdocMode]]
             [frontend.format.protocol :as protocol]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
             [clojure.string :as string]))
 
 (defonce mldoc-record (->MldocMode))
-(defonce adoc-record (->AdocMode))
 
 (defn get-format-record
   [format]
@@ -18,8 +16,6 @@ and edn. Can handle org, markdown and adoc formats"
     mldoc-record
     :markdown
     mldoc-record
-    :adoc
-    adoc-record
     nil))
 
 ;; html
@@ -48,8 +44,3 @@ and edn. Can handle org, markdown and adoc formats"
      (if-let [record (get-format-record format)]
        (protocol/toEdn record content config)
        nil))))
-
-(defn loaded?
-  [format]
-  (when-let [record (get-format-record format)]
-    (protocol/loaded? record)))
