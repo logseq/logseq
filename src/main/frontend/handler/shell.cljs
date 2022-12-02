@@ -48,21 +48,24 @@
 
 (defn run-command!
   [command]
-  (let [[command args] (gp-util/split-first " " command)
-        command (and command (string/lower-case command))]
-    (when (and (not (string/blank? command)) (not (string/blank? args)))
-      (let [args (string/trim args)]
-        (cond
-          (contains? dangerous-commands command)
-          (notification/show!
-           [:div (str command " is too dangerous!")]
-           :error)
+  (let [[command args]
+        (if (and (string? command) (string/includes? command " "))
+          (gp-util/split-first " " command)
+          [command ""])
+        command (and command (string/lower-case command))
+        args (-> args str string/trim)]
+    (when-not (string/blank? command)
+      (cond
+        (contains? dangerous-commands command)
+        (notification/show!
+         [:div (str command " is too dangerous!")]
+         :error)
 
-          (= "git" command)
-          (wrap-notification! command (fn [_ args] (run-git-command! args)) args)
+        (= "git" command)
+        (wrap-notification! command (fn [_ args] (run-git-command! args)) args)
 
-          :else
-          (run-cli-command! command args))))))
+        :else
+        (run-cli-command! command args)))))
 
 ;; git show $REV:$FILE
 (defn- get-versioned-file-content

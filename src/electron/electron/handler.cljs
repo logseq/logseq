@@ -436,19 +436,21 @@
 
 (defmethod handle :runCli [window [_ {:keys [command args returnResult]}]]
   (try
-    (let [handler (fn [message]
-                    (let [result (str "Running " command ": " message)]
-                      (println result)
-                      (when returnResult
-                        (utils/send-to-renderer window "notification"
-                                                {:type    "success"
-                                                 :payload result}))))
-          _job    (shell/run-command-safety! command args handler)])
+    (let [on-data-handler (fn [message]
+                            (let [result (str "Running " command ": " message)]
+                              (when returnResult
+                                (utils/send-to-renderer window "notification"
+                                                        {:type    "success"
+                                                         :payload result}))))
+          deferred        (p/deferred)
+          on-exit-handler (fn [code]
+                            (p/resolve! deferred code))
+          _job            (shell/run-command-safety! command args on-data-handler on-exit-handler)]
+      deferred)
     (catch js/Error e
       (utils/send-to-renderer window "notification"
                               {:type    "error"
-                               :payload (.-message e)})))
-  nil)
+                               :payload (.-message e)}))))
 
 (defmethod handle :gitCommitAll [_ [_ message]]
   (git/add-all-and-commit! message))

@@ -3,6 +3,7 @@
    [clojure.string :as string]
    [electron.state :as state]
    [clojure.set :as set]
+   [electron.logger :as logger]
    ["child_process" :as child-process]
    ["command-exists" :as command-exists]))
 
@@ -20,13 +21,15 @@
              commands-whitelist))
 
 (defn- run-command!
-  [command args listener]
+  [command args on-data on-exit]
+  (logger/debug "Shell: " (str command " " args))
   (let [job (child-process/spawn (str command " " args)
                                  #js []
-                                 #js {:shell true :detached true})]
+                                 #js {:shell true :detached false})]
 
-    (.on (.-stderr job) "data" listener)
-    (.on (.-stdout job) "data" listener)
+    (.on (.-stderr job) "data" on-data)
+    (.on (.-stdout job) "data" on-data)
+    (.on job "close" on-exit)
 
     job))
 
@@ -43,8 +46,8 @@
     (throw (js/Error. (str "Shell: " command " not be allowed!")))) command)
 
 (defn run-command-safety!
-  [command args listener]
+  [command args on-data on-exit]
   (when (some-> command str string/trim string/lower-case
                 (ensure-command-exists)
                 (ensure-command-in-whitelist))
-    (run-command! command args listener)))
+    (run-command! command args on-data on-exit)))
