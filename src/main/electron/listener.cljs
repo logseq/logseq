@@ -161,8 +161,8 @@
                                                    [:quick-capture-options :insert-today?]
                                                    false)
                              redirect-page? (get-in (state/get-config)
-                                                   [:quick-capture-options :redirect-page?]
-                                                   false)
+                                                    [:quick-capture-options :redirect-page?]
+                                                    false)
                              today-page (when (state/enable-journals?)
                                           (string/lower-case (date/today)))
                              page (if (or (= page "TODAY")
@@ -197,12 +197,14 @@
                              (editor-handler/insert (str "\n" content)))
 
                            (do
+                             (editor-handler/escape-editing)
                              (when (not= page (state/get-current-page))
                                (page-handler/create! page {:redirect? redirect-page?}))
-                             (editor-handler/escape-editing)
-                             (editor-handler/api-insert-new-block! content {:page page
-                                                                            :edit-block? true
-                                                                            :replace-empty-target? true}))))))
+                             ;; Or else this will clear the newly inserted content
+                             (js/setTimeout #(editor-handler/api-insert-new-block! content {:page page
+                                                                                            :edit-block? true
+                                                                                            :replace-empty-target? true})
+                                            100))))))
 
   (js/window.apis.on "openNewWindowOfGraph"
                      ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage
