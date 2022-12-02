@@ -47,7 +47,7 @@ env:
 
 jobs:
   build-apk:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, x64]
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v2
