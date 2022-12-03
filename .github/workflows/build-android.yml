@@ -97,7 +97,7 @@ jobs:
         id: ref
         run: |
           pkgver=$(node ./scripts/get-pkg-version.js "${{ inputs.build-target || github.event.inputs.build-target }}")
-          echo "version=$pkgver" >> >> $GITHUB_OUTPUT
+          echo "version=$pkgver" >> $GITHUB_OUTPUT
 
       - name: Update Nightly APP Version
         if: ${{ inputs.build-target == '' || inputs.build-target == 'nightly' || github.event.inputs.build-target == 'nightly' }}
