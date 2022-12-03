@@ -158,10 +158,8 @@
   [dir ok-handler]
   (let [record (get-record)]
     (p/let [result (protocol/open-dir record dir ok-handler)]
-      (if (or (util/electron?)
-              (mobile-util/native-platform?))
-        (let [[dir & paths] (bean/->clj result)]
-          [(:path dir) paths])
+      (if (or (util/electron?) (mobile-util/native-platform?))
+        (let [[dir & paths] result] [(:path dir) paths])
         result))))
 
 (defn get-files
@@ -177,11 +175,15 @@
 
 (defn watch-dir!
   ([dir] (watch-dir! dir {}))
-  ([dir options] (protocol/watch-dir! (get-record) dir options)))
+  ([dir options]
+   ;; "/local" means demo graph
+   (when (not= dir "/local")
+     (protocol/watch-dir! (get-record) dir options))))
 
 (defn unwatch-dir!
   [dir]
-  (protocol/unwatch-dir! (get-record) dir))
+  (when (not= dir "/local")
+    (protocol/unwatch-dir! (get-record) dir)))
 
 (defn mkdir-if-not-exists
   [dir]

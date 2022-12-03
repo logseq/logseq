@@ -1,5 +1,5 @@
 (ns frontend.fs.node
-  "Implementation of fs protocol for desktop"
+  "Implementation of fs protocol for Electron(ipc based)"
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.config :as config]
