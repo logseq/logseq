@@ -63,7 +63,7 @@ jobs:
 
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
-        run: echo "::set-output name=dir::$(yarn cache dir)"
+        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
 
       - name: Cache yarn cache directory
         uses: actions/cache@v3
@@ -89,7 +89,7 @@ jobs:
           key: ${{ runner.os }}-clojure-lib-${{ hashFiles('**/deps.edn') }}
 
       - name: Setup clojure
-        uses: DeLaGuardo/setup-clojure@3.5
+        uses: DeLaGuardo/setup-clojure@10.1
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 
@@ -97,7 +97,7 @@ jobs:
         id: ref
         run: |
           pkgver=$(node ./scripts/get-pkg-version.js "${{ inputs.build-target || github.event.inputs.build-target }}")
-          echo ::set-output name=version::$pkgver
+          echo "version=$pkgver" >> >> $GITHUB_OUTPUT
 
       - name: Update Nightly APP Version
         if: ${{ inputs.build-target == '' || inputs.build-target == 'nightly' || github.event.inputs.build-target == 'nightly' }}
@@ -148,6 +148,7 @@ jobs:
 
       - name: Sign Android APK
         run: |
+          env
           echo ${{ secrets.ANDROID_KEYSTORE }} | base64 -d > keystore.jks
           /usr/local/lib/android/sdk/build-tools/30.0.3/apksigner sign \
             --ks keystore.jks --ks-pass "pass:${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
