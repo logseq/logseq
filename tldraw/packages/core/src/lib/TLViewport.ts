@@ -4,7 +4,7 @@ import { FIT_TO_SCREEN_PADDING, ZOOM_UPDATE_FACTOR } from '../constants'
 import type { TLBounds } from '../types'
 
 const ease = (x: number) => {
-  return x * x
+  return -(Math.cos(Math.PI * x) - 1) / 2
 }
 
 const elapsedProgress = (t: number) => {
@@ -95,34 +95,19 @@ export class TLViewport {
   pinchZoom = (point: number[], delta: number[], zoom: number, animate = false): this => {
     const { camera } = this
 
-    const runZoom = (currentZoom: number) => {
-      const nextPoint = Vec.sub(camera.point, Vec.div(delta, camera.zoom))
-      currentZoom = Vec.clamp(currentZoom, TLViewport.minZoom, TLViewport.maxZoom)
-      const p0 = Vec.sub(Vec.div(point, camera.zoom), nextPoint)
-      const p1 = Vec.sub(Vec.div(point, currentZoom), nextPoint)
-      this.update({ point: Vec.toFixed(Vec.add(nextPoint, Vec.sub(p1, p0))), zoom: currentZoom })
-    }
+    const nextPoint = Vec.sub(camera.point, Vec.div(delta, camera.zoom))
+    zoom = Vec.clamp(zoom, TLViewport.minZoom, TLViewport.maxZoom)
+    const p0 = Vec.sub(Vec.div(point, camera.zoom), nextPoint)
+    const p1 = Vec.sub(Vec.div(point, zoom), nextPoint)
+
+    const newPoint = Vec.toFixed(Vec.add(nextPoint, Vec.sub(p1, p0)))
 
     if (animate) {
-      const diff = zoom - camera.zoom
-      const initialZoom = camera.zoom
-      const startTime = performance.now()
-      const step = () => {
-        const elapsed = performance.now() - startTime
-        const progress = elapsedProgress(elapsed) // 0 ~ 1, 100ms
-        const currentZoom = initialZoom + diff * progress
-        console.log(progress)
-        runZoom(currentZoom)
-        if (progress < 1) {
-          requestAnimationFrame(step)
-        } else {
-          runZoom(zoom)
-        }
-      }
-      step()
+      this.animate({ point: newPoint, zoom })
     } else {
-      runZoom(zoom)
+      this.update({ point: newPoint, zoom })
     }
+
     return this
   }
 
@@ -147,6 +132,31 @@ export class TLViewport {
     return this
   }
 
+  animate = ({ point, zoom }: { point: number[]; zoom: number }) => {
+    const { camera } = this
+    const originalPoint = camera.point
+    const originalZoom = camera.zoom
+    const zoomDiff = zoom - camera.zoom
+    const positionDiff = Vec.sub(point, camera.point)
+
+    const startTime = performance.now()
+    const step = () => {
+      const elapsed = performance.now() - startTime
+      const progress = elapsedProgress(elapsed) // 0 ~ 1, 100ms
+      const currentZoom = originalZoom + zoomDiff * progress
+      // fixme: the point should be calculated by the CURRENT zoom, not the final zoom
+      const currentPoint = Vec.add(originalPoint, Vec.mul(positionDiff, progress))
+
+      this.update({ point: currentPoint, zoom: currentZoom })
+      if (progress < 1) {
+        requestAnimationFrame(step)
+      } else {
+        this.update({ point, zoom })
+      }
+    }
+    step()
+  }
+
   zoomToBounds = ({ width, height, minX, minY }: TLBounds) => {
     const { bounds, camera } = this
     let zoom = Math.min(
@@ -167,26 +177,6 @@ export class TLViewport {
 
     const point = Vec.add([-minX, -minY], delta)
 
-    const originalPoint = camera.point
-    const originalZoom = camera.zoom
-    const zoomDiff = zoom - camera.zoom
-    const positionDiff = Vec.sub(point, camera.point)
-
-    // Animate by default
-    const startTime = performance.now()
-    const step = () => {
-      const elapsed = performance.now() - startTime
-      const progress = elapsedProgress(elapsed) // 0 ~ 1, 100ms
-      const currentZoom = originalZoom + zoomDiff * progress
-      // fixme: the point should be calculated by the CURRENT zoom, not the final zoom
-      const currentPoint = Vec.add(originalPoint, Vec.mul(positionDiff, progress))
-      this.update({ point: currentPoint, zoom: currentZoom })
-      if (progress < 1) {
-        requestAnimationFrame(step)
-      } else {
-        this.update({ point, zoom })
-      }
-    }
-    step()
+    this.animate({ point, zoom })
   }
 }
