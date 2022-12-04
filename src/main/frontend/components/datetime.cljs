@@ -83,7 +83,6 @@
   (reset! *timestamp default-timestamp-value)
   (reset! *show-time? false)
   (reset! *show-repeater? false)
-  (state/set-timestamp-block! nil)
   (state/set-state! :date-picker/date nil))
 
 (defn- on-submit
@@ -131,16 +130,14 @@
 (rum/defc date-picker < rum/reactive
   {:init (fn [state]
            (let [ts (last (:rum/args state))]
+             (clear-timestamp!)
              (if ts
                (reset! *timestamp ts)
                (reset! *timestamp {:time ""
                                    :repeater {}}))
              (when-not (:date-picker/date @state/state)
                (state/set-state! :date-picker/date (get ts :date (t/today)))))
-           state)
-   :will-unmount (fn [state]
-                   (clear-timestamp!)
-                   state)}
+           state)}
   [id format _ts]
   (let [current-command @commands/*current-command
         deadline-or-schedule? (and current-command
