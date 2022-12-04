@@ -32,7 +32,6 @@ export class CreatingState extends TLToolState<
       this.app.currentPage.addShapes(shape)
       this.app.setEditingShape(shape)
       this.app.setSelectedShapes([shape])
-      this.app.viewport.zoomToBounds({ ...shape.bounds, minY: shape.bounds.maxY + 200 })
     })
   }
 
