@@ -56,13 +56,13 @@
 (defonce icon-size (if (mobile-util/native-platform?) 26 20))
 
 (def block-background-colors
-  ["gray"
+  ["yellow"
    "red"
-   "yellow"
+   "pink"
    "green"
    "blue"
    "purple"
-   "pink"])
+   "gray"])
 
 (rum/defc ls-textarea
   < rum/reactive
@@ -250,10 +250,11 @@
              content]]
            [:div.ml-4.flex-shrink-0.flex
             [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150.notification-close-button
-             {:on-click (fn []
+             {:aria-label "Close"
+              :on-click (fn []
                           (notification/clear! uid))}
 
-            (icon "x" {:fill "currentColor"})]]]]]]])))
+             (icon "x" {:fill "currentColor"})]]]]]]])))
 
 (declare button)
 

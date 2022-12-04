@@ -121,7 +121,4 @@
          (#'model/get-unnecessary-namespaces-name '("one/two/tree" "one" "one/two" "non nested tag" "non nested link")))
       "Must be  one/two one"))
 
-
-
-
 #_(cljs.test/test-ns 'frontend.db.model-test)

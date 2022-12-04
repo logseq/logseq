@@ -256,7 +256,7 @@
    {}))
 
 (rum/defc ^:large-vars/cleanup-todo sidebar-nav
-  [route-match close-modal-fn left-sidebar-open? srs-open?
+  [route-match close-modal-fn left-sidebar-open? enable-whiteboards? srs-open?
    *closing? close-signal touching-x-offset]
   (let [[local-closing? set-local-closing?] (rum/use-state false)
         [el-rect set-el-rect!] (rum/use-state nil)
@@ -264,7 +264,6 @@
         ref-open?           (rum/use-ref left-sidebar-open?)
         default-home        (get-default-home-if-valid)
         route-name          (get-in route-match [:data :name])
-        enable-whiteboards? (state/enable-whiteboards?)
         on-contents-scroll  #(when-let [^js el (.-target %)]
                                (let [top  (.-scrollTop el)
                                      cls  (.-classList el)
@@ -361,7 +360,16 @@
                                      (route-handler/sidebar-journals!)
                                      (route-handler/go-to-journals!)))
                :icon             "calendar"})))
-
+         
+         (when enable-whiteboards?
+           (sidebar-item
+            {:class           "whiteboard"
+             :title           (t :right-side-bar/whiteboards)
+             :href            (rfe/href :whiteboards)
+             :active          (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
+             :icon            "whiteboard"
+             :icon-extension? true}))
+         
          (when (state/enable-flashcards? (state/get-current-repo))
            [:div.flashcards-nav
             (flashcards srs-open?)])
@@ -378,16 +386,7 @@
            :title  (t :right-side-bar/all-pages)
            :href   (rfe/href :all-pages)
            :active (and (not srs-open?) (= route-name :all-pages))
-           :icon   "files"})
-
-         (when enable-whiteboards?
-           (sidebar-item
-            {:class           "whiteboard"
-             :title           (t :right-side-bar/whiteboards)
-             :href            (rfe/href :whiteboards)
-             :active          (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
-             :icon            "whiteboard"
-             :icon-extension? true}))]]
+           :icon   "files"})]]
 
        [:div.nav-contents-container.flex.flex-col.gap-1.pt-1
         {:on-scroll on-contents-scroll}
@@ -423,6 +422,7 @@
         *closing?            (::closing? s)
         *touch-state         (::touch-state s)
         *close-signal        (::close-signal s)
+        enable-whiteboards?  (state/enable-whiteboards?)
         touch-point-fn       (fn [^js e] (some-> (gobj/get e "touches") (aget 0) (#(hash-map :x (.-clientX %) :y (.-clientY %)))))
         srs-open?            (= :srs (state/sub :modal/id))
         touching-x-offset    (and (some-> @*touch-state :after)
@@ -454,7 +454,7 @@
         (reset! *touch-state nil))}
 
      ;; sidebar contents
-     (sidebar-nav route-match close-fn left-sidebar-open? srs-open? *closing?
+     (sidebar-nav route-match close-fn left-sidebar-open? enable-whiteboards? srs-open? *closing?
                   @*close-signal (and touch-pending? touching-x-offset))]))
 
 (rum/defc recording-bar

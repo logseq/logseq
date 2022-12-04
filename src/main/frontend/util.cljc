@@ -11,6 +11,7 @@
             ["remove-accents" :as removeAccents]
             ["sanitize-filename" :as sanitizeFilename]
             ["check-password-strength" :refer [passwordStrength]]
+            ["path-complete-extname" :as pathCompleteExtname]
             [frontend.loader :refer [load]]
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
@@ -43,7 +44,7 @@
        (-write writer (str "\"" (.toString sym) "\"")))))
 
 #?(:cljs (defonce ^js node-path utils/nodePath))
-#?(:cljs (defonce ^js full-path-extname utils/fullPathExtname))
+#?(:cljs (defonce ^js full-path-extname pathCompleteExtname))
 #?(:cljs (defn app-scroll-container-node
            ([]
             (gdom/getElement "main-content-container"))
@@ -111,6 +112,11 @@
      "Mocked open DIR path for by-passing open dir in electron during testing. Nil if not given"
      []
      (when (electron?) (. js/window -__MOCKED_OPEN_DIR_PATH__))))
+
+;; #?(:cljs
+;;    (defn ci?
+;;      []
+;;      (boolean (. js/window -__E2E_TESTING__))))
 
 #?(:cljs
    (do
@@ -200,6 +206,11 @@
              (string/ends-with? %))
         [".png" ".jpg" ".jpeg" ".bmp" ".gif" ".webp" ".svg"]))
 
+(defn ext-of-video? [s]
+  (some #(-> (string/lower-case s)
+             (string/ends-with? %))
+        [".mp4" ".mkv" ".mov" ".wmv" ".avi" ".webm" ".mpg" ".ts" ".ogg" ".flv"]))
+
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
 (defn hiccup->class
   [class]
@@ -221,29 +232,6 @@
                            (.then bean/->clj)
                            (.then #(on-ok %)))
                        (on-failed resp)))))))))
-
-#?(:cljs
-   (defn upload
-     [url file on-ok on-failed on-progress]
-     (let [xhr (js/XMLHttpRequest.)]
-       (.open xhr "put" url)
-       (gobj/set xhr "onload" on-ok)
-       (gobj/set xhr "onerror" on-failed)
-       (when (and (gobj/get xhr "upload")
-                  on-progress)
-         (gobj/set (gobj/get xhr "upload")
-                   "onprogress"
-                   on-progress))
-       (.send xhr file))))
-
-#?(:cljs
-   (defn post
-     [url body on-ok on-failed]
-     (fetch url {:method "post"
-                 :headers {:Content-Type "application/json"}
-                 :body (js/JSON.stringify (clj->js body))}
-            on-ok
-            on-failed)))
 
 (defn zero-pad
   [n]

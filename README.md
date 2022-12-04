@@ -67,7 +67,7 @@ Logseq is also made possible by the following projects:
 
 ## Learn more
 
-- Our blog: https://logseq.com/blog - Please be sure to visit our [About page](https://logseq.com/blog/about) for the latest updates of the app
+- Our blog: [https://blog.logseq.com/](https://blog.logseq.com) - Please be sure to visit our [About page](https://blog.logseq.com/about) for the latest updates of the app
 - Twitter: https://twitter.com/logseq
 - Forum: https://discuss.logseq.com - Where we answer questions, discuss workflows and share tips
 - Discord: https://discord.gg/KpN4eHY
@@ -92,7 +92,7 @@ If you would like to contribute by solving an open issue, please fork this repos
 
 Once you push your code to your fork you we'll be able to open a PR into Logseq repository. For more info you can follow this guide from [Github docs](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork)
 
-And here a list of some [good firt issues](https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)!
+And here a list of some [good first issues](https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)!
 
 ## Thanks
 

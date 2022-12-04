@@ -217,7 +217,9 @@
                           (assoc opts' :skip-db-transact? false)
                           opts')
                   result (parse-and-load-file! repo-url file opts')
-                  page-name (some (fn [x] (and (map? x) (:block/name x))) result)
+                  page-name (some (fn [x] (when (and (map? x) (:block/original-name x )
+                                                     (= (:file/path file) (:file/path (:block/file x))))
+                                            (:block/name x))) result)
                   page-exists? (and page-name (get @*page-names page-name))
                   tx' (cond
                         whiteboard? tx
@@ -422,9 +424,9 @@
        (on-success)))
     (p/catch (fn [error]
                (js/console.error error)
-               (state/pub-event! [:instrument {:type :db/persist-failed
-                                               :payload {:error-str (str error)
-                                                         :error error}}])
+               (state/pub-event! [:capture-error
+                                  {:error error
+                                   :payload {:type :db/persist-failed}}])
                (when on-error
                  (on-error)))))))
 

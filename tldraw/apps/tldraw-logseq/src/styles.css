@@ -7,7 +7,7 @@
   --ls-wb-stroke-color-purple: var(--color-purple-500, purple);
   --ls-wb-stroke-color-pink: var(--color-pink-500, pink);
   --ls-wb-stroke-color-default: var(--ls-secondary-border-color);
-  --ls-wb-text-color-default: var(--ls-secondary-text-color);
+  --ls-wb-text-color-default: var(--ls-primary-text-color);
   --ls-wb-background-color-default: var(--ls-tertiary-background-color);
 }
 

@@ -1,6 +1,5 @@
 (ns ^:no-doc frontend.handler.editor
-  (:require ["path" :as path]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
             [dommy.core :as dom]
@@ -17,13 +16,11 @@
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.export :as export]
-            [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.assets :as assets-handler]
             [frontend.idb :as idb]
-            [frontend.image :as image]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.transaction :as outliner-tx]
@@ -1322,28 +1319,27 @@
 
 (defn get-asset-file-link
   [format url file-name image?]
-  (let [pdf? (and url (string/ends-with? (string/lower-case url) ".pdf"))]
+  (let [pdf? (and url (string/ends-with? (string/lower-case url) ".pdf"))
+        video? (and url (util/ext-of-video? url))]
     (case (keyword format)
-      :markdown (util/format (str (when (or image? pdf?) "!") "[%s](%s)") file-name url)
+      :markdown (util/format (str (when (or image? video? pdf?) "!") "[%s](%s)") file-name url)
       :org (if image?
              (util/format "[[%s]]" url)
              (util/format "[[%s][%s]]" url file-name))
       nil)))
 
-(defn ensure-assets-dir!
+(defn- ensure-assets-dir!
   [repo]
-  (let [repo-dir (config/get-repo-dir repo)
-        assets-dir "assets"]
-    (p/then
-     (fs/mkdir-if-not-exists (str repo-dir "/" assets-dir))
-     (fn [] [repo-dir assets-dir]))))
+  (p/let [repo-dir (config/get-repo-dir repo)
+          assets-dir "assets"
+          _ (fs/mkdir-if-not-exists (str repo-dir "/" assets-dir))]
+    [repo-dir assets-dir]))
 
-(defn get-asset-path [filename]
-  (p/let [[repo-dir assets-dir] (ensure-assets-dir! (state/get-current-repo))
-          path (path/join repo-dir assets-dir filename)]
-    (if (mobile-util/native-android?)
-      path
-      (js/encodeURI (js/decodeURI path)))))
+(defn get-asset-path
+  "Get asset path from filename, ensure assets dir exists"
+  [filename]
+  (p/let [[repo-dir assets-dir] (ensure-assets-dir! (state/get-current-repo))]
+    (util/safe-path-join repo-dir assets-dir filename)))
 
 (defn save-assets!
   ([_ repo files]
@@ -1464,7 +1460,7 @@
   [id ^js files format uploading? drop-or-paste?]
   (let [repo (state/get-current-repo)
         block (state/get-edit-block)]
-    (if (config/local-db? repo)
+    (when (config/local-db? repo)
       (-> (save-assets! block repo (js->clj files))
           (p/then
            (fn [res]
@@ -1487,28 +1483,7 @@
             (fn []
               (reset! uploading? false)
               (reset! *asset-uploading? false)
-              (reset! *asset-uploading-process 0))))
-      (image/upload
-       files
-       (fn [file file-name file-type]
-         (image-handler/request-presigned-url
-          file file-name file-type
-          uploading?
-          (fn [signed-url]
-            (insert-command! id
-                             (get-asset-file-link format signed-url file-name true)
-                             format
-                             {:last-pattern (if drop-or-paste? "" (state/get-editor-command-trigger))
-                              :restore?     true})
-
-            (reset! *asset-uploading? false)
-            (reset! *asset-uploading-process 0))
-          (fn [e]
-            (let [process (* (/ (gobj/get e "loaded")
-                                (gobj/get e "total"))
-                             100)]
-              (reset! *asset-uploading? false)
-              (reset! *asset-uploading-process process)))))))))
+              (reset! *asset-uploading-process 0)))))))
 
 ;; Editor should track some useful information, like editor modes.
 ;; For example:
@@ -1929,6 +1904,11 @@
          (edit-block! last-block' :max (:block/uuid last-block')))))
    0))
 
+(defn- nested-blocks
+  [blocks]
+  (let [ids (set (map :db/id blocks))]
+    (some? (some #(ids (:db/id (:block/parent %))) blocks))))
+
 (defn paste-blocks
   "Given a vec of blocks, insert them into the target page.
    keep-uuid?: if true, keep the uuid provided in the block structure."
@@ -1948,12 +1928,25 @@
         block (db/entity (:db/id target-block))
         page (if (:block/name block) block
                  (when target-block (:block/page (db/entity (:db/id target-block)))))
-        target-block (or target-block editing-block)
+        empty-target? (string/blank? (:block/content target-block))
+        paste-nested-blocks? (nested-blocks blocks)
+        target-block-has-children? (db/has-children? (:block/uuid target-block))
+        replace-empty-target? (if (and paste-nested-blocks? empty-target?
+                                       target-block-has-children?)
+                                false
+                                true)
+        target-block' (if replace-empty-target? target-block
+                          (db/pull (:db/id (:block/left target-block))))
         sibling? (cond
+                   (and paste-nested-blocks? empty-target?)
+                   (if (= (:block/parent target-block') (:block/parent target-block))
+                     true
+                     false)
+
                    (some? sibling?)
                    sibling?
 
-                   (db/has-children? (:block/uuid target-block))
+                   target-block-has-children?
                    false
 
                    :else
@@ -1966,15 +1959,15 @@
 
     (outliner-tx/transact!
       {:outliner-op :insert-blocks}
-      (when target-block
-        (let [format (or (:block/format target-block) (state/get-preferred-format))
+      (when target-block'
+        (let [format (or (:block/format target-block') (state/get-preferred-format))
               blocks' (map (fn [block]
                              (paste-block-cleanup block page exclude-properties format content-update-fn))
                            blocks)
-              result (outliner-core/insert-blocks! blocks' target-block {:sibling? sibling?
-                                                                         :outliner-op :paste
-                                                                         :replace-empty-target? true
-                                                                         :keep-uuid? keep-uuid?})]
+              result (outliner-core/insert-blocks! blocks' target-block' {:sibling? sibling?
+                                                                          :outliner-op :paste
+                                                                          :replace-empty-target? replace-empty-target?
+                                                                          :keep-uuid? keep-uuid?})]
           (edit-last-block-after-inserted! result))))))
 
 (defn- block-tree->blocks

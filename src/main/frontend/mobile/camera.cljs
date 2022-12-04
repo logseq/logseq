@@ -6,31 +6,34 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.date :as date]
-            [frontend.util :as util]
             [frontend.commands :as commands]
             [goog.object :as gobj]
             [frontend.util.cursor :as cursor]))
 
-(defn- save-photo []
-  (p/let [photo (p/catch
-                    (.getPhoto Camera (clj->js
-                                       {:allowEditing (get-in
-                                                       (state/get-config)
-                                                       [:mobile/photo :allow-editing?])
-                                        :saveToGallery true
-                                        :resultType (.-Base64 CameraResultType)}))
-                    (fn [error]
-                      (log/error :photo/get-failed {:error error})))
-          filename (str (date/get-date-time-string-2) ".jpeg")
-          path (editor-handler/get-asset-path filename)
-          _file (p/catch
-                    (.writeFile Filesystem (clj->js {:data (.-base64String photo)
-                                                     :path path
-                                                     :recursive true}))
-                    (fn [error]
-                      (log/error :file/write-failed {:path path
-                                                     :error error})))]
-    (p/resolved filename)))
+(defn- take-or-choose-photo []
+  (-> (.getPhoto Camera (clj->js
+                         {:allowEditing (get-in
+                                         (state/get-config)
+                                         [:mobile/photo :allow-editing?])
+                          :quality (get-in (state/get-config)
+                                           [:mobile/photo :quality] 80)
+                          :saveToGallery true
+                          :resultType (.-Base64 CameraResultType)}))
+      (p/catch (fn [error]
+                 (log/error :photo/get-failed {:error error})))
+      (p/then (fn [photo]
+                (if (nil? photo)
+                  (p/resolved nil)
+                  ;; NOTE: For iOS and Android, only jpeg format will be returned as base64 string.
+                  ;; See-also: https://capacitorjs.com/docs/apis/camera#galleryphoto
+                  (p/let [filename (str (date/get-date-time-string-2) ".jpeg")
+                          image-path (editor-handler/get-asset-path filename)
+                          _ret (.writeFile Filesystem (clj->js {:data (.-base64String photo)
+                                                                :path image-path
+                                                                :recursive true}))]
+                    filename))))
+      (p/catch (fn [error]
+                 (log/error :file/write-failed {:error error})))))
 
 (defn embed-photo [id]
   (let [block (state/get-edit-block)
@@ -47,11 +50,11 @@
 
                        :else " ")
         format (:block/format block)]
-    (p/let [filename (save-photo)
-            url (util/format "../assets/%s" filename)]
-      (commands/simple-insert!
-       id
-       (str left-padding
-            (editor-handler/get-asset-file-link format url filename true)
-        " ")
-       {}))))
+    (p/let [filename (take-or-choose-photo)]
+      (when (not-empty filename)
+        (commands/simple-insert!
+         id
+         (str left-padding
+              (editor-handler/get-asset-file-link format (str "../assets/" filename) filename true)
+              " ")
+         {})))))
