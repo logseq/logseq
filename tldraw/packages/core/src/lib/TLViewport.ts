@@ -8,7 +8,7 @@ const ease = (x: number) => {
 }
 
 const elapsedProgress = (t: number) => {
-  return ease(Vec.clamp(t / 200, 0, 1)) // 200ms
+  return ease(Vec.clamp(t / 10000, 0, 1)) // 200ms
 }
 
 export class TLViewport {
@@ -85,11 +85,21 @@ export class TLViewport {
     return this.pinchZoom(point, [0, 0], zoom, animate)
   }
 
+  pinchZoomOrigin = (point: number[], delta: number[], zoom: number): this => {
+    const { camera } = this
+    const nextPoint = Vec.sub(camera.point, Vec.div(delta, camera.zoom))
+    zoom = Vec.clamp(zoom, TLViewport.minZoom, TLViewport.maxZoom)
+    const p0 = Vec.div(point, camera.zoom)
+    const p1 = Vec.div(point, zoom)
+    return this.update({ point: Vec.toFixed(Vec.add(nextPoint, Vec.sub(p1, p0))), zoom })
+  }
+
   /**
    * Pinch to a new zoom level, possibly together with a pan.
    *
-   * @param point The current point under the cursor.
-   * @param delta The movement delta.
+   * @param point The current point under the cursor in the screen space. Zoom will be transformed
+   *   around this point.
+   * @param delta The movement delta in the screen space
    * @param zoom The new zoom level
    */
   pinchZoom = (point: number[], delta: number[], zoom: number, animate = false): this => {
@@ -97,8 +107,8 @@ export class TLViewport {
 
     const nextPoint = Vec.sub(camera.point, Vec.div(delta, camera.zoom))
     zoom = Vec.clamp(zoom, TLViewport.minZoom, TLViewport.maxZoom)
-    const p0 = Vec.sub(Vec.div(point, camera.zoom), nextPoint)
-    const p1 = Vec.sub(Vec.div(point, zoom), nextPoint)
+    const p0 = Vec.div(point, camera.zoom)
+    const p1 = Vec.div(point, zoom)
 
     const newPoint = Vec.toFixed(Vec.add(nextPoint, Vec.sub(p1, p0)))
 
@@ -123,7 +133,7 @@ export class TLViewport {
   }
 
   zoomOut = () => {
-    const { camera, bounds } = this
+    const { camera } = this
     this.setZoom(camera.zoom * ZOOM_UPDATE_FACTOR, true)
   }
 
@@ -137,17 +147,19 @@ export class TLViewport {
     const originalPoint = camera.point
     const originalZoom = camera.zoom
     const zoomDiff = zoom - camera.zoom
-    const positionDiff = Vec.sub(point, camera.point)
+    const pointDiff = Vec.sub(point, camera.point)
 
     const startTime = performance.now()
     const step = () => {
       const elapsed = performance.now() - startTime
-      const progress = elapsedProgress(elapsed) // 0 ~ 1, 100ms
+      const progress = elapsedProgress(elapsed) // 0 ~ 1
       const currentZoom = originalZoom + zoomDiff * progress
-      // fixme: the point should be calculated by the CURRENT zoom, not the final zoom
-      const currentPoint = Vec.add(originalPoint, Vec.mul(positionDiff, progress))
+      const currentPoint = Vec.add(originalPoint, Vec.mul(pointDiff, progress / currentZoom * camera.zoom))
+
+      console.log(progress / currentZoom * camera.zoom)
 
       this.update({ point: currentPoint, zoom: currentZoom })
+
       if (progress < 1) {
         requestAnimationFrame(step)
       } else {
