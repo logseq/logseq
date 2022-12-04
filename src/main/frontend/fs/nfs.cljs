@@ -1,4 +1,5 @@
-(ns ^:no-doc frontend.fs.nfs
+(ns frontend.fs.nfs
+  "File System Access API based fs backend"
   (:require [frontend.fs.protocol :as protocol]
             [frontend.util :as util]
             [clojure.string :as string]
@@ -215,10 +216,12 @@
             _ (protocol/write-file! this repo dir new-path content nil)]
       (protocol/unlink! this repo old-path nil)))
   (stat [_this dir path]
-    (if-let [file (get-nfs-file-handle (str "handle/"
-                                            (string/replace-first dir "/" "")
-                                            path))]
-      (p/let [file (.getFile file)]
+    (when-not (state/sub [:nfs/user-granted? (state/get-current-repo)])
+      (js/console.error "NFS not granted, can't stat file: " path))
+    (if-let [hfile (get-nfs-file-handle (str "handle/"
+                                             (string/replace-first dir "/" "")
+                                             path))]
+      (p/let [file (.getFile hfile)]
         (let [get-attr #(gobj/get file %)]
           {:file/last-modified-at (get-attr "lastModified")
            :file/size (get-attr "size")

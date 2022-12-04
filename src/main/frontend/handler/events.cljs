@@ -250,7 +250,7 @@
       repo)))
 
 (defn ask-permission
-  [repo]
+  [repo on-success]
   (when
    (and (not (util/electron?))
         (not (mobile-util/native-platform?)))
@@ -263,12 +263,14 @@
         "Grant"
         :class "ui__modal-enter"
         :on-click (fn []
-                    (nfs/check-directory-permission! repo)
+                    (-> (nfs/check-directory-permission! repo)
+                        (p/then #(when (and (fn? on-success) (true? %))
+                                   (on-success))))
                     (close-fn)))])))
 
-(defmethod handle :modal/nfs-ask-permission []
+(defmethod handle :modal/nfs-ask-permission [[_ on-success]]
   (when-let [repo (get-local-repo)]
-    (state/set-modal! (ask-permission repo))))
+    (state/set-modal! (ask-permission repo on-success))))
 
 (defonce *query-properties (atom {}))
 (rum/defc query-properties-settings-inner < rum/reactive
@@ -360,10 +362,17 @@
 (defmethod handle :graph/ready
   [[_ repo]]
   (when (config/local-db? repo)
-    (p/let [dir               (config/get-repo-dir repo)
-            dir-exists?       (fs/dir-exists? dir)]
-      (when-not dir-exists?
-        (state/pub-event! [:graph/dir-gone dir]))))
+    (let [dir (config/get-repo-dir repo)
+          check-dir-fn #(-> (fs/dir-exists? dir)
+                            (p/then (fn [exists?]
+                                      (when-not exists?
+                                        (p/rejected "Dir Not exists"))))
+                            (p/catch (fn [_]
+                                       (state/pub-event! [:graph/dir-gone dir]))))]
+      (if (and util/nfs? (not (state/sub [:nfs/user-granted? (state/get-current-repo)])))
+        (state/pub-event! [:modal/nfs-ask-permission #(check-dir-fn)])
+
+        (check-dir-fn))))
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo)
   ;; TODO: Notify user to update filename format when the UX is smooth enough
