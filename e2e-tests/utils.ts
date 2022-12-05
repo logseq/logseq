@@ -65,9 +65,10 @@ export async function createPage(page: Page, page_name: string) {// Click #searc
 
 export async function searchAndJumpToPage(page: Page, pageTitle: string) {
   await page.click('#search-button')
-  await page.fill('[placeholder="Search or create page"]', pageTitle)
+  await page.type('[placeholder="Search or create page"]', pageTitle)
   await page.waitForSelector(`[data-page-ref="${pageTitle}"]`, { state: 'visible' })
-  await page.click(`[data-page-ref="${pageTitle}"]`)
+  page.click(`[data-page-ref="${pageTitle}"]`)
+  await page.waitForNavigation()
   return pageTitle;
 }
 
@@ -213,7 +214,9 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
   // close it first so it doesn't cover up the UI
   let locator = page.locator('.notification-close-button').first()
   while (await locator?.isVisible()) {
-    await locator.click()
+    try { // don't fail if unable to click (likely disappeared already)
+      await locator.click()
+    } catch (error) {}
     await page.waitForTimeout(250)
 
     expect(locator.isVisible()).resolves.toBe(false)
