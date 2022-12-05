@@ -62,10 +62,6 @@
     (->edn content config))
   (toHtml [_this content config references]
     (export "html" content config references))
-  (loaded? [_this]
-    true)
-  (lazyLoad [_this _ok-handler]
-    true)
   (exportMarkdown [_this content config references]
     (parse-export-markdown content config references))
   (exportOPML [_this content config title references]

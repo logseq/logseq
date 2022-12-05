@@ -366,16 +366,18 @@
         (state/pub-event! [:graph/dir-gone dir]))))
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo)
-  (when-not config/test?
-    (js/setTimeout
-     (fn []
-       (let [filename-format (state/get-filename-format repo)]
-         (when (and (util/electron?)
-                    (not (util/ci?))
-                    (not (config/demo-graph?))
-                    (not= filename-format :triple-lowbar))
-           (state/pub-event! [:ui/notify-outdated-filename-format []]))))
-     3000)))
+  ;; TODO: Notify user to update filename format when the UX is smooth enough
+  ;; (when-not config/test?
+  ;;   (js/setTimeout
+  ;;    (fn []
+  ;;      (let [filename-format (state/get-filename-format repo)]
+  ;;        (when (and (util/electron?)
+  ;;                   (not (util/ci?))
+  ;;                   (not (config/demo-graph?))
+  ;;                   (not= filename-format :triple-lowbar))
+  ;;          (state/pub-event! [:ui/notify-outdated-filename-format []]))))
+  ;;    3000))
+  )
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))

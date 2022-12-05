@@ -669,7 +669,7 @@ img.small {
 }
 
 a.tag {
-  font-size: 13px;
+  font-size: 0.9em;
   text-align: center;
   text-decoration: none;
   display: inline-block;

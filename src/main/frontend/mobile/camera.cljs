@@ -22,7 +22,6 @@
       (p/catch (fn [error]
                  (log/error :photo/get-failed {:error error})))
       (p/then (fn [photo]
-                (prn ::debug-photo photo)
                 (if (nil? photo)
                   (p/resolved nil)
                   ;; NOTE: For iOS and Android, only jpeg format will be returned as base64 string.

@@ -118,11 +118,13 @@ base.beforeEach(async () => {
     await page.keyboard.press('Escape')
     await page.keyboard.press('Escape')
 
+    /*
     const locator = page.locator('.notification-close-button').first()
     while (await locator.isVisible()) {
-      await locator.click()
-      expect(locator.isVisible()).resolves.toBe(false)
+      locator.click() // ignore error
     }
+    */
+    await expect(page.locator('.notification-close-button')).not.toBeVisible()
 
     const rightSidebar = page.locator('.cp__right-sidebar-inner')
     if (await rightSidebar.isVisible()) {
@@ -203,8 +205,14 @@ export const test = base.extend<LogseqFixtures>({
         await page.waitForSelector(`.ls-block.selected >> nth=${total - 1}`, { timeout: 1000 })
       },
       escapeEditing: async (): Promise<void> => {
-        await page.keyboard.press('Escape')
-        await page.keyboard.press('Escape')
+        const blockEdit = page.locator('.ls-block textarea >> nth=0')
+        while (await blockEdit.isVisible()) {
+          await page.keyboard.press('Escape')
+        }
+        const blockSelect = page.locator('.ls-block.selected')
+        while (await blockSelect.isVisible()) {
+          await page.keyboard.press('Escape')
+        }
       },
       activeEditing: async (nth: number): Promise<void> => {
         await page.waitForSelector(`.ls-block >> nth=${nth}`, { timeout: 1000 })
