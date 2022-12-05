@@ -38,6 +38,8 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
     label: '',
   }
 
+  canEdit = true
+
   ReactComponent = observer(({ events, isErasing, isBinding, isSelected, isEditing, onEditingEnd }: TLComponentProps) => {
     const {
       props: {

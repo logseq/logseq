@@ -39,6 +39,8 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
     label: '',
   }
 
+  canEdit = true
+
   ReactComponent = observer(({ events, isErasing, isSelected, isEditing, onEditingEnd }: TLComponentProps) => {
     const {
       offset: [x, y],
