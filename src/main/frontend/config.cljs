@@ -104,14 +104,11 @@
 
 (def media-formats (set/union (gp-config/img-formats) audio-formats))
 
-(def html-render-formats
-  #{:adoc :asciidoc})
-
 (defn extname-of-supported?
   ([input] (extname-of-supported?
             input
             [image-formats doc-formats audio-formats
-             video-formats markup-formats html-render-formats
+             video-formats markup-formats
              (gp-config/text-formats)]))
   ([input formats]
    (when-let [input (some->

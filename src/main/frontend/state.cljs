@@ -45,7 +45,6 @@
      :indexeddb/support?      true
      :me                      nil
      :git/current-repo        current-graph
-     :format/loading          {}
      :draw?                   false
      :db/restoring?           nil
 
