@@ -1,4 +1,5 @@
 import {
+  checkValidUUID,
   deepMerge,
   mergeSettingsWithSchema,
   safeSnakeCase,
@@ -186,6 +187,23 @@ const app: Partial<IAppProxy> = {
       },
       action
     )
+  },
+
+  onBlockRendererSlotted(
+    uuid,
+    callback: (payload: any) => void) {
+    if (!checkValidUUID(uuid)) return
+
+    const pid = this.baseInfo.id
+    const hook = `hook:slot:${safeSnakeCase(`block:${uuid}`)}`
+
+    this.caller.on(hook, callback)
+    this.App._installPluginHook(pid, hook)
+
+    return () => {
+      this.caller.off(hook, callback)
+      this.App._uninstallPluginHook(pid, hook)
+    }
   },
 
   setFullScreen(flag) {

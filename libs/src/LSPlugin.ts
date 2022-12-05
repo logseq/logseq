@@ -102,6 +102,10 @@ export type IUserHook<E = any, R = IUserOffHook> = (
 export type IUserSlotHook<E = any> = (
   callback: (e: IHookEvent & UISlotIdentity & E) => void
 ) => void
+export type IUserConditionSlotHook<C = any, E = any> = (
+  condition: C,
+  callback: (e: IHookEvent & UISlotIdentity & E) => void
+) => void
 
 export type EntityID = number
 export type BlockUUID = string
@@ -455,7 +459,13 @@ export interface IAppProxy {
   onGraphAfterIndexed: IUserHook<{ repo: string }>
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
   onThemeChanged: IUserHook<Partial<{ name: string, mode: string, pid: string, url: string }>>
-  onBlockRendererSlotted: IUserSlotHook<{ uuid: BlockUUID }>
+
+  /**
+   * provide ui slot to specific block with UUID
+   *
+   * @added 0.0.13
+   */
+  onBlockRendererSlotted: IUserConditionSlotHook<BlockUUID, { block: BlockEntity }>
 
   /**
    * provide ui slot to block `renderer` macro for `{{renderer arg1, arg2}}`
@@ -636,7 +646,7 @@ export interface IEditorProxy extends Record<string, any> {
 
   /**
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-reddit-hot-news
-   * 
+   *
    * `keepUUID` will allow you to set a custom UUID for blocks by setting their properties.id
    */
   insertBatchBlock: (

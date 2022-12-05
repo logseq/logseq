@@ -53,6 +53,12 @@ export function isObject(item: any) {
 
 export const deepMerge = merge
 
+export function checkValidUUID(s: string) {
+  return (typeof s === 'string' &&
+    (s.length === 32) &&
+    (/^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/gi).test(s))
+}
+
 export function genID() {
   // Math.random should be unique because of its seeding algorithm.
   // Convert it to base 36 (numbers + letters), and grab the first 9 characters
@@ -190,9 +196,9 @@ export function setupInjectedStyle(
   el.textContent = style
 
   attrs &&
-    Object.entries(attrs).forEach(([k, v]) => {
-      el.setAttribute(k, v)
-    })
+  Object.entries(attrs).forEach(([k, v]) => {
+    el.setAttribute(k, v)
+  })
 
   document.head.append(el)
 
@@ -268,22 +274,22 @@ export function setupInjectedUI(
 
     // update attributes
     attrs &&
-      Object.entries(attrs).forEach(([k, v]) => {
-        el.setAttribute(k, v)
-      })
+    Object.entries(attrs).forEach(([k, v]) => {
+      el.setAttribute(k, v)
+    })
 
     let positionDirty = el.dataset.dx != null
     ui.style &&
-      Object.entries(ui.style).forEach(([k, v]) => {
-        if (
-          positionDirty &&
-          ['left', 'top', 'bottom', 'right', 'width', 'height'].includes(k)
-        ) {
-          return
-        }
+    Object.entries(ui.style).forEach(([k, v]) => {
+      if (
+        positionDirty &&
+        ['left', 'top', 'bottom', 'right', 'width', 'height'].includes(k)
+      ) {
+        return
+      }
 
-        el.style[k] = v
-      })
+      el.style[k] = v
+    })
     return
   }
 
@@ -303,14 +309,14 @@ export function setupInjectedUI(
   content.innerHTML = ui.template
 
   attrs &&
-    Object.entries(attrs).forEach(([k, v]) => {
-      el.setAttribute(k, v)
-    })
+  Object.entries(attrs).forEach(([k, v]) => {
+    el.setAttribute(k, v)
+  })
 
   ui.style &&
-    Object.entries(ui.style).forEach(([k, v]) => {
-      el.style[k] = v
-    })
+  Object.entries(ui.style).forEach(([k, v]) => {
+    el.style[k] = v
+  })
 
   let teardownUI: () => void
   let disposeFloat: () => void
@@ -322,11 +328,11 @@ export function setupInjectedUI(
     el.classList.add('lsp-ui-float-container', 'visible')
     disposeFloat =
       (pl._setupResizableContainer(el, key),
-      pl._setupDraggableContainer(el, {
-        key,
-        close: () => teardownUI(),
-        title: attrs?.title,
-      }))
+        pl._setupDraggableContainer(el, {
+          key,
+          close: () => teardownUI(),
+          title: attrs?.title,
+        }))
   }
 
   if (!!slot && ui.reset) {
@@ -364,7 +370,7 @@ export function setupInjectedUI(
 
         const msgType = trigger.dataset[`on${ucFirst(type)}`]
         msgType &&
-          pl.caller?.callUserModel(msgType, transformableEvent(trigger, e))
+        pl.caller?.callUserModel(msgType, transformableEvent(trigger, e))
       },
       false
     )
