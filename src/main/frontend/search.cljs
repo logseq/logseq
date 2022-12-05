@@ -111,7 +111,7 @@
     (protocol/transact-blocks! engine data)))
 
 (defn- transact-pages!
-  [repo data] 
+  [repo data]
   (when-let [engine (get-engine repo)]
     (protocol/transact-pages! engine data)))
 
@@ -216,6 +216,7 @@
                                     (contains? pages-to-add-set (:db/id page))) pages-result)
                           (map (fn [p] (or (:block/original-name p)
                                            (:block/name p))))
+                          (remove string/blank?)
                           (map search-db/original-page-name->index))
         pages-to-remove-set (->> (remove :added pages)
                                  (map :v))
@@ -246,7 +247,7 @@
       {:blocks-to-remove-set blocks-to-remove-set
        :blocks-to-add        blocks-to-add})))
 
-(defn- get-direct-blocks-and-pages 
+(defn- get-direct-blocks-and-pages
   [tx-report]
   (let [data (:tx-data tx-report)
         datoms (filter
