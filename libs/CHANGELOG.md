@@ -3,8 +3,9 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## [0.0.13]
 
-## [0.0.11]
+## [0.0.12]
 
 ### Added
 
