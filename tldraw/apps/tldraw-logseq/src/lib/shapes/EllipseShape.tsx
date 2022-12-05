@@ -36,6 +36,8 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
     label: '',
   }
 
+  canEdit = true
+
   ReactComponent = observer(({ isSelected, isErasing, events, isEditing, onEditingEnd }: TLComponentProps) => {
     const {
       size: [w, h],
