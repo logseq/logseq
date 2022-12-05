@@ -129,7 +129,7 @@ export const TextLabel = React.memo(function TextLabel({
     elm.style.transform = `scale(${scale}, ${scale}) translate(${offsetX}px, ${offsetY}px)`
     elm.style.width = size[0] + 1 + 'px'
     elm.style.height = size[1] + 1 + 'px'
-  }, [text, font, offsetY, offsetX, scale])
+  }, [text, fontWeight, offsetY, offsetX, scale])
 
   return (
     <div className="tl-text-label-wrapper">
