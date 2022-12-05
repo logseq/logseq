@@ -57,8 +57,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
 
     const labelSize = label || isEditing ? getTextLabelSize(label, { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight }, 4) : [0, 0]
     const midPoint =  Vec.mul(this.props.size, 0.5)
-    const dist = Math.min(this.props.size[0], this.props.size[1])
-    const scale = Math.max(0.5, Math.min(1, Math.max(dist / (labelSize[1] + 128), dist / (labelSize[0] + 128))))
+    const scale = Math.max(0.5, Math.min(1, w / labelSize[0] , h / labelSize[1]))
     const bounds = this.getBounds()
 
     const offset = React.useMemo(() => {
@@ -128,13 +127,11 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
 
     const bounds = this.getBounds()
     const labelSize = label ? getTextLabelSize(label, { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight }, 4) : [0, 0]
-    const dist = Math.min(this.props.size[0], this.props.size[1])
-    const scale = Math.max(0.5, Math.min(1, Math.max(dist / (labelSize[1] + 128), dist / (labelSize[0] + 128))))
+    const scale = Math.max(0.5, Math.min(1, w / labelSize[0] , h / labelSize[1]))
     const midPoint =  Vec.mul(this.props.size, 0.5)
 
     const offset = React.useMemo(() => {
-      const offset = Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
-      return offset
+      return Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
     }, [bounds, scale, midPoint])
 
     return (

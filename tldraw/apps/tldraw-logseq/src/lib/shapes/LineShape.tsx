@@ -68,8 +68,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     )
     const bounds = this.getBounds()
     const offset = React.useMemo(() => {
-      const offset = Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
-      return offset
+      return Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
     }, [bounds, scale, midPoint])
     const handleLabelChange = React.useCallback(
       (label: string) => {
@@ -119,8 +118,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       Math.min(1, Math.max(dist / (labelSize[1] + 128), dist / (labelSize[0] + 128)))
     )
     const offset = React.useMemo(() => {
-      const offset = Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
-      return offset
+      return Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
     }, [bounds, scale, midPoint])
     return (
       <g>
