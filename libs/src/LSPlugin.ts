@@ -634,10 +634,15 @@ export interface IEditorProxy extends Record<string, any> {
     }>
   ) => Promise<BlockEntity | null>
 
+  /**
+   * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-reddit-hot-news
+   * 
+   * `keepUUID` will allow you to set a custom UUID for blocks by setting their properties.id
+   */
   insertBatchBlock: (
     srcBlock: BlockIdentity,
     batch: IBatchBlock | Array<IBatchBlock>,
-    opts?: Partial<{ before: boolean; sibling: boolean }>
+    opts?: Partial<{ before: boolean; sibling: boolean, keepUUID: boolean }>
   ) => Promise<Array<BlockEntity> | null>
 
   updateBlock: (

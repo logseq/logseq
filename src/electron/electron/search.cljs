@@ -273,9 +273,13 @@
         (->>
          (concat matched-result
                  (search-blocks-aux database non-match-sql non-match-input page limit))
-         (distinct-by :id)
+         (distinct-by :rowid)
          (take limit)
          (vec))))))
+
+(defn- snippet-by
+  [content length]
+  (str (subs content 0 length) (when (> (count content) 250) "...")))
 
 (defn- search-pages-res-unpack
   [arr]
@@ -283,7 +287,19 @@
     {:id      rowid
      :uuid    uuid
      :content content
-     :snippet snippet}))
+     ;; post processing
+     :snippet (let [;; Remove title from snippet
+                    flag-title " $<pfts_f6ld$ "
+                    flag-title-pos (string/index-of snippet flag-title)
+                    snippet (if flag-title-pos
+                              (subs snippet (+ flag-title-pos (count flag-title)))
+                              snippet)
+                    ;; Cut snippet to 250 chars for non-matched results
+                    flag-highlight "$pfts_2lqh>$ "
+                    snippet (if (string/includes? snippet flag-highlight)
+                              snippet
+                              (snippet-by snippet 250))]
+                snippet)}))
 
 (defn- search-pages-aux
   [database sql input limit]
@@ -301,6 +317,7 @@
   (when-let [database (get-db repo)]
     (when-not (string/blank? q)
       (let [match-inputs (get-match-inputs q)
+            non-match-input (str "%" (string/replace q #"\s+" "%") "%")
             limit  (or limit 20)
             ;; https://www.sqlite.org/fts5.html#the_highlight_function
             ;; the 2nd column in pages_fts (content)
@@ -310,6 +327,8 @@
             select (str "select rowid, uuid, content, " snippet-aux " from pages_fts where ")
             match-sql (str select
                            " content match ? order by rank limit ?")
+            non-match-sql (str select
+                               " content like ? limit ?")
             matched-result (->>
                             (map
                               (fn [match-input]
@@ -317,7 +336,8 @@
                               match-inputs)
                             (apply concat))]
         (->>
-         matched-result
+         (concat matched-result
+                 (search-pages-aux database non-match-sql non-match-input limit))
          (distinct-by :id)
          (take limit)
          (vec))))))

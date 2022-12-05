@@ -2794,7 +2794,7 @@
 
   (idle [this]
     (go
-      (let [{:keys [stop remote->local local->remote local->remote-full-sync remote->local-full-sync pause] :as result}
+      (let [{:keys [stop remote->local local->remote local->remote-full-sync remote->local-full-sync pause resume] :as result}
             (<! ops-chan)]
         (cond
           (or stop (nil? result))
@@ -2809,6 +2809,8 @@
           (<! (.schedule this ::remote->local-full-sync nil nil))
           pause
           (<! (.schedule this ::pause nil nil))
+          resume
+          (<! (.schedule this ::idle nil nil))
           :else
           (do
             (state/pub-event! [:capture-error {:error (js/Error. "sync/wrong-ops-chan-when-idle")
@@ -2816,7 +2818,7 @@
                                                          :ops-chan-result result
                                                          :user-id user-uuid
                                                          :graph-id graph-uuid}}])
-            nil)))))
+            (<! (.schedule this ::idle nil nil)))))))
 
   (full-sync [this]
     (go

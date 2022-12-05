@@ -1,4 +1,7 @@
 import { CapacitorConfig } from '@capacitor/cli'
+import fs from 'fs'
+
+const version = fs.readFileSync('static/package.json', 'utf8').match(/"version": "(.*?)"/)?.at(1) ?? '0.0.0'
 
 const config: CapacitorConfig = {
   appId: 'com.logseq.app',
@@ -18,8 +21,12 @@ const config: CapacitorConfig = {
       resize: 'none'
     }
   },
+  android: {
+    appendUserAgent: `Logseq/${version} (Android)`
+  },
   ios: {
-    scheme: 'Logseq'
+    scheme: 'Logseq',
+    appendUserAgent: `Logseq/${version} (iOS)`
   },
   cordova: {
     staticPlugins: [

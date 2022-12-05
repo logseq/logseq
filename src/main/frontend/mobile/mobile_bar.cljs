@@ -51,7 +51,7 @@
                         (let [target (gdom/getNextElementSibling (gdom/getParentElement (.-target event)))]
                           (dom/add-class! target "show-submenu")))}
       (ui/icon "calendar" {:size ui/icon-size})]
-     [:div.submenu.fixed.left-0.hidden.w-full.flex-row.justify-evenly.items-center
+     [:div.submenu.fixed.left-0.bottom-0.hidden.w-full.flex-row.justify-evenly.items-center
       {:style {:bottom @util/keyboard-height}}
       (command-cp #(let [today (page-handler/get-page-ref-text (date/today))]
                      (commands/simple-insert! parent-id today {}))

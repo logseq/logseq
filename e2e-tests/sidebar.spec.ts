@@ -49,6 +49,7 @@ test('recent is updated #4320', async ({ page }) => {
 
   // then jump back
   await searchAndJumpToPage(page, page1)
+  await page.waitForTimeout(500)
   expect(await firstRecent.textContent()).toContain(page1)
   expect(await secondRecent.textContent()).toContain(page2)
 })
