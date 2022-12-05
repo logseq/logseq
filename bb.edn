@@ -66,6 +66,9 @@
   dev:validate-plugins-edn
   logseq.tasks.malli/validate-plugins-edn
 
+  dev:validate-global-config-edn
+  logseq.tasks.malli/validate-global-config-edn
+
   dev:lint
   logseq.tasks.dev/lint
 
