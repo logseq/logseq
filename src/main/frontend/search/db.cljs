@@ -12,7 +12,8 @@
 
 (defn- sanitize
   [content]
-  (util/search-normalize content (state/enable-search-remove-accents?)))
+  (some-> content
+          (util/search-normalize (state/enable-search-remove-accents?))))
 
 (defn- max-len
   []
@@ -22,10 +23,11 @@
   "Convert a block to the index for searching"
   [{:block/keys [uuid page content] :as block}]
   (when-not (> (count content) (max-len))
-    {:id (:db/id block)
-     :uuid (str uuid)
-     :page page
-     :content (sanitize content)}))
+    (when-not (string/blank? content)
+      {:id (:db/id block)
+       :uuid (str uuid)
+       :page page
+       :content (sanitize content)})))
 
 (defn page->index
   "Convert a page name to the index for searching (page content level)
@@ -33,11 +35,12 @@
   [{:block/keys [uuid original-name] :as page}]
   (when-let [content (some-> (:block/file page)
                              (:file/content))]
-    (when-not (> (count content) (* (max-len) 10))
-      {:id   (:db/id page)
-       :uuid (str uuid)
-       ;; Add page name to the index
-       :content (sanitize (str "$pfts_f6ld>$ " original-name " $<pfts_f6ld$ " content))})))
+    (when-not (string/blank? original-name)
+      (when-not (> (count content) (* (max-len) 10))
+        {:id   (:db/id page)
+         :uuid (str uuid)
+         ;; Add page name to the index
+         :content (sanitize (str "$pfts_f6ld>$ " original-name " $<pfts_f6ld$ " content))}))))
 
 (defn build-blocks-indice
   ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection
@@ -48,7 +51,7 @@
        (remove nil?)
        (bean/->js)))
 
-(defn build-pages-indice 
+(defn build-pages-indice
   [repo]
   (->> (db/get-all-pages repo)
        (map #(db/entity (:db/id %))) ;; get full file-content
@@ -70,8 +73,9 @@
     indice))
 
 (defn original-page-name->index
-  [p] {:name (util/search-normalize p (state/enable-search-remove-accents?))
-       :original-name p})
+  [p]
+  {:name (util/search-normalize p (state/enable-search-remove-accents?))
+   :original-name p})
 
 (defn make-pages-title-indice!
   "Build a page title indice from scratch.
