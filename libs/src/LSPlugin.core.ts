@@ -19,7 +19,7 @@ import {
   cleanInjectedScripts,
   safeSnakeCase,
   injectTheme,
-  cleanInjectedUI,
+  cleanInjectedUI, PluginLogger,
 } from './helpers'
 import * as pluginHelpers from './helpers'
 import Debug from 'debug'
@@ -129,59 +129,6 @@ class PluginSettings extends EventEmitter<'change' | 'reset'> {
 
   toJSON() {
     return this._settings
-  }
-}
-
-class PluginLogger extends EventEmitter<'change'> {
-  private _logs: Array<[type: string, payload: any]> = []
-
-  constructor(private readonly _tag: string) {
-    super()
-  }
-
-  write(type: string, payload: any[], inConsole?: boolean) {
-    if (payload?.length && (true === payload[payload.length - 1])) {
-      inConsole = true
-      payload.pop()
-    }
-
-    const msg = payload.reduce((ac, it) => {
-      if (it && it instanceof Error) {
-        ac += `${it.message} ${it.stack}`
-      } else {
-        ac += it.toString()
-      }
-      return ac
-    }, `[${this._tag}][${new Date().toLocaleTimeString()}] `)
-
-    this._logs.push([type, msg])
-
-    if (inConsole) {
-      console?.['ERROR' === type ? 'error' : 'debug'](`${type}: ${msg}`)
-    }
-
-    this.emit('change')
-  }
-
-  clear() {
-    this._logs = []
-    this.emit('change')
-  }
-
-  info(...args: any[]) {
-    this.write('INFO', args)
-  }
-
-  error(...args: any[]) {
-    this.write('ERROR', args)
-  }
-
-  warn(...args: any[]) {
-    this.write('WARN', args)
-  }
-
-  toJSON() {
-    return this._logs
   }
 }
 

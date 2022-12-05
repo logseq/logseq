@@ -2,6 +2,7 @@ import {
   checkValidUUID,
   deepMerge,
   mergeSettingsWithSchema,
+  PluginLogger,
   safeSnakeCase,
   safetyPathJoin,
 } from './helpers'
@@ -56,6 +57,7 @@ type callableMethods =
 
 const PROXY_CONTINUE = Symbol.for('proxy-continue')
 const debug = Debug('LSPlugin:user')
+const logger = new PluginLogger('', { console: true })
 
 /**
  * @param type (key of group commands)
@@ -92,6 +94,15 @@ function registerSimpleCommand(
       palette,
     ],
   })
+}
+
+function shouldValidUUID(uuid: string) {
+  if (!checkValidUUID(uuid)) {
+    logger.error(`#${uuid} is not a valid UUID string.`)
+    return false
+  }
+
+  return true
 }
 
 let _appBaseInfo: AppInfo = null
@@ -192,7 +203,7 @@ const app: Partial<IAppProxy> = {
   onBlockRendererSlotted(
     uuid,
     callback: (payload: any) => void) {
-    if (!checkValidUUID(uuid)) return
+    if (!shouldValidUUID(uuid)) return
 
     const pid = this.baseInfo.id
     const hook = `hook:slot:${safeSnakeCase(`block:${uuid}`)}`
@@ -472,6 +483,13 @@ export class LSPluginUser
 
       baseInfo = deepMerge(this._baseInfo, baseInfo)
 
+      if (baseInfo?.id) {
+        this._debugTag =
+          this._caller.debugTag = `#${baseInfo.id} [${baseInfo.name}]`
+
+        this.logger.setTag(this._debugTag)
+      }
+
       if (this._settingsSchema) {
         baseInfo.settings = mergeSettingsWithSchema(
           baseInfo.settings,
@@ -480,11 +498,6 @@ export class LSPluginUser
 
         // TODO: sync host settings schema
         await this.useSettingsSchema(this._settingsSchema)
-      }
-
-      if (baseInfo?.id) {
-        this._debugTag =
-          this._caller.debugTag = `#${baseInfo.id} [${baseInfo.name}]`
       }
 
       try {
@@ -621,6 +634,10 @@ export class LSPluginUser
 
   get baseInfo(): LSPluginBaseInfo {
     return this._baseInfo
+  }
+
+  get logger() {
+    return logger
   }
 
   get settings() {

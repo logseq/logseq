@@ -5,6 +5,7 @@ import DOMPurify from 'dompurify'
 import { merge } from 'lodash-es'
 import { snakeCase } from 'snake-case'
 import * as callables from './callable.apis'
+import EventEmitter from 'eventemitter3'
 
 declare global {
   interface Window {
@@ -52,6 +53,68 @@ export function isObject(item: any) {
 }
 
 export const deepMerge = merge
+
+export class PluginLogger extends EventEmitter<'change'> {
+  private _logs: Array<[type: string, payload: any]> = []
+
+  constructor(
+    private _tag?: string,
+    private _opts?: {
+      console: boolean
+    }
+  ) {
+    super()
+  }
+
+  write(type: string, payload: any[], inConsole?: boolean) {
+    if (payload?.length && (true === payload[payload.length - 1])) {
+      inConsole = true
+      payload.pop()
+    }
+
+    const msg = payload.reduce((ac, it) => {
+      if (it && it instanceof Error) {
+        ac += `${it.message} ${it.stack}`
+      } else {
+        ac += it.toString()
+      }
+      return ac
+    }, `[${this._tag}][${new Date().toLocaleTimeString()}] `)
+
+    this._logs.push([type, msg])
+
+    if (inConsole || this._opts?.console) {
+      console?.['ERROR' === type ? 'error' : 'debug'](`${type}: ${msg}`)
+    }
+
+    this.emit('change')
+  }
+
+  clear() {
+    this._logs = []
+    this.emit('change')
+  }
+
+  info(...args: any[]) {
+    this.write('INFO', args)
+  }
+
+  error(...args: any[]) {
+    this.write('ERROR', args)
+  }
+
+  warn(...args: any[]) {
+    this.write('WARN', args)
+  }
+
+  setTag(s: string) {
+    this._tag = s
+  }
+
+  toJSON() {
+    return this._logs
+  }
+}
 
 export function checkValidUUID(s: string) {
   return (typeof s === 'string' &&
