@@ -9,9 +9,11 @@
             [cljs-bean.core :as bean]
             [cljs-http.client :as http]
             [cljs.core.async :as async :refer [go <!]]
+            [clojure.core.async.interop :refer [p->c]]
             [frontend.handler.notification :as notification]
             [clojure.string :as string]
-            [logseq.publish :as publish]))
+            [logseq.publish :as publish]
+            [frontend.util.fs :as fs-util]))
 
 (defn- update-vals-uuid->str
   [coll]
@@ -65,7 +67,14 @@
                        (str "https://" config/API-DOMAIN "/publish/publish_upload"))]
     (prn "Debug [PUBLISH] body: " body)
     (go
-      (let [result (<! (http/post publish-api
+      (let [graph-dir (config/get-repo-dir repo)
+            graph-id (<! (p->c (fs-util/read-graph-id graph-dir)))
+            graph-id (or graph-id
+                         (let [new-graph-id (random-uuid)]
+                           (<! (p->c (fs-util/save-graph-id-if-not-exists! repo new-graph-id)))
+                           new-graph-id))
+            body (assoc body :graph-id graph-id)
+            result (<! (http/post publish-api
                                   {:oauth-token       token
                                    :edn-params        body
                                    :with-credentials? false}))]

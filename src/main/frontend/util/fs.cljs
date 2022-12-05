@@ -51,6 +51,29 @@
                 (fn [^js e]
                   (js/console.error "[fs read txid data error]" e))))))))
 
+(defn read-graph-id
+  [root]
+  (when (string? root)
+    (let [id-path (str "logseq/" config/graph-id-file)]
+      (p/let [exists? (fs/file-exists? root id-path)]
+        (when exists?
+          (-> (p/let [id-str (fs/read-file root id-path)]
+                (when id-str
+                  (:graph-id (reader/read-string id-str))))
+              (p/catch
+                  (fn [^js e]
+                    (js/console.error "[fs read graph id error]" e)))))))))
+
+(defn save-graph-id-if-not-exists!
+  [repo graph-id]
+  (when graph-id
+    (let [path (str "logseq/" config/graph-id-file)]
+      (fs/write-file! repo
+                      (config/get-repo-dir repo)
+                      path
+                      (pr-str {:graph-id graph-id})
+                      {:skip-compare? true}))))
+
 (defn inflate-graphs-info
   [graphs]
   (if (seq graphs)

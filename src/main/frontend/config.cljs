@@ -299,6 +299,7 @@
 
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")
+(def graph-id-file "graph-id.edn")
 (def custom-css-file "custom.css")
 (def export-css-file "export.css")
 (def custom-js-file "custom.js")
