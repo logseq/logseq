@@ -1327,9 +1327,16 @@
            nil)))))
 
 #?(:cljs
-   (defn sm-breakpoint?
-     []
-     (< (.-offsetWidth js/document.documentElement) 640)))
+   (do
+     (defn breakpoint?
+       [size]
+       (< (.-offsetWidth js/document.documentElement) size))
+
+     (defn sm-breakpoint?
+       [] (breakpoint? 640))
+
+     (defn md-breakpoint?
+       [] (breakpoint? 768))))
 
 #?(:cljs
    (defn event-is-composing?

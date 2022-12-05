@@ -393,13 +393,6 @@
           #(let [value (not enable-timetracking?)]
              (config-handler/set-config! :feature/enable-timetracking? value))))
 
-(defn fold-button-on-right-row [t enable-fold-button-on-right?]
-  (toggle "enable_fold_button_right"
-          (t :settings-page/enable-fold-button-on-right)
-          enable-fold-button-on-right?
-          #(let [value (not enable-fold-button-on-right?)]
-             (config-handler/set-config! :feature/enable-fold-button-on-right? value))))
-
 (defn update-home-page
   [event]
   (let [value (util/evalue event)]
@@ -586,7 +579,6 @@
         preferred-date-format (state/get-date-formatter)
         preferred-workflow (state/get-preferred-workflow)
         enable-timetracking? (state/enable-timetracking?)
-        enable-fold-button-on-right? (state/enable-fold-button-right?)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)
         preferred-pasting-file? (state/preferred-pasting-file?)
@@ -601,8 +593,7 @@
      (workflow-row t preferred-workflow)
      ;; (enable-block-timestamps-row t enable-block-timestamps?)
      (show-brackets-row t show-brackets?)
-     (when (mobile-util/native-platform?)
-       (fold-button-on-right-row t enable-fold-button-on-right?))
+
      (when (util/electron?) (switch-spell-check-row t))
      (outdenting-row t logical-outdenting?)
      (preferred-pasting-file t preferred-pasting-file?)

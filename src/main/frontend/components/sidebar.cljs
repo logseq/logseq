@@ -755,11 +755,11 @@
                        (util/fix-open-external-with-shift! e))}
 
      [:main.theme-inner
-      {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?
-                                 :ls-right-sidebar-open sidebar-open?
-                                 :ls-wide-mode wide-mode?
-                                 :ls-fold-button-on-right (and (util/sm-breakpoint?) fold-button-on-right?)
-                                 :ls-hl-colored ls-block-hl-colored?}])}
+      {:class (util/classnames [{:ls-left-sidebar-open    left-sidebar-open?
+                                 :ls-right-sidebar-open   sidebar-open?
+                                 :ls-wide-mode            wide-mode?
+                                 :ls-fold-button-on-right fold-button-on-right?
+                                 :ls-hl-colored           ls-block-hl-colored?}])}
 
       [:button#skip-to-main
        {:on-click #(ui/focus-element (ui/main-node))
