@@ -51,8 +51,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
     // Using the centroid of the polygon as the label position is preferable in this case
     // This shape is an isosceles triangle at the time of writing this comment
     const midPoint =  [this.props.size[0] / 2, this.props.size[1] * 2/3]
-    const dist = Math.min(this.props.size[0], this.props.size[1])
-    const scale = Math.max(0.5, Math.min(1, Math.max(dist / (labelSize[1] + 128), dist / (labelSize[0] + 128))))
+    const scale = Math.max(0.5, Math.min(1, this.props.size[0] / (labelSize[0] * 2) , this.props.size[1] / (labelSize[1] * 2)))
     const bounds = this.getBounds()
 
     const offset = React.useMemo(() => {
@@ -112,12 +111,10 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
     const bounds = this.getBounds()
     const labelSize = label ? getTextLabelSize(label, { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight }, 4) : [0, 0]
     const midPoint =  [this.props.size[0] / 2, this.props.size[1] * 2/3]
-    const dist = Math.min(this.props.size[0], this.props.size[1])
-    const scale = Math.max(0.5, Math.min(1, Math.max(dist / (labelSize[1] + 128), dist / (labelSize[0] + 128))))
+    const scale = Math.max(0.5, Math.min(1, this.props.size[0] / (labelSize[0] * 2) , this.props.size[1] / (labelSize[1] * 2)))
 
     const offset = React.useMemo(() => {
-      const offset = Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
-      return offset
+      return Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
     }, [bounds, scale, midPoint])
 
     return (
