@@ -445,7 +445,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         }}
         {...events}
       >
-        <div className=""></div>
         {isBinding && <BindingIndicator mode="html" strokeWidth={strokeWidth} size={size} />}
         <div
           data-inner-events={!tlEventsEnabled}
