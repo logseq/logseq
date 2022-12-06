@@ -36,6 +36,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           className="tl-menu-item"
           onSelect={preventEvent}
           onClick={app.api.zoomToSelection}
+          disabled={app.selectedShapesArray.length === 0}
         >
           Zoom to selection
           <div className="tl-menu-right-slot">
