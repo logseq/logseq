@@ -232,6 +232,7 @@ export default function App() {
           isWhiteboardPage: () => false,
           saveAsset: fileToBase64,
           makeAssetUrl: a => a,
+          getBlockPageName: a => a + '_page'
         }}
         model={model}
         onPersist={app => {

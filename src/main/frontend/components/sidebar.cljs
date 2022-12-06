@@ -71,7 +71,8 @@
 (rum/defc page-name
   [name icon recent?]
   (let [original-name (db-model/get-page-original-name name)
-        whiteboard-page? (db-model/whiteboard-page? name)]
+        whiteboard-page? (db-model/whiteboard-page? name)
+        untitiled? (db-model/untitled-page? name)]
     [:a.flex.items-center
      {:on-click
       (fn [e]
@@ -88,7 +89,9 @@
               (route-handler/redirect-to-whiteboard! name)
               (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))}
      [:span.page-icon (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
-     [:span.page-title (pdf-utils/fix-local-asset-pagename original-name)]]))
+     [:span.page-title {:class (when untitiled? "opacity-50")}
+      (if untitiled? (t :untitled)
+          (pdf-utils/fix-local-asset-pagename original-name))]]))
 
 (defn get-page-icon [page-entity]
   (let [default-icon (ui/icon "page" {:extension? true})
