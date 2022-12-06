@@ -14,8 +14,11 @@
                          [:enum :journals]
                          :string]]
     [:ui/enable-tooltip? :boolean]
+    [:ui/show-brackets? :boolean]
     [:feature/enable-block-timestamps? :boolean]
     [:feature/enable-search-remove-accents? :boolean]
+    [:feature/enable-journals? :boolean]
+    [:feature/enable-flashcards? :boolean]
     [:feature/disable-scheduled-and-deadline-query? :boolean]
     [:start-of-week [:enum 0 1 2 3 4 5 6]]
     [:custom-css-url :string]
@@ -59,6 +62,7 @@
     [:property-pages/enabled? :boolean]
     [:property-pages/excludelist [:set :keyword]]
     [:property/separated-by-commas [:set :keyword]]
+    [:ignored-page-references-keywords [:set :keyword]]
     [:logbook/settings :map]
     [:mobile/photo [:map
                     [:allow-editing? {:optional true} :boolean]
@@ -66,7 +70,8 @@
     [:mobile [:map
               [:gestures/disabled-in-block-with-tags {:optional true} [:vector :string]]]]
     [:editor/extra-codemirror-options :map]
-    [:ignored-page-references-keywords [:set :keyword]]
+    [:editor/logical-outdenting? :boolean]
+    [:editor/preferred-pasting-file? :boolean]
     [:quick-capture-templates [:map
                                [:text {:optional true} :string]
                                [:media {:optional true} :string]]]
