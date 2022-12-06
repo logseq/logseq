@@ -7,13 +7,11 @@
 
 (defn ->html
   "Convert blocks into HTML."
-  [blocks refed-blocks refs root-id]
-  (let [result (util/profile "render static markup"
-                             (react-dom-server/renderToString
-                              (html/blocks-container blocks {:refed-blocks refed-blocks
-                                                             :refs refs} root-id)))]
-    (println "Debug time in total: " @html/*debug-time)
-    result))
+  [config blocks refed-blocks refs root-id]
+  (react-dom-server/renderToString
+   (html/blocks-container blocks (merge config
+                                        {:refed-blocks refed-blocks
+                                         :refs refs}) root-id)))
 
 (comment
   (require '["fs" :as fs])

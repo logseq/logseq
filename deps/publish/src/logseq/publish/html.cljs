@@ -218,16 +218,16 @@
   (when (and block (:block/content block))
     (let [title [:span {:class "block-ref"}
                  (block-content (assoc config :block-ref? true) block)]]
-      ;; TODO: add href
       [:div.block-ref-wrap.inline
        (if label
-         (->elem
-          :span.block-ref
-          (map-inline config label))
+         [:a {:href (str "/ref/" (:block/uuid block) "?graph-id=" (:graph-id config))}
+          (->elem
+           :span.block-ref
+           (map-inline config label))]
          title)])))
 
 (rum/defc page-reference < rum/reactive
-  [s _config _label]
+  [s config _label]
   (let [s (some-> s
                   string/trim
                   gp-util/page-name-sanity-lc)]
@@ -235,7 +235,7 @@
       [:span.page-reference
        {:data-ref s}
        [:span.text-gray-500.bracket page-ref/left-brackets]
-       [:a {:href (str "/page/" (util/url-encode s))}
+       [:a {:href (str "/ref/" (util/url-encode s) "?graph-id=" (:graph-id config))}
         s]
        [:span.text-gray-500.bracket page-ref/right-brackets]])))
 
