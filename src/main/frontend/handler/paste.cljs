@@ -19,8 +19,7 @@
             [frontend.handler.notification :as notification]
             [frontend.util.text :as text-util]
             [frontend.format.mldoc :as mldoc]
-            [lambdaisland.glogi :as log]
-            [frontend.handler.editor :as editor]))
+            [lambdaisland.glogi :as log]))
 
 (defn- paste-text-parseable
   [format text]
