@@ -111,6 +111,7 @@
    :ui/toggle-document-mode        "Toggle document mode"
    :ui/toggle-settings             "Toggle settings"
    :ui/toggle-right-sidebar        "Toggle right sidebar"
+   :ui/close-right-sidebar-top    "Closes the top item in the right sidebar"
    :ui/toggle-left-sidebar         "Toggle left sidebar"
    :ui/toggle-help                 "Toggle help"
    :ui/toggle-theme                "Toggle between dark/light theme"
