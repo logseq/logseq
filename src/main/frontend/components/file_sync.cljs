@@ -872,26 +872,50 @@
       (catch :default e
         (js/console.warn "[onboarding SKIP] " (name type) e)))))
 
+(rum/defcs deleted-file-versions <
+  (rum/local nil ::file-versions)
+  {:will-mount (fn [state]
+                 (async/go
+                   (let [l (async/<! (fs-sync/<get-remote-file-versions
+                                      fs-sync/remoteapi
+                                      (nth (:rum/args state) 0)
+                                      (nth (:rum/args state) 1)))]
+                     (if (instance? ExceptionInfo l)
+                       (do (notification/show! "get-remote-file-versions failed")
+                           (reset! (::file-versions state) nil))
+                       (reset! (::file-versions state) (:VersionList l)))))
+                 state)}
+  [state graph-uuid _file-path]
+  (let [*file-versions (::file-versions state)]
+    [:div.text-sm "versions"
+     [:ul
+      (for [v @*file-versions]
+        [:li
+         [:a {:on-click #(file-sync-handler/download-version-file graph-uuid (:FileUUID v) (:VersionUUID v))}
+          (str (util/time-ago (tc/from-long (:CreateTime v))))]])]]))
+
 (rum/defcs delay-delete-files <
   (rum/local nil ::recent-deleted-files)
   {:will-mount (fn [state]
                  (async/go
-                     (let [l (async/<! (fs-sync/<get-remote-delay-deleted-files-meta
-                                        fs-sync/remoteapi
-                                        (nth (:rum/args state) 0)))]
-                       (if (instance? ExceptionInfo l)
-                         (do (notification/show! "get-remote-delay-deleted-files-meta failed")
-                             (reset! (::recent-deleted-files state) nil))
-                         (reset! (::recent-deleted-files state) l))))
+                   (let [l (async/<! (fs-sync/<get-remote-delay-deleted-files-meta
+                                      fs-sync/remoteapi
+                                      (nth (:rum/args state) 0)))]
+                     (if (instance? ExceptionInfo l)
+                       (do (notification/show! "get-remote-delay-deleted-files-meta failed")
+                           (reset! (::recent-deleted-files state) nil))
+                       (reset! (::recent-deleted-files state) l))))
                  state)}
   [state graph-uuid]
   (let [*recent-deleted-files (::recent-deleted-files state)]
     [:div
      [:h1.title "Recent deleted files"]
-     [:h3 "will be deleted after about 1 month"]
+     [:h4 "will be deleted after about 1 month"]
      [:ul
       (for [^fs-sync/DelayedDeleteFileMetadata f @*recent-deleted-files]
-        [:li
-         [:a {:on-click #(notification/show! "TODO: list version history")}
-          (:path f)]
-         [:div.text-sm (util/time-ago (tc/from-long (* 1000 (:delete-epoch f))))]])]]))
+        (ui/foldable
+         [:li
+          [:p (:path f)]
+          [:p.text-sm (str "deleted at " (util/time-ago (tc/from-long (* 1000 (:delete-epoch f)))))]]
+         #(deleted-file-versions graph-uuid (:path f))
+         {:default-collapsed? true}))]]))
