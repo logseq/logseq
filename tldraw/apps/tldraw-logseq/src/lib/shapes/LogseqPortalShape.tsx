@@ -390,6 +390,12 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       }
     }, [isEditing, this.props.collapsed])
 
+    React.useEffect(() => {
+      if (isCreating) {
+        app.viewport.zoomToBounds({ ...this.bounds, minY: this.bounds.maxY + 25 })
+      }
+    }, [app.viewport.currentView.height])
+
     const onPageNameChanged = React.useCallback((id: string) => {
       this.initialHeightCalculated = false
       const blockType = validUUID(id) ? 'B' : 'P'
