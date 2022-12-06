@@ -482,6 +482,11 @@
                 type     (str "block:" (:block/uuid b))]]
     (hook-plugin-db type {:block b :tx-data (get tx-data' (:db/id b)) :tx-meta tx-meta})))
 
+(defn hook-plugin-block-slot
+  [block payload]
+  (when-let [type (and block (str "slot:" (:block/uuid block)))]
+    (hook-plugin-editor type (merge payload block) nil)))
+
 (defn get-ls-dotdir-root
   []
   (ipc/ipc "getLogseqDotDirRoot"))

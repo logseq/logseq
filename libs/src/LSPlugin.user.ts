@@ -1,5 +1,5 @@
 import {
-  checkValidUUID,
+  isValidUUID,
   deepMerge,
   mergeSettingsWithSchema,
   PluginLogger,
@@ -97,7 +97,7 @@ function registerSimpleCommand(
 }
 
 function shouldValidUUID(uuid: string) {
-  if (!checkValidUUID(uuid)) {
+  if (!isValidUUID(uuid)) {
     logger.error(`#${uuid} is not a valid UUID string.`)
     return false
   }
@@ -206,7 +206,7 @@ const app: Partial<IAppProxy> = {
     if (!shouldValidUUID(uuid)) return
 
     const pid = this.baseInfo.id
-    const hook = `hook:slot:${safeSnakeCase(`block:${uuid}`)}`
+    const hook = `hook:editor:${safeSnakeCase(`slot:${uuid}`)}`
 
     this.caller.on(hook, callback)
     this.App._installPluginHook(pid, hook)
@@ -357,6 +357,8 @@ const db: Partial<IDBProxy> = {
       txMeta?: { outlinerOp: string; [p: string]: any }
     ) => void
   ): IUserOffHook {
+    if (!shouldValidUUID(uuid)) return
+
     const pid = this.baseInfo.id
     const hook = `hook:db:${safeSnakeCase(`block:${uuid}`)}`
     const aBlockChange = ({ block, txData, txMeta }) => {

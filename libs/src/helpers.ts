@@ -116,9 +116,9 @@ export class PluginLogger extends EventEmitter<'change'> {
   }
 }
 
-export function checkValidUUID(s: string) {
+export function isValidUUID(s: string) {
   return (typeof s === 'string' &&
-    (s.length === 32) &&
+    (s.length === 36) &&
     (/^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/gi).test(s))
 }
 
