@@ -735,6 +735,7 @@
         edit? (:editor/editing? @state/state)
         default-home (get-default-home-if-valid)
         logged? (user-handler/logged-in?)
+        fold-button-on-right? (state/enable-fold-button-right?)
         show-action-bar? (state/sub :mobile/show-action-bar?)
         show-recording-bar? (state/sub :mobile/show-recording-bar?)
         preferred-language (state/sub [:preferred-language])]
@@ -757,10 +758,11 @@
                        (util/fix-open-external-with-shift! e))}
 
      [:main.theme-inner
-      {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?
-                                 :ls-right-sidebar-open sidebar-open?
-                                 :ls-wide-mode wide-mode?
-                                 :ls-hl-colored ls-block-hl-colored?}])}
+      {:class (util/classnames [{:ls-left-sidebar-open    left-sidebar-open?
+                                 :ls-right-sidebar-open   sidebar-open?
+                                 :ls-wide-mode            wide-mode?
+                                 :ls-fold-button-on-right fold-button-on-right?
+                                 :ls-hl-colored           ls-block-hl-colored?}])}
 
       [:button#skip-to-main
        {:on-click #(ui/focus-element (ui/main-node))

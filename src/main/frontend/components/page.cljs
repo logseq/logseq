@@ -304,7 +304,7 @@
                         (reset! *edit? true))))}
        (when (not= icon "") [:span.page-icon icon])
        [:div.page-title-sizer-wrapper.relative
-        (when (rum/react *edit?)
+        (when @*edit?
           (page-title-editor {:*title-value *title-value
                               :*edit? *edit?
                               :*input-value *input-value
@@ -314,9 +314,9 @@
                               :untitled? untitled?
                               :whiteboard-page? whiteboard-page?}))
         [:span.title.block
-         {:data-value (rum/react *input-value)
-          :data-ref page-name
-          :style {:opacity (when @*edit? 0)}}
+         {:data-value @*input-value
+          :data-ref   page-name
+          :style      {:opacity (when @*edit? 0)}}
          (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
                untitled? [:span.opacity-50 (t :untitled)]
                :else title)]]])))

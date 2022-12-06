@@ -582,6 +582,11 @@ Similar to re-frame subscriptions"
   []
   (not (false? (:feature/enable-timetracking? (sub-config)))))
 
+(defn enable-fold-button-right?
+  []
+  (let [_ (sub :ui/viewport)]
+    (util/md-breakpoint?)))
+
 (defn enable-journals?
   ([]
    (enable-journals? (get-current-repo)))
