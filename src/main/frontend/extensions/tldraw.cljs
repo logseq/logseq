@@ -77,7 +77,9 @@
 
 (defn get-tldraw-handlers [current-whiteboard-name]
   {:search search-handler
-   :queryBlockByUUID #(clj->js (model/query-block-by-uuid (parse-uuid %)))
+   :queryBlockByUUID (fn [block-uuid]
+                       (clj->js
+                        (model/query-block-by-uuid (parse-uuid block-uuid))))
    :getBlockPageName #(:block/name (model/get-block-page (state/get-current-repo) (parse-uuid %)))
    :isWhiteboardPage model/whiteboard-page?
    :saveAsset save-asset-handler
@@ -105,7 +107,8 @@
 (rum/defc tldraw-app
   [page-name block-id]
   (let [populate-onboarding?  (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
-        data (whiteboard-handler/page-name->tldr! page-name)
+        data (-> (whiteboard-handler/page-name->tldr! page-name)
+                 (clj->js))
         [loaded-app set-loaded-app] (rum/use-state nil)
         on-mount (fn [tln]
                    (when-let [^js api (gobj/get tln "api")]

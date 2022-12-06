@@ -44,7 +44,8 @@
            state)}
   [page-name]
   (let [loaded? (rum/react tldraw-loaded?)
-        tldr (whiteboard-handler/page-name->tldr! page-name)
+        tldr (-> (whiteboard-handler/page-name->tldr! page-name)
+                 (clj->js))
         generate-preview (when loaded?
                            (resolve 'frontend.extensions.tldraw/generate-preview))]
     (when generate-preview

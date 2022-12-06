@@ -1680,6 +1680,11 @@
 
     :else false))
 
+(defn block-or-page?
+  [page-name-or-uuid]
+  (let [entity (get-page (str page-name-or-uuid))]
+    (if-not (some? (:block/name entity)) :block :page)))
+
 (defn untitled-page?
   [page-name]
   (when-let [entity (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])]
