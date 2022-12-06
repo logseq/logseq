@@ -384,14 +384,4 @@ html.is-mobile {
     background: var(--ls-primary-background-color);
     content: " ";
   }
-
-  &.highlight {
-    color: var(--ls-selection-text-color);
-    border-color: var(--ls-selection-background-color);
-
-    &:before {
-      opacity: 0.5;
-      background: var(--ls-selection-background-color);
-    }
-  }
 }

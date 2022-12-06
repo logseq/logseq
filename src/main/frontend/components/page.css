@@ -195,27 +195,6 @@
       }
     }
   }
-
-  .paginates {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 4px;
-
-    > span {
-      color: var(--ls-primary-text-color);
-
-      &:last-child {
-        a {
-          user-select: none;
-
-          &:active {
-            opacity: .6;
-          }
-        }
-      }
-    }
-  }
 }
 
 .cp__vertical-menu-button {

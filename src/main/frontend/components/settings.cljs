@@ -440,7 +440,8 @@
   (row-with-button-action
     {:left-label   (t :settings-page/customize-shortcuts)
      :button-label (t :settings-page/shortcut-settings)
-     :on-click      #((state/close-settings!)
+     :on-click      (fn []
+                      (state/close-settings!)
                       (route-handler/redirect! {:to :shortcut-setting}))
      :-for         "customize_shortcuts"}))
 
