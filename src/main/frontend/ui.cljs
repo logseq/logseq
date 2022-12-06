@@ -15,6 +15,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.model :as model]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.mixins :as mixins]
