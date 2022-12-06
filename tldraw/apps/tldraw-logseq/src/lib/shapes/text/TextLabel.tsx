@@ -17,6 +17,7 @@ export interface TextLabelProps {
   offsetX?: number
   scale?: number
   isEditing?: boolean
+  pointerEvents?: boolean
 }
 
 export const TextLabel = React.memo(function TextLabel({
@@ -29,6 +30,7 @@ export const TextLabel = React.memo(function TextLabel({
   offsetY = 0,
   scale = 1,
   isEditing = false,
+  pointerEvents = false,
   onBlur,
   onChange,
 }: TextLabelProps) {
@@ -141,7 +143,7 @@ export const TextLabel = React.memo(function TextLabel({
           fontStyle,
           fontWeight,
           color,
-          pointerEvents: text ? 'all' : 'none',
+          pointerEvents: pointerEvents ? 'all' : 'none',
           userSelect: isEditing ? 'text' : 'none',
         }}
       >

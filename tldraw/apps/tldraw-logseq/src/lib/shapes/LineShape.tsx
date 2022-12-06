@@ -90,6 +90,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
           onBlur={onEditingEnd}
           fontStyle={italic ? 'italic' : 'normal'}
           fontWeight={fontWeight}
+          pointerEvents={!!label}
         />
         <SVGContainer opacity={isErasing ? 0.2 : opacity} id={id + '_svg'}>
           <LabelMask id={id} bounds={bounds} labelSize={labelSize} offset={offset} scale={scale} />
