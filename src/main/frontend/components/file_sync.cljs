@@ -873,22 +873,24 @@
         (js/console.warn "[onboarding SKIP] " (name type) e)))))
 
 (rum/defcs delay-delete-files <
-  (rum/local [nil false] ::deleted-files&updated?)
+  (rum/local nil ::recent-deleted-files)
+  {:will-mount (fn [state]
+                 (async/go
+                     (let [l (async/<! (fs-sync/<get-remote-delay-deleted-files-meta
+                                        fs-sync/remoteapi
+                                        (nth (:rum/args state) 0)))]
+                       (if (instance? ExceptionInfo l)
+                         (do (notification/show! "get-remote-delay-deleted-files-meta failed")
+                             (reset! (::recent-deleted-files state) nil))
+                         (reset! (::recent-deleted-files state) l))))
+                 state)}
   [state graph-uuid]
-  (let [*deleted-files&updated? (get state ::deleted-files&updated?)
-        [deleted-files updated?] @*deleted-files&updated?]
-    (when-not updated?
-      (println "xxx" @*deleted-files&updated?)
-      (async/go
-        (let [l (async/<! (fs-sync/<get-remote-delay-deleted-files-meta fs-sync/remoteapi graph-uuid))]
-          (if (instance? ExceptionInfo l)
-            (notification/show! "get-remote-delay-deleted-files-meta failed")
-            (reset! *deleted-files&updated? [l true])))))
+  (let [*recent-deleted-files (::recent-deleted-files state)]
     [:div
      [:h1.title "Recent deleted files"]
      [:h3 "will be deleted after about 1 month"]
      [:ul
-      (for [^fs-sync/DelayedDeleteFileMetadata f deleted-files]
+      (for [^fs-sync/DelayedDeleteFileMetadata f @*recent-deleted-files]
         [:li
          [:a {:on-click #(notification/show! "TODO: list version history")}
           (:path f)]
