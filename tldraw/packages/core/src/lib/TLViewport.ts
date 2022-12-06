@@ -3,6 +3,14 @@ import { action, computed, makeObservable, observable } from 'mobx'
 import { FIT_TO_SCREEN_PADDING, ZOOM_UPDATE_FACTOR } from '../constants'
 import type { TLBounds } from '../types'
 
+const ease = (x: number) => {
+  return -(Math.cos(Math.PI * x) - 1) / 2
+}
+
+const elapsedProgress = (t: number, duration = 100) => {
+  return ease(Vec.clamp(t / duration, 0, 1))
+}
+
 export class TLViewport {
   constructor() {
     makeObservable(this)
@@ -73,54 +81,99 @@ export class TLViewport {
     return Vec.mul(Vec.add(point, camera.point), camera.zoom)
   }
 
-  onZoom = (point: number[], zoom: number): this => {
-    return this.pinchZoom(point, [0, 0], zoom)
+  onZoom = (point: number[], zoom: number, animate = false): this => {
+    return this.pinchZoom(point, [0, 0], zoom, animate)
   }
 
   /**
    * Pinch to a new zoom level, possibly together with a pan.
    *
-   * @param point The current point under the cursor.
-   * @param delta The movement delta.
+   * @param point The current point under the cursor in the screen space. Zoom will be transformed
+   *   around this point.
+   * @param delta The movement delta in the screen space
    * @param zoom The new zoom level
    */
-  pinchZoom = (point: number[], delta: number[], zoom: number): this => {
+  pinchZoom = (point: number[], delta: number[], zoom: number, animate = false): this => {
     const { camera } = this
+
     const nextPoint = Vec.sub(camera.point, Vec.div(delta, camera.zoom))
     zoom = Vec.clamp(zoom, TLViewport.minZoom, TLViewport.maxZoom)
-    const p0 = Vec.sub(Vec.div(point, camera.zoom), nextPoint)
-    const p1 = Vec.sub(Vec.div(point, zoom), nextPoint)
-    return this.update({ point: Vec.toFixed(Vec.add(nextPoint, Vec.sub(p1, p0))), zoom })
+    const p0 = Vec.div(point, camera.zoom)
+    const p1 = Vec.div(point, zoom)
+
+    const newPoint = Vec.toFixed(Vec.add(nextPoint, Vec.sub(p1, p0)))
+
+    if (animate) {
+      this.animateCamera({ point: newPoint, zoom })
+    } else {
+      this.update({ point: newPoint, zoom })
+    }
+
+    return this
   }
 
-  setZoom = (zoom: number) => {
+  setZoom = (zoom: number, animate = false) => {
     const { bounds } = this
     const center = [bounds.width / 2, bounds.height / 2]
-    this.onZoom(center, zoom)
+    this.onZoom(center, zoom, animate)
   }
 
   zoomIn = () => {
     const { camera } = this
-    this.setZoom(camera.zoom / ZOOM_UPDATE_FACTOR)
+    this.setZoom(camera.zoom / ZOOM_UPDATE_FACTOR, true)
   }
 
   zoomOut = () => {
-    const { camera, bounds } = this
-    this.setZoom(camera.zoom * ZOOM_UPDATE_FACTOR)
+    const { camera } = this
+    this.setZoom(camera.zoom * ZOOM_UPDATE_FACTOR, true)
   }
 
   resetZoom = (): this => {
-    const {
-      bounds,
-      camera: { zoom, point },
-    } = this
-    const center = [bounds.width / 2, bounds.height / 2]
-    const p0 = Vec.sub(Vec.div(center, zoom), point)
-    const p1 = Vec.sub(Vec.div(center, 1), point)
-    return this.update({ point: Vec.toFixed(Vec.add(point, Vec.sub(p1, p0))), zoom: 1 })
+    this.setZoom(1, true)
+    return this
   }
 
-  zoomToBounds = ({ width, height, minX, minY }: TLBounds): this => {
+  /**
+   * Animate the camera to the given position
+   */
+  animateCamera = ({ point, zoom }: { point: number[]; zoom: number }) => {
+    return this.animateToViewport({
+      minX: -point[0],
+      minY: -point[1],
+      maxX: this.bounds.width / zoom - point[0],
+      maxY: this.bounds.height / zoom - point[1],
+      width: this.bounds.width / zoom,
+      height: this.bounds.height / zoom,
+    })
+  }
+
+  animateToViewport = (view: TLBounds) => {
+    const startTime = performance.now()
+    const oldView = { ...this.currentView }
+
+    const step = () => {
+      const elapsed = performance.now() - startTime
+      const progress = elapsedProgress(elapsed) // 0 ~ 1
+      const next = {
+        minX: oldView.minX + (view.minX - oldView.minX) * progress,
+        minY: oldView.minY + (view.minY - oldView.minY) * progress,
+        maxX: oldView.maxX + (view.maxX - oldView.maxX) * progress,
+        maxY: oldView.maxY + (view.maxY - oldView.maxY) * progress,
+      }
+
+      const point = [-next.minX, -next.minY]
+      const zoom = this.bounds.width / (next.maxX - next.minX)
+
+      this.update({ point, zoom })
+      if (progress < 1) {
+        requestAnimationFrame(step)
+      }
+    }
+
+    step()
+  }
+
+  zoomToBounds = ({ width, height, minX, minY }: TLBounds) => {
     const { bounds, camera } = this
     let zoom = Math.min(
       (bounds.width - FIT_TO_SCREEN_PADDING) / width,
@@ -137,6 +190,8 @@ export class TLViewport {
       (bounds.width - width * zoom) / 2 / zoom,
       (bounds.height - height * zoom) / 2 / zoom,
     ]
-    return this.update({ point: Vec.add([-minX, -minY], delta), zoom })
+
+    const point = Vec.add([-minX, -minY], delta)
+    this.animateCamera({ point, zoom })
   }
 }

@@ -95,6 +95,10 @@ html[data-theme='light'] {
   .tl-menu-icon {
     @apply absolute left-4 text-base opacity-50;
   }
+
+  &[data-disabled] {
+    @apply opacity-50 pointer-events-none;
+  }
 }
 
 #tl-zoom {
