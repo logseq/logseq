@@ -27,7 +27,7 @@
             ks (if (vector? k) k [k])
             new-result (rewrite/assoc-in result ks v)
             new-content (str new-result)]
-        (file-handler/set-file-content! repo path new-content)))))
+        (file-handler/set-file-content! repo path new-content) nil))))
 
 (defn set-config!
   ([k v]

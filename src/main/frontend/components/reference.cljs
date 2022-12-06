@@ -59,7 +59,7 @@
     [:div.ls-filters.filters
      [:div.sm:flex.sm:items-start
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
-       (ui/icon "filter" {:style {:fontSize 20}})]
+       (ui/icon "filter" {:size 20})]
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left.pb-2
        [:h3#modal-headline.text-lg.leading-6.font-medium "Filter"]
        [:span.text-xs
@@ -146,14 +146,14 @@
                                       {:center? true}))}
        (ui/icon "filter" {:class (cond
                                    (empty? filter-state)
-                                   ""
+                                   "opacity-60 hover:opacity-100"
                                    (every? true? (vals filter-state))
                                    "text-success"
                                    (every? false? (vals filter-state))
                                    "text-error"
                                    :else
                                    "text-warning")
-                          :style {:fontSize 24}})]]
+                          :size  22})]]
 
      (fn []
        (references-inner page-name filters filtered-ref-blocks))
