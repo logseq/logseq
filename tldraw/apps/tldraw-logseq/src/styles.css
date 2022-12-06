@@ -430,7 +430,7 @@ button.tl-select-input-trigger {
 
 .tl-text-label-inner-wrapper {
   position: absolute;
-  padding: 4px;
+  padding: 6px 4px 4px;
   z-index: 1;
   min-height: 1px;
   min-width: 1px;
@@ -449,7 +449,7 @@ button.tl-select-input-trigger {
 
   z-index: 1;
   border: none;
-  padding: 4px;
+  padding: 6px 4px 4px;
   resize: none;
   text-align: inherit;
   min-height: inherit;
