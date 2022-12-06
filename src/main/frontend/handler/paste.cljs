@@ -19,7 +19,8 @@
             [frontend.handler.notification :as notification]
             [frontend.util.text :as text-util]
             [frontend.format.mldoc :as mldoc]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.handler.editor :as editor]))
 
 (defn- paste-text-parseable
   [format text]
@@ -155,10 +156,11 @@
   (utils/getClipText
    (fn [clipboard-data]
      (when-let [_ (state/get-input)]
-       (let [data (or (when (gp-util/url? clipboard-data)
-                        (wrap-macro-url clipboard-data))
-                      clipboard-data)]
-         (editor-handler/insert data true))))
+       (if (gp-util/url? clipboard-data)
+         (if (string/blank? (util/get-selected-text))
+           (editor-handler/insert (or (wrap-macro-url clipboard-data) clipboard-data) true)
+           (editor-handler/html-link-format! clipboard-data))
+         (editor-handler/insert clipboard-data true))))
    (fn [error]
      (js/console.error error))))
 
