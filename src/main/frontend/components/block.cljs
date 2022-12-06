@@ -2234,6 +2234,7 @@
   (let [{:block/keys [title body] :as block} (if (:block/title block) block
                                                  (merge block (block/parse-title-and-body uuid format pre-block? content)))
         collapsed? (util/collapsed? block)
+        plugin-slotted? (and config/lsp-enabled? (state/slot-hook-exist? uuid))
         block-ref? (:block-ref? config)
         stop-events? (:stop-events? config)
         block-ref-with-title? (and block-ref? (seq title))
@@ -2272,13 +2273,14 @@
         [:div.warning.text-sm
          "Large block will not be editable or searchable to not slow down the app, please use another editor to edit this block."])
       [:div.flex.flex-row.justify-between.block-content-inner
-       [:div.flex-1.w-full
-        (cond
-          (seq title)
-          (build-block-title config block)
+       (when-not plugin-slotted?
+         [:div.flex-1.w-full
+          (cond
+            (seq title)
+            (build-block-title config block)
 
-          :else
-          nil)]
+            :else
+            nil)])
 
        (clock-summary-cp block body)]
 
@@ -2304,18 +2306,24 @@
                  (not= block-type :whiteboard-shape))
         (properties-cp config block))
 
-      (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
-        (when (and (not block-ref-with-title?)
-                   (seq body)
-                   (or (not title-collapse-enabled?)
-                       (and title-collapse-enabled? (not collapsed?))))
-         [:div.block-body
-          ;; TODO: consistent id instead of the idx (since it could be changed later)
-          (let [body (block/trim-break-lines! (:block/body block))]
-            (for [[idx child] (medley/indexed body)]
-              (when-let [block (markup-element-cp config child)]
-                (rum/with-key (block-child block)
-                  (str uuid "-" idx)))))]))
+      (if plugin-slotted?
+        [:div.block-slotted-body
+         (plugins/hook-block-slot
+          :block-content-slotted
+          (-> block (dissoc :block/children :block/page)))]
+
+        (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
+          (when (and (not block-ref-with-title?)
+                     (seq body)
+                     (or (not title-collapse-enabled?)
+                         (and title-collapse-enabled? (not collapsed?))))
+            [:div.block-body
+             ;; TODO: consistent id instead of the idx (since it could be changed later)
+             (let [body (block/trim-break-lines! (:block/body block))]
+               (for [[idx child] (medley/indexed body)]
+                 (when-let [block (markup-element-cp config child)]
+                   (rum/with-key (block-child block)
+                                 (str uuid "-" idx)))))])))
 
       (case (:block/warning block)
         :multiple-blocks
@@ -2369,7 +2377,8 @@
                                string/trim
                                block-ref/block-ref?)]
     (if (and edit? editor-box)
-      [:div.editor-wrapper {:id editor-id}
+      [:div.editor-wrapper
+       {:id editor-id}
        (ui/catch-error
         (ui/block-error "Something wrong in the editor" {})
         (editor-box {:block block

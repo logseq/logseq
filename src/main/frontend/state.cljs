@@ -1547,6 +1547,12 @@ Similar to re-frame subscriptions"
         (set-state! [:plugin/installed-hooks hook-or-all] (disj coll pid))))
     true))
 
+(defn slot-hook-exist?
+  [uuid]
+  (when-let [type (and uuid (string/replace (str uuid) "-" "_"))]
+    (when-let [hooks (sub :plugin/installed-hooks)]
+      (contains? hooks (str "hook:editor:slot_" type)))))
+
 (defn active-tldraw-app
   []
   (when-let [tldraw-el (.closest js/document.activeElement ".logseq-tldraw[data-tlapp]")]

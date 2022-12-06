@@ -895,6 +895,16 @@ html[data-theme='dark'] {
       display: inline-flex;
     }
   }
+
+  .block-slotted-body {
+    .lsp-hook-ui-slot {
+      display: block;
+
+      [data-injected-ui] {
+        display: block;
+      }
+    }
+  }
 }
 
 .ui__modal[label=plugins-dashboard] {
