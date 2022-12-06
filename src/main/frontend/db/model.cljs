@@ -1680,6 +1680,11 @@
 
     :else false))
 
+(defn untitled-page?
+  [page-name]
+  (when-let [entity (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])]
+    (some? (parse-uuid page-name))))
+
 (defn get-all-whiteboards
   [repo]
   (->> (d/q

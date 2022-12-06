@@ -12,7 +12,7 @@ export const BlockLink = ({
 }) => {
   const {
     handlers: { isWhiteboardPage, redirectToPage, sidebarAddBlock, queryBlockByUUID },
-    renderers: { Breadcrumb, PageName, BlockReference },
+    renderers: { Breadcrumb, PageName },
   } = React.useContext(LogseqContext)
 
   let iconName = ''

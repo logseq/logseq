@@ -564,12 +564,14 @@
    All page-names are sanitized except page-name-in-block"
   [config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?]
   (let [tag? (:tag? config)
-        config (assoc config :whiteboard-page? whiteboard-page?)]
+        config (assoc config :whiteboard-page? whiteboard-page?)
+        untitled? (model/untitled-page? page-name)]
     [:a
      {:tabIndex "0"
       :class (cond-> (if tag? "tag" "page-ref")
                (:property? config)
-               (str " page-property-key block-property"))
+               (str " page-property-key block-property")
+               untitled? (str " opacity-50"))
       :data-ref page-name
       :on-mouse-down (fn [e] (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?))
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
@@ -593,9 +595,14 @@
 
          :else
          (let [original-name (util/get-page-original-name page-entity)
-               s (if (not= (util/safe-page-name-sanity-lc original-name) page-name-in-block)
-                   page-name-in-block ;; page-name-in-block might be overrided (legacy)
-                   (pdf-assets/human-page-name original-name))
+               s (cond untitled? 
+                       (t :untitled)
+
+                       (not= (util/safe-page-name-sanity-lc original-name) page-name-in-block)
+                       page-name-in-block ;; page-name-in-block might be overrided (legacy))
+                       
+                       :else
+                       (pdf-assets/human-page-name original-name))
                _ (when-not page-entity (js/console.warn "page-inner's page-entity is nil, given page-name: " page-name
                                                         " page-name-in-block: " page-name-in-block))]
            (if tag? (str "#" s) s))))]))

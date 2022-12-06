@@ -78,6 +78,7 @@
 (defn get-tldraw-handlers [current-whiteboard-name]
   {:search search-handler
    :queryBlockByUUID #(clj->js (model/query-block-by-uuid (parse-uuid %)))
+   :getBlockPageName #(:block/name (model/get-block-page (state/get-current-repo) (parse-uuid %)))
    :isWhiteboardPage model/whiteboard-page?
    :saveAsset save-asset-handler
    :makeAssetUrl editor-handler/make-asset-url
