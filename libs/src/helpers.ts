@@ -296,7 +296,7 @@ export function setupInjectedUI(
     float = true
   }
 
-  const id = `${pl.id}--${ui.key}`
+  const id = `${pl.id}--${ui.key || genID()}`
   const key = id
 
   const target = float
