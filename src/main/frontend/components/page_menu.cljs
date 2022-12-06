@@ -87,7 +87,9 @@
                        (if favorited?
                          (page-handler/unfavorite-page! page-original-name)
                          (page-handler/favorite-page! page-original-name)))}}
-
+          (when file-sync-graph-uuid
+            {:title "Recently Deleted files"
+             :options {:on-click #(state/pub-event! [:graph/recently-deleted-files file-sync-graph-uuid])}})
           (when (or (util/electron?) file-sync-graph-uuid)
             {:title   (t :page/version-history)
              :options {:on-click
@@ -113,7 +115,7 @@
             {:title   (t :page/delete)
              :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 
-          (when (and (not (mobile-util/native-platform?)) 
+          (when (and (not (mobile-util/native-platform?))
                      (state/get-current-page))
             {:title (t :page/presentation-mode)
              :options {:on-click (fn []

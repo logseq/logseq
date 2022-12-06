@@ -218,6 +218,10 @@
    (file-sync/pick-page-histories-panel graph-uuid page-name)
    {:id :page-histories :label "modal-page-histories"}))
 
+(defmethod handle :graph/recently-deleted-files [[_ graph-uuid]]
+  (state/set-modal!
+   #(file-sync/delay-delete-files graph-uuid)))
+
 (defmethod handle :graph/open-new-window [[_ev repo]]
   (p/let [current-repo (state/get-current-repo)
           target-repo (or repo current-repo)
@@ -225,6 +229,8 @@
           _ (when-not (= current-repo target-repo)
               (repo-handler/broadcast-persist-db! repo))]
     (ui-handler/open-new-window! repo)))
+
+
 
 (defmethod handle :graph/migrated [[_ _repo]]
   (js/alert "Graph migrated."))

@@ -871,3 +871,25 @@
           (state/set-state! [:file-sync/onboarding-state (keyword type)] true)))
       (catch :default e
         (js/console.warn "[onboarding SKIP] " (name type) e)))))
+
+(rum/defcs delay-delete-files <
+  (rum/local [nil false] ::deleted-files&updated?)
+  [state graph-uuid]
+  (let [*deleted-files&updated? (get state ::deleted-files&updated?)
+        [deleted-files updated?] @*deleted-files&updated?]
+    (when-not updated?
+      (println "xxx" @*deleted-files&updated?)
+      (async/go
+        (let [l (async/<! (fs-sync/<get-remote-delay-deleted-files-meta fs-sync/remoteapi graph-uuid))]
+          (if (instance? ExceptionInfo l)
+            (notification/show! "get-remote-delay-deleted-files-meta failed")
+            (reset! *deleted-files&updated? [l true])))))
+    [:div
+     [:h1.title "Recent deleted files"]
+     [:h3 "will be deleted after about 1 month"]
+     [:ul
+      (for [^fs-sync/DelayedDeleteFileMetadata f deleted-files]
+        [:li
+         [:a {:on-click #(notification/show! "TODO: list version history")}
+          (:path f)]
+         [:div.text-sm (util/time-ago (tc/from-long (* 1000 (:delete-epoch f))))]])]]))
