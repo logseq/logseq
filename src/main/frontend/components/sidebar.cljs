@@ -115,7 +115,8 @@
                "dragging-target"
                "")
       :draggable true
-      :on-drag-start (fn [_event]
+      :on-drag-start (fn [event]
+                       (ui/block->data-transfer! name event)
                        (state/set-state! :favorites/dragging name))
       :on-drag-over (fn [e]
                       (util/stop e)
@@ -178,6 +179,8 @@
           [:li.recent-item.select-none
            {:key name
             :title name
+            :draggable true
+            :on-drag-start (fn [event] (ui/block->data-transfer! name event))
             :data-ref name}
            (page-name name (get-page-icon entity) true)]))])))
 

@@ -57,7 +57,7 @@
 
 (defn- block-with-breadcrumb
   [repo block idx sidebar-key ref?]
-  (let [block-id (:block/uuid block)]
+  (when-let [block-id (:block/uuid block)]
     [[:div.mt-1 {:class (if ref? "ml-8" "ml-1")}
       (block/breadcrumb {:id     "block-parent"
                          :block? true
@@ -99,6 +99,8 @@
       [[:a.page-title {:href     (if (db-model/whiteboard-page? page-name)
                                    (rfe/href :whiteboard {:name page-name})
                                    (rfe/href :page {:name page-name}))
+                       :draggable true
+                       :on-drag-start (fn [event] (ui/block->data-transfer! page-name event))
                        :on-click (fn [e]
                                    (when (gobj/get e "shiftKey")
                                      (.preventDefault e)))}
