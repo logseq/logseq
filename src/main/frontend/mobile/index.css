@@ -79,13 +79,10 @@
 
     .submenu {
       z-index: 100;
-      background-color: var(--ls-secondary-background-color);
-      border-radius: 5px;
       box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02);
+      background-color: var(--ls-secondary-background-color);
       overflow-x: overlay;
       overflow-y: hidden;
-      overflow-scrolling: touch;
-      left: 0;
       height: 40px;
     }
 
