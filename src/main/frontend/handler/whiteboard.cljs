@@ -96,7 +96,7 @@
               :selectedIds #js[]
               :pages [(merge tldr-page
                              {:id id
-                              :name "page"
+                              :name (:block/name page-block)
                               :shapes shapes})]})))
 
 (defn transact-tldr! [page-name tldr]
