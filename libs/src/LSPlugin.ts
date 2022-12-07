@@ -465,7 +465,7 @@ export interface IAppProxy {
    *
    * @added 0.0.13
    */
-  onBlockRendererSlotted: IUserConditionSlotHook<BlockUUID, { block: BlockEntity }>
+  onBlockRendererSlotted: IUserConditionSlotHook<BlockUUID, Omit<BlockEntity, 'children' | 'page'>>
 
   /**
    * provide ui slot to block `renderer` macro for `{{renderer arg1, arg2}}`
