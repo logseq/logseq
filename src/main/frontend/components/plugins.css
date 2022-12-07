@@ -901,7 +901,8 @@ html[data-theme='dark'] {
       display: block;
 
       [data-injected-ui] {
-        display: block;
+        display: flex;
+        flex-direction: column;
       }
     }
   }
