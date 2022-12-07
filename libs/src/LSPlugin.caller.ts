@@ -38,7 +38,7 @@ class LSPluginCaller extends EventEmitter {
     payload: any,
     actor?: DeferredActor
   ) => Promise<any>
-  private _callUserModel?: (type: string, payload: any) => Promise<any>
+  private _callUserModel?: (type: string, ...payloads: any[]) => Promise<any>
 
   private _debugTag = ''
 
@@ -205,8 +205,13 @@ class LSPluginCaller extends EventEmitter {
     return this._call?.call(this, type, payload, actor)
   }
 
-  async callUserModel(type: string, payload: any = {}) {
-    return this._callUserModel?.call(this, type, payload)
+  async callUserModel(type: string, ...args: any[]) {
+    return this._callUserModel?.apply(this, [type, ...args])
+  }
+
+  async callUserModelAsync(type: string, ...args: any[]) {
+    type = AWAIT_LSPMSGFn(type)
+    return this._callUserModel?.apply(this, [type, ...args])
   }
 
   // run in host
@@ -292,12 +297,15 @@ class LSPluginCaller extends EventEmitter {
             })
           }
 
-          this._callUserModel = async (type, payload: any) => {
+          this._callUserModel = async (type, ...payloads: any[]) => {
             if (type.startsWith(FLAG_AWAIT)) {
-              // TODO: attach payload with method call
-              return await refChild.get(type.replace(FLAG_AWAIT, ''))
+              // TODO: attach arguments with method call
+              return await refChild.get(
+                type.replace(FLAG_AWAIT, ''),
+                ...payloads
+              )
             } else {
-              refChild.call(type, payload)
+              refChild.call(type, payloads?.[0])
             }
           }
 

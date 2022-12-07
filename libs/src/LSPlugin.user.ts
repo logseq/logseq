@@ -90,6 +90,7 @@ function registerSimpleCommand(
     method: 'register-plugin-simple-command',
     args: [
       this.baseInfo.id,
+      // [cmd, action]
       [{ key, label, type, desc, keybinding, extras }, ['editor/hook', eventKey]],
       palette,
     ],
