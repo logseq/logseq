@@ -33,7 +33,8 @@
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
             [frontend.fs.capacitor-fs :as capacitor-fs]
-            ["@capawesome/capacitor-background-task" :refer [BackgroundTask]]))
+            ["@capawesome/capacitor-background-task" :refer [BackgroundTask]]
+            ["path" :as path]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -656,15 +657,15 @@
   (let [favorite-pages* (set favorite-pages)]
     (fn [^FileMetadata item]
       (let [path (relative-path item)
-            journal? (string/starts-with? path
-                                          (str (config/get-journals-directory) "/"))
+            journal-dir (path/join (config/get-journals-directory) path/sep)
+            journal? (string/starts-with? path journal-dir)
             journal-day
             (when journal?
               (try
                 (tc/to-long
                  (tf/parse (tf/formatter "yyyy_MM_dd")
                            (-> path
-                               (string/replace-first "journals/" "")
+                               (string/replace-first journal-dir "")
                                (string/replace-first ".md" ""))))
                 (catch :default _)))]
         (cond
@@ -1411,8 +1412,8 @@
 (defn- is-journals-or-pages?
   [filetxn]
   (let [rel-path (relative-path filetxn)]
-    (or (string/starts-with? rel-path "journals/")
-        (string/starts-with? rel-path "pages/"))))
+    (or (string/starts-with? rel-path (path/join (config/get-journals-directory) path/sep))
+        (string/starts-with? rel-path (path/join (config/get-pages-directory) path/sep)))))
 
 (defn- need-add-version-file?
   "when we need to create a new version file:
