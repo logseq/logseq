@@ -335,11 +335,15 @@
                            (+ current-pos i)))
                        current-pos)
           orig-prefix (subs edit-content 0 current-pos)
+          postfix (subs edit-content current-pos)
+          postfix (if postfix-fn (postfix-fn postfix) postfix)
           space? (let [space? (when (and last-pattern orig-prefix)
                                 (let [s (when-let [last-index (string/last-index-of orig-prefix last-pattern)]
                                           (gp-util/safe-subs orig-prefix 0 last-index))]
                                   (not
                                    (or
+                                    (util/cjk-string? (str (last orig-prefix)))
+                                    (util/cjk-string? (str (first postfix)))
                                     (and s
                                          (string/ends-with? s "(")
                                          (or (string/starts-with? last-pattern block-ref/left-parens)
@@ -365,8 +369,6 @@
 
                    :else
                    (util/replace-last last-pattern orig-prefix value space?))
-          postfix (subs edit-content current-pos)
-          postfix (if postfix-fn (postfix-fn postfix) postfix)
           new-value (cond
                       (string/blank? postfix)
                       prefix
@@ -380,11 +382,7 @@
                      (or backward-pos 0))]
       (when-not (string/blank? new-value)
         (state/set-block-content-and-last-pos! id new-value new-pos)
-        (cursor/move-cursor-to input
-                               (if (and (or backward-pos forward-pos)
-                                        (not= end-pattern page-ref/right-brackets))
-                                 new-pos
-                                 (inc new-pos)))))))
+        (cursor/move-cursor-to input new-pos)))))
 
 (defn simple-insert!
   [id value
