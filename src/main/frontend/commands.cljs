@@ -322,7 +322,7 @@
 
 (defn insert!
   [id value
-   {:keys [last-pattern postfix-fn backward-pos forward-pos end-pattern backward-truncate-number command]
+   {:keys [last-pattern postfix-fn backward-pos end-pattern backward-truncate-number command]
     :as _option}]
   (when-let [input (gdom/getElement id)]
     (let [last-pattern (when-not backward-truncate-number
@@ -342,7 +342,8 @@
                                           (gp-util/safe-subs orig-prefix 0 last-index))]
                                   (not
                                    (or
-                                    (and (not= command :block-ref)
+                                    (and (= :page-ref command)
+                                         (util/cjk-string? value)
                                          (or (util/cjk-string? (str (last orig-prefix)))
                                              (util/cjk-string? (str (first postfix)))))
                                     (and s

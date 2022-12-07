@@ -771,19 +771,18 @@
                        (page-ref/->page-ref chosen)
                        chosen)
               q (if @editor-handler/*selected-text "" q)
-              [last-pattern forward-pos] (if wrapped?
-                                           [q 3]
-                                           (if (= \# (first q))
-                                             [(subs q 1) 1]
-                                             [q 2]))
+              last-pattern (if wrapped?
+                             q
+                             (if (= \# (first q))
+                               (subs q 1)
+                               q))
               last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)]
           (editor-handler/insert-command! id
                                           (str "#" (when wrapped? page-ref/left-brackets) chosen)
                                           format
                                           {:last-pattern last-pattern
                                            :end-pattern (when wrapped? page-ref/right-brackets)
-                                           :forward-pos forward-pos
-                                           :command :tag-page-ref})))
+                                           :command :page-ref})))
       (fn [chosen _click?]
         (state/clear-editor-action!)
         (let [prefix (str (t :new-page) ": ")
@@ -797,7 +796,6 @@
                                           {:last-pattern (str page-ref/left-brackets (if @editor-handler/*selected-text "" q))
                                            :end-pattern page-ref/right-brackets
                                            :postfix-fn   (fn [s] (util/replace-first page-ref/right-brackets s ""))
-                                           :forward-pos 3
                                            :command :page-ref}))))))
 
 (defn create-today-journal!
