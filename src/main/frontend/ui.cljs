@@ -15,7 +15,6 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db-mixins :as db-mixins]
-            [frontend.db.model :as model]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.mixins :as mixins]
@@ -1087,10 +1086,3 @@
       [])
      (when portal-anchor
        (rum/portal (rum/fragment children) portal-anchor)))))
-
-(defn block->data-transfer!
-  "Set block or page name to the given event's dataTransfer. Used in dnd."
-  [block-or-page-name event]
-  (.setData (gobj/get event "dataTransfer")
-            (if (model/page? block-or-page-name) "page-name" "block-uuid")
-            (str block-or-page-name)))

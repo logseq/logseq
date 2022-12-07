@@ -1647,7 +1647,7 @@
 (defn- bullet-drag-start
   [event block uuid block-id]
   (editor-handler/highlight-block! uuid)
-  (ui/block->data-transfer! uuid event)
+  (editor-handler/block->data-transfer! uuid event)
   (.setData (gobj/get event "dataTransfer")
             "block-dom-id"
             block-id)

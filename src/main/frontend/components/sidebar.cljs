@@ -116,7 +116,7 @@
                "")
       :draggable true
       :on-drag-start (fn [event]
-                       (ui/block->data-transfer! name event)
+                       (editor-handler/block->data-transfer! name event)
                        (state/set-state! :favorites/dragging name))
       :on-drag-over (fn [e]
                       (util/stop e)
@@ -180,7 +180,7 @@
            {:key name
             :title name
             :draggable true
-            :on-drag-start (fn [event] (ui/block->data-transfer! name event))
+            :on-drag-start (fn [event] (editor-handler/block->data-transfer! name event))
             :data-ref name}
            (page-name name (get-page-icon entity) true)]))])))
 
