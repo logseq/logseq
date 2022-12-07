@@ -20,8 +20,9 @@
       (pprint/pprint errors))
     (println "Valid!")))
 
-(defn validate-global-config-edn
-  "Validate a global config.edn file"
+;; This fn should be split if the global and repo definitions diverge
+(defn validate-config-edn
+  "Validate a global or repo config.edn file"
   [file]
   (if-let [errors (->> file
                        slurp
