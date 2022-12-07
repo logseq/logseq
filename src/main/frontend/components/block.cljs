@@ -3599,7 +3599,8 @@
                   (page-cp config page)
                   (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
                  (for [[parent blocks] parent-blocks]
-                   (let [blocks' (map #(update % :block/children tree/non-consecutive-blocks->vec-tree) blocks)]
+                   (let [blocks' (map #(update % :block/children (fn [col]
+                                                                   (tree/non-consecutive-blocks->vec-tree col 2))) blocks)]
                      (rum/with-key
                       (breadcrumb-with-container blocks' config)
                       (:db/id parent))))
