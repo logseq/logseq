@@ -93,6 +93,7 @@ function filterShapeByAction<S extends Shape>(shapes: Shape[], type: ContextBarA
 const EditAction = observer(() => {
   const app = useApp<Shape>()
   const shape = filterShapeByAction(app.selectedShapesArray, 'Edit')[0]
+  const iconName = ('label' in shape.props) && shape.props.label || ('text' in shape.props) && shape.props.text ? 'forms' : 'text'
 
   return (
     <Button
@@ -112,7 +113,7 @@ const EditAction = observer(() => {
         }
       }}
     >
-      <TablerIcon name={shape.props.label || shape.props.text ? "forms" : "text"} />
+      <TablerIcon name={iconName} />
     </Button>
   )
 })
