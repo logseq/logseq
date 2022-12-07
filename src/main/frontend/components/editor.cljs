@@ -76,7 +76,8 @@
                                    (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
               (editor-handler/insert-command! id command-steps
                                               format
-                                              {:restore? restore-slash?}))))
+                                              {:restore? restore-slash?
+                                               :command command}))))
         :class
         "black"}))))
 
@@ -89,7 +90,8 @@
        {:on-chosen (fn [chosen]
                      (editor-handler/insert-command! id (get (into {} matched) chosen)
                                                      format
-                                                     {:last-pattern commands/angle-bracket}))
+                                                     {:last-pattern commands/angle-bracket
+                                                      :command :block-commands}))
         :class     "black"}))))
 
 (defn- in-sidebar? [el]

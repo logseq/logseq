@@ -782,7 +782,8 @@
                                           format
                                           {:last-pattern last-pattern
                                            :end-pattern (when wrapped? page-ref/right-brackets)
-                                           :forward-pos forward-pos})))
+                                           :forward-pos forward-pos
+                                           :command :tag-page-ref})))
       (fn [chosen _click?]
         (state/clear-editor-action!)
         (let [prefix (str (t :new-page) ": ")
@@ -796,7 +797,8 @@
                                           {:last-pattern (str page-ref/left-brackets (if @editor-handler/*selected-text "" q))
                                            :end-pattern page-ref/right-brackets
                                            :postfix-fn   (fn [s] (util/replace-first page-ref/right-brackets s ""))
-                                           :forward-pos 3}))))))
+                                           :forward-pos 3
+                                           :command :page-ref}))))))
 
 (defn create-today-journal!
   []
