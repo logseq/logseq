@@ -45,7 +45,6 @@
      :indexeddb/support?      true
      :me                      nil
      :git/current-repo        current-graph
-     :format/loading          {}
      :draw?                   false
      :db/restoring?           nil
 
@@ -582,6 +581,11 @@ Similar to re-frame subscriptions"
 (defn enable-timetracking?
   []
   (not (false? (:feature/enable-timetracking? (sub-config)))))
+
+(defn enable-fold-button-right?
+  []
+  (let [_ (sub :ui/viewport)]
+    (util/md-breakpoint?)))
 
 (defn enable-journals?
   ([]

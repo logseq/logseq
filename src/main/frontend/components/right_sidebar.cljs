@@ -5,6 +5,7 @@
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
             [frontend.components.svg :as svg]
+            [frontend.components.shortcut :as shortcut]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -27,7 +28,7 @@
       [:button.button.icon.toggle-right-sidebar
        {:title "Toggle right sidebar"
         :on-click ui-handler/toggle-right-sidebar!}
-       (ui/icon "layout-sidebar-right" {:style {:fontSize "20px"}})])))
+       (ui/icon "layout-sidebar-right" {:size 20})])))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]
@@ -48,6 +49,11 @@
   [:div.contents.flex-col.flex.ml-3
    (when-let [contents (db/entity [:block/name "contents"])]
      (page/contents-page contents))])
+
+(rum/defc shortcut-settings
+  []
+  [:div.contents.flex-col.flex.ml-3
+   (shortcut/shortcut {:show-title? false})])
 
 (defn- block-with-breadcrumb
   [repo block idx sidebar-key ref?]
@@ -106,6 +112,9 @@
         (db-model/get-page-original-name page-name)]
        [:div.ml-2.slide.mt-2
         (slide/slide page-name)]])
+    
+    :shortcut-settings
+    [(t :help/shortcuts) (shortcut-settings)]
 
     ["" [:span]]))
 

@@ -71,7 +71,8 @@
 (rum/defc page-name
   [name icon recent?]
   (let [original-name (db-model/get-page-original-name name)
-        whiteboard-page? (db-model/whiteboard-page? name)]
+        whiteboard-page? (db-model/whiteboard-page? name)
+        untitiled? (db-model/untitled-page? name)]
     [:a.flex.items-center
      {:on-click
       (fn [e]
@@ -88,7 +89,9 @@
               (route-handler/redirect-to-whiteboard! name)
               (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))}
      [:span.page-icon (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
-     [:span.page-title (pdf-utils/fix-local-asset-pagename original-name)]]))
+     [:span.page-title {:class (when untitiled? "opacity-50")}
+      (if untitiled? (t :untitled)
+          (pdf-utils/fix-local-asset-pagename original-name))]]))
 
 (defn get-page-icon [page-entity]
   (let [default-icon (ui/icon "page" {:extension? true})
@@ -732,6 +735,7 @@
         edit? (:editor/editing? @state/state)
         default-home (get-default-home-if-valid)
         logged? (user-handler/logged-in?)
+        fold-button-on-right? (state/enable-fold-button-right?)
         show-action-bar? (state/sub :mobile/show-action-bar?)
         show-recording-bar? (state/sub :mobile/show-recording-bar?)
         preferred-language (state/sub [:preferred-language])]
@@ -754,10 +758,11 @@
                        (util/fix-open-external-with-shift! e))}
 
      [:main.theme-inner
-      {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?
-                                 :ls-right-sidebar-open sidebar-open?
-                                 :ls-wide-mode wide-mode?
-                                 :ls-hl-colored ls-block-hl-colored?}])}
+      {:class (util/classnames [{:ls-left-sidebar-open    left-sidebar-open?
+                                 :ls-right-sidebar-open   sidebar-open?
+                                 :ls-wide-mode            wide-mode?
+                                 :ls-fold-button-on-right fold-button-on-right?
+                                 :ls-hl-colored           ls-block-hl-colored?}])}
 
       [:button#skip-to-main
        {:on-click #(ui/focus-element (ui/main-node))

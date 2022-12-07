@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
+  BoundsUtils,
   delay,
   getComputedColor,
+  TLBounds,
   TLBoxShape,
   TLBoxShapeProps,
   TLResetBoundsInfo,
@@ -390,6 +392,21 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       }
     }, [isEditing, this.props.collapsed])
 
+    React.useEffect(() => {
+      if (isCreating) {
+        const screenSize = [app.viewport.bounds.width, app.viewport.bounds.height]
+        const boundScreenCenter = app.viewport.getScreenPoint([this.bounds.minX, this.bounds.minY])
+
+        if (
+          boundScreenCenter[0] > screenSize[0] - 400 ||
+          boundScreenCenter[1] > screenSize[1] - 240 ||
+          app.viewport.camera.zoom > 1.5 || app.viewport.camera.zoom < 0.5
+        ) {
+          app.viewport.zoomToBounds({ ...this.bounds, minY: this.bounds.maxY + 25 })
+        }
+      }
+    }, [app.viewport.bounds.height.toFixed(2)])
+
     const onPageNameChanged = React.useCallback((id: string) => {
       this.initialHeightCalculated = false
       const blockType = validUUID(id) ? 'B' : 'P'
@@ -428,6 +445,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         }}
         {...events}
       >
+        <div className=""></div>
         {isBinding && <BindingIndicator mode="html" strokeWidth={strokeWidth} size={size} />}
         <div
           data-inner-events={!tlEventsEnabled}
