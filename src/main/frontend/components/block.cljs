@@ -595,12 +595,12 @@
 
          :else
          (let [original-name (util/get-page-original-name page-entity)
-               s (cond untitled? 
+               s (cond untitled?
                        (t :untitled)
 
                        (not= (util/safe-page-name-sanity-lc original-name) page-name-in-block)
                        page-name-in-block ;; page-name-in-block might be overrided (legacy))
-                       
+
                        :else
                        (pdf-assets/human-page-name original-name))
                _ (when-not page-entity (js/console.warn "page-inner's page-entity is nil, given page-name: " page-name
@@ -3542,7 +3542,7 @@
                  blocks)]
     [:div
      (when (:breadcrumb-show? config)
-       (breadcrumb config (state/get-current-repo) navigating-block
+       (breadcrumb config (state/get-current-repo) (or navigating-block (:block/uuid (first blocks)))
                    {:show-page? false
                     :navigating-block *navigating-block}))
      (blocks-container blocks (assoc config
@@ -3584,25 +3584,26 @@
      (and (:ref? config) (:group-by-page? config))
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
-        (for [[page blocks] blocks]
-         (ui/lazy-visible
-          (fn []
-            (let [alias? (:block/alias? page)
-                  page (db/entity (:db/id page))
-                  blocks (tree/non-consecutive-blocks->vec-tree blocks)
-                  parent-blocks (group-by :block/parent blocks)]
-              [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                           (:ref? config)
-                           (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
-               (ui/foldable
-                [:div
-                 (page-cp config page)
-                 (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-                (for [[parent blocks] parent-blocks]
-                   (rum/with-key
-                     (breadcrumb-with-container blocks config)
-                     (:db/id parent)))
-                {:debug-id page})])))))]
+        (for [[page page-blocks] blocks]
+          (ui/lazy-visible
+           (fn []
+             (let [alias? (:block/alias? page)
+                   page (db/entity (:db/id page))
+                   page-blocks' (tree/non-consecutive-blocks->vec-tree page-blocks)
+                   parent-blocks (group-by :block/parent page-blocks')]
+               [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
+                            (:ref? config)
+                            (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
+                (ui/foldable
+                 [:div
+                  (page-cp config page)
+                  (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+                 (for [[parent blocks] parent-blocks]
+                   (let [blocks' (map #(update % :block/children tree/non-consecutive-blocks->vec-tree) blocks)]
+                     (rum/with-key
+                      (breadcrumb-with-container blocks' config)
+                      (:db/id parent))))
+                 {:debug-id page})])))))]
 
      (and (:group-by-page? config)
           (vector? (first blocks)))
