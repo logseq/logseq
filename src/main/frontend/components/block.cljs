@@ -3528,7 +3528,7 @@
              (assoc state
                     ::initial-block    first-block
                     ::navigating-block (atom (:block/uuid first-block)))))}
-  [state block config]
+  [state blocks config]
   (let [repo (state/get-current-repo)
         *navigating-block (::navigating-block state)
         navigating-block (rum/react *navigating-block)
@@ -3541,10 +3541,10 @@
                  (let [block navigating-block-entity]
                    (db/get-paginated-blocks repo (:db/id block)
                                             {:scoped-block-id (:db/id block)}))
-                 [block])]
+                 blocks)]
     [:div
      (when (:breadcrumb-show? config)
-       (breadcrumb config (state/get-current-repo) (or navigating-block (:block/uuid block))
+       (breadcrumb config (state/get-current-repo) navigating-block
                    {:show-page? false
                     :navigating-block *navigating-block}))
      (blocks-container blocks (assoc config
@@ -3567,7 +3567,8 @@
            (fn []
              (let [alias? (:block/alias? page)
                    page (db/entity (:db/id page))
-                   blocks' (tree/non-consecutive-blocks->vec-tree blocks)]
+                   blocks (tree/non-consecutive-blocks->vec-tree blocks)
+                   parent-blocks (group-by :block/parent blocks)]
                [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                             (:ref? config)
                             (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
@@ -3575,21 +3576,23 @@
                  [:div
                   (page-cp config page)
                   (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-                 (for [block blocks']
+                 (for [[parent blocks] parent-blocks]
                    (rum/with-key
-                     (breadcrumb-with-container block config)
-                     (:db/id block)))
+                     (breadcrumb-with-container blocks config)
+                     (:db/id parent)))
                  {:debug-id page
                   :trigger-once? false})])))))]
 
      (and (:ref? config) (:group-by-page? config))
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
-        (for [[page parent-blocks] blocks]
+        (for [[page blocks] blocks]
          (ui/lazy-visible
           (fn []
             (let [alias? (:block/alias? page)
-                  page (db/entity (:db/id page))]
+                  page (db/entity (:db/id page))
+                  blocks (tree/non-consecutive-blocks->vec-tree blocks)
+                  parent-blocks (group-by :block/parent blocks)]
               [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                            (:ref? config)
                            (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
@@ -3597,11 +3600,10 @@
                 [:div
                  (page-cp config page)
                  (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-                (for [block parent-blocks]
-                  (let [block' (update block :block/children tree/non-consecutive-blocks->vec-tree)]
-                    (rum/with-key
-                      (breadcrumb-with-container block' config)
-                      (:db/id block'))))
+                (for [[parent blocks] parent-blocks]
+                   (rum/with-key
+                     (breadcrumb-with-container blocks config)
+                     (:db/id parent)))
                 {:debug-id page})])))))]
 
      (and (:group-by-page? config)

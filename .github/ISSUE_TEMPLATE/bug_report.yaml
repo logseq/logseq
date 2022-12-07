@@ -46,7 +46,7 @@ body:
         Would you mind to tell us the system information about your desktop or mobile platform?
       placeholder: |
         OS version, Browser or App, Logseq App version
-        example: MacOS 12.2, Desktop App v0.5.9
+        example: macOS 12.2, Desktop App v0.5.9
         example: iPhone 12, iOS8.1, v0.5.9
         example: Pixel XL, Android 12, v0.5.9
     validations:
