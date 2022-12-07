@@ -7,7 +7,6 @@
             [frontend.handler.notification :as notification]
             [frontend.schema.handler.global-config :as global-config-schema]
             [frontend.state :as state]
-            [cljs.reader :as reader]
             [promesa.core :as p]
             [shadow.resource :as rc]
             [malli.error :as me]
@@ -39,7 +38,7 @@
 
 (defn- set-global-config-state!
   [content]
-  (let [config (reader/read-string content)]
+  (let [config (edn/read-string content)]
     (state/set-global-config! config)
     config))
 
@@ -77,10 +76,7 @@ nested keys or positional errors e.g. tuples"
 
 (defn- validate-config-map
   [m path]
-  (if-let [errors (->> m
-                       (m/explain global-config-schema/Config-edn)
-                       me/humanize
-                       seq)]
+  (if-let [errors (->> m (m/explain global-config-schema/Config-edn) me/humanize)]
     (do
       (notification/show! (gstring/format "The file '%s' has the following errors:\n%s"
                                           path
