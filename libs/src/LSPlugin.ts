@@ -370,10 +370,32 @@ export interface IAppProxy {
     action: SimpleCommandCallback
   ) => void
 
+  /**
+   * Supported all registered palette commands
+   * @param type
+   * @param args
+   */
   invokeExternalCommand: (
     type: ExternalCommandType,
     ...args: Array<any>
   ) => Promise<void>
+
+  /**
+   * Call external plugin command provided by models or registerd commands
+   * @added 0.0.13
+   * @param type `xx-plugin-id.commands.xx-key`, `xx-plugin-id.models.xx-key`
+   * @param args
+   */
+  invokeExternalPluginCommand: (
+    type: string,
+    ...args: Array<any>
+  ) => Promise<unknown>
+
+  /**
+   * @added 0.0.13
+   * @param pid
+   */
+  checkExternalPlugin: (pid: string) => Promise<{} | null>
 
   /**
    * Get state from app store
