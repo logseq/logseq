@@ -24,9 +24,9 @@ export const ToolButton = observer(({ id, icon, title, ...props }: ToolButtonPro
   // Tool must exist
   const Tool = [...app.Tools, TLSelectTool, TLMoveTool]?.find(T => T.id === id)
 
-  const shortcut = ((Tool as any)['shortcut'] as string[])?.[0]
+  const shortcut = ((Tool as any)['shortcut'] as string[])?.join(', ').toUpperCase()
 
-  const titleWithShortcut = shortcut ? `${title} (${shortcut})` : title
+  const titleWithShortcut = shortcut ? `${title} - ${shortcut}` : title
   return (
     <Button
       {...props}

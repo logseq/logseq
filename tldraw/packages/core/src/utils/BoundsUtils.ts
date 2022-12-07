@@ -64,13 +64,16 @@ export class BoundsUtils {
   }
 
   /**
-   * Get whether the bounds of A contain the bounds of B. A perfect match will return true.
+   * Get whether the bounds of A contain the bounds/point of B. A perfect match will return true.
    *
    * @param a Bounds
-   * @param b Bounds
+   * @param b Bounds|point
    * @returns
    */
-  static boundsContain(a: TLBounds, b: TLBounds): boolean {
+  static boundsContain(a: TLBounds, b: TLBounds | number[]): boolean {
+    if (Array.isArray(b)) {
+      return a.minX < b[0] && a.minY < b[1] && a.maxY > b[1] && a.maxX > b[0]
+    }
     return a.minX < b.minX && a.minY < b.minY && a.maxY > b.maxY && a.maxX > b.maxX
   }
 

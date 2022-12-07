@@ -226,7 +226,13 @@ html.is-native-iphone-without-notch
 
 html.is-mobile {
   .ui__modal {
-    @apply bottom-0 inset-x-0;
+    @apply bottom-0 inset-x-0 top-20;
+  }
+
+  .ui__modal-panel .panel-content {
+    width: calc(98vw - 2rem);
+    padding-top: 24px;
+    padding-bottom: 0;
   }
 }
 
