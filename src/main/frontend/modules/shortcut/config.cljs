@@ -373,6 +373,9 @@
    :ui/toggle-right-sidebar         {:binding "t r"
                                      :fn      ui-handler/toggle-right-sidebar!}
 
+   :ui/close-right-sidebar-top     {:binding "d r"
+                                     :fn      #(state/sidebar-remove-block! 0)}
+
    :ui/toggle-left-sidebar          {:binding "t l"
                                      :fn      state/toggle-left-sidebar!}
 
@@ -568,6 +571,7 @@
                           :ui/toggle-document-mode
                           :ui/toggle-settings
                           :ui/toggle-right-sidebar
+                          :ui/close-right-sidebar-top
                           :ui/toggle-left-sidebar
                           :ui/toggle-help
                           :ui/toggle-theme
@@ -720,7 +724,8 @@
     :date-picker/prev-week
     :date-picker/next-week
     :date-picker/complete
-    :git/commit]})
+    :git/commit
+    :ui/close-right-sidebar-top]})
 
 (let [category-maps {::category (set (keys category*))
                      ::dicts/category (set (keys dicts/category))}]
