@@ -8,6 +8,7 @@ export * from './SvgPathUtils'
 export * from './BindingUtils'
 export * from './DataUtils'
 export * from './TextUtils'
+export * from './ColorUtils'
 export * from './getTextSize'
 export * from './cache'
 
@@ -78,6 +79,14 @@ export function lerp(a: number, b: number, t: number) {
 /** Find whether the current device is a Mac / iOS / iPadOS. */
 export function isDarwin(): boolean {
   return /Mac|iPod|iPhone|iPad/.test(window.navigator.platform)
+}
+
+/**
+ * Migrated from frontend.util/safari?
+ */
+export function isSafari(): boolean {
+  const ua = window.navigator.userAgent.toLowerCase()
+  return ua.includes('webkit') && !ua.includes('chrome')
 }
 
 /**

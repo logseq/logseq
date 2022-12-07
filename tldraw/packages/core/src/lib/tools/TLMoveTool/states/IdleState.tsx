@@ -22,10 +22,6 @@ export class IdleState<
     }
   }
 
-  onPinchStart: TLEvents<S>['pinch'] = (info, event) => {
-    this.tool.transition('pinching', { info, event })
-  }
-
   onPointerDown: TLStateEvents<S, K>['onPointerDown'] = (info, e) => {
     if (info.order) return
     this.tool.transition('panning')

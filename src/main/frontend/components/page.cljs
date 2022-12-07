@@ -16,6 +16,7 @@
             [frontend.db.model :as model]
             [frontend.extensions.graph :as graph]
             [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.format.block :as block]
             [frontend.handler.common :as common-handler]
             [frontend.handler.config :as config-handler]
@@ -76,8 +77,8 @@
                       (or (not= page-name old-page-name)
                           (not= hiccup old-hiccup)
                           (not= block-uuid old-block-uuid))))}
-  [page-name _blocks hiccup sidebar? _block-uuid]
-  [:div.page-blocks-inner {:style {:margin-left (if sidebar? 0 -20)}}
+  [page-name _blocks hiccup sidebar? whiteboard? _block-uuid]
+  [:div.page-blocks-inner {:style {:margin-left (if (or sidebar? whiteboard?) 0 -20)}}
    (rum/with-key
      (content/content page-name
                       {:hiccup   hiccup
@@ -124,7 +125,7 @@
                                   (date/journal-title->int (date/today))))
                      (state/pub-event! [:journal/insert-template page-name])))
                  state)}
-  [repo page-e {:keys [sidebar?] :as config}]
+  [repo page-e {:keys [sidebar? whiteboard?] :as config}]
   (when page-e
     (let [page-name (or (:block/name page-e)
                         (str (:block/uuid page-e)))
@@ -147,7 +148,7 @@
               hiccup-config (common-handler/config-with-document-mode hiccup-config)
               hiccup (component-block/->hiccup page-blocks hiccup-config {})]
           [:div
-           (page-blocks-inner page-name page-blocks hiccup sidebar? block-id)
+           (page-blocks-inner page-name page-blocks hiccup sidebar? whiteboard? block-id)
            (when-not config/publishing?
              (let [args (if block-id
                           {:block-uuid block-id}
@@ -178,7 +179,7 @@
   [repo tag]
   (let [pages (db/get-tag-pages repo tag)]
     (when (seq pages)
-      [:div.references.mt-6.flex-1.flex-row
+      [:div.references.page-tags.mt-6.flex-1.flex-row
        [:div.content
         (ui/foldable
          [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag)]
@@ -239,7 +240,7 @@
                     :else
                     (state/set-modal! (confirm-fn)))
                   (util/stop e))]
-    [:span.absolute.inset-0
+    [:span.absolute.inset-0.edit-input-wrapper
      {:class (util/classnames [{:editing @*edit?}])}
      [:input.edit-input
       {:type          "text"
@@ -282,27 +283,28 @@
           whiteboard-page? (model/whiteboard-page? page-name)
           untitled? (and whiteboard-page? (parse-uuid page-name)) ;; normal page cannot be untitled right?
           title (if hls-page?
-                  [:a.asset-ref (pdf-assets/fix-local-asset-pagename title)]
+                  [:a.asset-ref (pdf-utils/fix-local-asset-pagename title)]
                   (if fmt-journal? (date/journal-title->custom-format title) title))
           old-name (or title page-name)]
-      [:h1.page-title.flex.cursor-pointer.gap-1
-       {:on-mouse-down (fn [e]
-                           (when (util/right-click? e)
-                             (state/set-state! :page-title/context {:page page-name})))
-          :on-click (fn [e]
-                      (.preventDefault e)
-                      (if (gobj/get e "shiftKey")
-                        (when-let [page (db/pull repo '[*] [:block/name page-name])]
-                          (state/sidebar-add-block!
-                           repo
-                           (:db/id page)
-                           :page))
-                        (when (and (not hls-page?) (not fmt-journal?))
-                          (reset! *input-value (if untitled? "" old-name))
-                          (reset! *edit? true))))}
+      [:h1.page-title.flex.cursor-pointer.gap-1.w-full
+       {:class (when-not whiteboard-page? "title")
+        :on-mouse-down (fn [e]
+                         (when (util/right-click? e)
+                           (state/set-state! :page-title/context {:page page-name})))
+        :on-click (fn [e]
+                    (.preventDefault e)
+                    (if (gobj/get e "shiftKey")
+                      (when-let [page (db/pull repo '[*] [:block/name page-name])]
+                        (state/sidebar-add-block!
+                         repo
+                         (:db/id page)
+                         :page))
+                      (when (and (not hls-page?) (not fmt-journal?))
+                        (reset! *input-value (if untitled? "" old-name))
+                        (reset! *edit? true))))}
        (when (not= icon "") [:span.page-icon icon])
-       [:div.page-title-sizer-wrapper.relative.w-full
-        (when (rum/react *edit?)
+       [:div.page-title-sizer-wrapper.relative
+        (when @*edit?
           (page-title-editor {:*title-value *title-value
                               :*edit? *edit?
                               :*input-value *input-value
@@ -312,15 +314,9 @@
                               :untitled? untitled?
                               :whiteboard-page? whiteboard-page?}))
         [:span.title.block
-         {:data-value (rum/react *input-value)
-          :data-ref page-name
-          :style {:opacity (when @*edit? 0)
-                  :pointer-events "none"
-                  :font-weight "inherit"
-                  :white-space "nowrap"
-                  :overflow "hidden"
-                  :text-overflow "ellipsis"
-                  :min-width "80px"}}
+         {:data-value @*input-value
+          :data-ref   page-name
+          :style      {:opacity (when @*edit? 0)}}
          (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
                untitled? [:span.opacity-50 (t :untitled)]
                :else title)]]])))
@@ -375,8 +371,8 @@
           journal? (db/journal-page? page-name)
           fmt-journal? (boolean (date/journal-title->int page-name))
           sidebar? (:sidebar? option)
-          whiteboard? (:whiteboard? option)
-          whiteboard-page? (model/whiteboard-page? page-name)
+          whiteboard? (:whiteboard? option) ;; in a whiteboard portal shape?
+          whiteboard-page? (model/whiteboard-page? page-name) ;; is this page a whiteboard?
           route-page-name path-page-name
           page (if block?
                  (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
@@ -406,7 +402,7 @@
               {:key path-page-name
                :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
 
-       (if whiteboard-page?
+       (if (and whiteboard-page? (not sidebar?))
          [:div ((state/get-component :whiteboard/tldraw-preview) page-name)] ;; FIXME: this is not reactive
          [:div.relative
           (when (and (not sidebar?) (not block?))
@@ -420,13 +416,13 @@
                                    (page-mouse-leave e *control-show?))}
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when-not whiteboard?
-               [:div.flex-1.flex-row
-                [:h1.title.ls-page-title (page-title page-name icon title format fmt-journal?)]])
+               [:div.ls-page-title.flex-1.flex-row.w-full
+                (page-title page-name icon title format fmt-journal?)])
              (when (not config/publishing?)
-               [:div.flex.flex-row
-                (when config/lsp-enabled?
+               (when config/lsp-enabled?
+                 [:div.flex.flex-row
                   (plugins/hook-ui-slot :page-head-actions-slotted nil)
-                  (plugins/hook-ui-items :pagebar))])])
+                  (plugins/hook-ui-items :pagebar)]))])
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))
              (let [config {:id "block-parent"
@@ -441,7 +437,7 @@
                _ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
                _ (when (and block? (not page))
                    (route-handler/redirect-to-page! @*current-block-page))]
-           (page-blocks-cp repo page {:sidebar? sidebar?}))]])
+           (page-blocks-cp repo page {:sidebar? sidebar? :whiteboard? whiteboard?}))]])
 
        (when today?
          (today-queries repo today? sidebar?))
@@ -822,6 +818,36 @@
                     (notification/show! (str (t :tips/all-done) "!") :success)
                     (js/setTimeout #(refresh-fn) 200)))]]))
 
+(rum/defc pagination
+  "Pagination component, like `<< <Prev 1/10 Next> >>`.
+
+- current: current page number
+- total: total number of items
+- per-page: number of items per page
+- on-change: callback function when page number changes"
+  [& {:keys [current total per-page on-change]
+      :or {current 1 per-page 40}}]
+  (let [total-pages (int (Math/ceil (/ total per-page)))
+        has-prev? (> current 1)
+        has-next? (< current total-pages)
+        prev-page (if (= 1 current) 1 (dec current))
+        next-page (if (= total-pages current) total-pages (inc current))]
+    [:div.flex.items-center.noselect
+     (when has-prev?
+       [[:a.fade-link.flex
+         {:on-click #(on-change 1)}
+         (ui/icon "chevrons-left")]
+        [:a.fade-link.flex.items-center {:on-click #(on-change prev-page)}
+         (ui/icon "caret-left") (t :paginates/prev)]])
+     [:div.px-2
+      [:span (str current "/" total-pages)]]
+     (when has-next?
+       [[:a.fade-link.flex.items-center {:on-click #(on-change next-page)}
+         (t :paginates/next) (ui/icon "caret-right")]
+        [:a.fade-link.flex
+         {:on-click #(on-change total-pages)}
+         (ui/icon "chevrons-right")]])]))
+
 (rum/defcs ^:large-vars/cleanup-todo all-pages < rum/reactive
   (rum/local nil ::pages)
   (rum/local nil ::search-key)
@@ -851,15 +877,17 @@
         *search-input (rum/create-ref)
 
         *indeterminate (rum/derived-atom
-                           [*checks] ::indeterminate
-                         (fn [checks]
-                           (when-let [checks (vals checks)]
-                             (if (every? true? checks)
-                               1 (if (some true? checks) -1 0)))))
+                        [*checks] ::indeterminate
+                        (fn [checks]
+                          (when-let [checks (vals checks)]
+                            (if (every? true? checks)
+                              1 (if (some true? checks) -1 0)))))
 
         mobile? (util/mobile?)
+        total-items (count @*results-all)
+        ;; FIXME: "pages" is ambiguous here, it can be either "Logseq pages" or "result pages"
         total-pages (if-not @*results-all 0
-                            (js/Math.ceil (/ (count @*results-all) per-page-num)))
+                            (js/Math.ceil (/ total-items per-page-num)))
         to-page (fn [page]
                   (when (> total-pages 1)
                     (if (and (> page 0)
@@ -882,7 +910,7 @@
     [:div.flex-1.cp__all_pages
      [:h1.title (t :all-pages)]
 
-     [:div.text-sm.ml-1.opacity-70.mb-4 (t :paginates/pages (count @*results-all))]
+     [:div.text-sm.ml-1.opacity-70.mb-4 (t :paginates/pages total-items)]
 
      (when current-repo
 
@@ -922,167 +950,153 @@
                                       [idx (boolean (get @*checks idx))])))
            (reset! *results pages)))
 
-       (let [has-prev? (> @*current-page 1)
-             has-next? (not= @*current-page total-pages)]
-         [:div
-         [:div.actions
-          {:class (util/classnames [{:has-selected (or (nil? @*indeterminate)
-                                                       (not= 0 @*indeterminate))}])}
-          [:div.l.flex.items-center
-           [:div.actions-wrap
-            (ui/button
-              [(ui/icon "trash" {:style {:font-size 15}}) (t :delete)]
-              :on-click (fn []
-                          (let [selected (filter (fn [[_ v]] v) @*checks)
-                                selected (and (seq selected)
-                                              (into #{} (for [[k _] selected] k)))]
-                            (when-let [pages (and selected (filter #(contains? selected (:block/idx %)) @*results))]
-                              (state/set-modal! (batch-delete-dialog pages false #(do
-                                                                                    (reset! *checks nil)
-                                                                                    (refresh-pages)))))))
-              :class "fade-link"
-              :small? true)]
+       [:div
+        [:div.actions
+         {:class (util/classnames [{:has-selected (or (nil? @*indeterminate)
+                                                      (not= 0 @*indeterminate))}])}
+         [:div.l.flex.items-center
+          [:div.actions-wrap
+           (ui/button
+            [(ui/icon "trash" {:style {:font-size 15}}) (t :delete)]
+            :on-click (fn []
+                        (let [selected (filter (fn [[_ v]] v) @*checks)
+                              selected (and (seq selected)
+                                            (into #{} (for [[k _] selected] k)))]
+                          (when-let [pages (and selected (filter #(contains? selected (:block/idx %)) @*results))]
+                            (state/set-modal! (batch-delete-dialog pages false #(do
+                                                                                  (reset! *checks nil)
+                                                                                  (refresh-pages)))))))
+            :class "fade-link"
+            :small? true)]
 
-           [:div.search-wrap.flex.items-center.pl-2
-            (let [search-fn (fn []
-                              (let [^js input (rum/deref *search-input)]
-                                (search-key (.-value input))
-                                (reset! *current-page 1)))
-                  reset-fn (fn []
+          [:div.search-wrap.flex.items-center.pl-2
+           (let [search-fn (fn []
                              (let [^js input (rum/deref *search-input)]
-                               (set! (.-value input) "")
-                               (reset! *search-key nil)))]
+                               (search-key (.-value input))
+                               (reset! *current-page 1)))
+                 reset-fn (fn []
+                            (let [^js input (rum/deref *search-input)]
+                              (set! (.-value input) "")
+                              (reset! *search-key nil)))]
 
-              [(ui/button (ui/icon "search")
-                 :on-click search-fn
-                 :small? true)
-               [:input.form-input {:placeholder   (t :search/page-names)
-                                   :on-key-up     (fn [^js e]
-                                                    (let [^js target (.-target e)]
-                                                      (if (string/blank? (.-value target))
-                                                        (reset! *search-key nil)
-                                                        (cond
-                                                          (= 13 (.-keyCode e)) (search-fn)
-                                                          (= 27 (.-keyCode e)) (reset-fn)))))
-                                   :ref           *search-input
-                                   :default-value ""}]
+             [(ui/button (ui/icon "search")
+                         :on-click search-fn
+                         :small? true)
+              [:input.form-input {:placeholder   (t :search/page-names)
+                                  :on-key-up     (fn [^js e]
+                                                   (let [^js target (.-target e)]
+                                                     (if (string/blank? (.-value target))
+                                                       (reset! *search-key nil)
+                                                       (cond
+                                                         (= 13 (.-keyCode e)) (search-fn)
+                                                         (= 27 (.-keyCode e)) (reset-fn)))))
+                                  :ref           *search-input
+                                  :default-value ""}]
 
-               (when (not (string/blank? @*search-key))
-                 [:a.cancel {:on-click reset-fn}
-                  (ui/icon "x")])])]]
+              (when (not (string/blank? @*search-key))
+                [:a.cancel {:on-click reset-fn}
+                 (ui/icon "x")])])]]
 
-          [:div.r.flex.items-center.justify-between
-           [:div
-            (ui/tippy
-             {:html  [:small (str (t :page/show-whiteboards) " ?")]
-              :arrow true}
-             [:a.button.whiteboard
-              {:class    (util/classnames [{:active (boolean @*whiteboard?)}])
-               :on-click #(reset! *whiteboard? (not @*whiteboard?))}
-              (ui/icon "whiteboard" {:extension? true :style {:fontSize ui/icon-size}})])]
-           [:div
-            (ui/tippy
-             {:html  [:small (str (t :page/show-journals) " ?")]
-              :arrow true}
-             [:a.button.journal
-              {:class    (util/classnames [{:active (boolean @*journal?)}])
-               :on-click #(reset! *journal? (not @*journal?))}
-              (ui/icon "calendar" {:size ui/icon-size})])]
+         [:div.r.flex.items-center.justify-between
+          [:div
+           (ui/tippy
+            {:html  [:small (str (t :page/show-whiteboards) " ?")]
+             :arrow true}
+            [:a.button.whiteboard
+             {:class    (util/classnames [{:active (boolean @*whiteboard?)}])
+              :on-click #(reset! *whiteboard? (not @*whiteboard?))}
+             (ui/icon "whiteboard" {:extension? true :style {:fontSize ui/icon-size}})])]
+          [:div
+           (ui/tippy
+            {:html  [:small (str (t :page/show-journals) " ?")]
+             :arrow true}
+            [:a.button.journal
+             {:class    (util/classnames [{:active (boolean @*journal?)}])
+              :on-click #(reset! *journal? (not @*journal?))}
+             (ui/icon "calendar" {:size ui/icon-size})])]
 
-           [:div.paginates
-            [:span.flex.items-center
-             {:class (util/classnames [{:is-first (= 1 @*current-page)
-                                        :is-last  (= @*current-page total-pages)}])}
-             (when has-prev?
-               [:a.py-4.pr-2.fade-link.flex.items-center
-                {:on-click #(to-page (dec @*current-page))}
-                (ui/icon "caret-left") (str " " (t :paginates/prev))])
-             [:span.opacity-60 (str @*current-page "/" total-pages)]
-             (when has-next?
-               [:a.py-4.pl-2.fade-link.flex.items-center
-                {:on-click #(to-page (inc @*current-page))} (str (t :paginates/next) " ")
-                (ui/icon "caret-right")])]]
+          [:div.paginates
+           (pagination :current @*current-page
+                       :total total-items
+                       :per-page per-page-num
+                       :on-change #(to-page %))]
 
-           (ui/dropdown-with-links
-            (fn [{:keys [toggle-fn]}]
-              [:a.button.fade-link
-               {:on-click toggle-fn}
-               (ui/icon "dots" {:size ui/icon-size})])
-            [{:title (t :remove-orphaned-pages)
-              :options {:on-click (fn []
-                                    (let [orphaned-pages (model/get-orphaned-pages {})
-                                          orphaned-pages? (seq orphaned-pages)]
-                                      (if orphaned-pages?
-                                        (state/set-modal!
-                                         (batch-delete-dialog
-                                          orphaned-pages  true
-                                          #(do
-                                             (reset! *checks nil)
-                                             (refresh-pages))))
-                                        (notification/show! "Congratulations, no orphaned pages in your graph!" :success))))}
-              :icon (ui/icon "file-x")}
-             {:title (t :all-files)
-              :options {:href (rfe/href :all-files)}
-              :icon (ui/icon "files")}]
-            {})]]
+          (ui/dropdown-with-links
+           (fn [{:keys [toggle-fn]}]
+             [:a.button.fade-link
+              {:on-click toggle-fn}
+              (ui/icon "dots" {:size ui/icon-size})])
+           [{:title (t :remove-orphaned-pages)
+             :options {:on-click (fn []
+                                   (let [orphaned-pages (model/get-orphaned-pages {})
+                                         orphaned-pages? (seq orphaned-pages)]
+                                     (if orphaned-pages?
+                                       (state/set-modal!
+                                        (batch-delete-dialog
+                                         orphaned-pages  true
+                                         #(do
+                                            (reset! *checks nil)
+                                            (refresh-pages))))
+                                       (notification/show! "Congratulations, no orphaned pages in your graph!" :success))))}
+             :icon (ui/icon "file-x")}
+            {:title (t :all-files)
+             :options {:href (rfe/href :all-files)}
+             :icon (ui/icon "files")}]
+           {})]]
 
-         [:table.table-auto.cp__all_pages_table
-          [:thead
-           [:tr
-            [:th.selector
-             (checkbox-opt "all-pages-select-all"
-                           (= 1 @*indeterminate)
-                           {:on-change     (fn []
-                                             (let [indeterminate? (= -1 @*indeterminate)
-                                                   all? (= 1 @*indeterminate)]
-                                               (doseq [{:block/keys [idx]} @*results]
-                                                 (swap! *checks assoc idx (or indeterminate? (not all?))))))
-                            :indeterminate (= -1 @*indeterminate)})]
+        [:table.table-auto.cp__all_pages_table
+         [:thead
+          [:tr
+           [:th.selector
+            (checkbox-opt "all-pages-select-all"
+                          (= 1 @*indeterminate)
+                          {:on-change     (fn []
+                                            (let [indeterminate? (= -1 @*indeterminate)
+                                                  all? (= 1 @*indeterminate)]
+                                              (doseq [{:block/keys [idx]} @*results]
+                                                (swap! *checks assoc idx (or indeterminate? (not all?))))))
+                           :indeterminate (= -1 @*indeterminate)})]
+           [:th.icon ""]
+           (sortable-title (t :block/name) :block/name *sort-by-item *desc?)
+           (when-not mobile?
+             [(sortable-title (t :page/backlinks) :block/backlinks *sort-by-item *desc?)
+              (sortable-title (t :page/created-at) :block/created-at *sort-by-item *desc?)
+              (sortable-title (t :page/updated-at) :block/updated-at *sort-by-item *desc?)])]]
 
-            (sortable-title (t :block/name) :block/name *sort-by-item *desc?)
-            (when-not mobile?
-              [(sortable-title (t :page/backlinks) :block/backlinks *sort-by-item *desc?)
-               (sortable-title (t :page/created-at) :block/created-at *sort-by-item *desc?)
-               (sortable-title (t :page/updated-at) :block/updated-at *sort-by-item *desc?)])]]
+         [:tbody
+          (for [{:block/keys [idx name created-at updated-at backlinks] :as page} @*results]
+            (when-not (string/blank? name)
+              [:tr {:key name}
+               [:td.selector
+                (checkbox-opt (str "label-" idx)
+                              (get @*checks idx)
+                              {:on-change (fn []
+                                            (swap! *checks update idx not))})]
+               [:td.icon.w-4.p-0.overflow-hidden
+                (when-let [icon (get-in page [:block/properties :icon])]
+                  icon)]
+               [:td.name [:a {:on-click (fn [e]
+                                          (.preventDefault e)
+                                          (let [repo (state/get-current-repo)]
+                                            (when (gobj/get e "shiftKey")
+                                              (state/sidebar-add-block!
+                                               repo
+                                               (:db/id page)
+                                               :page))))
+                              :href     (rfe/href :page {:name (:block/name page)})}
+                          (component-block/page-cp {} page)]]
 
-          [:tbody
-           (for [{:block/keys [idx name created-at updated-at backlinks] :as page} @*results]
-             (when-not (string/blank? name)
-               [:tr {:key name}
-                [:td.selector
-                 (checkbox-opt (str "label-" idx)
-                               (get @*checks idx)
-                               {:on-change (fn []
-                                             (swap! *checks update idx not))})]
-
-                [:td.name [:a {:on-click (fn [e]
-                                           (let [repo (state/get-current-repo)]
-                                             (when (gobj/get e "shiftKey")
-                                               (state/sidebar-add-block!
-                                                repo
-                                                (:db/id page)
-                                                :page))))
-                               :href     (rfe/href :page {:name (:block/name page)})}
-                           (component-block/page-cp {} page)]]
-
-                (when-not mobile?
-                  [:td.backlinks [:span backlinks]])
-
-                (when-not mobile?
+               (when-not mobile?
+                 [[:td.backlinks [:span backlinks]]
                   [:td.created-at [:span (if created-at
                                            (date/int->local-time-2 created-at)
-                                           "Unknown")]])
-                (when-not mobile?
+                                           "Unknown")]]
                   [:td.updated-at [:span (if updated-at
                                            (date/int->local-time-2 updated-at)
-                                           "Unknown")]])]))]]
+                                           "Unknown")]]])]))]]
 
-         [:div.paginates
-          [:span]
-          [:span.flex.items-center
-           (when has-prev?
-             [:a.py-4.text-sm.fade-link.flex.items-center {:on-click #(to-page (dec @*current-page))}
-              (ui/icon "caret-left") (str " " (t :paginates/prev))])
-           (when has-next?
-             [:a.py-4.pl-2.text-sm.fade-link.flex.items-center {:on-click #(to-page (inc @*current-page))} (str (t :paginates/next) " ")
-              (ui/icon "caret-right")])]]]))]))
+        [:div.flex.justify-end.py-4
+         (pagination :current @*current-page
+                     :total total-items
+                     :per-page per-page-num
+                     :on-change #(to-page %))]])]))

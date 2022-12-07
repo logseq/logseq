@@ -69,7 +69,7 @@ const defaultTheme: TLTheme = {
   accent: 'rgb(255, 0, 0)',
   brushFill: 'var(--ls-scrollbar-background-color, rgba(0, 0, 0, .05))',
   brushStroke: 'var(--ls-scrollbar-thumb-hover-color, rgba(0, 0, 0, .05))',
-  selectStroke: 'rgb(66, 133, 244)',
+  selectStroke: 'var(--color-selectedFill)',
   selectFill: 'rgba(65, 132, 244, 0.05)',
   binding: 'rgba(65, 132, 244, 0.5)',
   background: 'var(--ls-primary-background-color)',
@@ -119,6 +119,9 @@ const tlcss = css`
     cursor: var(--tl-cursor) !important;
     box-sizing: border-box;
     color: var(--tl-foreground);
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
   }
 
   .tl-overlay {
@@ -416,6 +419,13 @@ const tlcss = css`
     font-weight: 500;
     background-color: var(--tl-selectStroke);
     color: var(--tl-background);
+  }
+
+  .tl-grid-canvas {
+    position: absolute;
+    touch-action: none;
+    pointer-events: none;
+    user-select: none;
   }
 
   .tl-grid {

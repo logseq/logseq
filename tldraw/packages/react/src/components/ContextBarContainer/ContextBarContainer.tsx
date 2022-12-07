@@ -34,7 +34,7 @@ export const ContextBarContainer = observer(function ContextBarContainer<S exten
   const rotatedBounds = BoundsUtils.getRotatedBounds(bounds, rotation)
   const scaledBounds = BoundsUtils.multiplyBounds(rotatedBounds, zoom)
 
-  useCounterScaledPosition(rBounds, bounds, rotation, 10003)
+  useCounterScaledPosition(rBounds, bounds, rotation, 10005)
 
   if (!ContextBar) throw Error('Expected a ContextBar component.')
 

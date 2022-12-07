@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Decoration, TLLineShape, TLLineShapeProps } from '@tldraw/core'
-import { SVGContainer, TLComponentProps, useApp } from '@tldraw/react'
+import { Decoration, TLLineShape, TLLineShapeProps, getComputedColor } from '@tldraw/core'
+import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import Vec from '@tldraw/vec'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
@@ -14,6 +14,8 @@ import { TextLabel } from './text/TextLabel'
 interface LineShapeProps extends CustomStyleProps, TLLineShapeProps {
   type: 'line'
   label: string
+  fontWeight: number
+  italic: boolean
 }
 
 const font = '18px / 1 var(--ls-font-family)'
@@ -30,9 +32,11 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       start: { id: 'start', canBind: true, point: [0, 0] },
       end: { id: 'end', canBind: true, point: [1, 1] },
     },
-    stroke: 'var(--ls-primary-text-color, #000)',
-    fill: 'var(--ls-secondary-background-color)',
+    stroke: '',
+    fill: '',
     noFill: true,
+    fontWeight: 400,
+    italic: false,
     strokeType: 'line',
     strokeWidth: 1,
     opacity: 1,
@@ -42,7 +46,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     label: '',
   }
 
-  hideSelection = true
+  hideSelection = false
   canEdit = true
 
   ReactComponent = observer(({ events, isErasing, isEditing, onEditingEnd }: TLComponentProps) => {
@@ -51,6 +55,8 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       handles: { start, end },
       opacity,
       label,
+      italic,
+      fontWeight,
       id,
     } = this.props
     const labelSize = label || isEditing ? getTextLabelSize(label, font, 4) : [0, 0]
@@ -62,8 +68,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     )
     const bounds = this.getBounds()
     const offset = React.useMemo(() => {
-      const offset = Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
-      return offset
+      return Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
     }, [bounds, scale, midPoint])
     const handleLabelChange = React.useCallback(
       (label: string) => {
@@ -76,13 +81,16 @@ export class LineShape extends TLLineShape<LineShapeProps> {
         <TextLabel
           font={font}
           text={label}
-          color={stroke}
+          color={getComputedColor(stroke, 'text')}
           offsetX={offset[0]}
           offsetY={offset[1]}
           scale={scale}
           isEditing={isEditing}
           onChange={handleLabelChange}
           onBlur={onEditingEnd}
+          fontStyle={italic ? 'italic' : 'normal'}
+          fontWeight={fontWeight}
+          pointerEvents={!!label}
         />
         <SVGContainer opacity={isErasing ? 0.2 : opacity} id={id + '_svg'}>
           <LabelMask id={id} bounds={bounds} labelSize={labelSize} offset={offset} scale={scale} />
@@ -111,8 +119,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       Math.min(1, Math.max(dist / (labelSize[1] + 128), dist / (labelSize[0] + 128)))
     )
     const offset = React.useMemo(() => {
-      const offset = Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
-      return offset
+      return Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
     }, [bounds, scale, midPoint])
     return (
       <g>
@@ -161,7 +168,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       <>
         <Arrow
           style={{
-            stroke,
+            stroke: getComputedColor(stroke, 'text'),
             fill,
             strokeWidth,
             strokeType,
@@ -181,8 +188,8 @@ export class LineShape extends TLLineShape<LineShapeProps> {
               fontSize={20}
               transform={`translate(${midPoint[0]}, ${midPoint[1]})`}
               textAnchor="middle"
-              stroke={stroke}
-              fill={stroke}
+              fill={getComputedColor(stroke, 'text')}
+              stroke={getComputedColor(stroke, 'text')}
             >
               {label}
             </text>

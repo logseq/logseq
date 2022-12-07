@@ -50,6 +50,10 @@
       }
     }
 
+    .panels {
+      margin: 0 -32px -24px;
+    }
+
     .secondary-tabs {
       button {
         margin-right: 5px;
@@ -67,9 +71,16 @@
     }
 
     .control-tabs {
+      @apply px-6 transition-shadow;
+
+      &.scrolled {
+        box-shadow: 0 4px 6px -6px #ccc;
+      }
+
       .ti, .tie {
         margin-right: 4px;
       }
+
       .ui__dropdown-trigger {
         .ti-circle {
           visibility: hidden;
@@ -77,7 +88,11 @@
       }
 
       .dropdown-wrapper {
-          min-width: 14rem;
+        min-width: 14rem;
+      }
+
+      .title-wrap {
+        @apply whitespace-nowrap;
       }
     }
 
@@ -92,7 +107,7 @@
       &.contribute {
         position: absolute;
         top: -46px;
-        right: 0;
+        right: 20px;
         background: transparent;
         font-size: 12px;
         opacity: .8;
@@ -159,12 +174,10 @@
   }
 
   &-installed {
-    min-height: 60vh;
     padding-top: 5px;
   }
 
   &-marketplace {
-    min-height: 60vh;
     padding-top: 5px;
 
     &.has-installing {
@@ -177,7 +190,12 @@
   }
 
   &-item-lists {
-    @apply w-full grid grid-flow-row gap-3 pt-1;
+    @apply w-full max-h-[56vh] overflow-y-auto;
+
+    &-inner {
+      @apply grid grid-flow-row gap-3 px-6
+      grid-cols-1 md:grid-cols-2 lg:grid-cols-3;
+    }
   }
 
   &-item-card {
@@ -801,13 +819,25 @@
 
   .toolbar-plugins-manager {
     &-trigger {
-      .dropdown-wrapper {
+      .menu-links-wrapper {
         max-height: 80vh;
-        overflow-y: auto;
       }
 
       .menu-link {
         padding: 3px 5px;
+
+        &.extra-item {
+          padding: 4px 15px;
+          opacity: .8;
+
+          .title-wrap {
+            margin-left: 8px !important;
+          }
+
+          &:hover {
+            opacity: 1;
+          }
+        }
       }
 
       .item-wrap {
@@ -847,6 +877,14 @@ html[data-theme='dark'] {
   .lsp-frame-readme {
     background-color: #eeeeee;
   }
+
+  .cp__plugins-page {
+    .control-tabs {
+      &.scrolled {
+        box-shadow: 0 4px 6px -6px #666;
+      }
+    }
+  }
 }
 
 .block-content {
@@ -856,6 +894,13 @@ html[data-theme='dark'] {
     [data-injected-ui] {
       display: inline-flex;
     }
+  }
+}
+
+.ui__modal[label=plugins-dashboard] {
+  .panel-content {
+    overflow-y: auto;
+    max-height: calc(100vh - 100px);
   }
 }
 

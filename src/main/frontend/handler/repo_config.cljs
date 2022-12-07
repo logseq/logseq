@@ -57,7 +57,7 @@
    (set-repo-config-state! repo-url config-content)))
 
 (defn start
-  "This component only has one reponsibility on start, to manage db and ui state
+  "This component only has one responsibility on start, to manage db and ui state
   from repo config. It does not manage the repo directory, logseq/, as that is
   loosely done by repo-handler"
   [{:keys [repo]}]

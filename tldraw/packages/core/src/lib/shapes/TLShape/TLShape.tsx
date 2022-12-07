@@ -10,7 +10,7 @@ import Vec from '@tldraw/vec'
 import { action, computed, makeObservable, observable, toJS, transaction } from 'mobx'
 import { BINDING_DISTANCE } from '../../../constants'
 import type { TLHandle, TLResizeEdge, TLResizeCorner, TLAsset } from '../../../types'
-import { BoundsUtils, PointUtils, deepCopy } from '../../../utils'
+import { BoundsUtils, PointUtils, deepCopy, getComputedColor } from '../../../utils'
 
 export type TLShapeModel<P extends TLShapeProps = TLShapeProps> = {
   nonce?: number
@@ -28,6 +28,9 @@ export interface TLShapeProps {
   type: any
   parentId: string
   name?: string
+  fill?: string
+  stroke?: string
+  refs?: string[] // block id or page name
   point: number[]
   size?: number[]
   scale?: number[]
@@ -363,15 +366,15 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
    * Get a svg group element that can be used to render the shape with only the props data. In the
    * base, draw any shape as a box. Can be overridden by subclasses.
    */
-  getShapeSVGJsx(opts: any) {
+  getShapeSVGJsx(_?: any) {
     // Do not need to consider the original point here
     const bounds = this.getBounds()
     const { stroke, strokeWidth, strokeType, opacity, fill, noFill, borderRadius } = this
       .props as any
     return (
       <rect
-        fill={noFill ? 'none' : fill}
-        stroke={noFill ? fill : stroke}
+        fill={noFill ? 'none' : getComputedColor(fill, 'background')}
+        stroke={getComputedColor(stroke, 'stroke')}
         strokeWidth={strokeWidth ?? 2}
         strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
         fillOpacity={opacity ?? 0.2}

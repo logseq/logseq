@@ -5,13 +5,14 @@ import {
   AppCanvas,
   AppProvider,
   TLReactCallbacks,
-  TLReactComponents,
   TLReactToolConstructor,
+  useApp,
 } from '@tldraw/react'
 import * as React from 'react'
 import { AppUI } from './components/AppUI'
 import { ContextBar } from './components/ContextBar'
 import { ContextMenu } from './components/ContextMenu'
+import { QuickLinks } from './components/QuickLinks'
 import { useDrop } from './hooks/useDrop'
 import { usePaste } from './hooks/usePaste'
 import { useQuickAdd } from './hooks/useQuickAdd'
@@ -20,6 +21,7 @@ import {
   EllipseTool,
   HighlighterTool,
   HTMLTool,
+  IFrameTool,
   LineTool,
   LogseqPortalTool,
   NuEraseTool,
@@ -28,18 +30,12 @@ import {
   shapes,
   TextTool,
   YouTubeTool,
-  IFrameTool,
   type Shape,
 } from './lib'
 import { LogseqContext, type LogseqContextValue } from './lib/logseq-context'
 
-const components: TLReactComponents<Shape> = {
-  ContextBar: ContextBar,
-}
-
 const tools: TLReactToolConstructor<Shape>[] = [
   BoxTool,
-  // DotTool,
   EllipseTool,
   PolygonTool,
   NuEraseTool,
@@ -61,6 +57,36 @@ interface LogseqTldrawProps {
   onPersist?: TLReactCallbacks<Shape>['onPersist']
 }
 
+const BacklinksCount: LogseqContextValue['renderers']['BacklinksCount'] = props => {
+  const { renderers } = React.useContext(LogseqContext)
+
+  const options = { 'portal?': false }
+
+  return <renderers.BacklinksCount {...props} options={options} />
+}
+
+const AppImpl = () => {
+  const ref = React.useRef<HTMLDivElement>(null)
+  const app = useApp()
+  const components = React.useMemo(
+    () => ({
+      ContextBar,
+      BacklinksCount,
+      QuickLinks,
+    }),
+    []
+  )
+  return (
+    <ContextMenu collisionRef={ref}>
+      <div ref={ref} className="logseq-tldraw logseq-tldraw-wrapper" data-tlapp={app.uuid}>
+        <AppCanvas components={components}>
+          <AppUI />
+        </AppCanvas>
+      </div>
+    </ContextMenu>
+  )
+}
+
 const AppInner = ({
   onPersist,
   model,
@@ -69,7 +95,6 @@ const AppInner = ({
   const onDrop = useDrop()
   const onPaste = usePaste()
   const onQuickAdd = useQuickAdd()
-  const ref = React.useRef<HTMLDivElement>(null)
 
   const onPersistOnDiff: TLReactCallbacks<Shape>['onPersist'] = React.useCallback(
     (app, info) => {
@@ -91,13 +116,7 @@ const AppInner = ({
       model={model}
       {...rest}
     >
-      <ContextMenu collisionRef={ref}>
-        <div ref={ref} className="logseq-tldraw logseq-tldraw-wrapper">
-          <AppCanvas components={components}>
-            <AppUI />
-          </AppCanvas>
-        </div>
-      </ContextMenu>
+      <AppImpl />
     </AppProvider>
   )
 }
@@ -110,6 +129,7 @@ export const App = function App({ renderers, handlers, ...rest }: LogseqTldrawPr
       })
     )
   }, [])
+
   const contextValue = {
     renderers: memoRenders,
     handlers: handlers,

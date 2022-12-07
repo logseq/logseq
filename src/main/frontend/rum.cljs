@@ -119,6 +119,28 @@
       [ref tick])
      [set-ref rect])))
 
+(defn ->breakpoint
+  "Converts a number to a breakpoint string
+   Values come from https://tailwindcss.com/docs/responsive-design"
+  [size]
+  (cond
+    (nil? size) :md
+    (<= size 640) :sm
+    (<= size 768) :md
+    (<= size 1024) :lg
+    (<= size 1280) :xl
+    (<= size 1536) :xl
+    :else :2xl))
+
+(defn use-breakpoint
+  "Returns the current breakpoint
+   You can manually change the tick value, if you want to force refresh the value, you can manually change the tick value"
+  ([] (use-breakpoint nil))
+  ([tick]
+   (let [[ref rect] (use-bounding-client-rect tick)
+         bp (->breakpoint (when (some? rect) (.-width rect)))]
+     [ref bp])))
+
 (defn use-click-outside
   "Returns a function that can be used to register a callback
    that will be called when the user clicks outside the given dom node"

@@ -13,7 +13,10 @@
             [frontend.handler.user :as user]
             [frontend.fs :as fs]
             [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]))
+            [cljs-time.core :as t]
+            [frontend.storage :as storage]
+            [logseq.graph-parser.util :as gp-util]
+            [lambdaisland.glogi :as log]))
 
 (def *beta-unavailable? (volatile! false))
 
@@ -42,27 +45,33 @@
   [name]
   (go
     (let [r* (<! (sync/<create-graph sync/remoteapi name))
-          r (if (instance? ExceptionInfo r*) r* (:GraphUUID r*))]
-      (if (and (not (instance? ExceptionInfo r))
-               (string? r))
-        (let [tx-info [0 r (user/user-uuid) (state/get-current-repo)]]
-          (<! (apply sync/<update-graphs-txid! tx-info))
-          (swap! refresh-file-sync-component not) tx-info)
-        (do
-          (state/set-state! [:ui/loading? :graph/create-remote?] false)
-          (cond
-           ;; already processed this exception by events
-           ;; - :file-sync/storage-exceed-limit
-           ;; - :file-sync/graph-count-exceed-limit
-           (or (sync/storage-exceed-limit? r)
-               (sync/graph-count-exceed-limit? r))
-           nil
+          user-uuid-or-exp (<! (user/<user-uuid))
+          r (if (instance? ExceptionInfo r*) r*
+                (if (instance? ExceptionInfo user-uuid-or-exp)
+                  user-uuid-or-exp
+                  (:GraphUUID r*)))]
+      (when-not (instance? ExceptionInfo user-uuid-or-exp)
+        (if (and (not (instance? ExceptionInfo r))
+                 (string? r))
+          (let [tx-info [0 r user-uuid-or-exp (state/get-current-repo)]]
+            (<! (apply sync/<update-graphs-txid! tx-info))
+            (swap! refresh-file-sync-component not)
+            tx-info)
+          (do
+            (state/set-state! [:ui/loading? :graph/create-remote?] false)
+            (cond
+              ;; already processed this exception by events
+              ;; - :file-sync/storage-exceed-limit
+              ;; - :file-sync/graph-count-exceed-limit
+              (or (sync/storage-exceed-limit? r)
+                  (sync/graph-count-exceed-limit? r))
+              nil
 
-           (contains? #{400 404} (get-in (ex-data r) [:err :status]))
-           (notification/show! (str "Create graph failed: already existed graph: " name) :warning true nil 4000)
+              (contains? #{400 404} (get-in (ex-data r) [:err :status]))
+              (notification/show! (str "Create graph failed: already existed graph: " name) :warning true nil 4000)
 
-           :else
-           (notification/show! (str "Create graph failed:" r) :warning true nil 4000)))))))
+              :else
+              (notification/show! (str "Create graph failed: " (ex-message r)) :warning true nil 4000))))))))
 
 (defn <delete-graph
   [graph-uuid]
@@ -97,11 +106,14 @@
 (defn init-graph [graph-uuid]
   (go
     (let [repo (state/get-current-repo)
-          user-uuid (user/user-uuid)]
-      (state/set-state! :sync-graph/init? true)
-      (<! (sync/<update-graphs-txid! 0 graph-uuid user-uuid repo))
-      (swap! refresh-file-sync-component not)
-      (state/pub-event! [:graph/switch repo {:persist? false}]))))
+          user-uuid-or-exp (<! (user/<user-uuid))]
+      (if (instance? ExceptionInfo user-uuid-or-exp)
+        (notification/show! (ex-message user-uuid-or-exp) :error)
+        (do
+          (state/set-state! :sync-graph/init? true)
+          (<! (sync/<update-graphs-txid! 0 graph-uuid user-uuid-or-exp repo))
+          (swap! refresh-file-sync-component not)
+          (state/pub-event! [:graph/switch repo {:persist? false}]))))))
 
 (defn download-version-file
   ([graph-uuid file-uuid version-uuid]
@@ -131,18 +143,25 @@
                                      (#(js->clj % :keywordize-keys true))
                                      ((juxt :dir :name))
                                      (apply path/join base-path))
-            version-file-paths (<! (p->c (fs/readdir version-files-dir :path-only? true)))]
+            version-file-paths (->> (<! (p->c (fs/readdir version-files-dir :path-only? true)))
+                                    (remove #{version-files-dir}))]
         (when-not (instance? ExceptionInfo version-file-paths)
           (when (seq version-file-paths)
-            (mapv
-             (fn [path]
-               (let [create-time
-                     (-> (path/parse path)
-                         (js->clj :keywordize-keys true)
-                         :name
-                         (#(tf/parse (tf/formatter "yyyy-MM-dd'T'HH_mm_ss.SSSZZ") %)))]
-                 {:create-time create-time :path path :relative-path (string/replace-first path base-path "")}))
-             version-file-paths)))))))
+            (->>
+             (mapv
+              (fn [path]
+                (try
+                  (let [create-time
+                       (-> (path/parse path)
+                           (js->clj :keywordize-keys true)
+                           :name
+                           (#(tf/parse (tf/formatter "yyyy-MM-dd'T'HH_mm_ss.SSSZZ") %)))]
+                    {:create-time create-time :path path :relative-path (string/replace-first path base-path "")})
+                  (catch :default e
+                    (log/error :page-history/parse-format-error e)
+                    nil)))
+              version-file-paths)
+             (remove nil?))))))))
 
 (defn fetch-page-file-versions [graph-uuid page]
   []
@@ -150,7 +169,7 @@
     (when-let [path (:file/path (db/entity file-id))]
       (let [base-path (config/get-repo-dir (state/get-current-repo))
             base-path (if (string/starts-with? base-path "file://")
-                        (js/decodeURIComponent base-path)
+                        (gp-util/safe-decode-uri-component base-path)
                         base-path)
             path*     (string/replace-first (string/replace-first path base-path "") #"^/" "")]
         (go
@@ -172,7 +191,7 @@
           (:GraphName graph)
           " to "
           (config/get-string-repo-dir (config/get-local-dir local)))
-     :warning)
+     :success)
     (init-graph (:GraphUUID graph))
     (state/close-modal!)))
 
@@ -190,7 +209,9 @@
           (list :finished-local->remote :finished-remote->local)
           (when-let [current-uuid (state/get-current-file-sync-graph-uuid)]
             (state/clear-file-sync-progress! current-uuid)
-            (state/set-state! [:file-sync/graph-state current-uuid :file-sync/last-synced-at] (:epoch data)))
+            (state/set-state! [:file-sync/graph-state current-uuid :file-sync/last-synced-at] (:epoch data))
+            (when (= event :finished-local->remote)
+              (async/offer! sync/finished-local->remote-chan true)))
 
           :start
           (when-let [current-uuid (state/get-current-file-sync-graph-uuid)]
@@ -234,3 +255,8 @@
           (= mins 1) "1 min left"
           (> mins 30) "calculating..."
           :else (str mins " mins left"))))))
+
+(defn set-sync-enabled!
+  [value]
+  (storage/set :logseq-sync-enabled value)
+  (state/set-state! :feature/enable-sync? value))

@@ -61,7 +61,8 @@
     (gp-util/safe-subs s 0 200)))
 
 (defn get-page-file-path
-  ([] (get-page-file-path (state/get-current-page)))
+  ([] (get-page-file-path (or (state/get-current-page)
+                              (state/get-current-whiteboard))))
   ([page-name]
    (when page-name
      (let [page-name (util/page-name-sanity-lc page-name)]
@@ -99,6 +100,7 @@
 (defn- create-title-property?
   [journal? page-name]
   (and (not journal?)
+       (= (state/get-filename-format) :legacy) ;; reduce title computation
        (fs-util/create-title-property? page-name)))
 
 (defn- build-page-tx [format properties page journal? whiteboard?]
@@ -464,13 +466,18 @@
         (when (and file (not journal?))
           (rename-file! file new-file-name-body (fn [] nil)))
 
+
+        (let [home (get (state/get-config) :default-home {})]
+          (when (= old-page-name (util/page-name-sanity-lc (get home :page "")))
+            (config-handler/set-config! :default-home (assoc home :page new-name))))
+
         (rename-update-refs! page old-original-name new-name)
 
         (outliner-file/sync-to-file page))
 
       ;; Redirect to the newly renamed page
       (when redirect?
-        (route-handler/redirect! {:to          (if (= "whiteboard" (:block/type page)) :whiteboard :page)
+        (route-handler/redirect! {:to          (if (model/whiteboard-page? page) :whiteboard :page)
                                   :push        false
                                   :path-params {:name new-page-name}}))
 
@@ -692,10 +699,11 @@
   ([ok-handler] (ls-dir-files! ok-handler nil))
   ([ok-handler opts]
    (web-nfs/ls-dir-files-with-handler!
-     (fn [e]
-       (init-commands!)
-       (when ok-handler (ok-handler e)))
-     opts)))
+    (fn [e]
+      (init-commands!)
+      (when ok-handler
+        (ok-handler e)))
+    opts)))
 
 (defn get-all-pages
   [repo]

@@ -6,7 +6,7 @@ import ReactDOM from 'react-dom'
 import type { Shape } from '../../lib'
 
 const printPoint = (point: number[]) => {
-  return `[${point.map(d => d.toFixed(2)).join(', ')}]`
+  return `[${point.map(d => d?.toFixed(2) ?? '-').join(', ')}]`
 }
 
 const HistoryStack = observer(function HistoryStack() {
@@ -25,7 +25,7 @@ const HistoryStack = observer(function HistoryStack() {
   }, [])
 
   React.useEffect(() => {
-    requestIdleCallback(() => {
+    requestAnimationFrame(() => {
       anchorRef.current
         ?.querySelector(`[data-item-index="${app.history.pointer}"]`)
         ?.scrollIntoView()
@@ -75,7 +75,7 @@ export const DevTools = observer(() => {
   }, [])
 
   const rendererStatusText = [
-    ['Z', zoom.toFixed(2)],
+    ['Z', zoom?.toFixed(2) ?? 'null'],
     ['MP', printPoint(inputs.currentPoint)],
     ['MS', printPoint(inputs.currentScreenPoint)],
     ['VP', printPoint(point)],
@@ -83,6 +83,15 @@ export const DevTools = observer(() => {
   ]
     .map(p => p.join(''))
     .join('|')
+
+  const originPoint = canvasAnchorRef.current
+    ? ReactDOM.createPortal(
+        <svg className="tl-renderer-dev-tools tl-grid">
+          <circle cx={point[0] * zoom} cy={point[1] * zoom} r="4" fill="red" />
+        </svg>,
+        canvasAnchorRef.current
+      )
+    : null
 
   const rendererStatus = statusbarAnchorRef.current
     ? ReactDOM.createPortal(
@@ -101,6 +110,7 @@ export const DevTools = observer(() => {
 
   return (
     <>
+      {originPoint}
       {rendererStatus}
       <HistoryStack />
     </>

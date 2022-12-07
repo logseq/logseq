@@ -139,7 +139,12 @@ class PluginLogger extends EventEmitter<'change'> {
     super()
   }
 
-  write(type: string, payload: any[]) {
+  write(type: string, payload: any[], inConsole?: boolean) {
+    if (payload?.length && (true === payload[payload.length - 1])) {
+      inConsole = true
+      payload.pop()
+    }
+
     const msg = payload.reduce((ac, it) => {
       if (it && it instanceof Error) {
         ac += `${it.message} ${it.stack}`
@@ -150,6 +155,11 @@ class PluginLogger extends EventEmitter<'change'> {
     }, `[${this._tag}][${new Date().toLocaleTimeString()}] `)
 
     this._logs.push([type, msg])
+
+    if (inConsole) {
+      console?.['ERROR' === type ? 'error' : 'debug'](`${type}: ${msg}`)
+    }
+
     this.emit('change')
   }
 
@@ -634,8 +644,8 @@ class PluginLocal extends EventEmitter<'loaded'
 
     // Validate id
     const { registeredPlugins, isRegistering } = this._ctx
-    if (isRegistering && registeredPlugins.has(logseq.id)) {
-      throw new ExistedImportedPluginPackageError('prepare package Error')
+    if (isRegistering && registeredPlugins.has(this.id)) {
+      throw new ExistedImportedPluginPackageError('Registered plugin package Error')
     }
 
     return async () => {
@@ -907,9 +917,9 @@ class PluginLocal extends EventEmitter<'loaded'
 
       this._dispose(cleanInjectedScripts.bind(this))
     } catch (e) {
-      console.error('[Load Plugin Error] ', e)
-      this.logger?.error(e)
+      this.logger?.error('[Load Plugin]', e, true)
 
+      this.dispose().catch(null)
       this._status = PluginLocalLoadStatus.ERROR
       this._loadErr = e
     } finally {
@@ -1328,7 +1338,6 @@ class LSPluginCore
             continue
           }
         }
-
 
         pluginLocal.settings?.on('change', (a) => {
           this.emit('settings-changed', pluginLocal.id, a)

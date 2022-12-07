@@ -68,8 +68,9 @@
 
 (defn- get-whiteboard-tldr-from-text
   [text]
-  (when-let [matched-text (util/safe-re-find #"<whiteboard-tldr>(.*)</whiteboard-tldr>" text)]
-    (try-parse-as-json (js/decodeURIComponent (second matched-text)))))
+  (when-let [matched-text (util/safe-re-find #"<whiteboard-tldr>(.*)</whiteboard-tldr>"
+                                             (gp-util/safe-decode-uri-component text))]
+    (try-parse-as-json (second matched-text))))
 
 (defn- get-whiteboard-shape-refs-text
   [text]
@@ -178,26 +179,30 @@
      (state/set-state! :editor/on-paste? true)
      (let [input (state/get-input)]
        (if raw-paste?
-        (utils/getClipText
-         (fn [clipboard-data]
-           (when-let [_ (state/get-input)]
-             (let [text (or (when (gp-util/url? clipboard-data)
-                              (wrap-macro-url clipboard-data))
-                            clipboard-data)]
-               (paste-text-or-blocks-aux input e text nil))))
-         (fn [error]
-           (js/console.error error)))
-        (let [clipboard-data (gobj/get e "clipboardData")
-              html (when-not raw-paste? (.getData clipboard-data "text/html"))
-              text (.getData clipboard-data "text")]
-          (if-not (and (string/blank? text) (string/blank? html))
-            (paste-text-or-blocks-aux input e text html)
-            (when id
-              (let [_handled
-                    (let [clipboard-data (gobj/get e "clipboardData")
-                          files (.-files clipboard-data)]
-                      (when-let [file (first files)]
-                        (when-let [block (state/get-edit-block)]
-                          (editor-handler/upload-asset id #js[file] (:block/format block)
-                                                       editor-handler/*asset-uploading? true))))]
-                (util/stop e))))))))))
+         (utils/getClipText
+          (fn [clipboard-data]
+            (when-let [_ (state/get-input)]
+              (let [text (or (when (gp-util/url? clipboard-data)
+                               (wrap-macro-url clipboard-data))
+                             clipboard-data)]
+                (paste-text-or-blocks-aux input e text nil))))
+          (fn [error]
+            (js/console.error error)))
+         (let [clipboard-data (gobj/get e "clipboardData")
+               html (when-not raw-paste? (.getData clipboard-data "text/html"))
+               text (.getData clipboard-data "text")
+               files (.-files clipboard-data)
+               paste-file-if-exist (fn []
+                                      (when id
+                                        (let [_handled
+                                              (let [clipboard-data (gobj/get e "clipboardData")
+                                                    files (.-files clipboard-data)]
+                                                (when-let [file (first files)]
+                                                  (when-let [block (state/get-edit-block)]
+                                                    (editor-handler/upload-asset id #js[file] (:block/format block)
+                                                                                 editor-handler/*asset-uploading? true))))]
+                                          (util/stop e))))]
+           (cond
+             (and (string/blank? text) (string/blank? html)) (paste-file-if-exist)
+             (and (seq files) (state/preferred-pasting-file?)) (paste-file-if-exist)
+             :else (paste-text-or-blocks-aux input e text html))))))))

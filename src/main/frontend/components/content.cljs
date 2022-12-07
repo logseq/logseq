@@ -6,17 +6,15 @@
             [frontend.components.editor :as editor]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.export :as export]
-            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.srs :as srs]
-            [frontend.format :as format]
-            [frontend.format.protocol :as protocol]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -29,29 +27,6 @@
             [rum.core :as rum]))
 
 ;; TODO i18n support
-
-(defn- set-format-js-loading!
-  [format value]
-  (when format
-    (swap! state/state assoc-in [:format/loading format] value)))
-
-(defn- lazy-load
-  [format]
-  (let [format (gp-util/normalize-format format)]
-    (when-let [record (format/get-format-record format)]
-      (when-not (protocol/loaded? record)
-        (set-format-js-loading! format true)
-        (protocol/lazyLoad record
-                           (fn [_result]
-                             (set-format-js-loading! format false)))))))
-
-(defn lazy-load-js
-  [state]
-  (when-let [format (:format (last (:rum/args state)))]
-    (let [loader? (contains? config/html-render-formats format)]
-      (when loader?
-        (when-not (format/loaded? format)
-          (lazy-load format))))))
 
 (rum/defc custom-context-menu-content
   []
@@ -361,12 +336,9 @@
     (let [page-menu-options (page-menu/page-menu page)]
       [:.menu-links-wrapper
        (for [{:keys [title options]} page-menu-options]
-         (ui/menu-link
-          (merge
-           {:key title}
-           options)
-          title
-          nil))])))
+         (rum/with-key
+           (ui/menu-link options title nil)
+           title))])))
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
@@ -374,42 +346,46 @@
 (rum/defc hiccup-content < rum/static
   (mixins/event-mixin
    (fn [state]
+     ;; fixme: this mixin will register global event listeners on window
+     ;; which might cause unexpected issues
      (mixins/listen state js/window "contextmenu"
                     (fn [e]
                       (let [target (gobj/get e "target")
                             block-id (d/attr target "blockid")
                             {:keys [block block-ref]} (state/sub :block-ref/context)
                             {:keys [page]} (state/sub :page-title/context)]
-                        (cond
-                          page
-                          (do
+                        ;; TODO: Find a better way to handle this on whiteboards
+                        (when-not (whiteboard-handler/inside-portal? target)
+                          (cond
+                            page
+                            (do
+                              (common-handler/show-custom-context-menu!
+                               e
+                               (page-title-custom-context-menu-content page))
+                              (state/set-state! :page-title/context nil))
+
+                            block-ref
+                            (do
+                              (common-handler/show-custom-context-menu!
+                               e
+                               (block-ref-custom-context-menu-content block block-ref))
+                              (state/set-state! :block-ref/context nil))
+
+                            (and (state/selection?) (not (d/has-class? target "bullet")))
                             (common-handler/show-custom-context-menu!
                              e
-                             (page-title-custom-context-menu-content page))
-                            (state/set-state! :page-title/context nil))
+                             (custom-context-menu-content))
 
-                          block-ref
-                          (do
-                            (common-handler/show-custom-context-menu!
-                             e
-                             (block-ref-custom-context-menu-content block block-ref))
-                            (state/set-state! :block-ref/context nil))
+                            (and block-id (parse-uuid block-id))
+                            (let [block (.closest target ".ls-block")]
+                              (when block
+                                (util/select-highlight! [block]))
+                              (common-handler/show-custom-context-menu!
+                               e
+                               (block-context-menu-content target (uuid block-id))))
 
-                          (and (state/selection?) (not (d/has-class? target "bullet")))
-                          (common-handler/show-custom-context-menu!
-                           e
-                           (custom-context-menu-content))
-
-                          (and block-id (parse-uuid block-id))
-                          (let [block (.closest target ".ls-block")]
-                            (when block
-                              (util/select-highlight! [block]))
-                            (common-handler/show-custom-context-menu!
-                            e
-                            (block-context-menu-content target (uuid block-id))))
-
-                          :else
-                          nil))))))
+                            :else
+                            nil)))))))
   [id {:keys [hiccup]}]
   [:div {:id id}
    (if hiccup
@@ -418,17 +394,13 @@
 
 (rum/defc non-hiccup-content < rum/reactive
   [id content on-click on-hide config format]
-  (let [edit? (state/sub [:editor/editing? id])
-        loading (state/sub :format/loading)]
+  (let [edit? (state/sub [:editor/editing? id])]
     (if edit?
       (editor/box {:on-hide on-hide
                    :format format}
                   id
                   config)
-      (let [format (gp-util/normalize-format format)
-            loading? (get loading format)
-            markup? (contains? config/html-render-formats format)
-            on-click (fn [e]
+      (let [on-click (fn [e]
                        (when-not (util/link? (gobj/get e "target"))
                          (util/stop e)
                          (editor-handler/reset-cursor-range! (gdom/getElement (str id)))
@@ -436,17 +408,12 @@
                          (state/set-edit-input-id! id)
                          (when on-click
                            (on-click e))))]
-        (cond
-          (and markup? loading?)
-          [:div "loading ..."]
-
-          :else                       ; other text formats
-          [:pre.cursor.content.pre-white-space
-           {:id id
-            :on-click on-click}
-           (if (string/blank? content)
-             [:div.cursor "Click to edit"]
-             content)])))))
+        [:pre.cursor.content.pre-white-space
+         {:id id
+          :on-click on-click}
+         (if (string/blank? content)
+           [:div.cursor "Click to edit"]
+           content)]))))
 
 (defn- set-draw-iframe-style!
   []
@@ -461,16 +428,12 @@
           (d/set-style! draw :margin-left (str (- (/ (- width 570) 2)) "px")))))))
 
 (rum/defcs content < rum/reactive
-  {:will-mount (fn [state]
-                 (lazy-load-js state)
-                 state)
-   :did-mount (fn [state]
+  {:did-mount (fn [state]
                 (set-draw-iframe-style!)
                 (image-handler/render-local-images!)
                 state)
    :did-update (fn [state]
                  (set-draw-iframe-style!)
-                 (lazy-load-js state)
                  (image-handler/render-local-images!)
                  state)}
   [state id {:keys [format

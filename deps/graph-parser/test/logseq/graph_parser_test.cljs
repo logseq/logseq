@@ -74,7 +74,7 @@
                                                         (throw (js/Error "Testing unexpected failure")))]
         (try
           (graph-parser/parse-file conn "foo.md" "- id:: 628953c1-8d75-49fe-a648-f4c612109098"
-                                   {:delete-blocks-fn (fn [page _file]
+                                   {:delete-blocks-fn (fn [_db page _file _uuids]
                                                         (reset! deleted-page page))})
           (catch :default _)))
       (is (= nil @deleted-page)
@@ -322,6 +322,23 @@
                                "title:: core.async"
                                {})
       (is (= #{"core.async"}
+             (->> (d/q '[:find (pull ?b [*])
+                         :in $
+                         :where [?b :block/name]]
+                       @conn)
+                  (map (comp :block/name first))
+                  (remove built-in-pages)
+                  set)))))
+
+  (testing "for file and web uris"
+    (let [conn (ldb/start-conn)
+          built-in-pages (set (map string/lower-case default-db/built-in-pages-names))]
+      (graph-parser/parse-file conn
+                               "foo.md"
+                               (str "- [Filename.txt](file:///E:/test/Filename.txt)\n"
+                                    "- [example](https://example.com)")
+                               {})
+      (is (= #{"foo"}
              (->> (d/q '[:find (pull ?b [*])
                          :in $
                          :where [?b :block/name]]

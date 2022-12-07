@@ -10,31 +10,36 @@
             [rum.core :as rum]
             [frontend.util :as util]))
 
-(defn get-relation
+(defn- get-relation
+  "Get all parent pages along the namespace hierarchy path.
+   If there're aliases, only use the first namespaced alias."
   [page]
   (when-let [page (or (text/get-nested-page-name page) page)]
-    (when (or (text/namespace-page? page)
-              (:block/_namespace (db/entity [:block/name (util/page-name-sanity-lc page)])))
-      (let [repo (state/get-current-repo)
-            namespace-pages (db/get-namespace-pages repo page)
-            parent-routes (db-model/get-page-namespace-routes repo page)
-            pages (->> (concat namespace-pages parent-routes)
-                       (distinct)
-                       (sort-by :block/name)
-                       (map (fn [page]
-                              (or (:block/original-name page) (:block/name page))))
-                       (map #(string/split % "/")))
-            page-namespace (db-model/get-page-namespace repo page)
-            page-namespace (util/get-page-original-name page-namespace)]
-        (cond
-          (seq pages)
-          pages
+    (let [repo (state/get-current-repo)
+          aliases (db/get-page-alias-names repo page)
+          all-page-names (conj aliases page)]
+      (when-let [page (or (first (filter text/namespace-page? all-page-names))
+                          (when (:block/_namespace (db/entity [:block/name (util/page-name-sanity-lc page)]))
+                            page))]
+        (let [namespace-pages (db/get-namespace-pages repo page)
+              parent-routes (db-model/get-page-namespace-routes repo page)
+              pages (->> (concat namespace-pages parent-routes)
+                         (distinct)
+                         (sort-by :block/name)
+                         (map (fn [page]
+                                (or (:block/original-name page) (:block/name page))))
+                         (map #(string/split % "/")))
+              page-namespace (db-model/get-page-namespace repo page)
+              page-namespace (util/get-page-original-name page-namespace)]
+          (cond
+            (seq pages)
+            pages
 
-          page-namespace
-          [(string/split page-namespace "/")]
+            page-namespace
+            [(string/split page-namespace "/")]
 
-          :else
-          nil)))))
+            :else
+            nil))))))
 
 (rum/defc structures
   [page]

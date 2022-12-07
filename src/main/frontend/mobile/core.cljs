@@ -10,8 +10,8 @@
             [frontend.mobile.intent :as intent]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [frontend.util :as util]))
-
+            [frontend.util :as util]
+            [cljs-bean.core :as bean]))
 
 (def *url (atom nil))
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
@@ -23,8 +23,13 @@
 (defn- ios-init
   "Initialize iOS-specified event listeners"
   []
-  (p/let [path (capacitor-fs/ios-ensure-documents!)]
-    (println "iOS container path: " (js->clj path)))
+  (p/let [^js path (capacitor-fs/ios-ensure-documents!)]
+    (when-let [path' (bean/->clj path)]
+      (state/set-state! :mobile/container-urls
+                        (update-vals path' #(cond-> %
+                                              string?
+                                              (js/decodeURIComponent))))
+      (println "iOS container path: " path')))
 
   (state/pub-event! [:validate-appId])
 
@@ -87,9 +92,9 @@
   (println :debug :app-state-change-handler state (js/Date.))
   (when (state/get-current-repo)
     (let [is-active? (.-isActive state)]
-      (state/set-mobile-app-state-change is-active?)
       (when-not is-active?
-        (editor-handler/save-current-block!)))))
+        (editor-handler/save-current-block!))
+      (state/set-mobile-app-state-change is-active?))))
 
 (defn- general-init
   "Initialize event listeners used by both iOS and Android"
@@ -107,7 +112,7 @@
 
   (.addListener mobile-util/fs-watcher "watcher"
                 (fn [event]
-                  (state/pub-event! [:file-watcher/changed event])))
+                  (state/pub-event! [:mobile-file-watcher/changed event])))
 
   (.addListener Keyboard "keyboardWillShow"
                 (fn [^js info]

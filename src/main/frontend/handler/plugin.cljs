@@ -163,7 +163,7 @@
 
 (defn get-enabled-plugins-if-setting-schema
   []
-  (when-let [plugins (seq (state/get-enabled?-installed-plugins false nil true))]
+  (when-let [plugins (seq (state/get-enabled?-installed-plugins false nil true true))]
     (filter #(has-setting-schema? (:id %)) plugins)))
 
 (defn setup-install-listener!
@@ -233,8 +233,9 @@
     (js/window.apis.addListener channel listener)))
 
 (defn register-plugin
-  [pl]
-  (swap! state/state update-in [:plugin/installed-plugins] assoc (keyword (:id pl)) pl))
+  [plugin-metadata]
+  (when-let [pid (keyword (:id plugin-metadata))]
+    (swap! state/state update-in [:plugin/installed-plugins] assoc pid plugin-metadata)))
 
 (defn host-mounted!
   []
@@ -327,6 +328,16 @@
   (when-let [pid (keyword pid)]
     (swap! state/state medley/dissoc-in [:plugin/installed-resources pid])
     true))
+
+(defn register-plugin-search-service
+  [pid name opts]
+  (when-let [pid (and name (keyword pid))]
+    (state/install-plugin-service pid :search name opts)))
+
+(defn unregister-plugin-search-services
+  [pid]
+  (when-let [pid (keyword pid)]
+    (state/uninstall-plugin-service pid :search)))
 
 (defn unregister-plugin-themes
   ([pid] (unregister-plugin-themes pid true))
@@ -514,6 +525,11 @@
   []
   (state/pub-event! [:go/plugins]))
 
+(defn goto-plugins-settings!
+  []
+  (when-let [pl (first (seq (get-enabled-plugins-if-setting-schema)))]
+    (state/pub-event! [:go/plugins-settings (:id pl)])))
+
 (defn- get-user-default-plugins
   []
   (p/catch
@@ -558,7 +574,7 @@
     (when-not (= text "END")
       [:div.flex.align-items.justify-center.h-screen.w-full.preboot-loading
        [:span.flex.items-center.justify-center.w-60.flex-col
-        [:small.scale-250.opacity-70.mb-10.animate-pulse (svg/logo false)]
+        [:small.scale-250.opacity-70.mb-10.animate-pulse (svg/logo)]
         [:small.block.text-sm.relative.opacity-50 {:style {:right "-8px"}} text]]])))
 
 (defn ^:large-vars/cleanup-todo init-plugins!
@@ -580,7 +596,8 @@
                                 (invoke-exported-api "unregister_plugin_simple_command" pid)
                                 (invoke-exported-api "uninstall_plugin_hook" pid)
                                 (unregister-plugin-ui-items pid)
-                                (unregister-plugin-resources pid))
+                                (unregister-plugin-resources pid)
+                                (unregister-plugin-search-services pid))
 
               _               (doto js/LSPluginCore
                                 (.on "registered"
@@ -626,8 +643,8 @@
                                                           (when mode
                                                             (state/set-custom-theme! mode theme)
                                                             (state/set-theme-mode! mode))
-                                                          (hook-plugin-app :theme-changed theme)
-                                                          (state/set-state! :plugin/selected-theme url))))
+                                                          (state/set-state! :plugin/selected-theme url)
+                                                          (hook-plugin-app :theme-changed theme))))
 
                                 (.on "reset-custom-theme" (fn [^js themes]
                                                             (let [themes       (bean/->clj themes)

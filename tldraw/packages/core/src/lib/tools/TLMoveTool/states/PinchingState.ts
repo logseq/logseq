@@ -10,7 +10,7 @@ type GestureInfo<
   E extends TLEventInfo<S> = TLEventInfo<S>
 > = {
   info: E & { delta: number[]; point: number[]; offset: number[] }
-  event: K['wheel'] | K['pointer'] | K['touch'] | K['keyboard'] | K['gesture']
+  event: K['pointer'] | K['touch'] | K['keyboard'] | K['gesture']
 }
 
 export class PinchingState<
@@ -31,7 +31,7 @@ export class PinchingState<
   }
 
   onPinch: TLEvents<S>['pinch'] = info => {
-    this.app.viewport.pinchCamera(info.point, [0, 0], info.offset[0])
+    this.app.viewport.pinchZoom(info.point, info.delta, info.delta[2])
   }
 
   onPinchEnd: TLEvents<S>['pinch'] = () => {

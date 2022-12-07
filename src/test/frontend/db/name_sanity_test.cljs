@@ -74,7 +74,7 @@
     "aaa__bbb__cccon" "aaa/bbb/cccon"  true
     "aaa.bbb.ccc"     "adbcde/aks/sdf" true
     "a__.bbb.ccc"     "adbcde/aks/sdf" true
-    ))
+    "aaa__bbb__ccc" nil false))
 
 (deftest rename-previous-tests
   (are [x y] (= y (#'conversion-handler/calc-previous-name :legacy :triple-lowbar x))
@@ -99,9 +99,10 @@
                         :old-title "aa?#.bbb.ccc",
                         :changed-title "aa?#/bbb/ccc"}))
 
-(deftest rename-tests
+(deftest rename-tests-l2t
   ;; z: new title structure; x: old ver title; y: title property (if available)
   (are [x y z] (= z (#'conversion-handler/calc-rename-target-impl :legacy :triple-lowbar x y))
+    "aaBBcc"      "aabbcc"        nil
     "aaa.bbb.ccc" "aaa/bbb/ccc"   {:status :informal,
                                    :target "aaa___bbb___ccc",
                                    :old-title "aaa/bbb/ccc",
@@ -114,13 +115,32 @@
                                    :target "aa%3F%23___bbb___ccc",
                                    :old-title "aa?#/bbb/ccc",
                                    :changed-title "aa?#/bbb/ccc"}
-    "aa?#.bbb.ccc" "aa__/bbb/ccc" nil
-    "aaa__bbb__ccc" "aaa/bbb/ccc" nil
-    "aaa__bbb__cccon" "aaa/bbb/cccon" nil
+    "aa?#.bbb.ccc" "aa__/bbb/ccc" {:status :informal,
+                                   :target "aa_%5F___bbb___ccc",
+                                   :old-title "aa__/bbb/ccc",
+                                   :changed-title "aa__/bbb/ccc"}
+    "aaa__bbb__ccc" "aaa/bbb/ccc" {:status :informal,
+                                   :target "aaa___bbb___ccc",
+                                   :old-title "aaa/bbb/ccc",
+                                   :changed-title "aaa/bbb/ccc"}
+    "aaa__bbb__cccon" "aaa/bbb/cccon" {:status :informal,
+                                       :target "aaa___bbb___cccon",
+                                       :old-title "aaa/bbb/cccon",
+                                       :changed-title "aaa/bbb/cccon"}
     "aaa__bbb__ccc" nil               nil
     "aaa_bbb_ccc"   nil               nil
-    "aaa.bbb.ccc"   "adbcde/aks/sdf"  nil
-    "a__.bbb.ccc"   "adbcde/aks/sdf"  nil
+    "aaa.bbb.ccc"   "adbcde/aks/sdf"  {:status :informal,
+                                       :target "adbcde___aks___sdf",
+                                       :old-title "adbcde/aks/sdf",
+                                       :changed-title "adbcde/aks/sdf"}
+    "a__.bbb.ccc"   "adbcde/aks/sdf"  {:status :informal,
+                                       :target "adbcde___aks___sdf",
+                                       :old-title "adbcde/aks/sdf",
+                                       :changed-title "adbcde/aks/sdf"}
+    "aaa%2Fbbb%2Fccc" "aaa/bbb/ccc"  {:status :informal,
+                                      :target "aaa___bbb___ccc",
+                                      :old-title "aaa/bbb/ccc",
+                                      :changed-title "aaa/bbb/ccc"}
     "CON" "CON" {:status :informal,
                  :target "CON___",
                  :old-title "CON",

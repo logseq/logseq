@@ -7,30 +7,29 @@ import { action, computed, makeObservable, observable, toJS, transaction } from 
 import { GRID_SIZE } from '../../constants'
 import type {
   TLAsset,
-  TLEventMap,
-  TLShortcut,
-  TLSubscription,
-  TLSubscriptionEventName,
   TLCallback,
-  TLSubscriptionEventInfo,
-  TLStateEvents,
+  TLEventMap,
   TLEvents,
-  TLHandle,
+  TLShortcut,
+  TLStateEvents,
+  TLSubscription,
+  TLSubscriptionEventInfo,
+  TLSubscriptionEventName,
 } from '../../types'
 import { AlignType, DistributeType } from '../../types'
-import { KeyUtils, BoundsUtils, isNonNullable, createNewLineBinding } from '../../utils'
+import { BoundsUtils, createNewLineBinding, isNonNullable, KeyUtils, uniqueId } from '../../utils'
 import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
 import { TLApi } from '../TLApi'
 import { TLCursors } from '../TLCursors'
 
 import { TLHistory } from '../TLHistory'
 import { TLInputs } from '../TLInputs'
-import { type TLPageModel, TLPage } from '../TLPage'
+import { TLPage, type TLPageModel } from '../TLPage'
 import { TLSettings } from '../TLSettings'
 import { TLRootState } from '../TLState'
 import type { TLToolConstructor } from '../TLTool'
 import { TLViewport } from '../TLViewport'
-import { TLSelectTool, TLMoveTool } from '../tools'
+import { TLMoveTool, TLSelectTool } from '../tools'
 
 export interface TLDocumentModel<S extends TLShape = TLShape, A extends TLAsset = TLAsset> {
   // currentPageId: string
@@ -70,6 +69,7 @@ export class TLApp<
   }
 
   keybindingRegistered = false
+  uuid = uniqueId()
 
   static id = 'app'
   static initial = 'select'
@@ -171,6 +171,7 @@ export class TLApp<
         keys: ['del', 'backspace'],
         fn: () => {
           this.api.deleteShapes()
+          this.selectedTool.transition('idle')
         },
       },
     ]
@@ -184,9 +185,13 @@ export class TLApp<
         return {
           // @ts-expect-error ???
           keys: child.constructor['shortcut'] as string | string[],
-          fn: (_: any, __: any, e: Event) => {
+          fn: (_: any, __: any, e: KeyboardEvent) => {
             this.transition(child.id)
-            e.stopPropagation()
+
+            // hack: allows logseq related shortcut combinations to work
+            if (e.key !== 't') {
+              e.stopPropagation()
+            }
           },
         }
       })
@@ -450,8 +455,18 @@ export class TLApp<
     return this
   }
 
+  @action removeUnusedAssets = (): this => {
+    const usedAssets = this.getCleanUpAssets()
+    Object.keys(this.assets).forEach(assetId => {
+      if (!usedAssets.some(asset => asset.id === assetId)) {
+        delete this.assets[assetId]
+      }
+    })
+    this.persist()
+    return this
+  }
+
   getCleanUpAssets<T extends TLAsset>(): T[] {
-    let deleted = false
     const usedAssets = new Set<T>()
 
     this.pages.forEach(p =>
@@ -483,12 +498,14 @@ export class TLApp<
         // convey the bindings to maintain the new links after pasting
         bindings: toJS(this.currentPage.bindings),
       })
-      const tldrawString = `<whiteboard-tldr>${encodeURIComponent(jsonString)}</whiteboard-tldr>`
+      const tldrawString = encodeURIComponent(`<whiteboard-tldr>${jsonString}</whiteboard-tldr>`)
       // FIXME: use `writeClipboard` in frontend.utils
       navigator.clipboard.write([
         new ClipboardItem({
           'text/html': new Blob([tldrawString], { type: 'text/html' }),
-          // ??? what plain text should be used here?
+          'text/plain': new Blob([`((${this.selectedShapesArray[0].props.id}))`], {
+            type: 'text/plain',
+          }),
         }),
       ])
     }
@@ -914,18 +931,7 @@ export class TLApp<
     this.selectedTool.transition('idleHold')
   }
 
-  readonly onTransition: TLStateEvents<S, K>['onTransition'] = () => {
-    this.settings.update({ isToolLocked: false })
-  }
-
-  readonly onWheel: TLEvents<S, K>['wheel'] = (info, e) => {
-    if (e.ctrlKey || e.metaKey || this.isIn('select.contextMenu')) {
-      return
-    }
-
-    this.viewport.panCamera(info.delta)
-    this.inputs.onWheel([...this.viewport.getPagePoint([e.clientX, e.clientY]), 0.5], e)
-  }
+  readonly onTransition: TLStateEvents<S, K>['onTransition'] = () => {}
 
   readonly onPointerDown: TLEvents<S, K>['pointer'] = (info, e) => {
     // Pan canvas when holding middle click

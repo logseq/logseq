@@ -9,13 +9,13 @@ export class LogseqPortalTool extends TLTool<
   TLApp<Shape, TLReactEventMap>
 > {
   static id = 'logseq-portal'
-  static shortcut = ['9']
+  static shortcut = ['1']
   static states = [IdleState, CreatingState]
   static initial = 'idle'
 
   Shape = LogseqPortalShape
 
   onPinch: TLEvents<Shape>['pinch'] = info => {
-    this.app.viewport.pinchCamera(info.point, [0, 0], info.offset[0])
+    this.app.viewport.pinchZoom(info.point, info.delta, info.delta[2])
   }
 }

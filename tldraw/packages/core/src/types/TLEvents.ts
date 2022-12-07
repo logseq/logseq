@@ -8,11 +8,10 @@ export interface TLEvents<
   K extends TLEventMap = TLEventMap,
   E extends TLEventInfo<S> = TLEventInfo<S>
 > {
-  wheel: (info: E & { delta: number[]; point: number[] }, event: K['wheel']) => void
   pinch: (
     info: E & { delta: number[]; point: number[]; offset: number[] },
-    event: K['wheel'] | K['pointer'] | K['touch'] | K['keyboard'] | K['gesture']
+    event: K['pointer'] | K['touch'] | K['keyboard'] | K['gesture']
   ) => void
-  pointer: (info: E, event: K['pointer'] | K['wheel']) => void
+  pointer: (info: E, event: K['pointer']) => void
   keyboard: (info: E, event: K['keyboard']) => void
 }

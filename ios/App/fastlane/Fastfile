@@ -1,0 +1,53 @@
+# This file contains the fastlane.tools configuration
+# You can find the documentation at https://docs.fastlane.tools
+#
+# For a list of all available actions, check out
+#
+#     https://docs.fastlane.tools/actions
+#
+# For a list of all available plugins, check out
+#
+#     https://docs.fastlane.tools/plugins/available-plugins
+#
+
+# Uncomment the line if you want fastlane to automatically update itself
+# update_fastlane
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Push a new beta build to TestFlight"
+  lane :beta do
+    setup_ci
+
+    app_store_connect_api_key(
+      key_id: ENV["APP_STORE_CONNECT_API_KEY_KEY_ID"],
+      issuer_id: ENV["APP_STORE_CONNECT_API_KEY_ISSUER_ID"],
+      key_filepath: ENV["APP_STORE_CONNECT_API_KEY_KEY_FILEPATH"],
+    )
+
+    sync_code_signing(type: "appstore", readonly: true)
+
+    build_number = increment_build_number(
+      xcodeproj: "App.xcodeproj",
+      build_number: latest_testflight_build_number + 1,
+    )
+
+    # Ref: https://docs.fastlane.tools/advanced/fastlane/#directory-behavior
+    sh("../../../scripts/patch-xcode-project.sh")
+
+    build_app(
+      workspace: "App.xcworkspace",
+      destination: "generic/platform=iOS",
+      scheme: "Logseq",
+      configuration: "Release",
+    )
+
+    upload_to_testflight(
+      skip_submission: true,
+      skip_waiting_for_build_processing: true,
+    )
+
+    slack(message: "App Build (#{build_number}) successfully uploaded to TestFlight 🎉!")
+  end
+end

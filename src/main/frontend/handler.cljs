@@ -29,7 +29,6 @@
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
-            [frontend.handler.metadata :as metadata-handler]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
@@ -74,11 +73,7 @@
 (defn- instrument!
   []
   (let [total (srs/get-srs-cards-total)]
-    (state/set-state! :srs/cards-due-count total)
-    (state/pub-event! [:instrument {:type :flashcards/count
-                                    :payload {:total (or total 0)}}])
-    (state/pub-event! [:instrument {:type :blocks/count
-                                    :payload {:total (db/blocks-count)}}])))
+    (state/set-state! :srs/cards-due-count total)))
 
 (defn restore-and-setup!
   [repos]
@@ -97,7 +92,6 @@
             (p/finally
               (fn []
                 ;; install after config is restored
-                (shortcut/unlisten-all)
                 (shortcut/refresh!)
 
                 (cond
@@ -202,6 +196,7 @@
   [render]
   (set-global-error-notification!)
   (register-components-fns!)
+  (user-handler/restore-tokens-from-localstorage)
   (state/set-db-restoring! true)
   (render)
   (i18n/start)
@@ -221,13 +216,15 @@
 
   (-> (p/let [repos (get-repos)
               _ (state/set-repos! repos)
-              _ (restore-and-setup! repos)])
+              _ (restore-and-setup! repos)]
+        (when (mobile-util/native-platform?)
+          (p/do!
+           (mobile-util/hide-splash)
+           (state/restore-mobile-theme!))))
       (p/catch (fn [e]
                  (js/console.error "Error while restoring repos: " e)))
       (p/finally (fn []
                    (state/set-db-restoring! false))))
-  (when (mobile-util/native-platform?)
-    (mobile-util/hide-splash))
 
   (db/run-batch-txs!)
   (file/<ratelimit-file-writes!)
@@ -237,9 +234,6 @@
   (when (util/electron?)
     (el/listen!))
   (persist-var/load-vars)
-  (user-handler/restore-tokens-from-localstorage)
-  (user-handler/refresh-tokens-loop)
-  (metadata-handler/run-set-page-metadata-job!)
   (js/setTimeout instrument! (* 60 1000)))
 
 (defn stop! []

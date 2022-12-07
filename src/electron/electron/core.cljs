@@ -3,7 +3,8 @@
             [electron.search :as search]
             [electron.updater :refer [init-updater] :as updater]
             [electron.utils :refer [*win mac? linux? dev? get-win-from-sender restore-user-fetch-agent
-                                    decode-protected-assets-schema-path get-graph-name send-to-renderer]]
+                                    decode-protected-assets-schema-path get-graph-name send-to-renderer]
+             :as utils]
             [electron.url :refer [logseq-url-handler]]
             [electron.logger :as logger]
             [clojure.string :as string]
@@ -20,7 +21,7 @@
             [electron.git :as git]
             [electron.window :as win]
             [electron.exceptions :as exceptions]
-            ["/electron/utils" :as utils]))
+            ["/electron/utils" :as js-utils]))
 
 ;; Keep same as main/frontend.util.url
 (defonce LSP_SCHEME "logseq")
@@ -77,7 +78,7 @@
                       [STATIC_URL js/__dirname])
 
            path' (.-pathname url')
-           path' (js/decodeURIComponent path')
+           path' (utils/safe-decode-uri-component path')
            path' (.join path ROOT path')]
 
        (callback #js {:path path'}))))
@@ -94,8 +95,7 @@
       (let [static-dir (path/join root-dir "static")
             assets-from-dir (path/join repo-path "assets")
             assets-to-dir (path/join root-dir "assets")
-            index-html-path (path/join root-dir "index.html")
-            export-or-custom-css-path (if (fs/existsSync export-css-path) export-css-path custom-css-path)]
+            index-html-path (path/join root-dir "index.html")]
         (p/let [_ (. fs ensureDir static-dir)
                 _ (. fs ensureDir assets-to-dir)
                 _ (p/all (concat
@@ -119,8 +119,10 @@
                            (fn [part]
                              (. fs copy (path/join app-path part) (path/join static-dir part)))
                            ["css" "fonts" "icons" "img" "js"])))
-                export-css (. fs readFile export-or-custom-css-path)
-                _ (. fs writeFile (path/join static-dir "css" "export.css") export-css)
+                export-css (if (fs/existsSync export-css-path) (. fs readFile export-css-path) "")
+                _ (. fs writeFile (path/join static-dir "css" "export.css")  export-css)
+                custom-css (if (fs/existsSync custom-css-path) (. fs readFile custom-css-path) "")
+                _ (. fs writeFile (path/join static-dir "css" "custom.css") custom-css)
                 js-files ["main.js" "code-editor.js" "excalidraw.js" "tldraw.js"]
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" file)))
@@ -135,7 +137,7 @@
                 ;; TODO: ugly, replace with ls-files and filter with ".map"
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" (str file ".map"))))
-                              ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
+                              ["main.js" "code-editor.js" "excalidraw.js"]))]
 
           (send-to-renderer
            :notification
@@ -300,7 +302,7 @@
 
                (restore-user-fetch-agent)
 
-               (utils/disableXFrameOptions win)
+               (js-utils/disableXFrameOptions win)
 
                (search/ensure-search-dir!)
 

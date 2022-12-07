@@ -132,7 +132,7 @@
                            :h5 (block-transform 5 children)
                            :h6 (block-transform 6 children)
                            :a (let [href (:href attrs)
-                                    label (or (map-join children) "")
+                                    label (or (string/trim (map-join children)) "")
                                     has-img-tag? (util/safe-re-find #"\[:img" (str x))]
                                 (when-not (string/blank? href)
                                   (if has-img-tag?
@@ -170,9 +170,7 @@
 
                                    (string? (first children))
                                    (let [pattern (config/get-code format)]
-                                     (str " "
-                                          (str pattern (first children) pattern)
-                                          " "))
+                                     (str pattern (map-join children) pattern))
 
                                    ;; skip monospace style, since it has more complex children
                                    :else

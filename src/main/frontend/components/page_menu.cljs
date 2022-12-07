@@ -57,12 +57,14 @@
   [page-name]
   (when-let [page-name (or
                         page-name
-                        (state/get-current-page))]
+                        (state/get-current-page)
+                        (state/get-current-whiteboard))]
     (let [page-name (util/page-name-sanity-lc page-name)
           repo (state/sub :git/current-repo)
           page (db/entity repo [:block/name page-name])
           page-original-name (:block/original-name page)
-          block? (and page (util/uuid-string? page-name))
+          whiteboard? (= "whiteboard" (:block/type page))
+          block? (and page (util/uuid-string? page-name) (not whiteboard?))
           contents? (= page-name "contents")
           properties (:block/properties page)
           public? (true? (:public properties))
@@ -111,7 +113,8 @@
             {:title   (t :page/delete)
              :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 
-          (when-not (mobile-util/native-platform?)
+          (when (and (not (mobile-util/native-platform?)) 
+                     (state/get-current-page))
             {:title (t :page/presentation-mode)
              :options {:on-click (fn []
                                    (state/sidebar-add-block!

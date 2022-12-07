@@ -87,7 +87,8 @@
 }
 
 .ui__modal {
-  @apply fixed px-4 pb-4 inset-0 flex items-baseline justify-center top-12 sm:top-24;
+  @apply fixed px-4 pb-4 inset-0 flex items-baseline justify-center
+  top-12 sm:top-[calc(3vh+50px)];
 
   &-overlay {
     @apply fixed inset-0 transition-opacity;
@@ -106,7 +107,7 @@
     .panel-content {
       overflow-y: auto;
       overflow-x: hidden;
-      width: 94vw;
+      width: calc(94vw - 2rem);
       max-height: 89vh;
       padding: 2rem 1.5rem;
 
@@ -225,7 +226,13 @@ html.is-native-iphone-without-notch
 
 html.is-mobile {
   .ui__modal {
-    @apply bottom-0 inset-x-0;
+    @apply bottom-0 inset-x-0 top-20;
+  }
+
+  .ui__modal-panel .panel-content {
+    width: calc(98vw - 2rem);
+    padding-top: 24px;
+    padding-bottom: 0;
   }
 }
 
@@ -358,10 +365,10 @@ html.is-mobile {
 }
 
 .type-icon {
-  @apply text-xs text-center flex items-center justify-center rounded border mr-2 relative;
+  @apply text-base text-center flex items-center justify-center rounded border mr-2 relative;
 
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   border-color: var(--ls-primary-background-color);
   overflow: hidden;
@@ -376,15 +383,5 @@ html.is-mobile {
     @apply block absolute inset-0 ;
     background: var(--ls-primary-background-color);
     content: " ";
-  }
-
-  &.highlight {
-    color: var(--ls-selection-text-color);
-    border-color: var(--ls-selection-background-color);
-
-    &:before {
-      opacity: 0.5;
-      background: var(--ls-selection-background-color);
-    }
   }
 }

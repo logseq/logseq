@@ -24,7 +24,7 @@
     (let [result (first (gp-util/split-last "." file-name))
           ext (string/lower-case (gp-util/get-file-ext filepath))]
       (if (or (gp-config/mldoc-support? ext) (= "edn" ext))
-        (js/decodeURIComponent (string/replace result "." "/"))
+        (gp-util/safe-decode-uri-component (string/replace result "." "/"))
         result))))
 
 (defn- get-page-name
@@ -222,11 +222,11 @@
   (let [_ (when verbose (println "Parsing start: " file))
         {:keys [pages blocks]} (gp-util/safe-read-string content)
         blocks (map
-                 (fn [block]
-                   (-> block
-                       (gp-util/dissoc-in [:block/parent :block/name])
-                       (gp-util/dissoc-in [:block/left :block/name])))
-                 blocks)
+                (fn [block]
+                  (-> block
+                      (gp-util/dissoc-in [:block/parent :block/name])
+                      (gp-util/dissoc-in [:block/left :block/name])))
+                blocks)
         serialized-page (first pages)
         ;; whiteboard edn file should normally have valid :block/original-name, :block/name, :block/uuid
         page-name (-> (or (:block/name serialized-page)

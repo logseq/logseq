@@ -18,8 +18,8 @@
        "scale" [1 1],
        "label" "",
        "id" "0jy4JuM61pS9QQthBDme-",
-       "stroke" "#fcb0b0",
-       "fill" "#ffffff",
+       "stroke" "",
+       "fill" "",
        "strokeWidth" 1,
        "type" "line",
        "decorations" {"end" "arrow"},
@@ -33,8 +33,8 @@
        "collapsedHeight" 0,
        "scale" [1 1],
        "id" "hRp0fnc0i2BZIjEbZqO6_",
-       "stroke" "var(--ls-primary-text-color)",
-       "fill" "var(--ls-secondary-background-color)",
+       "stroke" "",
+       "fill" "",
        "strokeWidth" 2,
        "type" "logseq-portal",
        "nonce" 1655952865192,
@@ -66,4 +66,3 @@
   (tldraw/App (clj->js {:PageComponent test-comp
                         :onPersist on-persist
                         :model model})))
-

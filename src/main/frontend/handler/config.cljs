@@ -27,7 +27,7 @@
             ks (if (vector? k) k [k])
             new-result (rewrite/assoc-in result ks v)
             new-content (str new-result)]
-        (file-handler/set-file-content! repo path new-content)))))
+        (file-handler/set-file-content! repo path new-content) nil))))
 
 (defn set-config!
   ([k v]
@@ -47,3 +47,7 @@
 (defn toggle-ui-enable-tooltip! []
   (let [enable-tooltip? (state/enable-tooltip?)]
     (set-config! :ui/enable-tooltip? (not enable-tooltip?))))
+
+(defn toggle-preferred-pasting-file! []
+  (let [preferred-pasting-file? (state/preferred-pasting-file?)]
+    (set-config! :editor/preferred-pasting-file? (not preferred-pasting-file?))))
