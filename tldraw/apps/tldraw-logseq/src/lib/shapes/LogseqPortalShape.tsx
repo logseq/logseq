@@ -400,7 +400,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         if (
           boundScreenCenter[0] > screenSize[0] - 400 ||
           boundScreenCenter[1] > screenSize[1] - 240 ||
-          app.viewport.camera.zoom > 1.5 || app.viewport.camera.zoom < 0.5
+          app.viewport.camera.zoom > 1.5 ||
+          app.viewport.camera.zoom < 0.5
         ) {
           app.viewport.zoomToBounds({ ...this.bounds, minY: this.bounds.maxY + 25 })
         }

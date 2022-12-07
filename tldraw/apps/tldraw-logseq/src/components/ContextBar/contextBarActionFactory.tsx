@@ -46,12 +46,7 @@ export const contextBarActionTypes = [
 ] as const
 
 type ContextBarActionType = typeof contextBarActionTypes[number]
-const singleShapeActions: ContextBarActionType[] = [
-  'Edit',
-  'YoutubeLink',
-  'IFrameSource',
-  'Links',
-]
+const singleShapeActions: ContextBarActionType[] = ['Edit', 'YoutubeLink', 'IFrameSource', 'Links']
 
 const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 
@@ -93,7 +88,10 @@ function filterShapeByAction<S extends Shape>(shapes: Shape[], type: ContextBarA
 const EditAction = observer(() => {
   const app = useApp<Shape>()
   const shape = filterShapeByAction(app.selectedShapesArray, 'Edit')[0]
-  const iconName = ('label' in shape.props) && shape.props.label || ('text' in shape.props) && shape.props.text ? 'forms' : 'text'
+  const iconName =
+    ('label' in shape.props && shape.props.label) || ('text' in shape.props && shape.props.text)
+      ? 'forms'
+      : 'text'
 
   return (
     <Button

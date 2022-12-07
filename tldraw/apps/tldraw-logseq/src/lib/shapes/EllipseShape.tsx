@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { TLEllipseShapeProps, TLEllipseShape, getComputedColor, getTextLabelSize } from '@tldraw/core'
+import {
+  TLEllipseShapeProps,
+  TLEllipseShape,
+  getComputedColor,
+  getTextLabelSize,
+} from '@tldraw/core'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import Vec from '@tldraw/vec'
 import * as React from 'react'
@@ -38,85 +43,100 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
 
   canEdit = true
 
-  ReactComponent = observer(({ isSelected, isErasing, events, isEditing, onEditingEnd }: TLComponentProps) => {
-    const {
-      size: [w, h],
-      stroke,
-      fill,
-      noFill,
-      strokeWidth,
-      strokeType,
-      opacity,
-      label,
-      italic,
-      fontWeight,
-    } = this.props
+  ReactComponent = observer(
+    ({ isSelected, isErasing, events, isEditing, onEditingEnd }: TLComponentProps) => {
+      const {
+        size: [w, h],
+        stroke,
+        fill,
+        noFill,
+        strokeWidth,
+        strokeType,
+        opacity,
+        label,
+        italic,
+        fontWeight,
+      } = this.props
 
-    const labelSize = label || isEditing ? getTextLabelSize(label, { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight }, 4) : [0, 0]
-    const midPoint =  Vec.mul(this.props.size, 0.5)
-    const scale = Math.max(0.5, Math.min(1, w / labelSize[0] , h / labelSize[1]))
-    const bounds = this.getBounds()
+      const labelSize =
+        label || isEditing
+          ? getTextLabelSize(
+              label,
+              { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight },
+              4
+            )
+          : [0, 0]
+      const midPoint = Vec.mul(this.props.size, 0.5)
+      const scale = Math.max(0.5, Math.min(1, w / labelSize[0], h / labelSize[1]))
+      const bounds = this.getBounds()
 
-    const offset = React.useMemo(() => {
-      return Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
-    }, [bounds, scale, midPoint])
+      const offset = React.useMemo(() => {
+        return Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
+      }, [bounds, scale, midPoint])
 
-    const handleLabelChange = React.useCallback(
-      (label: string) => {
-        this.update?.({ label })
-      },
-      [label]
-    )
+      const handleLabelChange = React.useCallback(
+        (label: string) => {
+          this.update?.({ label })
+        },
+        [label]
+      )
 
-    return (
-      <div {...events} style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
-        <TextLabel
-          font={font}
-          text={label}
-          color={getComputedColor(stroke, 'text')}
-          offsetX={offset[0]}
-          offsetY={offset[1]}
-          scale={scale}
-          isEditing={isEditing}
-          onChange={handleLabelChange}
-          onBlur={onEditingEnd}
-          fontStyle={italic ? 'italic' : 'normal'}
-          fontWeight={fontWeight}
-        />
-        <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
-          <ellipse
-            className={isSelected || !noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
-            cx={w / 2}
-            cy={h / 2}
-            rx={Math.max(0.01, (w - strokeWidth) / 2)}
-            ry={Math.max(0.01, (h - strokeWidth) / 2)}
+      return (
+        <div {...events} style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+          <TextLabel
+            font={font}
+            text={label}
+            color={getComputedColor(stroke, 'text')}
+            offsetX={offset[0]}
+            offsetY={offset[1]}
+            scale={scale}
+            isEditing={isEditing}
+            onChange={handleLabelChange}
+            onBlur={onEditingEnd}
+            fontStyle={italic ? 'italic' : 'normal'}
+            fontWeight={fontWeight}
           />
-          <ellipse
-            cx={w / 2}
-            cy={h / 2}
-            rx={Math.max(0.01, (w - strokeWidth) / 2)}
-            ry={Math.max(0.01, (h - strokeWidth) / 2)}
-            strokeWidth={strokeWidth}
-            stroke={getComputedColor(stroke, 'stroke')}
-            strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
-            fill={noFill ? 'none' : getComputedColor(fill, 'background')}
-          />
-        </SVGContainer>
-      </div>
-    )
-  })
+          <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
+            <ellipse
+              className={isSelected || !noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
+              cx={w / 2}
+              cy={h / 2}
+              rx={Math.max(0.01, (w - strokeWidth) / 2)}
+              ry={Math.max(0.01, (h - strokeWidth) / 2)}
+            />
+            <ellipse
+              cx={w / 2}
+              cy={h / 2}
+              rx={Math.max(0.01, (w - strokeWidth) / 2)}
+              ry={Math.max(0.01, (h - strokeWidth) / 2)}
+              strokeWidth={strokeWidth}
+              stroke={getComputedColor(stroke, 'stroke')}
+              strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
+              fill={noFill ? 'none' : getComputedColor(fill, 'background')}
+            />
+          </SVGContainer>
+        </div>
+      )
+    }
+  )
 
   ReactIndicator = observer(() => {
     const {
       size: [w, h],
       label,
-      fontWeight
+      fontWeight,
     } = this.props
 
     const bounds = this.getBounds()
-    const labelSize = label ? getTextLabelSize(label, { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight }, 4) : [0, 0]
-    const scale = Math.max(0.5, Math.min(1, w / labelSize[0] , h / labelSize[1]))
-    const midPoint =  Vec.mul(this.props.size, 0.5)
+    const labelSize = label
+      ? getTextLabelSize(
+          label,
+          { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight },
+          4
+        )
+      : [0, 0]
+    const scale = Math.max(0.5, Math.min(1, w / labelSize[0], h / labelSize[1]))
+    const midPoint = Vec.mul(this.props.size, 0.5)
 
     const offset = React.useMemo(() => {
       const offset = Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
