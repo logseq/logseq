@@ -151,7 +151,6 @@ interface PluginLocalOptions {
   mode: 'shadow' | 'iframe'
   settingsSchema?: SettingSchemaDesc[]
   settings?: PluginSettings
-  logger?: PluginLogger
   effect?: boolean
   theme?: boolean
 
@@ -407,6 +406,7 @@ class PluginLocal extends EventEmitter<'loaded'
   private _localRoot?: string
   private _dotSettingsFile?: string
   private _caller?: LSPluginCaller
+  private _logger?: PluginLogger
 
   /**
    * @param _options
@@ -430,7 +430,7 @@ class PluginLocal extends EventEmitter<'loaded'
 
   async _setupUserSettings(reload?: boolean) {
     const { _options } = this
-    const logger = (_options.logger = new PluginLogger('Loader'))
+    const logger = (this._logger = new PluginLogger('Loader'))
 
     if (_options.settings && !reload) {
       return
@@ -1003,7 +1003,7 @@ class PluginLocal extends EventEmitter<'loaded'
   }
 
   get logger() {
-    return this.options.logger
+    return this._logger
   }
 
   get disabled() {
@@ -1070,6 +1070,8 @@ class PluginLocal extends EventEmitter<'loaded'
     json.usf = this.dotSettingsFile
     json.iir = this.isInstalledInDotRoot
     json.lsr = this._resolveResourceFullUrl('/')
+    json.settings = json.settings?.toJSON()
+    
     return json
   }
 }

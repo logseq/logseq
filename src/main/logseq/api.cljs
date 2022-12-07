@@ -471,6 +471,13 @@
       (bean/->clj params)
       (bean/->clj query))))
 
+(defn ^:export get_external_plugin
+  [plugin-id]
+  (try
+    (when-let [^js pl (.ensurePlugin js/LSPluginCore plugin-id)]
+      (.toJSON pl))
+    (catch js/Error _)))
+
 ;; editor
 (def ^:export check_editing
   (fn []

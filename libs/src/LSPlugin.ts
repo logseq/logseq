@@ -386,7 +386,7 @@ export interface IAppProxy {
    * @param type `xx-plugin-id.commands.xx-key`, `xx-plugin-id.models.xx-key`
    * @param args
    */
-  invokeExternalPluginCommand: (
+  invokeExternalPlugin: (
     type: string,
     ...args: Array<any>
   ) => Promise<unknown>
@@ -395,7 +395,7 @@ export interface IAppProxy {
    * @added 0.0.13
    * @param pid
    */
-  checkExternalPlugin: (pid: string) => Promise<{} | null>
+  getExternalPlugin: (pid: string) => Promise<{} | null>
 
   /**
    * Get state from app store
