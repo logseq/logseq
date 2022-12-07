@@ -3503,3 +3503,10 @@
           block (db/entity [:block/uuid block-id])
           content' (commands/clear-markdown-heading (:block/content block))]
       (save-block! repo block-id content'))))
+
+(defn block->data-transfer!
+  "Set block or page name to the given event's dataTransfer. Used in dnd."
+  [block-or-page-name event]
+  (.setData (gobj/get event "dataTransfer")
+            (if (db-model/page? block-or-page-name) "page-name" "block-uuid")
+            (str block-or-page-name)))
