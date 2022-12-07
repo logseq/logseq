@@ -1680,10 +1680,18 @@
 
     :else false))
 
-(defn block-or-page?
+(defn- block-or-page
   [page-name-or-uuid]
   (let [entity (get-page (str page-name-or-uuid))]
     (if-not (some? (:block/name entity)) :block :page)))
+
+(defn block?
+  [page-name-or-uuid]
+  (= :block (block-or-page page-name-or-uuid)))
+
+(defn page?
+  [page-name-or-uuid]
+  (= :page (block-or-page page-name-or-uuid)))
 
 (defn untitled-page?
   [page-name]

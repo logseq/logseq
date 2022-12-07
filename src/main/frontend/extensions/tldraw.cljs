@@ -107,8 +107,7 @@
 (rum/defc tldraw-app
   [page-name block-id]
   (let [populate-onboarding?  (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
-        data (-> (whiteboard-handler/page-name->tldr! page-name)
-                 (clj->js))
+        data (whiteboard-handler/page-name->tldr! page-name)
         [loaded-app set-loaded-app] (rum/use-state nil)
         on-mount (fn [tln]
                    (when-let [^js api (gobj/get tln "api")]

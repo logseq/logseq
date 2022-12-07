@@ -1092,5 +1092,5 @@
   "Set block or page name to the given event's dataTransfer. Used in dnd."
   [block-or-page-name event]
   (.setData (gobj/get event "dataTransfer")
-            (if (= :page (model/block-or-page? block-or-page-name)) "page-name" "block-uuid")
+            (if (model/page? block-or-page-name) "page-name" "block-uuid")
             (str block-or-page-name)))
