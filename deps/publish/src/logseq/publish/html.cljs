@@ -228,14 +228,12 @@
 
 (rum/defc page-reference < rum/reactive
   [s config _label]
-  (let [s (some-> s
-                  string/trim
-                  gp-util/page-name-sanity-lc)]
+  (let [s (some-> s string/trim)]
     (when-not (string/blank? s)
       [:span.page-reference
        {:data-ref s}
        [:span.text-gray-500.bracket page-ref/left-brackets]
-       [:a {:href (str "/ref/" (util/url-encode s) "?graph-id=" (:graph-id config))}
+       [:a {:href (str "/ref/" (util/url-encode (gp-util/page-name-sanity-lc s)) "?graph-id=" (:graph-id config))}
         s]
        [:span.text-gray-500.bracket page-ref/right-brackets]])))
 
