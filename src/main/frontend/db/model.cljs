@@ -1685,6 +1685,7 @@
   (let [entity (get-page (str page-name-or-uuid))]
     (if-not (some? (:block/name entity)) :block :page)))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn block?
   [page-name-or-uuid]
   (= :block (block-or-page page-name-or-uuid)))
