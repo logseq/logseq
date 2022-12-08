@@ -106,6 +106,10 @@ function shouldValidUUID(uuid: string) {
   return true
 }
 
+function checkEffect(p: LSPluginUser) {
+  return p && (p.baseInfo?.effect || !p.baseInfo?.iir)
+}
+
 let _appBaseInfo: AppInfo = null
 let _searchServices: Map<string, LSPluginSearchService> = new Map()
 
@@ -400,6 +404,22 @@ const db: Partial<IDBProxy> = {
       this.App._uninstallPluginHook(pid, hook)
     }
   },
+
+  datascriptQuery<T = any>(
+    this: LSPluginUser,
+    query: string,
+    ...inputs: Array<any>
+  ): Promise<T> {
+    if (inputs?.some(it => (typeof it === 'function'))) {
+      const host = this.Experiments.ensureHostScope()
+      return host.logseq.api.datascript_query(query, ...inputs)
+    }
+
+    return this._execCallableAPIAsync(
+      `datascript_query`,
+      ...inputs
+    )
+  }
 }
 
 const git: Partial<IGitProxy> = {}
@@ -659,6 +679,10 @@ export class LSPluginUser
 
   get baseInfo(): LSPluginBaseInfo {
     return this._baseInfo
+  }
+
+  get effect(): Boolean {
+    return checkEffect(this)
   }
 
   get logger() {
