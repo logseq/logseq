@@ -868,6 +868,11 @@
             resolved-inputs (map #(cond
                                     (string? %)
                                     (some-> % (cljs.reader/read-string) (query-react/resolve-input))
+
+                                    (fn? %)
+                                    (fn [& args]
+                                      (.apply % nil (clj->js (mapv bean/->js args))))
+                                    
                                     :else %)
                                  inputs)
             result          (apply d/q query db resolved-inputs)]
