@@ -8,7 +8,7 @@ This folder contains the JS codes for a custom build of Tldraw to fit the needs 
 
 ### Prerequisites
 
-Morden JS eco tools like Node.js and yarn.
+Modern JS eco tools like Node.js and yarn.
 
 ### Run in dev mode
 

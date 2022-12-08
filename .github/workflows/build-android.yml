@@ -107,8 +107,8 @@ jobs:
         run: |
           echo "ENABLE_FILE_SYNC_PRODUCTION=${{ inputs.enable-file-sync-production || github.event.inputs.enable-file-sync-production || inputs.build-target == '' }}" >> $GITHUB_ENV
 
-      - name: Compile CLJS - android variant, use es6 instead of es-next
-        run: yarn install && yarn release-android-app
+      - name: Compile CLJS - app variant, use es6 instead of es-next
+        run: yarn install && yarn release-app
 
       - name: Upload Sentry Sourcemaps (beta only)
         if: ${{ github.repository == 'logseq/logseq' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta') }}

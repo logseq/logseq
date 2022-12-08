@@ -23,17 +23,19 @@ function ShapeLinkItem({
   id,
   type,
   onRemove,
+  showContent,
 }: {
   id: string
   type: 'B' | 'P'
   onRemove?: () => void
+  showContent?: boolean
 }) {
   const { handlers } = React.useContext(LogseqContext)
 
   return (
     <div className="tl-shape-links-panel-item color-level relative">
       <div className="whitespace-pre break-all overflow-hidden text-ellipsis inline-flex">
-        <BlockLink id={id} />
+        <BlockLink id={id} showReferenceContent={showContent} />
       </div>
       <div className="flex-1" />
       <Button title="Open Page" type="button" onClick={() => handlers?.redirectToPage(id)}>
@@ -131,6 +133,7 @@ export const ShapeLinksInput = observer(function ShapeLinksInput({
                     onRemove={() => {
                       onRefsChange(refs.filter((_, j) => i !== j))
                     }}
+                    showContent
                   />
                 )
               })}

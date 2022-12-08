@@ -16,13 +16,13 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user]
             [frontend.state :as state]
-            [frontend.ui :as ui]
-            [frontend.handler.page :as page-handler]))
+            [frontend.ui :as ui]))
 
 
 (defn persist-dbs!
@@ -158,8 +158,11 @@
                      (fn [args]
                        (let [{:keys [url title content page append]} (bean/->clj args)
                              insert-today? (get-in (state/get-config)
-                                                   [:quick-capture-options :insert-today]
+                                                   [:quick-capture-options :insert-today?]
                                                    false)
+                             redirect-page? (get-in (state/get-config)
+                                                    [:quick-capture-options :redirect-page?]
+                                                    false)
                              today-page (when (state/enable-journals?)
                                           (string/lower-case (date/today)))
                              page (if (or (= page "TODAY")
@@ -194,11 +197,14 @@
                              (editor-handler/insert (str "\n" content)))
 
                            (do
+                             (editor-handler/escape-editing)
                              (when (not= page (state/get-current-page))
-                               (page-handler/create! page {:redirect? true}))
-                             (editor-handler/api-insert-new-block! content {:page page
-                                                                            :edit-block? true
-                                                                            :replace-empty-target? true}))))))
+                               (page-handler/create! page {:redirect? redirect-page?}))
+                             ;; Or else this will clear the newly inserted content
+                             (js/setTimeout #(editor-handler/api-insert-new-block! content {:page page
+                                                                                            :edit-block? true
+                                                                                            :replace-empty-target? true})
+                                            100))))))
 
   (js/window.apis.on "openNewWindowOfGraph"
                      ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage

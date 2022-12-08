@@ -216,6 +216,7 @@ export class TLBaseLineBindingState<
     if (this.currentShape) {
       this.app.setSelectedShapes([this.currentShape])
     }
+    this.app.transition('select')
     this.app.persist()
   }
 

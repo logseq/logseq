@@ -95,6 +95,10 @@ html[data-theme='light'] {
   .tl-menu-icon {
     @apply absolute left-4 text-base opacity-50;
   }
+
+  &[data-disabled] {
+    @apply opacity-50 pointer-events-none;
+  }
 }
 
 #tl-zoom {
@@ -335,7 +339,6 @@ button.tl-select-input-trigger {
   &[aria-expanded='true'] {
     .tl-popover-indicator {
       transform: rotate(180deg);
-      color: #000;
     }
   }
 }
@@ -347,6 +350,10 @@ button.tl-select-input-trigger {
   pointer-events: none;
   left: 0;
   bottom: -3px;
+
+  &[data-selected='true'] {
+    color: #000;
+  }
 }
 
 .floating-panel[data-tool-locked='true'] > .tl-button[data-selected='true']::after {
@@ -423,7 +430,7 @@ button.tl-select-input-trigger {
 
 .tl-text-label-inner-wrapper {
   position: absolute;
-  padding: 4px;
+  padding: 6px 4px 4px;
   z-index: 1;
   min-height: 1px;
   min-width: 1px;
@@ -442,7 +449,7 @@ button.tl-select-input-trigger {
 
   z-index: 1;
   border: none;
-  padding: 4px;
+  padding: 6px 4px 4px;
   resize: none;
   text-align: inherit;
   min-height: inherit;
@@ -455,7 +462,7 @@ button.tl-select-input-trigger {
   backface-visibility: hidden;
   display: inline-block;
   pointer-events: all;
-  background: transparent;
+  background: transparent !important;
   user-select: text;
   -webkit-font-smoothing: subpixel-antialiased;
   white-space: pre-wrap;

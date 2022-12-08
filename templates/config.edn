@@ -24,12 +24,21 @@
  ;; Default is true, you can also toggle this via setting page
  :ui/enable-tooltip? true
 
+ ;; Show brackets around page references
+ ;; :ui/show-brackets? true
+
  ;; Enable Block timestamp
  :feature/enable-block-timestamps? false
 
  ;; Enable remove accents when searching.
  ;; After toggle this option, please remember to rebuild your search index by press (cmd+c cmd+s).
  :feature/enable-search-remove-accents? true
+
+ ;; Enable journals
+ ;; :feature/enable-journals? true
+
+ ;; Enable flashcards
+ ;; :feature/enable-flashcards? true
 
  ;; Disable Built-in Scheduled and deadline Query
  ;; :feature/disable-scheduled-and-deadline-query? true
@@ -208,6 +217,7 @@
 
  :ref/linked-references-collapsed-threshold 50
 
+ ;; Favorites to list on the left sidebar
  :favorites []
 
  ;; any number between 0 and 1 (the greater it is the faster the changes of the next-interval of card reviews) (default 0.5)
@@ -232,6 +242,9 @@
  ;; E.g. :property/separated-by-commas #{:alias :tags}
  ;; :property/separated-by-commas #{}
 
+ ;; Properties that are ignored when parsing property values for references
+ ;; :ignored-page-references-keywords #{"author" "startup"}
+
  ;; logbook setup
  ;; :logbook/settings
  ;; {:with-second-support? false ;limit logbook to minutes, seconds will be eliminated
@@ -241,7 +254,8 @@
 
  ;; Mobile photo uploading setup
  ;; :mobile/photo
- ;; {:allow-editing? true}
+ ;; {:allow-editing? true
+ ;;  :quality          80}
 
  ;; Mobile features options
  ;; Gestures
@@ -249,12 +263,16 @@
  ;; {:gestures/disabled-in-block-with-tags ["kanban"]}
 
  ;; Extra CodeMirror options
+ ;; See https://codemirror.net/5/doc/manual.html#config for possible options
  ;; :editor/extra-codemirror-options {:keyMap "emacs" :lineWrapping true}
 
- ;; ignore #+keyword: for parsing page references in orgmode
- ;; :ignored-page-references-keywords #{"author" "startup"}
+ ;; Enable logical outdenting
+ ;; :editor/logical-outdenting? true
 
- ;; Quick capture templates on mobile for recieving contents from other apps.
+ ;; Enable preferring pasting file from clipboard
+ ;; :editor/preferred-pasting-file? true
+
+ ;; Quick capture templates for receiving contents from other apps.
  ;; Each template contains three elements {time}, {text} and {url}, which can be auto-expanded
  ;; by received contents from other apps. Note: the {} cannot be omitted.
  ;; - {time}: capture time
@@ -265,6 +283,9 @@
  ;; :quick-capture-templates
  ;; {:text "[[quick capture]] **{time}**: {text} from {url}"
  ;;  :media "[[quick capture]] **{time}**: {url}"}
+
+ ;; Quick capture options
+ ;; :quick-capture-options {:insert-today? false :redirect-page? false}
 
  ;; File sync options
  ;; Ignore these files when syncing, regexp is supported.
@@ -284,7 +305,7 @@
  ;; Decide the way to escape the special characters in the page title.
  ;; Warning:
  ;;   This is a dangerous operation. If you want to change the setting,
- ;;   should access the setting `Filename format` and follow the instructions. 
+ ;;   should access the setting `Filename format` and follow the instructions.
  ;;   Or you have to rename all the affected files manually then re-index on all
  ;;   clients after the files are synced. Wrong handling may cause page titles
  ;;   containing special characters to be messy.
@@ -292,8 +313,5 @@
  ;;   :file/name-format :triple-lowbar
  ;;     ;use triple underscore `___` for slash `/` in page title
  ;;     ;use Percent-encoding for other invalid characters
- ;;   :file/name-format :legacy
- ;;     ;use Percent-encoding for slash and other invalid characters
- ;;     ;parse `.` in file name as slash `/` in page title
  :file/name-format :triple-lowbar
  }

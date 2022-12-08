@@ -67,9 +67,6 @@
   position: fixed;
   bottom: 0;
   transition: bottom 260ms;
-  /* transition-timing-function: cubic-bezier(.29, 1.01, 1, -0.68); */
-  /* transition-timing-function: steps(10, jump-end); */
-  /* transition-timing-function: steps(5, end); */
   transition-timing-function: ease-out;
   left: 0;
   width: 100%;
@@ -78,17 +75,14 @@
   justify-content: space-between;
 
   button {
-    padding: 7px 10px;
+    @apply flex items-center py-2 px-2;
 
     .submenu {
-      background-color: red;
       z-index: 100;
-      background-color: var(--ls-secondary-background-color);
-      border-radius: 5px;
       box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02);
+      background-color: var(--ls-secondary-background-color);
       overflow-x: overlay;
       overflow-y: hidden;
-      left: 0px;
       height: 40px;
     }
 
@@ -103,7 +97,12 @@
     align-items: center;
     overflow-x: overlay;
     overflow-y: hidden;
+    overflow-scrolling: touch;
     width: 95%;
+
+    &::-webkit-scrollbar {
+      height: 4px;
+    }
   }
 
   .toolbar-hide-keyboard {

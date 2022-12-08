@@ -424,9 +424,9 @@
        (on-success)))
     (p/catch (fn [error]
                (js/console.error error)
-               (state/pub-event! [:instrument {:type :db/persist-failed
-                                               :payload {:error-str (str error)
-                                                         :error error}}])
+               (state/pub-event! [:capture-error
+                                  {:error error
+                                   :payload {:type :db/persist-failed}}])
                (when on-error
                  (on-error)))))))
 

@@ -4,7 +4,7 @@ body:
   - type: textarea
     id: problem
     attributes:
-      label: What happened?
+      label: What Happened?
       description: |
         Please provide as much info as possible. Not doing so may result in your bug not being addressed in a timely manner.
     validations:
@@ -31,33 +31,24 @@ body:
     validations:
       required: false
   - type: textarea
-    id: Screenshots
+    id: screenshots
     attributes:
       label: Screenshots
       description: |
-        If applicable, add screenshots to help explain your problem.
+        If applicable, add screenshots or screen recordings to help explain your problem.
     validations:
       required: false
   - type: textarea
-    id: desktop
+    id: platform
     attributes:
-      label: Desktop Platform Information
+      label: Desktop or Mobile Platform Information
       description: |
-        Would you mind to tell us the system information about your desktop platform?
+        Would you mind to tell us the system information about your desktop or mobile platform?
       placeholder: |
         OS version, Browser or App, Logseq App version
-        example: MacOS 12.2, App, v0.5.9
-    validations:
-      required: false
-  - type: textarea
-    id: mobile
-    attributes:
-      label: Mobile Platform Information
-      description: |
-        Would you mind to tell us the system information about your mobile platform?
-      placeholder: |
-        Device, OS version, Browser or App, Logseq App version
-        example: iPhone6, iOS8.1, App, v0.5.9
+        example: macOS 12.2, Desktop App v0.5.9
+        example: iPhone 12, iOS8.1, v0.5.9
+        example: Pixel XL, Android 12, v0.5.9
     validations:
       required: false
   - type: textarea

@@ -2,7 +2,6 @@
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.fs :as fs]
-            [frontend.handler.notification :as notification]
             [frontend.image :as image]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -51,46 +50,3 @@
                (js/console.dir error))))))
       (catch :default _e
         nil))))
-
-(defn request-presigned-url
-  [file filename mime-type uploading? url-handler on-processing]
-  (cond
-    (> (gobj/get file "size") (* 12 1024 1024))
-    (notification/show! [:p "Sorry, we don't support any file that's larger than 12MB."] :error)
-
-    :else
-    (do
-      (reset! uploading? true)
-      ;; start uploading?
-      (util/post (str config/api "presigned_url")
-                 {:filename filename
-                  :mime-type mime-type}
-                 (fn [{:keys [presigned-url s3-object-key] :as resp}]
-                   (if presigned-url
-                     (util/upload presigned-url
-                                  file
-                                  (fn [_result]
-                                    ;; request cdn signed url
-                                    (util/post (str config/api "signed_url")
-                                               {:s3-object-key s3-object-key}
-                                               (fn [{:keys [signed-url]}]
-                                                 (reset! uploading? false)
-                                                 (if signed-url
-                                                   (url-handler signed-url)
-                                                   (prn "Something error, can't get a valid signed url.")))
-                                               (fn [_error]
-                                                 (reset! uploading? false)
-                                                 (prn "Something error, can't get a valid signed url."))))
-                                  (fn [error]
-                                    (reset! uploading? false)
-                                    (prn "upload failed.")
-                                    (js/console.dir error))
-                                  (fn [e]
-                                    (on-processing e)))
-                     ;; TODO: notification, or re-try
-                     (do
-                       (reset! uploading? false)
-                       (prn "failed to get any presigned url, resp: " resp))))
-                 (fn [_error]
-                   ;; (prn "Get token failed, error: " error)
-                   (reset! uploading? false))))))

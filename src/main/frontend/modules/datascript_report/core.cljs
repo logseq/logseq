@@ -13,6 +13,8 @@
       nil)))
 
 (defn get-entity-from-db-after-or-before
+  "Get the entity from db after if possible; otherwise get entity from db before
+   Useful for fetching deleted elements"
   [db-before db-after db-id]
   (let [r (safe-pull db-after '[*] db-id)]
     (if (= keys-of-deleted-entity (count r))
@@ -21,6 +23,7 @@
       r)))
 
 (defn get-blocks-and-pages
+  "Calculate updated blocks and pages based on the db-before and db-after from tx-report"
   [{:keys [db-before db-after tx-data tx-meta]}]
   (let [updated-db-ids (-> (mapv first tx-data) (set))
         result (reduce
@@ -39,6 +42,7 @@
                 {:blocks #{}
                  :pages #{}}
                 updated-db-ids)
+        ;; updated pages logged in tx-meta (usually from move op)
         tx-meta-pages (->> [(:from-page tx-meta) (:target-page tx-meta)]
                            (remove nil?)
                            (map #(get-entity-from-db-after-or-before db-before db-after %))

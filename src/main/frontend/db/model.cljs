@@ -212,17 +212,6 @@
              (conn/get-db repo-url) pred)
         db-utils/seq-flatten)))
 
-(defn get-file-blocks
-  [repo-url path]
-  (-> (d/q '[:find ?block
-             :in $ ?path
-             :where
-             [?file :file/path ?path]
-             [?p :block/file ?file]
-             [?block :block/page ?p]]
-           (conn/get-db repo-url) path)
-      db-utils/seq-flatten))
-
 (defn set-file-last-modified-at!
   [repo path last-modified-at]
   (when (and repo path last-modified-at)
@@ -274,6 +263,7 @@
   (db-utils/entity [:block/uuid (if (uuid? id) id (uuid id))]))
 
 (defn query-block-by-uuid
+  "Return block or page entity, depends on the uuid"
   [id]
   (db-utils/pull [:block/uuid (if (uuid? id) id (uuid id))]))
 
@@ -785,6 +775,8 @@
         react)))))
 
 (defn get-page-blocks-no-cache
+  "Return blocks of the designated page, without using cache.
+   page - name / title of the page"
   ([page]
    (get-page-blocks-no-cache (state/get-current-repo) page nil))
   ([repo-url page]
@@ -1528,6 +1520,7 @@
             assets (get-assets datoms)]
         [@(d/conn-from-datoms datoms db-schema/schema) assets]))))
 
+;; Deprecated?
 (defn delete-blocks
   [repo-url files _delete-page?]
   (when (seq files)
@@ -1537,21 +1530,6 @@
 (defn delete-files
   [files]
   (mapv (fn [path] [:db.fn/retractEntity [:file/path path]]) files))
-
-(defn delete-file-blocks!
-  [repo-url path]
-  (let [blocks (get-file-blocks repo-url path)]
-    (mapv (fn [eid] [:db.fn/retractEntity eid]) blocks)))
-
-(defn delete-page-blocks
-  [repo-url page]
-  (when page
-    (when-let [db (conn/get-db repo-url)]
-      (let [page (db-utils/pull [:block/name (util/page-name-sanity-lc page)])]
-        (when page
-          (let [datoms (d/datoms db :avet :block/page (:db/id page))
-                block-eids (mapv :e datoms)]
-            (mapv (fn [eid] [:db.fn/retractEntity eid]) block-eids)))))))
 
 (defn delete-pages-by-files
   [files]
@@ -1701,6 +1679,20 @@
     (= "whiteboard" (:block/type page))
 
     :else false))
+
+(defn- block-or-page
+  [page-name-or-uuid]
+  (let [entity (get-page (str page-name-or-uuid))]
+    (if-not (some? (:block/name entity)) :block :page)))
+
+(defn page?
+  [page-name-or-uuid]
+  (= :page (block-or-page page-name-or-uuid)))
+
+(defn untitled-page?
+  [page-name]
+  (when-let [entity (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])]
+    (some? (parse-uuid page-name))))
 
 (defn get-all-whiteboards
   [repo]

@@ -16,9 +16,13 @@
 (goog-define PUBLISHING false)
 (defonce publishing? PUBLISHING)
 
+(goog-define REVISION "unknown")
+(defonce revison REVISION)
+
 (reset! state/publishing? publishing?)
 
-(def test? false)
+(goog-define TEST false)
+(def test? TEST)
 
 (goog-define ENABLE-FILE-SYNC-PRODUCTION false)
 
@@ -66,11 +70,6 @@
     "http://localhost:3000"
     (util/format "https://%s.com" app-name)))
 
-(def api
-  (if dev?
-    "http://localhost:3000/api/v1/"
-    (str website "/api/v1/")))
-
 (def asset-domain (util/format "https://asset.%s.com"
                                app-name))
 
@@ -105,14 +104,12 @@
 
 (def media-formats (set/union (gp-config/img-formats) audio-formats))
 
-(def html-render-formats
-  #{:adoc :asciidoc})
-
 (defn extname-of-supported?
   ([input] (extname-of-supported?
             input
             [image-formats doc-formats audio-formats
-             video-formats markup-formats html-render-formats]))
+             video-formats markup-formats
+             (gp-config/text-formats)]))
   ([input formats]
    (when-let [input (some->
                      (cond-> input
@@ -131,7 +128,7 @@
    *** Warning!!! ***
    For UX logic only! Don't use for FS logic
    iPad / Android Pad doesn't trigger!
-   
+
    Same as config/mobile?"
   (when-not util/node-test?
     (util/safe-re-find #"Mobi" js/navigator.userAgent)))

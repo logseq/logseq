@@ -77,7 +77,16 @@
                :else
                nil)]
 
-       [:div.text-sm version]
+       [:div.text-sm.cursor
+        {:title (str "Revision: " config/revison)
+         :on-click (fn []
+                     (notification/show! [:div "Current Revision: "
+                                          [:a {:target "_blank"
+                                               :href (str "https://github.com/logseq/logseq/commit/" config/revison)}
+                                           config/revison]]
+                                         :info
+                                         false))}
+        version]
 
        [:a.text-sm.fade-link.underline.inline
         {:target "_blank"
@@ -306,7 +315,7 @@
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "custom_date_format"}
     (t :settings-page/custom-date-format)
-    (ui/tippy {:html        (t :settings-page/custom-date-format-warning)     
+    (ui/tippy {:html        (t :settings-page/custom-date-format-warning)
                :class       "tippy-hover ml-2"
                :interactive true
                :disabled    false}
@@ -431,7 +440,8 @@
   (row-with-button-action
     {:left-label   (t :settings-page/customize-shortcuts)
      :button-label (t :settings-page/shortcut-settings)
-     :on-click      #((state/close-settings!)
+     :on-click      (fn []
+                      (state/close-settings!)
                       (route-handler/redirect! {:to :shortcut-setting}))
      :-for         "customize_shortcuts"}))
 
@@ -584,6 +594,7 @@
      (workflow-row t preferred-workflow)
      ;; (enable-block-timestamps-row t enable-block-timestamps?)
      (show-brackets-row t show-brackets?)
+
      (when (util/electron?) (switch-spell-check-row t))
      (outdenting-row t logical-outdenting?)
      (preferred-pasting-file t preferred-pasting-file?)
