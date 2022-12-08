@@ -19,6 +19,7 @@
     "@radix-ui/react-switch": "^1.0.1",
     "@radix-ui/react-toggle": "^1.0.1",
     "@radix-ui/react-toggle-group": "^1.0.1",
+    "@radix-ui/react-tooltip": "^1.0.2",
     "@tldraw/core": "2.0.0-alpha.1",
     "@tldraw/react": "2.0.0-alpha.1",
     "@tldraw/vec": "2.0.0-alpha.1",

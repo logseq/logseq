@@ -18,6 +18,7 @@ export function ColorInput({
   popoverSide,
   setColor,
   setOpacity,
+  title,
   ...rest
 }: ColorInputProps) {
   function renderColor(color?: string) {

@@ -30,6 +30,7 @@ export const ToolButton = observer(({ id, icon, title, ...props }: ToolButtonPro
   return (
     <Button
       {...props}
+      tooltipSide="left"
       title={titleWithShortcut}
       data-tool={id}
       data-selected={id === app.selectedTool.id}

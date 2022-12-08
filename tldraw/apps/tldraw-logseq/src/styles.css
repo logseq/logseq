@@ -1162,3 +1162,35 @@ button.tl-shape-links-panel-item-remove-button {
     @apply inline;
   }
 }
+
+
+.tl-tooltip-content {
+  border-radius: 4px;
+  padding: 10px 15px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--ls-secondary-text-color);
+  background-color: var(--ls-secondary-background-color);
+  box-shadow: var(--shadow-medium);
+  user-select: none;
+  animation-duration: 300ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+
+  &[data-state='delayed-open'] {
+    animation-name: fadeIn;
+  }
+}
+
+.tl-tooltip-arrow {
+  fill: var(--ls-secondary-background-color);;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
