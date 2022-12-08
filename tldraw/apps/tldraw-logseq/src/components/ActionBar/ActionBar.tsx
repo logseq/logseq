@@ -31,13 +31,6 @@ export const ActionBar = observer(function ActionBar(): JSX.Element {
   return (
     <div className="tl-action-bar">
       <div className="tl-toolbar tl-history-bar">
-        <ToolButton title="Select" id="select" icon="select-cursor" />
-        <ToolButton
-          title="Move"
-          id="move"
-          icon={app.isIn('move.panning') ? 'hand-grab' : 'hand-stop'}
-        />
-        <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
         <Button title="Undo" onClick={undo}>
           <TablerIcon name="arrow-back-up" />
         </Button>
