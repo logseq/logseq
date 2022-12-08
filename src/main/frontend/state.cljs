@@ -1431,7 +1431,7 @@ Similar to re-frame subscriptions"
   [value]
   (set-state! :network/online? value))
 
-(defn get-plugins-commands
+(defn get-plugins-slash-commands
   []
   (mapcat seq (flatten (vals (:plugin/installed-slash-commands @state)))))
 

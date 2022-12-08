@@ -482,7 +482,7 @@
     :models
     (plugin-handler/call-plugin-user-model! pid cmd-key cmd-args)
 
-    :else
+    :commands
     (plugin-handler/call-plugin-user-command! pid cmd-key cmd-args)))
 
 ;; editor

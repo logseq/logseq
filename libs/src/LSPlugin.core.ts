@@ -1010,6 +1010,10 @@ class PluginLocal extends EventEmitter<'loaded'
     return this.settings?.get('disabled')
   }
 
+  get theme() {
+    return this.options.theme
+  }
+
   get caller() {
     return this._caller
   }
@@ -1071,7 +1075,7 @@ class PluginLocal extends EventEmitter<'loaded'
     json.iir = this.isInstalledInDotRoot
     json.lsr = this._resolveResourceFullUrl('/')
     json.settings = json.settings?.toJSON()
-    
+
     return json
   }
 }
@@ -1482,6 +1486,16 @@ class LSPluginCore
 
   get themes() {
     return this._registeredThemes
+  }
+
+  get enabledPlugins() {
+    return [...this.registeredPlugins.entries()].reduce((a, b) => {
+      let p = b?.[1]
+      if (p?.disabled !== true) {
+        a.set(b?.[0], p)
+      }
+      return a
+    }, new Map())
   }
 
   async registerTheme(id: PluginLocalIdentity, opt: Theme): Promise<void> {
