@@ -218,6 +218,28 @@ const app: Partial<IAppProxy> = {
     }
   },
 
+  invokeExternalPlugin(
+    this: LSPluginUser,
+    type: string,
+    ...args: Array<any>
+  ) {
+    type = type?.trim()
+    if (!type) return
+    let [pid, group] = type.split('.')
+    if (!['models', 'commands'].includes(group?.toLowerCase())) {
+      throw new Error(`Type only support '.models' or '.commands' currently.`)
+    }
+    const key = type.replace(`${pid}.${group}.`, '')
+
+    if (!pid || !group || !key) {
+      throw new Error(`Illegal type of #${type} to invoke external plugin.`)
+    }
+    return this._execCallableAPIAsync(
+      'invoke_external_plugin_cmd',
+      pid, group.toLowerCase(), key, args
+    )
+  },
+
   setFullScreen(flag) {
     const sf = (...args) => this._callWin('setFullScreen', ...args)
 

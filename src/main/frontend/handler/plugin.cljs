@@ -134,11 +134,21 @@
         (js/console.error e)))))
 
 (defn get-plugin-inst
-  [id]
+  [pid]
   (try
-    (js/LSPluginCore.ensurePlugin (name id))
+    (js/LSPluginCore.ensurePlugin (name pid))
     (catch :default _e
       nil)))
+
+(defn call-plugin-user-model!
+  [pid key args]
+  (when-let [^js pl (get-plugin-inst pid)]
+    (let [^js caller (.-caller pl)]
+      (.apply (.-callUserModelAsync caller) caller (bean/->js (list* (name key) args))))))
+
+(defn call-plugin-user-command!
+  [pid key args]
+  (println "TODO: call palette command - " pid key args))
 
 (defn open-updates-downloading
   []
