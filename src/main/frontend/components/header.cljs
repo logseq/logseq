@@ -118,7 +118,7 @@
         :icon (ui/icon "brand-discord")}
        
        {:title [:div.flex-row.flex.justify-between.items-center
-                [:span "Bug report"]]
+                [:span (t :help/bug)]]
         :options {:href bug-report-url
                   :title "Fire a bug report on Github"
                   :target "_blank"}
