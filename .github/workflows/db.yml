@@ -25,7 +25,7 @@ env:
   JAVA_VERSION: '8'
   # This is the latest node version we can run.
   NODE_VERSION: '16'
-  BABASHKA_VERSION: '0.8.156'
+  BABASHKA_VERSION: '1.0.168'
 
 jobs:
   test:
