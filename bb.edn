@@ -14,7 +14,7 @@
   org.clj-commons/digest
   {:mvn/version "1.4.100"}}
  :pods
- {clj-kondo/clj-kondo {:version "2022.02.09"}
+ {clj-kondo/clj-kondo {:version "2022.10.05"}
   org.babashka/fswatcher {:version "0.0.3"}}
  :tasks
  {dev:desktop-watch
