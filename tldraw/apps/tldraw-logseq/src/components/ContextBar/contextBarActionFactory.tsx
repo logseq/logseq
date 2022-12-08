@@ -46,12 +46,7 @@ export const contextBarActionTypes = [
 ] as const
 
 type ContextBarActionType = typeof contextBarActionTypes[number]
-const singleShapeActions: ContextBarActionType[] = [
-  'Edit',
-  'YoutubeLink',
-  'IFrameSource',
-  'Links',
-]
+const singleShapeActions: ContextBarActionType[] = ['Edit', 'YoutubeLink', 'IFrameSource', 'Links']
 
 const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 
@@ -68,13 +63,13 @@ export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
   ],
   youtube: ['YoutubeLink', 'Links'],
   iframe: ['IFrameSource', 'Links'],
-  box: ['Swatch', 'NoFill', 'StrokeType', 'Links'],
-  ellipse: ['Swatch', 'NoFill', 'StrokeType', 'Links'],
-  polygon: ['Swatch', 'NoFill', 'StrokeType', 'Links'],
-  line: ['Edit', 'Swatch', 'ArrowMode', 'Links'],
+  box: ['Edit', 'TextStyle', 'Swatch', 'NoFill', 'StrokeType', 'Links'],
+  ellipse: ['Edit', 'TextStyle', 'Swatch', 'NoFill', 'StrokeType', 'Links'],
+  polygon: ['Edit', 'TextStyle', 'Swatch', 'NoFill', 'StrokeType', 'Links'],
+  line: ['Edit', 'TextStyle', 'Swatch', 'ArrowMode', 'Links'],
   pencil: ['Swatch', 'Links'],
   highlighter: ['Swatch', 'Links'],
-  text: ['Edit', 'Swatch', 'ScaleLevel', 'AutoResizing', 'TextStyle', 'Links'],
+  text: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'AutoResizing', 'Links'],
   html: ['ScaleLevel', 'AutoResizing', 'Links'],
   image: ['Links'],
   video: ['Links'],
@@ -93,6 +88,10 @@ function filterShapeByAction<S extends Shape>(shapes: Shape[], type: ContextBarA
 const EditAction = observer(() => {
   const app = useApp<Shape>()
   const shape = filterShapeByAction(app.selectedShapesArray, 'Edit')[0]
+  const iconName =
+    ('label' in shape.props && shape.props.label) || ('text' in shape.props && shape.props.text)
+      ? 'forms'
+      : 'text'
 
   return (
     <Button
@@ -112,7 +111,7 @@ const EditAction = observer(() => {
         }
       }}
     >
-      <TablerIcon name="text" />
+      <TablerIcon name={iconName} />
     </Button>
   )
 })

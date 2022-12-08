@@ -4,7 +4,7 @@
             [clojure.walk :as walk]
             [frontend.config :as config]
             [frontend.util :as util]
-            [frontend.extensions.hickory :as hickory]))
+            [hickory.core :as hickory]))
 
 (defonce *inside-pre? (atom false))
 (defn- hiccup-without-style
@@ -271,7 +271,7 @@
 (defn convert
   [format html]
   (when-not (string/blank? html)
-    (let [hiccup (hickory/html->hiccup html)
+    (let [hiccup (hickory/as-hiccup (hickory/parse html))
           decoded-hiccup (html-decode-hiccup hiccup)]
       (hiccup->doc format decoded-hiccup))))
 
