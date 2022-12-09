@@ -37,13 +37,15 @@ export const GeometryTools = observer(function GeometryTools() {
 
   return (
     <Popover.Root>
-      <Popover.Trigger className="tl-geometry-tools-pane-anchor">
-        <ToolButton {...geometries.find(geo => geo.id === activeGeomId)!} />
-        <TablerIcon
-          data-selected={geometries.some(geo => geo.id === app.selectedTool.id)}
-          className="tl-popover-indicator"
-          name="chevron-down-left"
-        />
+      <Popover.Trigger asChild>
+        <div className="tl-geometry-tools-pane-anchor">
+          <ToolButton {...geometries.find(geo => geo.id === activeGeomId)!} />
+          <TablerIcon
+            data-selected={geometries.some(geo => geo.id === app.selectedTool.id)}
+            className="tl-popover-indicator"
+            name="chevron-down-left"
+          />
+        </div>
       </Popover.Trigger>
 
       <Popover.Content className="tl-popover-content" side="left" sideOffset={15}>
