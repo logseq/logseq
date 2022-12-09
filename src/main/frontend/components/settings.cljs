@@ -453,7 +453,7 @@
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div
      (ui/button
-       "Settings"
+       (t :settings)
        :class "text-sm p-1"
        :style {:margin-top "0px"}
        :on-click
