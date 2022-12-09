@@ -650,10 +650,12 @@
 
 (defmethod handle :graph/re-index [[_]]
   ;; Ensure the graph only has ONE window instance
-  (repo-handler/re-index!
-   nfs-handler/rebuild-index!
-   #(do (page-handler/create-today-journal!)
-        (file-sync-restart!))))
+  (async/go
+    (async/<! (sync/<sync-stop))
+    (repo-handler/re-index!
+     nfs-handler/rebuild-index!
+     #(do (page-handler/create-today-journal!)
+          (file-sync-restart!)))))
 
 (defmethod handle :graph/ask-for-re-index [[_ *multiple-windows? ui]]
   ;; *multiple-windows? - if the graph is opened in multiple windows, boolean atom
