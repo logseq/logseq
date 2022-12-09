@@ -36,7 +36,6 @@ export const PrimaryTools = observer(function PrimaryTools() {
           style={{ margin: '0 -4px' }}
         />
         <ColorInput
-          title="Color Picker"
           popoverSide="left"
           color={app.settings.color}
           setColor={handleSetColor}

@@ -3,9 +3,10 @@ import type { Side } from '@radix-ui/react-popper'
 export interface TooltipProps extends ReactTooltip.TooltipContentProps {
   children: React.ReactNode
   side?: Side
+  sideOffset?: number
 }
 
-export function Tooltip({ title, side, ...rest }: TooltipProps) {
+export function Tooltip({ title, side, sideOffset = 10, ...rest }: TooltipProps) {
   return (
     <ReactTooltip.Provider>
       <ReactTooltip.Root>
@@ -13,7 +14,7 @@ export function Tooltip({ title, side, ...rest }: TooltipProps) {
           {rest.children}
         </ReactTooltip.Trigger>
         <ReactTooltip.Portal>
-          <ReactTooltip.Content className="tl-tooltip-content" sideOffset={10} side={side} {...rest}>
+          <ReactTooltip.Content className="tl-tooltip-content" sideOffset={sideOffset} side={side} {...rest}>
             {title}
             <ReactTooltip.Arrow className="tl-tooltip-arrow" />
           </ReactTooltip.Content>

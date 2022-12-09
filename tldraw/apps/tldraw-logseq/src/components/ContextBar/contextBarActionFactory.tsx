@@ -334,7 +334,6 @@ const SwatchAction = observer(() => {
   const color = shapes[0].props.noFill ? shapes[0].props.stroke : shapes[0].props.fill
   return (
     <ColorInput
-      title="Color Picker"
       popoverSide="top"
       color={color}
       opacity={shapes[0].props.opacity}
