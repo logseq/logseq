@@ -201,9 +201,11 @@ public class FsWatcher extends Plugin {
 
         @Override
         public void run() {
+            this.tick(false); // skip initial notification
+
             while (!Thread.currentThread().isInterrupted()) {
                 try {
-                    this.tick();
+                    this.tick(true);
                     Thread.sleep(2000); // The same as iOS fswatcher, 2s interval
                 } catch (InterruptedException e) {
                     // e.printStackTrace();
@@ -214,7 +216,7 @@ public class FsWatcher extends Plugin {
 
         }
 
-        private void tick() {
+        private void tick(boolean shouldNotify) {
             Map<String, SimpleFileMetadata> newMetaDb = new HashMap();
 
             Stack<String> paths = new Stack();
@@ -241,7 +243,12 @@ public class FsWatcher extends Plugin {
                     }
                 }
             }
-            this.updateMetaDb(newMetaDb);
+
+            if (shouldNotify) {
+                this.updateMetaDb(newMetaDb);
+            } else {
+                this.metaDb = newMetaDb;
+            }
         }
 
         private void updateMetaDb(Map<String, SimpleFileMetadata> newMetaDb) {

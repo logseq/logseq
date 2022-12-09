@@ -122,18 +122,18 @@
     (let [dir (config/get-repo-dir graph)]
       (p/let [files (fs/readdir dir :path-only? true)]
         (doseq [file files]
-          (when-let [ext (util/get-file-ext file)]
+          (when-let [_ext (util/get-file-ext file)]
             (->
-            (when-not (fs-util/ignored-path? dir file)
-              (p/let [content (fs/read-file dir file)
-                      stat (fs/stat dir file)
-                      type (if (db/file-exists? graph file)
-                             "change"
-                             "add")]
-                (handle-changed! type
-                                 {:dir dir
-                                  :path file
-                                  :content content
-                                  :stat stat})))
-            (p/catch (fn [error]
-                       (js/console.dir error))))))))))
+             (when-not (fs-util/ignored-path? dir file)
+               (p/let [content (fs/read-file dir file)
+                       stat (fs/stat dir file)
+                       type (if (db/file-exists? graph file)
+                              "change"
+                              "add")]
+                 (handle-changed! type
+                                  {:dir dir
+                                   :path file
+                                   :content content
+                                   :stat stat})))
+             (p/catch (fn [error]
+                        (js/console.dir error))))))))))
