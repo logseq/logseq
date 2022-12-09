@@ -1156,7 +1156,6 @@ button.tl-shape-links-panel-item-remove-button {
   }
 }
 
-
 .tl-tooltip-content {
   border-radius: 4px;
   padding: 10px 15px;
@@ -1164,7 +1163,7 @@ button.tl-shape-links-panel-item-remove-button {
   line-height: 1;
   color: var(--ls-secondary-text-color);
   background-color: var(--ls-secondary-background-color);
-  box-shadow: var(--shadow-medium);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   user-select: none;
   animation-duration: 700ms;
   animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
