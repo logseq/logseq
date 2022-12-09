@@ -113,3 +113,23 @@
 
       ;; return nil, otherwise the entire db will be transfered by ipc
       nil)))
+
+(defn load-graph-files!
+  [graph]
+  (when graph
+    (let [dir (config/get-repo-dir graph)]
+      (p/let [files (fs/readdir dir :path-only? true)]
+        (doseq [file files]
+          (->
+           (p/let [content (fs/read-file dir file)
+                   stat (fs/stat dir file)
+                   type (if (db/file-exists? graph file)
+                          "change"
+                          "add")]
+             (handle-changed! type
+                              {:dir dir
+                               :path file
+                               :content content
+                               :stat stat}))
+           (p/catch (fn [error]
+                      (js/console.dir error)))))))))
