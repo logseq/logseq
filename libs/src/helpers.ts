@@ -384,6 +384,7 @@ export function setupInjectedUI(
   let teardownUI: () => void
   let disposeFloat: () => void
 
+  // seu up float container
   if (float) {
     el.setAttribute('draggable', 'true')
     el.setAttribute('resizable', 'true')

@@ -240,12 +240,21 @@ class LSPluginCaller extends EventEmitter {
       const mainLayoutInfo = (await this._pluginLocal._loadLayoutsData())?.$$0
       if (mainLayoutInfo) {
         cnt.dataset.inited_layout = 'true'
-        const { width, height, left, top } = mainLayoutInfo
+        let { width, height, left, top, vw, vh } = mainLayoutInfo
+
+        left = Math.max(left, 0)
+        left = (typeof vw === 'number') ?
+          `${Math.min(left * 100 / vw, 99)}%` : `${left}px`
+
+        // 45 is height of headbar
+        top = Math.max(top, 45)
+        top = (typeof vh === 'number') ?
+          `${Math.min(top * 100 / vh, 99)}%` : `${top}px`
+
         Object.assign(cnt.style, {
           width: width + 'px',
           height: height + 'px',
-          left: left + 'px',
-          top: top + 'px',
+          left, top
         })
       }
     } catch (e) {
