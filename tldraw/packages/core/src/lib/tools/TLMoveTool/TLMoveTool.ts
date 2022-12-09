@@ -10,7 +10,7 @@ export class TLMoveTool<
   R extends TLApp<S, K> = TLApp<S, K>
 > extends TLTool<S, K, R> {
   static id = 'move'
-  static shortcut = ['m', '2']
+  static shortcut = ['2', 'm']
 
   static states = [IdleState, IdleHoldState, PanningState, PinchingState]
 
