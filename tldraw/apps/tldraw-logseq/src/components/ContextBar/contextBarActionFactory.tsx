@@ -96,7 +96,7 @@ const EditAction = observer(() => {
   return (
     <Button
       type="button"
-      title="Edit"
+      tooltip="Edit"
       onClick={() => {
         app.api.editShape(shape)
         if (shape.props.type === 'logseq-portal') {
@@ -242,7 +242,7 @@ const IFrameSourceAction = observer(() => {
 
   return (
     <span className="flex gap-3">
-      <Button title="Reload" type="button" onClick={handleReload}>
+      <Button tooltip="Reload" type="button" onClick={handleReload}>
         <TablerIcon name="refresh" />
       </Button>
       <TextInput
@@ -251,7 +251,7 @@ const IFrameSourceAction = observer(() => {
         value={`${shape.props.url}`}
         onChange={handleChange}
       />
-      <Button title="Open website url" type="button" onClick={() => window.open(shape.props.url)}>
+      <Button tooltip="Open website url" type="button" onClick={() => window.open(shape.props.url)}>
         <TablerIcon name="external-link" />
       </Button>
     </span>
@@ -275,7 +275,7 @@ const YoutubeLinkAction = observer(() => {
         onChange={handleChange}
       />
       <Button
-        title="Open YouTube Link"
+        tooltip="Open YouTube Link"
         type="button"
         onClick={() => window.logseq?.api?.open_external_link?.(shape.props.url)}
       >
@@ -300,7 +300,7 @@ const NoFillAction = observer(() => {
 
   return (
     <ToggleInput
-      title="Fill Toggle"
+      title="Fill"
       className="tl-button"
       pressed={noFill}
       onPressedChange={handleChange}

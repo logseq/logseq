@@ -58,26 +58,26 @@ export const ContextMenu = observer(function ContextMenu({
               <ReactContextMenu.Item>
                 <div className="tl-menu-button-row pb-0">
                   <Button
-                    title="Align left"
+                    tooltip="Align left"
                     onClick={() => runAndTransition(() => app.align(AlignType.Left))}
                   >
                     <TablerIcon name="layout-align-left" />
                   </Button>
                   <Button
-                    title="Align center horizontally"
+                    tooltip="Align center horizontally"
                     onClick={() => runAndTransition(() => app.align(AlignType.CenterHorizontal))}
                   >
                     <TablerIcon name="layout-align-center" />
                   </Button>
                   <Button
-                    title="Align right"
+                    tooltip="Align right"
                     onClick={() => runAndTransition(() => app.align(AlignType.Right))}
                   >
                     <TablerIcon name="layout-align-right" />
                   </Button>
                   <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
                   <Button
-                    title="Distribute horizontally"
+                    tooltip="Distribute horizontally"
                     onClick={() =>
                       runAndTransition(() => app.distribute(DistributeType.Horizontal))
                     }
@@ -87,26 +87,26 @@ export const ContextMenu = observer(function ContextMenu({
                 </div>
                 <div className="tl-menu-button-row pt-0">
                   <Button
-                    title="Align top"
+                    tooltip="Align top"
                     onClick={() => runAndTransition(() => app.align(AlignType.Top))}
                   >
                     <TablerIcon name="layout-align-top" />
                   </Button>
                   <Button
-                    title="Align center vertically"
+                    tooltip="Align center vertically"
                     onClick={() => runAndTransition(() => app.align(AlignType.CenterVertical))}
                   >
                     <TablerIcon name="layout-align-middle" />
                   </Button>
                   <Button
-                    title="Align bottom"
+                    tooltip="Align bottom"
                     onClick={() => runAndTransition(() => app.align(AlignType.Bottom))}
                   >
                     <TablerIcon name="layout-align-bottom" />
                   </Button>
                   <Separator.Root className="tl-toolbar-separator" orientation="vertical" />
                   <Button
-                    title="Distribute vertically"
+                    tooltip="Distribute vertically"
                     onClick={() => runAndTransition(() => app.distribute(DistributeType.Vertical))}
                   >
                     <TablerIcon name="layout-distribute-horizontal" />

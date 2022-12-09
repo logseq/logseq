@@ -8,9 +8,10 @@ import { TablerIcon } from '../icons'
 export interface ToolButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   id: string
   icon: string | React.ReactNode
+  tooltip: string
 }
 
-export const ToolButton = observer(({ id, icon, title, ...props }: ToolButtonProps) => {
+export const ToolButton = observer(({ id, icon, tooltip, ...props }: ToolButtonProps) => {
   const app = useApp()
 
   const handleToolClick = React.useCallback(
@@ -24,14 +25,22 @@ export const ToolButton = observer(({ id, icon, title, ...props }: ToolButtonPro
   // Tool must exist
   const Tool = [...app.Tools, TLSelectTool, TLMoveTool]?.find(T => T.id === id)
 
-  const shortcut = ((Tool as any)['shortcut'] as string[])?.join(', ').toUpperCase()
+  const shortcuts = ((Tool as any)['shortcut'])
 
-  const titleWithShortcut = shortcut ? `${title} - ${shortcut}` : title
+  const tooltipContent = shortcuts ?
+    <>
+      {tooltip}
+      <span className="ml-2 keyboard-shortcut">
+        {shortcuts.map((shortcut: string) => (<code>{shortcut.toUpperCase()}</code>)).reduce((prev: React.ReactNode, curr: React.ReactNode) => [prev, ' | ', curr])}
+      </span>
+    </> :
+      {tooltip}
+
   return (
     <Button
       {...props}
       tooltipSide="left"
-      title={titleWithShortcut}
+      tooltip={tooltipContent}
       data-tool={id}
       data-selected={id === app.selectedTool.id}
       onClick={handleToolClick}

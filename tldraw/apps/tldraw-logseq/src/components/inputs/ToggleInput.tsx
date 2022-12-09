@@ -16,7 +16,7 @@ export function ToggleInput({
   ...rest
 }: ToggleInputProps) {
   return (
-    <Tooltip title={title}>
+    <Tooltip content={title}>
       <Toggle.Root
         {...rest}
         data-toggle={toggle}

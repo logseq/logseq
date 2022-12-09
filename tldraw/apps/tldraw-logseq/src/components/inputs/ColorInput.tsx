@@ -19,7 +19,6 @@ export function ColorInput({
   popoverSide,
   setColor,
   setOpacity,
-  title = "Color",
   ...rest
 }: ColorInputProps) {
   function renderColor(color?: string) {
@@ -35,7 +34,7 @@ export function ColorInput({
   }
 
   return (
-    <PopoverButton {...rest} border arrow side={popoverSide} label={<Tooltip title={title} side={popoverSide} sideOffset={14}>{renderColor(color)}</Tooltip>}>
+    <PopoverButton {...rest} border arrow side={popoverSide} label={<Tooltip content={"Color"} side={popoverSide} sideOffset={14}>{renderColor(color)}</Tooltip>}>
       <div className="p-1">
         <div className={'tl-color-palette'}>
           {Object.values(Color).map(value => (

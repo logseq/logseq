@@ -10,17 +10,17 @@ export const GeometryTools = observer(function GeometryTools() {
     {
       id: 'box',
       icon: 'square',
-      title: 'Rectangle',
+      tooltip: 'Rectangle',
     },
     {
       id: 'ellipse',
       icon: 'circle',
-      title: 'Circle',
+      tooltip: 'Circle',
     },
     {
       id: 'polygon',
       icon: 'triangle',
-      title: 'Triangle',
+      tooltip: 'Triangle',
     },
   ]
 
