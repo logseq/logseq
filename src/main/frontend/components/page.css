@@ -255,7 +255,6 @@
 
       &.editing {
         background-color: var(--ls-secondary-background-color);
-        margin-right: 15px;
       }
     }
   }
