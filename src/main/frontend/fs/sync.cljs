@@ -2742,16 +2742,7 @@
       (let [next-state (<! (<loop-ensure-pwd&keys graph-uuid (state/get-current-repo) *stopped?))]
         (assert (s/valid? ::state next-state) next-state)
         (when (= next-state ::idle)
-          (<! (<ensure-set-env&keys graph-uuid *stopped?))
-          ;; wait seconds to receive all file change events,
-          ;; and then drop all of them.
-          ;; WHY: when opening a graph(or switching to another graph),
-          ;;      file-watcher will send a lot of file-change-events,
-          ;;      actually, each file corresponds to a file-change-event,
-          ;;      we need to ignore all of them.
-          (<! (timeout 3000))
-          (println :drain-local-changes-chan-at-starting
-                   (count (util/drain-chan local-changes-revised-chan))))
+          (<! (<ensure-set-env&keys graph-uuid *stopped?)))
         (if @*stopped?
           (.schedule this ::stop nil nil)
           (.schedule this next-state nil nil)))))
