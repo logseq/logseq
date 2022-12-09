@@ -559,10 +559,13 @@
           display: flex;
           align-items: center;
           padding-top: 3px;
+          flex-wrap: wrap;
 
           label {
             padding-right: 15px;
             user-select: none;
+            white-space: nowrap;
+            margin-top: 2px;
           }
 
           input {
