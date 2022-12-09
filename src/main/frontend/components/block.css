@@ -658,3 +658,51 @@ html.is-mac {
     }
   }
 }
+
+/**
+ * Fix broken styles of breadcrumb caused by mixed contents
+ * TODO: implement the logic in code instead of CSS selector
+*/
+
+/*Fix images*/
+.breadcrumb .image-resize {
+  width: auto;
+  height: 17px;
+  display: inline-block;
+  vertical-align: middle;
+  top: -1px;
+}
+
+.breadcrumb .image-resize img {
+  height: 17px;
+  width: auto;
+}
+
+.breadcrumb .image-resize :is(.asset-action-bar, .erd_scroll_detection_container) {
+  display: none;
+}
+
+/*Fix iframe(e.g YouTube)*/
+.breadcrumb :is(.embed-block>div, iframe) {
+  display: none;
+}
+
+/*Fix embed-block, properties*/
+.breadcrumb>a>div:not([style="display: inline;"]),
+.breadcrumb .embed-block {
+  display: inline-block;
+}
+
+/*Use ... to replace the invalid items*/
+.breadcrumb .embed-block {
+  background: initial;
+}
+
+:is(.breadcrumb .embed-block, .breadcrumb>a>div:not([style="display: inline;"]))::after {
+  content: "...";
+}
+
+/*Fix blockquote*/
+.breadcrumb :is(cp__fenced-code-block, blockquote) {
+  display: none;
+}
