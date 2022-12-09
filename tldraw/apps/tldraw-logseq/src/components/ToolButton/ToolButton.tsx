@@ -25,16 +25,20 @@ export const ToolButton = observer(({ id, icon, tooltip, ...props }: ToolButtonP
   // Tool must exist
   const Tool = [...app.Tools, TLSelectTool, TLMoveTool]?.find(T => T.id === id)
 
-  const shortcuts = ((Tool as any)['shortcut'])
+  const shortcuts = (Tool as any)['shortcut']
 
-  const tooltipContent = shortcuts ?
+  const tooltipContent = shortcuts ? (
     <>
       {tooltip}
       <span className="ml-2 keyboard-shortcut">
-        {shortcuts.map((shortcut: string) => (<code>{shortcut.toUpperCase()}</code>)).reduce((prev: React.ReactNode, curr: React.ReactNode) => [prev, ' | ', curr])}
+        {shortcuts
+          .map((shortcut: string) => <code>{shortcut.toUpperCase()}</code>)
+          .reduce((prev: React.ReactNode, curr: React.ReactNode) => [prev, ' | ', curr])}
       </span>
-    </> :
-      {tooltip}
+    </>
+  ) : (
+    { tooltip }
+  )
 
   return (
     <Button

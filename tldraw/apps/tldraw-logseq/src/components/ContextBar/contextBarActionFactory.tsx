@@ -300,12 +300,7 @@ const NoFillAction = observer(() => {
   const noFill = shapes.every(s => s.props.noFill)
 
   return (
-    <ToggleInput
-      title="Fill"
-      className="tl-button"
-      pressed={noFill}
-      onPressedChange={handleChange}
-    >
+    <ToggleInput title="Fill" className="tl-button" pressed={noFill} onPressedChange={handleChange}>
       <TablerIcon name={noFill ? 'droplet-off' : 'droplet'} />
     </ToggleInput>
   )

@@ -35,11 +35,7 @@ export const PrimaryTools = observer(function PrimaryTools() {
           orientation="horizontal"
           style={{ margin: '0 -4px' }}
         />
-        <ColorInput
-          popoverSide="left"
-          color={app.settings.color}
-          setColor={handleSetColor}
-        />
+        <ColorInput popoverSide="left" color={app.settings.color} setColor={handleSetColor} />
       </div>
     </div>
   )

@@ -90,13 +90,12 @@ export const ShapeLinksInput = observer(function ShapeLinksInput({
       align="start"
       alignOffset={-6}
       label={
-        <Tooltip content={"Link"} sideOffset={14}>
+        <Tooltip content={'Link'} sideOffset={14}>
           <div className="flex gap-1 relative items-center justify-center px-1">
             <TablerIcon name={noOfLinks > 0 ? 'link' : 'add-link'} />
             {noOfLinks > 0 && <div className="tl-shape-links-count">{noOfLinks}</div>}
           </div>
         </Tooltip>
-
       }
     >
       <div className="color-level rounded-lg" data-show-reference-panel={showReferencePanel}>

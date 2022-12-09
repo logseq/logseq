@@ -1175,7 +1175,7 @@ button.tl-shape-links-panel-item-remove-button {
 }
 
 .tl-tooltip-arrow {
-  fill: var(--ls-secondary-background-color);;
+  fill: var(--ls-secondary-background-color);
 }
 
 @keyframes fadeIn {
