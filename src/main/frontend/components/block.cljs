@@ -3458,22 +3458,29 @@
     (let [last-block-id (:db/id (last flat-blocks))]
       (block-handler/load-more! db-id last-block-id))))
 
+(defn- loading-more-data!
+  [config *loading? flat-blocks initial?]
+  ;; To prevent scrolling after inserting new blocks
+  (when (or initial?
+            (and (not initial?) (> (- (util/time-ms) (:start-time config)) 100)))
+    (reset! *loading? true)
+    (load-more-blocks! config flat-blocks)
+    (reset! *loading? false)))
+
 (rum/defcs lazy-blocks < rum/reactive
   (rum/local nil ::loading?)
   {:init (fn [state]
-           (assoc state ::id (str (random-uuid))))}
+           (assoc state ::id (str (random-uuid))))
+   :did-mount (fn [state]
+                (let [[config _ flat-blocks] (:rum/args state)]
+                  (loading-more-data! config (::loading? state) flat-blocks true))
+                state)}
   [state config blocks flat-blocks]
   (let [db-id (:db/id config)
         *loading? (::loading? state)]
     (if-not db-id
       (block-list config blocks)
-      (let [loading-more-data! (fn []
-                                 ;; To prevent scrolling after inserting new blocks
-                                 (when (> (- (util/time-ms) (:start-time config)) 100)
-                                   (reset! *loading? true)
-                                   (load-more-blocks! config flat-blocks)
-                                   (reset! *loading? false)))
-            has-more? (and
+      (let [has-more? (and
                        (>= (count flat-blocks) model/initial-blocks-length)
                        (some? (model/get-next-open-block (db/get-db) (last flat-blocks) db-id)))
             dom-id (str "lazy-blocks-" (::id state))]
@@ -3481,7 +3488,7 @@
          (ui/infinite-list
           "main-content-container"
           (block-list config blocks)
-          {:on-load loading-more-data!
+          {:on-load #(loading-more-data! config *loading? flat-blocks false)
            :bottom-reached (fn []
                              (when-let [node (gdom/getElement dom-id)]
                                (ui/bottom-reached? node 300)))
