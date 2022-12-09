@@ -160,10 +160,12 @@ const LogseqPortalViewModeAction = observer(() => {
     {
       value: '1',
       icon: 'object-compact',
+      tooltip: 'Collapse',
     },
     {
       value: '0',
       icon: 'object-expanded',
+      tooltip: 'Expand',
     },
   ]
   return (
@@ -352,10 +354,12 @@ const StrokeTypeAction = observer(() => {
     {
       value: 'line',
       icon: 'circle',
+      tooltip: 'Solid',
     },
     {
       value: 'dashed',
       icon: 'circle-dashed',
+      tooltip: 'Dashed',
     },
   ]
 

@@ -5,13 +5,14 @@ export interface TooltipProps extends ReactTooltip.TooltipContentProps {
   side?: Side
   sideOffset?: number
   content?: React.ReactNode
+  asChild?: boolean
 }
 
-export function Tooltip({ side, content, sideOffset = 10, ...rest }: TooltipProps) {
-  return (
+export function Tooltip({ side, content, asChild = true, sideOffset = 10, ...rest }: TooltipProps) {
+  return (content ?
     <ReactTooltip.Provider delayDuration={300}>
       <ReactTooltip.Root>
-        <ReactTooltip.Trigger asChild>
+        <ReactTooltip.Trigger asChild={asChild}>
           {rest.children}
         </ReactTooltip.Trigger>
         <ReactTooltip.Portal>
@@ -22,5 +23,9 @@ export function Tooltip({ side, content, sideOffset = 10, ...rest }: TooltipProp
         </ReactTooltip.Portal>
       </ReactTooltip.Root>
     </ReactTooltip.Provider>
-  )
+    :
+    <>
+      {rest.children}
+    </>
+    )
 }

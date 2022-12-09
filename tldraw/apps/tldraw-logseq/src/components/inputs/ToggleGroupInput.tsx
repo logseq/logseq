@@ -1,9 +1,11 @@
 import * as ToggleGroup from '@radix-ui/react-toggle-group'
 import { TablerIcon } from '../icons'
+import { Tooltip } from '../Tooltip'
 
 export interface ToggleGroupInputOption {
   value: string
   icon: string
+  tooltip?: string
 }
 
 interface ToggleGroupInputProps extends React.HTMLAttributes<HTMLElement> {
@@ -28,14 +30,16 @@ export function ToggleGroupInput({ options, value, onValueChange }: ToggleGroupI
     >
       {options.map(option => {
         return (
-          <ToggleGroup.Item
-            className="tl-toggle-group-input-button"
-            key={option.value}
-            value={option.value}
-            disabled={option.value === value}
-          >
-            <TablerIcon name={option.icon} />
-          </ToggleGroup.Item>
+          <Tooltip content={option.tooltip} asChild={false}>
+            <ToggleGroup.Item
+              className="tl-toggle-group-input-button"
+              key={option.value}
+              value={option.value}
+              disabled={option.value === value}
+            >
+              <TablerIcon name={option.icon} />
+            </ToggleGroup.Item>
+          </Tooltip>
         )
       })}
     </ToggleGroup.Root>
