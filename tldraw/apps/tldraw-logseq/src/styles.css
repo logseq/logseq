@@ -808,13 +808,6 @@ button.tl-select-input-trigger {
   @apply p-0 rounded-none;
 }
 
-.logseq-img-icon {
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-  box-shadow: 0 8px 12px 0 #85c8c81a, 0 4px 32px 0 #85c8c880;
-}
-
 .tl-target-not-found {
   @apply flex h-full w-full items-center justify-center;
 }
