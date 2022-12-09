@@ -410,6 +410,8 @@ const db: Partial<IDBProxy> = {
     query: string,
     ...inputs: Array<any>
   ): Promise<T> {
+    inputs.pop()
+
     if (inputs?.some(it => (typeof it === 'function'))) {
       const host = this.Experiments.ensureHostScope()
       return host.logseq.api.datascript_query(query, ...inputs)
