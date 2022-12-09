@@ -214,7 +214,7 @@ const ScaleLevelAction = observer(() => {
   ]
   return (
     <SelectInput
-      title="Scale Level"
+      tooltip="Scale Level"
       options={sizeOptions}
       value={scaleLevel}
       onValueChange={v => {
