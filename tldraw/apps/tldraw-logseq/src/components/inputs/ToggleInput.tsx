@@ -1,3 +1,4 @@
+import { Tooltip } from '../Tooltip'
 import * as Toggle from '@radix-ui/react-toggle'
 
 interface ToggleInputProps extends React.HTMLAttributes<HTMLElement> {
@@ -11,15 +12,18 @@ export function ToggleInput({
   pressed,
   onPressedChange,
   className,
+  title,
   ...rest
 }: ToggleInputProps) {
   return (
-    <Toggle.Root
-      {...rest}
-      data-toggle={toggle}
-      className={'tl-toggle-input' + (className ? ' ' + className : '')}
-      pressed={pressed}
-      onPressedChange={onPressedChange}
-    ></Toggle.Root>
+    <Tooltip title={title}>
+      <Toggle.Root
+        {...rest}
+        data-toggle={toggle}
+        className={'tl-toggle-input' + (className ? ' ' + className : '')}
+        pressed={pressed}
+        onPressedChange={onPressedChange}
+      ></Toggle.Root>
+    </Tooltip>
   )
 }
