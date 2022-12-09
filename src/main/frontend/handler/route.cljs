@@ -1,4 +1,5 @@
-(ns ^:no-doc frontend.handler.route
+(ns frontend.handler.route
+  "Provides fns used for routing throughout the app"
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -62,7 +63,8 @@
      :path-params {:name (str page-name)}}))
 
 (defn redirect-to-page!
-  "Must ensure `page-name` is dereferenced (not an alias), or it will create a wrong new page with that name (#3511)."
+  "Must ensure `page-name` is dereferenced (not an alias), or it will create a
+  wrong new page with that name (#3511). page-name can be a block name or uuid"
   ([page-name]
    (redirect-to-page! page-name {}))
   ([page-name {:keys [anchor push click-from-recent?]

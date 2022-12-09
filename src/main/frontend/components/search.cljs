@@ -4,7 +4,7 @@
             [frontend.util :as util]
             [frontend.components.block :as block]
             [frontend.components.svg :as svg]
-            [frontend.handler.route :as route]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.block :as block-handler]
@@ -161,13 +161,13 @@
     (let [data (or alias data)]
       (cond
         (model/whiteboard-page? data)
-        (route/redirect-to-whiteboard! data)
+        (route-handler/redirect-to-whiteboard! data)
         :else
-        (route/redirect-to-page! data)))
+        (route-handler/redirect-to-page! data)))
 
     :file
-    (route/redirect! {:to :file
-                      :path-params {:path data}})
+    (route-handler/redirect! {:to :file
+                              :path-params {:path data}})
 
     :block
     (let [block-uuid (uuid (:block/uuid data))
@@ -178,13 +178,13 @@
       (if page
         (cond
           (model/whiteboard-page? page-name)
-          (route/redirect-to-whiteboard! page-name {:block-id block-uuid})
+          (route-handler/redirect-to-whiteboard! page-name {:block-id block-uuid})
 
           (or collapsed? long-page?)
-          (route/redirect-to-page! block-uuid)
+          (route-handler/redirect-to-page! block-uuid)
 
           :else
-          (route/redirect-to-page! (:block/name page) {:anchor (str "ls-block-" (:block/uuid data))}))
+          (route-handler/redirect-to-page! (:block/name page) {:anchor (str "ls-block-" (:block/uuid data))}))
         ;; search indice outdated
         (println "[Error] Block page missing: "
                  {:block-id block-uuid
@@ -197,9 +197,9 @@
       (if page
         (cond
           (model/whiteboard-page? page-name)
-          (route/redirect-to-whiteboard! page-name)
+          (route-handler/redirect-to-whiteboard! page-name)
           :else
-          (route/redirect-to-page! page-name))
+          (route-handler/redirect-to-page! page-name))
         ;; search indice outdated
         (println "[Error] page missing: "
                  {:page-uuid page-uuid
@@ -219,7 +219,7 @@
          repo
          (:db/id page)
          :page)))
-    
+
     :page-content
     (let [page-uuid (uuid (:block/uuid data))
           page (model/get-block-by-uuid page-uuid)]
@@ -245,7 +245,7 @@
     (page-handler/create! search-q)
 
     :file
-    (route/redirect! {:to :file
+    (route-handler/redirect! {:to :file
                       :path-params {:path data}})
 
     nil)
@@ -425,7 +425,7 @@
       {:on-chosen (fn [{:keys [type data]}]
                     (case type
                       :page
-                      (do (route/redirect-to-page! data)
+                      (do (route-handler/redirect-to-page! data)
                           (state/close-modal!))
                       :search
                       (let [q data]
