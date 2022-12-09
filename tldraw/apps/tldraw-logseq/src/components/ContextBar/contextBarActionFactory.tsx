@@ -15,7 +15,6 @@ import type {
   TextShape,
   YouTubeShape,
 } from '../../lib'
-import { LogseqContext } from '../../lib/logseq-context'
 import { Button } from '../Button'
 import { TablerIcon } from '../icons'
 import { ColorInput } from '../inputs/ColorInput'
