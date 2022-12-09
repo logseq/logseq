@@ -8,7 +8,7 @@ export interface TooltipProps extends ReactTooltip.TooltipContentProps {
 
 export function Tooltip({ title, side, sideOffset = 10, ...rest }: TooltipProps) {
   return (
-    <ReactTooltip.Provider>
+    <ReactTooltip.Provider delayDuration={300}>
       <ReactTooltip.Root>
         <ReactTooltip.Trigger asChild>
           {rest.children}
