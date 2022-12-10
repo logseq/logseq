@@ -1,12 +1,16 @@
 (ns frontend.modules.layout.core
   (:require [cljs-bean.core :as bean]
+            [goog.object :as gobj]
             [frontend.util :as util]))
 
 (defonce *movable-containers (atom {}))
 
 (defn- calc-layout-data
   [^js cnt ^js _evt]
-  (.toJSON (.getBoundingClientRect cnt)))
+  (let [^js o (.toJSON (.getBoundingClientRect cnt))]
+    (set! (.-vw o) (gobj/get js/visualViewport "width"))
+    (set! (.-vh o) (gobj/get js/visualViewport "height"))
+    o))
 
 (defn ^:export move-container-to-top
   [identity]
