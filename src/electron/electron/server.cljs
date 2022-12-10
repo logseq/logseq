@@ -1,5 +1,6 @@
 (ns electron.server
   (:require ["fastify" :as Fastify]
+            [clojure.string :as string]
             [promesa.core :as p]
             [electron.logger :as logger]))
 
@@ -9,9 +10,15 @@
 (defonce HOST "0.0.0.0")
 (defonce PORT 3333)
 
-(defn api-handler
+(defn type-api? [s]
+  (when (string? s)
+    (string/starts-with? s "logseq.")))
+
+(defn api-invoker-fn
   [^js req ^js rep]
-  (.send rep #js {:method (.-method req) :msg "Hello Logseq!"}))
+  (.send rep #js {:method (.-method req)
+                  :msg    "Hello ❤️ Logseq!"
+                  :body   (.-body req)}))
 
 (defn close!
   []
@@ -26,8 +33,7 @@
               ^js s (Fastify. #js {:logger true})
               ;; routes
               _     (doto s
-                      (.get "/apis/:action" api-handler)
-                      (.post "/apis/:action" api-handler))
+                      (.post "/api-invoker" api-invoker-fn))
               ;; listen port
               _     (.listen s #js {:host HOST :port PORT})]
         (reset! *server s))
