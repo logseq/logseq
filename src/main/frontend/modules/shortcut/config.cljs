@@ -423,7 +423,7 @@
    :ui/toggle-cards                 {:binding "t c"
                                      :fn      ui-handler/toggle-cards!}
 
-   :git/commit                      {:binding "n c"
+   :git/commit                      {:binding "c"
                                      :fn      commit/show-commit-modal!}})
 
 (let [keyboard-shortcuts
