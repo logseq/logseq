@@ -255,7 +255,6 @@
 
       &.editing {
         background-color: var(--ls-secondary-background-color);
-        margin-right: 15px;
       }
     }
   }
@@ -270,7 +269,7 @@ a.page-title {
 }
 
 .page-title-sizer-wrapper {
-  @apply w-full overflow-x-auto;
+  @apply w-full overflow-x-auto overflow-y-hidden;
 
   :empty::before {
     content: '\200b';

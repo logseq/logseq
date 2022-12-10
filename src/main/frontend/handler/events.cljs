@@ -140,11 +140,11 @@
        (repo-config-handler/restore-repo-config! graph)
        (when-not (= :draw (state/get-current-route))
          (route-handler/redirect-to-home!))
-       (when-let [dir-name (config/get-repo-dir graph)]
-         (fs/watch-dir! dir-name))
        (srs/update-cards-due-count!)
        (state/pub-event! [:graph/ready graph])
-       (file-sync-restart!)))))
+       (file-sync-restart!)
+       (when-let [dir-name (config/get-repo-dir graph)]
+         (fs/watch-dir! dir-name))))))
 
 ;; Parameters for the `persist-db` function, to show the notification messages
 (def persist-db-noti-m
@@ -367,6 +367,7 @@
         (state/pub-event! [:graph/dir-gone dir]))))
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo)
+  (fs-watcher/load-graph-files! repo)
   ;; TODO: Notify user to update filename format when the UX is smooth enough
   ;; (when-not config/test?
   ;;   (js/setTimeout
@@ -651,10 +652,12 @@
 
 (defmethod handle :graph/re-index [[_]]
   ;; Ensure the graph only has ONE window instance
-  (repo-handler/re-index!
-   nfs-handler/rebuild-index!
-   #(do (page-handler/create-today-journal!)
-        (file-sync-restart!))))
+  (async/go
+    (async/<! (sync/<sync-stop))
+    (repo-handler/re-index!
+     nfs-handler/rebuild-index!
+     #(do (page-handler/create-today-journal!)
+          (file-sync-restart!)))))
 
 (defmethod handle :graph/ask-for-re-index [[_ *multiple-windows? ui]]
   ;; *multiple-windows? - if the graph is opened in multiple windows, boolean atom
