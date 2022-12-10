@@ -286,7 +286,10 @@
 
    :sidebar/open-today-page        {:binding (if mac? "mod+shift+j" "alt+shift+j")
                                     :fn      page-handler/open-today-in-sidebar}
-
+   
+   :sidebar/clear-top              {:binding "c r" 
+                                    :fn      #(state/sidebar-remove-block! 0)}
+   
    :sidebar/clear                  {:binding "mod+c mod+c"
                                     :fn      #(do
                                                 (state/clear-sidebar-blocks!)
@@ -373,9 +376,6 @@
    :ui/toggle-right-sidebar         {:binding "t r"
                                      :fn      ui-handler/toggle-right-sidebar!}
 
-   :ui/close-right-sidebar-top     {:binding "d r"
-                                     :fn      #(state/sidebar-remove-block! 0)}
-
    :ui/toggle-left-sidebar          {:binding "t l"
                                      :fn      state/toggle-left-sidebar!}
 
@@ -423,7 +423,7 @@
    :ui/toggle-cards                 {:binding "t c"
                                      :fn      ui-handler/toggle-cards!}
 
-   :git/commit                      {:binding "c"
+   :git/commit                      {:binding "n c"
                                      :fn      commit/show-commit-modal!}})
 
 (let [keyboard-shortcuts
@@ -571,7 +571,6 @@
                           :ui/toggle-document-mode
                           :ui/toggle-settings
                           :ui/toggle-right-sidebar
-                          :ui/close-right-sidebar-top
                           :ui/toggle-left-sidebar
                           :ui/toggle-help
                           :ui/toggle-theme
@@ -586,7 +585,9 @@
                           :ui/install-plugins-from-file
                           :editor/toggle-open-blocks
                           :ui/toggle-cards
-                          :git/commit])
+                          :git/commit
+                          :sidebar/clear-top
+                          ])
      (with-meta {:before m/enable-when-not-editing-mode!}))}))
 
 ;; To add a new entry to this map, first add it here and then
@@ -707,6 +708,7 @@
     :graph/add
     :graph/save
     :graph/re-index
+    :sidebar/clear-top
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index
@@ -724,8 +726,7 @@
     :date-picker/prev-week
     :date-picker/next-week
     :date-picker/complete
-    :git/commit
-    :ui/close-right-sidebar-top]})
+    :git/commit]})
 
 (let [category-maps {::category (set (keys category*))
                      ::dicts/category (set (keys dicts/category))}]
