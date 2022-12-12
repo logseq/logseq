@@ -23,7 +23,8 @@
   (reset! *state {:status nil                               ;; :running :starting :closing :closed :error
                   :error  nil
                   :host   (get-host)
-                  :port   (get-port)}))
+                  :port   (get-port)
+                  :tokens (cfgs/get-item :server/tokens)}))
 
 (defn- set-status!
   ([status] (set-status! status nil))
@@ -33,6 +34,14 @@
 (defn load-state-to-renderer!
   ([] (load-state-to-renderer! @*state))
   ([s] (utils/send-to-renderer @*win :syncAPIServerState s)))
+
+(defn set-config!
+  [config]
+  (when-let [config (and (map? config) (dissoc config :status))]
+    (reset! *state (merge @*state config))
+    (doseq [[k v] config]
+      (cfgs/set-item! (keyword (str "server/" (name k))) v))
+    (load-state-to-renderer!)))
 
 (defn- setup-state-watch!
   []
@@ -62,7 +71,8 @@
   [token]
   (when-let [valid-tokens (cfgs/get-item :server/tokens)]
     (when (or (string/blank? token)
-              (not (contains? valid-tokens token)))
+              (not (some #(or (= % token)
+                              (= (:value %) token)) valid-tokens)))
       (throw (js/Error. "Access Deny!")))))
 
 (defn- api-pre-handler!

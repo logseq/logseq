@@ -641,6 +641,9 @@
 (defmethod handle :server/do [^js _win [_ action]]
   (server/do-server! action))
 
+(defmethod handle :server/set-config [^js _win [_ config]]
+  (server/set-config! config))
+
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]
     (.handle ipcMain main-channel
