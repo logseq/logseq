@@ -32,7 +32,7 @@ export const ToolButton = observer(({ id, icon, tooltip, ...props }: ToolButtonP
       {tooltip}
       <span className="ml-2 keyboard-shortcut">
         {shortcuts
-          .map((shortcut: string) => <code>{shortcut.toUpperCase()}</code>)
+          .map((shortcut: string, idx: number) => <code key={idx}>{shortcut.toUpperCase()}</code>)
           .reduce((prev: React.ReactNode, curr: React.ReactNode) => [prev, ' | ', curr])}
       </span>
     </>

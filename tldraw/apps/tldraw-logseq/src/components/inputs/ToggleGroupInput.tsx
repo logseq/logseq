@@ -30,15 +30,16 @@ export function ToggleGroupInput({ options, value, onValueChange }: ToggleGroupI
     >
       {options.map(option => {
         return (
-          <Tooltip content={option.tooltip} asChild={false}>
-            <ToggleGroup.Item
-              className="tl-toggle-group-input-button"
-              key={option.value}
-              value={option.value}
-              disabled={option.value === value}
-            >
-              <TablerIcon name={option.icon} />
-            </ToggleGroup.Item>
+          <Tooltip content={option.tooltip} key={option.value}>
+            <div className='inline-block'>
+              <ToggleGroup.Item
+                className="tl-toggle-group-input-button"
+                value={option.value}
+                disabled={option.value === value}
+              >
+                <TablerIcon name={option.icon} />
+              </ToggleGroup.Item>
+            </div>
           </Tooltip>
         )
       })}
