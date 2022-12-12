@@ -286,10 +286,10 @@
 
    :sidebar/open-today-page        {:binding (if mac? "mod+shift+j" "alt+shift+j")
                                     :fn      page-handler/open-today-in-sidebar}
-   
-   :sidebar/clear-top              {:binding "c r" 
+
+   :sidebar/close-top              {:binding "c t"
                                     :fn      #(state/sidebar-remove-block! 0)}
-   
+
    :sidebar/clear                  {:binding "mod+c mod+c"
                                     :fn      #(do
                                                 (state/clear-sidebar-blocks!)
@@ -586,7 +586,7 @@
                           :editor/toggle-open-blocks
                           :ui/toggle-cards
                           :git/commit
-                          :sidebar/clear-top
+                          :sidebar/close-top
                           ])
      (with-meta {:before m/enable-when-not-editing-mode!}))}))
 
@@ -708,7 +708,7 @@
     :graph/add
     :graph/save
     :graph/re-index
-    :sidebar/clear-top
+    :sidebar/close-top
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index
