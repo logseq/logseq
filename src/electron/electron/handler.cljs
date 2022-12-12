@@ -635,8 +635,11 @@
 (defmethod handle :clear-find-in-page [^js win [_]]
   (find/clear! win))
 
-(defmethod handle :load-api-server-state []
+(defmethod handle :server/load-state []
   (server/load-state-to-renderer!))
+
+(defmethod handle :server/do [^js _win [_ action]]
+  (server/do-server! action))
 
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]

@@ -100,13 +100,15 @@
 
 (defn close!
   []
-  (when @*server
+  (when (and @*server (= :running (:status @*state)))
     (logger/debug "[server] closing ...")
     (set-status! :closing)
     (-> (.close @*server)
         (p/then (fn []
                   (reset! *server nil)
-                  (set-status! :closed))))))
+                  (set-status! :closed)))
+        (p/catch (fn [^js e]
+                   (set-status! :running e))))))
 
 (defn start!
   []
@@ -125,6 +127,15 @@
       (p/catch (fn [^js e]
                  (set-status! :error e)
                  (logger/error "[server] start error! " e)))))
+
+(defn do-server!
+  [action]
+  (case (keyword action)
+    :start (when (contains? #{nil :closed :error} (:status @*state))
+             (start!))
+    :stop (close!)
+    :restart (start!)
+    :else :dune))
 
 (defn setup!
   [^js win]
