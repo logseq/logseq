@@ -37,7 +37,7 @@ export const ToolButton = observer(({ id, icon, tooltip, ...props }: ToolButtonP
       </span>
     </>
   ) : (
-    { tooltip }
+    tooltip
   )
 
   return (
