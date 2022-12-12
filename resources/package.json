@@ -40,8 +40,7 @@
     "@logseq/rsapi": "0.0.54",
     "electron-deeplink": "1.0.10",
     "abort-controller": "3.0.0",
-    "fastify": "latest",
-    "snake-case": "3.0.4"
+    "fastify": "latest"
   },
   "devDependencies": {
     "@electron-forge/cli": "^6.0.0-beta.57",
