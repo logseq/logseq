@@ -698,11 +698,20 @@ html.is-mac {
   background: initial;
 }
 
+/*Fix blockquote*/
+.breadcrumb :is(cp__fenced-code-block, blockquote) {
+  display: none;
+}
+
 :is(.breadcrumb .embed-block, .breadcrumb>a>div:not([style="display: inline;"]))::after {
   content: "...";
 }
 
-/*Fix blockquote*/
-.breadcrumb :is(cp__fenced-code-block, blockquote) {
-  display: none;
+/*cards-review*/
+.breadcrumb .cards-review>div {
+  display:none;
+}
+
+.breadcrumb .cards-review:before {
+  content:"..."
 }
