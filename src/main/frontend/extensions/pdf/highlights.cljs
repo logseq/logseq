@@ -174,6 +174,7 @@
      {:ref      *el
       :style    {:top top :left left :visibility (if (and @*highlight-mode? new?) "hidden" "visible")}
       :on-click (fn [^js/MouseEvent e]
+                  (.stopPropagation e)
                   (when-let [action (.. e -target -dataset -action)]
                     (action-fn! action true)))}
 
