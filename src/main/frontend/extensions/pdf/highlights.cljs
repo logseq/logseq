@@ -600,9 +600,10 @@
                                                :properties {}})))]
 
            ;; show ctx menu
-           (set-tip-state! {:highlight hl-fn
-                            :selection selection
-                            :point     point}))))
+           (js/setTimeout (fn []
+                            (set-tip-state! {:highlight hl-fn
+                                             :selection selection
+                                             :point     point})))) 0))
 
      [(:range sel-state)])
 
