@@ -5,7 +5,8 @@
             [promesa.core :as p]
             [electron.utils :as utils]
             [camel-snake-kebab.core :as csk]
-            [electron.logger :as logger]))
+            [electron.logger :as logger]
+            [electron.configs :as cfgs]))
 
 (defonce ^:private *win (atom nil))
 (defonce ^:private *server (atom nil))
@@ -32,6 +33,24 @@
         (csk/->snake_case (str tag' (last s'))))
       (string/trim s))))
 
+(defn- validate-auth-token
+  [token]
+  (when-let [valid-tokens (cfgs/get-item :server/tokens)]
+    (when (or (string/blank? token)
+              (not (contains? valid-tokens token)))
+      (throw (js/Error. "Access Deny!")))))
+
+(defn- api-pre-handler!
+  [^js req ^js rep callback]
+  (try
+    (let [^js headers (.-headers req)]
+      (validate-auth-token (.-authorization headers))
+      (callback))
+    (catch js/Error _e
+      (-> rep
+          (.code 401)
+          (.send _e)))))
+
 (defonce ^:private *cid (volatile! 0))
 (defn- invoke-logseq-api!
   [method args]
@@ -42,7 +61,7 @@
        (utils/send-to-renderer @*win :invokeLogseqAPI {:syncId sid :method method :args args})
        (.handleOnce ipcMain (str ::sync! sid) ret-handle)))))
 
-(defn api-invoker-fn!
+(defn- api-invoker-fn!
   [^js req ^js rep]
   (if-let [^js body (.-body req)]
     (if-let [method (resolve-real-api-method (.-method body))]
@@ -65,8 +84,9 @@
   []
   (-> (p/let [_     (close!)
               ^js s (Fastify. #js {:logger true})
-              ;; routes
+              ;; hooks & routes
               _     (doto s
+                      (.addHook "preHandler" api-pre-handler!)
                       (.post "/api-invoker" api-invoker-fn!))
               ;; listen port
               _     (.listen s #js {:host HOST :port PORT})]
