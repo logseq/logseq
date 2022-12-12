@@ -3,6 +3,7 @@
             ["electron" :refer [ipcMain]]
             [clojure.string :as string]
             [promesa.core :as p]
+            [cljs-bean.core :as bean]
             [electron.utils :as utils]
             [camel-snake-kebab.core :as csk]
             [electron.logger :as logger]
@@ -11,8 +12,32 @@
 (defonce ^:private *win (atom nil))
 (defonce ^:private *server (atom nil))
 
-(defonce HOST "0.0.0.0")
-(defonce PORT 3333)
+(defn get-host [] (or (cfgs/get-item :server/host) "0.0.0.0"))
+(defn get-port [] (or (cfgs/get-item :server/port) 12315))
+
+(defonce *state
+  (atom nil))
+
+(defn- reset-state!
+  []
+  (reset! *state {:status nil                               ;; :running :starting :closing :closed :error
+                  :error  nil
+                  :host   (get-host)
+                  :port   (get-port)}))
+
+(defn- set-status!
+  ([status] (set-status! status nil))
+  ([status error]
+   (swap! *state assoc :status status :error error)))
+
+(defn load-state-to-renderer!
+  ([] (load-state-to-renderer! @*state))
+  ([s] (utils/send-to-renderer @*win :syncAPIServerState s)))
+
+(defn- setup-state-watch!
+  []
+  (add-watch *state ::ws #(load-state-to-renderer! %4))
+  #(remove-watch *state ::ws))
 
 (defn type-proxy-api? [s]
   (when (string? s)
@@ -77,25 +102,33 @@
   []
   (when @*server
     (logger/debug "[server] closing ...")
+    (set-status! :closing)
     (-> (.close @*server)
-        (p/then #(reset! *server nil)))))
+        (p/then (fn []
+                  (reset! *server nil)
+                  (set-status! :closed))))))
 
 (defn start!
   []
   (-> (p/let [_     (close!)
+              _     (set-status! :starting)
               ^js s (Fastify. #js {:logger true})
               ;; hooks & routes
               _     (doto s
                       (.addHook "preHandler" api-pre-handler!)
                       (.post "/api-invoker" api-invoker-fn!))
               ;; listen port
-              _     (.listen s #js {:host HOST :port PORT})]
-        (reset! *server s))
-      (p/then #(logger/debug "[server] start successfully! :" PORT))
-      (p/catch #(logger/error "[server] start error #" %))))
+              _     (.listen s (bean/->js (select-keys @*state [:host :port])))]
+        (reset! *server s)
+        (set-status! :running))
+      (p/then (fn [] (logger/debug "[server] start successfully!")))
+      (p/catch (fn [^js e]
+                 (set-status! :error e)
+                 (logger/error "[server] start error! " e)))))
 
 (defn setup!
   [^js win]
   (reset! *win win)
-  (start!)
-  #())
+  (let [t (setup-state-watch!)]
+    (reset-state!)
+    (start!) t))

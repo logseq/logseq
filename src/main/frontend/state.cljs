@@ -159,6 +159,7 @@
      :electron/updater-pending?             false
      :electron/updater                      {}
      :electron/user-cfgs                    nil
+     :electron/server                       nil
 
      ;; assets
      :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)

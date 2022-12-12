@@ -229,7 +229,11 @@
                                  (p/then #(ret-fn! %))
                                  (p/catch #(ret-fn! {:error %}))))
                            (catch js/Error e
-                             (ret-fn! {:error (.-message e)})))))))
+                             (ret-fn! {:error (.-message e)}))))))
+
+  (js/window.apis.on "syncAPIServerState"
+                     (fn [^js data]
+                       (state/set-state! :electron/server (bean/->clj data)))))
 
 (defn listen!
   []
