@@ -96,7 +96,7 @@
               :selectedIds #js[]
               :pages [(merge tldr-page
                              {:id id
-                              :name "page"
+                              :name (:block/name page-block)
                               :shapes shapes})]})))
 
 (defn transact-tldr! [page-name tldr]
@@ -173,11 +173,12 @@
 
 (defn page-name->tldr!
   ([page-name]
-   (if page-name
-     (if-let [[page-block blocks] (get-whiteboard-clj page-name)]
-       (whiteboard-clj->tldr page-block blocks)
-       (create-new-whiteboard-page! page-name))
-     (create-new-whiteboard-page! nil))))
+   (clj->js
+    (if page-name
+      (if-let [[page-block blocks] (get-whiteboard-clj page-name)]
+        (whiteboard-clj->tldr page-block blocks)
+        (create-new-whiteboard-page! page-name))
+      (create-new-whiteboard-page! nil)))))
 
 (defn- get-whiteboard-blocks
   "Given a page, return all the logseq blocks (exclude all shapes)"

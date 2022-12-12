@@ -142,9 +142,10 @@ const handleCreatingShapes = async (
   async function tryCreateShapesFromDataTransfer(dataTransfer: DataTransfer) {
     return tryCreateShapeHelper(
       tryCreateShapeFromFiles,
+      tryCreateShapeFromPageName,
+      tryCreateShapeFromBlockUUID,
       tryCreateShapeFromTextHTML,
-      tryCreateShapeFromTextPlain,
-      tryCreateShapeFromBlockUUID
+      tryCreateShapeFromTextPlain
     )(dataTransfer)
   }
 
@@ -226,6 +227,17 @@ const handleCreatingShapes = async (
           point: [point[0] + (LogseqPortalShape.defaultProps.size[0] + 16) * idx, point[1]],
         }
       })
+    }
+    return null
+  }
+
+  async function tryCreateShapeFromPageName(dataTransfer: DataTransfer) {
+    // This is a Logseq custom data type defined in frontend.components.block
+    const rawText = dataTransfer.getData('page-name')
+    if (rawText) {
+      const text = rawText.trim()
+
+      return tryCreateLogseqPortalShapesFromString(`[[${text}]]`)
     }
     return null
   }

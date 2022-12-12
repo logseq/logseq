@@ -153,7 +153,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
 
   resetZoomToCursor = (): this => {
     const viewport = this.app.viewport
-    viewport.update({
+    viewport.animateCamera({
       zoom: 1,
       point: Vec.sub(this.app.inputs.originScreenPoint, this.app.inputs.originPoint),
     })

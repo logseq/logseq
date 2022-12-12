@@ -138,7 +138,7 @@ base.afterAll(async () => {
   //  await electronApp.close()
   //}
   // use .dump as extension to avoid unfolded when zip by github
-  await context.tracing.stop({ path: 'e2e-dump/trace.zip.dump' });
+  await context.tracing.stop({ path: `e2e-dump/trace-${Date.now()}.zip.dump` });
 })
 
 // hijack electron app into the test context

@@ -28,6 +28,7 @@ public class FsWatcher: CAPPlugin, PollingWatcherDelegate {
             self.baseUrl = url
             self.watcher = PollingWatcher(at: url)
             self.watcher?.delegate = self
+            self.watcher?.start()
 
             call.resolve(["ok": true])
 
@@ -167,15 +168,19 @@ public class PollingWatcher {
 
     public init?(at: URL) {
         url = at
-
+    }
+    
+    public func start() {
+        
+        self.tick(notify: false)
+        
         let queue = DispatchQueue(label: Bundle.main.bundleIdentifier! + ".timer")
         timer = DispatchSource.makeTimerSource(queue: queue)
         timer!.setEventHandler(qos: .background, flags: []) { [weak self] in
-            self?.tick()
+            self?.tick(notify: true)
         }
         timer!.schedule(deadline: .now())
         timer!.resume()
-
     }
 
     deinit {
@@ -187,7 +192,7 @@ public class PollingWatcher {
         timer = nil
     }
 
-    private func tick() {
+    private func tick(notify: Bool) {
         // let startTime = DispatchTime.now()
 
         if let enumerator = FileManager.default.enumerator(
@@ -223,7 +228,11 @@ public class PollingWatcher {
                 }
             }
 
-            self.updateMetaDb(with: newMetaDb)
+            if notify {
+                self.updateMetaDb(with: newMetaDb)
+            } else {
+                self.metaDb = newMetaDb
+            }
         }
 
         // let elapsedNanoseconds = DispatchTime.now().uptimeNanoseconds - startTime.uptimeNanoseconds

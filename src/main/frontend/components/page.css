@@ -195,27 +195,6 @@
       }
     }
   }
-
-  .paginates {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 4px;
-
-    > span {
-      color: var(--ls-primary-text-color);
-
-      &:last-child {
-        a {
-          user-select: none;
-
-          &:active {
-            opacity: .6;
-          }
-        }
-      }
-    }
-  }
 }
 
 .cp__vertical-menu-button {
@@ -276,7 +255,6 @@
 
       &.editing {
         background-color: var(--ls-secondary-background-color);
-        margin-right: 15px;
       }
     }
   }
@@ -291,7 +269,7 @@ a.page-title {
 }
 
 .page-title-sizer-wrapper {
-  @apply w-full;
+  @apply w-full overflow-x-auto overflow-y-hidden;
 
   :empty::before {
     content: '\200b';
@@ -311,7 +289,7 @@ html.is-native-ipad,
 html.is-native-iphone,
 html.is-native-iphone-without-notch {
   .ls-page-title {
-    margin: 0 0 24px -15px;
+    margin: 0 0 10px -15px;
     padding: 0 !important;
   }
 }
