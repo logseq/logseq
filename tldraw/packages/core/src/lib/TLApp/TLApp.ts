@@ -185,9 +185,13 @@ export class TLApp<
         return {
           // @ts-expect-error ???
           keys: child.constructor['shortcut'] as string | string[],
-          fn: (_: any, __: any, e: Event) => {
+          fn: (_: any, __: any, e: KeyboardEvent) => {
             this.transition(child.id)
-            e.stopPropagation()
+
+            // hack: allows logseq related shortcut combinations to work
+            if (e.key !== 't') {
+              e.stopPropagation()
+            }
           },
         }
       })

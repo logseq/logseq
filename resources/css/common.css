@@ -904,3 +904,13 @@ html[data-theme='dark'] .keyboard-shortcut > code {
 .katex .tag {
     overflow-x: clip;
 }
+
+html.is-mobile {
+  h1.title {
+    margin-bottom: 10px;
+  }
+
+  #journals .journal-item:first-child {
+    margin-top: 5px;
+  }
+}

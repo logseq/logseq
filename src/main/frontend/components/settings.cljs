@@ -453,7 +453,7 @@
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div
      (ui/button
-       "Settings"
+       (t :settings)
        :class "text-sm p-1"
        :style {:margin-top "0px"}
        :on-click
@@ -476,7 +476,7 @@
           (not instrument-disabled?)
           (fn [] (instrument/disable-instrument
                    (not instrument-disabled?)))
-          [:span.text-sm.opacity-50 "Logseq will never collect your local graph database or sell your data."]))
+          [:span.text-sm.opacity-50 (t :settings-page/disable-sentry-desc)]))
 
 (defn clear-cache-row [t]
   (row-with-button-action {:left-label   (t :settings-page/clear-cache)
@@ -594,6 +594,7 @@
      (workflow-row t preferred-workflow)
      ;; (enable-block-timestamps-row t enable-block-timestamps?)
      (show-brackets-row t show-brackets?)
+
      (when (util/electron?) (switch-spell-check-row t))
      (outdenting-row t logical-outdenting?)
      (preferred-pasting-file t preferred-pasting-file?)
@@ -640,7 +641,7 @@
 
      (ui/admonition
        :warning
-       [:p "Clearing the cache will discard open graphs. You will lose unsaved changes."])]))
+       [:p (t :settings-page/clear-cache-warning)])]))
 
 (rum/defc sync-enabled-switcher
   [enabled?]

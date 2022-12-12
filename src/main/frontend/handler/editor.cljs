@@ -1478,7 +1478,8 @@
                                        image?)
                   format
                   {:last-pattern (if drop-or-paste? "" (state/get-editor-command-trigger))
-                   :restore?     true})))))
+                   :restore?     true
+                   :command      :insert-asset})))))
           (p/finally
             (fn []
               (reset! uploading? false)
@@ -1732,7 +1733,8 @@
                id
                (get-link format link label)
                format
-               {:last-pattern (str (state/get-editor-command-trigger) "link")})))
+               {:last-pattern (str (state/get-editor-command-trigger) "link")
+                :command :link})))
 
     :image-link (let [{:keys [link label]} m]
                   (when (not (string/blank? link))
@@ -1740,7 +1742,8 @@
                      id
                      (get-image-link format link label)
                      format
-                     {:last-pattern (str (state/get-editor-command-trigger) "link")})))
+                     {:last-pattern (str (state/get-editor-command-trigger) "link")
+                      :command :image-link})))
 
     nil)
 
@@ -1858,7 +1861,8 @@
                        {:last-pattern (str block-ref/left-parens (if @*selected-text "" q))
                         :end-pattern block-ref/right-parens
                         :postfix-fn   (fn [s] (util/replace-first block-ref/right-parens s ""))
-                        :forward-pos 3})
+                        :forward-pos 3
+                        :command :block-ref})
 
       ;; Save it so it'll be parsed correctly in the future
       (set-block-property! (:block/uuid chosen)
@@ -1890,7 +1894,7 @@
            {:block/page {:db/id (:db/id page)}
             :block/format format
             :block/properties (apply dissoc (:block/properties block)
-                                (concat 
+                                (concat
                                   (when (not keep-uuid?) [:id])
                                   [:custom_id :custom-id]
                                   exclude-properties))
@@ -2837,7 +2841,8 @@
                   (insert-command! input-id
                                    (last (first matched-block-commands))
                                    format
-                                   {:last-pattern commands/angle-bracket}))
+                                   {:last-pattern commands/angle-bracket
+                                    :command :block-commands}))
 
                 :else
                 (reset! commands/*matched-block-commands matched-block-commands))
@@ -3503,3 +3508,10 @@
           block (db/entity [:block/uuid block-id])
           content' (commands/clear-markdown-heading (:block/content block))]
       (save-block! repo block-id content'))))
+
+(defn block->data-transfer!
+  "Set block or page name to the given event's dataTransfer. Used in dnd."
+  [block-or-page-name event]
+  (.setData (gobj/get event "dataTransfer")
+            (if (db-model/page? block-or-page-name) "page-name" "block-uuid")
+            (str block-or-page-name)))

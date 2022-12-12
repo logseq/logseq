@@ -361,7 +361,7 @@
   }
 
   &.is-touching {
-    width: 100%;
+    width: 100% !important;
     transition: none;
 
     .left-sidebar-inner {
@@ -471,10 +471,6 @@ html[data-theme='dark'] {
   width: 100%;
   max-width: var(--ls-main-content-max-width);
   flex: 1;
-
-  h1.title {
-    padding-right: 15px;
-  }
 }
 
 .cp__sidebar-help {

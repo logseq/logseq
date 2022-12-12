@@ -213,7 +213,7 @@ export default function App() {
   }, [])
 
   return (
-    <div className={`h-screen w-screen`} id="main-content-container">
+    <div className={`h-screen w-screen z-0 relative`}>
       <ThemeSwitcher />
       <PreviewButton model={model} />
       <TldrawApp
@@ -232,6 +232,7 @@ export default function App() {
           isWhiteboardPage: () => false,
           saveAsset: fileToBase64,
           makeAssetUrl: a => a,
+          getBlockPageName: a => a + '_page'
         }}
         model={model}
         onPersist={app => {

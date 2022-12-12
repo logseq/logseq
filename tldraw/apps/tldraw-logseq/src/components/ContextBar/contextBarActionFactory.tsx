@@ -15,7 +15,6 @@ import type {
   TextShape,
   YouTubeShape,
 } from '../../lib'
-import { LogseqContext } from '../../lib/logseq-context'
 import { Button } from '../Button'
 import { TablerIcon } from '../icons'
 import { ColorInput } from '../inputs/ColorInput'
@@ -46,12 +45,7 @@ export const contextBarActionTypes = [
 ] as const
 
 type ContextBarActionType = typeof contextBarActionTypes[number]
-const singleShapeActions: ContextBarActionType[] = [
-  'Edit',
-  'YoutubeLink',
-  'IFrameSource',
-  'Links',
-]
+const singleShapeActions: ContextBarActionType[] = ['Edit', 'YoutubeLink', 'IFrameSource', 'Links']
 
 const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 
@@ -68,13 +62,13 @@ export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
   ],
   youtube: ['YoutubeLink', 'Links'],
   iframe: ['IFrameSource', 'Links'],
-  box: ['Swatch', 'NoFill', 'StrokeType', 'Links'],
-  ellipse: ['Swatch', 'NoFill', 'StrokeType', 'Links'],
-  polygon: ['Swatch', 'NoFill', 'StrokeType', 'Links'],
-  line: ['Edit', 'Swatch', 'ArrowMode', 'Links'],
+  box: ['Edit', 'TextStyle', 'Swatch', 'NoFill', 'StrokeType', 'Links'],
+  ellipse: ['Edit', 'TextStyle', 'Swatch', 'NoFill', 'StrokeType', 'Links'],
+  polygon: ['Edit', 'TextStyle', 'Swatch', 'NoFill', 'StrokeType', 'Links'],
+  line: ['Edit', 'TextStyle', 'Swatch', 'ArrowMode', 'Links'],
   pencil: ['Swatch', 'Links'],
   highlighter: ['Swatch', 'Links'],
-  text: ['Edit', 'Swatch', 'ScaleLevel', 'AutoResizing', 'TextStyle', 'Links'],
+  text: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'AutoResizing', 'Links'],
   html: ['ScaleLevel', 'AutoResizing', 'Links'],
   image: ['Links'],
   video: ['Links'],
@@ -93,11 +87,15 @@ function filterShapeByAction<S extends Shape>(shapes: Shape[], type: ContextBarA
 const EditAction = observer(() => {
   const app = useApp<Shape>()
   const shape = filterShapeByAction(app.selectedShapesArray, 'Edit')[0]
+  const iconName =
+    ('label' in shape.props && shape.props.label) || ('text' in shape.props && shape.props.text)
+      ? 'forms'
+      : 'text'
 
   return (
     <Button
       type="button"
-      title="Edit"
+      tooltip="Edit"
       onClick={() => {
         app.api.editShape(shape)
         if (shape.props.type === 'logseq-portal') {
@@ -112,7 +110,7 @@ const EditAction = observer(() => {
         }
       }}
     >
-      <TablerIcon name="text" />
+      <TablerIcon name={iconName} />
     </Button>
   )
 })
@@ -162,10 +160,12 @@ const LogseqPortalViewModeAction = observer(() => {
     {
       value: '1',
       icon: 'object-compact',
+      tooltip: 'Collapse',
     },
     {
       value: '0',
       icon: 'object-expanded',
+      tooltip: 'Expand',
     },
   ]
   return (
@@ -215,7 +215,7 @@ const ScaleLevelAction = observer(() => {
   ]
   return (
     <SelectInput
-      title="Scale Level"
+      tooltip="Scale Level"
       options={sizeOptions}
       value={scaleLevel}
       onValueChange={v => {
@@ -243,7 +243,7 @@ const IFrameSourceAction = observer(() => {
 
   return (
     <span className="flex gap-3">
-      <Button title="Reload" type="button" onClick={handleReload}>
+      <Button tooltip="Reload" type="button" onClick={handleReload}>
         <TablerIcon name="refresh" />
       </Button>
       <TextInput
@@ -252,7 +252,7 @@ const IFrameSourceAction = observer(() => {
         value={`${shape.props.url}`}
         onChange={handleChange}
       />
-      <Button title="Open website url" type="button" onClick={() => window.open(shape.props.url)}>
+      <Button tooltip="Open website url" type="button" onClick={() => window.open(shape.props.url)}>
         <TablerIcon name="external-link" />
       </Button>
     </span>
@@ -276,7 +276,7 @@ const YoutubeLinkAction = observer(() => {
         onChange={handleChange}
       />
       <Button
-        title="Open YouTube Link"
+        tooltip="Open YouTube Link"
         type="button"
         onClick={() => window.logseq?.api?.open_external_link?.(shape.props.url)}
       >
@@ -300,12 +300,7 @@ const NoFillAction = observer(() => {
   const noFill = shapes.every(s => s.props.noFill)
 
   return (
-    <ToggleInput
-      title="Fill Toggle"
-      className="tl-button"
-      pressed={noFill}
-      onPressedChange={handleChange}
-    >
+    <ToggleInput title="Fill" className="tl-button" pressed={noFill} onPressedChange={handleChange}>
       <TablerIcon name={noFill ? 'droplet-off' : 'droplet'} />
     </ToggleInput>
   )
@@ -335,7 +330,6 @@ const SwatchAction = observer(() => {
   const color = shapes[0].props.noFill ? shapes[0].props.stroke : shapes[0].props.fill
   return (
     <ColorInput
-      title="Color Picker"
       popoverSide="top"
       color={color}
       opacity={shapes[0].props.opacity}
@@ -355,10 +349,12 @@ const StrokeTypeAction = observer(() => {
     {
       value: 'line',
       icon: 'circle',
+      tooltip: 'Solid',
     },
     {
       value: 'dashed',
       icon: 'circle-dashed',
+      tooltip: 'Dashed',
     },
   ]
 

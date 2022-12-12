@@ -4,6 +4,7 @@
             [frontend.components.block :as block]
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
+            [frontend.components.shortcut :as shortcut]
             [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -11,9 +12,10 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as db-model]
             [frontend.extensions.slide :as slide]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.handler.ui :as ui-handler]
             [frontend.util :as util]
             [goog.object :as gobj]
             [medley.core :as medley]
@@ -27,7 +29,7 @@
       [:button.button.icon.toggle-right-sidebar
        {:title "Toggle right sidebar"
         :on-click ui-handler/toggle-right-sidebar!}
-       (ui/icon "layout-sidebar-right" {:style {:fontSize "20px"}})])))
+       (ui/icon "layout-sidebar-right" {:size 20})])))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]
@@ -49,9 +51,14 @@
    (when-let [contents (db/entity [:block/name "contents"])]
      (page/contents-page contents))])
 
+(rum/defc shortcut-settings
+  []
+  [:div.contents.flex-col.flex.ml-3
+   (shortcut/shortcut {:show-title? false})])
+
 (defn- block-with-breadcrumb
   [repo block idx sidebar-key ref?]
-  (let [block-id (:block/uuid block)]
+  (when-let [block-id (:block/uuid block)]
     [[:div.mt-1 {:class (if ref? "ml-8" "ml-1")}
       (block/breadcrumb {:id     "block-parent"
                          :block? true
@@ -93,6 +100,8 @@
       [[:a.page-title {:href     (if (db-model/whiteboard-page? page-name)
                                    (rfe/href :whiteboard {:name page-name})
                                    (rfe/href :page {:name page-name}))
+                       :draggable true
+                       :on-drag-start (fn [event] (editor-handler/block->data-transfer! page-name event))
                        :on-click (fn [e]
                                    (when (gobj/get e "shiftKey")
                                      (.preventDefault e)))}
@@ -106,6 +115,9 @@
         (db-model/get-page-original-name page-name)]
        [:div.ml-2.slide.mt-2
         (slide/slide page-name)]])
+    
+    :shortcut-settings
+    [(t :help/shortcuts) (shortcut-settings)]
 
     ["" [:span]]))
 

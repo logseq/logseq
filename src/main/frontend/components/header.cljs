@@ -134,7 +134,7 @@
         :icon (ui/icon "brand-discord")}
        
        {:title [:div.flex-row.flex.justify-between.items-center
-                [:span "Bug report"]]
+                [:span (t :help/bug)]]
         :options {:href bug-report-url
                   :title "Fire a bug report on Github"
                   :target "_blank"}
@@ -210,10 +210,14 @@
                                           :native-android (mobile-util/native-android?)}])
       :on-double-click (fn [^js e]
                          (when-let [target (.-target e)]
-                           (when (and (util/electron?)
-                                      (.. target -classList (contains "drag-region")))
-                             (js/window.apis.toggleMaxOrMinActiveWindow))))
-      :style           {:fontSize  50}}
+                           (cond
+                             (and (util/electron?)
+                                  (.. target -classList (contains "drag-region")))
+                             (js/window.apis.toggleMaxOrMinActiveWindow)
+
+                             (mobile-util/native-platform?)
+                             (util/scroll-to-top true))))
+      :style           {:fontSize 50}}
      [:div.l.flex.drag-region
       (when-not (mobile-util/native-platform?)
         [left-menu
