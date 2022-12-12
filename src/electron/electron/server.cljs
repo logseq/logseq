@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [promesa.core :as p]
             [electron.utils :as utils]
+            [camel-snake-kebab.core :as csk]
             [electron.logger :as logger]))
 
 (defonce ^:private *win (atom nil))
@@ -19,6 +20,18 @@
 (defn type-normal-api? [s]
   (not (type-proxy-api? s)))
 
+(defn resolve-real-api-method
+  [s]
+  (when-not (string/blank? s)
+    (if (type-proxy-api? s)
+      (let [s'   (string/split s ".")
+            tag  (second s')
+            tag' (when (and (not (string/blank? tag))
+                            (contains? #{"ui" "git" "assets"} (string/lower-case tag)))
+                   (str tag "_"))]
+        (csk/->snake_case (str tag' (last s'))))
+      (string/trim s))))
+
 (defonce ^:private *cid (volatile! 0))
 (defn- invoke-logseq-api!
   [method args]
@@ -31,9 +44,15 @@
 
 (defn api-invoker-fn!
   [^js req ^js rep]
-  (.send rep #js {:method (.-method req)
-                  :msg    "Hello ❤️ Logseq!"
-                  :body   (.-body req)}))
+  (if-let [^js body (.-body req)]
+    (if-let [method (resolve-real-api-method (.-method body))]
+      (-> (invoke-logseq-api! method (.-args body))
+          (p/then #(.send rep %))
+          (p/catch #(.send rep %)))
+      (-> rep
+          (.code 400)
+          (.send (js/Error. ":method of body is missing!"))))
+    (throw (js/Error. "Body{:method :args} is required!"))))
 
 (defn close!
   []

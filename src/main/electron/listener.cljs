@@ -221,9 +221,13 @@
                              ret-fn! #(ipc/invoke (str :electron.server/sync! sync-id) %)]
 
                          (try
-                           (-> (p/promise (apply js-invoke (aget js/window.logseq "api") method args))
-                               (p/then #(ret-fn! %))
-                               (p/catch #(ret-fn! {:error %})))
+                           (println "invokeLogseqAPI:" method)
+                           (let [^js apis (aget js/window.logseq "api")]
+                             (when-not (aget apis method)
+                               (throw (js/Error. (str "MethodNotExist:" method))))
+                             (-> (p/promise (apply js-invoke apis method args))
+                                 (p/then #(ret-fn! %))
+                                 (p/catch #(ret-fn! {:error %}))))
                            (catch js/Error e
                              (ret-fn! {:error (.-message e)})))))))
 
