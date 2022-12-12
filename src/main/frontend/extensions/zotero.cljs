@@ -496,5 +496,5 @@
           (str "file://"
                (util/node-path.join
                 (setting/setting :zotero-linked-attachment-base-directory)
-                path))]
+                (str/replace-first path "attachments:" "")))]
       (open-button full-path))))
