@@ -287,6 +287,9 @@
    :sidebar/open-today-page        {:binding (if mac? "mod+shift+j" "alt+shift+j")
                                     :fn      page-handler/open-today-in-sidebar}
 
+   :sidebar/close-top              {:binding "c t"
+                                    :fn      #(state/sidebar-remove-block! 0)}
+
    :sidebar/clear                  {:binding "mod+c mod+c"
                                     :fn      #(do
                                                 (state/clear-sidebar-blocks!)
@@ -582,7 +585,9 @@
                           :ui/install-plugins-from-file
                           :editor/toggle-open-blocks
                           :ui/toggle-cards
-                          :git/commit])
+                          :git/commit
+                          :sidebar/close-top
+                          ])
      (with-meta {:before m/enable-when-not-editing-mode!}))}))
 
 ;; To add a new entry to this map, first add it here and then
@@ -703,6 +708,7 @@
     :graph/add
     :graph/save
     :graph/re-index
+    :sidebar/close-top
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index
