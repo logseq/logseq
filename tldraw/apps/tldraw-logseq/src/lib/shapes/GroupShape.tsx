@@ -54,8 +54,8 @@ export class GroupShape extends TLGroupShape<GroupShapeProps> {
         strokeDasharray="8 2"
         x={-GROUP_PADDING}
         y={-GROUP_PADDING}
-        rx={GROUP_PADDING}
-        ry={GROUP_PADDING}
+        rx={GROUP_PADDING / 2}
+        ry={GROUP_PADDING / 2}
         width={bounds.width + GROUP_PADDING * 2}
         height={bounds.height + GROUP_PADDING * 2}
         fill="transparent"

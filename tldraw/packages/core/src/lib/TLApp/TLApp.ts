@@ -17,7 +17,14 @@ import type {
   TLSubscriptionEventName,
 } from '../../types'
 import { AlignType, DistributeType } from '../../types'
-import { BoundsUtils, createNewLineBinding, isNonNullable, KeyUtils, uniqueId } from '../../utils'
+import {
+  BoundsUtils,
+  createNewLineBinding,
+  dedupe,
+  isNonNullable,
+  KeyUtils,
+  uniqueId,
+} from '../../utils'
 import type { TLGroupShape, TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
 import { TLApi } from '../TLApi'
 import { TLCursors } from '../TLCursors'
@@ -333,19 +340,28 @@ export class TLApp<
     shapesInGroups.forEach(shape => {
       const parentGroup = this.getParentGroup(shape)
       if (parentGroup) {
-        parentGroup.update({
-          children: parentGroup.props.children?.filter(id => id !== shape.id),
-        })
+        const newChildren: string[] | undefined = parentGroup.props.children?.filter(
+          id => id !== shape.id
+        )
+        if (!newChildren || newChildren?.length <= 1) {
+          // remove empty group or group with only one child
+          ids.add(parentGroup.id)
+        } else {
+          parentGroup.update({ children: newChildren })
+        }
       }
     })
 
+    const allShapesToDelete = [...ids].map(id => this.getShapeById(id)!)
+
     this.setSelectedShapes(this.selectedShapesArray.filter(shape => !ids.has(shape.id)))
-    const removedShapes = this.currentPage.removeShapes(...[...normalizedShapes, ...shapesInGroups])
+    const removedShapes = this.currentPage.removeShapes(...allShapesToDelete)
     if (removedShapes) this.notify('delete-shapes', removedShapes)
     this.persist()
     return this
   }
 
+  /** Get all shapes in groups */
   shapesInGroups(groups = this.shapes) {
     return groups
       .flatMap(shape => shape.props.children)
@@ -513,11 +529,16 @@ export class TLApp<
 
   copy = () => {
     if (this.selectedShapesArray.length > 0 && !this.editingShape) {
+      const selectedShapes = dedupe([
+        ...this.selectedShapesArray,
+        // should also include shapes in a group
+        ...this.shapesInGroups(this.selectedShapesArray),
+      ])
       const jsonString = JSON.stringify({
-        shapes: this.selectedShapesArray.map(shape => shape.serialized),
+        shapes: selectedShapes.map(shape => shape.serialized),
         // pasting into other whiteboard may require this if any shape uses the assets
         assets: this.getCleanUpAssets().filter(asset => {
-          return this.selectedShapesArray.some(shape => shape.props.assetId === asset.id)
+          return selectedShapes.some(shape => shape.props.assetId === asset.id)
         }),
         // convey the bindings to maintain the new links after pasting
         bindings: toJS(this.currentPage.bindings),
@@ -527,7 +548,7 @@ export class TLApp<
       navigator.clipboard.write([
         new ClipboardItem({
           'text/html': new Blob([tldrawString], { type: 'text/html' }),
-          'text/plain': new Blob([`((${this.selectedShapesArray[0].props.id}))`], {
+          'text/plain': new Blob([`((${selectedShapes[0].props.id}))`], {
             type: 'text/plain',
           }),
         }),
@@ -628,6 +649,17 @@ export class TLApp<
     const stateId = selectedTool.id
     if (stateId !== 'select') return []
     return Array.from(selectedShapes.values())
+  }
+
+  // include selected shapes in groups
+  @computed get allSelectedShapes() {
+    return new Set(this.allSelectedShapesArray)
+  }
+
+  // include selected shapes in groups
+  @computed get allSelectedShapesArray() {
+    const { selectedShapesArray } = this
+    return dedupe([...selectedShapesArray, ...this.shapesInGroups(selectedShapesArray)])
   }
 
   @action setSelectedShapes = (shapes: S[] | string[]): this => {
