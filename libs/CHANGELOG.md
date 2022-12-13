@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ## [0.0.13]
 
+### Added
+- Support block content slot hook `App.onBlockRendererSlotted` with a specific block UUID.
+- Support plugins calling each other `App.invokeExternalPlugin` with key of models & commands. E.g.  
+  https://github.com/xyhp915/logseq-journals-calendar/blob/main/src/main.js#L74
+  ```typescript
+  await logseq.App.invokeExternalPlugin('logseq-journals-calendar.models.goToToday')
+  ```
+- Support predicate for `DB.datascriptQuery` inputs.
+
+### Fixed
+- Incorrect hook payload from `Editor.registerHighlightContextMenuItem`.
+- Auto generate key if not exist for `provideUI` options.
+
 ## [0.0.12]
 
 ### Added
