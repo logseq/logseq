@@ -67,7 +67,14 @@
 
   (let [server-state (state/sub :electron/server)
         *configs     (::configs _state)
-        {:keys [host port autostart]} @*configs]
+        {:keys [host port autostart]} @*configs
+        hp-changed?  (or (not= host (:host server-state))
+                         (not= (util/safe-parse-int port)
+                               (util/safe-parse-int (:port server-state))))
+        changed?     (or hp-changed? (->> [autostart (:autostart server-state)]
+                                          (mapv #(cond-> % (nil? %) not))
+                                          (apply not=)))]
+
     [:div.cp__server-configs-panel.-mx-2
      [:h2.text-3xl.-translate-y-4 "Server configurations"]
 
@@ -104,7 +111,15 @@
       (ui/button "Reset" :intent "logseq"
                  :on-click #(reset! *configs (select-keys server-state [:host :port :autostart])))
       (ui/button "Save & Apply"
-                 :on-click #(prn "===>>" (select-keys @*configs [:host :port :autostart])))]]))
+                 :disabled (not changed?)
+                 :on-click (fn []
+                             (let [configs (select-keys @*configs [:host :port :autostart])]
+                               (-> (ipc/ipc :server/set-config configs)
+                                   (p/then #(p/let [_ (close-panel)
+                                                    _ (p/delay 1000)]
+                                              (when hp-changed?
+                                                (ipc/ipc :server/do :restart))))
+                                   (p/catch #(notification/show! (str %) :error))))))]]))
 
 (rum/defc server-indicator
   [server-state]
@@ -112,9 +127,15 @@
   (rum/use-effect!
    #(ipc/ipc :server/load-state) [])
 
-  (let [{:keys [status]} server-state
+  (let [{:keys [status error]} server-state
         status   (keyword (util/safe-lower-case status))
         running? (= :running status)]
+
+    (rum/use-effect!
+     #(when error
+        (notification/show! (str "[Server] " error) :error))
+     [error])
+
     [:div.cp__server-indicator
      (ui/icon "api" {:size 24})
      [:code.text-sm.ml-1
