@@ -359,7 +359,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     return this
   }
 
-  doGroup = (shapes: S[] = this.app.selectedShapesArray) => {
+  doGroup = (shapes: S[] = this.app.allSelectedShapesArray) => {
     const selectedGroups: S[] = [
       ...shapes.filter(s => s.type === 'group'),
       ...shapes.map(s => this.app.getParentGroup(s)),
@@ -385,7 +385,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     this.app.persist()
   }
 
-  unGroup = (shapes: S[] = this.app.selectedShapesArray) => {
+  unGroup = (shapes: S[] = this.app.allSelectedShapesArray) => {
     const selectedGroups: S[] = [
       ...shapes.filter(s => s.type === 'group'),
       ...shapes.map(s => this.app.getParentGroup(s)),
