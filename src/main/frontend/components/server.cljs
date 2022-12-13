@@ -141,7 +141,8 @@
      [:code.text-sm.ml-1
       (if-not running?
         (string/upper-case (or (:status server-state) "stopped"))
-        (str "http://" (:host server-state) ":" (:port server-state)))]
+        (let [href (str "http://" (:host server-state) ":" (:port server-state))]
+          [:a.hover:underline {:href href} href]))]
 
      ;; settings menus
      (ui/dropdown-with-links

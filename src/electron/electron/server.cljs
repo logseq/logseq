@@ -1,6 +1,7 @@
 (ns electron.server
   (:require ["fastify" :as Fastify]
             ["electron" :refer [ipcMain]]
+            ["fs-extra" :as fs-extra]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -20,11 +21,12 @@
 
 (defn- reset-state!
   []
-  (reset! *state {:status nil                               ;; :running :starting :closing :closed :error
-                  :error  nil
-                  :host   (get-host)
-                  :port   (get-port)
-                  :tokens (cfgs/get-item :server/tokens)}))
+  (reset! *state {:status    nil                            ;; :running :starting :closing :closed :error
+                  :error     nil
+                  :host      (get-host)
+                  :port      (get-port)
+                  :tokens    (cfgs/get-item :server/tokens)
+                  :autostart (cfgs/get-item :server/autostart)}))
 
 (defn- set-status!
   ([status] (set-status! status nil))
@@ -77,14 +79,16 @@
 
 (defn- api-pre-handler!
   [^js req ^js rep callback]
-  (try
-    (let [^js headers (.-headers req)]
-      (validate-auth-token (.-authorization headers))
-      (callback))
-    (catch js/Error _e
-      (-> rep
-          (.code 401)
-          (.send _e)))))
+  (if (= "/" (.-url req))
+    (callback)
+    (try
+      (let [^js headers (.-headers req)]
+        (validate-auth-token (.-authorization headers))
+        (callback))
+      (catch js/Error _e
+        (-> rep
+            (.code 401)
+            (.send _e))))))
 
 (defonce ^:private *cid (volatile! 0))
 (defn- invoke-logseq-api!
@@ -124,11 +128,22 @@
   []
   (-> (p/let [_     (close!)
               _     (set-status! :starting)
-              ^js s (Fastify. #js {:logger true})
+              ^js s (Fastify. #js {:logger                true
+                                   :requestTimeout        (* 1000 42)
+                                   :forceCloseConnections true})
               ;; hooks & routes
               _     (doto s
                       (.addHook "preHandler" api-pre-handler!)
-                      (.post "/api-invoker" api-invoker-fn!))
+                      (.post "/api-invoker" api-invoker-fn!)
+                      (.get "/" (fn [_ ^js rep]
+                                  (let [html (fs-extra/readFileSync "./docs/api_server.html")
+                                        HOST (get-host)
+                                        PORT (get-port)
+                                        html (-> (str html)
+                                                 (string/replace-first "${HOST}" HOST)
+                                                 (string/replace-first "${PORT}" PORT))]
+                                    (doto rep (.type "text/html")
+                                              (.send html))))))
               ;; listen port
               _     (.listen s (bean/->js (select-keys @*state [:host :port])))]
         (reset! *server s)
@@ -152,4 +167,5 @@
   (reset! *win win)
   (let [t (setup-state-watch!)]
     (reset-state!)
-    (start!) t))
+    (when-not (false? (:autostart @*state))
+      (start!)) t))
