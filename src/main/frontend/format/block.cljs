@@ -56,9 +56,13 @@ and handles unexpected failure."
             (tf/unparse date/custom-formatter))))
 
 (defn normalize-block
-  "Normalizes supported formats such as dates and percentages."
-  ([block]
-   (->> [normalize-as-percentage normalize-as-date identity]
+  "Normalizes supported formats such as dates and percentages.
+   Be careful, this function may harm query sort performance!
+   - nlp-date? - Enable NLP parsing on date items.
+       Requires heavy computation (see `normalize-as-date` for details)"
+  ([block nlp-date?]
+   (->> [normalize-as-percentage (when nlp-date? normalize-as-date) identity]
+        (remove nil?)
         (map #(% (if (set? block) (first block) block)))
         (remove nil?)
         (first))))

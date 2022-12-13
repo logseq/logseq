@@ -5,7 +5,7 @@
 
 (deftest test-normalize-date
   (testing "normalize date values"
-    (are [x y] (= (block/normalize-block x) y)
+    (are [x y] (= (block/normalize-block x true) y)
          "Aug 12th, 2022"
          "2022-08-12T00:00:00Z"
 
@@ -20,7 +20,7 @@
 
 (deftest test-normalize-percentage
   (testing "normalize percentages"
-    (are [x y] (= (block/normalize-block x) y)
+    (are [x y] (= (block/normalize-block x false) y)
          "50%"
          0.5
 
@@ -35,7 +35,7 @@
 
 (deftest test-random-values
   (testing "random values should not be processed"
-    (are [x y] (= (block/normalize-block x) y)
+    (are [x y] (= (block/normalize-block x false) y)
          "anreanre"
          "anreanre"
 
