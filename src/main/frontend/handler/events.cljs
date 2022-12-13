@@ -390,7 +390,8 @@
 (defmethod handle :go/search [_]
   (state/set-modal! component-search/search-modal
                     {:fullscreen? false
-                     :close-btn?  false}))
+                     :close-btn?  false
+                     :label "ls-modal-search"}))
 
 (defmethod handle :go/plugins [_]
   (plugin/open-plugins-modal!))
