@@ -240,6 +240,14 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
       }
     })
 
+    clonedShapes.forEach(s => {
+      if (s.children && s.children?.length > 0) {
+        s.children = s.children.map(oldId => {
+          return clonedShapes[shapes.findIndex(s => s.id === oldId)].id
+        })
+      }
+    })
+
     const clonedBindings: TLBinding[] = []
 
     // Try to rebinding the shapes with the given bindings
