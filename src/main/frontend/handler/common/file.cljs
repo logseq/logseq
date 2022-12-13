@@ -9,7 +9,8 @@
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
-            [frontend.fs.capacitor-fs :as capacitor-fs]))
+            [frontend.fs.capacitor-fs :as capacitor-fs]
+            [frontend.context.i18n :refer [t]]))
 
 (defn- page-exists-in-another-file
   "Conflict of files towards same page"
@@ -23,7 +24,7 @@
   [repo-url file-page file-path]
   (when-let [current-file (page-exists-in-another-file repo-url file-page file-path)]
     (when (not= file-path current-file)
-      (let [error (str "Page already exists with another file: " current-file ", current file: " file-path ". Please keep only one of them and re-index your graph.")]
+      (let [error (t :file/validate-existing-file-error current-file file-path)]
         (state/pub-event! [:notification/show
                            {:content error
                             :status :error
