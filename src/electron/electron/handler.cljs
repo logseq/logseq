@@ -358,8 +358,12 @@
   (utils/get-ls-dotdir-root))
 
 (defmethod handle :testProxyUrl [win [_ url]]
-  (p/let [_ (utils/fetch url)]
-    (utils/send-to-renderer win :notification {:type "success" :payload (str "Successfully: " url)})))
+  (p/let [resp (utils/fetch url)
+          code (.-status resp)]
+    (js/console.debug resp code)
+    (if (<= 200 code 299)
+      (utils/send-to-renderer win :notification {:type "success" :payload (str "Success: " url " status " code)})
+      (utils/send-to-renderer win :notification {:type "error" :payload (str "Failed: " url " status " code)}))))
 
 (defmethod handle :httpFetchJSON [_win [_ url options]]
   (p/let [res (utils/fetch url options)

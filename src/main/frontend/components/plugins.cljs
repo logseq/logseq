@@ -409,10 +409,16 @@
        [:span.w-60
         [:input.form-input.is-small
          {:ref         *test-input
+          :list        "proxy-test-url-datalist"
+          :type        "url"
           :placeholder "http://"
           :on-change   #(set-opts!
                          (assoc opts :test (util/trim-safe (util/evalue %))))
-          :value       (:test opts)}]]
+          :value       (:test opts)}]
+        [:datalist#proxy-test-url-datalist
+         [:option "https://www.google.com"]
+         [:option "https://s3.amazonaws.com"]
+         [:option "https://clients3.google.com/generate_204"]]]
 
        (ui/button (if testing? (ui/loading "Testing") "Test URL")
                   :intent "logseq" :large? false
