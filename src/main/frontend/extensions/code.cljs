@@ -260,8 +260,13 @@
                 state)
    :did-update (fn [state]
                  (reset! (:code-options state) (last (:rum/args state)))
-                 (.setValue @(:editor-atom state)
-                            (string/join "" (butlast (:lines (last (:rum/args state))))))
+                 (->> state
+                      :rum/args
+                      last
+                      :lines
+                      butlast
+                      (string/join "")
+                      (.setValue @(:editor-atom state)))
                  state)}
   [state _config id attr code _theme _options]
   [:div.extensions__code
