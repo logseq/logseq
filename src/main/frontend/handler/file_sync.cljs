@@ -132,7 +132,7 @@
        (when-not (instance? ExceptionInfo r)
          (path/join "logseq" "version-files" key))))))
 
-(defn- list-file-local-versions
+(defn- <list-file-local-versions
   [page]
   (go
     (when-let [path (-> page :block/file :file/path)]
@@ -175,7 +175,7 @@
         (go
           (let [version-list       (:VersionList
                                     (<! (sync/<get-remote-file-versions sync/remoteapi graph-uuid path*)))
-                local-version-list (<! (list-file-local-versions page))
+                local-version-list (<! (<list-file-local-versions page))
                 all-version-list   (->> (concat version-list local-version-list)
                                         (sort-by #(or (:CreateTime %)
                                                       (:create-time %))
