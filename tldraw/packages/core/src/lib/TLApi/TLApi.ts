@@ -1,6 +1,6 @@
 import Vec from '@tldraw/vec'
 import type { TLAsset, TLBinding, TLEventMap } from '../../types'
-import { BoundsUtils, uniqueId } from '../../utils'
+import { BoundsUtils, isNonNullable, uniqueId } from '../../utils'
 import type { TLShape, TLShapeModel } from '../shapes'
 import type { TLApp } from '../TLApp'
 
@@ -93,7 +93,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
   /** Select all shapes on the current page. */
   selectAll = (): this => {
     this.app.setSelectedShapes(
-      this.app.currentPage.shapes.filter(s => !this.app.shapesInGroup.includes(s))
+      this.app.currentPage.shapes.filter(s => !this.app.shapesInGroups().includes(s))
     )
     return this
   }
@@ -349,5 +349,44 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
       this.addClonedShapes(data)
     }
     return this
+  }
+
+  doGroup = (shapes: S[] = this.app.selectedShapesArray) => {
+    const selectedGroups: S[] = [
+      ...shapes.filter(s => s.type === 'group'),
+      ...shapes.map(s => this.app.getParentGroup(s)),
+    ].filter(isNonNullable)
+    // not using this.app.removeShapes because it also remove shapes in the group
+    this.app.currentPage.removeShapes(...selectedGroups)
+
+    // group all shapes
+    const selectedShapes = shapes.filter(s => s.type !== 'group')
+    if (selectedShapes.length > 1) {
+      const ShapeGroup = this.app.getShapeClass('group')
+      const group = new ShapeGroup({
+        id: uniqueId(),
+        type: ShapeGroup.id,
+        parentId: this.app.currentPage.id,
+        children: selectedShapes.map(s => s.id),
+      })
+      this.app.currentPage.addShapes(group)
+      this.app.setSelectedShapes([group])
+    }
+    this.app.persist()
+  }
+
+  unGroup = (shapes: S[] = this.app.selectedShapesArray) => {
+    const selectedGroups: S[] = [
+      ...shapes.filter(s => s.type === 'group'),
+      ...shapes.map(s => this.app.getParentGroup(s)),
+    ].filter(isNonNullable)
+
+    const shapesInGroups = this.app.shapesInGroups(selectedGroups)
+
+    // not using this.app.removeShapes because it also remove shapes in the group
+    this.app.currentPage.removeShapes(...selectedGroups)
+    this.app.persist()
+
+    this.app.setSelectedShapes(shapesInGroups)
   }
 }
