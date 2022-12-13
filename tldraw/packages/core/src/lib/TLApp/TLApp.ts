@@ -320,18 +320,27 @@ export class TLApp<
 
   @action readonly deleteShapes = (shapes: S[] | string[]): this => {
     if (shapes.length === 0) return this
-    let ids: Set<string>
-    if (typeof shapes[0] === 'string') {
-      ids = new Set(shapes as string[])
-    } else {
-      ids = new Set((shapes as S[]).map(shape => shape.id))
-    }
+    const normalizedShapes: S[] = shapes
+      .map(shape => (typeof shape === 'string' ? this.getShapeById(shape) : shape))
+      .filter(isNonNullable)
 
-    // todo: delete a group shape should also delete its children
-    // todo: delete a shape in a group should also update the group shape
+    // delete a group shape should also delete its children
+    const shapesInGroups = this.shapesInGroups(normalizedShapes)
+
+    let ids: Set<string> = new Set([...normalizedShapes, ...shapesInGroups].map(s => s.id))
+
+    // delete a shape in a group should also update the group shape
+    shapesInGroups.forEach(shape => {
+      const parentGroup = this.getParentGroup(shape)
+      if (parentGroup) {
+        parentGroup.update({
+          children: parentGroup.props.children?.filter(id => id !== shape.id),
+        })
+      }
+    })
 
     this.setSelectedShapes(this.selectedShapesArray.filter(shape => !ids.has(shape.id)))
-    const removedShapes = this.currentPage.removeShapes(...shapes)
+    const removedShapes = this.currentPage.removeShapes(...[...normalizedShapes, ...shapesInGroups])
     if (removedShapes) this.notify('delete-shapes', removedShapes)
     this.persist()
     return this
@@ -342,6 +351,10 @@ export class TLApp<
       .flatMap(shape => shape.props.children)
       .filter(isNonNullable)
       .map(id => this.getShapeById(id)!)
+  }
+
+  getParentGroup(shape: S) {
+    return this.shapes.find(group => group.props.children?.includes(shape.id))
   }
 
   bringForward = (shapes: S[] | string[] = this.selectedShapesArray): this => {
