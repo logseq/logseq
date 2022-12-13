@@ -58,7 +58,6 @@
 
 (defonce *asset-uploading? (atom false))
 (defonce *asset-uploading-process (atom 0))
-(defonce *selected-text (atom nil))
 
 (defn get-selection-and-format
   []
@@ -1524,7 +1523,6 @@
         value (str prefix postfix)
         input (gdom/getElement input-id)]
     (when value
-      (when-not (string/blank? selected) (reset! *selected-text selected))
       (let [[prefix _pos] (commands/simple-replace! input-id value selected
                                                     {:backward-pos (count postfix)
                                                      :check-fn (fn [new-value prefix-pos]
@@ -1535,12 +1533,14 @@
           (= prefix page-ref/left-brackets)
           (do
             (commands/handle-step [:editor/search-page])
-            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
+            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)
+                                            :selected selected}))
 
           (= prefix block-ref/left-parens)
           (do
             (commands/handle-step [:editor/search-block :reference])
-            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})))))))
+            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)
+                                            :selected selected})))))))
 
 (defn surround-by?
   [input before end]
@@ -1848,8 +1848,14 @@
       :else
       nil)))
 
+(defn get-selected-text
+  []
+  (let [text (:selected (state/get-editor-action-data))]
+    (when-not (string/blank? text)
+      text)))
+
 (defn block-on-chosen-handler
-  [_input id q format]
+  [id q format selected-text]
   (fn [chosen _click?]
     (state/clear-editor-action!)
     (let [uuid-string (str (:block/uuid chosen))]
@@ -1858,7 +1864,7 @@
       (insert-command! id
                        (block-ref/->block-ref uuid-string)
                        format
-                       {:last-pattern (str block-ref/left-parens (if @*selected-text "" q))
+                       {:last-pattern (str block-ref/left-parens (if selected-text "" q))
                         :end-pattern block-ref/right-parens
                         :postfix-fn   (fn [s] (util/replace-first block-ref/right-parens s ""))
                         :forward-pos 3
