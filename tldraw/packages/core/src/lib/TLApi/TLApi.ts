@@ -371,6 +371,8 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
       })
       this.app.currentPage.addShapes(group)
       this.app.setSelectedShapes([group])
+      // the shapes in the group should also be moved to the bottom of the array (to be on top on the canvas)
+      this.app.bringForward(selectedShapes)
     }
     this.app.persist()
   }
