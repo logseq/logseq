@@ -56,6 +56,56 @@
                                       (p/finally #(close-panel))))
                  :disabled (not changed?))]]))
 
+(rum/defcs panel-of-configs
+  < rum/reactive
+    (rum/local nil ::configs)
+    {:will-mount
+     (fn [s]
+       (let [*configs (s ::configs)]
+         (reset! *configs (:electron/server @state/state)) s))}
+  [_state close-panel]
+
+  (let [server-state (state/sub :electron/server)
+        *configs     (::configs _state)
+        {:keys [host port autostart]} @*configs]
+    [:div.cp__server-configs-panel.-mx-2
+     [:h2.text-3xl.-translate-y-4 "Server configurations"]
+
+     [:div.item.flex.items-center.space-x-3
+      [:label.basis-96
+       [:strong "Host"]
+       [:input.form-input
+        {:value     host
+         :on-change #(let [value (.-value (.-target %))]
+                       (swap! *configs assoc :host value))}]]
+
+      [:label
+       [:strong "Port (0 ~ 65536)"]
+       [:input.form-input
+        {:auto-focus true
+         :value      port
+         :min        "1"
+         :max        "65536"
+         :type       "number"
+         :on-change  #(let [value (.-value (.-target %))]
+                        (swap! *configs assoc :port value))}]]]
+
+     [:p.py-3.px-1
+      [:label.flex.space-x-2.items-center
+       [:input.form-checkbox
+        {:type      "checkbox"
+         :on-change #(let [checked (.-checked (.-target %))]
+                       (swap! *configs assoc :autostart checked))
+         :checked   (not (false? autostart))}]
+
+       [:strong.select-none "Auto start server with the app launched"]]]
+
+     [:p.flex.justify-end.pt-6.space-x-3
+      (ui/button "Reset" :intent "logseq"
+                 :on-click #(reset! *configs (select-keys server-state [:host :port :autostart])))
+      (ui/button "Save & Apply"
+                 :on-click #(prn "===>>" (select-keys @*configs [:host :port :autostart])))]]))
+
 (rum/defc server-indicator
   [server-state]
 
@@ -99,7 +149,10 @@
              :icon    (ui/icon "key")}
 
             {:title   "Server configurations"
-             :options {:on-click #(notification/show! "TODO: manager of server!")}
+             :options {:on-click #(state/set-modal!
+                                   (fn [close]
+                                     (panel-of-configs close))
+                                   {:center? true})}
              :icon    (ui/icon "server-cog")}])
       {})]))
 
