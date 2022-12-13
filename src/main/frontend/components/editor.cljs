@@ -577,7 +577,8 @@
                   ::id (str (random-uuid))))
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))
-                state)}
+                state)
+   :will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   (mixins/event-mixin setup-key-listener!)
   (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
