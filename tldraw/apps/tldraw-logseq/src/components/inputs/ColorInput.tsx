@@ -3,6 +3,7 @@ import * as Slider from '@radix-ui/react-slider'
 import { Color } from '@tldraw/core'
 import { TablerIcon } from '../icons'
 import { PopoverButton } from '../PopoverButton'
+import { Tooltip } from '../Tooltip'
 
 interface ColorInputProps extends React.HTMLAttributes<HTMLButtonElement> {
   color?: string
@@ -33,7 +34,17 @@ export function ColorInput({
   }
 
   return (
-    <PopoverButton {...rest} border arrow side={popoverSide} label={renderColor(color)}>
+    <PopoverButton
+      {...rest}
+      border
+      arrow
+      side={popoverSide}
+      label={
+        <Tooltip content={'Color'} side={popoverSide} sideOffset={14}>
+          {renderColor(color)}
+        </Tooltip>
+      }
+    >
       <div className="p-1">
         <div className={'tl-color-palette'}>
           {Object.values(Color).map(value => (
