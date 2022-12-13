@@ -4505,6 +4505,7 @@
                                 :default "tutorial-tr.md")
         :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-tr.md")
                                        :default "dummy-notes-tr.md")
+        :on-boarding/closed-feature "Kapalı {1}"
         :on-boarding/demo-graph "Bu bir demo graftır, yerel bir klasör açana kadar değişiklikler kaydedilmeyecektir."
         :on-boarding/add-graph "Bir graf ekle"
         :on-boarding/open-local-dir "Yerel bir dizin açın"
@@ -4513,6 +4514,14 @@
         :on-boarding/new-graph-desc-3 "/journals - günlük sayfalarınız saklanır"
         :on-boarding/new-graph-desc-4 "/pages - diğer sayfalarınız saklanır"
         :on-boarding/new-graph-desc-5 "/logseq - yapılandırma, custom.css ve bazı meta veriler saklanır."
+        :on-boarding/welcome-whiteboard-modal-title "Düşünceleriniz için yeni bir tuval."
+        :on-boarding/welcome-whiteboard-modal-description "Beyaz tahtalar, fikir üretme ve düzenleme için harika bir araçtır. Şimdi bilgi tabanınızdaki düşüncelerinizi ya da yenilerini birbirleriyle yan yana getirerek, bağlantı kurabilir, ilişkilendirebilir ve yeni yöntemlerle anlayabilirsiniz."
+        :on-boarding/welcome-whiteboard-modal-later "Daha sonra"
+        :on-boarding/welcome-whiteboard-modal-start "Beyaz tahtaya başla"
+        :on-boarding/tour-whiteboard-home "{1} Beyaz tahtalarınız için giriş sayfasıdır"
+        :on-boarding/tour-whiteboard-home-description "Beyaz tahtalar uygulamada kendi bölümlerine sahiptir ve onları bir bakışta görebilir, kolayca yenilerini oluşturabilir veya silebilirsiniz."
+        :on-boarding/tour-whiteboard-new "{1} Yeni beyaz tahta oluştur"
+        :on-boarding/tour-whiteboard-new-description "Yeni bir beyaz tahta oluşturmanın birçok yolu vardır. Bunlardan biri her zaman tam burada bu panodadır."
         :help/start "Başlarken"
         :help/about "Logseq hakkında"
         :help/roadmap "Yol haritası"
@@ -4705,6 +4714,7 @@
         :settings-page/spell-checker "Yazım denetleyici"
         :settings-page/auto-updater "Otomatik güncelleme"
         :settings-page/disable-sentry "Kullanım verilerini ve tanılamayı Logseq'e gönderin"
+        :settings-page/disable-sentry-desc "Logseq asla yerel graf veritabanınızı toplamayacak veya verilerinizi satmayacaktır."
         :settings-page/preferred-outdenting "Mantıksal girinti"
         :settings-page/custom-date-format "Tercih edilen tarih biçimi"
         :settings-page/custom-date-format-warning "Yeniden dizin oluşturma gerekli! Mevcut günlük referansları bozulabilir!"
@@ -4722,6 +4732,7 @@
         :settings-page/enable-block-time "Blok zaman damgaları"
         :settings-page/clear-cache "Önbelleği temizle"
         :settings-page/clear "Temizle"
+        :settings-page/clear-cache-warning "Önbelleği temizlemek açık grafları atacaktır. Kaydedilmemiş değişiklikleri kaybedersiniz."
         :settings-page/developer-mode "Geliştirici modu"
         :settings-page/enable-developer-mode "Geliştirici modu"
         :settings-page/disable-developer-mode "Geliştirici modunu devre dışı bırak"

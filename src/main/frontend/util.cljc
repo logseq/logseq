@@ -933,10 +933,11 @@
    (defn search-normalize
      "Normalize string for searching (loose)"
      [s remove-accents?]
-     (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
-       (if remove-accents?
-         (removeAccents  normalize-str)
-         normalize-str))))
+     (when s
+       (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
+         (if remove-accents?
+           (removeAccents  normalize-str)
+           normalize-str)))))
 
 #?(:cljs
    (def page-name-sanity-lc
