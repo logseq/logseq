@@ -92,7 +92,9 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
 
   /** Select all shapes on the current page. */
   selectAll = (): this => {
-    this.app.setSelectedShapes(this.app.currentPage.shapes)
+    this.app.setSelectedShapes(
+      this.app.currentPage.shapes.filter(s => !this.app.shapesInGroup.includes(s))
+    )
     return this
   }
 

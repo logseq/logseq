@@ -47,13 +47,14 @@ export class TranslatingState<
     }
 
     transaction(() => {
-      selectedShapes.forEach(shape =>
+      selectedShapes.forEach(shape => {
         shape.update({ point: Vec.add(initialPoints[shape.id], delta) })
-      )
+      })
     })
   }
 
   private startCloning() {
+    // FIXME: clone group?
     if (!this.didClone) {
       // Create the clones
       this.clones = this.app.selectedShapesArray.map(shape => {
@@ -94,8 +95,6 @@ export class TranslatingState<
     this.moveSelectedShapesToPointer()
 
     this.isCloning = true
-
-    this.moveSelectedShapesToPointer()
   }
 
   onEnter = () => {

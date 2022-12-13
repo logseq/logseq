@@ -18,7 +18,7 @@ import type {
 } from '../../types'
 import { AlignType, DistributeType } from '../../types'
 import { BoundsUtils, createNewLineBinding, isNonNullable, KeyUtils, uniqueId } from '../../utils'
-import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
+import type { TLGroupShape, TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
 import { TLApi } from '../TLApi'
 import { TLCursors } from '../TLCursors'
 
@@ -326,11 +326,22 @@ export class TLApp<
     } else {
       ids = new Set((shapes as S[]).map(shape => shape.id))
     }
+
+    // todo: delete a group shape should also delete its children
+    // todo: delete a shape in a group should also update the group shape
+
     this.setSelectedShapes(this.selectedShapesArray.filter(shape => !ids.has(shape.id)))
     const removedShapes = this.currentPage.removeShapes(...shapes)
     if (removedShapes) this.notify('delete-shapes', removedShapes)
     this.persist()
     return this
+  }
+
+  shapesInGroups(groups = this.shapes) {
+    return groups
+      .flatMap(shape => shape.props.children)
+      .filter(isNonNullable)
+      .map(id => this.getShapeById(id)!)
   }
 
   bringForward = (shapes: S[] | string[] = this.selectedShapesArray): this => {
@@ -576,6 +587,14 @@ export class TLApp<
   @computed get hoveredShape(): S | undefined {
     const { hoveredId, currentPage } = this
     return hoveredId ? currentPage.shapes.find(shape => shape.id === hoveredId) : undefined
+  }
+
+  @computed get hoveredGroup(): S | undefined {
+    const { hoveredShape } = this
+    const hoveredGroup = hoveredShape
+      ? this.shapes.find(s => s.type === 'group' && s.props.children?.includes(hoveredShape.id))
+      : undefined
+    return hoveredGroup as S | undefined
   }
 
   @action readonly setHoveredShape = (shape?: string | S): this => {
@@ -865,7 +884,18 @@ export class TLApp<
   Shapes = new Map<string, TLShapeConstructor<S>>()
 
   registerShapes = (Shapes: TLShapeConstructor<S>[]) => {
-    Shapes.forEach(Shape => this.Shapes.set(Shape.id, Shape))
+    Shapes.forEach(Shape => {
+      // monkey patch Shape
+      if (Shape.id === 'group') {
+        // Group Shape requires this hack to get the real children shapes
+        const app = this
+        Shape.prototype.getShapes = function () {
+          // @ts-expect-error FIXME: this is a hack to get around the fact that we can't use computed properties in the constructor
+          return this.props.children?.map(id => app.getShapeById(id)!) ?? []
+        }
+      }
+      return this.Shapes.set(Shape.id, Shape)
+    })
   }
 
   deregisterShapes = (Shapes: TLShapeConstructor<S>[]) => {
