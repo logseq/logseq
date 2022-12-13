@@ -425,7 +425,8 @@
 
         :conversion/non-desktop "Graph directory in old versions needs to be converted to the new format.
           Please use the desktop app to do the conversion."
-        :conversion/write-filename-format "Apply format for incoming files"}
+        :conversion/write-filename-format "Apply format for incoming files"
+        :notification/clear-all "Clear all"}
 
    :de {:help/about "Über Logseq"
         :on-boarding/demo-graph "Dies ist ein Demo-Graph. Änderungen werden nicht gespeichert, solange Sie kein lokales Verzeichnis öffnen."
@@ -1856,7 +1857,8 @@
 
            :conversion/non-desktop "旧版本中的图谱目录需要转换为新格式。
           请使用桌面端应用进行转换."
-           :conversion/write-filename-format "为传入的文件应用格式"}
+           :conversion/write-filename-format "为传入的文件应用格式"
+           :notification/clear-all "清除全部通知"}
 
    :zh-Hant {:on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
              :on-boarding/add-graph "Add a graph"
