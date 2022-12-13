@@ -48,10 +48,10 @@
     "@electron-forge/maker-rpm": "^6.0.0-beta.57",
     "@electron-forge/maker-squirrel": "^6.0.0-beta.57",
     "@electron-forge/maker-zip": "^6.0.0-beta.57",
+    "@electron/rebuild": "3.2.10",
     "electron": "21.3.3",
     "electron-builder": "^22.11.7",
-    "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git",
-    "electron-rebuild": "3.2.5"
+    "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git"
   },
   "resolutions": {
     "**/electron": "21.3.3",
