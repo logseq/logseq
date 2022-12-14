@@ -1,4 +1,5 @@
 (ns frontend.handler.code
+  "Codemirror editor related."
   (:require [frontend.state :as state]
             [goog.object :as gobj]
             [frontend.db :as db]
