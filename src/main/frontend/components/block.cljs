@@ -2024,6 +2024,13 @@
 (assert (set/subset? hidden-editable-page-properties (gp-property/editable-built-in-properties))
         "Hidden editable page properties must be valid editable properties")
 
+(def hidden-editable-block-properties
+  "Properties that are hidden in a block (block property)"
+  #{:logseq.query/nlp-date})
+
+(assert (set/subset? hidden-editable-block-properties (gp-property/editable-built-in-properties))
+        "Hidden editable page properties must be valid editable properties")
+
 (defn- add-aliases-to-properties
   [properties block]
   (let [repo (state/get-current-repo)
@@ -2044,6 +2051,8 @@
                            (dissoc-keys (property/hidden-properties))
                            pre-block?
                            (dissoc-keys hidden-editable-page-properties)
+                           (not pre-block?)
+                           (dissoc-keys hidden-editable-block-properties)
                            pre-block?
                            (add-aliases-to-properties block))]
     (cond
