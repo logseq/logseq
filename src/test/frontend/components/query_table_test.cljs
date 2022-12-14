@@ -76,10 +76,10 @@
       {:sort-desc? true :sort-by-column :rating}
       [{:rating 8} {:rating 7}]
       [{:rating 8} {:rating 7}]
-      0.5 ;; actual: ~0.05
+      2.0 ;; actual: ~0.05
 
       {:sort-desc? false :sort-by-column :rating}
       [{:rating 8} {:rating 7}]
       [{:rating 7} {:rating 8}]
-      0.5 ;; actual: ~0.05
+      2.0 ;; actual: ~0.05
       )))
