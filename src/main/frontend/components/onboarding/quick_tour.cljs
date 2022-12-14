@@ -161,7 +161,8 @@
     :beforeShowPromise (fn []
                          (when-not (state/sub :ui/left-sidebar-open?)
                            (state/toggle-left-sidebar!))
-                         (wait-target ".nav-header .whiteboard" 500))
+                         (wait-target ".nav-header .whiteboard" 500)
+                         (util/scroll-to-top))
     :canClickTarget    true
     :buttons           [{:text "Next" :action (.-next jsTour)}]
     :popperOptions     {:modifiers [{:name    "preventOverflow"
