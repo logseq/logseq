@@ -63,7 +63,8 @@
   (let [p-desc? (get-in current-block [:block/properties :query-sort-desc])
         desc? (if (some? p-desc?) p-desc? true)
         p-sort-by (keyword (get-in current-block [:block/properties :query-sort-by]))
-        nlp-date? (get-in current-block [:block/properties :query-nlp-date])
+        ;; Starting with #6105, we started putting properties under namespaces.
+        nlp-date? (get-in current-block [:block/properties :logseq.query/nlp-date])
         sort-by-column (or (some-> p-sort-by keyword)
                          (if (query-dsl/query-contains-filter? (:block/content current-block) "sort-by")
                            nil
