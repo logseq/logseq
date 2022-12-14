@@ -18,8 +18,6 @@ export class GroupShape extends TLGroupShape<GroupShapeProps> {
 
   // TODO: add styles for arrow binding states
   ReactComponent = observer(({ events }: TLComponentProps) => {
-    const strokeWidth = 2
-    const bounds = this.getBounds()
     const app = useApp()
 
     const childSelected = app.selectedShapesArray.some(s => {
@@ -30,14 +28,6 @@ export class GroupShape extends TLGroupShape<GroupShapeProps> {
 
     return (
       <SVGContainer {...events}>
-        {/* <rect
-          className={'tl-hitarea-fill'}
-          x={strokeWidth / 2}
-          y={strokeWidth / 2}
-          width={Math.max(0.01, bounds.width - strokeWidth)}
-          height={Math.max(0.01, bounds.height - strokeWidth)}
-          pointerEvents="all"
-        /> */}
         {childSelected && (
           <g stroke="var(--color-selectedFill)">
             <Indicator />

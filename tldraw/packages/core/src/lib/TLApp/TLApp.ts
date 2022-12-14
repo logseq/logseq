@@ -334,10 +334,16 @@ export class TLApp<
     // delete a group shape should also delete its children
     const shapesInGroups = this.shapesInGroups(normalizedShapes)
 
+    normalizedShapes.forEach(shape => {
+      if (this.getParentGroup(shape)) {
+        shapesInGroups.push(shape)
+      }
+    })
+
     let ids: Set<string> = new Set([...normalizedShapes, ...shapesInGroups].map(s => s.id))
 
-    // delete a shape in a group should also update the group shape
     shapesInGroups.forEach(shape => {
+      // delete a shape in a group should also update the group shape
       const parentGroup = this.getParentGroup(shape)
       if (parentGroup) {
         const newChildren: string[] | undefined = parentGroup.props.children?.filter(
@@ -362,11 +368,12 @@ export class TLApp<
   }
 
   /** Get all shapes in groups */
-  shapesInGroups(groups = this.shapes) {
+  shapesInGroups(groups = this.shapes): S[] {
     return groups
       .flatMap(shape => shape.props.children)
       .filter(isNonNullable)
-      .map(id => this.getShapeById(id)!)
+      .map(id => this.getShapeById(id))
+      .filter(isNonNullable)
   }
 
   getParentGroup(shape: S) {
@@ -935,7 +942,7 @@ export class TLApp<
         const app = this
         Shape.prototype.getShapes = function () {
           // @ts-expect-error FIXME: this is a hack to get around the fact that we can't use computed properties in the constructor
-          return this.props.children?.map(id => app.getShapeById(id)!) ?? []
+          return this.props.children?.map(id => app.getShapeById(id)).filter(Boolean) ?? []
         }
       }
       return this.Shapes.set(Shape.id, Shape)
