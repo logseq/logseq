@@ -11,8 +11,6 @@
             ["diff-match-patch" :as google-diff]
             ["/electron/utils" :as js-utils]
             ["abort-controller" :as AbortController]
-            ["child_process" :as child-process]
-            ["command-exists" :as command-exists]
             [electron.shell :as shell]
             [electron.fs-watcher :as watcher]
             [electron.configs :as cfgs]
