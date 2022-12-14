@@ -83,14 +83,14 @@
     :block-ref
     #_:clj-kondo/ignore
     (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
-      (when-let [block (db/entity repo lookup)]
+      (when-let [block (db/pull repo lookup)]
        [(t :right-side-bar/block-ref)
         (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
 
     :block
     #_:clj-kondo/ignore
     (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
-      (when-let [block (db/entity repo lookup)]
+      (when-let [block (db/pull repo lookup)]
         (block-with-breadcrumb repo block idx [repo db-id block-type] false)))
 
     :page
@@ -115,7 +115,7 @@
         (db-model/get-page-original-name page-name)]
        [:div.ml-2.slide.mt-2
         (slide/slide page-name)]])
-    
+
     :shortcut-settings
     [(t :help/shortcuts) (shortcut-settings)]
 
