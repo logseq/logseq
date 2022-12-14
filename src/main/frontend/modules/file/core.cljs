@@ -10,6 +10,7 @@
             [frontend.util.fs :as fs-util]
             [frontend.util :as util]
             [frontend.handler.file :as file-handler]
+            [frontend.db.model :as model]
             [frontend.version :as version]))
 
 (defn- indented-block-content
@@ -164,7 +165,7 @@
     (when (:block/name page)
       (let [format (name (state/get-preferred-file-format repo))
             title (string/capitalize (:block/name page))
-            whiteboard-page? (= "whiteboard" (:block/type page))
+            whiteboard-page? (model/whiteboard-page? page)
             format (if whiteboard-page? "edn" format)
             journal-page? (date/valid-journal-title? title)
             journal-title (date/normalize-journal-title title)
@@ -232,7 +233,7 @@
                            (up/ugly-pr-str {:blocks tree
                                             :pages (list (remove-transit-ids page-block))})
                            (string/triml))
-                          
+
                           (= "edn" ext)
                           (let [{:keys [blocks refs]} (edn-transform-blocks page-block tree)]
                             (with-out-str

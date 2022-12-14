@@ -61,7 +61,8 @@
     (gp-util/safe-subs s 0 200)))
 
 (defn get-page-file-path
-  ([] (get-page-file-path (state/get-current-page)))
+  ([] (get-page-file-path (or (state/get-current-page)
+                              (state/get-current-whiteboard))))
   ([page-name]
    (when page-name
      (let [page-name (util/page-name-sanity-lc page-name)]
@@ -99,6 +100,7 @@
 (defn- create-title-property?
   [journal? page-name]
   (and (not journal?)
+       (= (state/get-filename-format) :legacy) ;; reduce title computation
        (fs-util/create-title-property? page-name)))
 
 (defn- build-page-tx [format properties page journal? whiteboard?]
@@ -475,7 +477,7 @@
 
       ;; Redirect to the newly renamed page
       (when redirect?
-        (route-handler/redirect! {:to          (if (= "whiteboard" (:block/type page)) :whiteboard :page)
+        (route-handler/redirect! {:to          (if (model/whiteboard-page? page) :whiteboard :page)
                                   :push        false
                                   :path-params {:name new-page-name}}))
 
@@ -752,7 +754,7 @@
         action (state/get-editor-action)
         hashtag? (= action :page-search-hashtag)
         q (or
-           @editor-handler/*selected-text
+           (editor-handler/get-selected-text)
            (when hashtag?
              (gp-util/safe-subs edit-content pos current-pos))
            (when (> (count edit-content) current-pos)
@@ -768,19 +770,19 @@
               chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
                        (page-ref/->page-ref chosen)
                        chosen)
-              q (if @editor-handler/*selected-text "" q)
-              [last-pattern forward-pos] (if wrapped?
-                                           [q 3]
-                                           (if (= \# (first q))
-                                             [(subs q 1) 1]
-                                             [q 2]))
+              q (if (editor-handler/get-selected-text) "" q)
+              last-pattern (if wrapped?
+                             q
+                             (if (= \# (first q))
+                               (subs q 1)
+                               q))
               last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)]
           (editor-handler/insert-command! id
                                           (str "#" (when wrapped? page-ref/left-brackets) chosen)
                                           format
                                           {:last-pattern last-pattern
                                            :end-pattern (when wrapped? page-ref/right-brackets)
-                                           :forward-pos forward-pos})))
+                                           :command :page-ref})))
       (fn [chosen _click?]
         (state/clear-editor-action!)
         (let [prefix (str (t :new-page) ": ")
@@ -791,10 +793,10 @@
           (editor-handler/insert-command! id
                                           page-ref-text
                                           format
-                                          {:last-pattern (str page-ref/left-brackets (if @editor-handler/*selected-text "" q))
+                                          {:last-pattern (str page-ref/left-brackets (if (editor-handler/get-selected-text) "" q))
                                            :end-pattern page-ref/right-brackets
                                            :postfix-fn   (fn [s] (util/replace-first page-ref/right-brackets s ""))
-                                           :forward-pos 3}))))))
+                                           :command :page-ref}))))))
 
 (defn create-today-journal!
   []

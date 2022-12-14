@@ -370,7 +370,8 @@
                      (util/format "Remembered:   %d (%d%%)" score-remembered-count (* 100 (/ score-remembered-count review-count)))}
                     {:content
                      (util/format "Forgotten :   %d (%d%%)" score-forgotten-count (* 100 (/ score-forgotten-count review-count)))}]}]
-       (:block/format card-query-block)))))
+       (:block/format card-query-block)
+       false))))
 
 ;;; ================================================================
 ;;; UI

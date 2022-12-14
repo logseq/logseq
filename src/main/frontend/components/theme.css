@@ -1,7 +1,6 @@
 :root {
   scrollbar-width: thin;
-  scrollbar-color: var(--ls-scrollbar-foreground-color)
-    var(--ls-scrollbar-background-color);
+  scrollbar-color: var(--ls-scrollbar-foreground-color) var(--ls-scrollbar-background-color);
 
   --ls-z-index-level-0: 0;
   --ls-z-index-level-1: 9;
@@ -111,6 +110,61 @@ html.is-resizing-buf {
   &.cursor-w-resize {
     * {
       cursor: w-resize !important;
+    }
+  }
+}
+
+main.ls-fold-button-on-right {
+  #main-content-container {
+    padding-right: 18px;
+    padding-left: 18px;
+    padding-top: 4px;
+
+    .page-blocks-inner {
+      margin-left: 0 !important;
+    }
+
+    .block-control-wrap {
+      /* hack for toggling enable-opts */
+      height: 23px;
+      background: transparent;
+    }
+  }
+
+  .cp__sidebar-left-layout {
+    width: 15px;
+
+    &.is-open {
+      width: 100%;
+    }
+  }
+
+  .ls-block {
+    .block-control {
+      @apply absolute -right-3 pr-2 pt-1 top-0 z-[1]
+      opacity-20 active:opacity-100;
+
+      .rotating-arrow.collapsed svg {
+        transform: rotate(180deg);
+      }
+    }
+
+    &[haschild="true"] {
+      .control-hide {
+        display: block !important;
+      }
+    }
+
+    .block-content-wrapper {
+      width: 100%;
+    }
+  }
+
+  .block-children-container {
+    margin-left: 7px;
+
+    .block-children {
+      padding-left: 10px;
     }
   }
 }

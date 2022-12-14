@@ -172,7 +172,6 @@
   [format]
   (case (keyword format)
     :md :markdown
-    :asciidoc :adoc
     ;; default
     (keyword format)))
 

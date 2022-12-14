@@ -16,9 +16,6 @@
                         :code-editor
                         {:entries    [frontend.extensions.code]
                          :depends-on #{:main}}
-                        :age-encryption
-                        {:entries    [frontend.extensions.age-encryption]
-                         :depends-on #{:main}}
                         :excalidraw
                         {:entries    [frontend.extensions.excalidraw]
                          :depends-on #{:main}}
@@ -36,9 +33,12 @@
                                                 "externs.js"]
                            :warnings           {:fn-deprecated false
                                                 :redef false}}
+        :build-hooks      [(shadow.hooks/git-revision-hook "--long --always --dirty")]
         :closure-defines  {goog.debug.LOGGING_ENABLED       true
-                           frontend.config/ENABLE-PLUGINS   #shadow/env ["ENABLE_PLUGINS"   :as :bool :default true]
-                           frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]}
+                           frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS"   :as :bool :default true]
+                           frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
+                           frontend.config/TEST #shadow/env ["LOGSEQ_CI" :as :bool :default false]
+                           frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]} ;; set by git-revision-hook
 
         ;; NOTE: electron, browser/mobile-app use different asset-paths.
         ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
@@ -70,9 +70,7 @@
          :closure-defines {frontend.util/NODETEST true}
          :devtools        {:enabled false}
          ;; disable :static-fns to allow for with-redefs and repl development
-         :compiler-options {:static-fns false
-         ;; For custom conditional reading, see https://shadow-cljs.github.io/docs/UsersGuide.html#_conditional_reading
-                            :reader-features #{:node-test}}
+         :compiler-options {:static-fns false}
          :main            frontend.test.frontend-node-test-runner/main}
 
   :publishing {:target        :browser
@@ -82,9 +80,6 @@
                                {:init-fn    frontend.publishing/init}
                                :code-editor
                                {:entries    [frontend.extensions.code]
-                                :depends-on #{:main}}
-                               :age-encryption
-                               {:entries    [frontend.extensions.age-encryption]
                                 :depends-on #{:main}}
                                :excalidraw
                                {:entries    [frontend.extensions.excalidraw]

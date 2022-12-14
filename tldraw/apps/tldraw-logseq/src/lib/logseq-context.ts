@@ -16,9 +16,23 @@ export interface LogseqContextValue {
     }>
     Breadcrumb: React.FC<{
       blockId: string
+      levelLimit?: number
+      endSeparator?: boolean
     }>
-    PageNameLink: React.FC<{
+    PageName: React.FC<{
       pageName: string
+    }>
+    BlockReference: React.FC<{
+      blockId: string
+    }>
+    BacklinksCount: React.FC<{
+      id: string
+      className?: string
+      options?: {
+        'portal?'?: boolean
+        'hover?'?: boolean
+        renderFn?: (open?: boolean, count?: number) => React.ReactNode
+      }
     }>
   }
   handlers: {
@@ -29,6 +43,7 @@ export interface LogseqContextValue {
     addNewWhiteboard: (pageName: string) => void
     addNewBlock: (content: string) => string // returns the new block uuid
     queryBlockByUUID: (uuid: string) => any
+    getBlockPageName: (uuid: string) => string
     isWhiteboardPage: (pageName: string) => boolean
     saveAsset: (file: File) => Promise<string>
     makeAssetUrl: (relativeUrl: string) => string

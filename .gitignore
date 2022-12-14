@@ -1,3 +1,4 @@
+/e2e-dump
 /target
 /classes
 /checkouts
@@ -12,7 +13,8 @@ pom.xml.asc
 .hg/
 
 node_modules/
-static/
+static/**
+!static/yarn.lock
 tmp
 cljs-test-runner-out
 
@@ -52,3 +54,4 @@ ios/App/App/capacitor.config.json
 android/app/src/main/assets/capacitor.config.json
 
 *.sublime-*
+/public/static

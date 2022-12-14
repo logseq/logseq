@@ -16,7 +16,10 @@
             [promesa.core :as p]
             [frontend.state :as state]
             [frontend.fs :as fs]
-            [frontend.fs.capacitor-fs :as capacitor-fs]))
+            [frontend.fs.capacitor-fs :as capacitor-fs]
+            [frontend.util.fs :as fs-util]
+            [frontend.util :as util]
+            [clojure.set :as set]))
 
 ;; all IPC paths must be normalized! (via gp-util/path-normalize)
 
@@ -88,7 +91,7 @@
                          (string/trim (or (state/get-default-journal-template) "")))
                       (= (string/trim content) "-")
                       (= (string/trim content) "*")))
-            (handle-add-and-change! repo path content db-content mtime true))
+            (handle-add-and-change! repo path content db-content mtime (not global-dir))) ;; no backup for global dir
 
           (and (= "unlink" type)
                (db/file-exists? repo path))
@@ -113,3 +116,34 @@
 
       ;; return nil, otherwise the entire db will be transfered by ipc
       nil)))
+
+(defn load-graph-files!
+  [graph]
+  (when graph
+    (let [dir (config/get-repo-dir graph)
+          db-files (->> (db/get-files graph)
+                        (map first)
+                        (filter #(string/starts-with? % (config/get-repo-dir graph))))]
+      (p/let [files (fs/readdir dir :path-only? true)
+              files (remove #(fs-util/ignored-path? dir %) files)]
+        (let [deleted-files (set/difference (set db-files) (set files))]
+          (when (seq deleted-files)
+            (let [delete-tx-data (->> (db/delete-files deleted-files)
+                                      (concat (db/delete-blocks graph deleted-files nil))
+                                      (remove nil?))]
+              (db/transact! graph delete-tx-data)))
+          (doseq [file files]
+            (when-let [_ext (util/get-file-ext file)]
+              (->
+               (p/let [content (fs/read-file dir file)
+                       stat (fs/stat dir file)
+                       type (if (db/file-exists? graph file)
+                              "change"
+                              "add")]
+                 (handle-changed! type
+                                  {:dir dir
+                                   :path file
+                                   :content content
+                                   :stat stat}))
+               (p/catch (fn [error]
+                          (js/console.dir error)))))))))))

@@ -28,6 +28,9 @@ export interface TLShapeProps {
   type: any
   parentId: string
   name?: string
+  fill?: string
+  stroke?: string
+  refs?: string[] // block id or page name
   point: number[]
   size?: number[]
   scale?: number[]

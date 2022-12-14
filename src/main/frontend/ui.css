@@ -226,7 +226,18 @@ html.is-native-iphone-without-notch
 
 html.is-mobile {
   .ui__modal {
-    @apply bottom-0 inset-x-0;
+    @apply bottom-0 inset-x-0 top-20;
+
+    &[label="ls-modal-search"] {
+      .panel-content {
+        padding-bottom: 0;
+      }
+    }
+  }
+
+  .ui__modal-panel .panel-content {
+    width: calc(98vw - 2rem);
+    padding-top: 24px;
   }
 }
 
@@ -377,15 +388,5 @@ html.is-mobile {
     @apply block absolute inset-0 ;
     background: var(--ls-primary-background-color);
     content: " ";
-  }
-
-  &.highlight {
-    color: var(--ls-selection-text-color);
-    border-color: var(--ls-selection-background-color);
-
-    &:before {
-      opacity: 0.5;
-      background: var(--ls-selection-background-color);
-    }
   }
 }

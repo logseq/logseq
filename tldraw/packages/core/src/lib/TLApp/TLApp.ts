@@ -185,9 +185,13 @@ export class TLApp<
         return {
           // @ts-expect-error ???
           keys: child.constructor['shortcut'] as string | string[],
-          fn: (_: any, __: any, e: Event) => {
+          fn: (_: any, __: any, e: KeyboardEvent) => {
             this.transition(child.id)
-            e.stopPropagation()
+
+            // hack: allows logseq related shortcut combinations to work
+            if (e.key !== 't') {
+              e.stopPropagation()
+            }
           },
         }
       })
@@ -499,7 +503,9 @@ export class TLApp<
       navigator.clipboard.write([
         new ClipboardItem({
           'text/html': new Blob([tldrawString], { type: 'text/html' }),
-          // ??? what plain text should be used here?
+          'text/plain': new Blob([`((${this.selectedShapesArray[0].props.id}))`], {
+            type: 'text/plain',
+          }),
         }),
       ])
     }

@@ -153,7 +153,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
 
   resetZoomToCursor = (): this => {
     const viewport = this.app.viewport
-    viewport.update({
+    viewport.animateCamera({
       zoom: 1,
       point: Vec.sub(this.app.inputs.originScreenPoint, this.app.inputs.originPoint),
     })
@@ -163,6 +163,19 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
   toggleGrid = (): this => {
     const { settings } = this.app
     settings.update({ showGrid: !settings.showGrid })
+    return this
+  }
+
+  setColor = (color: string): this => {
+    const { settings } = this.app
+
+    settings.update({ color: color })
+
+    this.app.selectedShapesArray.forEach(s => {
+      s.update({ fill: color, stroke: color })
+    })
+    this.app.persist()
+
     return this
   }
 

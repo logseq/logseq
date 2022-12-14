@@ -1,7 +1,5 @@
 package com.logseq.app;
 
-import android.annotation.SuppressLint;
-import android.os.Build;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.StructStat;
@@ -12,8 +10,9 @@ import android.net.Uri;
 
 import java.io.*;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Stack;
 import java.util.regex.Pattern;
 
 import java.io.File;
@@ -26,9 +25,9 @@ import com.getcapacitor.PluginCall;
 
 @CapacitorPlugin(name = "FsWatcher")
 public class FsWatcher extends Plugin {
-
-    List<SingleFileObserver> observers;
     private String mPath;
+    private PollingFsWatcher mWatcher;
+    private Thread mThread;
 
     @Override
     public void load() {
@@ -37,14 +36,11 @@ public class FsWatcher extends Plugin {
 
     @PluginMethod()
     public void watch(PluginCall call) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            call.reject("Android version not supported");
-            return;
-        }
         String pathParam = call.getString("path");
         // check file:// or no scheme uris
         Uri u = Uri.parse(pathParam);
         Log.i("FsWatcher", "watching " + u);
+        // TODO: handle context:// uri
         if (u.getScheme() == null || u.getScheme().equals("file")) {
             File pathObj;
             try {
@@ -56,32 +52,15 @@ public class FsWatcher extends Plugin {
 
             mPath = pathObj.getAbsolutePath();
 
-            int mask = FileObserver.CLOSE_WRITE |
-                    FileObserver.MOVE_SELF | FileObserver.MOVED_FROM | FileObserver.MOVED_TO |
-                    FileObserver.DELETE | FileObserver.DELETE_SELF | FileObserver.CREATE;
-
-            if (observers != null) {
+            if (mWatcher != null) {
                 call.reject("already watching");
                 return;
             }
-            observers = new ArrayList<>();
-            observers.add(new SingleFileObserver(pathObj, mask));
 
-            // NOTE: only watch first level of directory
-            File[] files = pathObj.listFiles();
-            if (files != null) {
-                for (File file : files) {
-                    String filename = file.getName();
-                    if (file.isDirectory() && !filename.startsWith(".") && !filename.equals("bak") && !filename.equals("version-files") && !filename.equals("node_modules")) {
-                        observers.add(new SingleFileObserver(file, mask));
-                    }
-                }
-            }
+            mWatcher = new PollingFsWatcher(mPath);
+            mThread = new Thread(mWatcher);
+            mThread.start();
 
-            this.initialNotify(pathObj);
-
-            for (int i = 0; i < observers.size(); i++)
-                observers.get(i).startWatching();
             call.resolve();
         } else {
             call.reject(u.getScheme() + " scheme not supported");
@@ -92,77 +71,69 @@ public class FsWatcher extends Plugin {
     public void unwatch(PluginCall call) {
         Log.i("FsWatcher", "unwatch all...");
 
-        if (observers != null) {
-            for (int i = 0; i < observers.size(); ++i)
-                observers.get(i).stopWatching();
-            observers.clear();
-            observers = null;
+        if (mWatcher != null) {
+            mThread.interrupt();
+            mWatcher = null;
         }
 
         call.resolve();
     }
 
-    public void initialNotify(File pathObj) {
-        this.initialNotify(pathObj, 2);
-    }
-
-    public void initialNotify(File pathObj, int maxDepth) {
-        if (maxDepth == 0) {
-            return;
-        }
-        File[] files = pathObj.listFiles();
-        if (files != null) {
-            for (File file : files) {
-                String filename = file.getName();
-                if (file.isDirectory() && !filename.startsWith(".") && !filename.equals("bak") && !filename.equals("version-files") && !filename.equals("node_modules")) {
-                    this.initialNotify(file, maxDepth - 1);
-                } else if (file.isFile()
-                        && Pattern.matches("(?i)[^.].*?\\.(md|org|css|edn|js|markdown)$",
-                        file.getName())) {
-                    this.onObserverEvent(FileObserver.CREATE, file.getAbsolutePath());
-                }
-            }
-        }
-    }
-
     // add, change, unlink events
-    public void onObserverEvent(int event, String path) {
+    public void onObserverEvent(int event, String path, SimpleFileMetadata metadata) {
         JSObject obj = new JSObject();
         String content = null;
         File f = new File(path);
+
+        boolean shouldRead = false;
+        if (Pattern.matches("(?i)[^.].*?\\.(md|org|css|edn|js|markdown|excalidraw)$", f.getName())) {
+            shouldRead = true;
+        }
+
         obj.put("path", Uri.fromFile(f));
         obj.put("dir", Uri.fromFile(new File(mPath)));
+        JSObject stat;
 
         switch (event) {
-            case FileObserver.CLOSE_WRITE:
+            case FileObserver.MODIFY:
                 obj.put("event", "change");
-                try {
-                    obj.put("stat", getFileStat(path));
-                    content = getFileContents(f);
-                } catch (IOException | ErrnoException e) {
-                    e.printStackTrace();
+                stat = new JSObject();
+                stat.put("mtime", metadata.mtime);
+                stat.put("ctime", metadata.ctime);
+                stat.put("size", metadata.size);
+                obj.put("stat", stat);
+                if (shouldRead) {
+                    try {
+                        content = getFileContents(f);
+                    } catch (IOException e) {
+                        Log.e("FsWatcher", "error reading modified file");
+                        e.printStackTrace();
+                    }
                 }
+
                 Log.i("FsWatcher", "prepare event " + obj);
                 obj.put("content", content);
                 break;
-            case FileObserver.MOVED_TO:
             case FileObserver.CREATE:
                 obj.put("event", "add");
-                try {
-                    obj.put("stat", getFileStat(path));
-                    content = getFileContents(f);
-                } catch (IOException | ErrnoException e) {
-                    e.printStackTrace();
+                stat = new JSObject();
+                stat.put("mtime", metadata.mtime);
+                stat.put("ctime", metadata.ctime);
+                stat.put("size", metadata.size);
+                obj.put("stat", stat);
+                if (shouldRead) {
+                    try {
+                        content = getFileContents(f);
+                    } catch (IOException e) {
+                        Log.e("FsWatcher", "error reading new file");
+                        e.printStackTrace();
+                    }
                 }
-                Log.i("FsWatcher", "prepare event " + obj);
                 obj.put("content", content);
                 break;
-            case FileObserver.MOVE_SELF:
-            case FileObserver.MOVED_FROM:
             case FileObserver.DELETE:
-            case FileObserver.DELETE_SELF:
                 if (f.exists()) {
-                    Log.i("FsWatcher", "abandon notification due to file exists");
+                    Log.i("FsWatcher", "abandon delete notification due to file exists");
                     return;
                 } else {
                     obj.put("event", "unlink");
@@ -193,59 +164,127 @@ public class FsWatcher extends Plugin {
         return outputStream.toString("utf-8");
     }
 
-    public static JSObject getFileStat(final String path) throws ErrnoException {
-        File file = new File(path);
-        StructStat stat = Os.stat(path);
-        JSObject obj = new JSObject();
-        obj.put("atime", stat.st_atime);
-        obj.put("mtime", stat.st_mtime);
-        obj.put("ctime", stat.st_ctime);
-        obj.put("size", file.length());
-        return obj;
-    }
+    public class SimpleFileMetadata {
+        public long mtime;
+        public long ctime;
+        public long size;
+        public long ino;
 
-    private class SingleFileObserver extends FileObserver {
-        private final String mPath;
-
-        public SingleFileObserver(String path, int mask) {
-            super(path, mask);
-            mPath = path;
+        public SimpleFileMetadata(File file) throws ErrnoException {
+            StructStat stat = Os.stat(file.getPath());
+            mtime = stat.st_mtime;
+            ctime = stat.st_ctime;
+            size = stat.st_size;
+            ino = stat.st_ino;
         }
 
-        @SuppressLint("NewApi")
-        public SingleFileObserver(File path, int mask) {
-            super(path, mask);
-            mPath = path.getAbsolutePath();
+        public boolean equals(SimpleFileMetadata other) {
+            return mtime == other.mtime && ctime == other.ctime && size == other.size && ino == other.ino;
+        }
+    }
+
+
+    public class PollingFsWatcher implements Runnable {
+        private String mPath;
+        private Map<String, SimpleFileMetadata> metaDb;
+
+        public PollingFsWatcher(String path) {
+            metaDb = new HashMap();
+
+            File dir = new File(path);
+            try {
+                mPath = dir.getCanonicalPath();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
 
         @Override
-        public void onEvent(int event, String path) {
-            if (path != null && !path.equals("graphs-txid.edn") && !path.equals("broken-config.edn")) {
-                Log.d("FsWatcher", "got path=" + mPath + "/" + path + " event=" + event);
-                // TODO: handle newly created directory
-                if (Pattern.matches("(?i)[^.].*?\\.(md|org|css|edn|js|markdown)$", path)) {
-                    String fullPath = mPath + "/" + path;
-                    if (event == FileObserver.MOVE_SELF || event == FileObserver.MOVED_FROM ||
-                        event == FileObserver.DELETE || event == FileObserver.DELETE_SELF) {
-                        Log.d("FsWatcher", "defer delete notification for " + path);
-                        Thread timer = new Thread() {
-                            @Override
-                            public void run() {
-                                try {
-                                    // delay 500ms then send, enough for most syncing net disks
-                                    Thread.sleep(500);
-                                    FsWatcher.this.onObserverEvent(event, fullPath);
-                                } catch (InterruptedException e) {
-                                    e.printStackTrace();
-                                }
+        public void run() {
+            this.tick(false); // skip initial notification
+
+            while (!Thread.currentThread().isInterrupted()) {
+                try {
+                    this.tick(true);
+                    Thread.sleep(2000); // The same as iOS fswatcher, 2s interval
+                } catch (InterruptedException e) {
+                    // e.printStackTrace();
+                    Log.i("FsWatcher", "interrupted, unwatch");
+                    break;
+                }
+            }
+
+        }
+
+        private void tick(boolean shouldNotify) {
+            Map<String, SimpleFileMetadata> newMetaDb = new HashMap();
+
+            Stack<String> paths = new Stack();
+            paths.push(mPath);
+            while (!paths.isEmpty()) {
+                String dir = paths.pop();
+                File curr = new File(dir);
+
+                File[] files = curr.listFiles();
+                if (files != null) {
+                    for (File file : files) {
+                        String filename = file.getName();
+                        if (file.isDirectory()) {
+                            if (!filename.startsWith(".") && !filename.equals("bak") && !filename.equals("version-files") && !filename.equals("node_modules")) {
+                                paths.push(file.getAbsolutePath());
                             }
-                        };
-                        timer.start();
-                    } else {
-                        FsWatcher.this.onObserverEvent(event, fullPath);
+                        } else if (file.isFile() && !filename.equals("graphs-txid.edn") && !filename.equals("broken-config.edn")) {
+                            try {
+                                SimpleFileMetadata metadata = new SimpleFileMetadata(file);
+                                newMetaDb.put(file.getAbsolutePath(), metadata);
+                            } catch (ErrnoException e) {
+                            }
+                        }
                     }
                 }
             }
+
+            if (shouldNotify) {
+                this.updateMetaDb(newMetaDb);
+            } else {
+                this.metaDb = newMetaDb;
+            }
+        }
+
+        private void updateMetaDb(Map<String, SimpleFileMetadata> newMetaDb) {
+            for (Map.Entry<String, SimpleFileMetadata> entry : newMetaDb.entrySet()) {
+                String path = entry.getKey();
+                SimpleFileMetadata newMeta = entry.getValue();
+                SimpleFileMetadata oldMeta = metaDb.remove(path);
+                if (oldMeta == null) {
+                    // new file
+                    onObserverEvent(FileObserver.CREATE, path, newMeta);
+                    Log.d("FsWatcher", "create " + path);
+                } else if (!oldMeta.equals(newMeta)) {
+                    // file changed
+                    onObserverEvent(FileObserver.MODIFY, path, newMeta);
+                    Log.d("FsWatcher", "changed " + path);
+                }
+            }
+            for (String path : metaDb.keySet()) {
+                // file deleted
+                Thread timer = new Thread() {
+                    @Override
+                    public void run() {
+                        try {
+                            // delay 500ms then send, enough for most syncing net disks
+                            Thread.sleep(500);
+                            onObserverEvent(FileObserver.DELETE, path, null);
+                            Log.d("FsWatcher", "deleted " + path);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                };
+                timer.start();
+            }
+
+            this.metaDb = newMetaDb;
         }
     }
 }

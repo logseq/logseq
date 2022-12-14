@@ -14,7 +14,12 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
       <DropdownMenuPrimitive.Trigger className="tl-button text-sm px-2 important" id="tl-zoom">
         {(app.viewport.camera.zoom * 100).toFixed(0) + '%'}
       </DropdownMenuPrimitive.Trigger>
-      <DropdownMenuPrimitive.Content className="tl-menu" id="zoomPopup" sideOffset={12}>
+      <DropdownMenuPrimitive.Content
+        onCloseAutoFocus={e => e.preventDefault()}
+        className="tl-menu"
+        id="zoomPopup"
+        sideOffset={12}
+      >
         <DropdownMenuPrimitive.Item
           className="tl-menu-item"
           onSelect={preventEvent}
@@ -31,6 +36,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
           className="tl-menu-item"
           onSelect={preventEvent}
           onClick={app.api.zoomToSelection}
+          disabled={app.selectedShapesArray.length === 0}
         >
           Zoom to selection
           <div className="tl-menu-right-slot">

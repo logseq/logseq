@@ -25,14 +25,13 @@ export class CreatingState extends TLToolState<
         parentId: this.app.currentPage.id,
         point: Vec.sub(this.app.inputs.originPoint, this.offset),
         size: LogseqPortalShape.defaultProps.size,
+        fill: this.app.settings.color,
+        stroke: this.app.settings.color,
       } as any)
       this.creatingShape = shape
       this.app.currentPage.addShapes(shape)
       this.app.setEditingShape(shape)
       this.app.setSelectedShapes([shape])
-      if (this.app.viewport.camera.zoom < 0.8 || this.app.viewport.camera.zoom > 1.2) {
-        this.app.api.resetZoomToCursor()
-      }
     })
   }
 

@@ -1,5 +1,3 @@
-;; FIXME
-;; this test is not focusable (unable to feed :node-test as reading feature?)
 (ns frontend.extensions.zotero.extractor-test
   (:require [clojure.edn :as edn]
             [clojure.test :as test :refer [deftest is testing]]
@@ -43,7 +41,6 @@
         (is (= 8 authors)))
 
       (testing "tags"
-        (prn (-> properties :tags))
         ;; tags split by `,` are counted into different tags
         ;; https://github.com/logseq/logseq/commit/435c2110bcc2d30ed743ba31375450f1a705b00b
         (is (= 20 tags)))))

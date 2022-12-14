@@ -68,8 +68,9 @@
 
 (defn- get-whiteboard-tldr-from-text
   [text]
-  (when-let [matched-text (util/safe-re-find #"<whiteboard-tldr>(.*)</whiteboard-tldr>" text)]
-    (try-parse-as-json (gp-util/safe-decode-uri-component (second matched-text)))))
+  (when-let [matched-text (util/safe-re-find #"<whiteboard-tldr>(.*)</whiteboard-tldr>"
+                                             (gp-util/safe-decode-uri-component text))]
+    (try-parse-as-json (second matched-text))))
 
 (defn- get-whiteboard-shape-refs-text
   [text]
@@ -154,10 +155,11 @@
   (utils/getClipText
    (fn [clipboard-data]
      (when-let [_ (state/get-input)]
-       (let [data (or (when (gp-util/url? clipboard-data)
-                        (wrap-macro-url clipboard-data))
-                      clipboard-data)]
-         (editor-handler/insert data true))))
+       (if (gp-util/url? clipboard-data)
+         (if (string/blank? (util/get-selected-text))
+           (editor-handler/insert (or (wrap-macro-url clipboard-data) clipboard-data) true)
+           (editor-handler/html-link-format! clipboard-data))
+         (editor-handler/insert clipboard-data true))))
    (fn [error]
      (js/console.error error))))
 
@@ -203,5 +205,5 @@
                                           (util/stop e))))]
            (cond
              (and (string/blank? text) (string/blank? html)) (paste-file-if-exist)
-             (and (seq files) (state/perferred-pasting-file?)) (paste-file-if-exist)
+             (and (seq files) (state/preferred-pasting-file?)) (paste-file-if-exist)
              :else (paste-text-or-blocks-aux input e text html))))))))

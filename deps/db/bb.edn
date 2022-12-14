@@ -7,7 +7,7 @@
    :git/sha "1815db538241082a01e95601e23e4290dd64d0c0"}}
 
  :pods
- {clj-kondo/clj-kondo {:version "2022.02.09"}}
+ {clj-kondo/clj-kondo {:version "2022.10.05"}}
 
  :tasks
  {test:load-all-namespaces-with-nbb
@@ -27,7 +27,7 @@
               [logseq.db.rules :as rules])
    :doc "Lint datalog rules for parsability and unbound variables"
    :task (datalog/lint-rules
-          (into rules/rules
+          (into (mapcat val rules/rules)
                 (-> rules/query-dsl-rules
                     ;; TODO: Update linter to handle false positive on ?str-val
                     (dissoc :property)

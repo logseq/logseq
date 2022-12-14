@@ -33,7 +33,7 @@ import {
   BlockEntity,
   IDatom,
   IAssetsProxy,
-  AppInfo,
+  AppInfo, IPluginSearchServiceHooks,
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -41,6 +41,7 @@ import EventEmitter from 'eventemitter3'
 import { IAsyncStorage, LSPluginFileStorage } from './modules/LSPlugin.Storage'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 import { LSPluginRequest } from './modules/LSPlugin.Request'
+import { LSPluginSearchService } from './modules/LSPlugin.Search'
 
 declare global {
   interface Window {
@@ -86,13 +87,15 @@ function registerSimpleCommand(
     method: 'register-plugin-simple-command',
     args: [
       this.baseInfo.id,
-      [{ key, label, type, desc, keybinding, extras}, ['editor/hook', eventKey]],
+      [{ key, label, type, desc, keybinding, extras }, ['editor/hook', eventKey]],
       palette,
     ],
   })
 }
 
 let _appBaseInfo: AppInfo = null
+let _searchServices: Map<string, LSPluginSearchService> = new Map()
+
 const app: Partial<IAppProxy> = {
   async getInfo(
     this: LSPluginUser,
@@ -105,6 +108,17 @@ const app: Partial<IAppProxy> = {
   },
 
   registerCommand: registerSimpleCommand,
+
+  registerSearchService<T extends IPluginSearchServiceHooks>(
+    this: LSPluginUser,
+    s: T
+  ) {
+    if (_searchServices.has(s.name)) {
+      throw new Error(`SearchService: #${s.name} has registered!`)
+    }
+
+    _searchServices.set(s.name, new LSPluginSearchService(this, s))
+  },
 
   registerCommandPalette(
     opts: { key: string; label: string; keybinding?: SimpleCommandKeybinding },
@@ -356,7 +370,11 @@ type uiState = {
 const KEY_MAIN_UI = 0
 
 /**
- * User plugin instance
+ * User plugin instance from global namespace `logseq`.
+ * @example
+ * ```ts
+ * logseq.UI.showMsg('Hello, Logseq')
+ * ```
  * @public
  */
 export class LSPluginUser
@@ -420,6 +438,7 @@ export class LSPluginUser
     })
   }
 
+  // Life related
   async ready(model?: any, callback?: any) {
     if (this._connected) return
 
@@ -495,6 +514,7 @@ export class LSPluginUser
     return this
   }
 
+  // Settings related
   useSettingsSchema(schema: Array<SettingSchemaDesc>) {
     if (this.connected) {
       this.caller.call('settings:schema', {
@@ -526,6 +546,7 @@ export class LSPluginUser
     this.caller.call('settings:visible:changed', { visible: false })
   }
 
+  // UI related
   setMainUIAttrs(attrs: Partial<UIContainerAttrs>): void {
     this.caller.call('main-ui:attrs', attrs)
   }
@@ -566,6 +587,7 @@ export class LSPluginUser
     }
   }
 
+  // Getters
   get version(): string {
     return this._version
   }

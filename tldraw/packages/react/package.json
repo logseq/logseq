@@ -35,22 +35,23 @@
     "@tldraw/core": "2.0.0-alpha.1",
     "@tldraw/intersect": "2.0.0-alpha.1",
     "@tldraw/vec": "2.0.0-alpha.1",
-    "@use-gesture/react": "^10.2.20",
+    "@use-gesture/react": "^10.2.22",
     "hotkeys-js": "^3.10.0",
     "is-plain-object": "^5.0.0",
-    "mobx": "^6.6.2",
+    "mobx": "^6.7.0",
     "mobx-react-lite": "^3.4.0",
     "mousetrap": "^1.6.5",
+    "polished": "^4.2.2",
     "rbush": "^3.0.1",
-    "uuid": "^8.0.0"
+    "uuid": "^9.0.0"
   },
   "peerDependencies": {
-    "react": ">=16.8",
+    "react": ">=16.8  || ^17.0",
     "react-dom": "^16.8 || ^17.0"
   },
   "devDependencies": {
     "@types/is-plain-object": "^2.0.4",
-    "@types/mousetrap": "^1.6.8",
+    "@types/mousetrap": "^1.6.11",
     "@types/node": "^16.11.6",
     "@types/offscreencanvas": "^2019.6.4",
     "@types/rbush": "^3.0.0",

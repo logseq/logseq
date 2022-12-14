@@ -137,7 +137,7 @@
                 ;; TODO: ugly, replace with ls-files and filter with ".map"
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" (str file ".map"))))
-                              ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
+                              ["main.js" "code-editor.js" "excalidraw.js"]))]
 
           (send-to-renderer
            :notification

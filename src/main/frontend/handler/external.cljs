@@ -59,10 +59,12 @@
                              (map
                                (fn [title]
                                  (let [day (date/journal-title->int title)
-                                       page-name (util/page-name-sanity-lc (date-time-util/int->journal-title day (state/get-date-formatter)))]
-                                   {:block/name page-name
-                                    :block/journal? true
-                                    :block/journal-day day}))
+                                       journal-title (date-time-util/int->journal-title day (state/get-date-formatter))]
+                                   (when journal-title
+                                     (let [page-name (util/page-name-sanity-lc journal-title)]
+                                       {:block/name page-name
+                                        :block/journal? true
+                                        :block/journal-day day}))))
                                titles))]
       (when (seq journal-pages-tx)
         (db/transact! repo journal-pages-tx)))))

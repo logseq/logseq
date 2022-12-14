@@ -18,8 +18,10 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.version :refer [version]]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [clojure.string :as string]))
 
 (rum/defc home-button
   < {:key-fn #(identity "home-button")}
@@ -56,6 +58,19 @@
      {:title "Toggle left menu"
       :on-click on-click}
      (ui/icon "menu-2" {:size ui/icon-size})]))
+
+(def bug-report-url
+  (let [ua (.-userAgent js/navigator)
+        safe-ua (string/replace ua #"[^_/a-zA-Z0-9\.\(\)]+" " ")
+        platform (str "App Version: " version "\n"
+                      "Git Revision: " config/REVISION "\n"
+                      "Platform: " safe-ua "\n"
+                      "Language: " (.-language js/navigator))]
+    (str "https://github.com/logseq/logseq/issues/new?"
+         "title=&"
+         "template=bug_report.yaml&"
+         "platform="
+         (js/encodeURIComponent platform))))
 
 (rum/defc dropdown-menu < rum/reactive
   < {:key-fn #(identity "repos-dropdown-menu")}
@@ -101,6 +116,13 @@
                   :title (t :discourse-title)
                   :target "_blank"}
         :icon (ui/icon "brand-discord")}
+       
+       {:title [:div.flex-row.flex.justify-between.items-center
+                [:span (t :help/bug)]]
+        :options {:href bug-report-url
+                  :title "Fire a bug report on Github"
+                  :target "_blank"}
+        :icon (ui/icon "bug")} 
 
        (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
          {:title (str (t :logout) " (" (user-handler/email) ")")
@@ -166,20 +188,31 @@
         custom-home-page? (and (state/custom-home-page?)
                                (= (state/sub-default-home-page) (state/get-current-page)))
         sync-enabled? (file-sync-handler/enable-sync?)]
-    [:div.cp__header#head
+    [:div.cp__header.drag-region#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
                                           :native-android (mobile-util/native-android?)}])
       :on-double-click (fn [^js e]
                          (when-let [target (.-target e)]
-                           (when (and (util/electron?)
-                                      (.. target -classList (contains "cp__header")))
-                             (js/window.apis.toggleMaxOrMinActiveWindow))))
-      :style           {:fontSize  50}}
-     [:div.l.flex
-      (when-not (mobile-util/native-platform?)
-        [left-menu
-         (when current-repo ;; this is for the Search button
+                           (cond
+                             (and (util/electron?)
+                                  (.. target -classList (contains "drag-region")))
+                             (js/window.apis.toggleMaxOrMinActiveWindow)
+
+                             (mobile-util/native-platform?)
+                             (util/scroll-to-top true))))
+      :style           {:fontSize 50}}
+     [:div.l.flex.drag-region
+      [left-menu
+       (if (mobile-util/native-platform?)
+         ;; back button for mobile
+         (when-not (or (state/home?) custom-home-page? (state/whiteboard-dashboard?))
+           (ui/with-shortcut :go/backward "bottom"
+             [:button.it.navigation.nav-left.button.icon.opacity-70
+              {:title "Go back" :on-click #(js/window.history.back)}
+              (ui/icon "chevron-left" {:size 26})]))
+         ;; search button for non-mobile
+         (when current-repo
            (ui/with-shortcut :go/search "right"
              [:button.button.icon#search-button
               {:title "Search"
@@ -187,16 +220,9 @@
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))
                               (state/pub-event! [:go/search]))}
-              (ui/icon "search" {:size ui/icon-size})]))])
-      (when (mobile-util/native-platform?)
-        (if (or (state/home?) custom-home-page?)
-          left-menu
-          (ui/with-shortcut :go/backward "bottom"
-            [:button.it.navigation.nav-left.button.icon.opacity-70
-             {:title "Go back" :on-click #(js/window.history.back)}
-             (ui/icon "chevron-left" {:size 26})])))]
+              (ui/icon "search" {:size ui/icon-size})])))]]
 
-     [:div.r.flex
+     [:div.r.flex.drag-region
       (when (and current-repo
                  (not (config/demo-graph? current-repo))
                  (user-handler/alpha-or-beta-user?))
