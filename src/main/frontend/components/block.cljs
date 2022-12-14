@@ -2082,39 +2082,29 @@
      [:code "Property name begins with a non-numeric character and can contain alphanumeric characters and . * + ! - _ ? $ % & = < >. If -, + or . are the first character, the second character (if any) must be non-numeric."]]))
 
 (rum/defcs timestamp-cp < rum/reactive
-  (rum/local false ::show?)
-  (rum/local {} ::pos)
-  {:will-unmount (fn [state]
-                   (when-let [show? (::show? state)]
-                     (reset! show? false))
-                   state)}
   [state block typ ast]
-  (let [show? (get state ::show?)]
-    [:div.flex.flex-col.timestamp
+  (let [ts-block (state/sub :editor/set-timestamp-block)
+        active? #(= (get block :block/uuid) (get-in ts-block [:block :block/uuid]))]
+    [:div.flex.flex-col.gap-4.timestamp
      [:div.text-sm.flex.flex-row
       [:div.opacity-50.font-medium.timestamp-label
        (str typ ": ")]
       [:a.opacity-80.hover:opacity-100
        {:on-mouse-down (fn [e]
                          (util/stop e)
-                         (if @show?
+                         (if (active?)
+                          (do
+                            (reset! commands/*current-command nil)
+                            (state/clear-editor-action!)
+                            (state/set-timestamp-block! nil))
                            (do
-                             (reset! show? false)
-                             (reset! commands/*current-command nil)
-                             (state/clear-editor-action!)
-                             (state/set-timestamp-block! nil))
-                           (do
-                             (reset! show? true)
                              (reset! commands/*current-command typ)
                              (state/set-editor-action! :datepicker)
                              (state/set-timestamp-block! {:block block
-                                                          :typ typ
-                                                          :show? show?}))))}
+                                                          :typ typ}))))}
        [:span.time-start "<"] [:time (repeated/timestamp->text ast)] [:span.time-stop ">"]]]
-     (when (true? @show?)
-       (let [ts (repeated/timestamp->map ast)]
-         [:div.my-4
-          (datetime-comp/date-picker nil nil ts)]))]))
+     (when (active?)
+          (datetime-comp/date-picker nil nil (repeated/timestamp->map ast)))]))
 
 (defn- target-forbidden-edit?
   [target]
