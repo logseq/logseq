@@ -8,8 +8,7 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.config :as config]
-            [frontend.util :as util]
-            [clojure.set :as set]))
+            [frontend.util :as util]))
 
 (defn run-git-command!
   [command]

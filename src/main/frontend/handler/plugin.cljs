@@ -2,7 +2,6 @@
   "System-component-like ns that provides all high level plugin functionality"
   (:require [promesa.core :as p]
             [rum.core :as rum]
-            [medley.core :as m]
             [frontend.util :as util]
             [clojure.walk :as walk]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -150,7 +149,7 @@
 (defn call-plugin-user-command!
   [pid key args]
   (when-let [commands (and key (seq (get (:plugin/simple-commands @state/state) (keyword pid))))]
-    (when-let [matched (m/find-first #(= (:key (second %)) key) commands)]
+    (when-let [matched (medley/find-first #(= (:key (second %)) key) commands)]
       (let [[_ cmd action pid] matched]
         (state/pub-event!
          [:exec-plugin-cmd {:type type :key key :pid pid :cmd (assoc cmd :args args) :action action}])))))
