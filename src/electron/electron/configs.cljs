@@ -21,7 +21,7 @@
 (defn- write-cfg!
   [cfg]
   (try
-    (do (.writeFileSync fs cfg-path (pr-str cfg)) cfg)
+    (.writeFileSync fs cfg-path (pr-str cfg)) cfg
     (catch :default e
       (js/console.error :cfg-error e))))
 
