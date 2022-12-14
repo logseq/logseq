@@ -1,12 +1,25 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { TLPolygonShape, TLPolygonShapeProps, getComputedColor } from '@tldraw/core'
+import {
+  TLPolygonShape,
+  TLPolygonShapeProps,
+  getComputedColor,
+  getTextLabelSize,
+} from '@tldraw/core'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
+import Vec from '@tldraw/vec'
+import * as React from 'react'
 import { observer } from 'mobx-react-lite'
 import { CustomStyleProps, withClampedStyles } from './style-props'
+import { TextLabel } from './text/TextLabel'
 
 interface PolygonShapeProps extends TLPolygonShapeProps, CustomStyleProps {
   type: 'polygon'
+  label: string
+  fontWeight: number
+  italic: boolean
 }
+
+const font = '18px / 1 var(--ls-font-family)'
 
 export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
   static id = 'polygon'
@@ -22,50 +35,148 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
     isFlippedY: false,
     stroke: '',
     fill: '',
+    fontWeight: 400,
+    italic: false,
     noFill: false,
     strokeType: 'line',
     strokeWidth: 2,
     opacity: 1,
+    label: '',
   }
 
-  ReactComponent = observer(({ events, isErasing, isSelected }: TLComponentProps) => {
-    const {
-      offset: [x, y],
-      props: { stroke, fill, noFill, strokeWidth, opacity, strokeType },
-    } = this
-    const path = this.getVertices(strokeWidth / 2).join()
-    return (
-      <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
-        <g transform={`translate(${x}, ${y})`}>
-          <polygon
-            className={isSelected || !noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
-            points={path}
+  canEdit = true
+
+  ReactComponent = observer(
+    ({ events, isErasing, isSelected, isEditing, onEditingEnd }: TLComponentProps) => {
+      const {
+        offset: [x, y],
+        props: {
+          stroke,
+          fill,
+          noFill,
+          strokeWidth,
+          opacity,
+          strokeType,
+          label,
+          italic,
+          fontWeight,
+        },
+      } = this
+
+      const path = this.getVertices(strokeWidth / 2).join()
+
+      const labelSize =
+        label || isEditing
+          ? getTextLabelSize(
+              label,
+              { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight },
+              4
+            )
+          : [0, 0]
+      // Using the centroid of the polygon as the label position is preferable in this case
+      // This shape is an isosceles triangle at the time of writing this comment
+      const midPoint = [this.props.size[0] / 2, (this.props.size[1] * 2) / 3]
+      const scale = Math.max(
+        0.5,
+        Math.min(
+          1,
+          this.props.size[0] / (labelSize[0] * 2),
+          this.props.size[1] / (labelSize[1] * 2)
+        )
+      )
+      const bounds = this.getBounds()
+
+      const offset = React.useMemo(() => {
+        return Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
+      }, [bounds, scale, midPoint])
+
+      const handleLabelChange = React.useCallback(
+        (label: string) => {
+          this.update?.({ label })
+        },
+        [label]
+      )
+
+      return (
+        <div {...events} style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+          <TextLabel
+            font={font}
+            text={label}
+            color={getComputedColor(stroke, 'text')}
+            offsetX={offset[0]}
+            offsetY={offset[1] / scale}
+            scale={scale}
+            isEditing={isEditing}
+            onChange={handleLabelChange}
+            onBlur={onEditingEnd}
+            fontStyle={italic ? 'italic' : 'normal'}
+            fontWeight={fontWeight}
           />
-          <polygon
-            points={path}
-            stroke={getComputedColor(stroke, 'stroke')}
-            fill={noFill ? 'none' : getComputedColor(fill, 'background')}
-            strokeWidth={strokeWidth}
-            rx={2}
-            ry={2}
-            strokeLinejoin="round"
-            strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
-          />
-        </g>
-      </SVGContainer>
-    )
-  })
+          <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
+            <g transform={`translate(${x}, ${y})`}>
+              <polygon
+                className={isSelected || !noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
+                points={path}
+              />
+              <polygon
+                points={path}
+                stroke={getComputedColor(stroke, 'stroke')}
+                fill={noFill ? 'none' : getComputedColor(fill, 'background')}
+                strokeWidth={strokeWidth}
+                rx={2}
+                ry={2}
+                strokeLinejoin="round"
+                strokeDasharray={strokeType === 'dashed' ? '8 2' : undefined}
+              />
+            </g>
+          </SVGContainer>
+        </div>
+      )
+    }
+  )
 
   ReactIndicator = observer(() => {
     const {
       offset: [x, y],
-      props: { strokeWidth },
+      props: { label, strokeWidth, fontWeight },
     } = this
+
+    const bounds = this.getBounds()
+    const labelSize = label
+      ? getTextLabelSize(
+          label,
+          { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight },
+          4
+        )
+      : [0, 0]
+    const midPoint = [this.props.size[0] / 2, (this.props.size[1] * 2) / 3]
+    const scale = Math.max(
+      0.5,
+      Math.min(1, this.props.size[0] / (labelSize[0] * 2), this.props.size[1] / (labelSize[1] * 2))
+    )
+
+    const offset = React.useMemo(() => {
+      return Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
+    }, [bounds, scale, midPoint])
+
     return (
-      <polygon
-        transform={`translate(${x}, ${y})`}
-        points={this.getVertices(strokeWidth / 2).join()}
-      />
+      <g>
+        <polygon
+          transform={`translate(${x}, ${y})`}
+          points={this.getVertices(strokeWidth / 2).join()}
+        />
+        {label && (
+          <rect
+            x={bounds.width / 2 - (labelSize[0] / 2) * scale + offset[0]}
+            y={bounds.height / 2 - (labelSize[1] / 2) * scale + offset[1]}
+            width={labelSize[0] * scale}
+            height={labelSize[1] * scale}
+            rx={4 * scale}
+            ry={4 * scale}
+            fill="transparent"
+          />
+        )}
+      </g>
     )
   })
 

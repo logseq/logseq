@@ -595,12 +595,12 @@
 
          :else
          (let [original-name (util/get-page-original-name page-entity)
-               s (cond untitled? 
+               s (cond untitled?
                        (t :untitled)
 
                        (not= (util/safe-page-name-sanity-lc original-name) page-name-in-block)
                        page-name-in-block ;; page-name-in-block might be overrided (legacy))
-                       
+
                        :else
                        (pdf-assets/human-page-name original-name))
                _ (when-not page-entity (js/console.warn "page-inner's page-entity is nil, given page-name: " page-name
@@ -1647,9 +1647,7 @@
 (defn- bullet-drag-start
   [event block uuid block-id]
   (editor-handler/highlight-block! uuid)
-  (.setData (gobj/get event "dataTransfer")
-            "block-uuid"
-            uuid)
+  (editor-handler/block->data-transfer! uuid event)
   (.setData (gobj/get event "dataTransfer")
             "block-dom-id"
             block-id)
@@ -2352,10 +2350,17 @@
       [:div.more (ui/icon "dots-circle-horizontal" {:size 18})])]])
 
 (rum/defcs block-content-or-editor < rum/reactive
-  (rum/local true ::hide-block-refs?)
+  {:init (fn [state]
+           (let [block (second (:rum/args state))
+                 config (first (:rum/args state))
+                 current-block-page? (= (str (:block/uuid block)) (state/get-current-page))
+                 embed-self? (and (:embed? config)
+                                  (= (:block/uuid block) (:block/uuid (:block config))))
+                 default-hide? (if (and current-block-page? (not embed-self?)) false true)]
+             (assoc state ::hide-block-refs? (atom default-hide?))))}
   [state config {:block/keys [uuid format] :as block} edit-input-id block-id edit? hide-block-refs-count?]
   (let [*hide-block-refs? (get state ::hide-block-refs?)
-        hide-block-refs? @*hide-block-refs?
+        hide-block-refs? (rum/react *hide-block-refs?)
         editor-box (get config :editor-box)
         editor-id (str "editor-" edit-input-id)
         slide? (:slide? config)
@@ -2498,51 +2503,52 @@
                          :or {show-page? true
                               level-limit 3}
                          :as opts}]
-  (let [parents (db/get-block-parents repo block-id (inc level-limit))
-        page (or (db/get-block-page repo block-id) ;; only return for block uuid
-                 (model/query-block-by-uuid block-id)) ;; return page entity when received page uuid
-        page-name (:block/name page)
-        page-original-name (:block/original-name page)
-        show? (or (seq parents) show-page? page-name)
-        parents (if (= page-name (:block/name (first parents)))
-                  (rest parents)
-                  parents)
-        more? (> (count parents) level-limit)
-        parents (if more? (take-last level-limit parents) parents)
-        config (assoc config :breadcrumb? true)]
-    (when show?
-      (let [page-name-props (when show-page?
-                              [page
-                               (page-cp (dissoc config :breadcrumb? true) page)
-                               {:block/name (or page-original-name page-name)}])
-            parents-props (doall
-                           (for [{:block/keys [uuid name content] :as block} parents]
-                             (when-not name ; not page
-                               (let [{:block/keys [title body]} (block/parse-title-and-body
-                                                                 uuid
-                                                                 (:block/format block)
-                                                                 (:block/pre-block? block)
-                                                                 content)
-                                     config (assoc config :block/uuid uuid)]
-                                 [block
-                                  (if (seq title)
-                                    (->elem :span (map-inline config title))
-                                    (->elem :div (markup-elements-cp config body)))]))))
-            breadcrumb (->> (into [] parents-props)
-                            (concat [page-name-props] (when more? [:more]))
-                            (filterv identity)
-                            (map (fn [x] (if (vector? x)
-                                           (let [[block label] x]
-                                             (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
-                                           [:span.opacity-70 "⋯"])))
-                            (interpose (breadcrumb-separator)))]
-        [:div.breadcrumb.block-parents.flex-row.flex-1
-         {:class (when (seq breadcrumb)
-                   (str (when-not (:search? config)
-                          " my-2")
-                        (when indent?
-                          " ml-4")))}
-         breadcrumb (when end-separator? (breadcrumb-separator))]))))
+  (when block-id
+    (let [parents (db/get-block-parents repo block-id (inc level-limit))
+          page (or (db/get-block-page repo block-id) ;; only return for block uuid
+                   (model/query-block-by-uuid block-id)) ;; return page entity when received page uuid
+          page-name (:block/name page)
+          page-original-name (:block/original-name page)
+          show? (or (seq parents) show-page? page-name)
+          parents (if (= page-name (:block/name (first parents)))
+                    (rest parents)
+                    parents)
+          more? (> (count parents) level-limit)
+          parents (if more? (take-last level-limit parents) parents)
+          config (assoc config :breadcrumb? true)]
+      (when show?
+        (let [page-name-props (when show-page?
+                                [page
+                                 (page-cp (dissoc config :breadcrumb? true) page)
+                                 {:block/name (or page-original-name page-name)}])
+              parents-props (doall
+                             (for [{:block/keys [uuid name content] :as block} parents]
+                               (when-not name ; not page
+                                 (let [{:block/keys [title body]} (block/parse-title-and-body
+                                                                   uuid
+                                                                   (:block/format block)
+                                                                   (:block/pre-block? block)
+                                                                   content)
+                                       config (assoc config :block/uuid uuid)]
+                                   [block
+                                    (if (seq title)
+                                      (->elem :span (map-inline config title))
+                                      (->elem :div (markup-elements-cp config body)))]))))
+              breadcrumb (->> (into [] parents-props)
+                              (concat [page-name-props] (when more? [:more]))
+                              (filterv identity)
+                              (map (fn [x] (if (vector? x)
+                                             (let [[block label] x]
+                                               (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
+                                             [:span.opacity-70 "⋯"])))
+                              (interpose (breadcrumb-separator)))]
+          [:div.breadcrumb.block-parents.flex-row.flex-1
+           {:class (when (seq breadcrumb)
+                     (str (when-not (:search? config)
+                            " my-2")
+                          (when indent?
+                            " ml-4")))}
+           breadcrumb (when end-separator? (breadcrumb-separator))])))))
 
 (defn- block-drag-over
   [event uuid top? block-id *move-to]
@@ -2770,7 +2776,10 @@
 
       (if whiteboard-block?
         (block-reference {} (str uuid) nil)
-        (block-content-or-editor config block edit-input-id block-id edit? false))
+        ;; Not embed self
+        (let [hide-block-refs-count? (and (:embed? config)
+                                          (= (:block/uuid block) (:embed-id config)))]
+          (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count?)))
 
       (when @*show-right-menu?
         (block-right-menu config block edit?))]
@@ -3450,22 +3459,29 @@
     (let [last-block-id (:db/id (last flat-blocks))]
       (block-handler/load-more! db-id last-block-id))))
 
+(defn- loading-more-data!
+  [config *loading? flat-blocks initial?]
+  ;; To prevent scrolling after inserting new blocks
+  (when (or initial?
+            (and (not initial?) (> (- (util/time-ms) (:start-time config)) 100)))
+    (reset! *loading? true)
+    (load-more-blocks! config flat-blocks)
+    (reset! *loading? false)))
+
 (rum/defcs lazy-blocks < rum/reactive
   (rum/local nil ::loading?)
   {:init (fn [state]
-           (assoc state ::id (str (random-uuid))))}
+           (assoc state ::id (str (random-uuid))))
+   :did-mount (fn [state]
+                (let [[config _ flat-blocks] (:rum/args state)]
+                  (loading-more-data! config (::loading? state) flat-blocks true))
+                state)}
   [state config blocks flat-blocks]
   (let [db-id (:db/id config)
         *loading? (::loading? state)]
     (if-not db-id
       (block-list config blocks)
-      (let [loading-more-data! (fn []
-                                 ;; To prevent scrolling after inserting new blocks
-                                 (when (> (- (util/time-ms) (:start-time config)) 100)
-                                   (reset! *loading? true)
-                                   (load-more-blocks! config flat-blocks)
-                                   (reset! *loading? false)))
-            has-more? (and
+      (let [has-more? (and
                        (>= (count flat-blocks) model/initial-blocks-length)
                        (some? (model/get-next-open-block (db/get-db) (last flat-blocks) db-id)))
             dom-id (str "lazy-blocks-" (::id state))]
@@ -3473,7 +3489,7 @@
          (ui/infinite-list
           "main-content-container"
           (block-list config blocks)
-          {:on-load loading-more-data!
+          {:on-load #(loading-more-data! config *loading? flat-blocks false)
            :bottom-reached (fn []
                              (when-let [node (gdom/getElement dom-id)]
                                (ui/bottom-reached? node 300)))
@@ -3518,7 +3534,7 @@
              (assoc state
                     ::initial-block    first-block
                     ::navigating-block (atom (:block/uuid first-block)))))}
-  [state block config]
+  [state blocks config]
   (let [repo (state/get-current-repo)
         *navigating-block (::navigating-block state)
         navigating-block (rum/react *navigating-block)
@@ -3531,10 +3547,10 @@
                  (let [block navigating-block-entity]
                    (db/get-paginated-blocks repo (:db/id block)
                                             {:scoped-block-id (:db/id block)}))
-                 [block])]
+                 blocks)]
     [:div
      (when (:breadcrumb-show? config)
-       (breadcrumb config (state/get-current-repo) (or navigating-block (:block/uuid block))
+       (breadcrumb config (state/get-current-repo) (or navigating-block (:block/uuid (first blocks)))
                    {:show-page? false
                     :navigating-block *navigating-block}))
      (blocks-container blocks (assoc config
@@ -3557,7 +3573,8 @@
            (fn []
              (let [alias? (:block/alias? page)
                    page (db/entity (:db/id page))
-                   blocks' (tree/non-consecutive-blocks->vec-tree blocks)]
+                   blocks (tree/non-consecutive-blocks->vec-tree blocks)
+                   parent-blocks (group-by :block/parent blocks)]
                [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                             (:ref? config)
                             (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
@@ -3565,34 +3582,37 @@
                  [:div
                   (page-cp config page)
                   (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-                 (for [block blocks']
+                 (for [[parent blocks] parent-blocks]
                    (rum/with-key
-                     (breadcrumb-with-container block config)
-                     (:db/id block)))
+                     (breadcrumb-with-container blocks config)
+                     (:db/id parent)))
                  {:debug-id page
                   :trigger-once? false})])))))]
 
      (and (:ref? config) (:group-by-page? config))
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
-        (for [[page parent-blocks] blocks]
-         (ui/lazy-visible
-          (fn []
-            (let [alias? (:block/alias? page)
-                  page (db/entity (:db/id page))]
-              [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                           (:ref? config)
-                           (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
-               (ui/foldable
-                [:div
-                 (page-cp config page)
-                 (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-                (for [block parent-blocks]
-                  (let [block' (update block :block/children tree/non-consecutive-blocks->vec-tree)]
-                    (rum/with-key
-                      (breadcrumb-with-container block' config)
-                      (:db/id block'))))
-                {:debug-id page})])))))]
+        (for [[page page-blocks] blocks]
+          (ui/lazy-visible
+           (fn []
+             (let [alias? (:block/alias? page)
+                   page (db/entity (:db/id page))
+                   page-blocks' (tree/non-consecutive-blocks->vec-tree page-blocks)
+                   parent-blocks (group-by :block/parent page-blocks')]
+               [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
+                            (:ref? config)
+                            (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
+                (ui/foldable
+                 [:div
+                  (page-cp config page)
+                  (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+                 (for [[parent blocks] parent-blocks]
+                   (let [blocks' (map #(update % :block/children (fn [col]
+                                                                   (tree/non-consecutive-blocks->vec-tree col 2))) blocks)]
+                     (rum/with-key
+                      (breadcrumb-with-container blocks' config)
+                      (:db/id parent))))
+                 {:debug-id page})])))))]
 
      (and (:group-by-page? config)
           (vector? (first blocks)))

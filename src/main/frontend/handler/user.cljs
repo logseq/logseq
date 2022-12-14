@@ -58,7 +58,7 @@
    parse-jwt
    :email))
 
-(defn- user-uuid []
+(defn user-uuid []
   (some->
    (state/get-auth-id-token)
    parse-jwt

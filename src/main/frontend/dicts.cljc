@@ -132,6 +132,7 @@
         :file/last-modified-at "Last modified at"
         :file/no-data "No data"
         :file/format-not-supported "Format .{1} is not supported."
+        :file/validate-existing-file-error "Page already exists with another file: {1}, current file: {2}. Please keep only one of them and re-index your graph."
         :file-rn/re-index "Re-index is strongly recommended after the files are renamed and on other devices after syncing."
         :file-rn/need-action "File rename actions are suggested to match the new format. Re-index is required on all devices when the renamed files are synced."
         :file-rn/or-select-actions " or individually rename files below, then "
@@ -217,6 +218,7 @@
         :settings-page/spell-checker "Spell checker"
         :settings-page/auto-updater "Auto updater"
         :settings-page/disable-sentry "Send usage data and diagnostics to Logseq"
+        :settings-page/disable-sentry-desc "Logseq will never collect your local graph database or sell your data." 
         :settings-page/preferred-outdenting "Logical outdenting"
         :settings-page/custom-date-format "Preferred date format"
         :settings-page/custom-date-format-warning "Re-index required! Existing journal references would be broken!"
@@ -234,6 +236,7 @@
         :settings-page/enable-block-time "Block timestamps"
         :settings-page/clear-cache "Clear cache"
         :settings-page/clear "Clear"
+        :settings-page/clear-cache-warning "Clearing the cache will discard open graphs. You will lose unsaved changes."
         :settings-page/developer-mode "Developer mode"
         :settings-page/enable-developer-mode "Developer mode"
         :settings-page/disable-developer-mode "Disable developer mode"
@@ -422,7 +425,8 @@
 
         :conversion/non-desktop "Graph directory in old versions needs to be converted to the new format.
           Please use the desktop app to do the conversion."
-        :conversion/write-filename-format "Apply format for incoming files"}
+        :conversion/write-filename-format "Apply format for incoming files"
+        :notification/clear-all "Clear all"}
 
    :de {:help/about "Über Logseq"
         :on-boarding/demo-graph "Dies ist ein Demo-Graph. Änderungen werden nicht gespeichert, solange Sie kein lokales Verzeichnis öffnen."
@@ -1582,7 +1586,8 @@
            :file/name "文件名"
            :file/file "文件："
            :file/last-modified-at "最后更改于"
-           :file/no-data "没有数据"
+           :file/no-data "没有数据" 
+           :file/validate-existing-file-error "页面已存在另一个文件: {1}, 当前文件: {2}. 请保留其中一个文件，然后重建当前图谱的索引。"
            :file-rn/re-index "重命名文件后，如果其他设备同步了改文件，强烈建议在同步成功后重新建立索引。"
            :file-rn/need-action "建议执行文件重命名操作以匹配新格式。当重命名的文件被同步后，请在所有设备上重新建立索引。"
            :file-rn/or-select-actions " 或在下面单独重命名这些文件，然后 "
@@ -1648,6 +1653,7 @@
            :settings-page/spell-checker "单词拼写检查"
            :settings-page/auto-updater "自动更新"
            :settings-page/disable-sentry "向 Logseq 提供使用情况和诊断信息"
+           :settings-page/disable-sentry-desc "Logseq 从来不会收集或出售你的图谱数据。"
            :settings-page/custom-date-format "首选日期页面格式"
            :settings-page/preferred-file-format "首选文件格式"
            :settings-page/preferred-workflow "首选工作流"
@@ -1663,6 +1669,7 @@
            :settings-page/enable-block-time "记录 block 创建/修改时间"
            :settings-page/clear-cache "清除缓存"
            :settings-page/clear "清除"
+           :settings-page/clear-cache-warning "清除缓存将关闭当前打开的图谱。你将丢失未保存的更改。"
            :settings-page/developer-mode "开发者模式"
            :settings-page/enable-developer-mode "启用开发者模式"
            :settings-page/disable-developer-mode "禁用开发者模式"
@@ -1850,7 +1857,8 @@
 
            :conversion/non-desktop "旧版本中的图谱目录需要转换为新格式。
           请使用桌面端应用进行转换."
-           :conversion/write-filename-format "为传入的文件应用格式"}
+           :conversion/write-filename-format "为传入的文件应用格式"
+           :notification/clear-all "清除全部通知"}
 
    :zh-Hant {:on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
              :on-boarding/add-graph "Add a graph"
@@ -4501,6 +4509,7 @@
                                 :default "tutorial-tr.md")
         :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-tr.md")
                                        :default "dummy-notes-tr.md")
+        :on-boarding/closed-feature "Kapalı {1}"
         :on-boarding/demo-graph "Bu bir demo graftır, yerel bir klasör açana kadar değişiklikler kaydedilmeyecektir."
         :on-boarding/add-graph "Bir graf ekle"
         :on-boarding/open-local-dir "Yerel bir dizin açın"
@@ -4509,6 +4518,14 @@
         :on-boarding/new-graph-desc-3 "/journals - günlük sayfalarınız saklanır"
         :on-boarding/new-graph-desc-4 "/pages - diğer sayfalarınız saklanır"
         :on-boarding/new-graph-desc-5 "/logseq - yapılandırma, custom.css ve bazı meta veriler saklanır."
+        :on-boarding/welcome-whiteboard-modal-title "Düşünceleriniz için yeni bir tuval."
+        :on-boarding/welcome-whiteboard-modal-description "Beyaz tahtalar, fikir üretme ve düzenleme için harika bir araçtır. Şimdi bilgi tabanınızdaki düşüncelerinizi ya da yenilerini birbirleriyle yan yana getirerek, bağlantı kurabilir, ilişkilendirebilir ve yeni yöntemlerle anlayabilirsiniz."
+        :on-boarding/welcome-whiteboard-modal-later "Daha sonra"
+        :on-boarding/welcome-whiteboard-modal-start "Beyaz tahtaya başla"
+        :on-boarding/tour-whiteboard-home "{1} Beyaz tahtalarınız için giriş sayfasıdır"
+        :on-boarding/tour-whiteboard-home-description "Beyaz tahtalar uygulamada kendi bölümlerine sahiptir ve onları bir bakışta görebilir, kolayca yenilerini oluşturabilir veya silebilirsiniz."
+        :on-boarding/tour-whiteboard-new "{1} Yeni beyaz tahta oluştur"
+        :on-boarding/tour-whiteboard-new-description "Yeni bir beyaz tahta oluşturmanın birçok yolu vardır. Bunlardan biri her zaman tam burada bu panodadır."
         :help/start "Başlarken"
         :help/about "Logseq hakkında"
         :help/roadmap "Yol haritası"
@@ -4701,6 +4718,7 @@
         :settings-page/spell-checker "Yazım denetleyici"
         :settings-page/auto-updater "Otomatik güncelleme"
         :settings-page/disable-sentry "Kullanım verilerini ve tanılamayı Logseq'e gönderin"
+        :settings-page/disable-sentry-desc "Logseq asla yerel graf veritabanınızı toplamayacak veya verilerinizi satmayacaktır."
         :settings-page/preferred-outdenting "Mantıksal girinti"
         :settings-page/custom-date-format "Tercih edilen tarih biçimi"
         :settings-page/custom-date-format-warning "Yeniden dizin oluşturma gerekli! Mevcut günlük referansları bozulabilir!"
@@ -4718,6 +4736,7 @@
         :settings-page/enable-block-time "Blok zaman damgaları"
         :settings-page/clear-cache "Önbelleği temizle"
         :settings-page/clear "Temizle"
+        :settings-page/clear-cache-warning "Önbelleği temizlemek açık grafları atacaktır. Kaydedilmemiş değişiklikleri kaybedersiniz."
         :settings-page/developer-mode "Geliştirici modu"
         :settings-page/enable-developer-mode "Geliştirici modu"
         :settings-page/disable-developer-mode "Geliştirici modunu devre dışı bırak"

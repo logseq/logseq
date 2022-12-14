@@ -62,7 +62,8 @@
             [rum.core :as rum]
             [logseq.graph-parser.config :as gp-config]
             [cljs-bean.core :as bean]
-            ["@sentry/react" :as Sentry]))
+            ["@sentry/react" :as Sentry]
+            [frontend.modules.instrumentation.sentry :as sentry-event]))
 
 ;; TODO: should we move all events here?
 
@@ -87,6 +88,8 @@
         (map? result)
         (do
           (state/set-user-info! result)
+          (when-let [uid (user-handler/user-uuid)]
+            (sentry-event/set-user! uid))
           (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
               (when-not (false? (state/enable-sync?)) ; user turns it off
@@ -139,11 +142,11 @@
        (repo-config-handler/restore-repo-config! graph)
        (when-not (= :draw (state/get-current-route))
          (route-handler/redirect-to-home!))
-       (when-let [dir-name (config/get-repo-dir graph)]
-         (fs/watch-dir! dir-name))
        (srs/update-cards-due-count!)
        (state/pub-event! [:graph/ready graph])
-       (file-sync-restart!)))))
+       (file-sync-restart!)
+       (when-let [dir-name (config/get-repo-dir graph)]
+         (fs/watch-dir! dir-name))))))
 
 ;; Parameters for the `persist-db` function, to show the notification messages
 (def persist-db-noti-m
@@ -366,6 +369,7 @@
         (state/pub-event! [:graph/dir-gone dir]))))
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo)
+  (fs-watcher/load-graph-files! repo)
   ;; TODO: Notify user to update filename format when the UX is smooth enough
   ;; (when-not config/test?
   ;;   (js/setTimeout
@@ -389,7 +393,8 @@
 (defmethod handle :go/search [_]
   (state/set-modal! component-search/search-modal
                     {:fullscreen? false
-                     :close-btn?  false}))
+                     :close-btn?  false
+                     :label "ls-modal-search"}))
 
 (defmethod handle :go/plugins [_]
   (plugin/open-plugins-modal!))
@@ -429,7 +434,7 @@
                        :graph-id graph-uuid
                        :tx-id tx-id)]
     (Sentry/captureException error
-                            (bean/->js {:extra payload}))))
+                             (bean/->js {:tags payload}))))
 
 (defmethod handle :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))
@@ -650,10 +655,12 @@
 
 (defmethod handle :graph/re-index [[_]]
   ;; Ensure the graph only has ONE window instance
-  (repo-handler/re-index!
-   nfs-handler/rebuild-index!
-   #(do (page-handler/create-today-journal!)
-        (file-sync-restart!))))
+  (async/go
+    (async/<! (sync/<sync-stop))
+    (repo-handler/re-index!
+     nfs-handler/rebuild-index!
+     #(do (page-handler/create-today-journal!)
+          (file-sync-restart!)))))
 
 (defmethod handle :graph/ask-for-re-index [[_ *multiple-windows? ui]]
   ;; *multiple-windows? - if the graph is opened in multiple windows, boolean atom

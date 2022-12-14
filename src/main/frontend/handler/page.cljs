@@ -754,7 +754,7 @@
         action (state/get-editor-action)
         hashtag? (= action :page-search-hashtag)
         q (or
-           @editor-handler/*selected-text
+           (editor-handler/get-selected-text)
            (when hashtag?
              (gp-util/safe-subs edit-content pos current-pos))
            (when (> (count edit-content) current-pos)
@@ -770,19 +770,19 @@
               chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
                        (page-ref/->page-ref chosen)
                        chosen)
-              q (if @editor-handler/*selected-text "" q)
-              [last-pattern forward-pos] (if wrapped?
-                                           [q 3]
-                                           (if (= \# (first q))
-                                             [(subs q 1) 1]
-                                             [q 2]))
+              q (if (editor-handler/get-selected-text) "" q)
+              last-pattern (if wrapped?
+                             q
+                             (if (= \# (first q))
+                               (subs q 1)
+                               q))
               last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)]
           (editor-handler/insert-command! id
                                           (str "#" (when wrapped? page-ref/left-brackets) chosen)
                                           format
                                           {:last-pattern last-pattern
                                            :end-pattern (when wrapped? page-ref/right-brackets)
-                                           :forward-pos forward-pos})))
+                                           :command :page-ref})))
       (fn [chosen _click?]
         (state/clear-editor-action!)
         (let [prefix (str (t :new-page) ": ")
@@ -793,10 +793,10 @@
           (editor-handler/insert-command! id
                                           page-ref-text
                                           format
-                                          {:last-pattern (str page-ref/left-brackets (if @editor-handler/*selected-text "" q))
+                                          {:last-pattern (str page-ref/left-brackets (if (editor-handler/get-selected-text) "" q))
                                            :end-pattern page-ref/right-brackets
                                            :postfix-fn   (fn [s] (util/replace-first page-ref/right-brackets s ""))
-                                           :forward-pos 3}))))))
+                                           :command :page-ref}))))))
 
 (defn create-today-journal!
   []

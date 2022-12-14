@@ -17,8 +17,7 @@
             [logseq.graph-parser.config :as gp-config]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [logseq.graph-parser.log :as log]))
+            [rum.core :as rum]))
 
 ;; Stores main application state
 (defonce ^:large-vars/data-var state
@@ -131,6 +130,8 @@
 
      ;; Whether to skip saving the current block
      :editor/skip-saving-current-block?     false
+
+     :editor/code-block-context             {}
 
      :db/last-transact-time                 {}
      ;; whether database is persisted
@@ -335,19 +336,10 @@ should be done through this fn in order to get global config and config defaults
   ([]
    (get-config (get-current-repo)))
   ([repo-url]
-   (try
-     (merge-configs
-      default-config
-      (get-in @state [:config ::global-config])
-      (get-in @state [:config repo-url]))
-     (catch :default e
-       (do
-         (log/error "Cannot parse global config file" e)
-         (log/error "Restore repo config")
-         ;; NOTE: Since repo config is guarded by a try-catch, we can safely failback to it
-         (merge-configs
-          default-config
-          (get-in @state [:config repo-url])))))))
+   (merge-configs
+    default-config
+    (get-in @state [:config ::global-config])
+    (get-in @state [:config repo-url]))))
 
 (defonce publishing? (atom nil))
 
@@ -560,15 +552,9 @@ Similar to re-frame subscriptions"
   ([] (sub-config (get-current-repo)))
   ([repo]
    (let [config (sub :config)]
-     (try
-       (merge-configs default-config
-                      (get config ::global-config)
-                      (get config repo))
-       (catch :default e
-         (do
-           (log/error "Cannot parse config files" e)
-           (log/error "Restore default config")
-           default-config))))))
+     (merge-configs default-config
+                    (get config ::global-config)
+                    (get config repo)))))
 
 (defn enable-grammarly?
   []
@@ -723,6 +709,10 @@ Similar to re-frame subscriptions"
 (defn home?
   []
   (= :home (get-current-route)))
+
+(defn whiteboard-dashboard?
+  []
+  (= :whiteboards (get-current-route)))
 
 (defn setups-picker?
   []

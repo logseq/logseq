@@ -471,10 +471,6 @@ html[data-theme='dark'] {
   width: 100%;
   max-width: var(--ls-main-content-max-width);
   flex: 1;
-
-  h1.title {
-    padding-right: 15px;
-  }
 }
 
 .cp__sidebar-help {

@@ -160,7 +160,7 @@
                (editor-handler/insert-command! id
                                                (page-ref/->page-ref journal)
                                                format
-                                               nil)
+                                               {:command :page-ref})
                (state/clear-editor-action!)
                (reset! commands/*current-command nil))))})
        (when deadline-or-schedule?

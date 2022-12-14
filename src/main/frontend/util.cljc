@@ -537,6 +537,10 @@
            (when-not not-space? " ")
            (triml-without-newlines right)))))
 
+(defn cjk-string?
+  [s]
+  (re-find #"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]" s))
+
 ;; Add documentation
 (defn replace-first [pattern s new-value]
   (if-let [first-index (string/index-of s pattern)]
@@ -929,10 +933,11 @@
    (defn search-normalize
      "Normalize string for searching (loose)"
      [s remove-accents?]
-     (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
-       (if remove-accents?
-         (removeAccents  normalize-str)
-         normalize-str))))
+     (when s
+       (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
+         (if remove-accents?
+           (removeAccents  normalize-str)
+           normalize-str)))))
 
 #?(:cljs
    (def page-name-sanity-lc
@@ -1437,7 +1442,7 @@
 (defn memoize-last
   "Different from core.memoize, it only cache the last result.
    Returns a memoized version of a referentially transparent function. The
-  memoized version of the function cache the the last result, and replay when calls 
+  memoized version of the function cache the the last result, and replay when calls
    with the same arguments, or update cache when with different arguments."
   [f]
   (let [last-mem (atom nil)

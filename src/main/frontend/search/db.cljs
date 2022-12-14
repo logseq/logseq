@@ -74,8 +74,9 @@
 
 (defn original-page-name->index
   [p]
-  {:name (util/search-normalize p (state/enable-search-remove-accents?))
-   :original-name p})
+  (when p
+    {:name (util/search-normalize p (state/enable-search-remove-accents?))
+     :original-name p}))
 
 (defn make-pages-title-indice!
   "Build a page title indice from scratch.

@@ -88,6 +88,7 @@
    :go/forward                     "Forwards"
    :search/re-index                "Rebuild search index"
    :sidebar/open-today-page        "Open today's page in the right sidebar"
+   :sidebar/close-top              "Closes the top item in the right sidebar"
    :sidebar/clear                  "Clear all in the right sidebar"
    :misc/copy                      "mod+c"
    :command-palette/toggle         "Toggle command palette"

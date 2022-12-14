@@ -262,10 +262,10 @@
   []
   [:div.ui__notifications-content
    [:div.pointer-events-auto
-    (button "Clear all"
-      :intent "logseq"
-      :on-click (fn []
-                  (notification/clear-all!)))]])
+    (button (t :notification/clear-all)
+     :intent "logseq"
+     :on-click (fn []
+                 (notification/clear-all!)))]])
 
 (rum/defc notification < rum/reactive
   []
@@ -443,7 +443,7 @@
                           (bottom-reached? node threshold))
         top-reached? (= scroll-top 0)
         down? (scroll-down?)]
-    (when (and down? bottom-reached? on-load)
+    (when (and bottom-reached? on-load)
       (on-load))
     (when (and (not down?) top-reached? on-top-reached)
       (on-top-reached))))

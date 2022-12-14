@@ -33,7 +33,8 @@
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
             [frontend.fs.capacitor-fs :as capacitor-fs]
-            ["@capawesome/capacitor-background-task" :refer [BackgroundTask]]))
+            ["@capawesome/capacitor-background-task" :refer [BackgroundTask]]
+            ["path" :as path]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -542,7 +543,7 @@
    (diffs->partitioned-filetxns n)))
 
 
-(deftype FileMetadata [size etag path encrypted-path last-modified remote? ^:mutable normalized-path]
+(deftype FileMetadata [size etag path encrypted-path last-modified remote? txid ^:mutable normalized-path]
   Object
   (get-normalized-path [_]
     (assert (string? path) path)
@@ -574,12 +575,13 @@
       :encrypted-path encrypted-path
       :last-modified last-modified
       :remote? remote?
+      :txid txid
       not-found))
 
 
   IPrintWithWriter
   (-pr-writer [_ w _opts]
-    (write-all w (str {:size size :etag etag :path path :remote? remote? :last-modified last-modified}))))
+    (write-all w (str {:size size :etag etag :path path :remote? remote? :txid txid :last-modified last-modified}))))
 
 
 
@@ -656,15 +658,15 @@
   (let [favorite-pages* (set favorite-pages)]
     (fn [^FileMetadata item]
       (let [path (relative-path item)
-            journal? (string/starts-with? path
-                                          (str (config/get-journals-directory) "/"))
+            journal-dir (path/join (config/get-journals-directory) path/sep)
+            journal? (string/starts-with? path journal-dir)
             journal-day
             (when journal?
               (try
                 (tc/to-long
                  (tf/parse (tf/formatter "yyyy_MM_dd")
                            (-> path
-                               (string/replace-first "journals/" "")
+                               (string/replace-first journal-dir "")
                                (string/replace-first ".md" ""))))
                 (catch :default _)))]
         (cond
@@ -792,7 +794,7 @@
         (recur others
                (conj result
                      (->FileMetadata (get metadata "size") (get metadata "md5") normalized-path
-                                     encryptedFname (get metadata "mtime") false nil)))))))
+                                     encryptedFname (get metadata "mtime") false nil nil)))))))
 
 (deftype RSAPI [^:mutable graph-uuid' ^:mutable private-key' ^:mutable public-key']
   IToken
@@ -1202,7 +1204,8 @@
                                                 #(hash-map :checksum (:checksum %)
                                                            :encrypted-path (remove-user-graph-uuid-prefix (:Key %))
                                                            :size (:Size %)
-                                                           :last-modified (:LastModified %))
+                                                           :last-modified (:LastModified %)
+                                                           :txid (:Txid %))
                                                 objs))
                                         (when-not (empty? next-continuation-token)
                                           (recur next-continuation-token)))))))]
@@ -1221,7 +1224,9 @@
                                   (get encrypted-path->path-map (:encrypted-path %))
                                   (:encrypted-path %)
                                   (:last-modified %)
-                                  true nil)
+                                  true
+                                  (:txid %)
+                                  nil)
                  (filter-files-with-unnormalized-path file-meta-list* encrypted-path->path-map))))))))))
 
   (<get-remote-files-meta [this graph-uuid filepaths]
@@ -1245,7 +1250,9 @@
                                                      path-normalize)
                                             (:FilePath %)
                                             (:LastModified %)
-                                            true nil)))
+                                            true
+                                            (:Txid %)
+                                            nil)))
                      r))))))))
 
   (<get-remote-graph [this graph-name-opt graph-uuid-opt]
@@ -1268,18 +1275,22 @@
 
   (<get-deletion-logs [this graph-uuid from-txid]
     (user/<wrap-ensure-id&access-token
-     (let [r (<! (.<request this "get_deletion_log" {:GraphUUID graph-uuid :FromTXId from-txid}))]
+     (let [r (<! (.<request this "get_deletion_log_v20221212" {:GraphUUID graph-uuid :FromTXId from-txid}))]
        (if (instance? ExceptionInfo r)
          r
-         (let [txns-with-encrypted-paths (mapv #(update % :path remove-user-graph-uuid-prefix) (:Transactions r))
-               encrypted-paths           (mapv :path txns-with-encrypted-paths)
+         (let [txns-with-encrypted-paths (mapv (fn [txn]
+                                                 (assoc txn :paths
+                                                        (mapv remove-user-graph-uuid-prefix (:paths txn))))
+                                               (:Transactions r))
+               encrypted-paths           (mapcat :paths txns-with-encrypted-paths)
                encrypted-path->path-map
                                          (zipmap
                                           encrypted-paths
                                           (<! (<decrypt-fnames rsapi graph-uuid encrypted-paths)))
                txns
                                          (mapv
-                                          (fn [txn] (update txn :path #(get encrypted-path->path-map %)))
+                                          (fn [txn]
+                                            (assoc txn :paths (mapv #(get encrypted-path->path-map %) (:paths txn))))
                                           txns-with-encrypted-paths)]
            txns)))))
 
@@ -1411,8 +1422,8 @@
 (defn- is-journals-or-pages?
   [filetxn]
   (let [rel-path (relative-path filetxn)]
-    (or (string/starts-with? rel-path "journals/")
-        (string/starts-with? rel-path "pages/"))))
+    (or (string/starts-with? rel-path (path/join (config/get-journals-directory) path/sep))
+        (string/starts-with? rel-path (path/join (config/get-pages-directory) path/sep)))))
 
 (defn- need-add-version-file?
   "when we need to create a new version file:
@@ -2394,12 +2405,32 @@
   (filterv filter-too-huge-files-aux es))
 
 (defn- filter-local-files-in-deletion-logs
-  [local-all-files-meta deletion-logs]
-  (let [deletion-logs-map (into {} (map (juxt :path identity)) deletion-logs)
+  [local-all-files-meta deletion-logs remote-all-files-meta]
+  (let [deletion-logs-map (into {}
+                                (mapcat
+                                 (fn [log]
+                                   (mapv
+                                    (fn [path] [path (select-keys log [:epoch :TXId])])
+                                    (:paths log))))
+                                deletion-logs)
+        remote-all-files-meta-map (into {} (map (juxt :path identity)) remote-all-files-meta)
         *keep             (transient #{})
-        *delete           (transient #{})]
+        *delete           (transient #{})
+        filtered-deletion-logs-map
+        (loop [[deletion-log & others] deletion-logs-map
+               result {}]
+          (if-not deletion-log
+            result
+            (let [[deletion-log-path deletion-log-meta] deletion-log
+                  meta (get remote-all-files-meta-map deletion-log-path)
+                  meta-txid (:txid meta)
+                  deletion-txid (:TXId deletion-log-meta)]
+              (if (and meta-txid deletion-txid
+                       (> meta-txid deletion-txid))
+                (recur others result)
+                (recur others (into result [[deletion-log-path deletion-log-meta]]))))))]
     (doseq [f local-all-files-meta]
-      (let [epoch-long (some-> (get deletion-logs-map (:path f))
+      (let [epoch-long (some-> (get filtered-deletion-logs-map (:path f))
                                :epoch
                                (* 1000))]
         (if (and epoch-long (> epoch-long (:last-modified f)))
@@ -2579,7 +2610,7 @@
           (let [remote-all-files-meta  remote-all-files-meta-or-exp
                 local-all-files-meta   (<! local-all-files-meta-c)
                 {local-all-files-meta :keep delete-local-files :delete}
-                (filter-local-files-in-deletion-logs local-all-files-meta deletion-logs-or-exp)
+                (filter-local-files-in-deletion-logs local-all-files-meta deletion-logs-or-exp remote-all-files-meta)
                 recent-10-days-range   ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %)) (t/today))
                 diff-local-files       (->> (diff-file-metadata-sets local-all-files-meta remote-all-files-meta)
                                             (<filter-too-long-filename graph-uuid)
@@ -2741,16 +2772,7 @@
       (let [next-state (<! (<loop-ensure-pwd&keys graph-uuid (state/get-current-repo) *stopped?))]
         (assert (s/valid? ::state next-state) next-state)
         (when (= next-state ::idle)
-          (<! (<ensure-set-env&keys graph-uuid *stopped?))
-          ;; wait seconds to receive all file change events,
-          ;; and then drop all of them.
-          ;; WHY: when opening a graph(or switching to another graph),
-          ;;      file-watcher will send a lot of file-change-events,
-          ;;      actually, each file corresponds to a file-change-event,
-          ;;      we need to ignore all of them.
-          (<! (timeout 3000))
-          (println :drain-local-changes-chan-at-starting
-                   (count (util/drain-chan local-changes-revised-chan))))
+          (<! (<ensure-set-env&keys graph-uuid *stopped?)))
         (if @*stopped?
           (.schedule this ::stop nil nil)
           (.schedule this next-state nil nil)))))
