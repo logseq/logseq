@@ -24,19 +24,19 @@
     (are [x _y timeout] (>= timeout (:time (util/with-time-number (block/normalize-block x true))))
       "Aug 12th, 2022"
       "2022-08-12T00:00:00Z"
-      5.0 ;; actual 2.2
+      50.0 ;; actual 2.2
 
       "2022-08-12T00:00:00Z"
       "2022-08-12T00:00:00Z"
-      500 ;; actual 125
+      1000.0 ;; actual 125
 
       #{"Aug 12th, 2022"}
       "2022-08-12T00:00:00Z"
-      5.0 ;; actual 1.7
+      50.0 ;; actual 1.7
 
       #{"2022-08-12T00:00:00Z"}
       "2022-08-12T00:00:00Z"
-      50  ;; actual 17.0
+      250.0  ;; actual 17.0
       )))
 
 (deftest test-normalize-percentage
@@ -77,23 +77,23 @@
     (are [x _y timeout] (>= timeout (:time (util/with-time-number (block/normalize-block x false))))
       "anreanre"
       "anreanre"
-      0.5 ;; actual 0.07
+      2.0 ;; actual 0.07
 
       ""
       ""
-      0.5 ;; actual 0.07
+      2.0 ;; actual 0.07
 
       "a.0%"
       "a.0%"
-      0.1 ;; actual 0.02
+      0.5 ;; actual 0.02
 
       "%"
       "%"
-      0.2 ;; actual 0.03
+      1.0 ;; actual 0.03
 
       "-%"
       "-%"
-      0.1 ;; actual 0.02
+      0.5 ;; actual 0.02
       )))
 
 (deftest test-normalize-journal-title
