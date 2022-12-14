@@ -10,8 +10,8 @@
 (def commands-allowlist
   #{"git" "pandoc" "ag" "grep" "alda"})
 
-(def commands-denylist
-  #{"rm" "mv" "rename" "dd" ">" "command" "sudo"})
+;(def commands-denylist
+;  #{"rm" "mv" "rename" "dd" ">" "command" "sudo"})
 
 (defn- get-commands-allowlist
   []
