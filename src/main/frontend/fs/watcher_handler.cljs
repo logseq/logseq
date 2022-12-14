@@ -129,7 +129,7 @@
         (let [deleted-files (set/difference (set db-files) (set files))]
           (when (seq deleted-files)
             (let [delete-tx-data (->> (db/delete-files deleted-files)
-                                      (concat (db/delete-blocks graph files nil))
+                                      (concat (db/delete-blocks graph deleted-files nil))
                                       (remove nil?))]
               (db/transact! graph delete-tx-data)))
           (doseq [file files]
