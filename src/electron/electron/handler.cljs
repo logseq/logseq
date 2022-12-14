@@ -357,13 +357,27 @@
 (defmethod handle :getLogseqDotDirRoot []
   (utils/get-ls-dotdir-root))
 
-(defmethod handle :testProxyUrl [win [_ url]]
-  (p/let [resp (utils/fetch url)
-          code (.-status resp)]
-    (js/console.debug resp code)
-    (if (<= 200 code 299)
-      (utils/send-to-renderer win :notification {:type "success" :payload (str "Success: " url " status " code)})
-      (utils/send-to-renderer win :notification {:type "error" :payload (str "Failed: " url " status " code)}))))
+(defmethod handle :getProxy [^js window]
+  (if-let [sess (.. window -webContents -session)]
+    (p/let [proxy (.resolveProxy sess "https://www.google.com")]
+      proxy)
+    (p/resolved nil)))
+
+(defmethod handle :testProxyUrl [_win [_ url]]
+  (let [start-ms (.getTime (js/Date.))]
+    (-> (utils/fetch url)
+        (p/timeout 5000)
+        (p/then (fn [resp]
+                  (let [code (.-status resp)
+                        response-ms (- (.getTime (js/Date.)) start-ms)]
+                    (if (<= 200 code 299)
+                      #js {:code code
+                           :response-ms response-ms}
+                      (p/rejected (js/Error. (str "HTTP status " code)))))))
+        (p/catch (fn [e]
+                   (if (instance? p/TimeoutException e)
+                     (p/rejected (js/Error. "Timeout"))
+                     (p/rejected e)))))))
 
 (defmethod handle :httpFetchJSON [_win [_ url options]]
   (p/let [res (utils/fetch url options)
@@ -555,6 +569,7 @@
     (.reload web-content)))
 
 (defmethod handle :setHttpsAgent [^js _win [_ opts]]
+  (prn ::opts opts)
   (utils/set-fetch-agent opts))
 
 ;;;;;;;;;;;;;;;;;;;;;;;

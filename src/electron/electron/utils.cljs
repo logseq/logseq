@@ -31,6 +31,7 @@
 (defn fetch
   ([url] (fetch url nil))
   ([url options]
+   (prn ::debug-fetch @*fetchAgent)
    (_fetch url (bean/->js (merge options {:agent @*fetchAgent})))))
 
 (defn get-ls-dotdir-root
@@ -54,6 +55,7 @@
 
 (defn set-fetch-agent
   [{:keys [protocol host port] :as opts}]
+  (prn ::set-fetch-agent opts)
   (reset! *fetchAgent
           (when (and protocol host port)
             (new HttpsProxyAgent (str protocol "://" host ":" port))))
