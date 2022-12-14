@@ -188,7 +188,7 @@
           path (util/node-path.join path "package.json")]
       (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true}))))
 
-(def ^:export save_focused_code_editor
+(def ^:export save_focused_code_editor_content
   (fn []
     (code-handler/save-code-editor!)))
 
