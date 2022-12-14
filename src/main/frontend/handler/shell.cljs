@@ -36,15 +36,15 @@
      :success
      false)))
 
-(def dangerous-commands
+(def commands-denylist
   #{"rm" "mv" "rename" "dd" ">" "command" "sudo"})
 
-(def code-block-commands-whitelist
+(def code-block-commands-allowlist
   #{"alda"})
 
 (defn get-code-block-commands
   []
-  code-block-commands-whitelist)
+  code-block-commands-allowlist)
 
 (defn run-command!
   [command]
@@ -56,7 +56,7 @@
         args (-> args str string/trim)]
     (when-not (string/blank? command)
       (cond
-        (contains? dangerous-commands command)
+        (contains? commands-denylist command)
         (notification/show!
          [:div (str command " is too dangerous!")]
          :error)

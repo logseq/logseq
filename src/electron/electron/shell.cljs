@@ -7,18 +7,18 @@
    ["child_process" :as child-process]
    ["command-exists" :as command-exists]))
 
-(def commands-whitelist
+(def commands-allowlist
   #{"git" "pandoc" "ag" "grep" "alda"})
 
-(def dangerous-commands
+(def commands-denylist
   #{"rm" "mv" "rename" "dd" ">" "command" "sudo"})
 
-(defn- get-commands-whitelist
+(defn- get-commands-allowlist
   []
   (set/union (set (some->> (map #(some-> % str string/trim string/lower-case)
-                                (get-in @state/state [:config :commands-whitelist]))
+                                (get-in @state/state [:config :commands-allowlist]))
                            (remove nil?)))
-             commands-whitelist))
+             commands-allowlist))
 
 (defn- run-command!
   [command args on-data on-exit]
@@ -39,15 +39,15 @@
    (some->> command (.sync command-exists))
     (throw (js/Error. (str "Shell: " command " not exist!")))) command)
 
-(defn- ensure-command-in-whitelist
+(defn- ensure-command-in-allowlist
   [command]
   (when-not
-   (some->> command (contains? (get-commands-whitelist)))
+   (some->> command (contains? (get-commands-allowlist)))
     (throw (js/Error. (str "Shell: " command " not be allowed!")))) command)
 
 (defn run-command-safety!
   [command args on-data on-exit]
   (when (some-> command str string/trim string/lower-case
                 (ensure-command-exists)
-                (ensure-command-in-whitelist))
+                (ensure-command-in-allowlist))
     (run-command! command args on-data on-exit)))
