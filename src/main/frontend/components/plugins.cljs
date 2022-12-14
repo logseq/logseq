@@ -386,21 +386,26 @@
      [:h1.mb-2.text-2xl.font-bold (t :settings-page/network-proxy)]
      [:div.p-2
       [:p [:label [:strong (t :type)]
-           (ui/select [{:label "Disabled" :value "" :selected disabled?}
-                       {:label "http" :value "http" :selected (= protocol "http")}
-                       {:label "socks5" :value "socks5" :selected (= protocol "socks5")}]
-                      #(set-opts!
-                        (assoc opts :protocol (if (= "disabled" (util/safe-lower-case %)) nil %))) nil)]]
+           (ui/select [{:label "Default" :value "default" :selected disabled?}
+                       {:label "HTTP" :value "http" :selected (= protocol "http")}
+                       {:label "SOCKS5" :value "socks5" :selected (= protocol "socks5")}]
+                      #(set-opts! (assoc opts :protocol (if (= % "default") nil %))))]]
       [:p.flex
-       [:label.pr-4 [:strong (t :host)]
+       [:label.pr-4
+        {:class (if disabled? "opacity-50" nil)}
+        [:strong (t :host)]
         [:input.form-input.is-small
-         {:value     (:host opts) :disabled disabled?
+         {:value     (:host opts)
+          :disabled  disabled?
           :on-change #(set-opts!
                        (assoc opts :host (util/trim-safe (util/evalue %))))}]]
 
-       [:label [:strong (t :port)]
+       [:label
+        {:class (if disabled? "opacity-50" nil)}
+        [:strong (t :port)]
         [:input.form-input.is-small
-         {:value     (:port opts) :type "number" :disabled disabled?
+         {:value     (:port opts) :type "number" :min 1 :max 65535
+          :disabled  disabled?
           :on-change #(set-opts!
                        (assoc opts :port (util/trim-safe (util/evalue %))))}]]]
 
@@ -411,7 +416,7 @@
          {:ref         *test-input
           :list        "proxy-test-url-datalist"
           :type        "url"
-          :placeholder "http://"
+          :placeholder "https://"
           :on-change   #(set-opts!
                          (assoc opts :test (util/trim-safe (util/evalue %))))
           :value       (:test opts)}]
@@ -422,13 +427,16 @@
 
        (ui/button (if testing? (ui/loading "Testing") "Test URL")
                   :intent "logseq" :large? false
-                  :style {:margin-top 0 :padding "5px 15px"}
                   :on-click #(let [val (util/trim-safe (.-value (rum/deref *test-input)))]
                                (when (and (not testing?) (not (string/blank? val)))
                                  (set-testing?! true)
                                  (-> (p/let [_ (ipc/ipc :setHttpsAgent opts)
-                                             _ (ipc/ipc :testProxyUrl val)])
-                                     (p/catch (fn [e] (notification/show! (str e) :error)))
+                                             result (ipc/ipc :testProxyUrl val)]
+                                       (js->clj result :keywordize-keys true))
+                                     (p/then (fn [{:keys [code response-ms]}]
+                                               (notification/show! (str "Success! Status " code " in " response-ms "ms.") :success)))
+                                     (p/catch (fn [e]
+                                                (notification/show! (str e) :error)))
                                      (p/finally (fn [] (set-testing?! false)))))))]
 
       [:p.pt-2
