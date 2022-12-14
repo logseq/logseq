@@ -319,7 +319,7 @@
    [:p (t :on-boarding/welcome-whiteboard-modal-description)]
 
    [:div.pt-6.flex.justify-center.space-x-2.sm:justify-end
-    (ui/button (t :on-boarding/welcome-whiteboard-modal-later) :on-click close-fn :background "gray" :class "opacity-60")
+    (ui/button (t :on-boarding/welcome-whiteboard-modal-skip) :on-click close-fn :background "gray" :class "opacity-60")
     (ui/button (t :on-boarding/welcome-whiteboard-modal-start)
                :on-click (fn []
                            (config-handler/set-config! :feature/enable-whiteboards? true)
