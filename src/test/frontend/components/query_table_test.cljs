@@ -70,16 +70,16 @@
          [{:title "意志"} {:title "圆圈"}])
     (state/set-preferred-language! "en"))
 
-  (testing "monitor sort time"
+  (testing "monitor time of sort by integer block property"
     (are [sort-state result _sorted-result timeout]
          (>= timeout (:time (util/with-time-number (#'query-table/sort-result (mapv #(hash-map :block/properties %) result) sort-state))))
       {:sort-desc? true :sort-by-column :rating}
       [{:rating 8} {:rating 7}]
       [{:rating 8} {:rating 7}]
-      0.1 ;; actual: ~0.05
+      0.5 ;; actual: ~0.05
 
       {:sort-desc? false :sort-by-column :rating}
       [{:rating 8} {:rating 7}]
       [{:rating 7} {:rating 8}]
-      0.2 ;; actual: ~0.05
+      0.5 ;; actual: ~0.05
       )))
