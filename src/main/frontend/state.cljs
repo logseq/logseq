@@ -131,6 +131,8 @@
      ;; Whether to skip saving the current block
      :editor/skip-saving-current-block?     false
 
+     :editor/code-block-context             {}
+
      :db/last-transact-time                 {}
      ;; whether database is persisted
      :db/persisted?                         {}
