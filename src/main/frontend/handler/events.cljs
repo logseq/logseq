@@ -62,7 +62,8 @@
             [rum.core :as rum]
             [logseq.graph-parser.config :as gp-config]
             [cljs-bean.core :as bean]
-            ["@sentry/react" :as Sentry]))
+            ["@sentry/react" :as Sentry]
+            [frontend.modules.instrumentation.sentry :as sentry-event]))
 
 ;; TODO: should we move all events here?
 
@@ -87,6 +88,8 @@
         (map? result)
         (do
           (state/set-user-info! result)
+          (when-let [uid (user-handler/user-uuid)]
+            (sentry-event/set-user! uid))
           (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
               (when-not (false? (state/enable-sync?)) ; user turns it off
@@ -390,7 +393,8 @@
 (defmethod handle :go/search [_]
   (state/set-modal! component-search/search-modal
                     {:fullscreen? false
-                     :close-btn?  false}))
+                     :close-btn?  false
+                     :label "ls-modal-search"}))
 
 (defmethod handle :go/plugins [_]
   (plugin/open-plugins-modal!))
@@ -430,7 +434,7 @@
                        :graph-id graph-uuid
                        :tx-id tx-id)]
     (Sentry/captureException error
-                            (bean/->js {:extra payload}))))
+                             (bean/->js {:tags payload}))))
 
 (defmethod handle :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))

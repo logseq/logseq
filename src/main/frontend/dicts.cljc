@@ -132,6 +132,7 @@
         :file/last-modified-at "Last modified at"
         :file/no-data "No data"
         :file/format-not-supported "Format .{1} is not supported."
+        :file/validate-existing-file-error "Page already exists with another file: {1}, current file: {2}. Please keep only one of them and re-index your graph."
         :file-rn/re-index "Re-index is strongly recommended after the files are renamed and on other devices after syncing."
         :file-rn/need-action "File rename actions are suggested to match the new format. Re-index is required on all devices when the renamed files are synced."
         :file-rn/or-select-actions " or individually rename files below, then "
@@ -424,7 +425,8 @@
 
         :conversion/non-desktop "Graph directory in old versions needs to be converted to the new format.
           Please use the desktop app to do the conversion."
-        :conversion/write-filename-format "Apply format for incoming files"}
+        :conversion/write-filename-format "Apply format for incoming files"
+        :notification/clear-all "Clear all"}
 
    :de {:help/about "Über Logseq"
         :on-boarding/demo-graph "Dies ist ein Demo-Graph. Änderungen werden nicht gespeichert, solange Sie kein lokales Verzeichnis öffnen."
@@ -1584,7 +1586,8 @@
            :file/name "文件名"
            :file/file "文件："
            :file/last-modified-at "最后更改于"
-           :file/no-data "没有数据"
+           :file/no-data "没有数据" 
+           :file/validate-existing-file-error "页面已存在另一个文件: {1}, 当前文件: {2}. 请保留其中一个文件，然后重建当前图谱的索引。"
            :file-rn/re-index "重命名文件后，如果其他设备同步了改文件，强烈建议在同步成功后重新建立索引。"
            :file-rn/need-action "建议执行文件重命名操作以匹配新格式。当重命名的文件被同步后，请在所有设备上重新建立索引。"
            :file-rn/or-select-actions " 或在下面单独重命名这些文件，然后 "
@@ -1854,7 +1857,8 @@
 
            :conversion/non-desktop "旧版本中的图谱目录需要转换为新格式。
           请使用桌面端应用进行转换."
-           :conversion/write-filename-format "为传入的文件应用格式"}
+           :conversion/write-filename-format "为传入的文件应用格式"
+           :notification/clear-all "清除全部通知"}
 
    :zh-Hant {:on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
              :on-boarding/add-graph "Add a graph"
