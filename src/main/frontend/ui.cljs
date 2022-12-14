@@ -262,10 +262,10 @@
   []
   [:div.ui__notifications-content
    [:div.pointer-events-auto
-    (button "Clear all"
-      :intent "logseq"
-      :on-click (fn []
-                  (notification/clear-all!)))]])
+    (button (t :notification/clear-all)
+     :intent "logseq"
+     :on-click (fn []
+                 (notification/clear-all!)))]])
 
 (rum/defc notification < rum/reactive
   []
