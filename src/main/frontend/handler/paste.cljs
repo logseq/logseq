@@ -72,16 +72,6 @@
                                              (gp-util/safe-decode-uri-component text))]
     (try-parse-as-json (second matched-text))))
 
-(defn- get-whiteboard-shape-refs-text
-  [text]
-  (let [tldr (get-whiteboard-tldr-from-text text)]
-    (when (and tldr (object? tldr))
-      (->> (gobj/get tldr "shapes")
-           (mapv (fn [shape]
-                   (let [shape-id (gobj/get shape "id")]
-                     (block-ref/->block-ref shape-id))))
-           (string/join "\n")))))
-
 (defn- paste-copied-blocks-or-text
   ;; todo: logseq/whiteboard-shapes is now text/html
   [text e html]
@@ -90,7 +80,10 @@
         input (state/get-input)
         input-id (state/get-edit-input-id)
         text (string/replace text "\r\n" "\n") ;; Fix for Windows platform
-        shape-refs-text (when-not (string/blank? html) (get-whiteboard-shape-refs-text html))
+        shape-refs-text (when (and (not (string/blank? html))
+                                   (get-whiteboard-tldr-from-text html)) 
+                          ;; text should alway be prepared block-ref generated in tldr
+                          text)
         internal-paste? (and
                          (seq (:copy/blocks copied-blocks))
                          ;; not copied from the external clipboard

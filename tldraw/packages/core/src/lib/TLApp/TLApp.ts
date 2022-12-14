@@ -529,11 +529,7 @@ export class TLApp<
 
   copy = () => {
     if (this.selectedShapesArray.length > 0 && !this.editingShape) {
-      const selectedShapes = dedupe([
-        ...this.selectedShapesArray,
-        // should also include shapes in a group
-        ...this.shapesInGroups(this.selectedShapesArray),
-      ])
+      const selectedShapes = this.allSelectedShapesArray
       const jsonString = JSON.stringify({
         shapes: selectedShapes.map(shape => shape.serialized),
         // pasting into other whiteboard may require this if any shape uses the assets
@@ -544,11 +540,14 @@ export class TLApp<
         bindings: toJS(this.currentPage.bindings),
       })
       const tldrawString = encodeURIComponent(`<whiteboard-tldr>${jsonString}</whiteboard-tldr>`)
+
+      const shapeBlockRefs = this.selectedShapesArray.map(s => `((${s.props.id}))`).join(' ')
+
       // FIXME: use `writeClipboard` in frontend.utils
       navigator.clipboard.write([
         new ClipboardItem({
           'text/html': new Blob([tldrawString], { type: 'text/html' }),
-          'text/plain': new Blob([`((${selectedShapes[0].props.id}))`], {
+          'text/plain': new Blob([shapeBlockRefs], {
             type: 'text/plain',
           }),
         }),
