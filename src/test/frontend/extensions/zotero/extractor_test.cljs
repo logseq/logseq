@@ -1,6 +1,6 @@
 (ns frontend.extensions.zotero.extractor-test
   (:require [clojure.edn :as edn]
-            [clojure.test :as test :refer [deftest is testing]]
+            [clojure.test :as test :refer [deftest is testing are]]
             [shadow.resource :as rc]
             [frontend.extensions.zotero.extractor :as extractor]))
 
@@ -65,6 +65,11 @@
 
       (testing "use parsed date when possible"
         (is (= "[[Mar 28th, 2011]]" (-> properties :date))))))
+  
+  (testing "zotero path"
+    (are [x y] (= (extractor/zotero-linked-file-macro x) y)
+      ;; TODO provide some real samples on multiple platforms
+      "attachments://abc/def/ghi.pdf" "{{zotero-linked-file \"//abc/def/ghi.pdf\"}}"))
 
 ;; 2022.10.18. Should be deprecated since Hickory is invalid in Node test
 ;; Skip until we find an alternative
