@@ -1243,8 +1243,9 @@
          format (:block/format block)]
      (save-block! {:block block :repo repo :format format} content)))
   ([{:keys [block repo] :as _state} value]
-   (when (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
-     (save-block-aux! block value {}))))
+   (let [repo (or repo (state/get-current-repo))]
+     (when (db/entity repo [:block/uuid (:block/uuid block)])
+       (save-block-aux! block value {})))))
 
 (defn save-current-block!
   "skip-properties? if set true, when editing block is likely be properties, skip saving"

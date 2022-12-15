@@ -115,7 +115,7 @@
         (db-model/get-page-original-name page-name)]
        [:div.ml-2.slide.mt-2
         (slide/slide page-name)]])
-    
+
     :shortcut-settings
     [(t :help/shortcuts) (shortcut-settings)]
 
