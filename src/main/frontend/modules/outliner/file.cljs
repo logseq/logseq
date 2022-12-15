@@ -96,10 +96,11 @@
   []
   (util/<ratelimit (state/get-file-write-chan) batch-write-interval
                  :filter-fn
-                 (fn [[repo _ time]]
-                   (swap! *writes-finished? assoc repo {:time time
-                                                        :value false})
-                   true)
+                 (fn [elems]
+                   (doseq [[repo _ time] elems]
+                     (swap! *writes-finished? assoc repo
+                            {:time time :value false}))
+                   elems)
                  :flush-fn
                  (fn [col]
                    (let [start-time (tc/to-long (t/now))

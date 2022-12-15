@@ -1105,46 +1105,60 @@
      "return a channel CH,
   ratelimit flush items in in-ch every max-duration(ms),
   opts:
-  - :filter-fn filter item before putting items into returned CH, (filter-fn item)
-               will poll it when its return value is channel,
+  - :filter-fn filter items before putting items into returned CH,
+               will poll it when (filter-fn items) return async channel,
+               (filter-fn items) return items
   - :flush-fn exec flush-fn when time to flush, (flush-fn item-coll)
   - :stop-ch stop go-loop when stop-ch closed
   - :distinct-coll? distinct coll when put into CH
   - :chan-buffer buffer of return CH, default use (async/chan 1000)
   - :flush-now-ch flush the content in the queue immediately
-  - :refresh-timeout-ch refresh (timeout max-duration)"
-     [in-ch max-duration & {:keys [filter-fn flush-fn stop-ch distinct-coll? chan-buffer flush-now-ch refresh-timeout-ch]}]
+  - :refresh-timeout-ch reset (timeout max-duration)
+  - :filter-fn-duration-window wait the duration before next (filter-fn items), default 500ms"
+     [in-ch max-duration & {:keys [filter-fn flush-fn stop-ch distinct-coll?
+                                   chan-buffer flush-now-ch refresh-timeout-ch
+                                   filter-fn-duration-window]
+                            :or {filter-fn-duration-window 500}}]
      (let [ch (if chan-buffer (async/chan chan-buffer) (async/chan 1000))
            stop-ch* (or stop-ch (async/chan))
            flush-now-ch* (or flush-now-ch (async/chan))
            refresh-timeout-ch* (or refresh-timeout-ch (async/chan))]
-       (async/go-loop [timeout-ch (async/timeout max-duration) coll []]
-         (let [{:keys [refresh-timeout timeout e stop flush-now]}
+       (async/go-loop [timeout-ch (async/timeout max-duration)
+                       filter-timeout-ch (async/timeout filter-fn-duration-window)
+                       coll-for-filter []
+                       coll-for-flush []]
+         (let [{:keys [refresh-timeout timeout filter-timeout e stop flush-now]}
                (async/alt! refresh-timeout-ch* {:refresh-timeout true}
                            timeout-ch {:timeout true}
+                           filter-timeout-ch {:filter-timeout true}
                            in-ch ([e] {:e e})
                            stop-ch* {:stop true}
                            flush-now-ch* {:flush-now true})]
            (cond
              refresh-timeout
-             (recur (async/timeout max-duration) coll)
+             (recur (async/timeout max-duration) filter-timeout-ch coll-for-filter coll-for-flush)
 
              (or flush-now timeout)
-             (do (async/onto-chan! ch coll false)
-                 (flush-fn coll)
+             (do (async/onto-chan! ch coll-for-flush false)
+                 (flush-fn coll-for-flush)
                  (drain-chan flush-now-ch*)
-                 (recur (async/timeout max-duration) []))
+                 (recur (async/timeout max-duration) filter-timeout-ch coll-for-filter []))
 
              (some? e)
-             (let [filter-v (filter-fn e)
-                   filter-v* (if (instance? ManyToManyChannel filter-v)
-                               (async/<! filter-v)
-                               filter-v)]
-               (if filter-v*
-                 (recur timeout-ch (cond-> (conj coll e)
-                                     distinct-coll? distinct
-                                     true vec))
-                 (recur timeout-ch coll)))
+             (recur timeout-ch filter-timeout-ch (conj coll-for-filter e) coll-for-flush)
+
+             (and filter-timeout (empty? coll-for-filter))
+             (recur timeout-ch (async/timeout filter-fn-duration-window) coll-for-filter coll-for-flush)
+
+             (and filter-timeout (seq coll-for-filter))
+             (let [filter-vs (filter-fn coll-for-filter)
+                   filter-vs* (if (instance? ManyToManyChannel filter-vs)
+                                (async/<! filter-vs)
+                                filter-vs)]
+               (recur timeout-ch (async/timeout filter-fn-duration-window) []
+                      (cond-> (apply conj coll-for-flush filter-vs*)
+                        distinct-coll? distinct
+                        true vec)))
 
              (or stop
                  ;; got nil from in-ch, means in-ch is closed
