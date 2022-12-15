@@ -44,8 +44,9 @@
                  event)})
 
 (defn init []
-  (let [config (clj->js config)]
-    (Sentry/init config)))
+  (when-not config/dev?
+    (let [config (clj->js config)]
+      (Sentry/init config))))
 
 (defn set-user!
   [id]
