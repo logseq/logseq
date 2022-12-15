@@ -49,6 +49,8 @@
    (string/replace (date/ymd date) "/" "")))
 
 (defn entity
+  "Should ensure the `id-or-lookup-ref` exists.
+   Or use `pull` instead"
   ([id-or-lookup-ref]
    (entity (state/get-current-repo) id-or-lookup-ref))
   ([repo id-or-lookup-ref]
