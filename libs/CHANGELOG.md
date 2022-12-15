@@ -7,7 +7,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - Support block content slot hook `App.onBlockRendererSlotted` with a specific block UUID
-- Support plugins calling each other `App.invokeExternalPlugin` with key of models & commands. E.g.
+- Support plugins calling each other `App.invokeExternalPlugin` with key of models & commands.  
+  E.g. (It is recommended that the caller plugin upgrade the SDK to the latest.)
   ```typescript
   // Defined at https://github.com/xyhp915/logseq-journals-calendar/blob/main/src/main.js#L74
   await logseq.App.invokeExternalPlugin('logseq-journals-calendar.models.goToToday')
