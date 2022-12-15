@@ -3,6 +3,7 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.model :as model]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
@@ -43,6 +44,23 @@
   []
   (redirect! {:to :whiteboards}))
 
+;; Named block links only works on web (and publishing)
+(if util/web-platform?
+  (defn- default-page-route [page-name-or-block-uuid]
+    ;; Only query if in a block context
+    (let [block (when (uuid? page-name-or-block-uuid)
+                  (model/get-block-by-uuid page-name-or-block-uuid))]
+      (if-let [route-name (get-in block [:block/properties :logseq.block/route-name])]
+        {:to :page-block
+         :path-params {:name (get-in block [:block/page :block/name])
+                       :block-route-name route-name}}
+        {:to :page
+         :path-params {:name (str page-name-or-block-uuid)}})))
+
+  (defn- default-page-route [page-name]
+    {:to :page
+     :path-params {:name (str page-name)}}))
+
 (defn redirect-to-page!
   "Must ensure `page-name` is dereferenced (not an alias), or it will create a wrong new page with that name (#3511)."
   ([page-name]
@@ -52,12 +70,11 @@
    (recent-handler/add-page-to-recent! (state/get-current-repo) page-name
                                        click-from-recent?)
    (let [m (cond->
-            {:to :page
-             :path-params {:name (str page-name)}}
-             anchor
-             (assoc :query-params {:anchor anchor})
-             push
-             (assoc :push push))]
+            (default-page-route page-name)
+            anchor
+            (assoc :query-params {:anchor anchor})
+            push
+            (assoc :push push))]
      (redirect! m))))
 
 (defn redirect-to-whiteboard!
