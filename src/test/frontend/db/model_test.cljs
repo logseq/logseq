@@ -1,6 +1,8 @@
 (ns frontend.db.model-test
   (:require [cljs.test :refer [use-fixtures deftest is are]]
             [frontend.db.model :as model]
+            [frontend.db :as db]
+            [frontend.db.conn :as conn]
             [frontend.test.helper :as test-helper :refer [load-test-files]]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
@@ -120,5 +122,12 @@
   (is (= '("one/two" "one")
          (#'model/get-unnecessary-namespaces-name '("one/two/tree" "one" "one/two" "non nested tag" "non nested link")))
       "Must be  one/two one"))
+
+(deftest entity-query-should-return-nil-if-id-not-exists
+  (is (nil? (db/entity 1000000))))
+
+(deftest entity-query-should-support-both-graph-string-and-db
+  (is (= 1 (:db/id (db/entity test-helper/test-db 1))))
+  (is (= 1 (:db/id (db/entity (conn/get-db test-helper/test-db) 1)))))
 
 #_(cljs.test/test-ns 'frontend.db.model-test)
