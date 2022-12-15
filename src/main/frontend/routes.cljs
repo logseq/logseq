@@ -51,6 +51,10 @@
     {:name :page
      :view page/page}]
 
+   ["/page/:name/block/:block-route-name"
+    {:name :page-block
+     :view page/page}]
+
    ["/all-pages"
     {:name :all-pages
      :view page/all-pages}]

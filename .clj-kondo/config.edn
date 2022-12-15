@@ -65,6 +65,7 @@
              frontend.handler.plugin-config plugin-config-handler
              frontend.handler.repo repo-handler
              frontend.handler.repo-config repo-config-handler
+             frontend.handler.route route-handler
              frontend.handler.search search-handler
              frontend.idb idb
              frontend.loader loader
