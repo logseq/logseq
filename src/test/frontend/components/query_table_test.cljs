@@ -56,6 +56,18 @@
          [{:title "abc"} {:title "cde"}]
          [{:title "abc"} {:title "cde"}]))
 
+  (testing "sort by mixed type block property"
+    (are [sort-state result sorted-result]
+         (= (mapv #(hash-map :block/properties %) sorted-result)
+            (#'query-table/sort-result (mapv #(hash-map :block/properties %) result) sort-state))
+         {:sort-desc? true :sort-by-column :title}
+         [{:title 1} {:title "A"} {:title 2} {:title "B"} {:title 11} {:title "C"}]
+         [{:title "C"} {:title "B"} {:title "A"} {:title 11} {:title 2} {:title 1}]
+
+         {:sort-desc? false :sort-by-column :title}
+         [{:title 1} {:title "A"} {:title 2} {:title "B"} {:title 11} {:title "C"}]
+         [{:title 1} {:title 2} {:title 11} {:title "A"} {:title "B"} {:title "C"}]))
+
   (testing "sort by string block property for specific locale"
     (state/set-preferred-language! "zh-CN")
     (are [sort-state result sorted-result]
