@@ -47,7 +47,7 @@
   "Properties used by logseq that user can edit"
   []
   (into #{:title :icon :template :template-including-parent :public :filters :exclude-from-graph-view
-          :logseq.query/nlp-date
+          :logseq.query/nlp-date :logseq.block/route-name
           ;; org-mode only
           :macro :filetags}
         editable-linkable-built-in-properties))

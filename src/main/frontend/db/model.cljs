@@ -267,6 +267,21 @@
   [id]
   (db-utils/pull [:block/uuid (if (uuid? id) id (uuid id))]))
 
+(defn get-block-by-page-name-and-route-name
+  "Returns first block for given page name and route-name property"
+  [repo page-name route-name]
+  (->> (d/q '[:find (pull ?b [:block/uuid])
+              :in $ ?page-name ?route-name
+              :where
+              [?page :block/name ?page-name]
+              [?b :block/page ?page]
+              [?b :block/properties ?prop]
+              [(get ?prop :logseq.block/route-name) ?route-name]]
+            (conn/get-db repo)
+            page-name
+            route-name)
+       ffirst))
+
 (defn get-page-format
   [page-name]
   (or

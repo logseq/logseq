@@ -2026,7 +2026,7 @@
 
 (def hidden-editable-block-properties
   "Properties that are hidden in a block (block property)"
-  #{:logseq.query/nlp-date})
+  #{:logseq.query/nlp-date :logseq.block/route-name})
 
 (assert (set/subset? hidden-editable-block-properties (gp-property/editable-built-in-properties))
         "Hidden editable page properties must be valid editable properties")
