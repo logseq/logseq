@@ -231,7 +231,7 @@
              {:title "Go back" :on-click #(js/window.history.back)}
              (ui/icon "chevron-left" {:size 26})])))
 
-      (when (state/developer-mode?)
+      (when (state/feature-http-server-enabled?)
         (server/server-indicator (state/sub :electron/server)))]]
 
      [:div.r.flex.drag-region

@@ -1836,6 +1836,11 @@ Similar to re-frame subscriptions"
   []
   (:editor/last-key-code @state))
 
+(defn feature-http-server-enabled?
+  []
+  (and (developer-mode?)
+       (storage/get ::storage-spec/http-server-enabled)))
+
 (defn get-plugin-by-id
   [id]
   (when-let [id (and id (keyword id))]

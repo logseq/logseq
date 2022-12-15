@@ -166,6 +166,4 @@
   [^js win]
   (reset! *win win)
   (let [t (setup-state-watch!)]
-    (reset-state!)
-    (when-not (false? (:autostart @*state))
-      (start!)) t))
+    (reset-state!) t))

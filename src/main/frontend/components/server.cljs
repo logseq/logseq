@@ -125,7 +125,12 @@
   [server-state]
 
   (rum/use-effect!
-   #(ipc/ipc :server/load-state) [])
+   (fn []
+     (ipc/ipc :server/load-state)
+     (let [t (js/setTimeout #(when (state/sub [:electron/server :autostart])
+                               (ipc/ipc :server/do :restart)) 1000)]
+       #(js/clearTimeout t)))
+   [])
 
   (let [{:keys [status error]} server-state
         status   (keyword (util/safe-lower-case status))
