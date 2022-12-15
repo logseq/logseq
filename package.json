@@ -64,6 +64,7 @@
         "cljs:test": "clojure -M:test compile test",
         "cljs:run-test": "node static/tests.js",
         "cljs:dev-release-app": "clojure -M:cljs release app --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\"",
+        "cljs:dev-release-electron": "clojure -M:cljs release app electron --debug --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\" && clojure -M:cljs release publishing",
         "cljs:debug": "clojure -M:cljs release app --debug",
         "cljs:report": "clojure -M:cljs run shadow.cljs.build-report app report.html",
         "cljs:build-electron": "clojure -A:cljs compile app electron",
