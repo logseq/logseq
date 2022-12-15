@@ -1877,7 +1877,7 @@
      :span
      {:class "block-tags"}
      (mapv (fn [tag]
-             (when-let [page (db/pull (:db/id tag))]
+             (when-let [page (db/entity (:db/id tag))]
                (let [tag (:block/name page)]
                  [:a.tag.mx-1 {:data-ref tag
                                :key (str "tag-" (:db/id tag))
