@@ -72,7 +72,7 @@
 
   (testing "monitor time of sort by integer block property"
     (are [sort-state result _sorted-result timeout]
-         (>= timeout (:time (util/with-time-number (#'query-table/sort-result (mapv #(hash-map :block/properties %) result) sort-state))))
+         (>= timeout (:time (util/with-time (#'query-table/sort-result (mapv #(hash-map :block/properties %) result) sort-state))))
       {:sort-desc? true :sort-by-column :rating}
       [{:rating 8} {:rating 7}]
       [{:rating 8} {:rating 7}]
