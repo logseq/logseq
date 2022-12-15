@@ -710,6 +710,10 @@ Similar to re-frame subscriptions"
   []
   (= :home (get-current-route)))
 
+(defn whiteboard-dashboard?
+  []
+  (= :whiteboards (get-current-route)))
+
 (defn setups-picker?
   []
   (= :repo-add (get-current-route)))

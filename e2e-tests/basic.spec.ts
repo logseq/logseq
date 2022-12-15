@@ -247,3 +247,30 @@ test('Scheduled date picker should point to the already specified Date #6985', a
   await page.click('a.opacity-80')
   await page.waitForTimeout(500)
 })
+
+test('Opening a second datepicker should close the first one #7341', async({page,block})=>{
+  await createRandomPage(page)
+
+  await block.mustFill('testTask \n SCHEDULED: <2000-05-06 Sat>')
+
+  await block.enterNext();
+
+  await block.mustFill('testTask \n SCHEDULED: <2000-06-07 Wed>')
+  await block.enterNext();
+  await page.click('#main-content-container')
+  // Open date picker
+  await page.waitForTimeout(500)
+  await page.click('#main-content-container')
+  await page.waitForTimeout(500)
+  await page.click('a:has-text("2000-06-07 Wed").opacity-80')
+  await page.waitForTimeout(50)
+  await page.click('a:has-text("2000-05-06 Sat").opacity-80')
+  await page.waitForTimeout(50)
+  expect(page.locator('text=May 2000')).toBeVisible()
+  expect(page.locator('td:has-text("6").active')).toBeVisible()
+  expect(page.locator('text=June 2000')).not.toBeVisible()
+  expect(page.locator('td:has-text("7").active')).not.toBeVisible()
+
+  // Close date picker
+  await page.click('a:has-text("2000-05-06 Sat").opacity-80')
+})
