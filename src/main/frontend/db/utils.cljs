@@ -59,7 +59,7 @@
    (when-let [db (if (string? repo-or-db)
                    ;; repo
                    (let [repo (or repo-or-db (state/get-current-repo))]
-                     (conn/get-db repo-or-db))
+                     (conn/get-db repo))
                    ;; db
                    repo-or-db)]
      (if (integer? id-or-lookup-ref)
