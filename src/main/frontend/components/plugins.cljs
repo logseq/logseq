@@ -377,19 +377,21 @@
    :target "_blank"))
 
 (rum/defc user-proxy-settings-panel
-  [{:keys [protocol] :as agent-opts}]
-  (let [[opts set-opts!] (rum/use-state agent-opts)
+  [{:keys [protocol type] :as agent-opts}]
+  (let [type (or (not-empty type) (not-empty protocol) "system")
+        [opts set-opts!] (rum/use-state agent-opts)
         [testing? set-testing?!] (rum/use-state false)
         *test-input (rum/create-ref)
-        disabled?   (string/blank? (:protocol opts))]
+        disabled?   (or (= (:type opts) "system") (= (:type opts) "direct"))]
     [:div.cp__settings-network-proxy-panel
      [:h1.mb-2.text-2xl.font-bold (t :settings-page/network-proxy)]
      [:div.p-2
       [:p [:label [:strong (t :type)]
-           (ui/select [{:label "Default" :value "default" :selected disabled?}
-                       {:label "HTTP" :value "http" :selected (= protocol "http")}
-                       {:label "SOCKS5" :value "socks5" :selected (= protocol "socks5")}]
-                      #(set-opts! (assoc opts :protocol (if (= % "default") nil %))))]]
+           (ui/select [{:label "System" :value "system" :selected (= type "system")}
+                       {:label "Direct" :value "direct" :selected (= type "direct")}
+                       {:label "HTTP"   :value "http"   :selected (= type "http")}
+                       {:label "SOCKS5" :value "socks5" :selected (= type "socks5")}]
+                      #(set-opts! (assoc opts :type % :protocol %)))]]
       [:p.flex
        [:label.pr-4
         {:class (if disabled? "opacity-50" nil)}
@@ -430,8 +432,7 @@
                   :on-click #(let [val (util/trim-safe (.-value (rum/deref *test-input)))]
                                (when (and (not testing?) (not (string/blank? val)))
                                  (set-testing?! true)
-                                 (-> (p/let [_ (ipc/ipc :setHttpsAgent opts)
-                                             result (ipc/ipc :testProxyUrl val)]
+                                 (-> (p/let [result (ipc/ipc :testProxyUrl val opts)]
                                        (js->clj result :keywordize-keys true))
                                      (p/then (fn [{:keys [code response-ms]}]
                                                (notification/show! (str "Success! Status " code " in " response-ms "ms.") :success)))
@@ -442,7 +443,7 @@
       [:p.pt-2
        (ui/button (t :save)
                   :on-click (fn []
-                              (p/let [_ (ipc/ipc :setHttpsAgent opts)]
+                              (p/let [_ (ipc/ipc :setProxy opts)]
                                 (state/set-state! [:electron/user-cfgs :settings/agent] opts)
                                 (state/close-sub-modal! :https-proxy-panel))))]]]))
 
