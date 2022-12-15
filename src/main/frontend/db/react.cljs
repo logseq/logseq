@@ -111,7 +111,7 @@
 
 (defn add-q!
   [k query time inputs result-atom transform-fn query-fn inputs-fn]
-  (let [time' (int (util/safe-parse-float time))]
+  (let [time' (int (util/safe-parse-float time))] ;; for robustness. `time` should already be float
     (swap! query-state assoc k {:query query
                                :query-time time'
                                :inputs inputs

@@ -41,27 +41,31 @@ and handles unexpected failure."
    (gp-block/page-name->map original-page-name with-id? (db/get-db (state/get-current-repo)) with-timestamp? (state/get-date-formatter))))
 
 (defn- normalize-as-percentage
-  ([block]
-   (some->> block
-            str
-            (re-matches #"(-?\d+\.?\d*)%")
-            second
-            (#(/ % 100)))))
+  [block]
+  (some->> block
+           str
+           (re-matches #"(-?\d+\.?\d*)%")
+           second
+           (#(/ % 100))))
 
 (defn- normalize-as-date
-  ([block]
-   (some->> block
-            str
-            date/normalize-date
-            (tf/unparse date/custom-formatter))))
+  [block]
+  (some->> block
+           str
+           date/normalize-date
+           (tf/unparse date/custom-formatter)))
 
 (defn normalize-block
-  "Normalizes supported formats such as dates and percentages."
-  ([block]
-   (->> [normalize-as-percentage normalize-as-date identity]
-        (map #(% (if (set? block) (first block) block)))
-        (remove nil?)
-        (first))))
+  "Normalizes supported formats such as dates and percentages.
+   Be careful, this function may harm query sort performance!
+   - nlp-date? - Enable NLP parsing on date items.
+       Requires heavy computation (see `normalize-as-date` for details)"
+  [block nlp-date?]
+  (->> [normalize-as-percentage (when nlp-date? normalize-as-date) identity]
+       (remove nil?)
+       (map #(% (if (set? block) (first block) block)))
+       (remove nil?)
+       (first)))
 
 (defn parse-block
   ([block]
