@@ -21,7 +21,7 @@
 
 (deftest monitor-normalize-date-time
   (testing "monitor time consumption of normalize date values"
-    (are [x _y timeout] (>= timeout (:time (util/with-time-number (block/normalize-block x true))))
+    (are [x _y timeout] (>= timeout (:time (util/with-time (block/normalize-block x true))))
       "Aug 12th, 2022"
       "2022-08-12T00:00:00Z"
       50.0 ;; actual 2.2
@@ -74,7 +74,7 @@
 
 (deftest monitor-normalize-randome-values-time
   (testing "monitor time consumption of random values should not be processed"
-    (are [x _y timeout] (>= timeout (:time (util/with-time-number (block/normalize-block x false))))
+    (are [x _y timeout] (>= timeout (:time (util/with-time (block/normalize-block x false))))
       "anreanre"
       "anreanre"
       2.0 ;; actual 0.07

@@ -1041,17 +1041,7 @@
 #?(:clj
    (defmacro with-time
      "Evaluates expr and prints the time it took. 
-      Returns the value of expr and the spent time of string in msecs."
-     [expr]
-     `(let [start# (cljs.core/system-time)
-            ret# ~expr]
-        {:result ret#
-         :time (.toFixed (- (cljs.core/system-time) start#) 6)})))
-
-#?(:clj
-   (defmacro with-time-number
-     "Evaluates expr and prints the time it took. 
-      Returns the value of expr and the spent time of number in msecs."
+      Returns the value of expr and the spent time of float number in msecs."
      [expr]
      `(let [start# (cljs.core/system-time)
             ret# ~expr]
