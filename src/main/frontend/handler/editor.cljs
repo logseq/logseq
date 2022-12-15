@@ -3005,6 +3005,7 @@
       (let [input (state/get-input)
             selected-start (util/get-selection-start input)
             selected-end (util/get-selection-end input)]
+        (save-current-block!)
         (if (= selected-start selected-end)
           (copy-current-block-ref "ref")
           (js/document.execCommand "copy")))
