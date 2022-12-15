@@ -131,6 +131,8 @@
      ;; Whether to skip saving the current block
      :editor/skip-saving-current-block?     false
 
+     :editor/code-block-context             {}
+
      :db/last-transact-time                 {}
      ;; whether database is persisted
      :db/persisted?                         {}
@@ -708,6 +710,10 @@ Similar to re-frame subscriptions"
 (defn home?
   []
   (= :home (get-current-route)))
+
+(defn whiteboard-dashboard?
+  []
+  (= :whiteboards (get-current-route)))
 
 (defn setups-picker?
   []

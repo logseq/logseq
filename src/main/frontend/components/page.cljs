@@ -752,7 +752,7 @@
      [:input.form-checkbox
       (merge {:type    "checkbox"
               :checked (boolean checked)
-              :ref *input
+              :ref     *input
               :id      key} opts)]]))
 
 (rum/defc sortable-title
@@ -1055,7 +1055,7 @@
                                                   all? (= 1 @*indeterminate)]
                                               (doseq [{:block/keys [idx]} @*results]
                                                 (swap! *checks assoc idx (or indeterminate? (not all?))))))
-                           :indeterminate (= -1 @*indeterminate)})]
+                           :indeterminate (when (= -1 @*indeterminate) "indeterminate")})]
            [:th.icon ""]
            (sortable-title (t :block/name) :block/name *sort-by-item *desc?)
            (when-not mobile?

@@ -141,9 +141,8 @@ main.ls-fold-button-on-right {
 
   .ls-block {
     .block-control {
-      @apply absolute -right-3 pr-2 top-1 bottom-1 z-[1] active:opacity-100;
-
-      -webkit-tap-highlight-color: transparent;
+      @apply absolute -right-3 pr-2 pt-1 top-0 z-[1]
+      opacity-20 active:opacity-100;
 
       .rotating-arrow.collapsed svg {
         transform: rotate(180deg);

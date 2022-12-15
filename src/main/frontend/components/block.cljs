@@ -2082,39 +2082,29 @@
      [:code "Property name begins with a non-numeric character and can contain alphanumeric characters and . * + ! - _ ? $ % & = < >. If -, + or . are the first character, the second character (if any) must be non-numeric."]]))
 
 (rum/defcs timestamp-cp < rum/reactive
-  (rum/local false ::show?)
-  (rum/local {} ::pos)
-  {:will-unmount (fn [state]
-                   (when-let [show? (::show? state)]
-                     (reset! show? false))
-                   state)}
   [state block typ ast]
-  (let [show? (get state ::show?)]
-    [:div.flex.flex-col.timestamp
+  (let [ts-block (state/sub :editor/set-timestamp-block)
+        active? #(= (get block :block/uuid) (get-in ts-block [:block :block/uuid]))]
+    [:div.flex.flex-col.gap-4.timestamp
      [:div.text-sm.flex.flex-row
       [:div.opacity-50.font-medium.timestamp-label
        (str typ ": ")]
       [:a.opacity-80.hover:opacity-100
        {:on-mouse-down (fn [e]
                          (util/stop e)
-                         (if @show?
+                         (if (active?)
+                          (do
+                            (reset! commands/*current-command nil)
+                            (state/clear-editor-action!)
+                            (state/set-timestamp-block! nil))
                            (do
-                             (reset! show? false)
-                             (reset! commands/*current-command nil)
-                             (state/clear-editor-action!)
-                             (state/set-timestamp-block! nil))
-                           (do
-                             (reset! show? true)
                              (reset! commands/*current-command typ)
                              (state/set-editor-action! :datepicker)
                              (state/set-timestamp-block! {:block block
-                                                          :typ typ
-                                                          :show? show?}))))}
+                                                          :typ typ}))))}
        [:span.time-start "<"] [:time (repeated/timestamp->text ast)] [:span.time-stop ">"]]]
-     (when (true? @show?)
-       (let [ts (repeated/timestamp->map ast)]
-         [:div.my-4
-          (datetime-comp/date-picker nil nil ts)]))]))
+     (when (active?)
+          (datetime-comp/date-picker nil nil (repeated/timestamp->map ast)))]))
 
 (defn- target-forbidden-edit?
   [target]
@@ -2360,10 +2350,17 @@
       [:div.more (ui/icon "dots-circle-horizontal" {:size 18})])]])
 
 (rum/defcs block-content-or-editor < rum/reactive
-  (rum/local true ::hide-block-refs?)
+  {:init (fn [state]
+           (let [block (second (:rum/args state))
+                 config (first (:rum/args state))
+                 current-block-page? (= (str (:block/uuid block)) (state/get-current-page))
+                 embed-self? (and (:embed? config)
+                                  (= (:block/uuid block) (:block/uuid (:block config))))
+                 default-hide? (if (and current-block-page? (not embed-self?)) false true)]
+             (assoc state ::hide-block-refs? (atom default-hide?))))}
   [state config {:block/keys [uuid format] :as block} edit-input-id block-id edit? hide-block-refs-count?]
   (let [*hide-block-refs? (get state ::hide-block-refs?)
-        hide-block-refs? @*hide-block-refs?
+        hide-block-refs? (rum/react *hide-block-refs?)
         editor-box (get config :editor-box)
         editor-id (str "editor-" edit-input-id)
         slide? (:slide? config)
@@ -2506,51 +2503,52 @@
                          :or {show-page? true
                               level-limit 3}
                          :as opts}]
-  (let [parents (db/get-block-parents repo block-id (inc level-limit))
-        page (or (db/get-block-page repo block-id) ;; only return for block uuid
-                 (model/query-block-by-uuid block-id)) ;; return page entity when received page uuid
-        page-name (:block/name page)
-        page-original-name (:block/original-name page)
-        show? (or (seq parents) show-page? page-name)
-        parents (if (= page-name (:block/name (first parents)))
-                  (rest parents)
-                  parents)
-        more? (> (count parents) level-limit)
-        parents (if more? (take-last level-limit parents) parents)
-        config (assoc config :breadcrumb? true)]
-    (when show?
-      (let [page-name-props (when show-page?
-                              [page
-                               (page-cp (dissoc config :breadcrumb? true) page)
-                               {:block/name (or page-original-name page-name)}])
-            parents-props (doall
-                           (for [{:block/keys [uuid name content] :as block} parents]
-                             (when-not name ; not page
-                               (let [{:block/keys [title body]} (block/parse-title-and-body
-                                                                 uuid
-                                                                 (:block/format block)
-                                                                 (:block/pre-block? block)
-                                                                 content)
-                                     config (assoc config :block/uuid uuid)]
-                                 [block
-                                  (if (seq title)
-                                    (->elem :span (map-inline config title))
-                                    (->elem :div (markup-elements-cp config body)))]))))
-            breadcrumb (->> (into [] parents-props)
-                            (concat [page-name-props] (when more? [:more]))
-                            (filterv identity)
-                            (map (fn [x] (if (vector? x)
-                                           (let [[block label] x]
-                                             (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
-                                           [:span.opacity-70 "⋯"])))
-                            (interpose (breadcrumb-separator)))]
-        [:div.breadcrumb.block-parents.flex-row.flex-1
-         {:class (when (seq breadcrumb)
-                   (str (when-not (:search? config)
-                          " my-2")
-                        (when indent?
-                          " ml-4")))}
-         breadcrumb (when end-separator? (breadcrumb-separator))]))))
+  (when block-id
+    (let [parents (db/get-block-parents repo block-id (inc level-limit))
+          page (or (db/get-block-page repo block-id) ;; only return for block uuid
+                   (model/query-block-by-uuid block-id)) ;; return page entity when received page uuid
+          page-name (:block/name page)
+          page-original-name (:block/original-name page)
+          show? (or (seq parents) show-page? page-name)
+          parents (if (= page-name (:block/name (first parents)))
+                    (rest parents)
+                    parents)
+          more? (> (count parents) level-limit)
+          parents (if more? (take-last level-limit parents) parents)
+          config (assoc config :breadcrumb? true)]
+      (when show?
+        (let [page-name-props (when show-page?
+                                [page
+                                 (page-cp (dissoc config :breadcrumb? true) page)
+                                 {:block/name (or page-original-name page-name)}])
+              parents-props (doall
+                             (for [{:block/keys [uuid name content] :as block} parents]
+                               (when-not name ; not page
+                                 (let [{:block/keys [title body]} (block/parse-title-and-body
+                                                                   uuid
+                                                                   (:block/format block)
+                                                                   (:block/pre-block? block)
+                                                                   content)
+                                       config (assoc config :block/uuid uuid)]
+                                   [block
+                                    (if (seq title)
+                                      (->elem :span (map-inline config title))
+                                      (->elem :div (markup-elements-cp config body)))]))))
+              breadcrumb (->> (into [] parents-props)
+                              (concat [page-name-props] (when more? [:more]))
+                              (filterv identity)
+                              (map (fn [x] (if (vector? x)
+                                             (let [[block label] x]
+                                               (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
+                                             [:span.opacity-70 "⋯"])))
+                              (interpose (breadcrumb-separator)))]
+          [:div.breadcrumb.block-parents.flex-row.flex-1
+           {:class (when (seq breadcrumb)
+                     (str (when-not (:search? config)
+                            " my-2")
+                          (when indent?
+                            " ml-4")))}
+           breadcrumb (when end-separator? (breadcrumb-separator))])))))
 
 (defn- block-drag-over
   [event uuid top? block-id *move-to]
@@ -2778,7 +2776,10 @@
 
       (if whiteboard-block?
         (block-reference {} (str uuid) nil)
-        (block-content-or-editor config block edit-input-id block-id edit? false))
+        ;; Not embed self
+        (let [hide-block-refs-count? (and (:embed? config)
+                                          (= (:block/uuid block) (:embed-id config)))]
+          (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count?)))
 
       (when @*show-right-menu?
         (block-right-menu config block edit?))]
