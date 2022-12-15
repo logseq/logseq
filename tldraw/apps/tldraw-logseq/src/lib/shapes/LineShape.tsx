@@ -1,17 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Decoration, TLLineShape, TLLineShapeProps, getComputedColor, BoundsUtils, TLPolylineShape } from '@tldraw/core'
+import { Decoration, TLLineShape, TLLineShapeProps, getComputedColor } from '@tldraw/core'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import Vec from '@tldraw/vec'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { Arrow } from './arrow/Arrow'
-import { getStraightArrowHeadPoints } from './arrow/arrowHelpers'
 import { getArrowPath } from './arrow/arrowHelpers'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 import { getTextLabelSize } from '@tldraw/core'
 import { LabelMask } from './text/LabelMask'
 import { TextLabel } from './text/TextLabel'
-import type { TLBounds } from '@tldraw/intersect'
 
 interface LineShapeProps extends CustomStyleProps, TLLineShapeProps {
   type: 'line'
@@ -106,14 +104,13 @@ export class LineShape extends TLLineShape<LineShapeProps> {
 
   ReactIndicator = observer(() => {
     const {
-      props: {
-        id,
-        decorations,
-        label,
-        strokeWidth,
-        handles: { start, end },}
-    } = this
-    let bounds = this.getBounds()
+      id,
+      decorations,
+      label,
+      strokeWidth,
+      handles: { start, end },
+    } = this.props
+    const bounds = this.getBounds()
     const labelSize = label ? getTextLabelSize(label, font, 4) : [0, 0]
     const midPoint = Vec.med(start.point, end.point)
     const dist = Vec.dist(start.point, end.point)
@@ -154,32 +151,6 @@ export class LineShape extends TLLineShape<LineShapeProps> {
 
   validateProps = (props: Partial<LineShapeProps>) => {
     return withClampedStyles(this, props)
-  }
-
-  getBounds = (): TLBounds => {
-    const {
-      point,
-      strokeWidth,
-      handles: { start, end },
-      decorations
-    } = this.props
-
-    let { points } = this
-
-    const arrowDist = Vec.dist(start.point, end.point)
-    const arrowHeadLength = Math.min(arrowDist / 3, strokeWidth * 16)
-
-    if (decorations?.start) {
-      const headPoints = getStraightArrowHeadPoints(start.point, end.point, arrowHeadLength)
-      points.push(headPoints.left, headPoints.right)
-    }
-
-    if (decorations?.end) {
-      const headPoints = getStraightArrowHeadPoints(end.point, start.point, arrowHeadLength)
-      points.push(headPoints.left, headPoints.right)
-    }
-
-    return BoundsUtils.translateBounds(BoundsUtils.getBoundsFromPoints(points), point)
   }
 
   getShapeSVGJsx({ preview }: any) {
