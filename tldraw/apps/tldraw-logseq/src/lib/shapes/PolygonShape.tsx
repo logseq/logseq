@@ -112,7 +112,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
             fontStyle={italic ? 'italic' : 'normal'}
             fontWeight={fontWeight}
           />
-          <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
+          <SVGContainer opacity={isErasing ? 0.2 : opacity}>
             <g transform={`translate(${x}, ${y})`}>
               <polygon
                 className={isSelected || !noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}

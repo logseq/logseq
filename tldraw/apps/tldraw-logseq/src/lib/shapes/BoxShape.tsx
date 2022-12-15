@@ -96,7 +96,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
             fontStyle={italic ? 'italic' : 'normal'}
             fontWeight={fontWeight}
           />
-          <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
+          <SVGContainer opacity={isErasing ? 0.2 : opacity}>
             {isBinding && <BindingIndicator mode="svg" strokeWidth={strokeWidth} size={[w, h]} />}
             <rect
               className={isSelected || !noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
