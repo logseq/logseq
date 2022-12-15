@@ -357,16 +357,24 @@
 (defmethod handle :getLogseqDotDirRoot []
   (utils/get-ls-dotdir-root))
 
-(defmethod handle :getProxy [^js window]
+(defmethod handle :getSystemProxy [^js window]
   (if-let [sess (.. window -webContents -session)]
     (p/let [proxy (.resolveProxy sess "https://www.google.com")]
       proxy)
     (p/resolved nil)))
 
-(defmethod handle :testProxyUrl [_win [_ url]]
-  (let [start-ms (.getTime (js/Date.))]
+(defmethod handle :setProxy [_win [_ options]]
+  ;; options: {:type "system" | "direct" | "socks5" | "http" | ... }
+  (p/do!
+   (utils/<set-proxy options)
+   (utils/save-proxy-settings options)))
+
+(defmethod handle :testProxyUrl [_win [_ url options]]
+  ;; FIXME: better not to set proxy while testing url
+  (let [_ (utils/<set-proxy options)
+        start-ms (.getTime (js/Date.))]
     (-> (utils/fetch url)
-        (p/timeout 5000)
+        (p/timeout 10000)
         (p/then (fn [resp]
                   (let [code (.-status resp)
                         response-ms (- (.getTime (js/Date.)) start-ms)]
@@ -567,10 +575,6 @@
   (logger/warn ::reload-window-page)
   (when-let [web-content (.-webContents win)]
     (.reload web-content)))
-
-(defmethod handle :setHttpsAgent [^js _win [_ opts]]
-  (prn ::opts opts)
-  (utils/set-fetch-agent opts))
 
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; file-sync-rs-apis ;;
