@@ -8,6 +8,7 @@
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
             [frontend.components.scheduled-deadlines :as scheduled]
+            [frontend.components.property.schema :as property-schema]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -25,6 +26,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
             [frontend.search :as search]
@@ -285,12 +287,21 @@
        :on-focus (fn []
                    (when untitled? (reset! *title-value "")))}]]))
 
+(rum/defc page-configure-button
+  [page-name]
+  [:a.text-xl.fade-link.inline
+   {:title "Toggle properties"
+    :on-click (fn [e]
+                (util/stop e)
+                (property-handler/toggle-properties page-name))}
+   ": :"])
+
 (rum/defcs page-title < rum/reactive
   (rum/local false ::edit?)
   (rum/local "" ::input-value)
   {:init (fn [state]
            (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
-  [state page-name icon title _format fmt-journal?]
+  [state page-name icon title _format fmt-journal? entity]
   (when title
     (let [*title-value (get state ::title-value)
           *edit? (get state ::edit?)
@@ -320,23 +331,28 @@
                         (reset! *input-value (if untitled? "" old-name))
                         (reset! *edit? true))))}
        (when (not= icon "") [:span.page-icon icon])
-       [:div.page-title-sizer-wrapper.relative
-        (when @*edit?
-          (page-title-editor {:*title-value *title-value
-                              :*edit? *edit?
-                              :*input-value *input-value
-                              :title title
-                              :page-name page-name
-                              :old-name old-name
-                              :untitled? untitled?
-                              :whiteboard-page? whiteboard-page?}))
-        [:span.title.block
-         {:data-value @*input-value
-          :data-ref   page-name
-          :style      {:opacity (when @*edit? 0)}}
-         (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
-               untitled? [:span.opacity-50 (t :untitled)]
-               :else title)]]])))
+       [:div.flex.flex-1.flex-row.justify-between.items-center
+        [:div.page-title-sizer-wrapper.flex.flex-1.relative
+         (when @*edit?
+           (page-title-editor {:*title-value *title-value
+                               :*edit? *edit?
+                               :*input-value *input-value
+                               :title title
+                               :page-name page-name
+                               :old-name old-name
+                               :untitled? untitled?
+                               :whiteboard-page? whiteboard-page?}))
+         [:span.title.block
+          {:data-value @*input-value
+           :data-ref   page-name
+           :style      {:opacity (when @*edit? 0)}}
+          (cond @*edit? [:span {:style {:white-space "pre"}} (rum/react *input-value)]
+            untitled? [:span.opacity-50 (t :untitled)]
+            :else title)]]
+        ;; TODO: Add property type to page properties
+        (when (#{"progress" "some-date"} (:block/name entity))
+          #_ (= "property" (:block/type entity))
+          (page-configure-button page-name))]])))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
@@ -366,6 +382,11 @@
    [:span.mt-6 {:class (if @*control-show?
                          "control-show cursor-pointer" "control-hide")}
     (ui/rotating-arrow @*all-collapsed?)]])
+
+(rum/defc page-properties
+  [entity]
+  [:div.p-2.mb-4
+   (property-schema/schema entity)])
 
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page < rum/reactive
@@ -400,7 +421,12 @@
                    (when-not (db/entity repo [:block/name page-name])
                      (let [m (block/page-name->map path-page-name true)]
                        (db/transact! repo [m])))
-                   (db/pull [:block/name page-name])))
+                   (db/pull [:block/name page-name])
+                   ;; TODO: Remove or fix
+                   #_(db/pull-block (:db/id (db/entity [:block/name page-name])))))
+          entity (if block?
+                   (db/entity repo [:block/uuid block-id])
+                   page)
           {:keys [icon]} (:block/properties page)
           page-name (:block/name page)
           page-original-name (:block/original-name page)
@@ -411,7 +437,8 @@
                   (= page-name (util/page-name-sanity-lc (date/journal-name))))
           *control-show? (::control-show? state)
           *all-collapsed? (::all-collapsed? state)
-          *current-block-page (::current-page state)]
+          *current-block-page (::current-page state)
+          properties-show? (state/sub [:ui/properties-show? page-name])]
       [:div.flex-1.page.relative
        (merge (if (seq (:block/tags page))
                 (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
@@ -436,12 +463,16 @@
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when-not whiteboard?
                [:div.ls-page-title.flex-1.flex-row.w-full
-                (page-title page-name icon title format fmt-journal?)])
+                (page-title page-name icon title format fmt-journal? entity)])
              (when (not config/publishing?)
                (when config/lsp-enabled?
                  [:div.flex.flex-row
                   (plugins/hook-ui-slot :page-head-actions-slotted nil)
                   (plugins/hook-ui-items :pagebar)]))])
+
+          (when properties-show?
+            (page-properties entity))
+
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))
              (let [config {:id "block-parent"

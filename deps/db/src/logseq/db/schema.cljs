@@ -60,6 +60,9 @@
    ;; map, key -> original property value's content
    :block/properties-text-values {}
 
+   ;; block property schema
+   :block/property-schema {}
+   
    ;; first block that's not a heading or unordered list
    :block/pre-block? {}
 
