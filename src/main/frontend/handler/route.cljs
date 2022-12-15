@@ -51,10 +51,10 @@
     ;; Only query if in a block context
     (let [block (when (uuid? page-name-or-block-uuid)
                   (model/get-block-by-uuid page-name-or-block-uuid))]
-      (if-let [route-name (get-in block [:block/properties :logseq.block/route-name])]
+      (if (get-in block [:block/properties :heading])
         {:to :page-block
          :path-params {:name (get-in block [:block/page :block/name])
-                       :block-route-name route-name}}
+                       :block-route-name (model/heading-content->route-name (:block/content block))}}
         {:to :page
          :path-params {:name (str page-name-or-block-uuid)}})))
 

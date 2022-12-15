@@ -11,25 +11,34 @@
   (load-test-files [{:file/path "foo.md"
                      :file/content "foo:: bar
 - b1
-logseq.block/route-name:: b1
-- b2"}])
+- ## B1
+- b2
+- ### Header 2
+foo:: bar"}])
 
   (let [block (ffirst
                (db-utils/q '[:find (pull ?b [:block/uuid])
-                             :where [?b :block/content "b1\nlogseq.block/route-name:: b1"]]))]
+                             :where [?b :block/content "## B1"]]))]
     (is (= {:to :page-block
             :path-params {:name "foo" :block-route-name "b1"}}
            (#'route-handler/default-page-route (:block/uuid block)))
         "Generates a page-block link if route-name is found"))
 
-  (let [uuid (->
-              (db-utils/q '[:find (pull ?b [:block/uuid])
-                            :where [?b :block/content "b2"]])
-              ffirst
-              :block/uuid)]
+  (let [block (ffirst
+               (db-utils/q '[:find (pull ?b [:block/uuid])
+                             :where [?b :block/content "### Header 2\nfoo:: bar"]]))]
+    (is (= {:to :page-block
+            :path-params {:name "foo" :block-route-name "header 2"}}
+           (#'route-handler/default-page-route (:block/uuid block)))
+        "Generates a page-block link if route-name with whitespace and properties is found"))
+
+  (let [uuid (-> (db-utils/q '[:find (pull ?b [:block/uuid])
+                               :where [?b :block/content "b2"]])
+                 ffirst
+                 :block/uuid)]
     (is (= {:to :page :path-params {:name (str uuid)}}
-          (#'route-handler/default-page-route uuid))
-       "Generates a page link if route-name is not found"))
+           (#'route-handler/default-page-route uuid))
+        "Generates a page link if route-name is not found"))
 
   (is (= {:to :page :path-params {:name "page-name"}}
          (#'route-handler/default-page-route "page-name"))

@@ -121,4 +121,17 @@
          (#'model/get-unnecessary-namespaces-name '("one/two/tree" "one" "one/two" "non nested tag" "non nested link")))
       "Must be  one/two one"))
 
-#_(cljs.test/test-ns 'frontend.db.model-test)
+(deftest get-block-by-page-name-and-block-route-name
+  (load-test-files [{:file/path "foo.md"
+                     :file/content "foo:: bar
+- b2
+- ### Header 2
+foo:: bar"}])
+  (is (uuid?
+       (:block/uuid
+        (model/get-block-by-page-name-and-block-route-name test-helper/test-db "foo" "header 2")))
+      "Header block's content returns map with :block/uuid")
+
+  (is (nil?
+       (model/get-block-by-page-name-and-block-route-name test-helper/test-db "foo" "b2"))
+      "Non header block's content returns nil"))

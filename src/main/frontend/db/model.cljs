@@ -267,19 +267,34 @@
   [id]
   (db-utils/pull [:block/uuid (if (uuid? id) id (uuid id))]))
 
-(defn get-block-by-page-name-and-route-name
-  "Returns first block for given page name and route-name property"
+(defn heading-content->route-name
+  "Converts a heading block's content to its route name. This works
+independent of format as format specific heading characters are stripped"
+  [block-content]
+  (some->> block-content
+           (re-find #"^#{0,}\s*(.*)(?:\n|$)")
+           second
+           string/lower-case))
+
+(defn get-block-by-page-name-and-block-route-name
+  "Returns first block for given page name and block's route name. Block's route
+  name must match the content of a page's block header"
   [repo page-name route-name]
   (->> (d/q '[:find (pull ?b [:block/uuid])
-              :in $ ?page-name ?route-name
+              :in $ ?page-name ?route-name ?content-matches
               :where
               [?page :block/name ?page-name]
               [?b :block/page ?page]
               [?b :block/properties ?prop]
-              [(get ?prop :logseq.block/route-name) ?route-name]]
+              [(get ?prop :heading) _]
+              [?b :block/content ?content]
+              [(?content-matches ?content ?route-name)]]
             (conn/get-db repo)
             page-name
-            route-name)
+            route-name
+            (fn content-matches? [block-content external-content]
+              (= (heading-content->route-name block-content)
+                 (string/lower-case external-content))))
        ffirst))
 
 (defn get-page-format

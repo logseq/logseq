@@ -46,12 +46,13 @@
 ;; Named block links only works on web (and publishing)
 (if util/web-platform?
   (defn- get-block-uuid-by-block-route-name
-    "Return string block uuid for matching :name and :block params or nil if not found"
+    "Return string block uuid for matching :name and :block-route-name params or
+    nil if not found"
     [state]
     ;; Only query if block name is in the route
     (when-let [route-name (get-in (first (:rum/args state))
                                   [:parameters :path :block-route-name])]
-      (->> (model/get-block-by-page-name-and-route-name
+      (->> (model/get-block-by-page-name-and-block-route-name
             (state/get-current-repo)
             (get-page-name state)
             route-name)
