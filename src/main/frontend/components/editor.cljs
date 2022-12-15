@@ -276,10 +276,10 @@
             q (string/triml q)
             matched-values (editor-handler/get-matched-property-values property q)
             non-exist-handler (fn [_state]
-                                ((editor-handler/property-value-on-chosen-handler id q) nil))]
+                                ((editor-handler/property-value-on-chosen-handler id q property) nil))]
         (ui/auto-complete
          matched-values
-         {:on-chosen (editor-handler/property-value-on-chosen-handler id q)
+         {:on-chosen (editor-handler/property-value-on-chosen-handler id q property)
           :on-enter non-exist-handler
           :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property value: " q)]
           :header [:div.px-4.py-2.text-sm.font-medium "Matched property values: "]

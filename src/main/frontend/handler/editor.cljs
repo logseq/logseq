@@ -17,6 +17,7 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.export :as export]
             [frontend.handler.notification :as notification]
+            [frontend.handler.property :as property-handler]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.assets :as assets-handler]
@@ -2124,11 +2125,18 @@
                        50)))))
 
 (defn property-value-on-chosen-handler
-  [element-id q]
+  [element-id q property]
   (fn [property-value]
-    (commands/insert! element-id (str gp-property/colons " " (or property-value q))
-                      {:last-pattern (str gp-property/colons " " q)})
-    (state/clear-editor-action!)))
+    (let [schema (:block/property-schema (db/pull [:block/name property]))
+          final-value (or property-value q)
+          [success? property-value-or-error] (property-handler/validate schema final-value)]
+      (if success?
+        (do
+          (commands/insert! element-id (str gp-property/colons " " final-value)
+                            {:last-pattern (str gp-property/colons " " q)})
+          (state/clear-editor-action!))
+        (notification/show!
+         (str property ": " property-value-or-error))))))
 
 (defn parent-is-page?
   [{{:block/keys [parent page]} :data :as node}]
