@@ -194,11 +194,9 @@ export class TLApp<
           keys: child.constructor['shortcut'] as string | string[],
           fn: (_: any, __: any, e: KeyboardEvent) => {
             this.transition(child.id)
-
             // hack: allows logseq related shortcut combinations to work
-            if (e.key !== 't') {
-              e.stopPropagation()
-            }
+            // fixme?: unsure if it will cause unexpected issues
+            // e.stopPropagation()
           },
         }
       })
