@@ -471,6 +471,8 @@ button.tl-select-input-trigger {
   &:focus {
     outline: none;
     border: none;
+    box-shadow: none;
+    background-color: hsla(0, 0%, 50%, 0.15) !important;
   }
 }
 
