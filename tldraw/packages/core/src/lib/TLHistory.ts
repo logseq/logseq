@@ -1,7 +1,8 @@
 import { action, computed, makeObservable, observable, transaction } from 'mobx'
 import type { TLEventMap } from '../types'
 import { deepCopy, deepEqual, omit } from '../utils'
-import type { TLShape } from './shapes'
+import type { TLShape, TLShapeModel } from './shapes'
+import type { TLGroupShape } from './shapes/TLGroupShape'
 import type { TLApp, TLDocumentModel } from './TLApp'
 import { TLPage } from './TLPage'
 
@@ -101,6 +102,11 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
     }
   }
 
+  instantiateShape = (serializedShape: TLShapeModel) => {
+    const ShapeClass = this.app.getShapeClass(serializedShape.type)
+    return new ShapeClass(serializedShape)
+  }
+
   @action deserialize = (snapshot: TLDocumentModel) => {
     transaction(() => {
       const { pages } = snapshot
@@ -131,9 +137,7 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
                 shapesMap.delete(serializedShape.id)
               } else {
                 // Create the shape
-                const ShapeClass = this.app.getShapeClass(serializedShape.type)
-                const newShape = new ShapeClass(serializedShape)
-                shapesToAdd.push(newShape)
+                shapesToAdd.push(this.instantiateShape(serializedShape))
               }
             }
 
@@ -158,8 +162,7 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
                 nonce,
                 bindings,
                 shapes: shapes.map(serializedShape => {
-                  const ShapeClass = this.app.getShapeClass(serializedShape.type)
-                  return new ShapeClass(serializedShape)
+                  return this.instantiateShape(serializedShape)
                 }),
               })
             )

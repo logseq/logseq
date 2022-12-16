@@ -1,6 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { EMPTY_OBJECT, TLAsset, TLBinding, TLBounds, TLCursor, TLTheme } from '@tldraw/core'
+import {
+  EMPTY_OBJECT,
+  isNonNullable,
+  TLAsset,
+  TLBinding,
+  TLBounds,
+  TLCursor,
+  TLTheme,
+} from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { NOOP } from '../../constants'
@@ -38,6 +46,7 @@ export interface TLCanvasProps<S extends TLReactShape> {
   assets: Record<string, TLAsset>
   theme: TLTheme
   hoveredShape: S
+  hoveredGroup: S
   editingShape: S
   bindingShapes: S[]
   selectionDirectionHint: number[]
@@ -69,6 +78,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
   bindingShapes,
   editingShape,
   hoveredShape,
+  hoveredGroup,
   selectionBounds,
   selectedShapes,
   erasingShapes,
@@ -110,6 +120,8 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
   const selectedShapesSet = React.useMemo(() => new Set(selectedShapes || []), [selectedShapes])
   const erasingShapesSet = React.useMemo(() => new Set(erasingShapes || []), [erasingShapes])
   const singleSelectedShape = selectedShapes?.length === 1 ? selectedShapes[0] : undefined
+
+  const hoveredShapes: S[] = [...new Set([hoveredGroup, hoveredShape])].filter(isNonNullable)
 
   return (
     <div ref={rContainer} className={`tl-container ${className ?? ''}`}>
@@ -153,9 +165,9 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                 isSelected={true}
               />
             ))}
-          {hoveredShape && (
-            <Indicator key={'hovered_indicator_' + hoveredShape.id} shape={hoveredShape} />
-          )}
+          {hoveredShapes.map(s => (
+            <Indicator key={'hovered_indicator_' + s.id} shape={s} />
+          ))}
           {singleSelectedShape && components.BacklinksCount && (
             <BacklinksCountContainer
               hidden={false}

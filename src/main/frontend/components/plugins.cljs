@@ -806,7 +806,7 @@
       false develop-mode? nil
       agent-opts)
 
-     [:div.cp__plugins-item-lists
+     [:div.cp__plugins-item-lists.pb-6
       {:ref "list-ref"}
       [:div.cp__plugins-item-lists-inner
        (for [item sorted-plugins]

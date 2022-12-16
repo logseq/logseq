@@ -122,41 +122,12 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
 
   ReactIndicator = observer(() => {
     const {
-      size: [w, h],
-      label,
-      fontWeight,
+      size: [w, h]
     } = this.props
-
-    const bounds = this.getBounds()
-    const labelSize = label
-      ? getTextLabelSize(
-          label,
-          { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight },
-          4
-        )
-      : [0, 0]
-    const scale = Math.max(0.5, Math.min(1, w / labelSize[0], h / labelSize[1]))
-    const midPoint = Vec.mul(this.props.size, 0.5)
-
-    const offset = React.useMemo(() => {
-      const offset = Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
-      return offset
-    }, [bounds, scale, midPoint])
 
     return (
       <g>
         <ellipse cx={w / 2} cy={h / 2} rx={w / 2} ry={h / 2} strokeWidth={2} fill="transparent" />
-        {label && (
-          <rect
-            x={bounds.width / 2 - (labelSize[0] / 2) * scale + offset[0]}
-            y={bounds.height / 2 - (labelSize[1] / 2) * scale + offset[1]}
-            width={labelSize[0] * scale}
-            height={labelSize[1] * scale}
-            rx={4 * scale}
-            ry={4 * scale}
-            fill="transparent"
-          />
-        )}
       </g>
     )
   })

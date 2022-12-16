@@ -31,6 +31,7 @@ export class PointingShapeBehindBoundsState<
       selectedIds,
       inputs: { shiftKey },
     } = this.app
+    // unlike PointingShapeState, always select the shape behind the group
     if (shiftKey) {
       this.app.setSelectedShapes([...Array.from(selectedIds.values()), this.info.shape.id])
     } else {

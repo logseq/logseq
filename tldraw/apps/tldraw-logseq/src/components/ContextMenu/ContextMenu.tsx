@@ -124,6 +124,28 @@ export const ContextMenu = observer(function ContextMenu({
               <ReactContextMenu.Separator className="menu-separator" />
             </>
           )}
+          {(app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) ||
+            app.selectedShapesArray.length > 1) && (
+            <>
+              {app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) && (
+                <ReactContextMenu.Item
+                  className="tl-menu-item"
+                  onClick={() => runAndTransition(app.api.unGroup)}
+                >
+                  Ungroup
+                </ReactContextMenu.Item>
+              )}
+              {app.selectedShapesArray.length > 1 && (
+                <ReactContextMenu.Item
+                  className="tl-menu-item"
+                  onClick={() => runAndTransition(app.api.doGroup)}
+                >
+                  Group
+                </ReactContextMenu.Item>
+              )}
+              <ReactContextMenu.Separator className="menu-separator" />
+            </>
+          )}
           {app.selectedShapes?.size > 0 && (
             <>
               <ReactContextMenu.Item

@@ -1040,12 +1040,13 @@
 
 #?(:clj
    (defmacro with-time
-     "Evaluates expr and prints the time it took. Returns the value of expr and the spent time."
+     "Evaluates expr and prints the time it took. 
+      Returns the value of expr and the spent time of float number in msecs."
      [expr]
      `(let [start# (cljs.core/system-time)
             ret# ~expr]
         {:result ret#
-         :time (.toFixed (- (cljs.core/system-time) start#) 6)})))
+         :time (- (cljs.core/system-time) start#)})))
 
 ;; TODO: profile and profileEnd
 
