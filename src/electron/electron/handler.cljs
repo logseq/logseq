@@ -49,6 +49,7 @@
                  (remove #(string/starts-with? (.-name ^js %) "."))
                  (map #(.join path dir (.-name %))))))
         dir)
+       (map utils/fix-win-path!)
        (doall)
        (vec)))
 
