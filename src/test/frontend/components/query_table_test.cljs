@@ -24,13 +24,13 @@
     (are [sort-state result sorted-result]
          (= (mapv #(hash-map :block/properties %) sorted-result)
             (#'query-table/sort-result (mapv #(hash-map :block/properties %) result) sort-state))
-         {:sort-desc? true :sort-by-column :rating}
-         [{:rating 8} {:rating 7}]
-         [{:rating 8} {:rating 7}]
+         {:sort-desc? true :sort-by-column :integer}
+         [{:integer 8} {:integer 7} {:integer 77}]
+         [{:integer 77} {:integer 8} {:integer 7}]
 
-         {:sort-desc? false :sort-by-column :rating}
-         [{:rating 8} {:rating 7}]
-         [{:rating 7} {:rating 8}]))
+         {:sort-desc? false :sort-by-column :integer}
+         [{:integer 8} {:integer 7} {:integer 77}]
+         [{:integer 7} {:integer 8} {:integer 77}]))
 
   (testing "sort by boolean block property"
     (are [sort-state result sorted-result]
