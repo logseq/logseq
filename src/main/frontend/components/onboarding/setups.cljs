@@ -8,7 +8,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.util :as util]
-            [frontend.handler.web.nfs :as nfs]
+            [frontend.handler.repo-load :as repo-load-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.mobile.graph-picker :as graph-picker]
             [frontend.handler.notification :as notification]
@@ -80,7 +80,7 @@
                                         :logged? logged?
                                         :native-icloud? native-icloud?})
 
-         (if (or (nfs/supported?) (mobile-util/native-platform?))
+         (if (or (repo-load-handler/supported?) (mobile-util/native-platform?))
            [:div.choose.flex.flex-col.items-center
             {:on-click #(page-handler/ls-dir-files!
                          (fn []

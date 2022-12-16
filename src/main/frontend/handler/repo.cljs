@@ -255,7 +255,9 @@
                    :or {re-render? true}}]
   (parse-files-and-create-default-files! repo-url files delete-files delete-blocks re-render? re-render-opts opts))
 
-(defn load-repo-to-db!
+(defn <load-repo-to-db!
+  "Parse files into blocks and load them into db, notice that this fn returns a
+  core.async channel."
   [repo-url {:keys [diffs nfs-files refresh? new-graph? empty-graph?]}]
   (spec/validate :repos/url repo-url)
   (route-handler/redirect-to-home!)

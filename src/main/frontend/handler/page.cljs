@@ -19,7 +19,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.web.nfs :as web-nfs]
+            [frontend.handler.repo-load :as repo-load-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.recent :as recent-handler]
             [frontend.modules.outliner.core :as outliner-core]
@@ -698,7 +698,7 @@
 (defn ls-dir-files!
   ([ok-handler] (ls-dir-files! ok-handler nil))
   ([ok-handler opts]
-   (web-nfs/ls-dir-files-with-handler!
+   (repo-load-handler/ls-dir-files-with-handler!
     (fn [e]
       (init-commands!)
       (when ok-handler

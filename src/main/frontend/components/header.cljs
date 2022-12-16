@@ -13,7 +13,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.web.nfs :as nfs]
+            [frontend.handler.repo-load :as repo-load-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -116,13 +116,13 @@
                   :title (t :discourse-title)
                   :target "_blank"}
         :icon (ui/icon "brand-discord")}
-       
+
        {:title [:div.flex-row.flex.justify-between.items-center
                 [:span (t :help/bug)]]
         :options {:href bug-report-url
                   :title "Fire a bug report on Github"
                   :target "_blank"}
-        :icon (ui/icon "bug")} 
+        :icon (ui/icon "bug")}
 
        (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
          {:title (str (t :logout) " (" (user-handler/email) ")")
@@ -176,7 +176,7 @@
                    (remove #(= (:url %) config/local-repo)))
         _ (state/sub [:user/info :UserGroups])
         electron-mac? (and util/mac? (util/electron?))
-        show-open-folder? (and (nfs/supported?)
+        show-open-folder? (and (repo-load-handler/supported?)
                                (or (empty? repos)
                                    (nil? (state/sub :git/current-repo)))
                                (not (mobile-util/native-platform?))

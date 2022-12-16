@@ -4,7 +4,7 @@
    [rum.core :as rum]
    [frontend.ui :as ui]
    [frontend.handler.notification :as notification]
-   [frontend.handler.web.nfs :as web-nfs]
+   [frontend.handler.repo-load :as repo-load-handler]
    [frontend.handler.page :as page-handler]
    [frontend.util :as util]
    [frontend.modules.shortcut.core :as shortcut]
@@ -56,7 +56,7 @@
                                        (-> (fs/mkdir-if-not-exists graph-path)
                                            (p/then
                                             (fn []
-                                              (web-nfs/ls-dir-files-with-path!
+                                              (repo-load-handler/ls-dir-files-with-path!
                                                graph-path (merge
                                                            {:ok-handler
                                                             (fn []

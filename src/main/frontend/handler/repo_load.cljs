@@ -1,5 +1,5 @@
-(ns frontend.handler.web.nfs
-  "The File System Access API, https://web.dev/file-system-access/."
+(ns frontend.handler.repo-load
+  "This ns handles repo re-index and refresh."
   (:require ["/frontend/utils" :as utils]
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
@@ -205,10 +205,10 @@
                               (do
                                 (repo-handler/start-repo-db-if-not-exists! repo)
                                 (async/go
-                                  (let [_finished? (async/<! (repo-handler/load-repo-to-db! repo
-                                                                                            {:new-graph?   true
-                                                                                             :empty-graph? (nil? (seq markup-files))
-                                                                                             :nfs-files    files}))]
+                                  (let [_finished? (async/<! (repo-handler/<load-repo-to-db! repo
+                                                                                             {:new-graph?   true
+                                                                                              :empty-graph? (nil? (seq markup-files))
+                                                                                              :nfs-files    files}))]
                                     (state/add-repo! {:url repo :nfs? true})
                                     (state/set-loading-files! repo false)
                                     (when ok-handler (ok-handler {:url repo}))
@@ -313,11 +313,11 @@
                               (seq diffs))
                       (comment "re-index a local graph is handled here")
                       (async/go
-                        (let [_finished? (async/<! (repo-handler/load-repo-to-db! repo
-                                                                                  {:diffs     diffs
-                                                                                   :nfs-files modified-files
-                                                                                   :refresh? (not re-index?)
-                                                                                   :new-graph? re-index?}))]
+                        (let [_finished? (async/<! (repo-handler/<load-repo-to-db! repo
+                                                                                   {:diffs     diffs
+                                                                                    :nfs-files modified-files
+                                                                                    :refresh? (not re-index?)
+                                                                                    :new-graph? re-index?}))]
                           (ok-handler))))
                     (when (and (util/electron?) (not re-index?))
                       (db/transact! repo new-files))))))))

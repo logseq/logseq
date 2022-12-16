@@ -5,7 +5,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.handler.repo-load :as repo-load-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -111,7 +111,7 @@
            (repos-inner local-graphs))
 
          [:div.flex.flex-row.my-4
-          (when (or (nfs-handler/supported?)
+          (when (or (repo-load-handler/supported?)
                     (mobile-util/native-platform?))
             [:div.mr-8
              (ui/button
@@ -163,7 +163,7 @@
         refresh-link (let [nfs-repo? (config/local-db? current-repo)]
                        (when (and nfs-repo?
                                   (not= current-repo config/local-repo)
-                                  (or (nfs-handler/supported?)
+                                  (or (repo-load-handler/supported?)
                                       (mobile-util/native-platform?)))
                          {:title (t :sync-from-local-files)
                           :hover-detail (t :sync-from-local-files-detail)

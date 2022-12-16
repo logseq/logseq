@@ -1,7 +1,7 @@
 (ns frontend.components.widgets
   (:require [frontend.context.i18n :refer [t]]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.web.nfs :as nfs]
+            [frontend.handler.repo-load :as repo-load-handler]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.ui :as ui]
             [rum.core :as rum]
@@ -13,7 +13,7 @@
   []
   [:div.flex.flex-col
    [:h1.title (t :on-boarding/add-graph)]
-   (let [nfs-supported? (or (nfs/supported?) (mobile-util/native-platform?))]
+   (let [nfs-supported? (or (repo-load-handler/supported?) (mobile-util/native-platform?))]
      (if (mobile-util/native-platform?)
        [:div.text-sm
         (ui/button "Open a local directory"

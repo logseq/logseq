@@ -39,7 +39,7 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.handler.repo-load :as repo-load]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
             [frontend.mobile.graph-picker :as graph-picker]
@@ -199,7 +199,7 @@
                                     true)]
                    (if overwrite?
                      (p/let [_ (fs/mkdir-if-not-exists graph-path)]
-                       (nfs-handler/ls-dir-files-with-path!
+                       (repo-load/ls-dir-files-with-path!
                         graph-path
                         {:ok-handler (fn []
                                        (file-sync-handler/init-remote-graph graph-path graph)
@@ -633,7 +633,7 @@
       :large? true
       :on-click (fn []
                   (state/close-modal!)
-                  (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
+                  (repo-load/refresh! (state/get-current-repo) refresh-cb)))]]))
 
 (defmethod handle :sync/create-remote-graph [[_ current-repo]]
   (let [graph-name (js/decodeURI (util/node-path.basename current-repo))]
@@ -658,7 +658,7 @@
   (async/go
     (async/<! (sync/<sync-stop))
     (repo-handler/re-index!
-     nfs-handler/rebuild-index!
+     repo-load/rebuild-index!
      #(do (page-handler/create-today-journal!)
           (file-sync-restart!)))))
 
