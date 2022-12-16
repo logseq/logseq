@@ -660,7 +660,7 @@
   (ui/toggle enabled?
              (fn []
                (let [value (not enabled?)]
-                 (when (user-handler/alpha-or-beta-user?)
+                 (when (user-handler/feature-available? :whiteboard)
                    (config-handler/set-config! :feature/enable-whiteboards? value))))
              true))
 

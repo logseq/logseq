@@ -194,12 +194,13 @@
   (or (alpha-user?) (beta-user?)))
 
 (defonce feature-matrix {:file-sync :beta
-                         :whiteboard :alpha})
+                         :whiteboard :beta})
 
 (defn feature-available?
   [feature]
-  (when (logged-in?)
-    (case (feature feature-matrix)
-      :beta (alpha-or-beta-user?)
-      :alpha (alpha-user?)
-      false)))
+  (or config/dev?
+      (when (logged-in?)
+        (case (feature feature-matrix)
+          :beta (alpha-or-beta-user?)
+          :alpha (alpha-user?)
+          false))))
