@@ -699,7 +699,7 @@ html.is-mac {
 }
 
 /*Fix blockquote*/
-.breadcrumb :is(cp__fenced-code-block, blockquote) {
+.breadcrumb :is(.cp__fenced-code-block, blockquote) {
   display: none;
 }
 
