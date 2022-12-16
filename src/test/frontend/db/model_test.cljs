@@ -3,7 +3,7 @@
             [frontend.db.model :as model]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
-            [logseq.db.schema :as schema]
+            [logseq.db.schema :as db-schema]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [datascript.core :as d]
             [shadow.resource :as rc]
@@ -154,7 +154,7 @@ foo:: bar"}])
                                          edn/read-string))
 
 (deftest get-block-children-ids-on-bad-outliner-data
-  (let [db (d/db-with (d/empty-db logseq.db.schema/schema)
+  (let [db (d/db-with (d/empty-db db-schema/schema)
                       broken-outliner-data-with-cycle)]
 
     (is (= "bad outliner data, need to re-index to fix"
