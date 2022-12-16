@@ -323,7 +323,7 @@ button.tl-select-input-trigger {
   }
 
   &[data-state='checked'] {
-    background-color: var(--color-selectedFill);
+    background-color: var(--color-indigo-500);
     color: #fff;
   }
 }

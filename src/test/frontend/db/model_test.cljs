@@ -1,6 +1,8 @@
 (ns frontend.db.model-test
   (:require [cljs.test :refer [use-fixtures deftest is are]]
             [frontend.db.model :as model]
+            [frontend.db :as db]
+            [frontend.db.conn :as conn]
             [frontend.test.helper :as test-helper :refer [load-test-files]]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
@@ -121,4 +123,24 @@
          (#'model/get-unnecessary-namespaces-name '("one/two/tree" "one" "one/two" "non nested tag" "non nested link")))
       "Must be  one/two one"))
 
-#_(cljs.test/test-ns 'frontend.db.model-test)
+(deftest entity-query-should-return-nil-if-id-not-exists
+  (is (nil? (db/entity 1000000))))
+
+(deftest entity-query-should-support-both-graph-string-and-db
+  (is (= 1 (:db/id (db/entity test-helper/test-db 1))))
+  (is (= 1 (:db/id (db/entity (conn/get-db test-helper/test-db) 1)))))
+  
+(deftest get-block-by-page-name-and-block-route-name
+  (load-test-files [{:file/path "foo.md"
+                     :file/content "foo:: bar
+- b2
+- ### Header 2
+foo:: bar"}])
+  (is (uuid?
+       (:block/uuid
+        (model/get-block-by-page-name-and-block-route-name test-helper/test-db "foo" "header 2")))
+      "Header block's content returns map with :block/uuid")
+
+  (is (nil?
+       (model/get-block-by-page-name-and-block-route-name test-helper/test-db "foo" "b2"))
+      "Non header block's content returns nil"))

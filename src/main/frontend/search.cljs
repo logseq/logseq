@@ -186,7 +186,8 @@
      (let [q (clean-str q)
            properties (->> (db-model/get-all-properties)
                            (remove (property/hidden-properties))
-                           (map name))]
+                           ;; Complete full keyword except the ':'
+                           (map #(subs (str %) 1)))]
        (when (seq properties)
          (if (string/blank? q)
            properties
