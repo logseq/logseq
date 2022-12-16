@@ -3,7 +3,11 @@
             [frontend.db.model :as model]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
-            [frontend.test.helper :as test-helper :refer [load-test-files]]))
+            [logseq.db.schema :as schema]
+            [frontend.test.helper :as test-helper :refer [load-test-files]]
+            [datascript.core :as d]
+            [shadow.resource :as rc]
+            [clojure.edn :as edn]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
                      :after test-helper/destroy-test-db!})
@@ -129,7 +133,7 @@
 (deftest entity-query-should-support-both-graph-string-and-db
   (is (= 1 (:db/id (db/entity test-helper/test-db 1))))
   (is (= 1 (:db/id (db/entity (conn/get-db test-helper/test-db) 1)))))
-  
+
 (deftest get-block-by-page-name-and-block-route-name
   (load-test-files [{:file/path "foo.md"
                      :file/content "foo:: bar
@@ -144,3 +148,16 @@ foo:: bar"}])
   (is (nil?
        (model/get-block-by-page-name-and-block-route-name test-helper/test-db "foo" "b2"))
       "Non header block's content returns nil"))
+
+
+(def broken-outliner-data-with-cycle (-> (rc/inline "fixtures/broken-outliner-data-with-cycle.edn")
+                                         edn/read-string))
+
+(deftest get-block-children-ids-on-bad-outliner-data
+  (let [db (d/db-with (d/empty-db logseq.db.schema/schema)
+                      broken-outliner-data-with-cycle)]
+
+    (is (= "bad outliner data, need to re-index to fix"
+           (try (model/get-block-children-ids-in-db db #uuid"e538d319-48d4-4a6d-ae70-c03bb55b6fe4")
+                (catch :default e
+                  (ex-message e)))))))

@@ -889,25 +889,28 @@ independent of format as format specific heading characters are stripped"
           (db-utils/pull-many repo
                               '[:db/id :block/name :block/original-name]
                               ids))))))
+(defn get-block-children-ids-in-db
+  [db block-uuid]
+  (when-let [eid (:db/id (db-utils/entity db [:block/uuid block-uuid]))]
+    (let [seen   (volatile! [])]
+      (loop [steps          100      ;check result every 100 steps
+             eids-to-expand [eid]]
+        (when (seq eids-to-expand)
+          (let [eids-to-expand*
+                (mapcat (fn [eid] (map first (d/datoms db :avet :block/parent eid))) eids-to-expand)
+                uuids-to-add (remove nil? (map #(:block/uuid (db-utils/entity db %)) eids-to-expand*))]
+            (when (and (zero? steps)
+                       (seq (set/intersection (set @seen) (set uuids-to-add))))
+              (throw (ex-info "bad outliner data, need to re-index to fix"
+                              {:seen @seen :eids-to-expand eids-to-expand})))
+            (vswap! seen (partial apply conj) uuids-to-add)
+            (recur (if (zero? steps) 100 (dec steps)) eids-to-expand*))))
+      @seen)))
 
 (defn get-block-children-ids
-  [repo block-uuid]
-  (when-let [db (conn/get-db repo)]
-    (when-let [eid (:db/id (db-utils/entity repo [:block/uuid block-uuid]))]
-      (let [seen   (volatile! [])]
-        (loop [steps          100               ;check result every 100 steps
-               eids-to-expand [eid]]
-          (when (seq eids-to-expand)
-            (let [eids-to-expand*
-                  (mapcat (fn [eid] (map first (d/datoms db :avet :block/parent eid))) eids-to-expand)
-                  uuids-to-add (remove nil? (map #(:block/uuid (db-utils/entity db %)) eids-to-expand*))]
-              (when (and (zero? steps)
-                         (seq (set/intersection (set @seen) (set uuids-to-add))))
-                (throw (ex-info "bad outliner data, need to re-index to fix"
-                                {:seen @seen :eids-to-expand eids-to-expand})))
-              (vswap! seen (partial apply conj) uuids-to-add)
-              (recur (if (zero? steps) 100 (dec steps)) eids-to-expand*))))
-        @seen))))
+  ([repo block-uuid]
+   (when-let [db (conn/get-db repo)]
+     (get-block-children-ids-in-db db block-uuid))))
 
 (defn get-block-immediate-children
   "Doesn't include nested children."
