@@ -3,7 +3,7 @@
   (:require [rum.core :as rum]
             [frontend.handler :as handler]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.route :as route]
+            [frontend.handler.route :as route-handler]
             [frontend.page :as page]
             [frontend.routes :as routes]
             [frontend.spec]
@@ -20,7 +20,7 @@
   (rfe/start!
    (rf/router routes/routes nil)
    (fn [route]
-     (route/set-route-match! route)
+     (route-handler/set-route-match! route)
      (plugin-handler/hook-plugin-app
       :route-changed (select-keys route [:template :path :parameters])))
 

@@ -111,7 +111,7 @@
 
 (defn add-q!
   [k query time inputs result-atom transform-fn query-fn inputs-fn]
-  (let [time' (int (util/safe-parse-float time))]
+  (let [time' (int (util/safe-parse-float time))] ;; for robustness. `time` should already be float
     (swap! query-state assoc k {:query query
                                :query-time time'
                                :inputs inputs
@@ -174,7 +174,7 @@
                                                 (apply d/q query db inputs))
 
                                               kv?
-                                              (d/entity db (last k))
+                                              (db-utils/entity db (last k))
 
                                               (seq inputs)
                                               (apply d/q query db inputs)
@@ -211,7 +211,7 @@
 
 (defn- get-block-parents
   [db id]
-  (let [get-parent (fn [id] (:db/id (:block/parent (d/entity db id))))]
+  (let [get-parent (fn [id] (:db/id (:block/parent (db-utils/entity db id))))]
     (loop [result [id]
            id id]
       (if-let [parent (get-parent id)]

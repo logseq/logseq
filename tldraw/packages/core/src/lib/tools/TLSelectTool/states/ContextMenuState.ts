@@ -22,12 +22,12 @@ export class ContextMenuState<
     } = this.app
 
     if (info.type === TLTargetType.Shape && !selectedShapes.has(info.shape)) {
+      const shape = this.app.getParentGroup(info.shape) ?? info.shape
       if (shiftKey) {
-        this.app.setSelectedShapes([...Array.from(selectedIds.values()), info.shape.id])
+        this.app.setSelectedShapes([...Array.from(selectedIds.values()), shape.id])
         return
       }
-
-      this.app.setSelectedShapes([info.shape])
+      this.app.setSelectedShapes([shape])
     }
   }
 

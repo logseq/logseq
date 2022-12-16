@@ -149,6 +149,17 @@ To write a test that uses a datascript db:
 * The easiest way to set up test data is to use `test-helper/load-test-files`.
 * For the repo argument that most fns take, pass it `test-helper/test-db`
 
+#### Performance tests
+To write a performance test:
+
+* Use `frontend.util/with-time-number` to get the time in ms. 
+ 
+* Example:
+  ```clojure
+  (are [x timeout] (>= timeout (:time (util/with-time-number (block/normalize-block x true))))
+      ... )
+  ```
+
 For examples of these tests, see `frontend.db.query-dsl-test` and `frontend.db.model-test`.
 
 ### Async Unit Testing

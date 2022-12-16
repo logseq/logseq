@@ -18,6 +18,7 @@ export const AppCanvas = observer(function InnerApp<S extends TLReactShape>(
       brush={app.brush}
       editingShape={app.editingShape}
       hoveredShape={app.hoveredShape}
+      hoveredGroup={app.hoveredGroup}
       bindingShapes={app.bindingShapes}
       selectionDirectionHint={app.selectionDirectionHint}
       selectionBounds={app.selectionBounds}

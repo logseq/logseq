@@ -43,6 +43,23 @@
   (let [route-match (first (:rum/args state))]
     (get-in route-match [:parameters :path :name])))
 
+;; Named block links only works on web (and publishing)
+(if util/web-platform?
+  (defn- get-block-uuid-by-block-route-name
+    "Return string block uuid for matching :name and :block-route-name params or
+    nil if not found"
+    [state]
+    ;; Only query if block name is in the route
+    (when-let [route-name (get-in (first (:rum/args state))
+                                  [:parameters :path :block-route-name])]
+      (->> (model/get-block-by-page-name-and-block-route-name
+            (state/get-current-repo)
+            (get-page-name state)
+            route-name)
+           :block/uuid
+           str)))
+  (def get-block-uuid-by-block-route-name (constantly nil)))
+
 (defn- get-blocks
   [repo page-name block-id]
   (when page-name
@@ -357,6 +374,8 @@
   (rum/local nil   ::current-page)
   [state {:keys [repo page-name] :as option}]
   (when-let [path-page-name (or page-name
+                                (get-block-uuid-by-block-route-name state)
+                                ;; is page name or uuid
                                 (get-page-name state)
                                 (state/get-current-page))]
     (let [current-repo (state/sub :git/current-repo)
@@ -430,14 +449,14 @@
                [:div.mb-4
                 (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
-         ;; blocks
-         (let [page (if block?
-                      (db/entity repo [:block/uuid block-id])
-                      page)
-               _ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
-               _ (when (and block? (not page))
-                   (route-handler/redirect-to-page! @*current-block-page))]
-           (page-blocks-cp repo page {:sidebar? sidebar? :whiteboard? whiteboard?}))]])
+           ;; blocks
+           (let [page (if block?
+                        (db/entity repo [:block/uuid block-id])
+                        page)
+                 _ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
+                 _ (when (and block? (not page))
+                     (route-handler/redirect-to-page! @*current-block-page))]
+             (page-blocks-cp repo page {:sidebar? sidebar? :whiteboard? whiteboard?}))]])
 
        (when today?
          (today-queries repo today? sidebar?))
@@ -752,7 +771,7 @@
      [:input.form-checkbox
       (merge {:type    "checkbox"
               :checked (boolean checked)
-              :ref *input
+              :ref     *input
               :id      key} opts)]]))
 
 (rum/defc sortable-title
@@ -1055,7 +1074,7 @@
                                                   all? (= 1 @*indeterminate)]
                                               (doseq [{:block/keys [idx]} @*results]
                                                 (swap! *checks assoc idx (or indeterminate? (not all?))))))
-                           :indeterminate (= -1 @*indeterminate)})]
+                           :indeterminate (when (= -1 @*indeterminate) "indeterminate")})]
            [:th.icon ""]
            (sortable-title (t :block/name) :block/name *sort-by-item *desc?)
            (when-not mobile?

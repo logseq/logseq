@@ -5,7 +5,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.util :as util]
-            [frontend.handler.route :as router-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.command-palette :as command-palette]
             [hiccups.runtime :as h]
             [dommy.core :as d]))
@@ -68,7 +68,7 @@
     :beforeShowPromise #(if-not (= (util/safe-lower-case (state/get-current-page))
                                    (util/safe-lower-case (date/today)))
                           (wait-target (fn []
-                                         (router-handler/redirect-to-page! (date/today))
+                                         (route-handler/redirect-to-page! (date/today))
                                          (util/scroll-to-top)) 200)
                           (p/resolved true))
     :buttons           [{:text "Back" :classes "back" :action (.-back jsTour)}
@@ -161,7 +161,8 @@
     :beforeShowPromise (fn []
                          (when-not (state/sub :ui/left-sidebar-open?)
                            (state/toggle-left-sidebar!))
-                         (wait-target ".nav-header .whiteboard" 500))
+                         (wait-target ".nav-header .whiteboard" 500)
+                         (util/scroll-to-top))
     :canClickTarget    true
     :buttons           [{:text "Next" :action (.-next jsTour)}]
     :popperOptions     {:modifiers [{:name    "preventOverflow"
@@ -174,7 +175,7 @@
     :text              (h/render-html [:section [:h2 (t :on-boarding/tour-whiteboard-new "🆕️")]
                                        [:p (t :on-boarding/tour-whiteboard-new-description)]])
     :beforeShowPromise (fn []
-                         (router-handler/redirect-to-whiteboard-dashboard!)
+                         (route-handler/redirect-to-whiteboard-dashboard!)
                          (wait-target ".dashboard-create-card" 500))
     :attachTo          {:element ".dashboard-create-card" :on "bottom"}
     :buttons           [{:text "Back" :classes "back" :action (.-back jsTour)}

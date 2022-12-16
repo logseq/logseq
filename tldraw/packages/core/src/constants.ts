@@ -30,6 +30,8 @@ export const EMPTY_OBJECT: any = {}
 
 export const EMPTY_ARRAY: any[] = []
 
+export const GROUP_PADDING = 8
+
 export const CURSORS: Record<TLSelectionHandle, TLCursor> = {
   [TLResizeEdge.Bottom]: TLCursor.NsResize,
   [TLResizeEdge.Top]: TLCursor.NsResize,

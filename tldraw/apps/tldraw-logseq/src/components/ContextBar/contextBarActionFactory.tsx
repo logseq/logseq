@@ -126,7 +126,7 @@ const AutoResizingAction = observer(() => {
 
   return (
     <ToggleInput
-      title="Auto Resize"
+      tooltip="Auto Resize"
       toggle={shapes.every(s => s.props.type === 'logseq-portal')}
       className="tl-button"
       pressed={pressed}
@@ -215,7 +215,7 @@ const ScaleLevelAction = observer(() => {
   ]
   return (
     <SelectInput
-      tooltip="Scale Level"
+      tooltip="Scale level"
       options={sizeOptions}
       value={scaleLevel}
       onValueChange={v => {
@@ -300,7 +300,7 @@ const NoFillAction = observer(() => {
   const noFill = shapes.every(s => s.props.noFill)
 
   return (
-    <ToggleInput title="Fill" className="tl-button" pressed={noFill} onPressedChange={handleChange}>
+    <ToggleInput tooltip="Fill" className="tl-button" pressed={noFill} onPressedChange={handleChange}>
       <TablerIcon name={noFill ? 'droplet-off' : 'droplet'} />
     </ToggleInput>
   )
@@ -435,7 +435,7 @@ const TextStyleAction = observer(() => {
   return (
     <span className="flex gap-1">
       <ToggleInput
-        title="Bold"
+        tooltip="Bold"
         className="tl-button"
         pressed={bold}
         onPressedChange={v => {
@@ -451,7 +451,7 @@ const TextStyleAction = observer(() => {
         <TablerIcon name="bold" />
       </ToggleInput>
       <ToggleInput
-        title="Italic"
+        tooltip="Italic"
         className="tl-button"
         pressed={italic}
         onPressedChange={v => {

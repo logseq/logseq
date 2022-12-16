@@ -176,6 +176,7 @@
      {:ref      *el
       :style    {:top top :left left :visibility (if (and @*highlight-mode? new?) "hidden" "visible")}
       :on-click (fn [^js/MouseEvent e]
+                  (.stopPropagation e)
                   (when-let [action (.. e -target -dataset -action)]
                     (action-fn! action true)))}
 
@@ -601,9 +602,10 @@
                                                :properties {}})))]
 
            ;; show ctx menu
-           (set-tip-state! {:highlight hl-fn
-                            :selection selection
-                            :point     point}))))
+           (js/setTimeout (fn []
+                            (set-tip-state! {:highlight hl-fn
+                                             :selection selection
+                                             :point     point})))) 0))
 
      [(:range sel-state)])
 
