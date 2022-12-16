@@ -56,7 +56,7 @@ export function FeaturesBoards () {
 
           <div className="r info-wrap flex-1">
             <strong><ScribbleLoop size={38} weight={'duotone'}/></strong>
-            <h1>Whiteboards <sup>ALPHA</sup></h1>
+            <h1>Whiteboards <sup>BETA</sup></h1>
 
             <h2>
               <span>A new canvas</span> <br/>
@@ -84,7 +84,7 @@ export function FeaturesBoardsDL () {
       <div className="inner">
         <div className="r info-wrap flex-1">
           <strong><ScribbleLoop size={38} weight={'duotone'}/></strong>
-          <h1>Whiteboards <sup>ALPHA</sup></h1>
+          <h1>Whiteboards <sup>BETA</sup></h1>
 
           {appState.sm.get() ?
             (

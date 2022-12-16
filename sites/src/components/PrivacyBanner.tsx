@@ -1,27 +1,35 @@
 import { Button } from './Buttons'
 import { XCircle } from 'phosphor-react'
 import { useEffect, useState } from 'react'
-import toast from 'react-hot-toast'
+import Cookie from 'js-cookie'
 
-export function PrivacyBanner () {
+export function PrivacyBanner() {
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
+    if (
+      sessionStorage?.getItem('__pb') == '1' ||
+      localStorage?.getItem('__pb') == '1'
+    ) return
+
     setTimeout(() => {
       setReady(true)
     }, 1500)
   }, [])
 
+  const closeBannerSession = () => {
+    sessionStorage?.setItem('__pb', '1')
+    setReady(false)
+  }
+
   const acceptHandler = () => {
-    toast('TODO: accept?', {
-      icon: '🍪'
-    })
+    localStorage?.setItem('__pb', '1')
+    Cookie.set(`__pb`, '1', { expires: 7 })
+    setReady(false)
   }
 
   const denyHandler = () => {
-    toast('TODO: deny?', {
-      icon: '❌',
-    })
+    closeBannerSession()
   }
 
   return (
@@ -34,8 +42,11 @@ export function PrivacyBanner () {
               cookies
               on
               your device to enhance site navigation, and analyze site usage.
-              View our <a className={'text-logseq-100 hover:underline'}
-                          href={'/'}>Privacy Policy</a> for more.
+              View our <a
+              className={'text-logseq-100 hover:underline'}
+              href={'https://docs.logseq.com/#/page/Privacy%20Policy'}
+              target={'_blank'}
+            >Privacy Policy</a> for more.
             </div>
 
             <div className="r">
@@ -44,7 +55,7 @@ export function PrivacyBanner () {
               <Button className={'sm:w-[120px]'}
                       onClick={acceptHandler}>Accept</Button>
               <Button className={'leading-0 bg-transparent opacity-50'}
-                      onClick={() => setReady(false)}
+                      onClick={closeBannerSession}
               >
                 <XCircle size={24}/>
               </Button>
