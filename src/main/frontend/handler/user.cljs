@@ -186,7 +186,8 @@
 
 (defn beta-user?
   []
-  (contains? (state/user-groups) "beta-tester"))
+  (or config/dev?
+      (contains? (state/user-groups) "beta-tester")))
 
 (defn alpha-or-beta-user?
   []

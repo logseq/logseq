@@ -35,6 +35,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.handler.config :as config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
@@ -78,6 +79,14 @@
   (async/go (async/<! (p->c (persist-var/load-vars)))
             (async/<! (sync/<sync-stop))))
 
+(defn- enable-beta-features!
+  []
+  (when-not (false? (state/enable-sync?)) ; user turns it off
+    (file-sync-handler/set-sync-enabled! true))
+
+  (when-not (false? (state/enable-whiteboards?))
+    (config-handler/set-config! :feature/enable-whiteboards? true)))
+
 (defmethod handle :user/fetch-info-and-graphs [[_]]
   (state/set-state! [:ui/loading? :login] false)
   (async/go
@@ -92,8 +101,7 @@
             (sentry-event/set-user! uid))
           (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
-              (when-not (false? (state/enable-sync?)) ; user turns it off
-                (file-sync-handler/set-sync-enabled! true))
+              (enable-beta-features!)
               (async/<! (file-sync-handler/load-session-graphs))
               (p/let [repos (repo-handler/refresh-repos!)]
                 (when-let [repo (state/get-current-repo)]
