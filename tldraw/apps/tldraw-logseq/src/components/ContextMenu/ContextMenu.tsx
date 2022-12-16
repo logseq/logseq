@@ -135,7 +135,7 @@ export const ContextMenu = observer(function ContextMenu({
                   Ungroup
                   <div className="tl-menu-right-slot">
                     <span className="keyboard-shortcut">
-                      <code>{MOD_KEY}</code> <code>SHIFT</code> <code>G</code>
+                      <code>{MOD_KEY}</code> <code>⇧</code> <code>G</code>
                     </span>
                   </div>
                 </ReactContextMenu.Item>
