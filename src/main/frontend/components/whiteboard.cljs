@@ -291,7 +291,7 @@
 
 (rum/defc whiteboard-route
   [route-match]
-  (when (user-handler/alpha-user?)
+  (when (user-handler/alpha-or-beta-user?)
     (let [name (get-in route-match [:parameters :path :name])
           {:keys [block-id]} (get-in route-match [:parameters :query])]
       (whiteboard-page name block-id))))
