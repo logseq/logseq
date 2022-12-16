@@ -1040,7 +1040,7 @@
 
 #?(:clj
    (defmacro with-time
-     "Evaluates expr and prints the time it took. 
+     "Evaluates expr and prints the time it took.
       Returns the value of expr and the spent time of float number in msecs."
      [expr]
      `(let [start# (cljs.core/system-time)
@@ -1100,6 +1100,12 @@
      [ch]
      (->> (repeatedly #(async/poll! ch))
           (take-while identity))))
+
+#?(:cljs
+   (defn async-channel?
+     "Whether `c` is a core.async channel."
+     [c]
+     (instance? ManyToManyChannel c)))
 
 #?(:cljs
    (defn <ratelimit

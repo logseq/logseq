@@ -269,7 +269,7 @@
      :deleted  deleted}))
 
 (defn- handle-diffs!
-  [repo nfs? old-files new-files handle-path path-handles re-index? ok-handler]
+  [repo nfs? old-files new-files handle-path path-handles re-index?]
   (let [get-last-modified-at (fn [path] (some (fn [file]
                                                 (when (= path (:file/path file))
                                                   (:file/last-modified-at file)))
@@ -309,21 +309,18 @@
                                (rename-f "remove" deleted)
                                (rename-f "add" added)
                                (rename-f "modify" modified))]
+                    (when (and (util/electron?) (not re-index?))
+                      (db/transact! repo new-files))
                     (when (or (and (seq diffs) (seq modified-files))
                               (seq diffs))
-                      (comment "re-index a local graph is handled here")
-                      (async/go
-                        (let [_finished? (async/<! (repo-handler/<load-repo-to-db! repo
-                                                                                   {:diffs     diffs
-                                                                                    :nfs-files modified-files
-                                                                                    :refresh? (not re-index?)
-                                                                                    :new-graph? re-index?}))]
-                          (ok-handler))))
-                    (when (and (util/electron?) (not re-index?))
-                      (db/transact! repo new-files))))))))
+                      (repo-handler/<load-repo-to-db! repo
+                                                      {:diffs     diffs
+                                                       :nfs-files modified-files
+                                                       :refresh? (not re-index?)
+                                                       :new-graph? re-index?}))))))))
 
 (defn- reload-dir!
-  [repo {:keys [re-index? ok-handler]
+  [repo {:keys [re-index?]
          :or {re-index? false}}]
   (when (and repo (config/local-db? repo))
     (let [old-files (db/get-files-full repo)
@@ -369,7 +366,7 @@
                                                                          (string/replace-first path (str dir-name "/") ""))))
                                                     (into {})))))
                        (set-files! @path-handles))]
-             (handle-diffs! repo nfs? old-files new-files handle-path path-handles re-index? ok-handler))))
+             (handle-diffs! repo nfs? old-files new-files handle-path path-handles re-index?))))
        (p/catch (fn [error]
                   (log/error :nfs/load-files-error repo)
                   (log/error :exception error)))
@@ -378,28 +375,31 @@
 
 (defn rebuild-index!
   [repo ok-handler]
-  (let [ok-handler (fn []
-                     (ok-handler)
-                     (state/set-nfs-refreshing! false))]
-    (when repo
-     (state/set-nfs-refreshing! true)
-     (search/reset-indice! repo)
-     (db/remove-conn! repo)
-     (db/clear-query-state!)
-     (db/start-db-conn! repo)
-     (reload-dir! repo {:re-index? true
-                        :ok-handler ok-handler}))))
+  (when repo
+    (state/set-nfs-refreshing! true)
+    (search/reset-indice! repo)
+    (db/remove-conn! repo)
+    (db/clear-query-state!)
+    (db/start-db-conn! repo)
+    (async/go
+      (let [result (reload-dir! repo {:re-index? true})]
+        (when (util/async-channel? result)
+          (async/<! result))
+        (ok-handler))
+      (state/set-nfs-refreshing! false))))
 
 ;; TODO: move to frontend.handler.repo
 (defn refresh!
   [repo ok-handler]
-  (let [ok-handler (fn []
-                     (ok-handler)
-                     (state/set-nfs-refreshing! false))]
-    (when (and repo
-              (not (state/unlinked-dir? (config/get-repo-dir repo))))
-     (state/set-nfs-refreshing! true)
-     (reload-dir! repo {:ok-handler ok-handler}))))
+  (when (and repo
+             (not (state/unlinked-dir? (config/get-repo-dir repo))))
+    (state/set-nfs-refreshing! true)
+    (async/go
+      (let [result (reload-dir! repo {:re-index? true})]
+        (when (util/async-channel? result)
+          (async/<! result))
+        (ok-handler))
+      (state/set-nfs-refreshing! false))))
 
 (defn supported?
   []
