@@ -10,8 +10,10 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
             [frontend.fs.capacitor-fs :as capacitor-fs]
+            [frontend.fs :as fs]
             [frontend.context.i18n :refer [t]]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [promesa.core :as p]))
 
 (defn- page-exists-in-another-file
   "Conflict of files towards same page"
@@ -30,6 +32,8 @@
            (string/lower-case file-path))
         ;; case renamed
         (when-let [file (db/pull [:file/path current-file])]
+          (p/let [disk-content (fs/read-file "" current-file)]
+            (fs/backup-db-file! repo-url current-file (:file/content file) disk-content))
           (db/transact! repo-url [{:db/id (:db/id file)
                                    :file/path file-path}]))
 

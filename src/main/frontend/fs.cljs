@@ -15,7 +15,8 @@
             [frontend.db :as db]
             [clojure.string :as string]
             [frontend.state :as state]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [electron.ipc :as ipc]))
 
 (defonce nfs-record (nfs/->Nfs))
 (defonce bfs-record (bfs/->Bfs))
@@ -229,3 +230,15 @@
 (defn dir-exists?
   [dir]
   (file-exists? dir ""))
+
+(defn backup-db-file!
+  [repo path db-content disk-content]
+  (cond
+    (util/electron?)
+    (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content disk-content)
+
+    (mobile-util/native-platform?)
+    (capacitor-fs/backup-file repo :backup-dir path db-content)
+
+    ;; TODO: nfs
+    ))

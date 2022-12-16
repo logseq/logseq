@@ -133,6 +133,11 @@ export const ContextMenu = observer(function ContextMenu({
                   onClick={() => runAndTransition(app.api.unGroup)}
                 >
                   Ungroup
+                  <div className="tl-menu-right-slot">
+                    <span className="keyboard-shortcut">
+                      <code>{MOD_KEY}</code> <code>⇧</code> <code>G</code>
+                    </span>
+                  </div>
                 </ReactContextMenu.Item>
               )}
               {app.selectedShapesArray.length > 1 && (
@@ -141,6 +146,11 @@ export const ContextMenu = observer(function ContextMenu({
                   onClick={() => runAndTransition(app.api.doGroup)}
                 >
                   Group
+                  <div className="tl-menu-right-slot">
+                    <span className="keyboard-shortcut">
+                      <code>{MOD_KEY}</code> <code>G</code>
+                    </span>
+                  </div>
                 </ReactContextMenu.Item>
               )}
               <ReactContextMenu.Separator className="menu-separator" />
