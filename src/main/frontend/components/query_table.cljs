@@ -42,7 +42,9 @@
 (defn- locale-compare
   "Use locale specific comparison for strings and general comparison for others."
   [x y]
-  (.localeCompare (str x) (str y) (state/sub :preferred-language) (clj->js {:numeric true})))
+    (if (and (number? x) (number? y))
+      (< x y)
+      (.localeCompare (str x) (str y) (state/sub :preferred-language) (clj->js {:numeric true}))))
 
 (defn- sort-result [result {:keys [sort-by-column sort-desc? sort-nlp-date?]}]
   (if (some? sort-by-column)
