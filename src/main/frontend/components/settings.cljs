@@ -660,7 +660,8 @@
   (ui/toggle enabled?
              (fn []
                (let [value (not enabled?)]
-                 (config-handler/set-config! :feature/enable-whiteboards? value)))
+                 (when (user-handler/alpha-or-beta-user?)
+                   (config-handler/set-config! :feature/enable-whiteboards? value))))
              true))
 
 (defn whiteboards-switcher-row [enabled?]
