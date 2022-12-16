@@ -1,6 +1,12 @@
 name: Bug Report
 description: Report a bug encountered while using Logseq
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you very much for opening bug report ticket to Logseq.
+
+        If it is an idea or help wanted, please go to [our Forum](https://discuss.logseq.com/) or [our Discord](https://discord.com/invite/KpN4eHY)
   - type: checkboxes
     id: confirm-search
     attributes:
