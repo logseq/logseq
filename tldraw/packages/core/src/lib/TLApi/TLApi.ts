@@ -393,10 +393,12 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
 
     const shapesInGroups = this.app.shapesInGroups(selectedGroups)
 
-    // not using this.app.removeShapes because it also remove shapes in the group
-    this.app.currentPage.removeShapes(...selectedGroups)
-    this.app.persist()
+    if (selectedGroups.length > 0) {
+      // not using this.app.removeShapes because it also remove shapes in the group
+      this.app.currentPage.removeShapes(...selectedGroups)
+      this.app.persist()
 
-    this.app.setSelectedShapes(shapesInGroups)
+      this.app.setSelectedShapes(shapesInGroups)
+    }
   }
 }

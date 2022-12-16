@@ -181,6 +181,18 @@ export class TLApp<
           this.selectedTool.transition('idle')
         },
       },
+      {
+        keys: 'mod+g',
+        fn: () => {
+          this.api.doGroup()
+        },
+      },
+      {
+        keys: 'mod+shift+g',
+        fn: () => {
+          this.api.unGroup()
+        },
+      },
     ]
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
