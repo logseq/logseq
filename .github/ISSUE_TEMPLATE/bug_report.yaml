@@ -4,16 +4,16 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thank you very much for opening bug report ticket to Logseq.
+        Thank you very much for opening a bug report with Logseq.
 
-        If it is an idea or help wanted, please go to [our Forum](https://discuss.logseq.com/) or [our Discord](https://discord.com/invite/KpN4eHY)
+        If you have a feature idea or need help, please go to [our Forum](https://discuss.logseq.com/) or [our Discord](https://discord.com/invite/KpN4eHY).
   - type: checkboxes
     id: confirm-search
     attributes:
       label: Search first
-      description: Please make sure to search through the [existing issues](https://github.com/logseq/logseq/issues) and [Logseq Forum](https://discuss.logseq.com/) before report.
+      description: Please make sure to search through the [existing issues](https://github.com/logseq/logseq/issues) and [Logseq Forum](https://discuss.logseq.com/) before reporting.
       options:
-        - label: Search and no similar report found
+        - label: Search and no similar issue found
           required: true
   - type: textarea
     id: problem
