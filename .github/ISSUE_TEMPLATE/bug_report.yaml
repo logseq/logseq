@@ -1,6 +1,20 @@
 name: Bug Report
 description: Report a bug encountered while using Logseq
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you very much for opening a bug report with Logseq.
+
+        If you have a feature idea or need help, please go to [our Forum](https://discuss.logseq.com/) or [our Discord](https://discord.com/invite/KpN4eHY).
+  - type: checkboxes
+    id: confirm-search
+    attributes:
+      label: Search first
+      description: Please make sure to search through the [existing issues](https://github.com/logseq/logseq/issues) and [Logseq Forum](https://discuss.logseq.com/) before reporting.
+      options:
+        - label: Search and no similar issue found
+          required: true
   - type: textarea
     id: problem
     attributes:
@@ -59,3 +73,11 @@ body:
         If applicable, add additional context to help explain your problem.
     validations:
       required: false
+
+  - type: checkboxes
+    id: ask-pr
+    attributes:
+      label: Are you willing to submit a PR?
+      description: Your contributions are greatly appreciated and play a vital role in helping to improve the project!
+      options:
+        - label: I'm willing to submit a PR (Thank you!)
