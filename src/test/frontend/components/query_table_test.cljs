@@ -68,6 +68,18 @@
          [{:title 1} {:title "A"} {:title 2} {:title "B"} {:title 11} {:title "C"}]
          [{:title 1} {:title 2} {:title 11} {:title "A"} {:title "B"} {:title "C"}]))
 
+  (testing "sort by positive and negative integer block property"
+    (are [sort-state result sorted-result]
+         (= (mapv #(hash-map :block/properties %) sorted-result)
+            (#'query-table/sort-result (mapv #(hash-map :block/properties %) result) sort-state))
+         {:sort-desc? true :sort-by-column :title}
+         [{:title -2} {:title 0} {:title 2}]
+         [{:title 2} {:title 0} {:title -2}]
+
+         {:sort-desc? false :sort-by-column :title}
+         [{:title -2} {:title 0} {:title 2}]
+         [{:title -2} {:title 0} {:title 2}]))
+
   (testing "sort by decimal number block property"
     (are [sort-state result sorted-result]
          (= (mapv #(hash-map :block/properties %) sorted-result)
