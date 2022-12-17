@@ -80,6 +80,18 @@
          [{:title 1.1} {:title 1.2} {:title 1.11}]
          [{:title 1.1} {:title 1.11} {:title 1.2}]))
 
+   (testing "sort by semver-style string block property"
+      (are [sort-state result sorted-result]
+         (= (mapv #(hash-map :block/properties %) sorted-result)
+            (#'query-table/sort-result (mapv #(hash-map :block/properties %) result) sort-state))
+         {:sort-desc? true :sort-by-column :title}
+         [{:title "1.1.0"} {:title "1.2.0"} {:title "1.11.0"} {:title "1.1.1"} {:title "1.11.1"} {:title "1.2.1"}]
+         [{:title "1.11.1"} {:title "1.11.0"} {:title "1.2.1"} {:title "1.2.0"} {:title "1.1.1"} {:title "1.1.0"}]
+
+         {:sort-desc? false :sort-by-column :title}
+         [{:title "1.1.0"} {:title "1.2.0"} {:title "1.11.0"} {:title "1.1.1"} {:title "1.11.1"} {:title "1.2.1"}]
+         [{:title "1.1.0"} {:title "1.1.1"} {:title "1.2.0"} {:title "1.2.1"} {:title "1.11.0"} {:title "1.11.1"}]))
+
   (testing "sort by string block property for specific locale"
     (state/set-preferred-language! "zh-CN")
     (are [sort-state result sorted-result]
