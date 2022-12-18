@@ -85,6 +85,10 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     }
   }
 
+  @computed get shapesById() {
+    return Object.fromEntries(this.shapes.map(shape => [shape.id, shape]))
+  }
+
   @observable nonce = 0
 
   @action bump = () => {
