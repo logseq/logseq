@@ -291,7 +291,7 @@
 
 (rum/defc whiteboard-route
   [route-match]
-  (when (user-handler/alpha-user?)
+  (when (user-handler/feature-available? :whiteboard)
     (let [name (get-in route-match [:parameters :path :name])
           {:keys [block-id]} (get-in route-match [:parameters :query])]
       (whiteboard-page name block-id))))
@@ -300,7 +300,6 @@
   []
   (when (and (user-handler/feature-available? :whiteboard)
              (not (or (state/sub :whiteboard/onboarding-tour?)
-                      (state/enable-whiteboards?)
                       (util/mobile?))))
     (state/pub-event! [:whiteboard/onboarding])
     (state/set-state! [:whiteboard/onboarding-tour?] true)
@@ -319,7 +318,7 @@
    [:p (t :on-boarding/welcome-whiteboard-modal-description)]
 
    [:div.pt-6.flex.justify-center.space-x-2.sm:justify-end
-    (ui/button (t :on-boarding/welcome-whiteboard-modal-later) :on-click close-fn :background "gray" :class "opacity-60")
+    (ui/button (t :on-boarding/welcome-whiteboard-modal-skip) :on-click close-fn :background "gray" :class "opacity-60")
     (ui/button (t :on-boarding/welcome-whiteboard-modal-start)
                :on-click (fn []
                            (config-handler/set-config! :feature/enable-whiteboards? true)

@@ -1,7 +1,7 @@
 import { Vec } from '@tldraw/vec'
 import { transaction } from 'mobx'
 import { type TLEventMap, TLCursor, type TLEvents } from '../../../../types'
-import { uniqueId } from '../../../../utils'
+import { dedupe, uniqueId } from '../../../../utils'
 import type { TLShape } from '../../../shapes'
 import type { TLApp } from '../../../TLApp'
 import { TLToolState } from '../../../TLToolState'
@@ -47,16 +47,17 @@ export class TranslatingState<
     }
 
     transaction(() => {
-      selectedShapes.forEach(shape =>
+      this.app.allSelectedShapes.forEach(shape => {
         shape.update({ point: Vec.add(initialPoints[shape.id], delta) })
-      )
+      })
     })
   }
 
   private startCloning() {
+    // FIXME: clone group?
     if (!this.didClone) {
       // Create the clones
-      this.clones = this.app.selectedShapesArray.map(shape => {
+      this.clones = this.app.allSelectedShapesArray.map(shape => {
         const ShapeClass = this.app.getShapeClass(shape.type)
         if (!ShapeClass) throw Error('Could not find that shape class.')
         const clone = new ShapeClass({
@@ -77,7 +78,7 @@ export class TranslatingState<
     }
 
     // Move shapes back to their start positions
-    this.app.selectedShapes.forEach(shape => {
+    this.app.allSelectedShapes.forEach(shape => {
       shape.update({ point: this.initialPoints[shape.id] })
     })
 
@@ -94,8 +95,6 @@ export class TranslatingState<
     this.moveSelectedShapesToPointer()
 
     this.isCloning = true
-
-    this.moveSelectedShapesToPointer()
   }
 
   onEnter = () => {
@@ -103,10 +102,10 @@ export class TranslatingState<
     this.app.history.pause()
 
     // Set initial data
-    const { selectedShapesArray, inputs } = this.app
+    const { allSelectedShapesArray, inputs } = this.app
 
     this.initialShapePoints = Object.fromEntries(
-      selectedShapesArray.map(({ id, props: { point } }) => [id, point.slice()])
+      allSelectedShapesArray.map(({ id, props: { point } }) => [id, point.slice()])
     )
     this.initialPoints = this.initialShapePoints
 
@@ -160,7 +159,7 @@ export class TranslatingState<
         break
       }
       case 'Escape': {
-        this.app.selectedShapes.forEach(shape => {
+        this.app.allSelectedShapes.forEach(shape => {
           shape.update({ point: this.initialPoints[shape.id] })
         })
         this.tool.transition('idle')
@@ -174,10 +173,10 @@ export class TranslatingState<
       case 'Alt': {
         if (!this.isCloning) throw Error('Expected to be cloning.')
 
-        const { currentPage, selectedShapes } = this.app
+        const { currentPage, allSelectedShapes } = this.app
 
         // Remove the selected shapes (our clones)
-        currentPage.removeShapes(...selectedShapes)
+        currentPage.removeShapes(...allSelectedShapes)
 
         // Set the initial points to the original shape points
         this.initialPoints = this.initialShapePoints

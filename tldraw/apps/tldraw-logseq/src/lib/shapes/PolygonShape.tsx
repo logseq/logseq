@@ -112,7 +112,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
             fontStyle={italic ? 'italic' : 'normal'}
             fontWeight={fontWeight}
           />
-          <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
+          <SVGContainer opacity={isErasing ? 0.2 : opacity}>
             <g transform={`translate(${x}, ${y})`}>
               <polygon
                 className={isSelected || !noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
@@ -138,26 +138,8 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
   ReactIndicator = observer(() => {
     const {
       offset: [x, y],
-      props: { label, strokeWidth, fontWeight },
+      props: { strokeWidth }
     } = this
-
-    const bounds = this.getBounds()
-    const labelSize = label
-      ? getTextLabelSize(
-          label,
-          { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight },
-          4
-        )
-      : [0, 0]
-    const midPoint = [this.props.size[0] / 2, (this.props.size[1] * 2) / 3]
-    const scale = Math.max(
-      0.5,
-      Math.min(1, this.props.size[0] / (labelSize[0] * 2), this.props.size[1] / (labelSize[1] * 2))
-    )
-
-    const offset = React.useMemo(() => {
-      return Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
-    }, [bounds, scale, midPoint])
 
     return (
       <g>
@@ -165,17 +147,6 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
           transform={`translate(${x}, ${y})`}
           points={this.getVertices(strokeWidth / 2).join()}
         />
-        {label && (
-          <rect
-            x={bounds.width / 2 - (labelSize[0] / 2) * scale + offset[0]}
-            y={bounds.height / 2 - (labelSize[1] / 2) * scale + offset[1]}
-            width={labelSize[0] * scale}
-            height={labelSize[1] * scale}
-            rx={4 * scale}
-            ry={4 * scale}
-            fill="transparent"
-          />
-        )}
       </g>
     )
   })

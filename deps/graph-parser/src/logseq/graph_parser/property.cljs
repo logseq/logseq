@@ -47,6 +47,7 @@
   "Properties used by logseq that user can edit"
   []
   (into #{:title :icon :template :template-including-parent :public :filters :exclude-from-graph-view
+          :logseq.query/nlp-date
           ;; org-mode only
           :macro :filetags}
         editable-linkable-built-in-properties))
@@ -70,6 +71,7 @@
   {:template-including-parent :boolean
    :public :boolean
    :exclude-from-graph-view :boolean
+   :logseq.query/nlp-date :boolean
    :heading :boolean
    :collapsed :boolean
    :created-at :integer

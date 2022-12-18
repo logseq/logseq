@@ -124,6 +124,38 @@ export const ContextMenu = observer(function ContextMenu({
               <ReactContextMenu.Separator className="menu-separator" />
             </>
           )}
+          {(app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) ||
+            app.selectedShapesArray.length > 1) && (
+            <>
+              {app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) && (
+                <ReactContextMenu.Item
+                  className="tl-menu-item"
+                  onClick={() => runAndTransition(app.api.unGroup)}
+                >
+                  Ungroup
+                  <div className="tl-menu-right-slot">
+                    <span className="keyboard-shortcut">
+                      <code>{MOD_KEY}</code> <code>⇧</code> <code>G</code>
+                    </span>
+                  </div>
+                </ReactContextMenu.Item>
+              )}
+              {app.selectedShapesArray.length > 1 && (
+                <ReactContextMenu.Item
+                  className="tl-menu-item"
+                  onClick={() => runAndTransition(app.api.doGroup)}
+                >
+                  Group
+                  <div className="tl-menu-right-slot">
+                    <span className="keyboard-shortcut">
+                      <code>{MOD_KEY}</code> <code>G</code>
+                    </span>
+                  </div>
+                </ReactContextMenu.Item>
+              )}
+              <ReactContextMenu.Separator className="menu-separator" />
+            </>
+          )}
           {app.selectedShapes?.size > 0 && (
             <>
               <ReactContextMenu.Item

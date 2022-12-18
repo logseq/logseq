@@ -17,8 +17,15 @@ import type {
   TLSubscriptionEventName,
 } from '../../types'
 import { AlignType, DistributeType } from '../../types'
-import { BoundsUtils, createNewLineBinding, isNonNullable, KeyUtils, uniqueId } from '../../utils'
-import type { TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
+import {
+  BoundsUtils,
+  createNewLineBinding,
+  dedupe,
+  isNonNullable,
+  KeyUtils,
+  uniqueId,
+} from '../../utils'
+import type { TLGroupShape, TLShape, TLShapeConstructor, TLShapeModel } from '../shapes'
 import { TLApi } from '../TLApi'
 import { TLCursors } from '../TLCursors'
 
@@ -174,6 +181,18 @@ export class TLApp<
           this.selectedTool.transition('idle')
         },
       },
+      {
+        keys: 'mod+g',
+        fn: () => {
+          this.api.doGroup()
+        },
+      },
+      {
+        keys: 'mod+shift+g',
+        fn: () => {
+          this.api.unGroup()
+        },
+      },
     ]
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
@@ -187,11 +206,9 @@ export class TLApp<
           keys: child.constructor['shortcut'] as string | string[],
           fn: (_: any, __: any, e: KeyboardEvent) => {
             this.transition(child.id)
-
             // hack: allows logseq related shortcut combinations to work
-            if (e.key !== 't') {
-              e.stopPropagation()
-            }
+            // fixme?: unsure if it will cause unexpected issues
+            // e.stopPropagation()
           },
         }
       })
@@ -320,17 +337,57 @@ export class TLApp<
 
   @action readonly deleteShapes = (shapes: S[] | string[]): this => {
     if (shapes.length === 0) return this
-    let ids: Set<string>
-    if (typeof shapes[0] === 'string') {
-      ids = new Set(shapes as string[])
-    } else {
-      ids = new Set((shapes as S[]).map(shape => shape.id))
-    }
+    const normalizedShapes: S[] = shapes
+      .map(shape => (typeof shape === 'string' ? this.getShapeById(shape) : shape))
+      .filter(isNonNullable)
+
+    // delete a group shape should also delete its children
+    const shapesInGroups = this.shapesInGroups(normalizedShapes)
+
+    normalizedShapes.forEach(shape => {
+      if (this.getParentGroup(shape)) {
+        shapesInGroups.push(shape)
+      }
+    })
+
+    let ids: Set<string> = new Set([...normalizedShapes, ...shapesInGroups].map(s => s.id))
+
+    shapesInGroups.forEach(shape => {
+      // delete a shape in a group should also update the group shape
+      const parentGroup = this.getParentGroup(shape)
+      if (parentGroup) {
+        const newChildren: string[] | undefined = parentGroup.props.children?.filter(
+          id => id !== shape.id
+        )
+        if (!newChildren || newChildren?.length <= 1) {
+          // remove empty group or group with only one child
+          ids.add(parentGroup.id)
+        } else {
+          parentGroup.update({ children: newChildren })
+        }
+      }
+    })
+
+    const allShapesToDelete = [...ids].map(id => this.getShapeById(id)!)
+
     this.setSelectedShapes(this.selectedShapesArray.filter(shape => !ids.has(shape.id)))
-    const removedShapes = this.currentPage.removeShapes(...shapes)
+    const removedShapes = this.currentPage.removeShapes(...allShapesToDelete)
     if (removedShapes) this.notify('delete-shapes', removedShapes)
     this.persist()
     return this
+  }
+
+  /** Get all shapes in groups */
+  shapesInGroups(groups = this.shapes): S[] {
+    return groups
+      .flatMap(shape => shape.props.children)
+      .filter(isNonNullable)
+      .map(id => this.getShapeById(id))
+      .filter(isNonNullable)
+  }
+
+  getParentGroup(shape: S) {
+    return this.shapes.find(group => group.props.children?.includes(shape.id))
   }
 
   bringForward = (shapes: S[] | string[] = this.selectedShapesArray): this => {
@@ -489,21 +546,25 @@ export class TLApp<
 
   copy = () => {
     if (this.selectedShapesArray.length > 0 && !this.editingShape) {
+      const selectedShapes = this.allSelectedShapesArray
       const jsonString = JSON.stringify({
-        shapes: this.selectedShapesArray.map(shape => shape.serialized),
+        shapes: selectedShapes.map(shape => shape.serialized),
         // pasting into other whiteboard may require this if any shape uses the assets
         assets: this.getCleanUpAssets().filter(asset => {
-          return this.selectedShapesArray.some(shape => shape.props.assetId === asset.id)
+          return selectedShapes.some(shape => shape.props.assetId === asset.id)
         }),
         // convey the bindings to maintain the new links after pasting
         bindings: toJS(this.currentPage.bindings),
       })
       const tldrawString = encodeURIComponent(`<whiteboard-tldr>${jsonString}</whiteboard-tldr>`)
+
+      const shapeBlockRefs = this.selectedShapesArray.map(s => `((${s.props.id}))`).join(' ')
+
       // FIXME: use `writeClipboard` in frontend.utils
       navigator.clipboard.write([
         new ClipboardItem({
           'text/html': new Blob([tldrawString], { type: 'text/html' }),
-          'text/plain': new Blob([`((${this.selectedShapesArray[0].props.id}))`], {
+          'text/plain': new Blob([shapeBlockRefs], {
             type: 'text/plain',
           }),
         }),
@@ -578,6 +639,14 @@ export class TLApp<
     return hoveredId ? currentPage.shapes.find(shape => shape.id === hoveredId) : undefined
   }
 
+  @computed get hoveredGroup(): S | undefined {
+    const { hoveredShape } = this
+    const hoveredGroup = hoveredShape
+      ? this.shapes.find(s => s.type === 'group' && s.props.children?.includes(hoveredShape.id))
+      : undefined
+    return hoveredGroup as S | undefined
+  }
+
   @action readonly setHoveredShape = (shape?: string | S): this => {
     this.hoveredId = typeof shape === 'string' ? shape : shape?.id
     return this
@@ -596,6 +665,17 @@ export class TLApp<
     const stateId = selectedTool.id
     if (stateId !== 'select') return []
     return Array.from(selectedShapes.values())
+  }
+
+  // include selected shapes in groups
+  @computed get allSelectedShapes() {
+    return new Set(this.allSelectedShapesArray)
+  }
+
+  // include selected shapes in groups
+  @computed get allSelectedShapesArray() {
+    const { selectedShapesArray } = this
+    return dedupe([...selectedShapesArray, ...this.shapesInGroups(selectedShapesArray)])
   }
 
   @action setSelectedShapes = (shapes: S[] | string[]): this => {
@@ -865,7 +945,18 @@ export class TLApp<
   Shapes = new Map<string, TLShapeConstructor<S>>()
 
   registerShapes = (Shapes: TLShapeConstructor<S>[]) => {
-    Shapes.forEach(Shape => this.Shapes.set(Shape.id, Shape))
+    Shapes.forEach(Shape => {
+      // monkey patch Shape
+      if (Shape.id === 'group') {
+        // Group Shape requires this hack to get the real children shapes
+        const app = this
+        Shape.prototype.getShapes = function () {
+          // @ts-expect-error FIXME: this is a hack to get around the fact that we can't use computed properties in the constructor
+          return this.props.children?.map(id => app.getShapeById(id)).filter(Boolean) ?? []
+        }
+      }
+      return this.Shapes.set(Shape.id, Shape)
+    })
   }
 
   deregisterShapes = (Shapes: TLShapeConstructor<S>[]) => {

@@ -35,6 +35,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.handler.config :as config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
@@ -62,7 +63,8 @@
             [rum.core :as rum]
             [logseq.graph-parser.config :as gp-config]
             [cljs-bean.core :as bean]
-            ["@sentry/react" :as Sentry]))
+            ["@sentry/react" :as Sentry]
+            [frontend.modules.instrumentation.sentry :as sentry-event]))
 
 ;; TODO: should we move all events here?
 
@@ -77,6 +79,14 @@
   (async/go (async/<! (p->c (persist-var/load-vars)))
             (async/<! (sync/<sync-stop))))
 
+(defn- enable-beta-features!
+  []
+  (when-not (false? (state/enable-sync?)) ; user turns it off
+    (file-sync-handler/set-sync-enabled! true))
+
+  (when-not (false? (state/enable-whiteboards?))
+    (config-handler/set-config! :feature/enable-whiteboards? true)))
+
 (defmethod handle :user/fetch-info-and-graphs [[_]]
   (state/set-state! [:ui/loading? :login] false)
   (async/go
@@ -87,10 +97,11 @@
         (map? result)
         (do
           (state/set-user-info! result)
+          (when-let [uid (user-handler/user-uuid)]
+            (sentry-event/set-user! uid))
           (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
-              (when-not (false? (state/enable-sync?)) ; user turns it off
-                (file-sync-handler/set-sync-enabled! true))
+              (enable-beta-features!)
               (async/<! (file-sync-handler/load-session-graphs))
               (p/let [repos (repo-handler/refresh-repos!)]
                 (when-let [repo (state/get-current-repo)]
@@ -390,7 +401,8 @@
 (defmethod handle :go/search [_]
   (state/set-modal! component-search/search-modal
                     {:fullscreen? false
-                     :close-btn?  false}))
+                     :close-btn?  false
+                     :label "ls-modal-search"}))
 
 (defmethod handle :go/plugins [_]
   (plugin/open-plugins-modal!))
@@ -430,7 +442,7 @@
                        :graph-id graph-uuid
                        :tx-id tx-id)]
     (Sentry/captureException error
-                            (bean/->js {:extra payload}))))
+                             (bean/->js {:tags payload}))))
 
 (defmethod handle :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))

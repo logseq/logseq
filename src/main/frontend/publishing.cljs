@@ -5,7 +5,7 @@
             [frontend.db :as db]
             [logseq.db.schema :as db-schema]
             [rum.core :as rum]
-            [frontend.handler.route :as route]
+            [frontend.handler.route :as route-handler]
             [frontend.page :as page]
             [frontend.util :as util]
             [frontend.routes :as routes]
@@ -56,7 +56,7 @@
   []
   (rfe/start!
    (rf/router routes/routes {})
-   route/set-route-match!
+   route-handler/set-route-match!
    ;; set to false to enable HistoryAPI
    {:use-fragment true}))
 

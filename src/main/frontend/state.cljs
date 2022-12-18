@@ -131,6 +131,8 @@
      ;; Whether to skip saving the current block
      :editor/skip-saving-current-block?     false
 
+     :editor/code-block-context             {}
+
      :db/last-transact-time                 {}
      ;; whether database is persisted
      :db/persisted?                         {}
@@ -592,7 +594,7 @@ Similar to re-frame subscriptions"
    (enable-whiteboards? (get-current-repo)))
   ([repo]
    (and
-    ((resolve 'frontend.handler.user/alpha-user?)) ;; using resolve to avoid circular dependency
+    ((resolve 'frontend.handler.user/alpha-or-beta-user?)) ;; using resolve to avoid circular dependency
     (:feature/enable-whiteboards? (sub-config repo)))))
 
 (defn export-heading-to-list?
@@ -707,6 +709,10 @@ Similar to re-frame subscriptions"
 (defn home?
   []
   (= :home (get-current-route)))
+
+(defn whiteboard-dashboard?
+  []
+  (= :whiteboards (get-current-route)))
 
 (defn setups-picker?
   []

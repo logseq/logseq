@@ -24,8 +24,13 @@
                  "logseq/version-files" "logseq/graphs-txid.edn"]]
     (when (string? path)
       (or
-       (some #(string/starts-with? path (str dir "/" %)) ignores)
-       (some #(string/includes? path (str "/" % "/")) ignores)
+       (some #(string/starts-with? path
+                                   (if (= dir "")
+                                     %
+                                     (str dir "/" %))) ignores)
+       (some #(string/includes? path (if (= dir "")
+                                       (str "/" % "/")
+                                       (str % "/"))) ignores)
        (some #(string/ends-with? path %)
              [".DS_Store" "logseq/graphs-txid.edn" "logseq/broken-config.edn"])
       ;; hidden directory or file
