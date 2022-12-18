@@ -42,7 +42,7 @@ Go to your cloned Logseq repo. Then install dependencies, execute the `clj` equi
   yarn gulp:watch
   ```
 
-* Open another powershell window, and run `yarn cljs:watch`. Clojure CLI will pull dependencies from Maven and Clojars, build the app and start the development server. Refer [THIS](#set-up-clojure-cli-repository-mirror) if your network access to Maven and Clojars is unstable.
+* Open another powershell window, and run `clj -M:cljs watch app electron`. Clojure CLI will pull dependencies from Maven and Clojars, build the app and start the development server. Refer [THIS](#set-up-clojure-cli-repository-mirror) if your network access to Maven and Clojars is unstable.
 
 Now you can access the app via `http://localhost:3001` and all changes to the code will be watched.
 
