@@ -17,14 +17,16 @@ export function ToggleInput({
   ...rest
 }: ToggleInputProps) {
   return (
-    <Tooltip content={tooltip} asChild={false}>
-      <Toggle.Root
-        {...rest}
-        data-toggle={toggle}
-        className={'tl-toggle-input' + (className ? ' ' + className : '')}
-        pressed={pressed}
-        onPressedChange={onPressedChange}
-      ></Toggle.Root>
+    <Tooltip content={tooltip}>
+      <div className="inline-block">
+        <Toggle.Root
+          {...rest}
+          data-toggle={toggle}
+          className={'tl-toggle-input' + (className ? ' ' + className : '')}
+          pressed={pressed}
+          onPressedChange={onPressedChange}
+        ></Toggle.Root>
+      </div>
     </Tooltip>
   )
 }
