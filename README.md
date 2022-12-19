@@ -41,7 +41,7 @@ The plugins documentation is at https://logseq.github.io/plugins. Any feedback w
 
 ## Feature requests
 
-Please go to https://discuss.logseq.com/new-topic?category=feature-requests.
+Please go to https://discuss.logseq.com/c/feature-requests/7.
 
 ## How can I use it?
 
