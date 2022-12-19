@@ -524,10 +524,13 @@
              true))
 
 (rum/defc user-proxy-settings
-  [{:keys [protocol host port] :as agent-opts}]
-  (ui/button [:span
-              (when-let [e (and protocol host port (str protocol "://" host ":" port))]
-                [:strong.pr-1 e])
+  [{:keys [type protocol host port] :as agent-opts}]
+  (ui/button [:span.flex.items-center
+              [:strong.pr-1
+               (case type
+                 "system" "System Default"
+                 "direct" "Direct"
+                 (and protocol host port (str protocol "://" host ":" port)))]
               (ui/icon "edit")]
              :small? true
              :on-click #(state/set-sub-modal!
