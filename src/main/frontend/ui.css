@@ -113,7 +113,6 @@
 
       @screen sm {
         overflow-y: overlay;
-        min-width: 720px;
         max-height: 85vh;
         padding: 2rem;
         width: auto;
@@ -232,11 +231,16 @@ html.is-mobile {
       .panel-content {
         padding-bottom: 0;
       }
+
+      .ls-search {
+        padding-bottom: 0;
+      }
     }
   }
 
   .ui__modal-panel .panel-content {
     width: calc(98vw - 2rem);
+    max-width: var(--ls-main-content-max-width);
     padding-top: 24px;
   }
 }

@@ -108,7 +108,8 @@ html.is-ios {
 
   .cp__palette-main {
     margin-bottom: 0;
-    --palettle-container-height: calc(98vh - 8rem - var(--ls-native-kb-height));
+    min-height: var(--palettle-input-height);
+    --palettle-container-height: calc(98vh - 6rem - var(--ls-native-kb-height));
   }
 }
 
