@@ -470,7 +470,7 @@
           deferred        (p/deferred)
           on-exit-handler (fn [code]
                             (p/resolve! deferred code))
-          _job            (shell/run-command-safety! command args on-data-handler on-exit-handler)]
+          _job            (shell/run-command-safely! command args on-data-handler on-exit-handler)]
       deferred)
     (catch js/Error e
       (utils/send-to-renderer window "notification"

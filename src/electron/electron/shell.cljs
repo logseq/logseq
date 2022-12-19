@@ -37,15 +37,15 @@
   [command]
   (when-not
    (some->> command (.sync command-exists))
-    (throw (js/Error. (str "Shell: " command " not exist!")))) command)
+    (throw (js/Error. (str "Shell: " command " does not exist!")))) command)
 
 (defn- ensure-command-in-allowlist
   [command]
   (when-not
    (some->> command (contains? (get-commands-allowlist)))
-    (throw (js/Error. (str "Shell: " command " not be allowed!")))) command)
+    (throw (js/Error. (str "Shell: " command " is not allowed!")))) command)
 
-(defn run-command-safety!
+(defn run-command-safely!
   [command args on-data on-exit]
   (when (some-> command str string/trim string/lower-case
                 (ensure-command-exists)
