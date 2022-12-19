@@ -3615,8 +3615,8 @@
            (fn []
              (let [alias? (:block/alias? page)
                    page (db/entity (:db/id page))
-                   page-blocks' (tree/non-consecutive-blocks->vec-tree page-blocks)
-                   parent-blocks (group-by :block/parent page-blocks')]
+                   ;; FIXME: parents need to be sorted
+                   parent-blocks (group-by :block/parent page-blocks)]
                [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                             (:ref? config)
                             (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
@@ -3626,10 +3626,10 @@
                   (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
                  (for [[parent blocks] parent-blocks]
                    (let [blocks' (map #(update % :block/children (fn [col]
-                                                                   (tree/non-consecutive-blocks->vec-tree col 2))) blocks)]
+                                                                   (tree/non-consecutive-blocks->vec-tree col))) blocks)]
                      (rum/with-key
-                      (breadcrumb-with-container blocks' config)
-                      (:db/id parent))))
+                       (breadcrumb-with-container blocks' config)
+                       (:db/id parent))))
                  {:debug-id page})])))))]
 
      (and (:group-by-page? config)
