@@ -51,22 +51,9 @@
 
 ;; User level configuration for whether plugins are enabled
 (defonce lsp-enabled?
-         (and (util/electron?)
-              (not (false? feature-plugin-system-on?))
-              (state/lsp-enabled?-or-theme)))
-
-(defn plugin-config-enabled?
-  []
-  (and lsp-enabled? (global-config-enabled?)))
-
-;; Desktop only as other platforms requires better understanding of their
-;; multi-graph workflows and optimal place for a "global" dir
-(def global-config-enabled? util/electron?)
-
-;; User level configuration for whether plugins are enabled
-(defonce lsp-enabled?
-         (and (util/electron?)
-              (state/lsp-enabled?-or-theme)))
+  (and (util/electron?)
+       (not (false? feature-plugin-system-on?))
+       (state/lsp-enabled?-or-theme)))
 
 (defn plugin-config-enabled?
   []
@@ -98,7 +85,7 @@
 
     :else
     (if dev? path
-        (str asset-domain path))))
+             (str asset-domain path))))
 
 (def markup-formats
   #{:org :md :markdown :asciidoc :adoc :rst})
