@@ -117,11 +117,11 @@
         {:keys [year month day]} date
         {:keys [hour min]} time]
     [:div.flex.flex-col.timestamp
-    [:div.text-sm.flex.flex-row
-     [:div.opacity-50.font-medium.timestamp-label
-      (str typ ": ")]
-     [:a.opacity-80.hover:opacity-100
-      [:span.time-start "<"] [:time (repeated/timestamp->text ast)] [:span.time-stop ">"]]]]))
+     [:div.text-sm.flex.flex-row
+      [:div.opacity-50.font-medium.timestamp-label
+       (str typ ": ")]
+      [:a.opacity-80.hover:opacity-100
+       [:span.time-start "<"] [:time (repeated/timestamp->text ast)] [:span.time-stop ">"]]]]))
 
 (defn block-checkbox
   [block class]
@@ -144,20 +144,14 @@
    {:style {:margin-right 6}
     :checked checked?}))
 
-(defn marker-switch
-  [{:block/keys [marker] :as block}]
-  (when (contains? #{"NOW" "LATER" "TODO" "DOING"} marker)
-    [:a
-     {:class (str "marker-switch block-marker " marker)}
-     marker]))
+(declare page-reference)
 
-(defn marker-cp
-  [{:block/keys [pre-block? marker] :as _block}]
-  (when-not pre-block?
-    (when (contains? #{"IN-PROGRESS" "WAIT" "WAITING"} marker)
-      [:span {:class (str "task-status block-marker " (string/lower-case marker))
-              :style {:margin-right 3.5}}
-       (string/upper-case marker)])))
+(defn marker-switch
+  [config {:block/keys [marker] :as block}]
+  (when marker
+    [:span
+     {:class (str "block-marker " marker)}
+     (page-reference (string/upper-case marker) config nil false)]))
 
 (rum/defc priority-text
   [priority]
@@ -239,13 +233,15 @@
          title)])))
 
 (rum/defc page-reference < rum/reactive
-  [s config _label]
+  [s config _label tag?]
   (let [s (some-> s string/trim)]
     (when-not (string/blank? s)
       [:span.page-reference
        {:data-ref s}
-       [:a {:href (str "/ref/" (util/url-encode (gp-util/page-name-sanity-lc s)) "?graph-id=" (:graph-id config))}
-        s]])))
+       [:a.page-ref
+        {:tabIndex "0"
+         :href (str "/ref/" (util/url-encode (gp-util/page-name-sanity-lc s)) "?graph-id=" (:graph-id config))}
+        (if tag? (str "#" s) s)]])))
 
 (defn get-refed-block
   [refed-blocks id embed?]
@@ -279,7 +275,7 @@
           (block-reference config block label))))
 
     (not (string/includes? s "."))
-    (page-reference s config label)
+    (page-reference s config label false)
 
     (gp-util/url? s)
     (->elem :a {:href s
@@ -339,7 +335,7 @@
       ["Page_ref" page]
       (let [label* (if (seq (plain->text label)) label nil)]
         (when-not (and (string? page) (string/blank? page))
-          (page-reference page config label*)))
+          (page-reference page config label* false)))
 
       ["Embed_data" src]
       ;; TBD
@@ -361,8 +357,8 @@
           (->elem
            :a.external-link
            (cond->
-            {:href href
-             :target "_blank"}
+             {:href href
+              :target "_blank"}
              title
              (assoc :title title))
            (map-inline config label)))))))
@@ -478,25 +474,25 @@
   (when-let [url (first arguments)]
     (let [results (get-matched-video url)
           src (match results
-                     [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
-                     (if (= (count id) 11) ["youtube-player" id] url)
+                [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
+                (if (= (count id) 11) ["youtube-player" id] url)
 
-                     [_ _ _ "youtube-nocookie.com" _ id _]
-                     (str "https://www.youtube-nocookie.com/embed/" id)
+                [_ _ _ "youtube-nocookie.com" _ id _]
+                (str "https://www.youtube-nocookie.com/embed/" id)
 
-                     [_ _ _ "loom.com" _ id _]
-                     (str "https://www.loom.com/embed/" id)
+                [_ _ _ "loom.com" _ id _]
+                (str "https://www.loom.com/embed/" id)
 
-                     [_ _ _ (_ :guard #(string/ends-with? % "vimeo.com")) _ id _]
-                     (str "https://player.vimeo.com/video/" id)
+                [_ _ _ (_ :guard #(string/ends-with? % "vimeo.com")) _ id _]
+                (str "https://player.vimeo.com/video/" id)
 
-                     [_ _ _ "bilibili.com" _ id & query]
-                     (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1"
-                          (when-let [page (second query)]
-                            (str "&page=" page)))
+                [_ _ _ "bilibili.com" _ id & query]
+                (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1"
+                     (when-let [page (second query)]
+                       (str "&page=" page)))
 
-                     :else
-                     url)]
+                :else
+                url)]
       (if (and (coll? src)
                (= (first src) "youtube-player"))
         (youtube-video (last src))
@@ -542,7 +538,7 @@
       (page-ref/page-ref? a)
       (let [page-name (text/get-page-name a)]
         (when-not (string/blank? page-name)
-          (page-reference page-name config nil)
+          (page-reference page-name config nil false)
           ;; TODO: page embed
           ))
 
@@ -604,7 +600,7 @@
     ["Tag" _]
     (when-let [s (gp-block/get-tag item)]
       (let [s (text/page-ref-un-brackets! s)]
-        [:a.tag (str "#" s)]))
+        (page-reference s config nil true)))
 
     ["Emphasis" [[kind] data]]
     (emphasis-cp config kind data)
@@ -726,7 +722,7 @@
         (let [v (->> (remove string/blank? v)
                      (filter string?))
               vals (for [item v]
-                     (page-reference item config nil))
+                     (page-reference item config nil false))
               elems (interpose (span-comma) vals)]
           (for [elem elems]
             (rum/with-key elem (str (random-uuid)))))
@@ -773,8 +769,7 @@
         checkbox (when-not pre-block?
                    (block-checkbox t (str "mr-1 cursor")))
         marker-switch (when-not pre-block?
-                        (marker-switch t))
-        marker-cp (marker-cp t)
+                        (marker-switch config t))
         priority (priority-cp t)
         tags (block-tags-cp config t)
         bg-color (:background-color properties)
@@ -795,14 +790,13 @@
         {:style {:background-color bg-color}
          :class "with-bg-color"}))
      (remove nil?
-      (concat
-       [checkbox
-        marker-switch
-        marker-cp
-        priority]
-       (when (seq title)
-         (map-inline config title))
-       [tags])))))
+             (concat
+              [checkbox
+               marker-switch
+               priority]
+              (when (seq title)
+                (map-inline config title))
+              [tags])))))
 
 (defn divide-lists
   [[f & l]]
@@ -873,7 +867,7 @@
         (->elem
          :li
          (cond->
-          {:checked checked?}
+           {:checked checked?}
            number
            (assoc :value number))
          (vec-cat
@@ -1116,33 +1110,33 @@
         _ (swap! *debug-time update :parsing + time)
         {:block/keys [title body] :as block} (merge block result)]
     [:div.flex.flex-col.block-content-wrapper
-    [:div.flex-1.w-full.flex
-     [:div.block-content.inline
-      {:id (str "block-content-" uuid)}
-      [:<>
-       (when (seq title)
-         (build-block-title config block))
+     [:div.flex-1.w-full.flex
+      [:div.block-content.inline
+       {:id (str "block-content-" uuid)}
+       [:<>
+        (when (seq title)
+          (build-block-title config block))
 
-       (when deadline
-         (when-let [deadline-ast (get-deadline-ast block)]
-           (timestamp-cp block "DEADLINE" deadline-ast)))
+        (when deadline
+          (when-let [deadline-ast (get-deadline-ast block)]
+            (timestamp-cp block "DEADLINE" deadline-ast)))
 
-       (when scheduled
-         (when-let [scheduled-ast (get-scheduled-ast block)]
-           (timestamp-cp block "SCHEDULED" scheduled-ast)))
+        (when scheduled
+          (when-let [scheduled-ast (get-scheduled-ast block)]
+            (timestamp-cp block "SCHEDULED" scheduled-ast)))
 
-       (when (and (seq properties)
-                  (let [hidden? (properties-hidden? properties)]
-                    (not hidden?)))
-         (properties-cp config block))
+        (when (and (seq properties)
+                   (let [hidden? (properties-hidden? properties)]
+                     (not hidden?)))
+          (properties-cp config block))
 
-       (when (seq body)
-         [:div.block-body
-          (let [body (block/trim-break-lines (:block/body block))]
-            (for [[idx child] (util/indexed body)]
-              (when-let [block (markup-element-cp config child)]
-                (rum/with-key (block-child block)
-                  (str uuid "-" idx)))))])]]]]))
+        (when (seq body)
+          [:div.block-body
+           (let [body (block/trim-break-lines (:block/body block))]
+             (for [[idx child] (util/indexed body)]
+               (when-let [block (markup-element-cp config child)]
+                 (rum/with-key (block-child block)
+                   (str uuid "-" idx)))))])]]]]))
 
 (rum/defc block-children
   [config block children collapsed?]
