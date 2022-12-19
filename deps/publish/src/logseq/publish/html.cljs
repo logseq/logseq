@@ -964,15 +964,15 @@
   [{:keys [html-export?] :as config} item]
   (try
     (match item
-      ["Drawer" name lines]
-      [:div
-       [:div.text-sm
-        [:div.drawer {:data-drawer-name name}
-         [:div.opacity-50.font-medium.drawer-name
-          (util/format ":%s:" (string/upper-case name))]
-         [:div.opacity-50.font-medium
-          (apply str lines)
-          [:div ":END:"]]]]]
+      ;; ["Drawer" name lines]
+      ;; [:div
+      ;;  [:div.text-sm
+      ;;   [:div.drawer {:data-drawer-name name}
+      ;;    [:div.opacity-50.font-medium.drawer-name
+      ;;     (util/format ":%s:" (string/upper-case name))]
+      ;;    [:div.opacity-50.font-medium
+      ;;     (apply str lines)
+      ;;     [:div ":END:"]]]]]
 
       ["Paragraph" l]
       (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
