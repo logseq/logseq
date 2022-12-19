@@ -19,7 +19,7 @@ export function useCanvasEvents() {
 
     const onPointerDown: TLReactCustomEvents['pointer'] = e => {
       const { order = 0 } = e
-      if (!order && e.pointerType !== 'pen') {
+      if (!order) {
         e.currentTarget?.setPointerCapture(e.pointerId)
       }
 
@@ -77,6 +77,10 @@ export function useCanvasEvents() {
       onPointerLeave,
       onDrop,
       onDragOver,
+      // fix touch callout in iOS
+      onTouchEnd: (e: TouchEvent) => {
+        e.preventDefault()
+      }
     }
   }, [callbacks])
 
