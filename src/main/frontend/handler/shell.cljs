@@ -38,13 +38,6 @@
 (def commands-denylist
   #{"rm" "mv" "rename" "dd" ">" "command" "sudo"})
 
-(def code-block-commands-allowlist
-  #{"alda"})
-
-(defn get-code-block-commands
-  []
-  code-block-commands-allowlist)
-
 (defn run-command!
   [command]
   (let [[command args]
