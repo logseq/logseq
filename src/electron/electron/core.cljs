@@ -2,7 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater] :as updater]
-            [electron.utils :refer [*win mac? linux? dev? get-win-from-sender restore-user-fetch-agent
+            [electron.utils :refer [*win mac? linux? dev? get-win-from-sender
                                     decode-protected-assets-schema-path get-graph-name send-to-renderer]
              :as utils]
             [electron.url :refer [logseq-url-handler]]
@@ -137,7 +137,7 @@
                 ;; TODO: ugly, replace with ls-files and filter with ".map"
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" (str file ".map"))))
-                              ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
+                              ["main.js" "code-editor.js" "excalidraw.js"]))]
 
           (send-to-renderer
            :notification
@@ -300,7 +300,7 @@
                    _ (reset! *win win)]
                (logger/info (str "Logseq App(" (.getVersion app) ") Starting... "))
 
-               (restore-user-fetch-agent)
+               (utils/<restore-proxy-settings)
 
                (js-utils/disableXFrameOptions win)
 

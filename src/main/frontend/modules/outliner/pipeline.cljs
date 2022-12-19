@@ -18,6 +18,8 @@
 ;; and the new path-refs changes, which makes both undo/redo and
 ;; react-query/refresh! easier.
 
+;; TODO: also need to consider whiteboard transactions
+
 ;; Steps:
 ;; 1. For each changed block, new-refs = its page + :block/refs + parents :block/refs
 ;; 2. Its children' block/path-refs might need to be updated too.

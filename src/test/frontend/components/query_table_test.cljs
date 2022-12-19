@@ -1,7 +1,8 @@
 (ns frontend.components.query-table-test
   (:require [clojure.test :refer [deftest testing are]]
             [frontend.state :as state]
-            [frontend.components.query-table :as query-table]))
+            [frontend.components.query-table :as query-table]
+            [frontend.util :as util]))
 
 (deftest sort-result
   ;; Define since it's not defined
@@ -67,4 +68,18 @@
          {:sort-desc? false :sort-by-column :title}
          [{:title "圆圈"} {:title "意志"}]
          [{:title "意志"} {:title "圆圈"}])
-    (state/set-preferred-language! "en")))
+    (state/set-preferred-language! "en"))
+
+  (testing "monitor time of sort by integer block property"
+    (are [sort-state result _sorted-result timeout]
+         (>= timeout (:time (util/with-time (#'query-table/sort-result (mapv #(hash-map :block/properties %) result) sort-state))))
+      {:sort-desc? true :sort-by-column :rating}
+      [{:rating 8} {:rating 7}]
+      [{:rating 8} {:rating 7}]
+      2.0 ;; actual: ~0.05
+
+      {:sort-desc? false :sort-by-column :rating}
+      [{:rating 8} {:rating 7}]
+      [{:rating 7} {:rating 8}]
+      2.0 ;; actual: ~0.05
+      )))

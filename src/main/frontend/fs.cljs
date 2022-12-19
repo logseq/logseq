@@ -15,7 +15,8 @@
             [frontend.db :as db]
             [clojure.string :as string]
             [frontend.state :as state]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [electron.ipc :as ipc]))
 
 (defonce nfs-record (nfs/->Nfs))
 (defonce bfs-record (bfs/->Bfs))
@@ -82,13 +83,11 @@
        (p/let [opts (assoc opts
                            :error-handler
                            (fn [error]
-                             (state/pub-event! [:instrument {:type :write-file/failed
-                                                             :payload {:fs (type fs-record)
-                                                                       :user-agent (when js/navigator js/navigator.userAgent)
-                                                                       :path path
-                                                                       :content-length (count content)
-                                                                       :error-str (str error)
-                                                                       :error error}}])))
+                             (state/pub-event! [:capture-error {:error error
+                                                                :payload {:type :write-file/failed
+                                                                          :fs (type fs-record)
+                                                                          :user-agent (when js/navigator js/navigator.userAgent)
+                                                                          :content-length (count content)}}])))
                _ (protocol/write-file! (get-fs dir) repo dir path content opts)]
          (when (= bfs-record fs-record)
            (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
@@ -231,3 +230,15 @@
 (defn dir-exists?
   [dir]
   (file-exists? dir ""))
+
+(defn backup-db-file!
+  [repo path db-content disk-content]
+  (cond
+    (util/electron?)
+    (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content disk-content)
+
+    (mobile-util/native-platform?)
+    (capacitor-fs/backup-file repo :backup-dir path db-content)
+
+    ;; TODO: nfs
+    ))

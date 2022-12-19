@@ -228,11 +228,7 @@
         (str prefix "///private/" others))
 
       :else
-      (do
-        (state/pub-event! [:instrument {:type :error/ios-path-missing-slashes
-                                        ;; respect user's privacy
-                                        :path (gp-util/safe-subs path 10)}])
-        path))
+      path)
     path))
 
 (defn normalize-file-protocol-path [dir path]

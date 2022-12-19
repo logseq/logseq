@@ -74,7 +74,7 @@
                                                         (throw (js/Error "Testing unexpected failure")))]
         (try
           (graph-parser/parse-file conn "foo.md" "- id:: 628953c1-8d75-49fe-a648-f4c612109098"
-                                   {:delete-blocks-fn (fn [page _file]
+                                   {:delete-blocks-fn (fn [_db page _file _uuids]
                                                         (reset! deleted-page page))})
           (catch :default _)))
       (is (= nil @deleted-page)

@@ -1,14 +1,13 @@
-import * as React from 'react'
-import * as Popover from '@radix-ui/react-popover'
 import type { Side } from '@radix-ui/react-popper'
 import * as Slider from '@radix-ui/react-slider'
-import { TablerIcon } from '../icons'
 import { Color } from '@tldraw/core'
+import { TablerIcon } from '../icons'
+import { PopoverButton } from '../PopoverButton'
+import { Tooltip } from '../Tooltip'
 
-interface ColorInputProps extends React.InputHTMLAttributes<HTMLButtonElement> {
+interface ColorInputProps extends React.HTMLAttributes<HTMLButtonElement> {
   color?: string
   opacity?: number
-  collisionRef: HTMLElement | null
   popoverSide: Side
   setColor: (value: string) => void
   setOpacity?: (value: number) => void
@@ -17,15 +16,12 @@ interface ColorInputProps extends React.InputHTMLAttributes<HTMLButtonElement> {
 export function ColorInput({
   color,
   opacity,
-  collisionRef,
   popoverSide,
   setColor,
   setOpacity,
   ...rest
 }: ColorInputProps) {
-  const ref = React.useRef<HTMLDivElement>(null)
-
-  function renderColor(color: string) {
+  function renderColor(color?: string) {
     return color ? (
       <div className="tl-color-bg" style={{ backgroundColor: color }}>
         <div className={`w-full h-full bg-${color}-500`}></div>
@@ -38,15 +34,18 @@ export function ColorInput({
   }
 
   return (
-    <Popover.Root>
-      <Popover.Trigger className="tl-color-drip">{renderColor(color)}</Popover.Trigger>
-
-      <Popover.Content
-        className="tl-popover-content p-1"
-        side={popoverSide}
-        sideOffset={15}
-        collisionBoundary={collisionRef}
-      >
+    <PopoverButton
+      {...rest}
+      border
+      arrow
+      side={popoverSide}
+      label={
+        <Tooltip content={'Color'} side={popoverSide} sideOffset={14}>
+          {renderColor(color)}
+        </Tooltip>
+      }
+    >
+      <div className="p-1">
         <div className={'tl-color-palette'}>
           {Object.values(Color).map(value => (
             <button
@@ -62,7 +61,7 @@ export function ColorInput({
         {setOpacity && (
           <div className="mx-1 my-2">
             <Slider.Root
-              defaultValue={[opacity]}
+              defaultValue={[opacity ?? 0]}
               onValueCommit={value => setOpacity(value[0])}
               max={1}
               step={0.1}
@@ -76,9 +75,7 @@ export function ColorInput({
             </Slider.Root>
           </div>
         )}
-
-        <Popover.Arrow className="tl-popover-arrow" />
-      </Popover.Content>
-    </Popover.Root>
+      </div>
+    </PopoverButton>
   )
 }

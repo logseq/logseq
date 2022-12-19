@@ -1,28 +1,28 @@
 (ns electron.listener
   "System-component-like ns that defines listeners by event name to receive ipc
   messages from electron's main process"
-  (:require
-    [cljs-bean.core :as bean]
-    [clojure.string :as string]
-    [datascript.core :as d]
-    [dommy.core :as dom]
-    [electron.ipc :as ipc]
-    [frontend.config :as config]
-    [frontend.context.i18n :refer [t]]
-    [frontend.date :as date]
-    [frontend.db :as db]
-    [frontend.db.model :as db-model]
-    [frontend.fs.sync :as sync]
-    [frontend.fs.watcher-handler :as watcher-handler]
-    [frontend.handler.editor :as editor-handler]
-    [frontend.handler.file-sync :as file-sync-handler]
-    [frontend.handler.notification :as notification]
-    [frontend.handler.repo :as repo-handler]
-    [frontend.handler.route :as route-handler]
-    [frontend.handler.ui :as ui-handler]
-    [frontend.handler.user :as user]
-    [frontend.state :as state]
-    [frontend.ui :as ui]))
+  (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
+            [datascript.core :as d]
+            [dommy.core :as dom]
+            [electron.ipc :as ipc]
+            [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
+            [frontend.date :as date]
+            [frontend.db :as db]
+            [frontend.db.model :as db-model]
+            [frontend.fs.sync :as sync]
+            [frontend.fs.watcher-handler :as watcher-handler]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.file-sync :as file-sync-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.page :as page-handler]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.handler.user :as user]
+            [frontend.state :as state]
+            [frontend.ui :as ui]))
 
 
 (defn persist-dbs!
@@ -30,8 +30,8 @@
   ;; only persist current db!
   ;; TODO rename the function and event to persist-db
   (repo-handler/persist-db! {:before     #(notification/show!
-                                            (ui/loading (t :graph/persist))
-                                            :warning)
+                                           (ui/loading (t :graph/persist))
+                                           :warning)
                              :on-success #(ipc/ipc "persistent-dbs-saved")
                              :on-error   #(ipc/ipc "persistent-dbs-error")}))
 
@@ -40,9 +40,9 @@
   []
   ;; TODO: move "file-watcher" to electron.ipc.channels
   (js/window.apis.on
-    "persistent-dbs"
-    (fn [_req]
-      (persist-dbs!))))
+   "persistent-dbs"
+   (fn [_req]
+     (persist-dbs!))))
 
 
 (defn ^:large-vars/cleanup-todo listen-to-electron!
@@ -128,14 +128,14 @@
                      (fn [data]
                        (let [repo (bean/->clj data)
                              before-f #(notification/show!
-                                         (ui/loading (t :graph/persist))
-                                         :warning)
+                                        (ui/loading (t :graph/persist))
+                                        :warning)
                              after-f #(ipc/ipc "broadcastPersistGraphDone")
                              error-f (fn []
                                        (after-f)
                                        (notification/show!
-                                         (t :graph/persist-error)
-                                         :error))
+                                        (t :graph/persist-error)
+                                        :error))
                              handlers {:before     before-f
                                        :on-success after-f
                                        :on-error   error-f}]
@@ -156,28 +156,55 @@
 
   (js/window.apis.on "quickCapture"
                      (fn [args]
-                       (let [{:keys [url title content]} (bean/->clj args)
+                       (let [{:keys [url title content page append]} (bean/->clj args)
                              insert-today? (get-in (state/get-config)
-                                                   [:quick-capture-options :insert-today]
+                                                   [:quick-capture-options :insert-today?]
                                                    false)
-                             page (if (true? insert-today?) (string/lower-case (date/journal-name)) (state/get-current-page))
+                             redirect-page? (get-in (state/get-config)
+                                                    [:quick-capture-options :redirect-page?]
+                                                    false)
+                             today-page (when (state/enable-journals?)
+                                          (string/lower-case (date/today)))
+                             page (if (or (= page "TODAY")
+                                          (and (string/blank? page) insert-today?))
+                                    today-page
+                                    (or (not-empty page)
+                                        (state/get-current-page)
+                                        today-page))
+                             page (or page "quick capture") ;; default to quick capture page, if journals are not enabled
                              format (db/get-page-format page)
                              time (date/get-current-time)
                              text (or (and content (not-empty (string/trim content))) "")
-                             link (if (string/includes? url "www.youtube.com/watch") (str title " {{video " url "}}") (if (not-empty title) (config/link-format format title url) url))
+                             link (if (string/includes? url "www.youtube.com/watch")
+                                    (str title " {{video " url "}}")
+                                    (if (not-empty title)
+                                      (config/link-format format title url)
+                                      url))
                              template (get-in (state/get-config)
                                               [:quick-capture-templates :text]
                                               "**{time}** [[quick capture]]: {text} {url}")
                              content (-> template
                                          (string/replace "{time}" time)
                                          (string/replace "{url}" link)
-                                         (string/replace "{text}" text))]
-                         (if (and (state/get-edit-block) (not state/editing?)) ; changed to not so that block is created at the end of the page
-                           (editor-handler/insert content)
-                           (editor-handler/api-insert-new-block! content {:page page
-                                                                          :edit-block? false
-                                                                          :replace-empty-target? true})))))
+                                         (string/replace "{text}" text))
+                             edit-content (state/get-edit-content)
+                             edit-content-blank? (string/blank? edit-content)
+                             edit-content-include-capture? (and (not-empty edit-content)
+                                                                (string/includes? edit-content "[[quick capture]]"))]
+                         (if (and (state/editing?) (not append) (not edit-content-include-capture?))
+                           (if edit-content-blank?
+                             (editor-handler/insert content)
+                             (editor-handler/insert (str "\n" content)))
 
+                           (do
+                             (editor-handler/escape-editing)
+                             (when (not= page (state/get-current-page))
+                               (page-handler/create! page {:redirect? redirect-page?}))
+                             ;; Or else this will clear the newly inserted content
+                             (js/setTimeout #(editor-handler/api-insert-new-block! content {:page page
+                                                                                            :edit-block? true
+                                                                                            :replace-empty-target? true})
+                                            100))))))
 
   (js/window.apis.on "openNewWindowOfGraph"
                      ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage

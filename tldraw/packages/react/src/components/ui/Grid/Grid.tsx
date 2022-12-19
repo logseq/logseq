@@ -38,7 +38,13 @@ const SVGGrid = observer(function CanvasGrid({ size }: TLGridProps) {
               patternUnits="userSpaceOnUse"
             >
               {!hide && (
-                <circle className={`tl-grid-dot`} cx={gxo} cy={gyo} r={1.5} opacity={clamp(opacity, 0, 1)} />
+                <circle
+                  className={`tl-grid-dot`}
+                  cx={gxo}
+                  cy={gyo}
+                  r={1.5}
+                  opacity={clamp(opacity, 0, 1)}
+                />
               )}
             </pattern>
           )

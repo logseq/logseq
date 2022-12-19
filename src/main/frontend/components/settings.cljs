@@ -77,7 +77,16 @@
                :else
                nil)]
 
-       [:div.text-sm version]
+       [:div.text-sm.cursor
+        {:title (str "Revision: " config/revison)
+         :on-click (fn []
+                     (notification/show! [:div "Current Revision: "
+                                          [:a {:target "_blank"
+                                               :href (str "https://github.com/logseq/logseq/commit/" config/revison)}
+                                           config/revison]]
+                                         :info
+                                         false))}
+        version]
 
        [:a.text-sm.fade-link.underline.inline
         {:target "_blank"
@@ -306,7 +315,7 @@
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "custom_date_format"}
     (t :settings-page/custom-date-format)
-    (ui/tippy {:html        (t :settings-page/custom-date-format-warning)     
+    (ui/tippy {:html        (t :settings-page/custom-date-format-warning)
                :class       "tippy-hover ml-2"
                :interactive true
                :disabled    false}
@@ -431,7 +440,8 @@
   (row-with-button-action
     {:left-label   (t :settings-page/customize-shortcuts)
      :button-label (t :settings-page/shortcut-settings)
-     :on-click      #((state/close-settings!)
+     :on-click      (fn []
+                      (state/close-settings!)
                       (route-handler/redirect! {:to :shortcut-setting}))
      :-for         "customize_shortcuts"}))
 
@@ -443,7 +453,7 @@
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div
      (ui/button
-       "Settings"
+       (t :settings)
        :class "text-sm p-1"
        :style {:margin-top "0px"}
        :on-click
@@ -466,7 +476,7 @@
           (not instrument-disabled?)
           (fn [] (instrument/disable-instrument
                    (not instrument-disabled?)))
-          [:span.text-sm.opacity-50 "Logseq will never collect your local graph database or sell your data."]))
+          [:span.text-sm.opacity-50 (t :settings-page/disable-sentry-desc)]))
 
 (defn clear-cache-row [t]
   (row-with-button-action {:left-label   (t :settings-page/clear-cache)
@@ -514,10 +524,13 @@
              true))
 
 (rum/defc user-proxy-settings
-  [{:keys [protocol host port] :as agent-opts}]
-  (ui/button [:span
-              (when-let [e (and protocol host port (str protocol "://" host ":" port))]
-                [:strong.pr-1 e])
+  [{:keys [type protocol host port] :as agent-opts}]
+  (ui/button [:span.flex.items-center
+              [:strong.pr-1
+               (case type
+                 "system" "System Default"
+                 "direct" "Direct"
+                 (and protocol host port (str protocol "://" host ":" port)))]
               (ui/icon "edit")]
              :small? true
              :on-click #(state/set-sub-modal!
@@ -584,6 +597,7 @@
      (workflow-row t preferred-workflow)
      ;; (enable-block-timestamps-row t enable-block-timestamps?)
      (show-brackets-row t show-brackets?)
+
      (when (util/electron?) (switch-spell-check-row t))
      (outdenting-row t logical-outdenting?)
      (preferred-pasting-file t preferred-pasting-file?)
@@ -630,7 +644,7 @@
 
      (ui/admonition
        :warning
-       [:p "Clearing the cache will discard open graphs. You will lose unsaved changes."])]))
+       [:p (t :settings-page/clear-cache-warning)])]))
 
 (rum/defc sync-enabled-switcher
   [enabled?]
@@ -649,7 +663,8 @@
   (ui/toggle enabled?
              (fn []
                (let [value (not enabled?)]
-                 (config-handler/set-config! :feature/enable-whiteboards? value)))
+                 (when (user-handler/feature-available? :whiteboard)
+                   (config-handler/set-config! :feature/enable-whiteboards? value))))
              true))
 
 (defn whiteboards-switcher-row [enabled?]
@@ -712,41 +727,19 @@
           [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
                     :target "_blank"}
            "here"]
-          "for instructions on how to set up and use Sync."]]])
+          "for instructions on how to set up and use Sync."]
+         (whiteboards-switcher-row enable-whiteboards?)]])
 
-     (when-not web-platform?
-       [:div.mt-1.sm:mt-0.sm:col-span-2
-        [:hr]
-        (if logged-in?
-          [:div
-           (user-handler/email)
-           [:p (ui/button (t :logout) {:class "p-1"
-                                       :icon "logout"
-                                       :on-click user-handler/logout})]]
-          [:div
-           (ui/button (t :login) {:class "p-1"
-                                  :icon "login"
-                                  :on-click (fn []
-                                              (state/close-settings!)
-                                              (js/window.open config/LOGIN-URL))})
-           [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])])
-
-     (when-not web-platform?
-       [:<>
-        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
-        [:div.flex.flex-col.gap-4
-         {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-         (sync-switcher-row enable-sync?)]])
-
-     (when-not web-platform?
-       [:<>
-        [:hr]
-        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]]
-        [:div.flex.flex-col.gap-4
-         {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-         (whiteboards-switcher-row enable-whiteboards?)]])]))
+     ;; (when-not web-platform?
+     ;;   [:<>
+     ;;    [:hr]
+     ;;    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+     ;;     [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]]
+     ;;    [:div.flex.flex-col.gap-4
+     ;;     {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
+     ;;     ;; features
+     ;;     ]])
+     ]))
 
 (rum/defcs settings
   < (rum/local [:general :general] ::active)

@@ -49,6 +49,7 @@
                  (remove #(string/starts-with? (.-name ^js %) "."))
                  (map #(.join path dir (.-name %))))))
         dir)
+       (map utils/fix-win-path!)
        (doall)
        (vec)))
 
@@ -285,28 +286,47 @@
   (async/put! state/persistent-dbs-chan true)
   true)
 
+;; Search related IPCs
 (defmethod handle :search-blocks [_window [_ repo q opts]]
   (search/search-blocks repo q opts))
 
-(defmethod handle :rebuild-blocks-indice [_window [_ repo data]]
+(defmethod handle :search-pages [_window [_ repo q opts]]
+  (search/search-pages repo q opts))
+
+(defmethod handle :rebuild-indice [_window [_ repo block-data page-data]]
   (search/truncate-blocks-table! repo)
   ;; unneeded serialization
-  (search/upsert-blocks! repo (bean/->js data))
+  (search/upsert-blocks! repo (bean/->js block-data))
+  (search/truncate-pages-table! repo)
+  (search/upsert-pages! repo (bean/->js page-data))
   [])
 
 (defmethod handle :transact-blocks [_window [_ repo data]]
   (let [{:keys [blocks-to-remove-set blocks-to-add]} data]
+    ;; Order matters! Same id will delete then upsert sometimes.
     (when (seq blocks-to-remove-set)
       (search/delete-blocks! repo blocks-to-remove-set))
     (when (seq blocks-to-add)
       ;; unneeded serialization
       (search/upsert-blocks! repo (bean/->js blocks-to-add)))))
 
-(defmethod handle :truncate-blocks [_window [_ repo]]
-  (search/truncate-blocks-table! repo))
+(defmethod handle :transact-pages [_window [_ repo data]]
+  (let [{:keys [pages-to-remove-set pages-to-add]} data]
+    ;; Order matters! Same id will delete then upsert sometimes.
+    (when (seq pages-to-remove-set)
+      (search/delete-pages! repo pages-to-remove-set))
+    (when (seq pages-to-add)
+      ;; unneeded serialization
+      (search/upsert-pages! repo (bean/->js pages-to-add)))))
+
+(defmethod handle :truncate-indice [_window [_ repo]]
+  (search/truncate-blocks-table! repo)
+  (search/truncate-pages-table! repo))
 
 (defmethod handle :remove-db [_window [_ repo]]
   (search/delete-db! repo))
+;; ^^^^
+;; Search related IPCs End
 
 (defn clear-cache!
   [window]
@@ -337,9 +357,35 @@
 (defmethod handle :getLogseqDotDirRoot []
   (utils/get-ls-dotdir-root))
 
-(defmethod handle :testProxyUrl [win [_ url]]
-  (p/let [_ (utils/fetch url)]
-    (utils/send-to-renderer win :notification {:type "success" :payload (str "Successfully: " url)})))
+(defmethod handle :getSystemProxy [^js window]
+  (if-let [sess (.. window -webContents -session)]
+    (p/let [proxy (.resolveProxy sess "https://www.google.com")]
+      proxy)
+    (p/resolved nil)))
+
+(defmethod handle :setProxy [_win [_ options]]
+  ;; options: {:type "system" | "direct" | "socks5" | "http" | ... }
+  (p/do!
+   (utils/<set-proxy options)
+   (utils/save-proxy-settings options)))
+
+(defmethod handle :testProxyUrl [_win [_ url options]]
+  ;; FIXME: better not to set proxy while testing url
+  (let [_ (utils/<set-proxy options)
+        start-ms (.getTime (js/Date.))]
+    (-> (utils/fetch url)
+        (p/timeout 10000)
+        (p/then (fn [resp]
+                  (let [code (.-status resp)
+                        response-ms (- (.getTime (js/Date.)) start-ms)]
+                    (if (<= 200 code 299)
+                      #js {:code code
+                           :response-ms response-ms}
+                      (p/rejected (js/Error. (str "HTTP status " code)))))))
+        (p/catch (fn [e]
+                   (if (instance? p/TimeoutException e)
+                     (p/rejected (js/Error. "Timeout"))
+                     (p/rejected e)))))))
 
 (defmethod handle :httpFetchJSON [_win [_ url options]]
   (p/let [res (utils/fetch url options)
@@ -529,9 +575,6 @@
   (logger/warn ::reload-window-page)
   (when-let [web-content (.-webContents win)]
     (.reload web-content)))
-
-(defmethod handle :setHttpsAgent [^js _win [_ opts]]
-  (utils/set-fetch-agent opts))
 
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; file-sync-rs-apis ;;

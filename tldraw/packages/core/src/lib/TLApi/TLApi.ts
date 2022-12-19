@@ -1,6 +1,6 @@
 import Vec from '@tldraw/vec'
 import type { TLAsset, TLBinding, TLEventMap } from '../../types'
-import { BoundsUtils, uniqueId } from '../../utils'
+import { BoundsUtils, isNonNullable, uniqueId } from '../../utils'
 import type { TLShape, TLShapeModel } from '../shapes'
 import type { TLApp } from '../TLApp'
 
@@ -92,7 +92,9 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
 
   /** Select all shapes on the current page. */
   selectAll = (): this => {
-    this.app.setSelectedShapes(this.app.currentPage.shapes)
+    this.app.setSelectedShapes(
+      this.app.currentPage.shapes.filter(s => !this.app.shapesInGroups().includes(s))
+    )
     return this
   }
 
@@ -153,7 +155,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
 
   resetZoomToCursor = (): this => {
     const viewport = this.app.viewport
-    viewport.update({
+    viewport.animateCamera({
       zoom: 1,
       point: Vec.sub(this.app.inputs.originScreenPoint, this.app.inputs.originPoint),
     })
@@ -235,6 +237,14 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
           point[0] + shape.point![0] - commonBounds.minX,
           point[1] + shape.point![1] - commonBounds.minY,
         ],
+      }
+    })
+
+    clonedShapes.forEach(s => {
+      if (s.children && s.children?.length > 0) {
+        s.children = s.children.map(oldId => {
+          return clonedShapes[shapes.findIndex(s => s.id === oldId)].id
+        })
       }
     })
 
@@ -347,5 +357,48 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
       this.addClonedShapes(data)
     }
     return this
+  }
+
+  doGroup = (shapes: S[] = this.app.allSelectedShapesArray) => {
+    const selectedGroups: S[] = [
+      ...shapes.filter(s => s.type === 'group'),
+      ...shapes.map(s => this.app.getParentGroup(s)),
+    ].filter(isNonNullable)
+    // not using this.app.removeShapes because it also remove shapes in the group
+    this.app.currentPage.removeShapes(...selectedGroups)
+
+    // group all shapes
+    const selectedShapes = shapes.filter(s => s.type !== 'group')
+    if (selectedShapes.length > 1) {
+      const ShapeGroup = this.app.getShapeClass('group')
+      const group = new ShapeGroup({
+        id: uniqueId(),
+        type: ShapeGroup.id,
+        parentId: this.app.currentPage.id,
+        children: selectedShapes.map(s => s.id),
+      })
+      this.app.currentPage.addShapes(group)
+      this.app.setSelectedShapes([group])
+      // the shapes in the group should also be moved to the bottom of the array (to be on top on the canvas)
+      this.app.bringForward(selectedShapes)
+    }
+    this.app.persist()
+  }
+
+  unGroup = (shapes: S[] = this.app.allSelectedShapesArray) => {
+    const selectedGroups: S[] = [
+      ...shapes.filter(s => s.type === 'group'),
+      ...shapes.map(s => this.app.getParentGroup(s)),
+    ].filter(isNonNullable)
+
+    const shapesInGroups = this.app.shapesInGroups(selectedGroups)
+
+    if (selectedGroups.length > 0) {
+      // not using this.app.removeShapes because it also remove shapes in the group
+      this.app.currentPage.removeShapes(...selectedGroups)
+      this.app.persist()
+
+      this.app.setSelectedShapes(shapesInGroups)
+    }
   }
 }

@@ -56,13 +56,13 @@
 (defonce icon-size (if (mobile-util/native-platform?) 26 20))
 
 (def block-background-colors
-  ["gray"
+  ["yellow"
    "red"
-   "yellow"
+   "pink"
    "green"
    "blue"
    "purple"
-   "pink"])
+   "gray"])
 
 (rum/defc ls-textarea
   < rum/reactive
@@ -246,14 +246,15 @@
            [:div.flex-shrink-0
             svg]
            [:div.ml-3.w-0.flex-1
-            [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}}
+            [:div.text-sm.leading-6.font-medium.whitespace-pre-line {:style {:margin 0}}
              content]]
            [:div.ml-4.flex-shrink-0.flex
             [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150.notification-close-button
-             {:on-click (fn []
+             {:aria-label "Close"
+              :on-click (fn []
                           (notification/clear! uid))}
 
-            (icon "x" {:fill "currentColor"})]]]]]]])))
+             (icon "x" {:fill "currentColor"})]]]]]]])))
 
 (declare button)
 
@@ -261,10 +262,10 @@
   []
   [:div.ui__notifications-content
    [:div.pointer-events-auto
-    (button "Clear all"
-      :intent "logseq"
-      :on-click (fn []
-                  (notification/clear-all!)))]])
+    (button (t :notification/clear-all)
+     :intent "logseq"
+     :on-click (fn []
+                 (notification/clear-all!)))]])
 
 (rum/defc notification < rum/reactive
   []
@@ -442,7 +443,7 @@
                           (bottom-reached? node threshold))
         top-reached? (= scroll-top 0)
         down? (scroll-down?)]
-    (when (and down? bottom-reached? on-load)
+    (when (and bottom-reached? on-load)
       (on-load))
     (when (and (not down?) top-reached? on-top-reached)
       (on-top-reached))))
@@ -810,20 +811,24 @@
   block-error)
 
 (rum/defc select
-  [options on-change class]
-  [:select.mt-1.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-1.sm:ml-4.w-12.sm:w-20
-   {:class     (or class "form-select")
-    :style     {:padding "0 0 0 6px"}
-    :on-change (fn [e]
-                 (let [value (util/evalue e)]
-                   (on-change value)))}
-   (for [{:keys [label value selected]} options]
-     [:option (cond->
-               {:key   label
-                :default-value (or value label)}
-                selected
-                (assoc :selected selected))
-      label])])
+  ([options on-change]
+   (select options on-change nil))
+  ([options on-change class]
+   [:select.pl-6.mt-1.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-1.sm:ml-4.w-12.sm:w-20
+    {:class     (or class "form-select")
+     :on-change (fn [e]
+                  (let [value (util/evalue e)]
+                    (on-change value)))}
+    (for [{:keys [label value selected disabled]
+           :or {selected false disabled false}} options]
+      [:option (cond->
+                {:key   label
+                 :value (or value label)} ;; NOTE: value might be an empty string, `or` is safe here
+                 disabled
+                 (assoc :disabled disabled)
+                 selected
+                 (assoc :selected selected))
+       label])]))
 
 (rum/defc radio-list
   [options on-change class]
@@ -942,24 +947,24 @@
   (memoize (fn [klass] (r/adapt-class klass))))
 
 (defn icon
-  ([class] (icon class nil))
-  ([class {:keys [extension? font?] :as opts}]
-   (when-not (string/blank? class)
+  ([name] (icon name nil))
+  ([name {:keys [extension? font? class] :as opts}]
+   (when-not (string/blank? name)
      (let [^js jsTablerIcons (gobj/get js/window "tablerIcons")]
        (if (or extension? font? (not jsTablerIcons))
          [:span.ui__icon (merge {:class
                                  (util/format
-                                  (str "%s-" class
+                                  (str "%s-" name
                                        (when (:class opts)
                                          (str " " (string/trim (:class opts)))))
                                   (if extension? "tie tie" "ti ti"))}
                                 (dissoc opts :class :extension? :font?))]
 
          ;; tabler svg react
-         (when-let [klass (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase class)))]
+         (when-let [klass (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase name)))]
            (let [f (get-adapt-icon-class klass)]
              [:span.ui__icon.ti
-              {:class (str "ls-icon-" class)}
+              {:class (str "ls-icon-" name " " class)}
               (f (merge {:size 18} (r/map-keys->camel-case (dissoc opts :class))))])))))))
 
 (defn button

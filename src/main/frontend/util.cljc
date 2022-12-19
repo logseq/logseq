@@ -11,6 +11,7 @@
             ["remove-accents" :as removeAccents]
             ["sanitize-filename" :as sanitizeFilename]
             ["check-password-strength" :refer [passwordStrength]]
+            ["path-complete-extname" :as pathCompleteExtname]
             [frontend.loader :refer [load]]
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
@@ -43,7 +44,7 @@
        (-write writer (str "\"" (.toString sym) "\"")))))
 
 #?(:cljs (defonce ^js node-path utils/nodePath))
-#?(:cljs (defonce ^js full-path-extname utils/fullPathExtname))
+#?(:cljs (defonce ^js full-path-extname pathCompleteExtname))
 #?(:cljs (defn app-scroll-container-node
            ([]
             (gdom/getElement "main-content-container"))
@@ -111,6 +112,11 @@
      "Mocked open DIR path for by-passing open dir in electron during testing. Nil if not given"
      []
      (when (electron?) (. js/window -__MOCKED_OPEN_DIR_PATH__))))
+
+;; #?(:cljs
+;;    (defn ci?
+;;      []
+;;      (boolean (. js/window -__E2E_TESTING__))))
 
 #?(:cljs
    (do
@@ -200,6 +206,11 @@
              (string/ends-with? %))
         [".png" ".jpg" ".jpeg" ".bmp" ".gif" ".webp" ".svg"]))
 
+(defn ext-of-video? [s]
+  (some #(-> (string/lower-case s)
+             (string/ends-with? %))
+        [".mp4" ".mkv" ".mov" ".wmv" ".avi" ".webm" ".mpg" ".ts" ".ogg" ".flv"]))
+
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
 (defn hiccup->class
   [class]
@@ -221,29 +232,6 @@
                            (.then bean/->clj)
                            (.then #(on-ok %)))
                        (on-failed resp)))))))))
-
-#?(:cljs
-   (defn upload
-     [url file on-ok on-failed on-progress]
-     (let [xhr (js/XMLHttpRequest.)]
-       (.open xhr "put" url)
-       (gobj/set xhr "onload" on-ok)
-       (gobj/set xhr "onerror" on-failed)
-       (when (and (gobj/get xhr "upload")
-                  on-progress)
-         (gobj/set (gobj/get xhr "upload")
-                   "onprogress"
-                   on-progress))
-       (.send xhr file))))
-
-#?(:cljs
-   (defn post
-     [url body on-ok on-failed]
-     (fetch url {:method "post"
-                 :headers {:Content-Type "application/json"}
-                 :body (js/JSON.stringify (clj->js body))}
-            on-ok
-            on-failed)))
 
 (defn zero-pad
   [n]
@@ -548,6 +536,10 @@
       (str left
            (when-not not-space? " ")
            (triml-without-newlines right)))))
+
+(defn cjk-string?
+  [s]
+  (re-find #"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]" s))
 
 ;; Add documentation
 (defn replace-first [pattern s new-value]
@@ -941,10 +933,11 @@
    (defn search-normalize
      "Normalize string for searching (loose)"
      [s remove-accents?]
-     (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
-       (if remove-accents?
-         (removeAccents  normalize-str)
-         normalize-str))))
+     (when s
+       (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
+         (if remove-accents?
+           (removeAccents  normalize-str)
+           normalize-str)))))
 
 #?(:cljs
    (def page-name-sanity-lc
@@ -1047,12 +1040,13 @@
 
 #?(:clj
    (defmacro with-time
-     "Evaluates expr and prints the time it took. Returns the value of expr and the spent time."
+     "Evaluates expr and prints the time it took. 
+      Returns the value of expr and the spent time of float number in msecs."
      [expr]
      `(let [start# (cljs.core/system-time)
             ret# ~expr]
         {:result ret#
-         :time (.toFixed (- (cljs.core/system-time) start#) 6)})))
+         :time (- (cljs.core/system-time) start#)})))
 
 ;; TODO: profile and profileEnd
 
@@ -1317,7 +1311,7 @@
              vw-height   (or (.-height js/window.visualViewport)
                              (.-clientHeight js/document.documentElement))
              ;; mobile toolbar height: 40px
-             scroll      (- cursor-y (- vw-height (+ @keyboard-height 40)))]
+             scroll      (- cursor-y (- vw-height (+ @keyboard-height (+ 40 4))))]
          (cond
            (and to-vw-one-quarter? (> cursor-y (* vw-height 0.4)))
            (set! (.-scrollTop main-node) (+ scroll-top (- cursor-y (/ vw-height 4))))
@@ -1339,9 +1333,16 @@
            nil)))))
 
 #?(:cljs
-   (defn sm-breakpoint?
-     []
-     (< (.-offsetWidth js/document.documentElement) 640)))
+   (do
+     (defn breakpoint?
+       [size]
+       (< (.-offsetWidth js/document.documentElement) size))
+
+     (defn sm-breakpoint?
+       [] (breakpoint? 640))
+
+     (defn md-breakpoint?
+       [] (breakpoint? 768))))
 
 #?(:cljs
    (defn event-is-composing?
@@ -1437,3 +1438,21 @@
                       (.then (fn [blob]
                                (js/navigator.clipboard.write (clj->js [(js/ClipboardItem. (clj->js {(.-type blob) blob}))]))))
                       (.catch js/console.error)))))))
+
+
+(defn memoize-last
+  "Different from core.memoize, it only cache the last result.
+   Returns a memoized version of a referentially transparent function. The
+  memoized version of the function cache the the last result, and replay when calls
+   with the same arguments, or update cache when with different arguments."
+  [f]
+  (let [last-mem (atom nil)
+        last-args (atom nil)]
+    (fn [& args]
+      (if (or (nil? @last-mem)
+              (not= @last-args args))
+        (let [ret (apply f args)]
+          (reset! last-args args)
+          (reset! last-mem ret)
+          ret)
+        @last-mem))))

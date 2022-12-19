@@ -76,9 +76,8 @@
                                    (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
               (editor-handler/insert-command! id command-steps
                                               format
-                                              {:restore? restore-slash?})
-              (state/pub-event! [:instrument {:type :editor/command-triggered
-                                              :payload {:command command}}]))))
+                                              {:restore? restore-slash?
+                                               :command command}))))
         :class
         "black"}))))
 
@@ -91,14 +90,14 @@
        {:on-chosen (fn [chosen]
                      (editor-handler/insert-command! id (get (into {} matched) chosen)
                                                      format
-                                                     {:last-pattern commands/angle-bracket}))
+                                                     {:last-pattern commands/angle-bracket
+                                                      :command :block-commands}))
         :class     "black"}))))
 
 (defn- in-sidebar? [el]
   (not (.contains (.getElementById js/document "left-container") el)))
 
 (rum/defc page-search < rum/reactive
-  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   "Embedded page searching popup"
   [id format]
   (let [action (state/sub :editor/action)]
@@ -110,7 +109,7 @@
                 edit-content (or (state/sub [:editor/content id]) "")
                 sidebar? (in-sidebar? input)
                 q (or
-                   @editor-handler/*selected-text
+                   (editor-handler/get-selected-text)
                    (when (= action :page-search-hashtag)
                      (gp-util/safe-subs edit-content pos current-pos))
                    (when (> (count edit-content) current-pos)
@@ -162,26 +161,31 @@
               :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
               :class       "black"})))))))
 
+(defn- search-blocks!
+  [state result]
+  (let [[edit-block _ _ q] (:rum/args state)]
+    (p/let [matched-blocks (when-not (string/blank? q)
+                             (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
+      (reset! result matched-blocks))))
+
 (rum/defcs block-search-auto-complete < rum/reactive
   {:init (fn [state]
-           (assoc state ::result (atom nil)))
+           (let [result (atom nil)]
+             (search-blocks! state result)
+             (assoc state ::result result)))
    :did-update (fn [state]
-                 (let [result (::result state)
-                       [edit-block _ _ q] (:rum/args state)]
-                   (p/let [matched-blocks (when-not (string/blank? q)
-                                            (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
-                     (reset! result matched-blocks)))
+                 (search-blocks! state (::result state))
                  state)}
-  [state _edit-block input id q format]
+  [state _edit-block input id q format selected-text]
   (let [result (->> (rum/react (get state ::result))
                     (remove (fn [b] (string/blank? (:block/content (db-model/query-block-by-uuid (:block/uuid b)))))))
-        chosen-handler (editor-handler/block-on-chosen-handler input id q format)
+        chosen-handler (editor-handler/block-on-chosen-handler id q format selected-text)
         non-exist-block-handler (editor-handler/block-non-exist-handler input)]
     (ui/auto-complete
      result
      {:on-chosen   chosen-handler
       :on-enter    non-exist-block-handler
-      :empty-placeholder   [:div.text-gray-500.pl-4.pr-4 (t :editor/block-search)]
+      :empty-placeholder   [:div.text-gray-500.text-sm.px-4.py-2 (t :editor/block-search)]
       :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
                      (let [page (or (:block/original-name page)
                                     (:block/name page))
@@ -195,7 +199,6 @@
 
 (rum/defcs block-search < rum/reactive
   {:will-unmount (fn [state]
-                   (reset! editor-handler/*selected-text nil)
                    (state/clear-search-result!)
                    state)}
   [state id _format]
@@ -206,15 +209,15 @@
           current-pos (cursor/pos input)
           edit-content (state/sub [:editor/content id])
           edit-block (state/get-edit-block)
+          selected-text (editor-handler/get-selected-text)
           q (or
-             @editor-handler/*selected-text
+             selected-text
              (when (> (count edit-content) current-pos)
                (subs edit-content pos current-pos)))]
       (when input
-        (block-search-auto-complete edit-block input id q format)))))
+        (block-search-auto-complete edit-block input id q format selected-text)))))
 
 (rum/defc template-search < rum/reactive
-  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id _format]
   (let [pos (state/get-editor-last-pos)
         input (gdom/getElement id)]
@@ -238,7 +241,6 @@
           :class       "black"})))))
 
 (rum/defc property-search < rum/reactive
-  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id]
   (let [input (gdom/getElement id)]
     (when input
@@ -258,7 +260,6 @@
           :class       "black"})))))
 
 (rum/defc property-value-search < rum/reactive
-  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id]
   (let [property (:property (state/get-editor-action-data))
         input (gdom/getElement id)]

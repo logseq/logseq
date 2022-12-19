@@ -1,25 +1,25 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
+  BoundsUtils,
   delay,
+  getComputedColor,
+  TLBounds,
   TLBoxShape,
   TLBoxShapeProps,
   TLResetBoundsInfo,
   TLResizeInfo,
   validUUID,
-  getComputedColor,
 } from '@tldraw/core'
-import { Virtuoso } from 'react-virtuoso'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
-import { useDebouncedValue } from '@tldraw/react'
 import Vec from '@tldraw/vec'
 import { action, computed, makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
-import type { SizeLevel, Shape } from '.'
-import { TablerIcon } from '../../components/icons'
-import { TextInput } from '../../components/inputs/TextInput'
+import type { Shape, SizeLevel } from '.'
+import { CircleButton } from '../../components/Button'
+import { LogseqQuickSearch } from '../../components/QuickSearch'
 import { useCameraMovingRef } from '../../hooks/useCameraMoving'
-import { LogseqContext, type SearchResult } from '../logseq-context'
+import { LogseqContext } from '../logseq-context'
 import { BindingIndicator } from './BindingIndicator'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
@@ -37,10 +37,6 @@ export interface LogseqPortalShapeProps extends TLBoxShapeProps, CustomStyleProp
   scaleLevel?: SizeLevel
 }
 
-interface LogseqQuickSearchProps {
-  onChange: (id: string) => void
-}
-
 const levelToScale = {
   xs: 0.5,
   sm: 0.8,
@@ -48,30 +44,6 @@ const levelToScale = {
   lg: 1.5,
   xl: 2,
   xxl: 3,
-}
-
-const LogseqTypeTag = ({
-  type,
-  active,
-}: {
-  type: 'B' | 'P' | 'BA' | 'PA' | 'WA' | 'WP' | 'BS' | 'PS'
-  active?: boolean
-}) => {
-  const nameMapping = {
-    B: 'block',
-    P: 'page',
-    WP: 'whiteboard',
-    BA: 'new-block',
-    PA: 'new-page',
-    WA: 'new-whiteboard',
-    BS: 'block-search',
-    PS: 'page-search',
-  }
-  return (
-    <span className="tl-type-tag" data-active={active}>
-      <i className={`tie tie-${nameMapping[type]}`} />
-    </span>
-  )
 }
 
 const LogseqPortalShapeHeader = observer(
@@ -82,7 +54,7 @@ const LogseqPortalShapeHeader = observer(
     children,
   }: {
     type: 'P' | 'B'
-    fill: string
+    fill?: string
     opacity: number
     children: React.ReactNode
   }) => {
@@ -109,97 +81,6 @@ const LogseqPortalShapeHeader = observer(
     )
   }
 )
-
-function escapeRegExp(text: string) {
-  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')
-}
-
-const highlightedJSX = (input: string, keyword: string) => {
-  return (
-    <span>
-      {input
-        .split(new RegExp(`(${escapeRegExp(keyword)})`, 'gi'))
-        .map((part, index) => {
-          if (index % 2 === 1) {
-            return <mark className="tl-highlighted">{part}</mark>
-          }
-          return part
-        })
-        .map((frag, idx) => (
-          <React.Fragment key={idx}>{frag}</React.Fragment>
-        ))}
-    </span>
-  )
-}
-
-const useSearch = (q: string, searchFilter: 'B' | 'P' | null) => {
-  const { handlers } = React.useContext(LogseqContext)
-  const [results, setResults] = React.useState<SearchResult | null>(null)
-  const dq = useDebouncedValue(q, 200)
-
-  React.useEffect(() => {
-    let canceled = false
-    if (dq.length > 0) {
-      const filter = { 'pages?': true, 'blocks?': true, 'files?': false }
-      if (searchFilter === 'B') {
-        filter['pages?'] = false
-      } else if (searchFilter === 'P') {
-        filter['blocks?'] = false
-      }
-      handlers.search(dq, filter).then(_results => {
-        if (!canceled) {
-          setResults(_results)
-        }
-      })
-    } else {
-      setResults(null)
-    }
-    return () => {
-      canceled = true
-    }
-  }, [dq, handlers?.search])
-
-  return results
-}
-
-const CircleButton = ({
-  active,
-  style,
-  icon,
-  otherIcon,
-  onClick,
-}: {
-  active?: boolean
-  style?: React.CSSProperties
-  icon: string
-  otherIcon?: string
-  onClick: () => void
-}) => {
-  const [recentlyChanged, setRecentlyChanged] = React.useState(false)
-
-  React.useEffect(() => {
-    setRecentlyChanged(true)
-    const timer = setTimeout(() => {
-      setRecentlyChanged(false)
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [active])
-
-  return (
-    <button
-      data-active={active}
-      data-recently-changed={recentlyChanged}
-      style={style}
-      className="tl-circle-button"
-      onMouseDown={onClick}
-    >
-      <div className="tl-circle-button-icons-wrapper" data-icons-count={otherIcon ? 2 : 1}>
-        {otherIcon && <TablerIcon name={otherIcon} />}
-        <TablerIcon name={icon} />
-      </div>
-    </button>
-  )
-}
 
 export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   static id = 'logseq-portal'
@@ -384,332 +265,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     })
   }
 
-  LogseqQuickSearch = observer(({ onChange }: LogseqQuickSearchProps) => {
-    const [q, setQ] = React.useState(LogseqPortalShape.defaultSearchQuery)
-    const [searchFilter, setSearchFilter] = React.useState<'B' | 'P' | null>(
-      LogseqPortalShape.defaultSearchFilter
-    )
-    const rInput = React.useRef<HTMLInputElement>(null)
-    const { handlers, renderers } = React.useContext(LogseqContext)
-    const app = useApp<Shape>()
-
-    const finishCreating = React.useCallback((id: string) => {
-      onChange(id)
-      rInput.current?.blur()
-      if (id) {
-        LogseqPortalShape.defaultSearchQuery = ''
-        LogseqPortalShape.defaultSearchFilter = null
-      }
-    }, [])
-
-    const onAddBlock = React.useCallback((content: string) => {
-      const uuid = handlers?.addNewBlock(content)
-      if (uuid) {
-        finishCreating(uuid)
-        // wait until the editor is mounted
-        setTimeout(() => {
-          app.api.editShape(this)
-          window.logseq?.api?.edit_block?.(uuid)
-        })
-      }
-      return uuid
-    }, [])
-
-    const optionsWrapperRef = React.useRef<HTMLDivElement>(null)
-
-    const [focusedOptionIdx, setFocusedOptionIdx] = React.useState<number>(0)
-
-    const searchResult = useSearch(q, searchFilter)
-
-    const [prefixIcon, setPrefixIcon] = React.useState<string>('circle-plus')
-
-    React.useEffect(() => {
-      // autofocus seems not to be working
-      setTimeout(() => {
-        rInput.current?.focus()
-      })
-    }, [searchFilter])
-
-    React.useEffect(() => {
-      LogseqPortalShape.defaultSearchQuery = q
-      LogseqPortalShape.defaultSearchFilter = searchFilter
-    }, [q, searchFilter])
-
-    type Option = {
-      actionIcon: 'search' | 'circle-plus'
-      onChosen: () => boolean // return true if the action was handled
-      element: React.ReactNode
-    }
-
-    const options: Option[] = React.useMemo(() => {
-      const options: Option[] = []
-
-      const Breadcrumb = renderers?.Breadcrumb
-
-      if (!Breadcrumb || !handlers) {
-        return []
-      }
-
-      // New block option
-      options.push({
-        actionIcon: 'circle-plus',
-        onChosen: () => {
-          return !!onAddBlock(q)
-        },
-        element: (
-          <div className="tl-quick-search-option-row">
-            <LogseqTypeTag active type="BA" />
-            {q.length > 0 ? (
-              <>
-                <strong>New block:</strong>
-                {q}
-              </>
-            ) : (
-              <strong>New block</strong>
-            )}
-          </div>
-        ),
-      })
-
-      // New page or whiteboard option when no exact match
-      if (!searchResult?.pages?.some(p => p.toLowerCase() === q.toLowerCase()) && q) {
-        options.push(
-          {
-            actionIcon: 'circle-plus',
-            onChosen: () => {
-              finishCreating(q)
-              return true
-            },
-            element: (
-              <div className="tl-quick-search-option-row">
-                <LogseqTypeTag active type="PA" />
-                <strong>New page:</strong>
-                {q}
-              </div>
-            ),
-          },
-          {
-            actionIcon: 'circle-plus',
-            onChosen: () => {
-              handlers?.addNewWhiteboard(q)
-              finishCreating(q)
-              return true
-            },
-            element: (
-              <div className="tl-quick-search-option-row">
-                <LogseqTypeTag active type="WA" />
-                <strong>New whiteboard:</strong>
-                {q}
-              </div>
-            ),
-          }
-        )
-      }
-
-      // search filters
-      if (q.length === 0 && searchFilter === null) {
-        options.push(
-          {
-            actionIcon: 'search',
-            onChosen: () => {
-              setSearchFilter('B')
-              return true
-            },
-            element: (
-              <div className="tl-quick-search-option-row">
-                <LogseqTypeTag type="BS" />
-                Search only blocks
-              </div>
-            ),
-          },
-          {
-            actionIcon: 'search',
-            onChosen: () => {
-              setSearchFilter('P')
-              return true
-            },
-            element: (
-              <div className="tl-quick-search-option-row">
-                <LogseqTypeTag type="PS" />
-                Search only pages
-              </div>
-            ),
-          }
-        )
-      }
-
-      // Page results
-      if ((!searchFilter || searchFilter === 'P') && searchResult && searchResult.pages) {
-        options.push(
-          ...searchResult.pages.map(page => {
-            return {
-              actionIcon: 'search' as 'search',
-              onChosen: () => {
-                finishCreating(page)
-                return true
-              },
-              element: (
-                <div className="tl-quick-search-option-row">
-                  <LogseqTypeTag type={handlers.isWhiteboardPage(page) ? 'WP' : 'P'} />
-                  {highlightedJSX(page, q)}
-                </div>
-              ),
-            }
-          })
-        )
-      }
-
-      // Block results
-      if ((!searchFilter || searchFilter === 'B') && searchResult && searchResult.blocks) {
-        options.push(
-          ...searchResult.blocks
-            .filter(block => block.content && block.uuid)
-            .map(({ content, uuid }) => {
-              const block = handlers.queryBlockByUUID(uuid)
-              return {
-                actionIcon: 'search' as 'search',
-                onChosen: () => {
-                  if (block) {
-                    finishCreating(uuid)
-                    window.logseq?.api?.set_blocks_id?.([uuid])
-                    return true
-                  }
-                  return false
-                },
-                element: block ? (
-                  <>
-                    <div className="tl-quick-search-option-row">
-                      <LogseqTypeTag type="B" />
-                      <div className="tl-quick-search-option-breadcrumb">
-                        <Breadcrumb blockId={uuid} />
-                      </div>
-                    </div>
-                    <div className="tl-quick-search-option-row">
-                      <div className="tl-quick-search-option-placeholder" />
-                      {highlightedJSX(content, q)}
-                    </div>
-                  </>
-                ) : (
-                  <div className="tl-quick-search-option-row">
-                    Cache is outdated. Please click the 'Re-index' button in the graph's dropdown
-                    menu.
-                  </div>
-                ),
-              }
-            })
-        )
-      }
-      return options
-    }, [q, searchFilter, searchResult, renderers?.Breadcrumb, handlers])
-
-    React.useEffect(() => {
-      const keydownListener = (e: KeyboardEvent) => {
-        let newIndex = focusedOptionIdx
-        if (e.key === 'ArrowDown') {
-          newIndex = Math.min(options.length - 1, focusedOptionIdx + 1)
-        } else if (e.key === 'ArrowUp') {
-          newIndex = Math.max(0, focusedOptionIdx - 1)
-        } else if (e.key === 'Enter') {
-          options[focusedOptionIdx]?.onChosen()
-          e.stopPropagation()
-          e.preventDefault()
-        } else if (e.key === 'Backspace' && q.length === 0) {
-          setSearchFilter(null)
-        } else if (e.key === 'Escape') {
-          finishCreating('')
-        }
-
-        if (newIndex !== focusedOptionIdx) {
-          const option = options[newIndex]
-          setFocusedOptionIdx(newIndex)
-          setPrefixIcon(option.actionIcon)
-          e.stopPropagation()
-          e.preventDefault()
-          const optionElement = optionsWrapperRef.current?.querySelector(
-            '.tl-quick-search-option:nth-child(' + (newIndex + 1) + ')'
-          )
-          if (optionElement) {
-            // @ts-expect-error we are using scrollIntoViewIfNeeded, which is not in standards
-            optionElement?.scrollIntoViewIfNeeded(false)
-          }
-        }
-      }
-      document.addEventListener('keydown', keydownListener, true)
-      return () => {
-        document.removeEventListener('keydown', keydownListener, true)
-      }
-    }, [options, focusedOptionIdx, q])
-
-    return (
-      <div className="tl-quick-search">
-        <CircleButton
-          icon={prefixIcon}
-          onClick={() => {
-            options[focusedOptionIdx]?.onChosen()
-          }}
-        />
-        <div className="tl-quick-search-input-container">
-          {searchFilter && (
-            <div className="tl-quick-search-input-filter">
-              <LogseqTypeTag type={searchFilter} />
-              {searchFilter === 'B' ? 'Search blocks' : 'Search pages'}
-              <div
-                className="tl-quick-search-input-filter-remove"
-                onClick={() => setSearchFilter(null)}
-              >
-                <TablerIcon name="x" />
-              </div>
-            </div>
-          )}
-          <TextInput
-            ref={rInput}
-            type="text"
-            value={q}
-            className="tl-quick-search-input"
-            placeholder="Create or search your graph..."
-            onChange={q => setQ(q.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                finishCreating(q)
-              }
-            }}
-          />
-        </div>
-        <div className="tl-quick-search-options" ref={optionsWrapperRef}>
-          <Virtuoso
-            style={{ height: Math.min(Math.max(1, options.length), 12) * 40 }}
-            totalCount={options.length}
-            itemContent={index => {
-              const { actionIcon, onChosen, element } = options[index]
-              return (
-                <div
-                  key={index}
-                  data-focused={index === focusedOptionIdx}
-                  className="tl-quick-search-option"
-                  tabIndex={0}
-                  onMouseEnter={() => {
-                    setPrefixIcon(actionIcon)
-                    setFocusedOptionIdx(index)
-                  }}
-                  // we have to use mousedown && stop propagation EARLY, otherwise some
-                  // default behavior of clicking the rendered elements will happen
-                  onMouseDownCapture={e => {
-                    if (onChosen()) {
-                      e.stopPropagation()
-                      e.preventDefault()
-                    }
-                  }}
-                >
-                  {element}
-                </div>
-              )
-            }}
-          />
-        </div>
-      </div>
-    )
-  })
-
   PortalComponent = observer(({}: TLComponentProps) => {
     const {
       props: { pageId, fill, opacity },
@@ -783,7 +338,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   ReactComponent = observer((componentProps: TLComponentProps) => {
     const { events, isErasing, isEditing, isBinding } = componentProps
     const {
-      props: { opacity, pageId, stroke, fill, scaleLevel, strokeWidth, size },
+      props: { opacity, pageId, fill, scaleLevel, strokeWidth, size },
     } = this
 
     const app = useApp<Shape>()
@@ -837,6 +392,22 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       }
     }, [isEditing, this.props.collapsed])
 
+    React.useEffect(() => {
+      if (isCreating) {
+        const screenSize = [app.viewport.bounds.width, app.viewport.bounds.height]
+        const boundScreenCenter = app.viewport.getScreenPoint([this.bounds.minX, this.bounds.minY])
+
+        if (
+          boundScreenCenter[0] > screenSize[0] - 400 ||
+          boundScreenCenter[1] > screenSize[1] - 240 ||
+          app.viewport.camera.zoom > 1.5 ||
+          app.viewport.camera.zoom < 0.5
+        ) {
+          app.viewport.zoomToBounds({ ...this.bounds, minY: this.bounds.maxY + 25 })
+        }
+      }
+    }, [app.viewport.bounds.height.toFixed(2)])
+
     const onPageNameChanged = React.useCallback((id: string) => {
       this.initialHeightCalculated = false
       const blockType = validUUID(id) ? 'B' : 'P'
@@ -852,7 +423,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     }, [])
 
     const PortalComponent = this.PortalComponent
-    const LogseqQuickSearch = this.LogseqQuickSearch
 
     const blockContent = React.useMemo(() => {
       if (pageId && this.props.blockType === 'B') {
@@ -867,7 +437,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       return null // not being correctly configured
     }
 
-    const { Breadcrumb, PageNameLink } = renderers
+    const { Breadcrumb, PageName } = renderers
 
     return (
       <HTMLContainer
@@ -889,7 +459,17 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           }}
         >
           {isCreating ? (
-            <LogseqQuickSearch onChange={onPageNameChanged} />
+            <LogseqQuickSearch
+              onChange={onPageNameChanged}
+              onAddBlock={uuid => {
+                // wait until the editor is mounted
+                setTimeout(() => {
+                  app.api.editShape(this)
+                  window.logseq?.api?.edit_block?.(uuid)
+                })
+              }}
+              placeholder="Create or search your graph..."
+            />
           ) : (
             <>
               <div
@@ -912,7 +492,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                     opacity={opacity}
                   >
                     {this.props.blockType === 'P' ? (
-                      <PageNameLink pageName={pageId} />
+                      <PageName pageName={pageId} />
                     ) : (
                       <Breadcrumb blockId={pageId} />
                     )}
@@ -937,10 +517,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
   ReactIndicator = observer(() => {
     const bounds = this.getBounds()
-    const app = useApp<Shape>()
-    if (app.selectedShapesArray.length === 1) {
-      return null
-    }
     return <rect width={bounds.width} height={bounds.height} fill="transparent" rx={8} ry={8} />
   })
 

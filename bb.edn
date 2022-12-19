@@ -1,20 +1,17 @@
 {:paths ["scripts/src" "src/main"]
  :deps
- {org.babashka/spec.alpha
-  {:git/url "https://github.com/babashka/spec.alpha"
-   :sha "1a841c4cc1d4f6dab7505a98ed2d532dd9d56b78"}
-  metosin/malli
+ {metosin/malli
   {:mvn/version "0.9.1"}
   logseq/bb-tasks
   #_{:local/root "../bb-tasks"}
   {:git/url "https://github.com/logseq/bb-tasks"
-   :git/sha "95e4fbdb7bbf1c720c6f8b58e3b3b96b3b487526"}
+   :git/sha "4295d5df0458cc06a09c5d506510ee49b785407d"}
   logseq/graph-parser
   {:local/root "deps/graph-parser"}
   org.clj-commons/digest
   {:mvn/version "1.4.100"}}
  :pods
- {clj-kondo/clj-kondo {:version "2022.02.09"}
+ {clj-kondo/clj-kondo {:version "2022.10.05"}
   org.babashka/fswatcher {:version "0.0.3"}}
  :tasks
  {dev:desktop-watch
@@ -65,6 +62,9 @@
 
   dev:validate-plugins-edn
   logseq.tasks.malli/validate-plugins-edn
+
+  dev:validate-config-edn
+  logseq.tasks.malli/validate-config-edn
 
   dev:lint
   logseq.tasks.dev/lint

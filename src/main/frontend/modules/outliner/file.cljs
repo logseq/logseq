@@ -60,9 +60,10 @@
         (when-not (and (= 1 (count blocks))
                        (string/blank? (:block/content (first blocks)))
                        (nil? (:block/file page-block)))
-          (let [tree (tree/blocks->vec-tree repo blocks (:block/name page-block))]
+          (let [tree-or-blocks (if whiteboard? blocks
+                                   (tree/blocks->vec-tree repo blocks (:block/name page-block)))]
             (if page-block
-              (file/save-tree! page-block (if whiteboard? blocks tree))
+              (file/save-tree! page-block tree-or-blocks)
               (js/console.error (str "can't find page id: " page-db-id)))))))))
 
 (defn write-files!

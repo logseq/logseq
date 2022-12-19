@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { observable, makeObservable, action } from 'mobx'
-import { isSafari } from '../utils'
 
 export interface TLSettingsProps {
   mode: 'light' | 'dark'

@@ -89,6 +89,18 @@ yarn electron-watch
 yarn e2e-test # or npx playwright test
 ```
 
+If e2e failed after first running:
+- `rm -rdf ~/.logseq`
+- `rm -rdf <repo dir>/tmp/`  
+- `rm -rdf <appData dir>/Electron`  (Reference: https://www.electronjs.org/de/docs/latest/api/app#appgetpathname)
+
+If e2e tests fail, they can be debugged by examining a trace dump with [the
+playwright trace
+viewer](https://playwright.dev/docs/trace-viewer#recording-a-trace). Locally
+this will get dumped into e2e-dump/. On CI the trace file will be under
+Artifacts at the bottom of a run page e.g.
+https://github.com/logseq/logseq/actions/runs/3574600322.
+
 ### Unit Testing
 
 Our unit tests use the [shadow-cljs test-runner](https://shadow-cljs.github.io/docs/UsersGuide.html#_testing). To run them:
@@ -136,6 +148,17 @@ To write a test that uses a datascript db:
   destroy test databases after each test.
 * The easiest way to set up test data is to use `test-helper/load-test-files`.
 * For the repo argument that most fns take, pass it `test-helper/test-db`
+
+#### Performance tests
+To write a performance test:
+
+* Use `frontend.util/with-time-number` to get the time in ms. 
+ 
+* Example:
+  ```clojure
+  (are [x timeout] (>= timeout (:time (util/with-time-number (block/normalize-block x true))))
+      ... )
+  ```
 
 For examples of these tests, see `frontend.db.query-dsl-test` and `frontend.db.model-test`.
 

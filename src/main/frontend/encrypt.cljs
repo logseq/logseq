@@ -4,7 +4,6 @@
             [frontend.util :as util]
             [promesa.core :as p]
             [electron.ipc :as ipc]
-            [shadow.loader :as loader]
             [frontend.mobile.util :as mobile-util]))
 
 (defn encrypt-with-passphrase
@@ -22,10 +21,7 @@
              :data)
 
     :else
-    (p/let [lazy-encrypt-with-user-passphrase (resolve 'frontend.extensions.age-encryption/encrypt-with-user-passphrase)
-            content (utf8/encode content)
-            encrypted (@lazy-encrypt-with-user-passphrase passphrase content true)]
-      (utf8/decode encrypted))))
+    nil))
 
 (defn decrypt-with-passphrase
   [passphrase content]
@@ -42,8 +38,4 @@
              :data)
 
     :else
-    (p/let [_ (loader/load :age-encryption)
-            lazy-decrypt-with-user-passphrase (resolve 'frontend.extensions.age-encryption/decrypt-with-user-passphrase)
-            content (utf8/encode content)
-            decrypted (lazy-decrypt-with-user-passphrase passphrase content)]
-      (utf8/decode decrypted))))
+    nil))

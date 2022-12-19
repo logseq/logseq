@@ -23,19 +23,51 @@ const documentModel = onLoad() ?? {
       name: 'Page',
       shapes: [
         {
-          scale: [1, 1],
-          blockType: 'B',
-          id: 'p6bv7EfoQPIF1eZB1RRO6',
-          type: 'logseq-portal',
           parentId: 'page1',
-          point: [369.109375, 170.5546875],
-          size: [240, 0],
+          id: '2ec86a35-7ae1-11ed-8cf0-d77b96340231',
+          type: 'group',
+          children: [
+            '2ec86a30-7ae1-11ed-8cf0-d77b96340231',
+            '304ce750-7ae1-11ed-8cf0-d77b96340231',
+          ],
+        },
+        {
+          scale: [1, 1],
+          id: '2ec86a30-7ae1-11ed-8cf0-d77b96340231',
+          parentId: 'page1',
+          type: 'box',
+          point: [440.1057854416563, 323.39934576376567],
+          size: [237.39428786834378, 109.46744189728395],
+          borderRadius: 2,
           stroke: '',
           fill: '',
+          noFill: false,
+          fontWeight: 400,
+          italic: false,
+          strokeType: 'line',
           strokeWidth: 2,
           opacity: 1,
-          pageId: 'aaasssdddfff',
-          nonce: 1,
+          label: '',
+          nonce: 1670934308981,
+        },
+        {
+          scale: [1, 1],
+          id: '304ce750-7ae1-11ed-8cf0-d77b96340231',
+          parentId: 'page1',
+          type: 'box',
+          point: [667.72008322492, 250.01956107918932],
+          size: [316.42711988510905, 134.2180982739887],
+          borderRadius: 2,
+          stroke: '',
+          fill: '',
+          noFill: false,
+          fontWeight: 400,
+          italic: false,
+          strokeType: 'line',
+          strokeWidth: 2,
+          opacity: 1,
+          label: '',
+          nonce: 1670934311539,
         },
       ],
       bindings: {},
@@ -68,11 +100,15 @@ const Block = () => {
   )
 }
 
-const Breadcrumb = props => {
+const Breadcrumb = ({ endSeparator }) => {
+  return <div className="font-mono">Breadcrumb {endSeparator ? ' > ' : ''}</div>
+}
+
+const BlockReference = props => {
   return <div className="font-mono">{props.blockId}</div>
 }
 
-const PageNameLink = props => {
+const PageName = props => {
   const [value, setValue] = React.useState(JSON.stringify(props))
   return (
     <input
@@ -80,6 +116,14 @@ const PageNameLink = props => {
       value={value}
       onChange={e => setValue(e.target.value)}
     />
+  )
+}
+
+const BacklinksCount = props => {
+  return (
+    <div className={props.className}>
+      <div className={'open-page-ref-link rounded bg-gray-400 p-0.5 '}>3</div>
+    </div>
   )
 }
 
@@ -201,7 +245,7 @@ export default function App() {
   }, [])
 
   return (
-    <div className={`h-screen w-screen`}>
+    <div className={`h-screen w-screen z-0 relative`}>
       <ThemeSwitcher />
       <PreviewButton model={model} />
       <TldrawApp
@@ -209,7 +253,9 @@ export default function App() {
           Page,
           Block,
           Breadcrumb,
-          PageNameLink,
+          PageName,
+          BacklinksCount,
+          BlockReference,
         }}
         handlers={{
           search: searchHandler,
@@ -218,6 +264,7 @@ export default function App() {
           isWhiteboardPage: () => false,
           saveAsset: fileToBase64,
           makeAssetUrl: a => a,
+          getBlockPageName: a => a + '_page',
         }}
         model={model}
         onPersist={app => {

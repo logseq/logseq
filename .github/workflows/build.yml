@@ -17,7 +17,7 @@ env:
   JAVA_VERSION: '8'
   # This is the latest node version we can run.
   NODE_VERSION: '16'
-  BABASHKA_VERSION: '0.8.1'
+  BABASHKA_VERSION: '1.0.168'
 
 jobs:
 
@@ -30,10 +30,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Node
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'yarn'
@@ -42,18 +42,18 @@ jobs:
             static/yarn.lock
 
       - name: Set up Java
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Set up Clojure
-        uses: DeLaGuardo/setup-clojure@master
+        uses: DeLaGuardo/setup-clojure@10.1
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 
       - name: Clojure cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         id: clojure-deps
         with:
           path: |
@@ -79,23 +79,19 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Java
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Set up Clojure
-        uses: DeLaGuardo/setup-clojure@master
+        uses: DeLaGuardo/setup-clojure@10.1
         with:
           cli: ${{ env.CLOJURE_VERSION }}
-
-      - name: Setup Babashka
-        uses: turtlequeue/setup-babashka@v1.3.0
-        with:
-          babashka-version: ${{ env.BABASHKA_VERSION }}
+          bb: ${{ env.BABASHKA_VERSION }}
 
       - name: Run clj-kondo lint
         run: clojure -M:clj-kondo --parallel --lint src
@@ -117,10 +113,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Node
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'yarn'
@@ -129,13 +125,13 @@ jobs:
             static/yarn.lock
 
       - name: Set up Java
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Set up Clojure
-        uses: DeLaGuardo/setup-clojure@master
+        uses: DeLaGuardo/setup-clojure@10.1
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 
@@ -154,7 +150,7 @@ jobs:
         run: clojure -A:cljs -P
 
       - name: Shadow-cljs cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: .shadow-cljs
           # ensure update cache every time
@@ -172,21 +168,30 @@ jobs:
       - name: Prepare E2E test build
         run: |
           yarn gulp:build && clojure -M:cljs compile app publishing electron
-          (cd static && yarn install && yarn rebuild:better-sqlite3)
+          (cd static && yarn install && yarn rebuild:all)
 
       # Exits with 0 if yarn.lock is up to date or 1 if we forgot to update it
       - name: Ensure static yarn.lock is up to date
         run: git diff --exit-code static/yarn.lock
 
-      - name: Run Playwright test
-        run: xvfb-run -- yarn e2e-test
+      - name: Run Playwright test - 1/2
+        run: xvfb-run -- npx playwright test --reporter github --shard=1/2
         env:
-          CI: true
+          LOGSEQ_CI: true
           DEBUG: "pw:api"
+          RELEASE: true # skip dev only test
+
+      - name: Run Playwright test - 2/2
+        run: xvfb-run -- npx playwright test --reporter github --shard=2/2
+        env:
+          LOGSEQ_CI: true
+          DEBUG: "pw:api"
+          RELEASE: true # skip dev only test
 
       - name: Save test artifacts
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: e2e-test-report
-          path: artifacts.zip
+          path: e2e-dump/*
+          retention-days: 1

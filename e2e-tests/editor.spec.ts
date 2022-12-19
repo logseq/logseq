@@ -29,6 +29,25 @@ test('hashtag and quare brackets in same line #4178', async ({ page }) => {
   )
 })
 
+test('hashtag search page auto-complete', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  await block.activeEditing(0)
+
+  await page.type('textarea >> nth=0', '#', { delay: 100 })
+  await page.waitForSelector('text="Search for a page"', { state: 'visible' })
+  await page.keyboard.press('Escape', { delay: 50 })
+
+  await block.mustFill("done")
+
+  await enterNextBlock(page)
+  await page.type('textarea >> nth=0', 'Some #', { delay: 100 })
+  await page.waitForSelector('text="Search for a page"', { state: 'visible' })
+  await page.keyboard.press('Escape', { delay: 50 })
+
+  await block.mustFill("done")
+})
+
 test('disappeared children #4814', async ({ page, block }) => {
   await createRandomPage(page)
 
@@ -148,9 +167,10 @@ test(
 test('copy & paste block ref and replace its content', async ({ page, block }) => {
   await createRandomPage(page)
 
-  await block.mustFill('Some random text')
-  // FIXME: copy instantly will make content disappear
+  await block.mustType('Some random text')
+  // FIXME: https://github.com/logseq/logseq/issues/7541
   await page.waitForTimeout(1000)
+
   if (IsMac) {
     await page.keyboard.press('Meta+c')
   } else {
@@ -158,6 +178,8 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
   }
 
   await page.press('textarea >> nth=0', 'Enter')
+  await block.waitForBlocks(2)
+
   if (IsMac) {
     await page.keyboard.press('Meta+v')
   } else {
@@ -165,54 +187,58 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
   }
   await page.keyboard.press('Enter')
 
-  const blockRef = page.locator('.block-ref >> text="Some random text"');
-
   // Check if the newly created block-ref has the same referenced content
-  await expect(blockRef).toHaveCount(1);
+  await expect(page.locator('.block-ref >> text="Some random text"')).toHaveCount(1);
 
   // Move cursor into the block ref
   for (let i = 0; i < 4; i++) {
     await page.press('textarea >> nth=0', 'ArrowLeft')
   }
 
+  await expect(page.locator('textarea >> nth=0')).not.toHaveValue('Some random text')
+
   // Trigger replace-block-reference-with-content-at-point
   if (IsMac) {
     await page.keyboard.press('Meta+Shift+r')
   } else {
-    await page.keyboard.press('Control+Shift+v')
+    await page.keyboard.press('Control+Shift+r')
   }
+  await expect(page.locator('textarea >> nth=0')).toHaveValue('Some random text')
+  await block.escapeEditing()
+
+  await expect(page.locator('.block-ref >> text="Some random text"')).toHaveCount(0);
+  await expect(page.locator('text="Some random text"')).toHaveCount(2);
 })
 
 test('copy and paste block after editing new block #5962', async ({ page, block }) => {
   await createRandomPage(page)
 
   // Create a block and copy it in block-select mode
-  await block.mustFill('Block being copied')
-  await page.waitForTimeout(100)
+  await block.mustType('Block being copied')
   await page.keyboard.press('Escape')
-  await page.waitForTimeout(100)
+  await expect(page.locator('.ls-block.selected')).toHaveCount(1)
+
   if (IsMac) {
-    await page.keyboard.press('Meta+c')
+    await page.keyboard.press('Meta+c', { delay: 10 })
   } else {
-    await page.keyboard.press('Control+c')
+    await page.keyboard.press('Control+c', { delay: 10 })
   }
-  // await page.waitForTimeout(100)
-  await page.keyboard.press('Enter')
-  await page.waitForTimeout(100)
-  await page.keyboard.press('Enter')
 
-  await page.waitForTimeout(100)
-  // Create a new block with some text
-  await page.keyboard.insertText("Typed block")
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.ls-block.selected')).toHaveCount(0)
+  await expect(page.locator('textarea >> nth=0')).toBeVisible()
+  await page.keyboard.press('Enter')
+  await block.waitForBlocks(2)
 
-  // Quickly paste the copied block
+  await block.mustType('Typed block')
+
   if (IsMac) {
     await page.keyboard.press('Meta+v')
   } else {
     await page.keyboard.press('Control+v')
   }
-
-  await expect(page.locator('text="Typed block"')).toHaveCount(1);
+  await expect(page.locator('text="Typed block"')).toHaveCount(1)
+  await block.waitForBlocks(3)
 })
 
 test('undo and redo after starting an action should not destroy text #6267', async ({ page, block }) => {
@@ -497,7 +523,7 @@ test('press escape when link/image dialog is open, should restore focus to input
 })
 
 test('should show text after soft return when node is collapsed #5074', async ({ page, block }) => {
-  const delay = 100
+  const delay = 300
   await createRandomPage(page)
 
   await page.type('textarea >> nth=0', 'Before soft return', { delay: 10 })
@@ -507,11 +533,10 @@ test('should show text after soft return when node is collapsed #5074', async ({
   await block.enterNext()
   expect(await block.indent()).toBe(true)
   await block.mustType('Child text')
-  await page.waitForTimeout(delay)
 
   // collapse
   await page.click('.block-control >> nth=0')
-  await page.waitForTimeout(delay)
+  await block.waitForBlocks(1)
 
   // select the block that has the soft return
   await page.keyboard.press('ArrowDown')
@@ -519,13 +544,12 @@ test('should show text after soft return when node is collapsed #5074', async ({
   await page.keyboard.press('Enter')
   await page.waitForTimeout(delay)
 
-  expect(await page.inputValue('textarea >> nth=0')).toBe(
-    'Before soft return\nAfter soft return'
-  )
+  await expect(page.locator('textarea >> nth=0')).toHaveText('Before soft return\nAfter soft return')
 
   // zoom into the block
-  await page.click('a.block-control + a')
-  await page.waitForTimeout(delay)
+  page.click('a.block-control + a')
+  await page.waitForNavigation()
+  await page.waitForTimeout(delay * 3)
 
   // select the block that has the soft return
   await page.keyboard.press('ArrowDown')
@@ -533,9 +557,7 @@ test('should show text after soft return when node is collapsed #5074', async ({
   await page.keyboard.press('Enter')
   await page.waitForTimeout(delay)
 
-  expect(await page.inputValue('textarea >> nth=0')).toBe(
-    'Before soft return\nAfter soft return'
-  )
+  await expect(page.locator('textarea >> nth=0')).toHaveText('Before soft return\nAfter soft return')
 })
 
 test('should not erase typed text when expanding block quickly after typing #3891', async ({ page, block }) => {
