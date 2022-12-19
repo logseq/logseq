@@ -811,20 +811,24 @@
   block-error)
 
 (rum/defc select
-  [options on-change class]
-  [:select.mt-1.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-1.sm:ml-4.w-12.sm:w-20
-   {:class     (or class "form-select")
-    :style     {:padding "0 0 0 6px"}
-    :on-change (fn [e]
-                 (let [value (util/evalue e)]
-                   (on-change value)))}
-   (for [{:keys [label value selected]} options]
-     [:option (cond->
-               {:key   label
-                :default-value (or value label)}
-                selected
-                (assoc :selected selected))
-      label])])
+  ([options on-change]
+   (select options on-change nil))
+  ([options on-change class]
+   [:select.pl-6.mt-1.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-1.sm:ml-4.w-12.sm:w-20
+    {:class     (or class "form-select")
+     :on-change (fn [e]
+                  (let [value (util/evalue e)]
+                    (on-change value)))}
+    (for [{:keys [label value selected disabled]
+           :or {selected false disabled false}} options]
+      [:option (cond->
+                {:key   label
+                 :value (or value label)} ;; NOTE: value might be an empty string, `or` is safe here
+                 disabled
+                 (assoc :disabled disabled)
+                 selected
+                 (assoc :selected selected))
+       label])]))
 
 (rum/defc radio-list
   [options on-change class]

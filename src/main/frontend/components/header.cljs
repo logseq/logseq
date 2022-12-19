@@ -116,13 +116,13 @@
                   :title (t :discourse-title)
                   :target "_blank"}
         :icon (ui/icon "brand-discord")}
-       
+
        {:title [:div.flex-row.flex.justify-between.items-center
                 [:span (t :help/bug)]]
         :options {:href bug-report-url
                   :title "Fire a bug report on Github"
                   :target "_blank"}
-        :icon (ui/icon "bug")} 
+        :icon (ui/icon "bug")}
 
        (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
          {:title (str (t :logout) " (" (user-handler/email) ")")
