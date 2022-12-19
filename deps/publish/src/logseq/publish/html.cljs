@@ -186,7 +186,7 @@
               (seq items)))))))
 
 (defn block-tags-cp
-  [{:block/keys [pre-block? tags] :as _block}]
+  [config {:block/keys [pre-block? tags] :as _block}]
   (when (and (not pre-block?)
              (seq tags))
     (->elem
@@ -196,7 +196,8 @@
              (when-let [tag (or (:block/original-name tag)
                                 (:block/name tag))]
                [:a.tag.mx-1 {:data-ref tag
-                             :key (str "tag-" (:db/id tag))}
+                             :key (str "tag-" (:db/id tag))
+                             :href (str "/ref/" (util/url-encode (gp-util/page-name-sanity-lc tag)) "?graph-id=" (:graph-id config))}
                 (str "#" tag)]))
            tags))))
 
@@ -775,7 +776,7 @@
                         (marker-switch t))
         marker-cp (marker-cp t)
         priority (priority-cp t)
-        tags (block-tags-cp t)
+        tags (block-tags-cp config t)
         bg-color (:background-color properties)
         heading (:heading properties)
         elem (if heading
