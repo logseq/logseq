@@ -3,7 +3,6 @@
             ["electron" :refer [app BrowserWindow]]
             ["fs-extra" :as fs]
             ["path" :as path]
-            [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.configs :as cfgs]
             [electron.logger :as logger]
