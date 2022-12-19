@@ -59,7 +59,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       fontWeight,
       id,
     } = this.props
-    const labelSize = label || isEditing ? getTextLabelSize(label, font, 4) : [0, 0]
+    const labelSize = label || isEditing ? getTextLabelSize(label, font, 6) : [0, 0]
     const midPoint = Vec.med(start.point, end.point)
     const dist = Vec.dist(start.point, end.point)
     const scale = Math.max(
@@ -111,7 +111,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       handles: { start, end },
     } = this.props
     const bounds = this.getBounds()
-    const labelSize = label ? getTextLabelSize(label, font, 4) : [0, 0]
+    const labelSize = label ? getTextLabelSize(label, font, 6) : [0, 0]
     const midPoint = Vec.med(start.point, end.point)
     const dist = Vec.dist(start.point, end.point)
     const scale = Math.max(
