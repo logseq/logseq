@@ -17,6 +17,7 @@ export class CreatingState<
 
   private shape = {} as T
   private points: number[][] = [[0, 0, 0.5]]
+  private persistTimeout
 
   // Add a new point and offset the shape, if necessary
   private addNextPoint(point: number[]) {
@@ -96,7 +97,13 @@ export class CreatingState<
     })
     this.tool.previousShape = this.shape
     this.tool.transition('idle')
-    this.app.persist()
+    let tool = this.app.selectedTool.id
+    if (tool === 'pencil' || tool === 'highlighter') {
+      if (this.persistTimeout) { clearTimeout(this.persistTimeout) }
+      this.persistTimeout = setTimeout(this.app.persist, 3000)
+    } else {
+      this.app.persist()
+    }
   }
 
   onKeyDown: TLStateEvents<S>['onKeyDown'] = (info, e) => {
