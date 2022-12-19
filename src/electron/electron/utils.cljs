@@ -8,7 +8,6 @@
             [electron.configs :as cfgs]
             [electron.logger :as logger]
             [cljs-bean.core :as bean]
-            [electron.state :as state]
             [promesa.core :as p]))
 
 (defonce *win (atom nil)) ;; The main window
