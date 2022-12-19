@@ -195,6 +195,12 @@ export class TLApp<
           this.api.unGroup()
         },
       },
+      {
+        keys: 'mod+c mod+g',
+        fn: () => {
+          this.api.toggleGrid()
+        },
+      }
     ]
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
