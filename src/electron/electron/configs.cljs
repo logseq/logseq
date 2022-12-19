@@ -5,6 +5,7 @@
     ["electron" :refer [^js app] :as electron]
     [cljs.reader :as reader]))
 
+;; FIXME: move configs.edn to where it should be
 (defonce dot-root (.join path (.getPath app "home") ".logseq"))
 (defonce cfg-root (.getPath app "userData"))
 (defonce cfg-path (.join path cfg-root "configs.edn"))
