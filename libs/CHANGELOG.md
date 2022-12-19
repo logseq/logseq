@@ -3,8 +3,27 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## [0.0.13]
 
-## [0.0.11]
+### Added
+- Support block content slot hook `App.onBlockRendererSlotted` with a specific block UUID
+- Support plugins calling each other `App.invokeExternalPlugin` with key of models & commands.  
+  E.g. (It is recommended that the caller plugin upgrade the SDK to the latest.)
+  ```typescript
+  // Defined at https://github.com/xyhp915/logseq-journals-calendar/blob/main/src/main.js#L74
+  await logseq.App.invokeExternalPlugin('logseq-journals-calendar.models.goToToday')
+  
+  // Defined at https://github.com/vipzhicheng/logseq-plugin-vim-shortcuts/blob/bec05aeee8/src/keybindings/down.ts#L20
+  await logseq.App.invokeExternalPlugin('logseq-plugin-vim-shortcuts.commands.vim-shortcut-down-0')
+  ```
+- Support api of `Editor.saveFocusedCodeEditorContent` [#FQ](https://github.com/logseq/logseq/issues/7714)
+- Support predicate for `DB.datascriptQuery` inputs
+
+### Fixed
+- Incorrect hook payload from `Editor.registerHighlightContextMenuItem`
+- Auto generate key if not exist for `provideUI` options
+
+## [0.0.12]
 
 ### Added
 

@@ -3,10 +3,10 @@
             ["electron" :refer [app BrowserWindow]]
             ["fs-extra" :as fs]
             ["path" :as path]
-            [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.configs :as cfgs]
             [electron.logger :as logger]
+            [cljs-bean.core :as bean]
             [promesa.core :as p]))
 
 (defonce *win (atom nil)) ;; The main window
