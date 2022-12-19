@@ -19,7 +19,9 @@ export function useCanvasEvents() {
 
     const onPointerDown: TLReactCustomEvents['pointer'] = e => {
       const { order = 0 } = e
-      if (!order) e.currentTarget?.setPointerCapture(e.pointerId)
+      if (!order && e.pointerType !== 'pen') {
+        e.currentTarget?.setPointerCapture(e.pointerId)
+      }
 
       if (!e.isPrimary) {
         // ignore secondary pointers (in multi-touch scenarios)
