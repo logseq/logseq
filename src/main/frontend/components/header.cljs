@@ -36,6 +36,12 @@
                    (route-handler/redirect-to-home!))}
      (ui/icon "home" {:size ui/icon-size})]))
 
+(rum/defc login-modal
+  []
+  [:div.h-96
+   [:webview.h-full
+    {:src config/LOGIN-URL}]])
+
 (rum/defc login < rum/reactive
   < {:key-fn #(identity "login-button")}
   []
@@ -46,7 +52,10 @@
     (when-not (or config/publishing?
                   logged?
                   (not sync-enabled?))
-      [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
+      [:a.button.text-sm.font-medium.block {:on-click #(if (util/electron?)
+                                                         (state/set-modal! login-modal {:key "login-modal"
+                                                                                        :center? true})
+                                                         (js/window.open config/LOGIN-URL))}
        [:span (t :login)]
        (when loading?
          [:span.ml-2 (ui/loading "")])])))

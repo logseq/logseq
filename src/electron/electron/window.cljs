@@ -37,6 +37,7 @@
                       :sandbox                 false
                       :webSecurity             (not dev?)
                       :contextIsolation        true
+                      :webviewTag              true
                       :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
                       ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
                       ;; to use `scollbar-gutter` after the feature is implemented in browsers.
