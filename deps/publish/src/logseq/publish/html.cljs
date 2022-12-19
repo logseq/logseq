@@ -18,7 +18,8 @@
             [logseq.publish.ui :as ui]
             [logseq.publish.util :as util]
             [cljs-time.core :as t]
-            [cljs-time.format :as tf]))
+            [cljs-time.format :as tf]
+            [clojure.set :as set]))
 
 (defn get-locale-string
   [s]
@@ -102,7 +103,9 @@
   "These are properties hidden from user including built-in ones and ones
   configured by user"
   []
-  (gp-property/hidden-built-in-properties))
+  (set/union
+   (gp-property/hidden-built-in-properties)
+   #{:public}))
 
 (defn properties-hidden?
   [properties]
