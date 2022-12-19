@@ -5,6 +5,7 @@
             [clojure.edn :as edn]
             [clojure.string :as string]
             [clojure.walk :as walk]
+            [medley.core :as medley]
             [logseq.graph-parser.log :as log]))
 
 (defn safe-decode-uri-component
@@ -158,15 +159,8 @@
            (string/join " ")))
 
 (defn distinct-by
-  "Copy of frontend.util/distinct-by. Too basic to couple to main app"
   [f col]
-  (reduce
-   (fn [acc x]
-     (if (some #(= (f x) (f %)) acc)
-       acc
-       (vec (conj acc x))))
-   []
-   col))
+  (medley/distinct-by f (seq col)))
 
 (defn normalize-format
   [format]
