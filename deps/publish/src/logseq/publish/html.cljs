@@ -16,7 +16,18 @@
             [logseq.publish.security :as security]
             [logseq.publish.svg :as svg]
             [logseq.publish.ui :as ui]
-            [logseq.publish.util :as util]))
+            [logseq.publish.util :as util]
+            [cljs-time.core :as t]
+            [cljs-time.format :as tf]))
+
+(defn get-locale-string
+  [s]
+  (try
+    (->> (tf/parse (tf/formatters :date-time-no-ms) s)
+         (t/to-default-time-zone)
+         (tf/unparse (tf/formatter "MMM do, yyyy")))
+    (catch :default _e
+      nil)))
 
 (defn- string-of-url
   [url]
@@ -232,10 +243,8 @@
     (when-not (string/blank? s)
       [:span.page-reference
        {:data-ref s}
-       [:span.text-gray-500.bracket page-ref/left-brackets]
        [:a {:href (str "/ref/" (util/url-encode (gp-util/page-name-sanity-lc s)) "?graph-id=" (:graph-id config))}
-        s]
-       [:span.text-gray-500.bracket page-ref/right-brackets]])))
+        s]])))
 
 (defn get-refed-block
   [refed-blocks id embed?]
@@ -690,9 +699,14 @@
      (let [result (gp-mldoc/inline->edn v (gp-mldoc/default-config format))]
        [:div.inline.mr-1 (map-inline config result)]))))
 
+(rum/defc span-comma
+  []
+  [:span ", "])
+
 (rum/defc property-cp
   [config block k value]
-  (let [v (or
+  (let [date (and (= k :date) (get-locale-string (str value)))
+        v (or
            (when (and (coll? value) (seq value))
              (get (:block/properties-text-values block) k))
            value)]
@@ -700,7 +714,27 @@
      [:span.property-key.font-medium (name k)]
      [:span.mr-1 ":"]
      [:div.property-value.inline
-      (inline-text config (:block/format block) (str v))]]))
+      (cond
+        (int? v)
+        v
+
+        date
+        date
+
+        (coll? v)
+        (let [v (->> (remove string/blank? v)
+                     (filter string?))
+              vals (for [item v]
+                     (page-reference item config nil))
+              elems (interpose (span-comma) vals)]
+          (for [elem elems]
+            (rum/with-key elem (str (random-uuid)))))
+
+        (and (string? v) (gp-util/wrapped-by-quotes? v))
+        (gp-util/unquote-string v)
+
+        :else
+        (inline-text config (:block/format block) (str v)))]]))
 
 (rum/defc properties-cp
   [config {:block/keys [pre-block?] :as block}]
