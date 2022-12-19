@@ -1437,7 +1437,7 @@ Similar to re-frame subscriptions"
   [value]
   (set-state! :network/online? value))
 
-(defn get-plugins-commands
+(defn get-plugins-slash-commands
   []
   (mapcat seq (flatten (vals (:plugin/installed-slash-commands @state)))))
 
@@ -1541,6 +1541,12 @@ Similar to re-frame subscriptions"
       (when-let [coll (get-in @state [:plugin/installed-hooks hook-or-all])]
         (set-state! [:plugin/installed-hooks hook-or-all] (disj coll pid))))
     true))
+
+(defn slot-hook-exist?
+  [uuid]
+  (when-let [type (and uuid (string/replace (str uuid) "-" "_"))]
+    (when-let [hooks (sub :plugin/installed-hooks)]
+      (contains? hooks (str "hook:editor:slot_" type)))))
 
 (defn active-tldraw-app
   []

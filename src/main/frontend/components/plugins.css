@@ -559,10 +559,13 @@
           display: flex;
           align-items: center;
           padding-top: 3px;
+          flex-wrap: wrap;
 
           label {
             padding-right: 15px;
             user-select: none;
+            white-space: nowrap;
+            margin-top: 2px;
           }
 
           input {
@@ -893,6 +896,17 @@ html[data-theme='dark'] {
 
     [data-injected-ui] {
       display: inline-flex;
+    }
+  }
+
+  .block-slotted-body {
+    .lsp-hook-ui-slot {
+      display: block;
+
+      [data-injected-ui] {
+        display: flex;
+        flex-direction: column;
+      }
     }
   }
 }
