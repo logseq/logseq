@@ -474,7 +474,9 @@
 
 
 #?(:cljs
-   (def distinct-by medley/distinct-by))
+   (defn distinct-by
+     [f col]
+     (medley/distinct-by f (seq col))))
 
 #?(:cljs
    (defn distinct-by-last-wins
