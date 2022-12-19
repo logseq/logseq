@@ -291,7 +291,7 @@
 
 (rum/defc whiteboard-route
   [route-match]
-  (when (user-handler/alpha-user?)
+  (when (user-handler/feature-available? :whiteboard)
     (let [name (get-in route-match [:parameters :path :name])
           {:keys [block-id]} (get-in route-match [:parameters :query])]
       (whiteboard-page name block-id))))
@@ -300,7 +300,6 @@
   []
   (when (and (user-handler/feature-available? :whiteboard)
              (not (or (state/sub :whiteboard/onboarding-tour?)
-                      (state/enable-whiteboards?)
                       (util/mobile?))))
     (state/pub-event! [:whiteboard/onboarding])
     (state/set-state! [:whiteboard/onboarding-tour?] true)
