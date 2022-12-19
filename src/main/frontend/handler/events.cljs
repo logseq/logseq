@@ -463,6 +463,8 @@
     (when (mobile-util/native-ios?)
       (reset! util/keyboard-height keyboard-height)
       (set! (.. main-node -style -marginBottom) (str keyboard-height "px"))
+      (when-let [^js html (js/document.querySelector ":root")]
+        (.setProperty (.-style html) "--ls-native-kb-height" (str keyboard-height "px")))
       (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
         (set! (.. left-sidebar-node -style -bottom) (str keyboard-height "px")))
       (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
@@ -483,6 +485,8 @@
     (when (= (state/sub :editor/record-status) "RECORDING")
       (state/set-state! :mobile/show-recording-bar? false))
     (when (mobile-util/native-ios?)
+      (when-let [^js html (js/document.querySelector ":root")]
+        (.removeProperty (.-style html) "--ls-native-kb-height"))
       (when-let [card-preview-el (js/document.querySelector ".cards-review")]
         (set! (.. card-preview-el -style -marginBottom) "0px"))
       (when-let [card-preview-el (js/document.querySelector ".encryption-password")]
