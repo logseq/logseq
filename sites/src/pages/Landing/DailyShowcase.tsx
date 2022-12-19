@@ -15,17 +15,18 @@ const showcases = [
     label: 'Relationships',
     iconUrl: IconImageRelations,
     descImgUrl: new URL('./assets/benefit-0.png', import.meta.url),
-    refLink: 'https://twitter.com/1238361496603648001/status/1516223572972351496',
+    refLink: 'https://discord.com/channels/725182569297215569/725188616695054356/1045646531090448436',
+    userName: 'oskr',
+    refType: 'discord',
     desc: (
       <p>
         Communicate better. <span className="opacity-60">Stay on top of your <br/>relationships, conversations, and meetings.</span>
       </p>),
     feedback: (
       <p>
-        <span>“It is amazing how many times I’m on the phone with my product manager and</span> he asks a question about
-        a stat
-        and I can just search my Logseq (with meeting notes, research highlights, etc) live and answer.
-        <span> It’s honestly next level.”</span>
+        <span>“I mostly use it for work: keeping </span>daily notes & meeting notes. It's the best solution I've found
+        to managing my tasks
+        <span>(and I only use a fraction of the features there).”</span>
       </p>
     )
   },
@@ -33,6 +34,9 @@ const showcases = [
     label: 'Daily Plan',
     iconUrl: IconImageDailyPlan,
     descImgUrl: new URL('./assets/benefit-1.png', import.meta.url),
+    refLink: 'https://discord.com/channels/725182569297215569/918889676071374889/1050520429258887320',
+    refType: 'discord',
+    userName: 'breadchris',
     desc: (
       <p>
         <span>Channel your attention,</span>
@@ -40,8 +44,10 @@ const showcases = [
       </p>),
     feedback: (
       <p>
-        “Logseq has actually saved my life, I don’t think I would be able to be a founder without it.
-        <span> My brain is so ADD and it just works so well with it.”</span>
+        <span>“I used to hate taking notes.</span>
+        If I told my past self that I wouldn't just like taking notes, but that I would become addicted to it, I
+        wouldn't believe it.
+        <span>Logseq has changed my life 🔥🔥🔥”</span>
       </p>
     )
   },
@@ -51,6 +57,7 @@ const showcases = [
     descImgUrl: new URL('./assets/benefit-2.png', import.meta.url),
     refLink: 'https://discord.com/channels/725182569297215569/766475028978991104/965786173148627044',
     refType: 'discord',
+    userName: 'Kiernan',
     desc: (
       <p>
         Understand yourself better.
@@ -66,6 +73,7 @@ const showcases = [
     iconUrl: IconImageDataControl,
     descImgUrl: new URL('./assets/benefit-3.png', import.meta.url),
     refLink: 'https://twitter.com/15777984/status/1522601138738151427',
+    userName: '@b05crypto',
     desc: (
       <p>
         <span>Do all this without lock-in.</span> <br/>
@@ -80,7 +88,7 @@ const showcases = [
   }
 ]
 
-export function DailyShowcaseTabs (
+export function DailyShowcaseTabs(
   props: { activeShowcase: string, setActiveShowcase: any }
 ) {
   const { activeShowcase, setActiveShowcase } = props
@@ -106,7 +114,7 @@ export function DailyShowcaseTabs (
   </div>)
 }
 
-export function DailyShowcaseSelect (
+export function DailyShowcaseSelect(
   props: { activeShowcase: string, setActiveShowcase: any }
 ) {
   const { activeShowcase, setActiveShowcase } = props
@@ -147,7 +155,7 @@ export function DailyShowcaseSelect (
   )
 }
 
-export function DailyShowcase () {
+export function DailyShowcase() {
   const appState = useAppState()
   const [activeShowcase, setActiveShowcase] = useState(showcases[0].label)
   const [sizeCache, setSizeCache] = useState([0, 0])
@@ -288,12 +296,17 @@ export function DailyShowcase () {
                       </div>
 
                       <div className="ft">
-                        <strong className="font-normal opacity-60">User Feedback</strong>
+                        <div className={'flex flex-col'}>
+                          <strong className="font-normal opacity-60">User Feedback</strong>
+                          <span><span className="font-normal opacity-60 pr-2">by</span>{it.userName}</span>
+                        </div>
                         <div className="flex items-center">
                           <span className="opacity-60">Via </span>
                           {(it.refType === 'discord') ?
-                            (<><DiscordLogo className="mx-2" size={30} weight="duotone"/> <span className="opacity-60">Discord</span></>) :
-                            (<><TwitterLogo className="mx-2" size={30} weight="duotone"/> <span className="opacity-60">Twitter</span></>)}
+                            (<><DiscordLogo className="mx-2" size={30} weight="duotone"/> <span
+                              className="opacity-60">Discord</span></>) :
+                            (<><TwitterLogo className="mx-2" size={30} weight="duotone"/> <span
+                              className="opacity-60">Twitter</span></>)}
                           <span
                             className="border rounded p-1 border-gray-600 ml-3 bg-gray-500/20 cursor-pointer active:opacity-80">
                             <a target={'_blank'} href={it.refLink}>

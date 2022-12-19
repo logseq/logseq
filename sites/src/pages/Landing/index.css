@@ -841,8 +841,8 @@ h1, h2, h3 {
             -webkit-font-smoothing: antialiased;
 
             > .fd {
-              @apply leading-7 pt-6 pb-2
-              sm:leading-[35px] sm:pt-0 sm:pb-[12px];
+              @apply leading-7 pt-6 pb-2 break-all
+              sm:leading-[35px] sm:pt-0 sm:pb-[20px];
 
               span {
                 @apply opacity-60;
