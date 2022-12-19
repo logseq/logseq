@@ -409,6 +409,12 @@ button.tl-select-input-trigger {
   backface-visibility: hidden;
   pointer-events: all;
   user-select: text;
+
+  &:focus {
+    outline: none;
+    border: none;
+    box-shadow: none;
+  }
 }
 
 .tl-stroke-hitarea {

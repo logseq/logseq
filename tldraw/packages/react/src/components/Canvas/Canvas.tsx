@@ -165,9 +165,9 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                 isSelected={true}
               />
             ))}
-          {hoveredShapes.map(s => (
-            <Indicator key={'hovered_indicator_' + s.id} shape={s} />
-          ))}
+          {hoveredShapes.map(
+            s => s !== editingShape && <Indicator key={'hovered_indicator_' + s.id} shape={s} />
+          )}
           {singleSelectedShape && components.BacklinksCount && (
             <BacklinksCountContainer
               hidden={false}

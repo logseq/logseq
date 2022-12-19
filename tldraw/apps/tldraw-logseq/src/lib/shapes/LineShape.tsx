@@ -102,7 +102,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     )
   })
 
-  ReactIndicator = observer(() => {
+  ReactIndicator = observer(({ isEditing }: TLComponentProps) => {
     const {
       id,
       decorations,
@@ -133,7 +133,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
             decorations?.end
           )}
         />
-        {label && (
+        {label && !isEditing && (
           <rect
             x={bounds.width / 2 - (labelSize[0] / 2) * scale + offset[0]}
             y={bounds.height / 2 - (labelSize[1] / 2) * scale + offset[1]}
