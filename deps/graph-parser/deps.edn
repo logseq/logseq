@@ -8,8 +8,7 @@
   ;; stubbed in nbb
   com.lambdaisland/glogi      {:mvn/version "1.1.144"}
   ;; built in to nbb
-  cljs-bean/cljs-bean         {:mvn/version "1.5.0"}
-  medley/medley               {:mvn/version "1.4.0"}}
+  cljs-bean/cljs-bean         {:mvn/version "1.5.0"}}
 
  :aliases
  ;; This runs tests with nodejs. Would be nice to run this with in a browser env

@@ -5,7 +5,6 @@
             [clojure.edn :as edn]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [medley.core :as medley]
             [logseq.graph-parser.log :as log]))
 
 (defn safe-decode-uri-component
@@ -158,9 +157,20 @@
            (map string/capitalize)
            (string/join " ")))
 
+
 (defn distinct-by
-  [f col]
-  (medley/distinct-by f (seq col)))
+  "Copy from medley"
+  [f coll]
+  (let [step (fn step [xs seen]
+               (lazy-seq
+                ((fn [[x :as xs] seen]
+                   (when-let [s (seq xs)]
+                     (let [fx (f x)]
+                       (if (contains? seen fx)
+                         (recur (rest s) seen)
+                         (cons x (step (rest s) (conj seen fx)))))))
+                 xs seen)))]
+    (step (seq coll) #{})))
 
 (defn normalize-format
   [format]
