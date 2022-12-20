@@ -1231,10 +1231,17 @@ independent of format as format specific heading characters are stripped"
             {:use-cache? false
              :query-fn (fn []
                          (let [entities (mapcat (fn [id]
-                                                  (:block/_path-refs (db-utils/entity id))) pages)]
-                           (db-utils/pull-many '[*] (map :db/id entities))))}
+                                                  (:block/_path-refs (db-utils/entity id))) pages)
+                               blocks (map (fn [e]
+                                             {:block/parent (:block/parent e)
+                                              :block/left (:block/left e)
+                                              :block/page (:block/page e)
+                                              :block/collapsed? (:block/collapsed? e)}) entities)]
+                           {:entities entities
+                            :blocks blocks}))}
             nil)
           react
+          :entities
           (remove (fn [block] (= page-id (:db/id (:block/page block)))))))))))
 
 (defn get-date-scheduled-or-deadlines
