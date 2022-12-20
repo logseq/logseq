@@ -56,7 +56,9 @@
          :path-params {:name (get-in block [:block/page :block/name])
                        :block-route-name (model/heading-content->route-name (:block/content block))}}
         {:to :page
-         :path-params {:name (str page-name-or-block-uuid)}})))
+         :path-params {:name (if (string? page-name-or-block-uuid)
+                               (util/page-name-sanity-lc page-name-or-block-uuid)
+                               (str page-name-or-block-uuid))}})))
 
   (defn- default-page-route [page-name]
     {:to :page
