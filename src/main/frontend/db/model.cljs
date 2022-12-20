@@ -299,15 +299,17 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-page-format
   [page-name]
-  (or
-   (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page-name)])]
-     (or
-      (:block/format page)
-      (when-let [file (:block/file page)]
-        (when-let [path (:file/path (db-utils/entity (:db/id file)))]
-          (gp-util/get-format path)))))
-   (state/get-preferred-format)
-   :markdown))
+  {:post [(keyword? %)]}
+  (keyword
+   (or
+    (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page-name)])]
+      (or
+       (:block/format page)
+       (when-let [file (:block/file page)]
+         (when-let [path (:file/path (db-utils/entity (:db/id file)))]
+           (gp-util/get-format path)))))
+    (state/get-preferred-format)
+    :markdown)))
 
 (defn page-alias-set
   [repo-url page]
@@ -1230,9 +1232,11 @@ independent of format as format specific heading characters are stripped"
              :query-fn (fn []
                          (let [entities (mapcat (fn [id]
                                                   (:block/_path-refs (db-utils/entity id))) pages)
-                               blocks (map (fn [e] {:block/parent (:block/parent e)
-                                                    :block/left (:block/left e)
-                                                    :block/page (:block/page e)}) entities)]
+                               blocks (map (fn [e]
+                                             {:block/parent (:block/parent e)
+                                              :block/left (:block/left e)
+                                              :block/page (:block/page e)
+                                              :block/collapsed? (:block/collapsed? e)}) entities)]
                            {:entities entities
                             :blocks blocks}))}
             nil)

@@ -115,7 +115,7 @@
 
 ;; only save when user's idle
 
-(def *db-listener (atom nil))
+(defonce *db-listener (atom nil))
 
 (defn- repo-listen-to-tx!
   [repo conn]

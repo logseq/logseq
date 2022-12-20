@@ -330,6 +330,11 @@
              new))
          configs))
 
+(defn validate-current-config
+  "TODO: Temporal fix"
+  [config]
+  (when (map? config) config))
+
 (defn get-config
   "User config for the given repo or current repo if none given. All config fetching
 should be done through this fn in order to get global config and config defaults"
@@ -339,7 +344,7 @@ should be done through this fn in order to get global config and config defaults
    (merge-configs
     default-config
     (get-in @state [:config ::global-config])
-    (get-in @state [:config repo-url]))))
+    (validate-current-config (get-in @state [:config repo-url])))))
 
 (defonce publishing? (atom nil))
 
@@ -551,10 +556,10 @@ Similar to re-frame subscriptions"
   "Sub equivalent to get-config which should handle all sub user-config access"
   ([] (sub-config (get-current-repo)))
   ([repo]
-   (let [config (sub :config)]
+   (let [config (validate-current-config (sub :config))]
      (merge-configs default-config
                     (get config ::global-config)
-                    (get config repo)))))
+                    (validate-current-config (get config repo))))))
 
 (defn enable-grammarly?
   []
@@ -1437,7 +1442,7 @@ Similar to re-frame subscriptions"
   [value]
   (set-state! :network/online? value))
 
-(defn get-plugins-commands
+(defn get-plugins-slash-commands
   []
   (mapcat seq (flatten (vals (:plugin/installed-slash-commands @state)))))
 
@@ -1541,6 +1546,12 @@ Similar to re-frame subscriptions"
       (when-let [coll (get-in @state [:plugin/installed-hooks hook-or-all])]
         (set-state! [:plugin/installed-hooks hook-or-all] (disj coll pid))))
     true))
+
+(defn slot-hook-exist?
+  [uuid]
+  (when-let [type (and uuid (string/replace (str uuid) "-" "_"))]
+    (when-let [hooks (sub :plugin/installed-hooks)]
+      (contains? hooks (str "hook:editor:slot_" type)))))
 
 (defn active-tldraw-app
   []

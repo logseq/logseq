@@ -4520,6 +4520,7 @@
         :on-boarding/new-graph-desc-5 "/logseq - yapılandırma, custom.css ve bazı meta veriler saklanır."
         :on-boarding/welcome-whiteboard-modal-title "Düşünceleriniz için yeni bir tuval."
         :on-boarding/welcome-whiteboard-modal-description "Beyaz tahtalar, fikir üretme ve düzenleme için harika bir araçtır. Şimdi bilgi tabanınızdaki düşüncelerinizi ya da yenilerini birbirleriyle yan yana getirerek, bağlantı kurabilir, ilişkilendirebilir ve yeni yöntemlerle anlayabilirsiniz."
+        :on-boarding/welcome-whiteboard-modal-skip "Atla"
         :on-boarding/welcome-whiteboard-modal-start "Beyaz tahtaya başla"
         :on-boarding/tour-whiteboard-home "{1} Beyaz tahtalarınız için giriş sayfasıdır"
         :on-boarding/tour-whiteboard-home-description "Beyaz tahtalar uygulamada kendi bölümlerine sahiptir ve onları bir bakışta görebilir, kolayca yenilerini oluşturabilir veya silebilirsiniz."
@@ -4632,6 +4633,7 @@
         :file/last-modified-at "Son değiştirilme tarihi"
         :file/no-data "Veri yok"
         :file/format-not-supported ".{1} biçimi desteklenmiyor."
+        :file/validate-existing-file-error "Sayfa, başka bir dosyayla zaten var: {1}, geçerli dosya: {2}. Lütfen bunlardan yalnızca birini saklayın ve grafınız için yeniden dizin oluşturun."
         :file-rn/re-index "Dosyalar yeniden adlandırıldıktan ve diğer cihazlarla eşitledikten sonra yeniden dizin oluşturma önerilir."
         :file-rn/need-action "Yeni biçime uyması için dosya yeniden adlandırma eylemleri önerilir. Yeniden adlandırılan dosyalar eşitlendiğinde tüm cihazlarda yeniden dizin oluşturma gerekir."
         :file-rn/or-select-actions " veya aşağıdaki dosyaları tek tek yeniden adlandırın, ardından "
@@ -4924,7 +4926,8 @@
 
         :conversion/non-desktop "Eski sürümlerdeki graf dizininin yeni biçime dönüştürülmesi gerekiyor.
           Lütfen dönüştürmeyi yapmak için masaüstü uygulamasını kullanın."
-        :conversion/write-filename-format "Gelen dosyalar için biçimi uygula"}
+        :conversion/write-filename-format "Gelen dosyalar için biçimi uygula"
+        :notification/clear-all "Tümünü temizle"}
 
    :ko {:tutorial/text #?(:cljs (rc/inline "tutorial-ko.md")
                           :default "tutorial-ko.md")

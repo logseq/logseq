@@ -7,7 +7,8 @@
             [promesa.core :as p]
             [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.util :as util]))
 
 (defn run-git-command!
   [command]
@@ -17,14 +18,15 @@
   [command]
   (ipc/ipc "runGitWithinCurrentGraph" command))
 
-;; TODO: export to pdf/html/word
-(defn run-pandoc-command!
-  [command]
-  (ipc/ipc "runPandoc" command))
+(defn run-cli-command!
+  [command args]
+  (ipc/ipc :runCli {:command      command
+                    :args         args
+                    :returnResult true}))
 
 (defn wrap-notification!
   [command f args]
-  (p/let [result (f args)]
+  (p/let [result (f command args)]
     (notification/show!
      (if (string/blank? result)
        [:p [:code.mr-1 (str command " " args) ]
@@ -33,22 +35,29 @@
      :success
      false)))
 
+(def commands-denylist
+  #{"rm" "mv" "rename" "dd" ">" "command" "sudo"})
+
 (defn run-command!
   [command]
-  (let [[command args] (gp-util/split-first " " command)
-        command (and command (string/lower-case command))]
-    (when (and (not (string/blank? command)) (not (string/blank? args)))
-      (let [args (string/trim args)]
-        (case (keyword command)
-         :git
-         (wrap-notification! command run-git-command! args)
+  (let [[command args]
+        (if (and (string? command) (string/includes? command " "))
+          (gp-util/split-first " " command)
+          [command ""])
+        command (and command (string/lower-case command))
+        args (-> args str string/trim)]
+    (when-not (string/blank? command)
+      (cond
+        (contains? commands-denylist command)
+        (notification/show!
+         [:div (str command " is too dangerous!")]
+         :error)
 
-         ;; :pandoc
-         ;; (wrap-notification! command run-pandoc-command! args)
+        (= "git" command)
+        (wrap-notification! command (fn [_ args] (run-git-command! args)) args)
 
-         (notification/show!
-          [:div (str command " is not supported yet!")]
-          :error))))))
+        :else
+        (run-cli-command! command args)))))
 
 ;; git show $REV:$FILE
 (defn- get-versioned-file-content
@@ -90,3 +99,11 @@
     (notification/show!
      [:div "git config successfully!"]
      :success)))
+
+(defn run-cli-command-wrapper!
+  [command content]
+  (let [args (case command
+               "alda" (util/format "play -c \"%s\"" content)
+               ;; TODO: plugin slot
+               content)]
+    (run-cli-command! command args)))

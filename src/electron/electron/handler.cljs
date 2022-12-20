@@ -11,6 +11,7 @@
             ["diff-match-patch" :as google-diff]
             ["/electron/utils" :as js-utils]
             ["abort-controller" :as AbortController]
+            [electron.shell :as shell]
             [electron.fs-watcher :as watcher]
             [electron.configs :as cfgs]
             [promesa.core :as p]
@@ -357,9 +358,35 @@
 (defmethod handle :getLogseqDotDirRoot []
   (utils/get-ls-dotdir-root))
 
-(defmethod handle :testProxyUrl [win [_ url]]
-  (p/let [_ (utils/fetch url)]
-    (utils/send-to-renderer win :notification {:type "success" :payload (str "Successfully: " url)})))
+(defmethod handle :getSystemProxy [^js window]
+  (if-let [sess (.. window -webContents -session)]
+    (p/let [proxy (.resolveProxy sess "https://www.google.com")]
+      proxy)
+    (p/resolved nil)))
+
+(defmethod handle :setProxy [_win [_ options]]
+  ;; options: {:type "system" | "direct" | "socks5" | "http" | ... }
+  (p/do!
+   (utils/<set-proxy options)
+   (utils/save-proxy-settings options)))
+
+(defmethod handle :testProxyUrl [_win [_ url options]]
+  ;; FIXME: better not to set proxy while testing url
+  (let [_ (utils/<set-proxy options)
+        start-ms (.getTime (js/Date.))]
+    (-> (utils/fetch url)
+        (p/timeout 10000)
+        (p/then (fn [resp]
+                  (let [code (.-status resp)
+                        response-ms (- (.getTime (js/Date.)) start-ms)]
+                    (if (<= 200 code 299)
+                      #js {:code code
+                           :response-ms response-ms}
+                      (p/rejected (js/Error. (str "HTTP status " code)))))))
+        (p/catch (fn [e]
+                   (if (instance? p/TimeoutException e)
+                     (p/rejected (js/Error. "Timeout"))
+                     (p/rejected e)))))))
 
 (defmethod handle :httpFetchJSON [_win [_ url options]]
   (p/let [res (utils/fetch url options)
@@ -384,11 +411,12 @@
 
 (defmethod handle :userAppCfgs [_window [_ k v]]
   (let [config (cfgs/get-config)]
-    (if-not k
-      config
+    (if-let [k (and k (keyword k))]
       (if-not (nil? v)
-        (cfgs/set-item! (keyword k) v)
-        (cfgs/get-item (keyword k))))))
+        (do (cfgs/set-item! k v)
+            (state/set-state! [:config k] v))
+        (cfgs/get-item k))
+     config)))
 
 (defmethod handle :getDirname [_]
   js/__dirname)
@@ -430,6 +458,24 @@
   (when (seq args)
     (git/init!)
     (git/run-git2! (clj->js args))))
+
+(defmethod handle :runCli [window [_ {:keys [command args returnResult]}]]
+  (try
+    (let [on-data-handler (fn [message]
+                            (let [result (str "Running " command ": " message)]
+                              (when returnResult
+                                (utils/send-to-renderer window "notification"
+                                                        {:type    "success"
+                                                         :payload result}))))
+          deferred        (p/deferred)
+          on-exit-handler (fn [code]
+                            (p/resolve! deferred code))
+          _job            (shell/run-command-safely! command args on-data-handler on-exit-handler)]
+      deferred)
+    (catch js/Error e
+      (utils/send-to-renderer window "notification"
+                              {:type    "error"
+                               :payload (.-message e)}))))
 
 (defmethod handle :gitCommitAll [_ [_ message]]
   (git/add-all-and-commit! message))
@@ -549,9 +595,6 @@
   (logger/warn ::reload-window-page)
   (when-let [web-content (.-webContents win)]
     (.reload web-content)))
-
-(defmethod handle :setHttpsAgent [^js _win [_ opts]]
-  (utils/set-fetch-agent opts))
 
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; file-sync-rs-apis ;;
