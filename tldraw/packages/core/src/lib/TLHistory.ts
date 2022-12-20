@@ -89,6 +89,9 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
   @action undo = () => {
     if (this.isPaused) return
     if (this.app.selectedTool.currentState.id !== 'idle') return
+
+    // pencil && highlighter changes may not be saved yet
+    this.persist()
     if (this.canUndo) {
       this.setPointer(this.pointer - 1)
     }
