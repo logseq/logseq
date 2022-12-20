@@ -94,7 +94,6 @@
      :ui/file-component                     nil
      :ui/custom-query-components            {}
      :ui/show-recent?                       false
-     :ui/command-palette-open?              false
      :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
                                                 false)
      ;; remember scroll positions of visited paths
@@ -1338,16 +1337,24 @@ Similar to re-frame subscriptions"
                {:fullscreen? false
                 :close-btn?  true}))
   ([modal-panel-content {:keys [id label fullscreen? close-btn? close-backdrop? center?]}]
-   (when (seq (get-sub-modals))
-     (close-sub-modal! true))
-   (swap! state assoc
-          :modal/id id
-          :modal/label (or label (if center? "ls-modal-align-center" ""))
-          :modal/show? (boolean modal-panel-content)
-          :modal/panel-content modal-panel-content
-          :modal/fullscreen? fullscreen?
-          :modal/close-btn? close-btn?
-          :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)) nil))
+   (let [opened? (modal-opened?)]
+     (when opened?
+       (close-modal!))
+     (when (seq (get-sub-modals))
+       (close-sub-modal! true))
+
+     (async/go
+       (when opened?
+         (<! (async/timeout 100)))
+       (swap! state assoc
+              :modal/id id
+              :modal/label (or label (if center? "ls-modal-align-center" ""))
+              :modal/show? (boolean modal-panel-content)
+              :modal/panel-content modal-panel-content
+              :modal/fullscreen? fullscreen?
+              :modal/close-btn? close-btn?
+              :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true))))
+   nil))
 
 (defn close-modal!
   []

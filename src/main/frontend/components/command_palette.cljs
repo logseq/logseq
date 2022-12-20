@@ -36,9 +36,6 @@
 (rum/defcs command-palette <
   (shortcut/disable-all-shortcuts)
   (rum/local "" ::input)
-  {:will-unmount (fn [state]
-                   (state/set-state! :ui/command-palette-open? false)
-                   state)}
   [state {:keys [commands limit]
           :or {limit 100}}]
   (let [input (::input state)]
@@ -59,13 +56,3 @@
        {:item-render render-command
         :class       "cp__palette-results"
         :on-chosen   (fn [cmd] (cp/invoke-command cmd))})]]))
-
-(rum/defc command-palette-modal < rum/reactive
-  []
-  (let [open? (state/sub :ui/command-palette-open?)]
-    (when open?
-      (state/set-modal!
-       #(command-palette {:commands (cp/get-commands)})
-       {:fullscreen? false
-        :close-btn?  false}))
-    nil))
