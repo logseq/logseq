@@ -3,6 +3,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
+            [clojure.edn :as edn]
             [datascript.core :as d]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.date-time-util :as date-time-util]
@@ -19,6 +20,13 @@
   (and
    (vector? block)
    (= "Heading" (first block))))
+
+(defn edn-comment-block?
+  [block]
+  (and
+   (vector? block)
+   (= "Raw_Html" (first block))
+   (string/starts-with? (second block) "<!--EDN")))
 
 (defn get-tag
   [block]
@@ -571,7 +579,9 @@
                        :properties-order (vec (:properties-order properties)))
 
                 (seq (:invalid-properties properties))
-                (assoc :invalid-properties (:invalid-properties properties)))
+                (assoc :invalid-properties (:invalid-properties properties))
+                (some? (:block/property-schema properties))
+                (assoc :block/property-schema (:block/property-schema properties)))
         block (if (get-in block [:properties :collapsed])
                 (-> (assoc block :collapsed? true)
                     (update :properties (fn [m] (dissoc m :collapsed)))
@@ -624,12 +634,23 @@
                       timestamps' (merge timestamps timestamps)]
                   (recur headings (rest blocks) timestamps' properties body))
 
+                (edn-comment-block? block)
+                (let [attributes (-> (second block)
+                                     (string/replace #"^<!--EDN\n|-->$" "")
+                                     edn/read-string)]
+                  (prn :EDN block attributes)
+                  (recur headings (rest blocks) timestamps attributes body))
+
                 (gp-property/properties-ast? block)
-                (let [properties (extract-properties (second block) (assoc user-config :format format))]
+                (let [_ (prn :PROP block properties)
+                      properties (merge properties
+                                        (extract-properties (second block) (assoc user-config :format format)))]
+
                   (recur headings (rest blocks) timestamps properties body))
 
                 (heading-block? block)
-                (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
+                (let [_ (prn :HEADING block properties)
+                      block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
                       block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))]
                   (recur (conj headings block'') (rest blocks) {} {} []))
 
