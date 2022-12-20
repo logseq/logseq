@@ -1469,6 +1469,7 @@
              :command.go/forward                     "İleriye git"
              :command.search/re-index                "Arama dizinini yeniden oluştur"
              :command.sidebar/open-today-page        "Sağ kenar çubuğunda bugünün sayfasını açın"
+             :command.sidebar/close-top              "Sağ kenar çubuğunun en üst öğesini kapatır"
              :command.sidebar/clear                  "Sağ kenar çubuğundaki herşeyi temizle"
              :command.misc/copy                      "mod+c"
              :command.command-palette/toggle         "Komut paletini aç"
