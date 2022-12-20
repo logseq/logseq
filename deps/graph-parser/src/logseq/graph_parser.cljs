@@ -8,7 +8,6 @@
             [logseq.graph-parser.config :as gp-config]
             [logseq.db.schema :as db-schema]
             [clojure.string :as string]
-            [clojure.edn :as edn]
             [clojure.set :as set]))
 
 (defn- retract-blocks-tx
@@ -69,9 +68,6 @@
         retain-uuids (set (keep :block/uuid retain-uuid-blocks))]
     (retract-blocks-tx (distinct blocks) retain-uuids)))
 
-;; TODO: Pass this as arg to parse-file
-(def edn-files (atom {}))
-
 (defn parse-file
   "Parse file and save parsed data to the given db. Main parse fn used by logseq app.
 Options available:
@@ -100,24 +96,11 @@ Options available:
                :or   {pages []
                       blocks []
                       ast []}}
-              (cond
-                (contains? gp-config/mldoc-support-formats format)
-                (let [res (extract/extract file content extract-options')
-                      edn-file (string/replace-first file #"\.(.*)$" ".edn")]
-                  (if-let [edn-file-content (some-> (@edn-files edn-file) edn/read-string)]
-                    (update res :pages (fn [pages]
-                                         (into [(merge (first pages)
-                                                       (:page edn-file-content))]
-                                               (rest pages))))
-                    res))
+              (cond (contains? gp-config/mldoc-support-formats format)
+                (extract/extract file content extract-options')
 
                 (gp-config/whiteboard? file)
                 (extract/extract-whiteboard-edn file content extract-options')
-
-                ;; Save edn files for later
-                (string/ends-with? file ".edn")
-                (do (swap! edn-files assoc file content)
-                  {})
 
                 :else nil)
               block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
