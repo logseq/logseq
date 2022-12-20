@@ -44,7 +44,7 @@
   [x y]
     (if (and (number? x) (number? y))
       (< x y)
-      (.localeCompare (str x) (str y) (state/sub :preferred-language) (clj->js {:numeric true}))))
+      (.localeCompare (str x) (str y) (state/sub :preferred-language) #js {:numeric true})))
 
 (defn- sort-result [result {:keys [sort-by-column sort-desc? sort-nlp-date?]}]
   (if (some? sort-by-column)
