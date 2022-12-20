@@ -366,7 +366,7 @@
                                      (route-handler/sidebar-journals!)
                                      (route-handler/go-to-journals!)))
                :icon             "calendar"})))
-         
+
          (when enable-whiteboards?
            (sidebar-item
             {:class           "whiteboard"
@@ -375,7 +375,7 @@
              :active          (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
              :icon            "whiteboard"
              :icon-extension? true}))
-         
+
          (when (state/enable-flashcards? (state/get-current-repo))
            [:div.flashcards-nav
             (flashcards srs-open?)])
@@ -804,7 +804,6 @@
       (ui/notification)
       (ui/modal)
       (ui/sub-modal)
-      (command-palette/command-palette-modal)
       (select/select-modal)
       (custom-context-menu)
       (plugins/custom-js-installer {:t t
