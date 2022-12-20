@@ -3421,6 +3421,35 @@
          (map (comp gdom/getElementByClass str :block/uuid))
          state/exit-editing-and-set-selected-blocks!)))
 
+(defn select-parent [e]
+  (let [edit-input (some-> (state/get-edit-input-id) gdom/getElement)
+        edit-block (state/get-edit-block)]
+    (cond
+      ;; editing block fully selected
+      (and edit-block edit-input
+           (= (util/get-selected-text) (.-value edit-input)))
+      (do
+        (util/stop e)
+        (state/exit-editing-and-set-selected-blocks!
+         [(gdom/getElementByClass (str (:block/uuid edit-block)))]))
+
+      edit-block
+      nil
+
+      :else
+      (do
+        (util/stop e)
+        (if-let [block-id (some-> (first (state/get-selection-blocks))
+                                  (dom/attr "blockid")
+                                  uuid)]
+          (when-let [block (db/entity [:block/uuid block-id])]
+            (let [parent (:block/parent block)]
+              (if (and parent (:block/parent parent))
+                (state/exit-editing-and-set-selected-blocks! [(gdom/getElementByClass (:block/uuid parent))])
+                ;; page block
+                (select-all-blocks!))))
+          (select-all-blocks!))))))
+
 (defn escape-editing
   ([]
    (escape-editing true))
