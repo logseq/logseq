@@ -2127,7 +2127,8 @@
 (defn property-value-on-chosen-handler
   [element-id q property]
   (fn [property-value]
-    (let [schema (:block/property-schema (db/pull [:block/name property]))
+    (let [schema (:block/property-schema (db/get-pre-block (state/get-current-repo)
+                                                           (:db/id (db/entity [:block/name property]))))
           final-value (or property-value q)
           [success? property-value-or-error] (property-handler/validate schema final-value)]
       (if success?

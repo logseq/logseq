@@ -3,6 +3,7 @@
   (:require [frontend.state :as state]
             [frontend.db :as db]
             [clojure.string :as string]
+            [goog.string :as gstring]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.page-ref :as page-ref]))
 
@@ -13,10 +14,20 @@
 ;; TODO spec
 (defn set-property-schema!
   [entity key value]
-  (let [schema (assoc (:block/property-schema entity) key value)]
+  (let [pre-block (db/get-pre-block (state/get-current-repo) (:db/id entity))
+        schema (assoc (:block/property-schema pre-block) key value)
+        content (str (:block/content pre-block))
+        edn-comment (gstring/format "<!--EDN %s -->" (pr-str {:block/property-schema schema}))
+        new-content (cond
+                      (string/includes? content "<!--EDN")
+                      (string/replace-first content #"<!--EDN.*-->" edn-comment)
+                      (seq content)
+                      (str content "\n" edn-comment)
+                      :else
+                      edn-comment)]
     (db/transact! (state/get-current-repo)
-      [{:db/id (:db/id entity)
-        :block/property-schema schema}])))
+                  [{:db/id (:db/id pre-block)
+                    :block/content new-content}])))
 
 (defn validate
   "Check whether the `value` validate against the `schema`."

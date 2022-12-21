@@ -526,18 +526,20 @@
                                                       (when (coll? refs)
                                                         refs))))
                                             (map :block/original-name))
-                         block {:uuid id
-                                :content content
-                                :level 1
-                                :properties properties
-                                :properties-order (vec properties-order)
-                                :properties-text-values properties-text-values
-                                :invalid-properties invalid-properties
-                                :refs property-refs
-                                :pre-block? true
-                                :unordered true
-                                :macros (extract-macros-from-ast body)
-                                :body body}
+                         block (merge
+                                {:uuid id
+                                 :content content
+                                 :level 1
+                                 :properties properties
+                                 :properties-order (vec properties-order)
+                                 :properties-text-values properties-text-values
+                                 :invalid-properties invalid-properties
+                                 :refs property-refs
+                                 :pre-block? true
+                                 :unordered true
+                                 :macros (extract-macros-from-ast body)
+                                 :body body}
+                                (select-keys pre-block-properties [:block/property-schema]))
                          block (with-page-block-refs block false supported-formats db date-formatter)]
                      (block-keywordize block))
                    (select-keys first-block [:block/format :block/page]))
@@ -567,21 +569,21 @@
                        :level (if unordered? (:level block) 1))
                 block)
         block (cond->
-                (-> (assoc block
-                           :uuid id
-                           :refs ref-pages-in-properties
-                           :format format
-                           :meta pos-meta)
-                    (dissoc :size))
-                (or (seq (:properties properties)) markdown-heading?)
-                (assoc :properties (with-heading-property (:properties properties) markdown-heading? (:size block) (:level block))
-                       :properties-text-values (:properties-text-values properties)
-                       :properties-order (vec (:properties-order properties)))
+               (-> (assoc block
+                          :uuid id
+                          :refs ref-pages-in-properties
+                          :format format
+                          :meta pos-meta)
+                   (dissoc :size))
+               (or (seq (:properties properties)) markdown-heading?)
+               (assoc :properties (with-heading-property (:properties properties) markdown-heading? (:size block) (:level block))
+                      :properties-text-values (:properties-text-values properties)
+                      :properties-order (vec (:properties-order properties)))
 
-                (seq (:invalid-properties properties))
-                (assoc :invalid-properties (:invalid-properties properties))
-                (some? (:block/property-schema properties))
-                (assoc :block/property-schema (:block/property-schema properties)))
+               (seq (:invalid-properties properties))
+               (assoc :invalid-properties (:invalid-properties properties))
+               (seq (select-keys properties [:block/property-schema]))
+               (merge (select-keys properties [:block/property-schema])))
         block (if (get-in block [:properties :collapsed])
                 (-> (assoc block :collapsed? true)
                     (update :properties (fn [m] (dissoc m :collapsed)))
@@ -636,20 +638,20 @@
 
                 (edn-comment-block? block)
                 (let [attributes (-> (second block)
-                                     (string/replace #"^<!--EDN\n|-->$" "")
+                                     (string/replace #"^<!--EDN|-->$" "")
                                      edn/read-string)]
-                  (prn :EDN block attributes)
+                  ; (prn :EDN block attributes)
                   (recur headings (rest blocks) timestamps attributes body))
 
                 (gp-property/properties-ast? block)
-                (let [_ (prn :PROP block properties)
+                (let [;_ (prn :PROP block properties)
                       properties (merge properties
                                         (extract-properties (second block) (assoc user-config :format format)))]
 
                   (recur headings (rest blocks) timestamps properties body))
 
                 (heading-block? block)
-                (let [_ (prn :HEADING block properties)
+                (let [;_ (prn :HEADING block properties)
                       block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
                       block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))]
                   (recur (conj headings block'') (rest blocks) {} {} []))

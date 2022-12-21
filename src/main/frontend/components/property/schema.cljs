@@ -6,6 +6,8 @@
             [frontend.handler.property :as property-handler]
             [rum.core :as rum]
             [frontend.context.i18n :refer [t]]
+            [frontend.db :as db]
+            [frontend.state :as state]
             [frontend.handler.notification :as notification]))
 
 (rum/defc property-item
@@ -79,7 +81,7 @@
 
 (rum/defc schema
   [entity]
-  (let [schema (:block/property-schema entity)]
+  (let [schema (:block/property-schema (db/get-pre-block (state/get-current-repo) (:db/id entity)))]
     [:div.property-schema
      (schema-type entity schema)
      (schema-number-range entity schema)
