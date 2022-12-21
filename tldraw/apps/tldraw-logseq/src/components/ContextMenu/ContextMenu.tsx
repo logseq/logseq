@@ -124,6 +124,22 @@ export const ContextMenu = observer(function ContextMenu({
               <ReactContextMenu.Separator className="menu-separator" />
             </>
           )}
+          {app.selectedShapes?.size > 0 && (
+            <>
+            <ReactContextMenu.Item
+              className="tl-menu-item"
+              onClick={() => runAndTransition(app.api.zoomToSelection)}
+            >
+              Focus
+              <div className="tl-menu-right-slot">
+                <span className="keyboard-shortcut">
+                  <code>{MOD_KEY}</code> <code>⇧</code> <code>1</code>
+                </span>
+              </div>
+            </ReactContextMenu.Item>
+            <ReactContextMenu.Separator className="menu-separator" />
+            </>
+          )}
           {(app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) ||
             app.selectedShapesArray.length > 1) && (
             <>
