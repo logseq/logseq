@@ -2,7 +2,7 @@
   "Provides main application state, fns associated to set and state based rum
   cursors"
   (:require [cljs-bean.core :as bean]
-            [cljs.core.async :as async]
+            [cljs.core.async :as async :refer [<!]]
             [cljs.spec.alpha :as s]
             [clojure.string :as string]
             [dommy.core :as dom]
