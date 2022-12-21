@@ -4,7 +4,6 @@
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.context.i18n :refer [t]]
             [frontend.search :as search]
-            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [rum.core :as rum]
