@@ -120,6 +120,10 @@
                      (utils/send-to-renderer "notification" {:type "error"
                                                              :payload (str error "\nIf you don't want to see those errors or don't need git, you can disable the \"Git auto commit\" feature on Settings > Version control.")})))))))))
 
+(defn short-status!
+  []
+  (run-git! #js ["status" "--porcelain"]))
+
 (defonce quotes-regex #"\"[^\"]+\"")
 (defn wrapped-by-quotes?
   [v]

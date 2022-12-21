@@ -442,7 +442,7 @@
         (do (cfgs/set-item! k v)
             (state/set-state! [:config k] v))
         (cfgs/get-item k))
-     config)))
+      config)))
 
 (defmethod handle :getDirname [_]
   js/__dirname)
@@ -505,6 +505,9 @@
 
 (defmethod handle :gitCommitAll [_ [_ message]]
   (git/add-all-and-commit! message))
+
+(defmethod handle :gitStatus [_ [_]]
+  (git/short-status!))
 
 (defmethod handle :installMarketPlugin [_ [_ mft]]
   (plugin/install-or-update! mft))
