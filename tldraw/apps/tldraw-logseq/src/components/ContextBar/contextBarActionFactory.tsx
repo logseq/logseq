@@ -27,6 +27,7 @@ import {
   type ToggleGroupInputOption,
 } from '../inputs/ToggleGroupInput'
 import { ToggleInput } from '../inputs/ToggleInput'
+import { LogseqContext } from '../../lib/logseq-context'
 
 export const contextBarActionTypes = [
   // Order matters
@@ -85,8 +86,13 @@ function filterShapeByAction<S extends Shape>(shapes: Shape[], type: ContextBarA
 }
 
 const EditAction = observer(() => {
+  const {
+    handlers: { isWhiteboardPage, redirectToPage },
+  } = React.useContext(LogseqContext)
+
   const app = useApp<Shape>()
   const shape = filterShapeByAction(app.selectedShapesArray, 'Edit')[0]
+
   const iconName =
     ('label' in shape.props && shape.props.label) || ('text' in shape.props && shape.props.text)
       ? 'forms'
@@ -101,6 +107,10 @@ const EditAction = observer(() => {
         if (shape.props.type === 'logseq-portal') {
           let uuid = shape.props.pageId
           if (shape.props.blockType === 'P') {
+            if (isWhiteboardPage(uuid)) {
+              redirectToPage(uuid)
+            }
+
             const firstNonePropertyBlock = window.logseq?.api
               ?.get_page_blocks_tree?.(shape.props.pageId)
               .find(b => !('propertiesOrder' in b))
