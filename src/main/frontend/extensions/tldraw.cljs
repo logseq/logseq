@@ -136,7 +136,7 @@
        (tldraw {:renderers tldraw-renderers
                 :handlers (get-tldraw-handlers page-name)
                 :onMount on-mount
-                :onPersist (fn [app]
+                :onPersist (fn [app _info model]
                              (let [document (gobj/get app "serialized")]
-                               (whiteboard-handler/transact-tldr! page-name document)))
+                               (whiteboard-handler/transact-tldr-delta! page-name document model)))
                 :model data})])))

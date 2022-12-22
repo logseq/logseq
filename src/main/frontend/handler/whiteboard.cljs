@@ -12,11 +12,12 @@
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [clojure.data :as data]))
 
-(defn shape->block [shape page-name idx]
+(defn shape->block [shape page-name]
   (let [properties {:ls-type :whiteboard-shape
-                    :logseq.tldraw.shape (assoc shape :index idx)}
+                    :logseq.tldraw.shape shape}
         block {:block/page {:block/name (util/page-name-sanity-lc page-name)}
                :block/parent {:block/name page-name}
                :block/properties properties}
@@ -44,9 +45,9 @@
         shapes (:shapes tldr-data)
         ;; we should maintain the order of the shapes in the page
         ;; bring back/forward is depending on this ordering
-        blocks (map-indexed
-                (fn [idx shape]
-                  (let [block (shape->block shape page-name idx)]
+        blocks (map
+                (fn [shape]
+                  (let [block (shape->block shape page-name)]
                     (merge block
                            (select-keys (id->block (:block/uuid block))
                                         [:block/created-at :block/updated-at])))) shapes)
@@ -66,7 +67,7 @@
                                       (block-ids (:block/uuid (:block/parent block)))
                                       (not (gp-whiteboard/shape-block? block)))))
                                existing-blocks)
-        ;; always recalcuate refs for now. 
+        ;; always recalcuate refs for now.
         ;; todo: optimize in frontend.modules.outliner.pipeline/compute-block-path-refs?
         refs-tx (mapcat (fn [m] [[:db/retract (:db/id m) :block/path-refs]
                                  [:db/retract (:db/id m) :block/refs]]) existing-blocks)
@@ -103,6 +104,48 @@
   (let [{:keys [pages assets]} (js->clj tldr :keywordize-keys true)
         page (first pages)
         tx (tldr-page->blocks-tx page-name (assoc page :assets assets))]
+    (db-utils/transact! tx)))
+
+(defn transact-tldr-delta! [page-name tldr model]
+  (let [{:keys [pages] :as tldr-data} (js->clj tldr :keywordize-keys true)
+        model (js->clj model :keywordize-keys true)
+        pages' (:pages model)
+        page (first pages)
+        page' (first pages')
+        diff (data/diff page page')
+        shapes (:shapes (first diff))
+        existing-ids (set (->> (map :id shapes) (remove nil?)))
+        deleted-shapes (->> (:shapes (second diff))
+                            (filter :id)
+                            (remove #(existing-ids (:id %))))
+        page-entity (model/get-page page-name)
+        page-block {:block/name page-name
+                    :block/type "whiteboard"
+                    :block/properties {:ls-type :whiteboard-page
+                                       :logseq.tldraw.page (dissoc page :shapes)}
+                    :block/updated-at (util/time-ms)
+                    :block/created-at (or (:block/created-at page-entity)
+                                          (util/time-ms))}
+        new-shapes (->> (map-indexed (fn [idx item]
+                                       (when (:id item)
+                                         (nth (:shapes page) idx)))
+                                     shapes)
+                        (remove nil?))
+        new-shapes-ids (set (map :id new-shapes))
+        changed-shapes (->> (map-indexed (fn [idx item]
+                                           (when (and item (not (:id item)))
+                                             (nth (:shapes page) idx)))
+                                         shapes)
+                            (remove nil?)
+                            (remove #(new-shapes-ids (:id %))))
+        new-shapes-tx (->> (map #(shape->block % page-name) new-shapes)
+                           (map outliner/block-with-timestamps))
+        changed-shapes-tx (->> (map #(shape->block % page-name) changed-shapes)
+                               (map #(assoc % :block/updated-at (util/time-ms))))
+        delete-blocks-tx (mapv (fn [s] [:db/retractEntity [:block/uuid (uuid (:id s))]]) deleted-shapes)
+        tx (concat delete-blocks-tx [page-block] new-shapes-tx changed-shapes-tx)]
+    (assert (every? :type new-shapes) "New shapes: each shape needs to have a type")
+    (assert (every? :type changed-shapes) "Changed shapes: each shape needs to have a type")
     (db-utils/transact! tx)))
 
 (defn get-default-tldr

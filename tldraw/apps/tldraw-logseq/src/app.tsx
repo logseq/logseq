@@ -105,7 +105,7 @@ const AppInner = ({
   const onPersistOnDiff: TLReactCallbacks<Shape>['onPersist'] = React.useCallback(
     (app, info) => {
       if (!deepEqual(app.serialized, model)) {
-        onPersist?.(app, info)
+        onPersist?.(app, info, model)
       }
     },
     [model]
