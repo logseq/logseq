@@ -10,6 +10,7 @@
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
             [frontend.components.whiteboard :as whiteboard]
+            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
@@ -227,6 +228,7 @@
                    (state/set-db-restoring! false))))
 
   (db/run-batch-txs!)
+  (whiteboard-handler/run-db-transact!)
   (file/<ratelimit-file-writes!)
 
   (when config/dev?

@@ -13,7 +13,11 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [promesa.core :as p]
-            [clojure.data :as data]))
+            [clojure.data :as data]
+            [goog.object :as gobj]
+            [cljs-bean.core :as bean]
+            [clojure.set :as set]
+            [clojure.core.async :as async]))
 
 (defn shape->block [shape page-name]
   (let [properties {:ls-type :whiteboard-shape
@@ -106,47 +110,57 @@
         tx (tldr-page->blocks-tx page-name (assoc page :assets assets))]
     (db-utils/transact! tx)))
 
-(defn transact-tldr-delta! [page-name tldr model]
-  (let [{:keys [pages] :as tldr-data} (js->clj tldr :keywordize-keys true)
-        model (js->clj model :keywordize-keys true)
-        pages' (:pages model)
-        page (first pages)
-        page' (first pages')
-        diff (data/diff page page')
-        shapes (:shapes (first diff))
-        existing-ids (set (->> (map :id shapes) (remove nil?)))
-        deleted-shapes (->> (:shapes (second diff))
-                            (filter :id)
-                            (remove #(existing-ids (:id %))))
-        page-entity (model/get-page page-name)
-        page-block {:block/name page-name
-                    :block/type "whiteboard"
-                    :block/properties {:ls-type :whiteboard-page
-                                       :logseq.tldraw.page (dissoc page :shapes)}
-                    :block/updated-at (util/time-ms)
-                    :block/created-at (or (:block/created-at page-entity)
-                                          (util/time-ms))}
-        new-shapes (->> (map-indexed (fn [idx item]
-                                       (when (:id item)
-                                         (nth (:shapes page) idx)))
-                                     shapes)
-                        (remove nil?))
-        new-shapes-ids (set (map :id new-shapes))
-        changed-shapes (->> (map-indexed (fn [idx item]
-                                           (when (and item (not (:id item)))
-                                             (nth (:shapes page) idx)))
-                                         shapes)
-                            (remove nil?)
-                            (remove #(new-shapes-ids (:id %))))
-        new-shapes-tx (->> (map #(shape->block % page-name) new-shapes)
-                           (map outliner/block-with-timestamps))
-        changed-shapes-tx (->> (map #(shape->block % page-name) changed-shapes)
-                               (map #(assoc % :block/updated-at (util/time-ms))))
-        delete-blocks-tx (mapv (fn [s] [:db/retractEntity [:block/uuid (uuid (:id s))]]) deleted-shapes)
-        tx (concat delete-blocks-tx [page-block] new-shapes-tx changed-shapes-tx)]
-    (assert (every? :type new-shapes) "New shapes: each shape needs to have a type")
-    (assert (every? :type changed-shapes) "Changed shapes: each shape needs to have a type")
-    (db-utils/transact! tx)))
+(defn build-page-block
+  [page-name tldraw-page]
+  (let [page-entity (model/get-page page-name)]
+    {:block/name page-name
+     :block/type "whiteboard"
+     :block/properties {:ls-type :whiteboard-page
+                        :logseq.tldraw.page (bean/->clj
+                                             (do
+                                               (gobj/remove tldraw-page "shapes")
+                                               tldraw-page))}
+     :block/updated-at (util/time-ms)
+     :block/created-at (or (:block/created-at page-entity)
+                           (util/time-ms))}))
+
+(defn transact-tldr-delta! [page-name current-model prev-model]
+  (let [prev-model (if prev-model prev-model
+                       #js {:pages [{:shapes []}]})
+        page (first (.-pages current-model))
+        page' (first (.-pages prev-model))
+        new-shapes (.-shapes page)
+        old-shapes (.-shapes page')
+        id-nonce-map (fn [x]
+                       {:id (gobj/get x "id")
+                        :nonce (gobj/get x "nonce")})
+        get-id-and-nonce (fn [shapes]
+                           (->> (map id-nonce-map shapes)
+                                (remove nil?)
+                                (set)))
+        new-id-nounces (get-id-and-nonce new-shapes)
+        old-id-nounces (get-id-and-nonce old-shapes)
+        changes (set/difference new-id-nounces old-id-nounces)
+        new-ids (set (map :id new-id-nounces))
+        old-ids (set (map :id old-id-nounces))
+        deleted-ids (set/difference old-ids new-ids)
+        created-ids (set/difference new-ids old-ids)
+        upserted-shapes (atom [])
+        page-block (build-page-block page-name page)]
+    (doseq [shape new-shapes]
+      (when (contains? changes (id-nonce-map shape))
+        (swap! upserted-shapes conj (bean/->clj shape))))
+    (let [delete-blocks-tx (mapv (fn [id] [:db/retractEntity [:block/uuid (uuid id)]]) deleted-ids)
+          with-timestamps (fn [block]
+                            (if (contains? created-ids (str (:block/uuid block)))
+                              (assoc block :block/updated-at (util/time-ms))
+                              (outliner/block-with-timestamps block)))
+          upserted-blocks (->> (map #(shape->block % page-name) @upserted-shapes)
+                               (map with-timestamps))
+          tx (concat delete-blocks-tx [page-block] upserted-blocks)
+          repo (state/get-current-repo)]
+      (state/update-state! [:whiteboard/batch-txs repo :tx-data]
+                           (fn [data] (concat data tx))))))
 
 (defn get-default-tldr
   [page-id]
@@ -308,3 +322,21 @@
           (state/set-onboarding-whiteboard! true))
         (p/catch
          (fn [e] (js/console.warn "Failed to populate onboarding whiteboard" e))))))
+
+(defn transact-immediately!
+  []
+  (let [repo (state/get-current-repo)
+        tx-data (get-in @state/state [:whiteboard/batch-txs repo :tx-data])]
+    (when (seq tx-data) (db-utils/transact! tx-data))
+    (state/set-state! [:whiteboard/batch-txs repo] {})))
+
+(defn run-db-transact!
+  []
+  (async/go-loop []
+    (async/<! (async/timeout 1000))
+    (let [repo (state/get-current-repo)
+          tx-data (get-in @state/state [:whiteboard/batch-txs repo :tx-data])]
+      (when-not (state/whiteboard-idle? (state/get-current-repo))
+        (when (seq tx-data) (db-utils/transact! tx-data))
+        (state/set-state! [:whiteboard/batch-txs repo] {})))
+    (recur)))

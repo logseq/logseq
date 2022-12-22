@@ -115,8 +115,10 @@
                                (whiteboard-handler/populate-onboarding-whiteboard api))
                              #(do (state/focus-whiteboard-shape tln block-id)
                                   (set-loaded-app tln)))))]
-    (rum/use-effect! (fn [] (when (and loaded-app block-id)
-                              (state/focus-whiteboard-shape loaded-app block-id)) #())
+    (rum/use-effect! (fn []
+                       (when (and loaded-app block-id)
+                         (state/focus-whiteboard-shape loaded-app block-id))
+                       whiteboard-handler/transact-immediately!)
                      [block-id loaded-app])
 
     (when data
@@ -136,7 +138,8 @@
        (tldraw {:renderers tldraw-renderers
                 :handlers (get-tldraw-handlers page-name)
                 :onMount on-mount
-                :onPersist (fn [app _info model]
+                :onPersist (fn [app info model]
+                             (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
                              (let [document (gobj/get app "serialized")]
                                (whiteboard-handler/transact-tldr-delta! page-name document model)))
                 :model data})])))
