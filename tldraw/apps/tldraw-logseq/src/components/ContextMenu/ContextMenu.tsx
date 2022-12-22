@@ -148,6 +148,7 @@ export const ContextMenu = observer(function ContextMenu({
                   className="tl-menu-item"
                   onClick={() => runAndTransition(app.api.unGroup)}
                 >
+                  <TablerIcon className="tl-menu-icon" name="ungroup" />
                   Ungroup
                   <div className="tl-menu-right-slot">
                     <span className="keyboard-shortcut">
@@ -161,6 +162,7 @@ export const ContextMenu = observer(function ContextMenu({
                   className="tl-menu-item"
                   onClick={() => runAndTransition(app.api.doGroup)}
                 >
+                  <TablerIcon className="tl-menu-icon" name="group" />
                   Group
                   <div className="tl-menu-right-slot">
                     <span className="keyboard-shortcut">
