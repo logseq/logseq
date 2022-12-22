@@ -111,15 +111,17 @@
     (db-utils/transact! tx)))
 
 (defn build-page-block
-  [page-name tldraw-page]
+  [page-name tldraw-page assets]
   (let [page-entity (model/get-page page-name)]
     {:block/name page-name
      :block/type "whiteboard"
      :block/properties {:ls-type :whiteboard-page
-                        :logseq.tldraw.page (bean/->clj
-                                             (do
-                                               (gobj/remove tldraw-page "shapes")
-                                               tldraw-page))}
+                        :logseq.tldraw.page (->
+                                             (bean/->clj
+                                              (do
+                                                (gobj/remove tldraw-page "shapes")
+                                                tldraw-page))
+                                             (assoc :assets (bean/->clj assets)))}
      :block/updated-at (util/time-ms)
      :block/created-at (or (:block/created-at page-entity)
                            (util/time-ms))}))
@@ -128,6 +130,7 @@
   (let [prev-model (if prev-model prev-model
                        #js {:pages [{:shapes []}]})
         page (first (.-pages current-model))
+        assets (.-assets current-model)
         page' (first (.-pages prev-model))
         new-shapes (.-shapes page)
         old-shapes (.-shapes page')
@@ -146,7 +149,7 @@
         deleted-ids (set/difference old-ids new-ids)
         created-ids (set/difference new-ids old-ids)
         upserted-shapes (atom [])
-        page-block (build-page-block page-name page)]
+        page-block (build-page-block page-name page assets)]
     (doseq [shape new-shapes]
       (when (contains? changes (id-nonce-map shape))
         (swap! upserted-shapes conj (bean/->clj shape))))
