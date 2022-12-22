@@ -132,7 +132,7 @@ html[data-theme='light'] {
 
 .tl-menu-right-slot {
   margin-left: auto;
-  padding-left: 20px;
+  padding-left: 40px;
 
   .keyboard-shortcut > code {
     padding: 4px !important;
