@@ -541,10 +541,13 @@
              true))
 
 (rum/defc user-proxy-settings
-  [{:keys [protocol host port] :as agent-opts}]
-  (ui/button [:span
-              (when-let [e (and protocol host port (str protocol "://" host ":" port))]
-                [:strong.pr-1 e])
+  [{:keys [type protocol host port] :as agent-opts}]
+  (ui/button [:span.flex.items-center
+              [:strong.pr-1
+               (case type
+                 "system" "System Default"
+                 "direct" "Direct"
+                 (and protocol host port (str protocol "://" host ":" port)))]
               (ui/icon "edit")]
              :small? true
              :on-click #(state/set-sub-modal!
@@ -682,7 +685,8 @@
   (ui/toggle enabled?
              (fn []
                (let [value (not enabled?)]
-                 (config-handler/set-config! :feature/enable-whiteboards? value)))
+                 (when (user-handler/feature-available? :whiteboard)
+                   (config-handler/set-config! :feature/enable-whiteboards? value))))
              true))
 
 (defn whiteboards-switcher-row [enabled?]
@@ -748,16 +752,19 @@
           [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
                     :target "_blank"}
            "here"]
-          "for instructions on how to set up and use Sync."]]])
+          "for instructions on how to set up and use Sync."]
+         (whiteboards-switcher-row enable-whiteboards?)]])
 
-     (when-not web-platform?
-       [:<>
-        [:hr]
-        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-         [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]]
-        [:div.flex.flex-col.gap-4
-         {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-         (whiteboards-switcher-row enable-whiteboards?)]])]))
+     ;; (when-not web-platform?
+     ;;   [:<>
+     ;;    [:hr]
+     ;;    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+     ;;     [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]]
+     ;;    [:div.flex.flex-col.gap-4
+     ;;     {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
+     ;;     ;; features
+     ;;     ]])
+     ]))
 
 (rum/defcs settings
   < (rum/local [:general :general] ::active)

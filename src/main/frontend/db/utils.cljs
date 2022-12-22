@@ -49,11 +49,23 @@
    (string/replace (date/ymd date) "/" "")))
 
 (defn entity
+  "This function will return nil if passed `id-or-lookup-ref` is an integer and
+  the entity doesn't exist in db (Datascript will return {:id id}).
+  `repo-or-db`: a repo string or a db,
+  `id-or-lookup-ref`: same as d/entity."
   ([id-or-lookup-ref]
    (entity (state/get-current-repo) id-or-lookup-ref))
-  ([repo id-or-lookup-ref]
-   (when-let [db (conn/get-db repo)]
-     (d/entity db id-or-lookup-ref))))
+  ([repo-or-db id-or-lookup-ref]
+   (when-let [db (if (string? repo-or-db)
+                   ;; repo
+                   (let [repo (or repo-or-db (state/get-current-repo))]
+                     (conn/get-db repo))
+                   ;; db
+                   repo-or-db)]
+     (if (integer? id-or-lookup-ref)
+       (when (d/datoms db :eavt id-or-lookup-ref)
+         (d/entity db id-or-lookup-ref))
+       (d/entity db id-or-lookup-ref)))))
 
 (defn pull
   ([eid]

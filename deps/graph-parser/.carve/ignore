@@ -34,3 +34,5 @@ logseq.graph-parser.property/property-value-from-content
 logseq.graph-parser.whiteboard/page-block->tldr-page
 ;; API
 logseq.graph-parser/get-blocks-to-delete
+;; Future use & be unified with markdown colon
+logseq.graph-parser.property/colons-org

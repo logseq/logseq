@@ -115,46 +115,48 @@
         id          (:id highlight)
         new?        (nil? id)
         content     (:content highlight)
-        text?       (string/blank? (:image content))
+        area?       (not (string/blank? (:image content)))
         action-fn!  (fn [action clear?]
                       (when-let [action (and action (name action))]
-                        (case action
-                          "ref"
-                          (pdf-assets/copy-hl-ref! highlight)
+                        (let [highlight (if (fn? highlight) (highlight) highlight)
+                              content (:content highlight)]
+                          (case action
+                            "ref"
+                            (pdf-assets/copy-hl-ref! highlight)
 
-                          "copy"
-                          (do
-                            (util/copy-to-clipboard!
-                             (or (:text content) (pdf-utils/fix-selection-text-breakline (.toString selection))))
-                            (pdf-utils/clear-all-selection))
+                            "copy"
+                            (do
+                              (util/copy-to-clipboard!
+                               (or (:text content) (pdf-utils/fix-selection-text-breakline (.toString selection))))
+                              (pdf-utils/clear-all-selection))
 
-                          "link"
-                          (pdf-assets/goto-block-ref! highlight)
+                            "link"
+                            (pdf-assets/goto-block-ref! highlight)
 
-                          "del"
-                          (do
-                            (del-hl! highlight)
-                            (pdf-assets/del-ref-block! highlight)
-                            (pdf-assets/unlink-hl-area-image$ viewer (:pdf/current @state/state) highlight))
+                            "del"
+                            (do
+                              (del-hl! highlight)
+                              (pdf-assets/del-ref-block! highlight)
+                              (pdf-assets/unlink-hl-area-image$ viewer (:pdf/current @state/state) highlight))
 
-                          "hook"
-                          :dune
+                            "hook"
+                            :dune
 
-                          ;; colors
-                          (let [properties {:color action}]
-                            (if-not id
-                              ;; add highlight
-                              (let [highlight (merge (if (fn? highlight) (highlight) highlight)
-                                                     {:id         (pdf-utils/gen-uuid)
-                                                      :properties properties})]
-                                (add-hl! highlight)
-                                (pdf-utils/clear-all-selection)
-                                (pdf-assets/copy-hl-ref! highlight))
+                            ;; colors
+                            (let [properties {:color action}]
+                              (if-not id
+                                ;; add highlight
+                                (let [highlight (merge highlight
+                                                       {:id         (pdf-utils/gen-uuid)
+                                                        :properties properties})]
+                                  (add-hl! highlight)
+                                  (pdf-utils/clear-all-selection)
+                                  (pdf-assets/copy-hl-ref! highlight))
 
-                              ;; update highlight
-                              (upd-hl! (assoc highlight :properties properties)))
+                                ;; update highlight
+                                (upd-hl! (assoc highlight :properties properties)))
 
-                            (reset! *highlight-last-color (keyword action))))
+                              (reset! *highlight-last-color (keyword action)))))
 
                         (and clear? (js/setTimeout #(clear-ctx-tip!) 68))))]
 
@@ -174,6 +176,7 @@
      {:ref      *el
       :style    {:top top :left left :visibility (if (and @*highlight-mode? new?) "hidden" "visible")}
       :on-click (fn [^js/MouseEvent e]
+                  (.stopPropagation e)
                   (when-let [action (.. e -target -dataset -action)]
                     (action-fn! action true)))}
 
@@ -184,20 +187,20 @@
 
      (and id [:li.item {:data-action "ref"} (t :pdf/copy-ref)])
 
-     (and (not (:image content)) [:li.item {:data-action "copy"} (t :pdf/copy-text)])
+     (and (not area?) [:li.item {:data-action "copy"} (t :pdf/copy-text)])
 
      (and id [:li.item {:data-action "link"} (t :pdf/linked-ref)])
 
      (and id [:li.item {:data-action "del"} (t :delete)])
 
-     (when (and config/lsp-enabled? text?)
+     (when (and config/lsp-enabled? (not area?))
        (for [[_ {:keys [key label extras] :as _cmd} action pid]
              (state/get-plugins-commands-with-type :highlight-context-menu-item)]
          [:li.item {:key         key
                     :data-action "hook"
-                    :on-click    #(do
+                    :on-click    #(let [highlight (if (fn? highlight) (highlight) highlight)]
                                     (commands/exec-plugin-simple-command!
-                                     pid {:key key :content content :point point} action)
+                                     pid {:key key :content (:content highlight) :point point} action)
 
                                     (when (true? (:clearSelection extras))
                                       (pdf-utils/clear-all-selection)))}
@@ -599,9 +602,10 @@
                                                :properties {}})))]
 
            ;; show ctx menu
-           (set-tip-state! {:highlight hl-fn
-                            :selection selection
-                            :point     point}))))
+           (js/setTimeout (fn []
+                            (set-tip-state! {:highlight hl-fn
+                                             :selection selection
+                                             :point     point})))) 0))
 
      [(:range sel-state)])
 

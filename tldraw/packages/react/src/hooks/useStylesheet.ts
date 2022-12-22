@@ -120,7 +120,6 @@ const tlcss = css`
     box-sizing: border-box;
     color: var(--tl-foreground);
     -webkit-user-select: none;
-    -webkit-touch-callout: none;
     -webkit-user-drag: none;
   }
 

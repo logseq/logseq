@@ -96,7 +96,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
             fontStyle={italic ? 'italic' : 'normal'}
             fontWeight={fontWeight}
           />
-          <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
+          <SVGContainer opacity={isErasing ? 0.2 : opacity}>
             {isBinding && <BindingIndicator mode="svg" strokeWidth={strokeWidth} size={[w, h]} />}
             <rect
               className={isSelected || !noFill ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
@@ -130,41 +130,13 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
     const {
       props: {
         size: [w, h],
-        borderRadius,
-        label,
-        fontWeight,
+        borderRadius
       },
     } = this
-
-    const bounds = this.getBounds()
-    const labelSize = label
-      ? getTextLabelSize(
-          label,
-          { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight },
-          4
-        )
-      : [0, 0]
-    const scale = Math.max(0.5, Math.min(1, w / labelSize[0], h / labelSize[1]))
-    const midPoint = Vec.mul(this.props.size, 0.5)
-
-    const offset = React.useMemo(() => {
-      return Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
-    }, [bounds, scale, midPoint])
 
     return (
       <g>
         <rect width={w} height={h} rx={borderRadius} ry={borderRadius} fill="transparent" />
-        {label && (
-          <rect
-            x={bounds.width / 2 - (labelSize[0] / 2) * scale + offset[0]}
-            y={bounds.height / 2 - (labelSize[1] / 2) * scale + offset[1]}
-            width={labelSize[0] * scale}
-            height={labelSize[1] * scale}
-            rx={4 * scale}
-            ry={4 * scale}
-            fill="transparent"
-          />
-        )}
       </g>
     )
   })

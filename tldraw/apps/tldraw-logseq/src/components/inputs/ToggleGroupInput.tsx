@@ -31,7 +31,7 @@ export function ToggleGroupInput({ options, value, onValueChange }: ToggleGroupI
       {options.map(option => {
         return (
           <Tooltip content={option.tooltip} key={option.value}>
-            <div className='inline-block'>
+            <div className="inline-block">
               <ToggleGroup.Item
                 className="tl-toggle-group-input-button"
                 value={option.value}

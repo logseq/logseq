@@ -27,6 +27,11 @@
   backface-visibility: hidden;
 }
 
+.logseq-tldraw *:not(.tl-logseq-portal-container) * {
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
 .dark-theme,
 html[data-theme='dark'] {
   --ls-wb-background-color-gray: var(--color-gray-800, gray);
@@ -323,7 +328,7 @@ button.tl-select-input-trigger {
   }
 
   &[data-state='checked'] {
-    background-color: var(--color-selectedFill);
+    background-color: var(--color-indigo-500);
     color: #fff;
   }
 }
@@ -409,6 +414,12 @@ button.tl-select-input-trigger {
   backface-visibility: hidden;
   pointer-events: all;
   user-select: text;
+
+  &:focus {
+    outline: none;
+    border: none;
+    box-shadow: none;
+  }
 }
 
 .tl-stroke-hitarea {
@@ -471,6 +482,8 @@ button.tl-select-input-trigger {
   &:focus {
     outline: none;
     border: none;
+    box-shadow: none;
+    background-color: hsla(0, 0%, 50%, 0.15) !important;
   }
 }
 

@@ -172,7 +172,8 @@
                  :hourCycle "h23"}))))
 
 (defn normalize-date
-  "Given raw date string, return a normalized date string at best effort."
+  "Given raw date string, return a normalized date string at best effort.
+   Warning: this is a function with heavy cost (likely 50ms). Use with caution"
   [s]
   (some
    (fn [formatter]

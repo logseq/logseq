@@ -35,10 +35,12 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.handler.config :as config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.shell :as shell-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
@@ -78,6 +80,14 @@
   (async/go (async/<! (p->c (persist-var/load-vars)))
             (async/<! (sync/<sync-stop))))
 
+(defn- enable-beta-features!
+  []
+  (when-not (false? (state/enable-sync?)) ; user turns it off
+    (file-sync-handler/set-sync-enabled! true))
+
+  (when-not (false? (state/enable-whiteboards?))
+    (config-handler/set-config! :feature/enable-whiteboards? true)))
+
 (defmethod handle :user/fetch-info-and-graphs [[_]]
   (state/set-state! [:ui/loading? :login] false)
   (async/go
@@ -92,8 +102,7 @@
             (sentry-event/set-user! uid))
           (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
-              (when-not (false? (state/enable-sync?)) ; user turns it off
-                (file-sync-handler/set-sync-enabled! true))
+              (enable-beta-features!)
               (async/<! (file-sync-handler/load-session-graphs))
               (p/let [repos (repo-handler/refresh-repos!)]
                 (when-let [repo (state/get-current-repo)]
@@ -454,6 +463,8 @@
     (when (mobile-util/native-ios?)
       (reset! util/keyboard-height keyboard-height)
       (set! (.. main-node -style -marginBottom) (str keyboard-height "px"))
+      (when-let [^js html (js/document.querySelector ":root")]
+        (.setProperty (.-style html) "--ls-native-kb-height" (str keyboard-height "px")))
       (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
         (set! (.. left-sidebar-node -style -bottom) (str keyboard-height "px")))
       (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
@@ -474,6 +485,8 @@
     (when (= (state/sub :editor/record-status) "RECORDING")
       (state/set-state! :mobile/show-recording-bar? false))
     (when (mobile-util/native-ios?)
+      (when-let [^js html (js/document.querySelector ":root")]
+        (.removeProperty (.-style html) "--ls-native-kb-height"))
       (when-let [card-preview-el (js/document.querySelector ".cards-review")]
         (set! (.. card-preview-el -style -marginBottom) "0px"))
       (when-let [card-preview-el (js/document.querySelector ".encryption-password")]
@@ -905,6 +918,10 @@
                                 [:p (.-message error)]]))))]
                        [:p "Don't forget to re-index your graph when all the conflicts are resolved."]]
                       :status :error}]))
+
+(defmethod handle :run/cli-command [[_ command content]]
+  (when (and command (not (string/blank? content)))
+    (shell-handler/run-cli-command-wrapper! command content)))
 
 (defn run!
   []

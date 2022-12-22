@@ -6,7 +6,7 @@
             ["posthog-js" :as posthog]
             [cljs-bean.core :as bean]))
 
-(def ^:const token "qUumrWobEk2dKiKt1b32CMEZy8fgNS94rb_Bq4WutPA")
+(goog-define POSTHOG-TOKEN "")
 (def ^:const masked "masked")
 
 (defn register []
@@ -39,7 +39,8 @@
    :loaded (fn [_] (register))})
 
 (defn init []
-  (posthog/init token (clj->js config)))
+  (when (and (not config/dev?) (not-empty POSTHOG-TOKEN))
+    (posthog/init POSTHOG-TOKEN (clj->js config))))
 
 (defn opt-out [opt-out?]
   (if opt-out?

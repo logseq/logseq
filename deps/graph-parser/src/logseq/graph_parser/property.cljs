@@ -7,7 +7,11 @@
             [goog.string.format]))
 
 (def colons "Property delimiter for markdown mode" "::")
-
+(defn colons-org 
+  "Property delimiter for org mode"
+  [property]
+  (str ":" property ":"))
+ 
 (defn ->block-content
   "Creates a block content string from properties map"
   [properties]
@@ -47,6 +51,7 @@
   "Properties used by logseq that user can edit"
   []
   (into #{:title :icon :template :template-including-parent :public :filters :exclude-from-graph-view
+          :logseq.query/nlp-date
           ;; org-mode only
           :macro :filetags}
         editable-linkable-built-in-properties))
@@ -70,6 +75,7 @@
   {:template-including-parent :boolean
    :public :boolean
    :exclude-from-graph-view :boolean
+   :logseq.query/nlp-date :boolean
    :heading :boolean
    :collapsed :boolean
    :created-at :integer

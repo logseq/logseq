@@ -41,7 +41,7 @@ The plugins documentation is at https://logseq.github.io/plugins. Any feedback w
 
 ## Feature requests
 
-Please go to https://discuss.logseq.com/c/feature-requests/7.
+Please go to https://discuss.logseq.com/new-topic?category=feature-requests.
 
 ## How can I use it?
 
@@ -72,7 +72,7 @@ Logseq is also made possible by the following projects:
 - Forum: https://discuss.logseq.com - Where we answer questions, discuss workflows and share tips
 - Discord: https://discord.gg/KpN4eHY
 - 中文 Discord：https://discord.gg/xYqcrXWymg
-- Github: https://github.com/logseq/logseq - everyone is encouraged to report issues!
+- GitHub: https://github.com/logseq/logseq - everyone is encouraged to report issues!
 
 ---
 
@@ -90,7 +90,7 @@ There are more guides in [docs/](docs/), e.g. the [Guide for contributing to tra
 ## How to contribute with a PR
 If you would like to contribute by solving an open issue, please fork this repository and then create a branch for the fix.
 
-Once you push your code to your fork you we'll be able to open a PR into Logseq repository. For more info you can follow this guide from [Github docs](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork)
+Once you push your code to your fork, you'll be able to open a PR into Logseq repository. For more info you can follow this guide from [GitHub docs](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork)
 
 And here a list of some [good first issues](https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)!
 
