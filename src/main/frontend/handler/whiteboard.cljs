@@ -90,12 +90,20 @@
           blocks (model/get-page-blocks-no-cache page-name)]
       [page-block blocks])))
 
+(defn- build-shapes
+  [page-block blocks]
+  (let [shapes-index (get-in page-block [:block/properties :logseq.tldraw.page :shapes-index])
+        shape-id->index (zipmap shapes-index (range 0 (count shapes-index)))]
+    (->> blocks
+         (map (fn [block]
+                (assoc block :index (get shape-id->index (str (:block/uuid block)) 0))))
+         (sort-by :index)
+         (filter gp-whiteboard/shape-block?)
+         (map gp-whiteboard/block->shape))))
+
 (defn- whiteboard-clj->tldr [page-block blocks]
   (let [id (str (:block/uuid page-block))
-        shapes (->> blocks
-                    (filter gp-whiteboard/shape-block?)
-                    (map gp-whiteboard/block->shape)
-                    (sort-by :index))
+        shapes (build-shapes page-block blocks)
         tldr-page (gp-whiteboard/page-block->tldr-page page-block)
         assets (:assets tldr-page)
         tldr-page (dissoc tldr-page :assets)]
@@ -114,7 +122,7 @@
     (db-utils/transact! tx)))
 
 (defn build-page-block
-  [page-name tldraw-page assets]
+  [page-name tldraw-page assets shapes-index]
   (let [page-entity (model/get-page page-name)
         get-k #(gobj/get tldraw-page %)]
     {:block/name page-name
@@ -124,7 +132,8 @@
                                              :name (get-k "name")
                                              :bindings (js->clj-keywordize (get-k "bindings"))
                                              :nonce (get-k "nonce")
-                                             :assets (js->clj-keywordize assets)}}
+                                             :assets (js->clj-keywordize assets)
+                                             :shapes-index shapes-index}}
      :block/updated-at (util/time-ms)
      :block/created-at (or (:block/created-at page-entity)
                            (util/time-ms))}))
@@ -153,7 +162,8 @@
         deleted-ids (set/difference old-ids new-ids)
         created-ids (set/difference new-ids old-ids)
         upserted-shapes (atom [])
-        page-block (build-page-block page-name page assets)]
+        shapes-index (map #(gobj/get % "id") new-shapes)
+        page-block (build-page-block page-name page assets shapes-index)]
     (doseq [shape new-shapes]
       (when (contains? changes (id-nonce-map shape))
         (swap! upserted-shapes conj (js->clj-keywordize shape))))
@@ -305,10 +315,7 @@
   ([{:keys [pages blocks]} api]
    (let [page-block (first pages)
          ;; FIXME: should also clone normal blocks
-         shapes (->> blocks
-                     (filter gp-whiteboard/shape-block?)
-                     (map gp-whiteboard/block->shape)
-                     (sort-by :index))
+         shapes (build-shapes page-block blocks)
          tldr-page (gp-whiteboard/page-block->tldr-page page-block)
          assets (:assets tldr-page)
          bindings (:bindings tldr-page)]
