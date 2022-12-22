@@ -95,6 +95,7 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
             onBlur={onEditingEnd}
             fontStyle={italic ? 'italic' : 'normal'}
             fontWeight={fontWeight}
+            pointerEvents={!!label}
           />
           <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
             <ellipse

@@ -111,6 +111,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
             onBlur={onEditingEnd}
             fontStyle={italic ? 'italic' : 'normal'}
             fontWeight={fontWeight}
+            pointerEvents={!!label}
           />
           <SVGContainer opacity={isErasing ? 0.2 : opacity}>
             <g transform={`translate(${x}, ${y})`}>

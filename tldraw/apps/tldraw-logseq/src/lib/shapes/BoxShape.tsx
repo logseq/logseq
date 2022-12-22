@@ -95,6 +95,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
             onBlur={onEditingEnd}
             fontStyle={italic ? 'italic' : 'normal'}
             fontWeight={fontWeight}
+            pointerEvents={!!label}
           />
           <SVGContainer opacity={isErasing ? 0.2 : opacity}>
             {isBinding && <BindingIndicator mode="svg" strokeWidth={strokeWidth} size={[w, h]} />}
