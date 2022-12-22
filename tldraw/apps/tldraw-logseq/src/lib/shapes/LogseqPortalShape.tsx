@@ -439,6 +439,17 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     const { Breadcrumb, PageName } = renderers
 
+    const portalStyle : React.CSSProperties = {
+        width: `calc(100% / ${scaleRatio})`,
+        height: `calc(100% / ${scaleRatio})`,
+        opacity: isErasing ? 0.2 : 1,
+    }
+
+    // Reduce the chance of blurry text
+    if (scaleRatio !== 1) {
+      portalStyle.transform = `scale(${scaleRatio})`
+    }
+
     return (
       <HTMLContainer
         style={{
@@ -478,12 +489,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 data-page-id={pageId}
                 data-portal-selected={portalSelected}
                 data-editing={isEditing}
-                style={{
-                  width: `calc(100% / ${scaleRatio})`,
-                  height: `calc(100% / ${scaleRatio})`,
-                  transform: `scale(${scaleRatio})`,
-                  opacity: isErasing ? 0.2 : 1,
-                }}
+                style={portalStyle}
               >
                 {!this.props.compact && !targetNotFound && (
                   <LogseqPortalShapeHeader
