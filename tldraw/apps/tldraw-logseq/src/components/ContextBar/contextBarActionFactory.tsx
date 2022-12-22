@@ -1,4 +1,4 @@
-import { Decoration, isNonNullable, validUUID } from '@tldraw/core'
+import { Decoration, isNonNullable } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import React from 'react'
