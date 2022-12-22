@@ -177,8 +177,10 @@ export class TLApp<
       {
         keys: ['del', 'backspace'],
         fn: () => {
-          this.api.deleteShapes()
-          this.selectedTool.transition('idle')
+          if (!this.editingShape) {
+            this.api.deleteShapes()
+            this.selectedTool.transition('idle')
+          }
         },
       },
       {
