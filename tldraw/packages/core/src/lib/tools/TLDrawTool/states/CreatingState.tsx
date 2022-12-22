@@ -5,6 +5,7 @@ import type { TLShape, TLDrawShape } from '../../../shapes'
 import type { TLApp } from '../../../TLApp'
 import { TLToolState } from '../../../TLToolState'
 import type { TLDrawTool } from '../TLDrawTool'
+import { debounce } from '../../../../utils'
 
 export class CreatingState<
   S extends TLShape,
@@ -17,7 +18,8 @@ export class CreatingState<
 
   private shape = {} as T
   private points: number[][] = [[0, 0, 0.5]]
-  private persistTimeout
+
+  private persistDebounced = debounce(this.app.persist, 1000)
 
   // Add a new point and offset the shape, if necessary
   private addNextPoint(point: number[]) {
@@ -99,8 +101,7 @@ export class CreatingState<
     this.tool.transition('idle')
     let tool = this.app.selectedTool.id
     if (tool === 'pencil' || tool === 'highlighter') {
-      if (this.persistTimeout) { clearTimeout(this.persistTimeout) }
-      this.persistTimeout = setTimeout(this.app.persist, 3000)
+      this.persistDebounced()
     } else {
       this.app.persist()
     }
