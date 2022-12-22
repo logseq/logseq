@@ -1,9 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
-  BoundsUtils,
   delay,
   getComputedColor,
-  TLBounds,
   TLBoxShape,
   TLBoxShapeProps,
   TLResetBoundsInfo,
