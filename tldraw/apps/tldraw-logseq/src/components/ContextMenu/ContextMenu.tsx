@@ -130,7 +130,7 @@ export const ContextMenu = observer(function ContextMenu({
               className="tl-menu-item"
               onClick={() => runAndTransition(app.api.zoomToSelection)}
             >
-              Focus
+              Zoom to fit
               <div className="tl-menu-right-slot">
                 <span className="keyboard-shortcut">
                   <code>{MOD_KEY}</code> <code>⇧</code> <code>1</code>
