@@ -323,20 +323,15 @@
         (p/catch
          (fn [e] (js/console.warn "Failed to populate onboarding whiteboard" e))))))
 
-(defn transact-immediately!
-  []
-  (let [repo (state/get-current-repo)
-        tx-data (get-in @state/state [:whiteboard/batch-txs repo :tx-data])]
-    (when (seq tx-data) (db-utils/transact! tx-data))
-    (state/set-state! [:whiteboard/batch-txs repo] {})))
-
 (defn run-db-transact!
   []
   (async/go-loop []
     (async/<! (async/timeout 1000))
     (let [repo (state/get-current-repo)
           tx-data (get-in @state/state [:whiteboard/batch-txs repo :tx-data])]
-      (when-not (state/whiteboard-idle? (state/get-current-repo))
-        (when (seq tx-data) (db-utils/transact! tx-data))
+      (when (or (not (state/whiteboard-idle? (state/get-current-repo)))
+                (not (state/whiteboard-route?)))
+        (when (seq tx-data)
+          (db-utils/transact! tx-data))
         (state/set-state! [:whiteboard/batch-txs repo] {})))
     (recur)))

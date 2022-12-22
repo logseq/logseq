@@ -118,7 +118,7 @@
     (rum/use-effect! (fn []
                        (when (and loaded-app block-id)
                          (state/focus-whiteboard-shape loaded-app block-id))
-                       whiteboard-handler/transact-immediately!)
+                       #())
                      [block-id loaded-app])
 
     (when data
