@@ -13,7 +13,6 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [promesa.core :as p]
-            [clojure.data :as data]
             [goog.object :as gobj]
             [clojure.set :as set]
             [clojure.core.async :as async]))
