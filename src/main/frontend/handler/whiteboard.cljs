@@ -115,16 +115,16 @@
 
 (defn build-page-block
   [page-name tldraw-page assets]
-  (let [page-entity (model/get-page page-name)]
+  (let [page-entity (model/get-page page-name)
+        get-k #(gobj/get tldraw-page %)]
     {:block/name page-name
      :block/type "whiteboard"
      :block/properties {:ls-type :whiteboard-page
-                        :logseq.tldraw.page (->
-                                             (js->clj-keywordize
-                                              (do
-                                                (gobj/remove tldraw-page "shapes")
-                                                tldraw-page))
-                                             (assoc :assets (js->clj-keywordize assets)))}
+                        :logseq.tldraw.page {:id (get-k "id")
+                                             :name (get-k "name")
+                                             :bindings (js->clj-keywordize (get-k "bindings"))
+                                             :nonce (get-k "nonce")
+                                             :assets (js->clj-keywordize assets)}}
      :block/updated-at (util/time-ms)
      :block/created-at (or (:block/created-at page-entity)
                            (util/time-ms))}))
@@ -169,7 +169,9 @@
       (state/update-state! [:whiteboard/batch-txs repo :tx-data]
                            (fn [data]
                              (->> (concat data tx)
-                                  (util/distinct-by-last-wins :block/uuid)))))))
+                                  (util/distinct-by-last-wins
+                                   (fn [x]
+                                     (or (:block/uuid x) x)))))))))
 
 (defn get-default-tldr
   [page-id]
