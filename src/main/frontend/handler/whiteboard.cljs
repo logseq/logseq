@@ -15,9 +15,12 @@
             [promesa.core :as p]
             [clojure.data :as data]
             [goog.object :as gobj]
-            [cljs-bean.core :as bean]
             [clojure.set :as set]
             [clojure.core.async :as async]))
+
+(defn js->clj-keywordize
+  [obj]
+  (js->clj obj :keywordize-keys true))
 
 (defn shape->block [shape page-name]
   (let [properties {:ls-type :whiteboard-shape
@@ -117,15 +120,16 @@
      :block/type "whiteboard"
      :block/properties {:ls-type :whiteboard-page
                         :logseq.tldraw.page (->
-                                             (bean/->clj
+                                             (js->clj-keywordize
                                               (do
                                                 (gobj/remove tldraw-page "shapes")
                                                 tldraw-page))
-                                             (assoc :assets (bean/->clj assets)))}
+                                             (assoc :assets (js->clj-keywordize assets)))}
      :block/updated-at (util/time-ms)
      :block/created-at (or (:block/created-at page-entity)
                            (util/time-ms))}))
 
+(def debug-tx (atom []))
 (defn transact-tldr-delta! [page-name current-model prev-model]
   (let [prev-model (if prev-model prev-model
                        #js {:pages [{:shapes []}]})
@@ -152,7 +156,7 @@
         page-block (build-page-block page-name page assets)]
     (doseq [shape new-shapes]
       (when (contains? changes (id-nonce-map shape))
-        (swap! upserted-shapes conj (bean/->clj shape))))
+        (swap! upserted-shapes conj (js->clj-keywordize shape))))
     (let [delete-blocks-tx (mapv (fn [id] [:db/retractEntity [:block/uuid (uuid id)]]) deleted-ids)
           with-timestamps (fn [block]
                             (if (contains? created-ids (str (:block/uuid block)))
@@ -163,7 +167,9 @@
           tx (concat delete-blocks-tx [page-block] upserted-blocks)
           repo (state/get-current-repo)]
       (state/update-state! [:whiteboard/batch-txs repo :tx-data]
-                           (fn [data] (concat data tx))))))
+                           (fn [data]
+                             (->> (concat data tx)
+                                  (util/distinct-by-last-wins :block/uuid)))))))
 
 (defn get-default-tldr
   [page-id]
@@ -335,6 +341,7 @@
       (when (or (not (state/whiteboard-idle? (state/get-current-repo)))
                 (not (state/whiteboard-route?)))
         (when (seq tx-data)
+          (swap! debug-tx conj tx-data)
           (db-utils/transact! tx-data))
         (state/set-state! [:whiteboard/batch-txs repo] {})))
     (recur)))
