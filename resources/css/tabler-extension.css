@@ -6,7 +6,7 @@
  *  - update the tie-xxx css rules
  */
 
-@font-face {
+ @font-face {
   font-family: 'tabler-icons-extension';
   src: url('../fonts/tabler-icons-extension.woff2?mxgthk') format('woff2');
   font-style: normal;
@@ -44,98 +44,110 @@
   content: "\ea04";
 }
 
-.tie-connector::before {
+.tie-cloud-exclamation::before {
   content: "\ea05";
 }
 
-.tie-h-auto::before {
+.tie-connector::before {
   content: "\ea06";
 }
 
-.tie-heading-off::before {
+.tie-group::before {
   content: "\ea07";
 }
 
-.tie-internal-link::before {
+.tie-h-auto::before {
   content: "\ea08";
 }
 
-.tie-link-to-block::before {
+.tie-heading-off::before {
   content: "\ea09";
 }
 
-.tie-link-to-page::before {
+.tie-internal-link::before {
   content: "\ea0a";
 }
 
-.tie-link-to-whiteboard::before {
+.tie-link-to-block::before {
   content: "\ea0b";
 }
 
-.tie-move-to-sidebar-right::before {
+.tie-link-to-page::before {
   content: "\ea0c";
 }
 
-.tie-new-block::before {
+.tie-link-to-whiteboard::before {
   content: "\ea0d";
 }
 
-.tie-new-page::before {
+.tie-move-to-sidebar-right::before {
   content: "\ea0e";
 }
 
-.tie-new-whiteboard::before {
+.tie-new-block::before {
   content: "\ea0f";
 }
 
-.tie-new-whiteboard-element::before {
+.tie-new-page::before {
   content: "\ea10";
 }
 
-.tie-object-compact::before {
+.tie-new-whiteboard::before {
   content: "\ea11";
 }
 
-.tie-object-expanded::before {
+.tie-new-whiteboard-element::before {
   content: "\ea12";
 }
 
-.tie-open-as-page::before {
+.tie-object-compact::before {
   content: "\ea13";
 }
 
-.tie-page::before {
+.tie-object-expanded::before {
   content: "\ea14";
 }
 
-.tie-page-search::before {
+.tie-open-as-page::before {
   content: "\ea15";
 }
 
-.tie-references-hide::before {
+.tie-page::before {
   content: "\ea16";
 }
 
-.tie-references-show::before {
+.tie-page-search::before {
   content: "\ea17";
 }
 
-.tie-select-cursor::before {
+.tie-references-hide::before {
   content: "\ea18";
 }
 
-.tie-text::before {
+.tie-references-show::before {
   content: "\ea19";
 }
 
-.tie-whiteboard::before {
+.tie-select-cursor::before {
   content: "\ea1a";
 }
 
-.tie-whiteboard-element::before {
+.tie-text::before {
   content: "\ea1b";
 }
 
-.tie-whiteboard-search::before {
+.tie-ungroup::before {
   content: "\ea1c";
+}
+
+.tie-whiteboard::before {
+  content: "\ea1d";
+}
+
+.tie-whiteboard-element::before {
+  content: "\ea1e";
+}
+
+.tie-whiteboard-search::before {
+  content: "\ea1f";
 }
