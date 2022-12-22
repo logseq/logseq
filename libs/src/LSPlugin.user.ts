@@ -410,6 +410,7 @@ const db: Partial<IDBProxy> = {
     query: string,
     ...inputs: Array<any>
   ): Promise<T> {
+    // force remove proxy ns flag `db`
     inputs.pop()
 
     if (inputs?.some(it => (typeof it === 'function'))) {
@@ -419,7 +420,7 @@ const db: Partial<IDBProxy> = {
 
     return this._execCallableAPIAsync(
       `datascript_query`,
-      ...inputs
+      ...[query, ...inputs]
     )
   }
 }
