@@ -132,6 +132,13 @@ dummy.contentRect = function() {};
 dummy.height = function() {};
 dummy.createShapes = function() {};
 dummy.updateShapes = function() {};
+// hickory related, ATTRIBUTE will be $ATTRIBUTE$
+dummy.ATTRIBUTE = function() {};
+dummy.COMMENT = function() {};
+dummy.DOCUMENT = function() {};
+dummy.DOCUMENT_TYPE = function() {};
+dummy.ELEMENT = function() {};
+dummy.TEXT = function() {};
 
 /**
  * @typedef {{

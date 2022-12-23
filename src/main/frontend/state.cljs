@@ -2,7 +2,7 @@
   "Provides main application state, fns associated to set and state based rum
   cursors"
   (:require [cljs-bean.core :as bean]
-            [cljs.core.async :as async]
+            [cljs.core.async :as async :refer [<!]]
             [cljs.spec.alpha :as s]
             [clojure.string :as string]
             [dommy.core :as dom]
@@ -94,7 +94,6 @@
      :ui/file-component                     nil
      :ui/custom-query-components            {}
      :ui/show-recent?                       false
-     :ui/command-palette-open?              false
      :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
                                                 false)
      ;; remember scroll positions of visited paths
@@ -330,6 +329,11 @@
              new))
          configs))
 
+(defn validate-current-config
+  "TODO: Temporal fix"
+  [config]
+  (when (map? config) config))
+
 (defn get-config
   "User config for the given repo or current repo if none given. All config fetching
 should be done through this fn in order to get global config and config defaults"
@@ -339,7 +343,7 @@ should be done through this fn in order to get global config and config defaults
    (merge-configs
     default-config
     (get-in @state [:config ::global-config])
-    (get-in @state [:config repo-url]))))
+    (validate-current-config (get-in @state [:config repo-url])))))
 
 (defonce publishing? (atom nil))
 
@@ -551,10 +555,10 @@ Similar to re-frame subscriptions"
   "Sub equivalent to get-config which should handle all sub user-config access"
   ([] (sub-config (get-current-repo)))
   ([repo]
-   (let [config (sub :config)]
+   (let [config (validate-current-config (sub :config))]
      (merge-configs default-config
                     (get config ::global-config)
-                    (get config repo)))))
+                    (validate-current-config (get config repo))))))
 
 (defn enable-grammarly?
   []
@@ -1333,16 +1337,24 @@ Similar to re-frame subscriptions"
                {:fullscreen? false
                 :close-btn?  true}))
   ([modal-panel-content {:keys [id label fullscreen? close-btn? close-backdrop? center?]}]
-   (when (seq (get-sub-modals))
-     (close-sub-modal! true))
-   (swap! state assoc
-          :modal/id id
-          :modal/label (or label (if center? "ls-modal-align-center" ""))
-          :modal/show? (boolean modal-panel-content)
-          :modal/panel-content modal-panel-content
-          :modal/fullscreen? fullscreen?
-          :modal/close-btn? close-btn?
-          :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)) nil))
+   (let [opened? (modal-opened?)]
+     (when opened?
+       (close-modal!))
+     (when (seq (get-sub-modals))
+       (close-sub-modal! true))
+
+     (async/go
+       (when opened?
+         (<! (async/timeout 100)))
+       (swap! state assoc
+              :modal/id id
+              :modal/label (or label (if center? "ls-modal-align-center" ""))
+              :modal/show? (boolean modal-panel-content)
+              :modal/panel-content modal-panel-content
+              :modal/fullscreen? fullscreen?
+              :modal/close-btn? close-btn?
+              :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true))))
+   nil))
 
 (defn close-modal!
   []
@@ -1437,7 +1449,7 @@ Similar to re-frame subscriptions"
   [value]
   (set-state! :network/online? value))
 
-(defn get-plugins-commands
+(defn get-plugins-slash-commands
   []
   (mapcat seq (flatten (vals (:plugin/installed-slash-commands @state)))))
 
@@ -1541,6 +1553,12 @@ Similar to re-frame subscriptions"
       (when-let [coll (get-in @state [:plugin/installed-hooks hook-or-all])]
         (set-state! [:plugin/installed-hooks hook-or-all] (disj coll pid))))
     true))
+
+(defn slot-hook-exist?
+  [uuid]
+  (when-let [type (and uuid (string/replace (str uuid) "-" "_"))]
+    (when-let [hooks (sub :plugin/installed-hooks)]
+      (contains? hooks (str "hook:editor:slot_" type)))))
 
 (defn active-tldraw-app
   []

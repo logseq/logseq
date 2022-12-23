@@ -35,7 +35,9 @@
                                                 :redef false}}
         :build-hooks      [(shadow.hooks/git-revision-hook "--long --always --dirty")]
         :closure-defines  {goog.debug.LOGGING_ENABLED       true
-                           frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS"   :as :bool :default true]
+                           frontend.modules.instrumentation.sentry/SENTRY-DSN #shadow/env "LOGSEQ_SENTRY_DSN"
+                           frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"
+                           frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS" :as :bool :default true]
                            frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
                            frontend.config/TEST #shadow/env ["LOGSEQ_CI" :as :bool :default false]
                            frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]} ;; set by git-revision-hook

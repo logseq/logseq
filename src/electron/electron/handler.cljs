@@ -11,6 +11,7 @@
             ["diff-match-patch" :as google-diff]
             ["/electron/utils" :as js-utils]
             ["abort-controller" :as AbortController]
+            [electron.shell :as shell]
             [electron.fs-watcher :as watcher]
             [electron.configs :as cfgs]
             [promesa.core :as p]
@@ -410,11 +411,12 @@
 
 (defmethod handle :userAppCfgs [_window [_ k v]]
   (let [config (cfgs/get-config)]
-    (if-not k
-      config
+    (if-let [k (and k (keyword k))]
       (if-not (nil? v)
-        (cfgs/set-item! (keyword k) v)
-        (cfgs/get-item (keyword k))))))
+        (do (cfgs/set-item! k v)
+            (state/set-state! [:config k] v))
+        (cfgs/get-item k))
+     config)))
 
 (defmethod handle :getDirname [_]
   js/__dirname)
@@ -456,6 +458,24 @@
   (when (seq args)
     (git/init!)
     (git/run-git2! (clj->js args))))
+
+(defmethod handle :runCli [window [_ {:keys [command args returnResult]}]]
+  (try
+    (let [on-data-handler (fn [message]
+                            (let [result (str "Running " command ": " message)]
+                              (when returnResult
+                                (utils/send-to-renderer window "notification"
+                                                        {:type    "success"
+                                                         :payload result}))))
+          deferred        (p/deferred)
+          on-exit-handler (fn [code]
+                            (p/resolve! deferred code))
+          _job            (shell/run-command-safely! command args on-data-handler on-exit-handler)]
+      deferred)
+    (catch js/Error e
+      (utils/send-to-renderer window "notification"
+                              {:type    "error"
+                               :payload (.-message e)}))))
 
 (defmethod handle :gitCommitAll [_ [_ message]]
   (git/add-all-and-commit! message))

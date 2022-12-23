@@ -934,17 +934,15 @@
   (state/set-sub-modal! installed-themes))
 
 (rum/defc hook-ui-slot
-  ([type payload] (hook-ui-slot type payload nil))
-  ([type payload opts]
+  ([type payload] (hook-ui-slot type payload nil #(plugin-handler/hook-plugin-app type % nil)))
+  ([type payload opts callback]
    (let [rs      (util/rand-str 8)
          id      (str "slot__" rs)
          *el-ref (rum/use-ref nil)]
 
      (rum/use-effect!
       (fn []
-        (let [timer (js/setTimeout
-                     #(plugin-handler/hook-plugin-app type {:slot id :payload payload} nil)
-                     100)]
+        (let [timer (js/setTimeout #(callback {:type type :slot id :payload payload}) 50)]
           #(js/clearTimeout timer)))
       [id])
 
@@ -961,6 +959,10 @@
       (merge opts {:id            id
                    :ref           *el-ref
                    :on-mouse-down (fn [e] (util/stop e))})])))
+
+(rum/defc hook-block-slot < rum/static
+  [type block]
+  (hook-ui-slot type {} nil #(plugin-handler/hook-plugin-block-slot block %)))
 
 (rum/defc ui-item-renderer
   [pid type {:keys [key template prefix]}]
