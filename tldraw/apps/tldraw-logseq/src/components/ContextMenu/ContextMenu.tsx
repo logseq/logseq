@@ -43,7 +43,7 @@ export const ContextMenu = observer(function ContextMenu({
         }
       }}
     >
-      <ReactContextMenu.Trigger>{children}</ReactContextMenu.Trigger>
+      <ReactContextMenu.Trigger disabled={app.editingShape}>{children}</ReactContextMenu.Trigger>
       <ReactContextMenu.Content
         className="tl-menu tl-context-menu"
         ref={rContent}
