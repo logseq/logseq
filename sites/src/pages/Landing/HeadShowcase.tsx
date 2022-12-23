@@ -197,7 +197,7 @@ export function HeadShowcase () {
               leftIcon={<Play size={18} weight={'duotone'}/>}
               rightIcon={<ArrowSquareOut size={18} className={'opacity-70'}/>}
               className={'bg-logseq-600'}
-              onClick={openLiveDemo}
+              href={"https://demo.logseq.com"}
             >
               Live Demo
             </Button>

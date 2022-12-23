@@ -264,7 +264,7 @@ export function LandingFooterDesc (props: {
             leftIcon={<Play size={18} weight={'duotone'}/>}
             rightIcon={<ArrowSquareOut size={18} className={'opacity-70'}/>}
             className={'w-full bg-logseq-600 mt-4 sm:w-auto sm:mt-0'}
-            onClick={openLiveDemo}
+            href={"https://demo.logseq.com"}
           >
             Live Demo
           </Button>
