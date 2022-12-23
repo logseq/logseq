@@ -43,7 +43,11 @@ export const ContextMenu = observer(function ContextMenu({
         }
       }}
     >
-      <ReactContextMenu.Trigger disabled={app.editingShape}>{children}</ReactContextMenu.Trigger>
+      <ReactContextMenu.Trigger
+        disabled={app.editingShape && Object.keys(app.editingShape).length !== 0}
+      >
+        {children}
+      </ReactContextMenu.Trigger>
       <ReactContextMenu.Content
         className="tl-menu tl-context-menu"
         ref={rContent}
@@ -126,18 +130,18 @@ export const ContextMenu = observer(function ContextMenu({
           )}
           {app.selectedShapes?.size > 0 && (
             <>
-            <ReactContextMenu.Item
-              className="tl-menu-item"
-              onClick={() => runAndTransition(app.api.zoomToSelection)}
-            >
-              Zoom to fit
-              <div className="tl-menu-right-slot">
-                <span className="keyboard-shortcut">
-                  <code>{MOD_KEY}</code> <code>⇧</code> <code>1</code>
-                </span>
-              </div>
-            </ReactContextMenu.Item>
-            <ReactContextMenu.Separator className="menu-separator" />
+              <ReactContextMenu.Item
+                className="tl-menu-item"
+                onClick={() => runAndTransition(app.api.zoomToSelection)}
+              >
+                Zoom to fit
+                <div className="tl-menu-right-slot">
+                  <span className="keyboard-shortcut">
+                    <code>{MOD_KEY}</code> <code>⇧</code> <code>1</code>
+                  </span>
+                </div>
+              </ReactContextMenu.Item>
+              <ReactContextMenu.Separator className="menu-separator" />
             </>
           )}
           {(app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) ||
