@@ -1562,7 +1562,7 @@ Similar to re-frame subscriptions"
 
 (defn active-tldraw-app
   []
-  (when-let [tldraw-el (.closest js/document.activeElement ".logseq-tldraw[data-tlapp]")]
+  (when-let [tldraw-el (.querySelector js/document.body ".logseq-tldraw[data-tlapp]")]
     (gobj/get js/window.tlapps (.. tldraw-el -dataset -tlapp))))
 
 (defn tldraw-editing-logseq-block?
