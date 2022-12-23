@@ -437,10 +437,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     const { Breadcrumb, PageName } = renderers
 
-    const portalStyle : React.CSSProperties = {
-        width: `calc(100% / ${scaleRatio})`,
-        height: `calc(100% / ${scaleRatio})`,
-        opacity: isErasing ? 0.2 : 1,
+    const portalStyle: React.CSSProperties = {
+      width: `calc(100% / ${scaleRatio})`,
+      height: `calc(100% / ${scaleRatio})`,
+      opacity: isErasing ? 0.2 : 1,
     }
 
     // Reduce the chance of blurry text

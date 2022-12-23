@@ -139,7 +139,7 @@ export class PolygonShape extends TLPolygonShape<PolygonShapeProps> {
   ReactIndicator = observer(() => {
     const {
       offset: [x, y],
-      props: { strokeWidth }
+      props: { strokeWidth },
     } = this
 
     return (

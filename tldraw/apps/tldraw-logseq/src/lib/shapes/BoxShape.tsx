@@ -131,7 +131,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
     const {
       props: {
         size: [w, h],
-        borderRadius
+        borderRadius,
       },
     } = this
 

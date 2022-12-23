@@ -123,7 +123,7 @@ export class EllipseShape extends TLEllipseShape<EllipseShapeProps> {
 
   ReactIndicator = observer(() => {
     const {
-      size: [w, h]
+      size: [w, h],
     } = this.props
 
     return (
