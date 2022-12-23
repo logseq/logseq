@@ -7,15 +7,29 @@ import { observer } from 'mobx-react-lite'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 import { BindingIndicator } from './BindingIndicator'
 import { TextLabel } from './text/TextLabel'
+import type { SizeLevel } from '.'
+import { action, computed } from 'mobx'
+
 export interface BoxShapeProps extends TLBoxShapeProps, CustomStyleProps {
   borderRadius: number
   type: 'box'
   label: string
+  fontSize: number
   fontWeight: number
   italic: boolean
+  scaleLevel?: SizeLevel
 }
 
-const font = '18px / 1 var(--ls-font-family)'
+const font = '20px / 1 var(--ls-font-family)'
+
+const levelToScale = {
+  xs: 10,
+  sm: 16,
+  md: 20,
+  lg: 32,
+  xl: 48,
+  xxl: 60,
+}
 
 export class BoxShape extends TLBoxShape<BoxShapeProps> {
   static id = 'box'
@@ -31,6 +45,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
     fill: '',
     noFill: false,
     fontWeight: 400,
+    fontSize: 20,
     italic: false,
     strokeType: 'line',
     strokeWidth: 2,
@@ -55,6 +70,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
           label,
           italic,
           fontWeight,
+          fontSize,
         },
       } = this
 
@@ -62,7 +78,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
         label || isEditing
           ? getTextLabelSize(
               label,
-              { fontFamily: 'var(--ls-font-family)', fontSize: 18, lineHeight: 1, fontWeight },
+              { fontFamily: 'var(--ls-font-family)', fontSize, lineHeight: 1, fontWeight },
               4
             )
           : [0, 0]
@@ -89,6 +105,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
             color={getComputedColor(stroke, 'text')}
             offsetX={offset[0]}
             offsetY={offset[1]}
+            fontSize={fontSize}
             scale={scale}
             isEditing={isEditing}
             onChange={handleLabelChange}
@@ -126,6 +143,18 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
       )
     }
   )
+
+  @computed get scaleLevel() {
+    return this.props.scaleLevel ?? 'md'
+  }
+
+  @action setScaleLevel = async (v?: SizeLevel) => {
+    this.update({
+      scaleLevel: v,
+      fontSize: levelToScale[v ?? 'md'],
+    })
+    this.onResetBounds()
+  }
 
   ReactIndicator = observer(() => {
     const {
