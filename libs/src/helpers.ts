@@ -424,6 +424,7 @@ export function setupInjectedUI(
     'keydown',
     'change',
     'input',
+    'contextmenu'
   ].forEach((type) => {
     el.addEventListener(
       type,
@@ -432,9 +433,10 @@ export function setupInjectedUI(
         const trigger = target.closest(`[data-on-${type}]`) as HTMLElement
         if (!trigger) return
 
+        const { preventDefault } = trigger.dataset
         const msgType = trigger.dataset[`on${ucFirst(type)}`]
-        msgType &&
-        pl.caller?.callUserModel(msgType, transformableEvent(trigger, e))
+        if (msgType) pl.caller?.callUserModel(msgType, transformableEvent(trigger, e))
+        if (preventDefault?.toLowerCase() === 'true') e.preventDefault()
       },
       false
     )
@@ -473,6 +475,8 @@ export function transformableEvent(target: HTMLElement, e: Event) {
   const obj: any = {}
 
   if (target) {
+    obj.type = e.type
+
     const ds = target.dataset
     const FLAG_RECT = 'rect'
 
