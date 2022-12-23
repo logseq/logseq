@@ -6,7 +6,6 @@ import * as React from 'react'
 import type { Shape } from '../../lib'
 import { TablerIcon } from '../icons'
 import { Button } from '../Button'
-import { ToolButton } from '../ToolButton'
 import { ZoomMenu } from '../ZoomMenu'
 import * as Separator from '@radix-ui/react-separator'
 
