@@ -158,18 +158,18 @@
   "Given the block uuid, add a new shape to the referenced block.
    By default it will be placed next to the given shape id"
   [block-uuid source-shape & {:keys [link? bottom?]}]
-  (let [app (state/active-tldraw-app)
-        ^js api (.-api app)
-        point (-> (.getShapeById app source-shape)
-                  (.-bounds)
-                  ((fn [bounds] (if bottom?
-                                  [(.-minX bounds) (+ 64 (.-maxY bounds))]
-                                  [(+ 64 (.-maxX bounds)) (.-minY bounds)]))))
-        shape (->logseq-portal-shape block-uuid point)]
-    (when (uuid? block-uuid) (editor-handler/set-blocks-id! [block-uuid]))
-    (.createShapes api (clj->js shape))
-    (when link?
-      (.createNewLineBinding api source-shape (:id shape)))))
+  (when-let [app (state/active-tldraw-app)]
+    (let [^js api (.-api app)
+          point (-> (.getShapeById app source-shape)
+                    (.-bounds)
+                    ((fn [bounds] (if bottom?
+                                    [(.-minX bounds) (+ 64 (.-maxY bounds))]
+                                    [(+ 64 (.-maxX bounds)) (.-minY bounds)]))))
+          shape (->logseq-portal-shape block-uuid point)]
+      (when (uuid? block-uuid) (editor-handler/set-blocks-id! [block-uuid]))
+      (.createShapes api (clj->js shape))
+      (when link?
+        (.createNewLineBinding api source-shape (:id shape))))))
 
 (defn page-name->tldr!
   ([page-name]
