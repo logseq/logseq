@@ -41,7 +41,7 @@ export const Arrow = React.memo(function StraightArrow({
   const arrowDist = Vec.dist(start, end)
   if (arrowDist < 2) return null
   const { strokeWidth } = style
-  const sw = 1 + strokeWidth * levelToScale[scaleLevel ?? 'md'] / 10
+  const sw = 1 + (strokeWidth * levelToScale[scaleLevel ?? 'md']) / 10
   // Path between start and end points
   const path = 'M' + Vec.toFixed(start) + 'L' + Vec.toFixed(end)
   // Arrowheads
