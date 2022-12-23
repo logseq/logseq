@@ -1,5 +1,6 @@
 import type { Side } from '@radix-ui/react-popper'
 import { validUUID } from '@tldraw/core'
+import { useApp } from '@tldraw/react'
 import React from 'react'
 
 import { observer } from 'mobx-react-lite'
@@ -31,6 +32,7 @@ function ShapeLinkItem({
   onRemove?: () => void
   showContent?: boolean
 }) {
+  const app = useApp<Shape>()
   const { handlers } = React.useContext(LogseqContext)
 
   return (
@@ -39,9 +41,11 @@ function ShapeLinkItem({
         <BlockLink id={id} showReferenceContent={showContent} />
       </div>
       <div className="flex-1" />
-      <Button tooltip="Open Page" type="button" onClick={() => handlers?.redirectToPage(id)}>
-        <TablerIcon name="open-as-page" />
-      </Button>
+      {handlers.getBlockPageName(id) !== app.currentPage.name && (
+        <Button tooltip="Open Page" type="button" onClick={() => handlers?.redirectToPage(id)}>
+          <TablerIcon name="open-as-page" />
+        </Button>
+      )}
       <Button
         tooltip="Open Page in Right Sidebar"
         type="button"
