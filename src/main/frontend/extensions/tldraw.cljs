@@ -23,7 +23,7 @@
 
 (rum/defc page-cp
   [props]
-  (page/page {:page-name (gobj/get props "pageName") :whiteboard? true}))
+  (page/page {:page-name (model/get-redirect-page-name (gobj/get props "pageName")) :whiteboard? true}))
 
 (rum/defc block-cp
   [props]
