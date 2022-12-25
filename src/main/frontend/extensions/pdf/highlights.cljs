@@ -208,43 +208,56 @@
      ]))
 
 (rum/defc pdf-highlights-text-region
-  [^js viewer vw-hl hl
-   {:keys [show-ctx-menu!]}]
+  [^js viewer vw-hl hl {:keys [show-ctx-menu!]}]
 
-  (let [{:keys [rects]} (:position vw-hl)
+  (let [{:keys [id]} hl
+        {:keys [rects]} (:position vw-hl)
         {:keys [color]} (:properties hl)
-        open-tip! (fn [^js/MouseEvent e]
-                    (.preventDefault e)
-                    (let [x (.-clientX e)
-                          y (.-clientY e)]
 
-                      (show-ctx-menu! viewer hl {:x x :y y})))]
+        open-ctx-menu!
+        (fn [^js/MouseEvent e]
+          (.preventDefault e)
+          (let [x (.-clientX e)
+                y (.-clientY e)]
+
+            (show-ctx-menu! viewer hl {:x x :y y})))
+
+        dragstart-handle!
+        (fn [^js e]
+          (when-let [^js dt (and id (.-dataTransfer e))]
+            (.setData dt "text/plain" (str "((" id "))"))))]
 
     [:div.extensions__pdf-hls-text-region
-     {:on-click        open-tip!
-      :on-context-menu open-tip!}
+     {:on-click        open-ctx-menu!
+      :on-context-menu open-ctx-menu!}
 
      (map-indexed
       (fn [idx rect]
         [:div.hls-text-region-item
-         {:key        idx
-          :style      rect
-          :data-color color}])
+         {:key           idx
+          :style         rect
+          :draggable     "true"
+          :on-drag-start dragstart-handle!
+          :data-color    color}])
       rects)]))
 
 (rum/defc ^:large-vars/cleanup-todo pdf-highlight-area-region
-  [^js viewer vw-hl hl
-   {:keys [show-ctx-menu! upd-hl!]}]
+  [^js viewer vw-hl hl {:keys [show-ctx-menu! upd-hl!]}]
 
-  (let [*el       (rum/use-ref nil)
-        *dirty    (rum/use-ref nil)
-        open-tip! (fn [^js/MouseEvent e]
-                    (.preventDefault e)
-                    (when-not (rum/deref *dirty)
-                      (let [x (.-clientX e)
-                            y (.-clientY e)]
+  (let [{:keys [id]} hl
+        *el    (rum/use-ref nil)
+        *dirty (rum/use-ref nil)
+        open-ctx-menu! (fn [^js/MouseEvent e]
+                         (.preventDefault e)
+                         (when-not (rum/deref *dirty)
+                           (let [x (.-clientX e)
+                                 y (.-clientY e)]
 
-                        (show-ctx-menu! viewer hl {:x x :y y}))))]
+                             (show-ctx-menu! viewer hl {:x x :y y}))))
+
+        dragstart-handle! (fn [^js e]
+                            (when-let [^js dt (and id (.-dataTransfer e))]
+                              (.setData dt "text/plain" (str "((" id "))"))))]
 
     ;; resizable
     (rum/use-effect!
@@ -331,8 +344,10 @@
          {:ref             *el
           :style           vw-bounding
           :data-color      color
-          :on-click        open-tip!
-          :on-context-menu open-tip!}]))))
+          :draggable       "true"
+          :on-drag-start   dragstart-handle!
+          :on-click        open-ctx-menu!
+          :on-context-menu open-ctx-menu!}]))))
 
 (rum/defc pdf-highlights-region-container
   "Displays the highlights over a pdf document."
@@ -888,7 +903,7 @@
        #(set-ready! false))
      [identity])
 
-    [:div#pdf-layout-container.extensions__pdf-container
+    [:div#pdf-layout-container.extensions__pdf-container.ls-keep-editing-when-outside-click
      (when (and prepared identity ready)
        (pdf-loader pdf-current))]))
 
