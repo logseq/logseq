@@ -2492,9 +2492,14 @@
         {:block/keys [format uuid] :as block} (state/get-edit-block)
         id (state/get-edit-input-id)
         repo (state/get-current-repo)
+        editing-block (gdom/getElement (state/get-editing-block-dom-id))
         f (if up? util/get-prev-block-non-collapsed util/get-next-block-non-collapsed)
-        sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))]
-    (when sibling-block
+        sibling-block (f editing-block)
+        same-container? (when (and editing-block sibling-block)
+                          (->> [editing-block sibling-block]
+                               (map (fn [^js b] (.closest b ".blocks-container")))
+                               (apply =)))]
+    (when (and sibling-block same-container?)
       (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
         (let [content (:block/content block)
               value (state/get-edit-content)]
