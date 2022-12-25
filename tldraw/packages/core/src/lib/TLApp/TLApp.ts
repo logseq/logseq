@@ -181,6 +181,18 @@ export class TLApp<
           this.selectedTool.transition('idle')
         },
       },
+      {
+        keys: 'mod+g',
+        fn: () => {
+          this.api.doGroup()
+        },
+      },
+      {
+        keys: 'mod+shift+g',
+        fn: () => {
+          this.api.unGroup()
+        },
+      },
     ]
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
@@ -194,11 +206,9 @@ export class TLApp<
           keys: child.constructor['shortcut'] as string | string[],
           fn: (_: any, __: any, e: KeyboardEvent) => {
             this.transition(child.id)
-
             // hack: allows logseq related shortcut combinations to work
-            if (e.key !== 't') {
-              e.stopPropagation()
-            }
+            // fixme?: unsure if it will cause unexpected issues
+            // e.stopPropagation()
           },
         }
       })
@@ -308,7 +318,7 @@ export class TLApp<
   /* --------------------- Shapes --------------------- */
 
   getShapeById = <T extends S>(id: string, pageId = this.currentPage.id): T | undefined => {
-    const shape = this.getPageById(pageId)?.shapes.find(shape => shape.id === id) as T
+    const shape = this.getPageById(pageId)?.shapesById[id] as T
     return shape
   }
 

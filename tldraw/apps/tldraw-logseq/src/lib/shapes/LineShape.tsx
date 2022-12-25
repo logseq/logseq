@@ -46,7 +46,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     label: '',
   }
 
-  hideSelection = false
+  hideSelection = true
   canEdit = true
 
   ReactComponent = observer(({ events, isErasing, isEditing, onEditingEnd }: TLComponentProps) => {
@@ -59,7 +59,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       fontWeight,
       id,
     } = this.props
-    const labelSize = label || isEditing ? getTextLabelSize(label, font, 4) : [0, 0]
+    const labelSize = label || isEditing ? getTextLabelSize(label, font, 6) : [0, 0]
     const midPoint = Vec.med(start.point, end.point)
     const dist = Vec.dist(start.point, end.point)
     const scale = Math.max(
@@ -102,7 +102,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     )
   })
 
-  ReactIndicator = observer(() => {
+  ReactIndicator = observer(({ isEditing }: TLComponentProps) => {
     const {
       id,
       decorations,
@@ -111,7 +111,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       handles: { start, end },
     } = this.props
     const bounds = this.getBounds()
-    const labelSize = label ? getTextLabelSize(label, font, 4) : [0, 0]
+    const labelSize = label ? getTextLabelSize(label, font, 6) : [0, 0]
     const midPoint = Vec.med(start.point, end.point)
     const dist = Vec.dist(start.point, end.point)
     const scale = Math.max(
@@ -123,7 +123,6 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     }, [bounds, scale, midPoint])
     return (
       <g>
-        <LabelMask id={id} bounds={bounds} labelSize={labelSize} offset={offset} scale={scale} />
         <path
           mask={label ? `url(#${id}_clip)` : ``}
           d={getArrowPath(
@@ -134,7 +133,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
             decorations?.end
           )}
         />
-        {label && (
+        {label && !isEditing && (
           <rect
             x={bounds.width / 2 - (labelSize[0] / 2) * scale + offset[0]}
             y={bounds.height / 2 - (labelSize[1] / 2) * scale + offset[1]}

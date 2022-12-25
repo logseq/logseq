@@ -28,7 +28,8 @@ export const BacklinksCountContainer = observer(function BacklinksCountContainer
 
   const stop: React.EventHandler<any> = e => e.stopPropagation()
 
-  const rounded = bounds.height * zoom < 50 || !app.selectedShapesArray.includes(shape)
+  const rounded =
+    bounds.height * zoom < 50 || !app.selectedShapesArray.includes(shape) || shape.hideSelection
 
   return (
     <Container bounds={bounds} className="tl-backlinks-count-container">
