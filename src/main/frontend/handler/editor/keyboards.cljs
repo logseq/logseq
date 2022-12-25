@@ -25,6 +25,10 @@
          (= :input (state/get-editor-action))
          nil
 
+         (some-> (.-target _e)
+                 (.closest ".ls-keep-editing-when-outside-click"))
+         nil
+
          :else
          (let [{:keys [on-hide value]} (editor-handler/get-state)]
            (when on-hide
