@@ -633,6 +633,7 @@ Similar to re-frame subscriptions"
 (defn- get-selected-block-ids
   [blocks]
   (->> blocks
+       (remove nil?)
        (keep #(when-let [id (dom/attr % "blockid")]
                 (uuid id)))
        (distinct)))
@@ -970,7 +971,8 @@ Similar to re-frame subscriptions"
 
 (defn get-selection-blocks
   []
-  (:selection/blocks @state))
+  (->> (:selection/blocks @state)
+       (remove nil?)))
 
 (defn get-selection-block-ids
   []
