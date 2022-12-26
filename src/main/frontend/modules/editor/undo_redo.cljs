@@ -2,7 +2,8 @@
   (:require [datascript.core :as d]
             [frontend.db.conn :as conn]
             [frontend.modules.datascript-report.core :as db-report]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [clojure.set :as set]))
 
 ;;;; APIs
 
@@ -141,7 +142,10 @@
   (when (and (not (empty? tx-data))
              (not (or (:undo? tx-meta)
                       (:redo? tx-meta)))
-             (not @*pause-listener))
+             (not @*pause-listener)
+             (not (set/subset?
+                   (set (map :a tx-data))
+                   #{:block/created-at :block/updated-at})))
     (reset-redo)
     (if (:compute-new-refs? tx-meta)
       (let [[removed-e _prev-e] (pop-undo)
