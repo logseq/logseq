@@ -905,7 +905,7 @@
        #(set-ready! false))
      [identity])
 
-    [:div#pdf-layout-container.extensions__pdf-container.ls-keep-editing-when-outside-click
+    [:div#pdf-layout-container.extensions__pdf-container
      (when (and prepared identity ready)
        (pdf-loader pdf-current))]))
 
