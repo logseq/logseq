@@ -11,7 +11,7 @@
     (mixins/hide-when-esc-or-outside
      state
      :on-hide
-     (fn [_state _e event]
+     (fn [_state e event]
        (cond
          (contains?
           #{:commands :block-commands
@@ -25,7 +25,7 @@
          (= :input (state/get-editor-action))
          nil
 
-         (some-> (.-target _e)
+         (some-> (.-target e)
                  (.closest ".ls-keep-editing-when-outside-click"))
          nil
 
