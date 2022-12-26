@@ -2,6 +2,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.svg :as svg]
+            [frontend.components.block :as block]
             [frontend.context.i18n :refer [t]]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.pdf.utils :as pdf-utils]
@@ -225,6 +226,7 @@
         dragstart-handle!
         (fn [^js e]
           (when-let [^js dt (and id (.-dataTransfer e))]
+            (reset! block/*dragging? true)
             (.setData dt "text/plain" (str "((" id "))"))))]
 
     [:div.extensions__pdf-hls-text-region
