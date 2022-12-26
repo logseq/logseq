@@ -137,7 +137,7 @@
        (tldraw {:renderers tldraw-renderers
                 :handlers (get-tldraw-handlers page-name)
                 :onMount on-mount
-                :onPersist (fn [app _info model]
+                :onPersist (fn [app _info]
                              (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
                              (util/profile "tldraw persist"
                                            (whiteboard-handler/transact-tldr-delta! page-name app)))

@@ -41,6 +41,7 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.shell :as shell-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.handler.command-palette :as cp]
@@ -930,6 +931,12 @@
 (defmethod handle :run/cli-command [[_ command content]]
   (when (and command (not (string/blank? content)))
     (shell-handler/run-cli-command-wrapper! command content)))
+
+(defmethod handle :whiteboard/undo [[_ e]]
+  (whiteboard-handler/undo! e))
+
+(defmethod handle :whiteboard/redo [[_ e]]
+  (whiteboard-handler/redo! e))
 
 (defn run!
   []

@@ -2,10 +2,12 @@
   "Whiteboard related handlers"
   (:require [datascript.core :as d]
             [dommy.core :as dom]
+            [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.modules.editor.undo-redo :as history]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
@@ -16,7 +18,8 @@
             [goog.object :as gobj]
             [clojure.set :as set]
             [clojure.core.async :as async]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [cljs-bean.core :as bean]))
 
 (defn js->clj-keywordize
   [obj]
@@ -146,29 +149,39 @@
         upsert-shapes (->> (set/difference new-id-nonces db-id-nonces)
                            (map (fn [{:keys [id nonce]}]
                                   (-> (.-serialized ^js (.getShapeById tl-page id))
-                                      js->clj-keywordize))))
+                                      js->clj-keywordize)))
+                           (set))
         old-ids (set (map :id db-id-nonces))
         new-ids (set (map :id new-id-nonces))
-        created-ids (set/difference new-ids old-ids)
-        deleted-ids (set/difference old-ids new-ids)
-        updated-ids (set/difference new-ids (set/union created-ids deleted-ids))
-        deleted-shapes-tx (->> deleted-ids
-                               (remove string/blank?)
-                               (mapv (fn [id] [:db/retractEntity [:block/uuid (uuid id)]])))
+        created-shapes (set (filter #(new-ids (:id %)) upsert-shapes))
+        created-ids (->> (set/difference new-ids old-ids)
+                         (remove string/blank?))
+        deleted-ids (->> (set/difference old-ids new-ids)
+                         (remove string/blank?))
+        repo (state/get-current-repo)
+        deleted-shapes (when (seq deleted-ids)
+                         (db/pull-many repo '[*] (mapv (fn [id] [:block/uuid (uuid id)]) deleted-ids)))
+        deleted-shapes-tx (mapv (fn [id] [:db/retractEntity [:block/uuid (uuid id)]]) deleted-ids)
         with-timestamps (fn [block]
                           (if (contains? created-ids (str (:block/uuid block)))
                             (assoc block :block/updated-at (util/time-ms))
-                            (outliner/block-with-timestamps block)))]
+                            (outliner/block-with-timestamps block)))
+        changed-shapes (set/difference upsert-shapes created-shapes)
+        prev-changed-blocks (when (seq changed-shapes)
+                              (db/pull-many repo '[*] (mapv (fn [shape]
+                                                              [:block/uuid (uuid (:id shape))]) changed-shapes)))]
     {:page-block (build-page-block page-name tl-page assets shapes-index)
-     :upserted-blocks (->> (map #(shape->block % page-name) upsert-shapes)
-                         (map with-timestamps))
+     :upserted-blocks (->> upsert-shapes
+                           (map #(shape->block % page-name))
+                           (map with-timestamps))
      :delete-blocks deleted-shapes-tx
-     :metadata {:type :whiteboard/op
-                :data {:created-ids created-ids
-                       :deleted-ids deleted-ids
-                       :updated-ids updated-ids}}}))
+     :metadata {:whiteboard/transact? true
+                :data {:deleted-shapes deleted-shapes
+                       :new-shapes created-shapes
+                       :changed-shapes changed-shapes
+                       :prev-changed-blocks prev-changed-blocks}}}))
 
-(defn transact-tldr-delta! [page-name app]
+(defn transact-tldr-delta! [page-name ^js app]
   (let [tl-page ^js (second (first (.-pages app)))
         shapes (.-shapes ^js tl-page)
         new-id-nonces (set (map (fn [shape]
@@ -339,3 +352,48 @@
           (state/set-onboarding-whiteboard! true))
         (p/catch
          (fn [e] (js/console.warn "Failed to populate onboarding whiteboard" e))))))
+
+(defn- delete-shapes!
+  [^js api shapes]
+  (apply (.-deleteShapes api) (map :id shapes)))
+
+(defn- create-shapes!
+  [^js api shapes]
+  (apply (.-createShapes api) (bean/->js shapes)))
+
+(defn- update-shapes!
+  [^js api shapes]
+  (apply (.-updateShapes api) (bean/->js shapes)))
+
+(defn undo!
+  [{:keys [txs tx-meta]}]
+  (history/pause-listener!)
+  (let [app (state/active-tldraw-app)
+        {:keys [deleted-shapes new-shapes changed-shapes prev-changed-blocks]} (:data tx-meta)
+        ^js api (.-api app)]
+    (when api
+      (when (seq deleted-shapes)
+        (create-shapes! api deleted-shapes))
+      (when (seq new-shapes)
+        (delete-shapes! api new-shapes))
+      (when (seq changed-shapes)
+        (delete-shapes! api changed-shapes)
+        (let [prev-shapes (map (fn [b] (get-in b [:block/properties :logseq.tldraw.shape]))
+                            prev-changed-blocks)]
+          (create-shapes! api prev-shapes)))))
+  (history/resume-listener!))
+
+(defn redo!
+  [{:keys [txs tx-meta]}]
+  (history/pause-listener!)
+  (let [app (state/active-tldraw-app)
+        {:keys [deleted-shapes new-shapes changed-shapes]} (:data tx-meta)
+        ^js api (.-api app)]
+    (when api
+      (when (seq deleted-shapes)
+        (delete-shapes! api deleted-shapes))
+      (when (seq new-shapes)
+        (create-shapes! api new-shapes))
+      (when (seq changed-shapes)
+        (update-shapes! api changed-shapes))))
+  (history/resume-listener!))

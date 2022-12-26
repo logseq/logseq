@@ -232,7 +232,7 @@
    :editor/undo                    {:binding "mod+z"
                                     :fn      history/undo!}
 
-   :editor/redo                    {:binding ["shift+mod+z" "mod+y"]
+   :editor/redo                    {:binding ["mod+shift+z" "mod+y"]
                                     :fn      history/redo!}
 
    :editor/insert-link             {:binding "mod+l"

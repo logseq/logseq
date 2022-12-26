@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { deepEqual, TLDocumentModel } from '@tldraw/core'
+import { TLDocumentModel } from '@tldraw/core'
 import {
   AppCanvas,
   AppProvider,
@@ -99,9 +99,7 @@ const AppInner = ({
 
   const onPersistOnDiff: TLReactCallbacks<Shape>['onPersist'] = React.useCallback(
     (app, info) => {
-      if (!deepEqual(app.serialized, model)) {
-        onPersist?.(app, info, model)
-      }
+       onPersist?.(app, info)
     },
     [model]
   )

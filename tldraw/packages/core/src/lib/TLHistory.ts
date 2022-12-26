@@ -6,12 +6,6 @@ import type { TLGroupShape } from './shapes/TLGroupShape'
 import type { TLApp, TLDocumentModel } from './TLApp'
 import { TLPage } from './TLPage'
 
-const shouldPersist = (a: TLDocumentModel, b: TLDocumentModel) => {
-  const page0 = omit(a.pages[0], 'nonce')
-  const page1 = omit(b.pages[0], 'nonce')
-  return !deepEqual(page0, page1)
-}
-
 export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEventMap> {
   constructor(app: TLApp<S, K>) {
     this.app = app
@@ -57,24 +51,6 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
 
   @action persist = (replace = false) => {
     if (this.isPaused || this.creating) return
-
-    // const { serialized } = this.app
-
-    // // Do not persist if the serialized state is the same as the last one
-    // if (this.stack.length > 0 && !shouldPersist(this.stack[this.pointer], serialized)) {
-    //   return
-    // }
-
-    // if (replace) {
-    //   this.stack[this.pointer] = serialized
-    // } else {
-    //   if (this.pointer < this.stack.length) {
-    //     this.stack = this.stack.slice(0, this.pointer + 1)
-    //   }
-    //   this.stack.push(serialized)
-    //   this.pointer = this.stack.length - 1
-    // }
-
     this.app.pages.forEach(page => page.bump()) // Is it ok here?
     this.app.notify('persist', null)
   }

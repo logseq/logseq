@@ -1754,5 +1754,5 @@ independent of format as format specific heading characters are stripped"
   [repo page-name]
   (->> (get-page-blocks-no-cache repo page-name {:keys [:block/uuid :block/properties]})
        (map (fn [{:block/keys [uuid properties]}]
-              {:id uuid
+              {:id (str uuid)
                :nonce (get-in properties [:logseq.tldraw.shape :nonce])}))))

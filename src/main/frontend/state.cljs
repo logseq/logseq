@@ -1760,8 +1760,7 @@ Similar to re-frame subscriptions"
 
 (defn block-component-editing?
   []
-  (or (:block/component-editing-mode? @state)
-      (whiteboard-active-but-not-editing-portal?)))
+  (:block/component-editing-mode? @state))
 
 (defn set-block-component-editing-mode!
   [value]
