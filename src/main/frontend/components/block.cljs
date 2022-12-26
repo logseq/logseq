@@ -872,7 +872,7 @@
           stop-inner-events? (= block-type :whiteboard-shape)]
       (if (and block (:block/content block))
         (let [title [:span.block-ref
-                     (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
+                     (block-content (assoc config :block-ref? (not (state/show-full-blocks?)) :stop-events? stop-inner-events?)
                                     block nil (:block/uuid block)
                                     (:slide? config))]
               inner (if label

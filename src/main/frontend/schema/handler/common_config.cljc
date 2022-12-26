@@ -38,6 +38,7 @@
     [:block/content-max-length :int]
     [:ui/show-command-doc? :boolean]
     [:ui/show-empty-bullets? :boolean]
+    [:ui/show-full-blocks? :boolean]
     [:query/views [:map-of
                    :keyword
                    [:sequential any?]]]
