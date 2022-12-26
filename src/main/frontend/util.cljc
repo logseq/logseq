@@ -481,9 +481,8 @@
 #?(:cljs
    (defn distinct-by-last-wins
      [f col]
-     (if (sequential? col)
-       (reverse (distinct-by f (reverse col)))
-       (distinct-by f col))))
+     {:pre [(sequential? col)]}
+     (reverse (distinct-by f (reverse col)))))
 
 (defn get-git-owner-and-repo
   [repo-url]
