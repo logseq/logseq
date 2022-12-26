@@ -69,11 +69,6 @@ const AppImpl = () => {
   const ref = React.useRef<HTMLDivElement>(null)
   const app = useApp()
 
-  React.useEffect(
-    () => { return () => { app.persist() } },
-    []
-  )
-
   const components = React.useMemo(
     () => ({
       ContextBar,

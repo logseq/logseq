@@ -54,10 +54,6 @@ export function useSetup<
     if (onPaste) unsubs.push(app.subscribe('paste', onPaste))
     if (onCanvasDBClick) unsubs.push(app.subscribe('canvas-dbclick', onCanvasDBClick))
     // Kind of unusual, is this the right pattern?
-    // Allows the app to send the last notice before the unmount
-    return () => setTimeout(
-      () => unsubs.forEach(unsub => unsub()),
-      1000
-    )
+    return () => unsubs.forEach(unsub => unsub())
   }, [app, onPersist, onSave, onSaveAs, onError])
 }

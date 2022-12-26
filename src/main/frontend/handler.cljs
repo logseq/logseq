@@ -228,7 +228,6 @@
                    (state/set-db-restoring! false))))
 
   (db/run-batch-txs!)
-  (whiteboard-handler/run-db-transact!)
   (file/<ratelimit-file-writes!)
 
   (when config/dev?

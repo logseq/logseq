@@ -19,7 +19,7 @@ export class CreatingState<
   private shape = {} as T
   private points: number[][] = [[0, 0, 0.5]]
 
-  private persistDebounced = debounce(this.app.persist, 1000)
+  private persistDebounced = debounce(this.app.persist, 200)
 
   // Add a new point and offset the shape, if necessary
   private addNextPoint(point: number[]) {

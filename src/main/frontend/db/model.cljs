@@ -1741,11 +1741,18 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-all-whiteboards
   [repo]
-  (->> (d/q
-        '[:find [(pull ?page [:block/name
-                              :block/created-at
-                              :block/updated-at]) ...]
-          :where
-          [?page :block/name]
-          [?page :block/type "whiteboard"]]
-        (conn/get-db repo))))
+  (d/q
+    '[:find [(pull ?page [:block/name
+                          :block/created-at
+                          :block/updated-at]) ...]
+      :where
+      [?page :block/name]
+      [?page :block/type "whiteboard"]]
+    (conn/get-db repo)))
+
+(defn get-whiteboard-id-nonces
+  [repo page-name]
+  (->> (get-page-blocks-no-cache repo page-name {:keys [:block/uuid :block/properties]})
+       (map (fn [{:block/keys [uuid properties]}]
+              {:id uuid
+               :nonce (get-in properties [:logseq.tldraw.shape :nonce])}))))

@@ -278,8 +278,7 @@
 
      :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
      :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
-     :whiteboard/last-persisted-at          {}
-     :whiteboard/batch-txs                  {}})))
+     :whiteboard/last-persisted-at          {}})))
 
 ;; Block ast state
 ;; ===============
@@ -1641,11 +1640,9 @@ Similar to re-frame subscriptions"
   "Check if whiteboard is idle."
   [repo]
   (when repo
-    (and
-     (empty? (get-in @state [:whiteboard/batch-txs repo]))
-     (>= (- (util/time-ms) (or (get-in @state [:whiteboard/last-persisted-at repo])
-                               (- (util/time-ms) 10000)))
-         3000))))
+    (>= (- (util/time-ms) (or (get-in @state [:whiteboard/last-persisted-at repo])
+                              (- (util/time-ms) 10000)))
+        3000)))
 
 (defn set-nfs-refreshing!
   [value]

@@ -120,7 +120,6 @@
                          (state/focus-whiteboard-shape loaded-app block-id))
                        #())
                      [block-id loaded-app])
-
     (when data
       [:div.draw.tldraw.whiteboard.relative.w-full.h-full
        {:style {:overscroll-behavior "none"}
@@ -140,6 +139,6 @@
                 :onMount on-mount
                 :onPersist (fn [app _info model]
                              (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
-                             (let [document (gobj/get app "serialized")]
-                               (whiteboard-handler/transact-tldr-delta! page-name document model)))
+                             (util/profile "tldraw persist"
+                                           (whiteboard-handler/transact-tldr-delta! page-name app)))
                 :model data})])))

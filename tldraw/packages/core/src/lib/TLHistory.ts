@@ -58,22 +58,22 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
   @action persist = (replace = false) => {
     if (this.isPaused || this.creating) return
 
-    const { serialized } = this.app
+    // const { serialized } = this.app
 
-    // Do not persist if the serialized state is the same as the last one
-    if (this.stack.length > 0 && !shouldPersist(this.stack[this.pointer], serialized)) {
-      return
-    }
+    // // Do not persist if the serialized state is the same as the last one
+    // if (this.stack.length > 0 && !shouldPersist(this.stack[this.pointer], serialized)) {
+    //   return
+    // }
 
-    if (replace) {
-      this.stack[this.pointer] = serialized
-    } else {
-      if (this.pointer < this.stack.length) {
-        this.stack = this.stack.slice(0, this.pointer + 1)
-      }
-      this.stack.push(serialized)
-      this.pointer = this.stack.length - 1
-    }
+    // if (replace) {
+    //   this.stack[this.pointer] = serialized
+    // } else {
+    //   if (this.pointer < this.stack.length) {
+    //     this.stack = this.stack.slice(0, this.pointer + 1)
+    //   }
+    //   this.stack.push(serialized)
+    //   this.pointer = this.stack.length - 1
+    // }
 
     this.app.pages.forEach(page => page.bump()) // Is it ok here?
     this.app.notify('persist', null)
@@ -89,9 +89,6 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
   @action undo = () => {
     if (this.isPaused) return
     if (this.app.selectedTool.currentState.id !== 'idle') return
-
-    // pencil && highlighter changes may not be saved yet
-    this.persist()
     if (this.canUndo) {
       this.setPointer(this.pointer - 1)
     }

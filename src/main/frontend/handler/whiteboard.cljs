@@ -15,7 +15,8 @@
             [promesa.core :as p]
             [goog.object :as gobj]
             [clojure.set :as set]
-            [clojure.core.async :as async]))
+            [clojure.core.async :as async]
+            [clojure.string :as string]))
 
 (defn js->clj-keywordize
   [obj]
@@ -137,50 +138,49 @@
      :block/created-at (or (:block/created-at page-entity)
                            (util/time-ms))}))
 
-(def debug-tx (atom []))
-(defn transact-tldr-delta! [page-name current-model prev-model]
-  (let [prev-model (if prev-model prev-model
-                       #js {:pages [{:shapes []}]})
-        page (first (.-pages current-model))
-        assets (.-assets current-model)
-        page' (first (.-pages prev-model))
-        new-shapes (.-shapes page)
-        old-shapes (.-shapes page')
-        id-nonce-map (fn [x]
-                       {:id (gobj/get x "id")
-                        :nonce (gobj/get x "nonce")})
-        get-id-and-nonce (fn [shapes]
-                           (->> (map id-nonce-map shapes)
-                                (remove nil?)
-                                (set)))
-        new-id-nounces (get-id-and-nonce new-shapes)
-        old-id-nounces (get-id-and-nonce old-shapes)
-        changes (set/difference new-id-nounces old-id-nounces)
-        new-ids (set (map :id new-id-nounces))
-        old-ids (set (map :id old-id-nounces))
-        deleted-ids (set/difference old-ids new-ids)
-        created-ids (set/difference new-ids old-ids)
-        upserted-shapes (atom [])
+(defn- compute-tx
+  [^js app ^js tl-page new-id-nonces db-id-nonces page-name]
+  (let [assets (js->clj-keywordize (.getCleanUpAssets app))
+        new-shapes (.-shapes tl-page)
         shapes-index (map #(gobj/get % "id") new-shapes)
-        page-block (build-page-block page-name page assets shapes-index)]
-    (doseq [shape new-shapes]
-      (when (contains? changes (id-nonce-map shape))
-        (swap! upserted-shapes conj (js->clj-keywordize shape))))
-    (let [delete-blocks-tx (mapv (fn [id] [:db/retractEntity [:block/uuid (uuid id)]]) deleted-ids)
-          with-timestamps (fn [block]
-                            (if (contains? created-ids (str (:block/uuid block)))
-                              (assoc block :block/updated-at (util/time-ms))
-                              (outliner/block-with-timestamps block)))
-          upserted-blocks (->> (map #(shape->block % page-name) @upserted-shapes)
-                               (map with-timestamps))
-          tx (concat delete-blocks-tx [page-block] upserted-blocks)
-          repo (state/get-current-repo)]
-      (state/update-state! [:whiteboard/batch-txs repo :tx-data]
-                           (fn [data]
-                             (->> (concat data tx)
-                                  (util/distinct-by-last-wins
-                                   (fn [x]
-                                     (or (:block/uuid x) x)))))))))
+        upsert-shapes (->> (set/difference new-id-nonces db-id-nonces)
+                           (map (fn [{:keys [id nonce]}]
+                                  (-> (.-serialized ^js (.getShapeById tl-page id))
+                                      js->clj-keywordize))))
+        old-ids (set (map :id db-id-nonces))
+        new-ids (set (map :id new-id-nonces))
+        created-ids (set/difference new-ids old-ids)
+        deleted-ids (set/difference old-ids new-ids)
+        updated-ids (set/difference new-ids (set/union created-ids deleted-ids))
+        deleted-shapes-tx (->> deleted-ids
+                               (remove string/blank?)
+                               (mapv (fn [id] [:db/retractEntity [:block/uuid (uuid id)]])))
+        with-timestamps (fn [block]
+                          (if (contains? created-ids (str (:block/uuid block)))
+                            (assoc block :block/updated-at (util/time-ms))
+                            (outliner/block-with-timestamps block)))]
+    {:page-block (build-page-block page-name tl-page assets shapes-index)
+     :upserted-blocks (->> (map #(shape->block % page-name) upsert-shapes)
+                         (map with-timestamps))
+     :delete-blocks deleted-shapes-tx
+     :metadata {:type :whiteboard/op
+                :data {:created-ids created-ids
+                       :deleted-ids deleted-ids
+                       :updated-ids updated-ids}}}))
+
+(defn transact-tldr-delta! [page-name app]
+  (let [tl-page ^js (second (first (.-pages app)))
+        shapes (.-shapes ^js tl-page)
+        new-id-nonces (set (map (fn [shape]
+                                  {:id (.-id shape)
+                                   :nonce (.-nonce shape)}) shapes))
+        repo (state/get-current-repo)
+        db-id-nonces (set (->> (model/get-whiteboard-id-nonces repo page-name)
+                               (map #(update % :id str))))
+        {:keys [page-block upserted-blocks delete-blocks metadata]}
+        (compute-tx app tl-page new-id-nonces db-id-nonces page-name)
+        tx-data (concat delete-blocks [page-block] upserted-blocks)]
+    (db-utils/transact! repo tx-data metadata)))
 
 (defn get-default-tldr
   [page-id]
@@ -339,17 +339,3 @@
           (state/set-onboarding-whiteboard! true))
         (p/catch
          (fn [e] (js/console.warn "Failed to populate onboarding whiteboard" e))))))
-
-(defn run-db-transact!
-  []
-  (async/go-loop []
-    (async/<! (async/timeout 1000))
-    (let [repo (state/get-current-repo)
-          tx-data (get-in @state/state [:whiteboard/batch-txs repo :tx-data])]
-      (when (or (not (state/whiteboard-idle? (state/get-current-repo)))
-                (not (state/whiteboard-route?)))
-        (when (seq tx-data)
-          (swap! debug-tx conj tx-data)
-          (db-utils/transact! tx-data))
-        (state/set-state! [:whiteboard/batch-txs repo] {})))
-    (recur)))
