@@ -11,9 +11,9 @@ body:
     id: confirm-search
     attributes:
       label: Search first
-      description: Please make sure to search through the [existing issues](https://github.com/logseq/logseq/issues) and [Logseq Forum](https://discuss.logseq.com/) before reporting.
+      description: Please search [existing issues](https://github.com/logseq/logseq/issues) and the [Logseq Forum](https://discuss.logseq.com/) before reporting.
       options:
-        - label: Search and no similar issue found
+        - label: I searched and no similar issues were found
           required: true
   - type: textarea
     id: problem

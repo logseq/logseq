@@ -257,7 +257,7 @@
 
    :go/search                      {:binding "mod+k"
                                     :fn      #(do
-                                                (editor-handler/escape-editing)
+                                                (editor-handler/escape-editing false)
                                                 (route-handler/go-to-search! :global))}
 
    :go/electron-find-in-page       {:binding "mod+f"
@@ -301,7 +301,7 @@
    :command-palette/toggle         {:binding "mod+shift+p"
                                     :fn      #(do
                                                 (editor-handler/escape-editing)
-                                                (state/toggle! :ui/command-palette-open?))}
+                                                (state/pub-event! [:modal/command-palette]))}
 
    :graph/export-as-html           {:fn #(export-handler/export-repo-as-html!
                                           (state/get-current-repo))
@@ -499,8 +499,7 @@
 
     :shortcut.handler/editor-global
     (->
-     (build-category-map [:command/run
-                          :command-palette/toggle
+     (build-category-map [
                           :graph/export-as-html
                           :graph/open
                           :graph/remove
@@ -548,7 +547,9 @@
                           :go/forward
                           :search/re-index
                           :sidebar/open-today-page
-                          :sidebar/clear])
+                          :sidebar/clear
+                          :command/run
+                          :command-palette/toggle])
      (with-meta {:before m/prevent-default-behavior}))
 
     :shortcut.handler/misc
