@@ -872,7 +872,7 @@
           stop-inner-events? (= block-type :whiteboard-shape)]
       (if (and block (:block/content block))
         (let [title [:span.block-ref
-                     (block-content (assoc config :block-ref? (not (state/show-full-blocks?)) :stop-events? stop-inner-events?)
+                     (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
                                     block nil (:block/uuid block)
                                     (:slide? config))]
               inner (if label
@@ -2245,7 +2245,7 @@
         plugin-slotted? (and config/lsp-enabled? (state/slot-hook-exist? uuid))
         block-ref? (:block-ref? config)
         stop-events? (:stop-events? config)
-        block-ref-with-title? (and block-ref? (seq title))
+        block-ref-with-title? (and block-ref? (not (state/show-full-blocks?)) (seq title))
         block-type (or (:ls-type properties) :default)
         content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
