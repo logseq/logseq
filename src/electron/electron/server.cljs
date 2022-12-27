@@ -85,10 +85,10 @@
       (let [^js headers (.-headers req)]
         (validate-auth-token (.-authorization headers))
         (callback))
-      (catch js/Error _e
+      (catch js/Error e
         (-> rep
             (.code 401)
-            (.send _e))))))
+            (.send e))))))
 
 (defonce ^:private *cid (volatile! 0))
 (defn- invoke-logseq-api!
