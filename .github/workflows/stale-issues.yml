@@ -1,0 +1,62 @@
+# This workflow warns and then closes issues that have had no activity for a 
+# specified amount of time. You can adjust the behavior by modifying this file.
+# For more information, see:
+#   https://github.com/marketplace/actions/close-stale-issues
+#   https://github.com/actions/stale/blob/master/action.yml
+#   https://github.com/actions/stale
+
+# Disable yamlint truthy rule
+# https://yamllint.readthedocs.io/en/stable/rules.html#module-yamllint.rules.truthy
+# yamllint disable-line rule:truthy
+
+---
+name: '180 Days Stale Issues Policy'
+on:
+  schedule:
+  - cron: "0 0 * * *"
+permissions:
+  contents: read
+
+jobs:
+  stale:
+    permissions:
+      issues: write  # for actions/stale to close stale issues
+    runs-on: ubuntu-latest
+    steps:
+    - name: '🧹 Mark & close stale issues'
+      id: stale_issues
+      uses: actions/stale@6f05e4244c9a0b2ed3401882b05d701dd0a7289b # v7
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        days-before-issue-stale: 180
+        days-before-close: 20
+        operations-per-run: 300 # The maximum number of operations per run, used to control rate limiting
+        stale-issue-label: ':status/automatic-stale'
+        close-issue-label: ':status/automatic-closing'
+        exempt-issue-labels: ':status/hold, :status/WIP, :type/enhancement'
+        remove-stale-when-updated: true
+        stale-issue-message: |
+            👋 Hello,
+            There hasn't been any recent activity on this issue :sleeping:
+            To keep our backlog manageable we have to clean old issues,
+            as many of them have already been resolved with the latest updates.
+            
+            Please make sure to update to the latest [Logseq](https://logseq.com) version and
+            Let us know us know if that solves the issue by adding a comment 💬
+            
+            This issue has been automatically marked as stale & will be closed in 20 days
+            if no further activity occurs.
+            
+            Access additional 🌐 [Logseq](https://logseq.com) resources:
+              - **Forum**: https://discuss.logseq.com
+              - **Blog**: https://blog.logseq.com
+              - **Docs**: https://docs.logseq.com
+            
+            Feel free to inform us of any other **issues** you discover or **feature requests** that come to mind in the
+            future. Pull Requests (PRs) are also always welcomed!
+            
+            Thank you for your contributions to Logseq :heart:! 
+#           close-issue-message: 'The issue has been automatically closed'
+
+    - name: 'Print outputs'
+      run: printf '%s\n' ${{ join(steps.stale.outputs.*, ',') }}
