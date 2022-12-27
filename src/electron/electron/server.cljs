@@ -54,9 +54,6 @@
   (when (string? s)
     (string/starts-with? s "logseq.")))
 
-(defn type-normal-api? [s]
-  (not (type-proxy-api? s)))
-
 (defn resolve-real-api-method
   [s]
   (when-not (string/blank? s)
