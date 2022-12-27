@@ -3,7 +3,7 @@
    [clojure.string :as string]
    [rum.core :as rum]
    [electron.ipc :as ipc]
-   [medley.core :as m]
+   [medley.core :as medley]
    [promesa.core :as p]
    [frontend.state :as state]
    [frontend.util :as util]
@@ -26,7 +26,7 @@
      [:h2.text-3xl.-translate-y-4 "Authorization tokens"]
      ;; items
      (let [update-value! (fn [idx k v] (swap! *tokens assoc-in [idx k] v))]
-       (for [[idx {:keys [value name]}] (m/indexed @*tokens)]
+       (for [[idx {:keys [value name]}] (medley/indexed @*tokens)]
          [:div.item.py-2.flex.space-x-2.items-center
           {:key idx}
           [:input.form-input.basis-36
@@ -42,7 +42,7 @@
                             (update-value! idx :value value))}]
 
           [:button.px-2.opacity-50.hover:opacity-90.active:opacity-100
-           {:on-click #(reset! *tokens (into [] (m/remove-nth idx @*tokens)))}
+           {:on-click #(reset! *tokens (into [] (medley/remove-nth idx @*tokens)))}
            [:span.flex.items-center (ui/icon "trash-x")]]]))
 
      [:p.flex.justify-end.pt-6.space-x-3

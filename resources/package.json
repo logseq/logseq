@@ -41,7 +41,7 @@
     "electron-deeplink": "1.0.10",
     "abort-controller": "3.0.0",
     "fastify": "latest",
-    "command-exists": "1.2.9",
+    "command-exists": "1.2.9"
   },
   "devDependencies": {
     "@electron-forge/cli": "^6.0.0-beta.57",
