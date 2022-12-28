@@ -404,32 +404,31 @@
   [{:keys [txs tx-meta]}]
   (history/pause-listener!)
   (try
-    (let [app (state/active-tldraw-app)
-          {:keys [deleted-shapes new-shapes changed-shapes prev-changed-blocks]} (:data tx-meta)
-          whiteboard-op (:whiteboard/op tx-meta)
-          ^js api (.-api app)]
-      (prn "undo")
-      (util/pprint tx-meta)
-      (when api
-        (case whiteboard-op
-          :group
-          (do
-            (select-shapes api (map :id new-shapes))
-            (.unGroup api))
-          :un-group
-          (do
-            (select-shapes api (mapcat :children deleted-shapes))
-            (.doGroup api))
-          (do
-            (when (seq deleted-shapes)
-              (create-shapes! api deleted-shapes))
-            (when (seq new-shapes)
-              (delete-shapes! api new-shapes))
-            (when (seq changed-shapes)
-              (delete-shapes! api changed-shapes)
-              (let [prev-shapes (map (fn [b] (get-in b [:block/properties :logseq.tldraw.shape]))
-                                  prev-changed-blocks)]
-                (create-shapes! api prev-shapes)))))))
+    (when-let [app (state/active-tldraw-app)]
+      (let [{:keys [deleted-shapes new-shapes changed-shapes prev-changed-blocks]} (:data tx-meta)
+            whiteboard-op (:whiteboard/op tx-meta)
+            ^js api (.-api app)]
+        (prn "undo")
+        (util/pprint tx-meta)
+        (when api
+          (case whiteboard-op
+            :group
+            (do
+              (select-shapes api (map :id new-shapes))
+              (.unGroup api))
+            :un-group
+            (do
+              (select-shapes api (mapcat :children deleted-shapes))
+              (.doGroup api))
+            (do
+              (when (seq deleted-shapes)
+                (create-shapes! api deleted-shapes))
+              (when (seq new-shapes)
+                (delete-shapes! api new-shapes))
+              (when (seq changed-shapes)
+                (let [prev-shapes (map (fn [b] (get-in b [:block/properties :logseq.tldraw.shape]))
+                                    prev-changed-blocks)]
+                  (update-shapes! api prev-shapes))))))))
     (catch :default e
       (js/console.error e)))
   (history/resume-listener!))
