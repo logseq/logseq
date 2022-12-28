@@ -37,7 +37,8 @@ jobs:
 
             We haven't seen any activity on this issue in a while :sleeping:, and we just wanted to make sure that it's still relevant. If you're still experiencing this issue, you might find it helpful to update to the latest version of Logseq. The latest version includes bug fixes and new features that may help to resolve this issue, and you can download it from [our website](https://logseq.com). If updating to the latest version doesn't help, please let us know by adding a comment 💬. We're here to help!
 
-            If the issue has been resolved or is no longer relevant, that's great news! We'll go ahead and close this issue to keep our backlog organized. Please note that this issue will be closed automatically in 20 days if there is no further activity. If you need more time to resolve the issue or provide more information, please just let us know by adding a comment.
+            If the issue has been resolved or is no longer relevant, that's great news! 🎉
+            We'll go ahead and close this issue to keep our backlog organized. Please note that this issue will be closed automatically in 20 days if there is no further activity. If you need more time to resolve the issue or provide more information, please just let us know by adding a comment.
 
 
             Access additional [Logseq](https://logseq.com) 🚀 resources:
@@ -69,11 +70,10 @@ jobs:
           stale-issue-message: |
             Hi There! 👋
 
-            # trunk-ignore(yamllint/line-length)
             We haven't seen any activity on this issue in a while :sleeping:, and we just wanted to make sure that it's still relevant. If you're still experiencing this issue, you might find it helpful to update to the latest version of Logseq. The latest version includes bug fixes and new features that may help to resolve this issue, and you can download it from [our website](https://logseq.com). If updating to the latest version doesn't help, please let us know by adding a comment 💬. We're here to help!
 
-            # trunk-ignore(yamllint/line-length)
-            If the issue has been resolved or is no longer relevant, that's great news! We'll go ahead and close this issue to keep our backlog organized. Please note that this issue will be closed automatically in 20 days if there is no further activity. If you need more time to resolve the issue or provide more information, please just let us know by adding a comment.
+            If the issue has been resolved or is no longer relevant, that's great news! 🎉
+            We'll go ahead and close this issue to keep our backlog organized. Please note that this issue will be closed automatically in 20 days if there is no further activity. If you need more time to resolve the issue or provide more information, please just let us know by adding a comment.
 
 
             Access additional [Logseq](https://logseq.com) 🚀 resources:
