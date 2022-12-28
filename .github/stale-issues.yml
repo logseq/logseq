@@ -32,24 +32,20 @@ jobs:
         exempt-issue-labels: ':status/hold, :status/WIP, :type/enhancement, type/can-be-reproduced, priority-A'
         remove-stale-when-updated: true
         stale-issue-message: |
-          👋 Hello,
-          There hasn't been any recent activity on this issue :sleeping:
-          To keep our backlog manageable & to help us focus on active issues, we have to clean old issues, as many of them have already been resolved with the latest updates.
+          Hi There! 👋
 
-          Please make sure to update to the latest [Logseq](https://logseq.com) version and
-          Let us know if that solves the issue by adding a comment 💬
+          We haven't seen any activity on this issue in a while :sleeping:, and we just wanted to make sure that it's still relevant. If you're still experiencing this issue, please let us know by adding a comment 💬. We're here to help!
 
-          This issue has been automatically marked as stale & will be closed in 20 days
-          if no further activity occurs.
+          If the issue has been resolved or is no longer relevant, that's great news! We'll go ahead and close this issue to keep our backlog organized. Please note that this issue will be closed automatically in 20 days if there is no further activity. If you need more time to resolve the issue or provide more information, please just let us know by adding a comment.
+
+          If you're still having trouble, you might find it helpful to update to the latest version of Logseq. You can download the latest version from [our website](https://logseq.com). If updating to the latest version doesn't help, please don't hesitate to reach out for assistance.
 
           Access additional [Logseq](https://logseq.com) 🚀 resources:
             - **Forum**: https://discuss.logseq.com
             - **Blog**: https://blog.logseq.com
             - **Docs**: https://docs.logseq.com
 
-          Feel free to inform us of any other **issues** you discover or **feature requests** that come to mind in the future. Pull Requests (PRs) are also always welcomed!
-
-          Thank you for your contributions to Logseq! :heart:
+          Thanks for your contributions to Logseq! If you have any other **issues** or **feature** requests, please don't hesitate to let us know. We always welcome pull requests too!
 
     - name: 'Print outputs'
       run: printf '%s\n' ${{ join(steps.stale.outputs.*, ',') }}
@@ -67,24 +63,20 @@ jobs:
         only-labels: 'awaiting response'
         remove-stale-when-updated: true
         stale-issue-message: |
-          👋 Hello,
-          There hasn't been any recent activity on this issue :sleeping:
-          To keep our backlog manageable & to help us focus on active issues, we have to clean old issues, as many of them have already been resolved with the latest updates.
+          Hi There! 👋
 
-          Please make sure to update to the latest [Logseq](https://logseq.com) version and
-          Let us know if that solves the issue by adding a comment 💬
+          We haven't seen any activity on this issue in a while :sleeping:, and we just wanted to make sure that it's still relevant. If you're still experiencing this issue, please let us know by adding a comment 💬. We're here to help!
 
-          This issue has been automatically marked as stale & will be closed in 20 days
-          if no further activity occurs.
+          If the issue has been resolved or is no longer relevant, that's great news! We'll go ahead and close this issue to keep our backlog organized. Please note that this issue will be closed automatically in 20 days if there is no further activity. If you need more time to resolve the issue or provide more information, please just let us know by adding a comment.
+
+          If you're still having trouble, you might find it helpful to update to the latest version of Logseq. You can download the latest version from [our website](https://logseq.com). If updating to the latest version doesn't help, please don't hesitate to reach out for assistance.
 
           Access additional [Logseq](https://logseq.com) 🚀 resources:
             - **Forum**: https://discuss.logseq.com
             - **Blog**: https://blog.logseq.com
             - **Docs**: https://docs.logseq.com
 
-          Feel free to inform us of any other **issues** you discover or **feature requests** that come to mind in the future. Pull Requests (PRs) are also always welcomed!
-
-          Thank you for your contributions to Logseq! :heart:
+          Thanks for your contributions to Logseq! If you have any other **issues** or **feature** requests, please don't hesitate to let us know. We always welcome pull requests too!
 
     - name: 'Print outputs'
       run: printf '%s\n' ${{ join(steps.stale.outputs.*, ',') }}
