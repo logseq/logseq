@@ -195,14 +195,32 @@
         {:keys [page-block upserted-blocks delete-blocks metadata]}
         (compute-tx app tl-page new-id-nonces db-id-nonces page-name)
         tx-data (concat delete-blocks [page-block] upserted-blocks)
+        new-shapes (get-in metadata [:data :new-shapes])
         metadata' (cond
-                    (some #(= "group" (:type %)) (get-in metadata [:data :new-shapes]))
+                    ;; group
+                    (some #(= "group" (:type %)) new-shapes)
                     (assoc metadata :whiteboard/op :group)
+
+                    ;; ungroup
                     (some #(= "group" (:type %)) (get-in metadata [:data :deleted-shapes]))
                     (assoc metadata :whiteboard/op :un-group)
+
+                    ;; arrow
+                    (some #(and (= "line" (:type %))
+                                (= "arrow "(:end (:decorations %)))) new-shapes)
+
+                    (assoc metadata :whiteboard/op :new-arrow)
                     :else
                     metadata)]
-    (db-utils/transact! repo tx-data metadata')))
+    (if (contains? #{:new-arrow} (:whiteboard/op metadata'))
+      (state/set-state! :whiteboard/pending-tx-data
+                        {:tx-data tx-data
+                         :metadata metadata'})
+      (let [pending-tx-data (:whiteboard/pending-tx-data @state/state)
+            tx-data' (concat (:tx-data pending-tx-data) tx-data)
+            metadata'' (merge metadata' (:metadata pending-tx-data))]
+        (state/set-state! :whiteboard/pending-tx-data {})
+        (db-utils/transact! repo tx-data' metadata'')))))
 
 (defn get-default-tldr
   [page-id]
@@ -382,42 +400,47 @@
   [{:keys [txs tx-meta]}]
   (history/pause-listener!)
   (try
-    (let [app (state/active-tldraw-app)]
-      (let [{:keys [deleted-shapes new-shapes changed-shapes prev-changed-blocks]} (:data tx-meta)
-            whiteboard-op (:whiteboard/op tx-meta)
-            ^js api (.-api app)]
-        (when api
-          (case whiteboard-op
-            :group
-            (do
-              (select-shapes api (map :id new-shapes))
-              (.unGroup api))
-            :un-group
-            (do
-              (select-shapes api (mapcat :children deleted-shapes))
-              (.doGroup api))
-            (do
-              (when (seq deleted-shapes)
-                (create-shapes! api deleted-shapes))
-              (when (seq new-shapes)
-                (delete-shapes! api new-shapes))
-              (when (seq changed-shapes)
-                (delete-shapes! api changed-shapes)
-                (let [prev-shapes (map (fn [b] (get-in b [:block/properties :logseq.tldraw.shape]))
-                                    prev-changed-blocks)]
-                  (create-shapes! api prev-shapes))))))))
+    (let [app (state/active-tldraw-app)
+          {:keys [deleted-shapes new-shapes changed-shapes prev-changed-blocks]} (:data tx-meta)
+          whiteboard-op (:whiteboard/op tx-meta)
+          ^js api (.-api app)]
+      (prn "undo")
+      (util/pprint tx-meta)
+      (when api
+        (case whiteboard-op
+          :group
+          (do
+            (select-shapes api (map :id new-shapes))
+            (.unGroup api))
+          :un-group
+          (do
+            (select-shapes api (mapcat :children deleted-shapes))
+            (.doGroup api))
+          (do
+            (when (seq deleted-shapes)
+              (create-shapes! api deleted-shapes))
+            (when (seq new-shapes)
+              (delete-shapes! api new-shapes))
+            (when (seq changed-shapes)
+              (delete-shapes! api changed-shapes)
+              (let [prev-shapes (map (fn [b] (get-in b [:block/properties :logseq.tldraw.shape]))
+                                  prev-changed-blocks)]
+                (create-shapes! api prev-shapes)))))))
     (catch :default e
       (js/console.error e)))
   (history/resume-listener!))
 
 (defn redo!
   [{:keys [txs tx-meta]}]
+  (prn "redo! here")
   (history/pause-listener!)
   (try
     (when-let [app (state/active-tldraw-app)]
       (let [{:keys [deleted-shapes new-shapes changed-shapes]} (:data tx-meta)
             whiteboard-op (:whiteboard/op tx-meta)
-            ^js api (.-api app)]
+            ^js api (.-api app)
+            tl-page ^js (second (first (.-pages app)))]
+        (prn {:redo tx-meta})
         (when api
           (case whiteboard-op
             :group
@@ -432,9 +455,16 @@
               (when (seq deleted-shapes)
                 (delete-shapes! api deleted-shapes))
               (when (seq new-shapes)
+                (prn "create new-shapes: "
+                     new-shapes)
+                (prn {:whiteboard-op whiteboard-op})
                 (create-shapes! api new-shapes))
               (when (seq changed-shapes)
-                (update-shapes! api changed-shapes)))))))
+                (update-shapes! api changed-shapes))
+              (when (= :new-arrow whiteboard-op)
+                (let [changed-ids (mapcat :id [deleted-shapes new-shapes changed-shapes])]
+                  (prn {:changed-ids changed-ids})
+                  (.cleanup tl-page (bean/->js changed-ids)))))))))
     (catch :default e
       (js/console.error e)))
   (history/resume-listener!))
