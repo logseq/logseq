@@ -880,7 +880,7 @@
         (let [token (<! (<get-token this))
               metadata {:fsCaseSensitive (<! (<case-sensitive-fs? this graph-uuid base-path))
                         :version version
-                        :revision config/revison
+                        :revision config/revision
                         :platform (platform)}]
           (<! (<retry-rsapi
                #(p->c (ipc/ipc "update-remote-files" graph-uuid base-path normalized-filepaths local-txid token
@@ -985,7 +985,7 @@
         (let [token (<! (<get-token this))
               metadata {:fsCaseSensitive (<! (<case-sensitive-fs? this graph-uuid base-path))
                         :version version
-                        :revision config/revison
+                        :revision config/revision
                         :platform (platform)}
               r (<! (p->c (.updateRemoteFiles mobile-util/file-sync
                                               (clj->js {:graphUUID graph-uuid

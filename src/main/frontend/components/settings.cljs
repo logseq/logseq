@@ -78,12 +78,12 @@
                nil)]
 
        [:div.text-sm.cursor
-        {:title (str "Revision: " config/revison)
+        {:title (str "Revision: " config/revision)
          :on-click (fn []
                      (notification/show! [:div "Current Revision: "
                                           [:a {:target "_blank"
-                                               :href (str "https://github.com/logseq/logseq/commit/" config/revison)}
-                                           config/revison]]
+                                               :href (str "https://github.com/logseq/logseq/commit/" config/revision)}
+                                           config/revision]]
                                          :info
                                          false))}
         version]
