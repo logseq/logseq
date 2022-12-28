@@ -878,7 +878,7 @@
       (go
         (<! (<rsapi-cancel-all-requests))
         (let [token (<! (<get-token this))
-              metadata {:fs-case-sensitive? (<! (<case-sensitive-fs? this graph-uuid base-path))
+              metadata {:fsCaseSensitive (<! (<case-sensitive-fs? this graph-uuid base-path))
                         :version version
                         :revision config/revison
                         :platform (platform)}]
@@ -983,7 +983,7 @@
     (let [normalized-filepaths (mapv path-normalize filepaths)]
       (go
         (let [token (<! (<get-token this))
-              metadata {:fs-case-sensitive? (<! (<case-sensitive-fs? this graph-uuid base-path))
+              metadata {:fsCaseSensitive (<! (<case-sensitive-fs? this graph-uuid base-path))
                         :version version
                         :revision config/revison
                         :platform (platform)}
