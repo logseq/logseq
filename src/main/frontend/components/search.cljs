@@ -378,7 +378,7 @@
        :on-shift-chosen #(search-on-shift-chosen repo search-q %)
        :item-render #(search-item-render search-q %)
        :on-chosen-open-link #(search-on-chosen-open-link repo search-q %)})
-     (when (and has-more? (util/electron?) (not all?))
+     (when (and has-more? (not all?))
        [:div.px-2.py-4.search-more
         [:a.text-sm.font-medium {:href (rfe/href :search {:q search-q})
                                  :on-click (fn []
