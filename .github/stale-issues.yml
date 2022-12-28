@@ -30,7 +30,7 @@ jobs:
         operations-per-run: 100 # The maximum number of operations per run, used to control rate limiting
         stale-issue-label: ':status/automatic-stale'
         close-issue-label: ':status/automatic-closing'
-        exempt-issue-labels: ':status/hold, :status/WIP, :type/enhancement'
+        exempt-issue-labels: ':status/hold, :status/WIP, :type/enhancement, type/can-be-reproduced, priority-A'
         remove-stale-when-updated: true
         stale-issue-message: |
             👋 Hello,
