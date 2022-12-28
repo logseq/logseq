@@ -153,9 +153,10 @@
                            (set))
         old-ids (set (map :id db-id-nonces))
         new-ids (set (map :id new-id-nonces))
-        created-shapes (set (filter #(new-ids (:id %)) upsert-shapes))
         created-ids (->> (set/difference new-ids old-ids)
-                         (remove string/blank?))
+                         (remove string/blank?)
+                         (set))
+        created-shapes (set (filter #(created-ids (:id %)) upsert-shapes))
         deleted-ids (->> (set/difference old-ids new-ids)
                          (remove string/blank?))
         repo (state/get-current-repo)
@@ -211,7 +212,10 @@
 
                     (assoc metadata :whiteboard/op :new-arrow)
                     :else
-                    metadata)]
+                    metadata)
+        metadata' (if (seq (concat upserted-blocks delete-blocks))
+                    metadata'
+                    (assoc metadata :undo? true))]
     (if (contains? #{:new-arrow} (:whiteboard/op metadata'))
       (state/set-state! :whiteboard/pending-tx-data
                         {:tx-data tx-data

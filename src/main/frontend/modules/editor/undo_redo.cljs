@@ -146,10 +146,7 @@
              (not (set/subset?
                    (set (map :a tx-data))
                    #{:block/created-at :block/updated-at})))
-    (prn "reset redo")
-    (frontend.util/pprint {:tx-data tx-data
-                           :tx-meta tx-meta})
-    ;; (reset-redo)
+    (reset-redo)
     (if (:compute-new-refs? tx-meta)
       (let [[removed-e _prev-e] (pop-undo)
             entity (update removed-e :txs concat tx-data)]
