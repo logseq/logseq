@@ -82,14 +82,14 @@
 
 #?(:cljs
    (do
-     (defn ios*?
+     (defn- ios*?
        []
        (utils/ios))
      (def ios? (memoize ios*?))))
 
 #?(:cljs
    (do
-     (defn safari*?
+     (defn- safari*?
        []
        (let [ua (string/lower-case js/navigator.userAgent)]
          (and (string/includes? ua "webkit")
@@ -98,7 +98,7 @@
 
 #?(:cljs
    (do
-     (defn mobile*?
+     (defn- mobile*?
        "Triggering condition: Mobile phones
         *** Warning!!! ***
         For UX logic only! Don't use for FS logic
@@ -110,7 +110,7 @@
 
 #?(:cljs
    (do
-     (defn electron*?
+     (defn- electron*?
        []
        (when (and js/window (gobj/get js/window "navigator"))
          (gstring/caseInsensitiveContains js/navigator.userAgent " electron")))
