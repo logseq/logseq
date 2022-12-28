@@ -32,8 +32,8 @@
 (defn delete-remote-files [graph-uuid base-path file-paths txid token]
   (rsapi/deleteRemoteFiles graph-uuid base-path (clj->js file-paths) txid token))
 
-(defn update-remote-files [graph-uuid base-path file-paths txid token]
-  (rsapi/updateRemoteFiles graph-uuid base-path (clj->js file-paths) txid token true))
+(defn update-remote-files [graph-uuid base-path file-paths txid token metadata]
+  (rsapi/updateRemoteFiles graph-uuid base-path (clj->js file-paths) txid token true (clj->js metadata)))
 
 (defn encrypt-fnames [graph-uuid fnames]
   (rsapi/encryptFnames graph-uuid (clj->js fnames)))

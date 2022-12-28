@@ -27,6 +27,7 @@
             [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.encrypt :as encrypt]
+            [frontend.version :refer [version]]
             [logseq.graph-parser.util :as gp-util]
             [medley.core :refer [dedupe-by]]
             [rum.core :as rum]
@@ -741,6 +742,30 @@
   (<get-token [this]))
 
 
+
+(def <case-sensitive-fs?
+  "Try to call <get-local-files-meta on logseq/config.edn,
+  to check the underlying fs is case-sensitive or not"
+  (let [cached-result (atom nil)]
+    (fn [rsapi graph-uuid base-path]
+      (go
+        (if-not (nil? @cached-result)
+          @cached-result
+          (let [r (<! (<get-local-files-meta rsapi graph-uuid base-path ["logseq/CoNfIg.edn"]))]
+            (reset! cached-result (zero? (count r)))
+            @cached-result))))))
+
+(defn- platform*
+  []
+  (cond
+    (mobile-util/native-ios?) "ios"
+    (mobile-util/native-android?) "android"
+    util/mac? "mac"
+    util/win32? "windows"
+    util/linux? "linux"
+    :else "other-platform"))
+(def platform (memoize platform*))
+
 (defn <case-different-local-file-exist?
   "e.g. filepath=\"pages/Foo.md\"
   found-filepath=\"pages/foo.md\"
@@ -852,9 +877,14 @@
     (let [normalized-filepaths (mapv path-normalize filepaths)]
       (go
         (<! (<rsapi-cancel-all-requests))
-        (let [token (<! (<get-token this))]
+        (let [token (<! (<get-token this))
+              metadata {:fs-case-sensitive? (<! (<case-sensitive-fs? this graph-uuid base-path))
+                        :version version
+                        :revision config/revison
+                        :platform (platform)}]
           (<! (<retry-rsapi
-               #(p->c (ipc/ipc "update-remote-files" graph-uuid base-path normalized-filepaths local-txid token))))))))
+               #(p->c (ipc/ipc "update-remote-files" graph-uuid base-path normalized-filepaths local-txid token
+                               metadata))))))))
 
   (<delete-remote-files [this graph-uuid base-path filepaths local-txid]
     (let [normalized-filepaths (mapv path-normalize filepaths)]
@@ -953,13 +983,18 @@
     (let [normalized-filepaths (mapv path-normalize filepaths)]
       (go
         (let [token (<! (<get-token this))
+              metadata {:fs-case-sensitive? (<! (<case-sensitive-fs? this graph-uuid base-path))
+                        :version version
+                        :revision config/revison
+                        :platform (platform)}
               r (<! (p->c (.updateRemoteFiles mobile-util/file-sync
                                               (clj->js {:graphUUID graph-uuid
                                                         :basePath base-path
                                                         :filePaths normalized-filepaths
                                                         :txid local-txid
                                                         :token token
-                                                        :fnameEncryption true}))))]
+                                                        :fnameEncryption true
+                                                        :metadata metadata}))))]
           (if (instance? ExceptionInfo r)
             r
             (get (js->clj r) "txid"))))))
