@@ -1,9 +1,11 @@
 <h1 align="center"> Logseq </h1>
 <!-- logo -->
+
 <p align="center">
     <a href="https://logseq.com" alt="Logseq Website">
     <img src="https://raw.githubusercontent.com/logseq/logseq/master/resources/icon.png?sanitize=true" height="173"/></a>
 </p>
+
 <!-- dev badges -->
 <p align="center">
     <a href="https://github.com/logseq/logseq/graphs/contributors" alt="Contributors">
@@ -44,7 +46,7 @@
         target="_blank"><img
             src="https://api.producthunt.com/widgets/embed-image/v1/review.svg?post_id=298158&theme=dark"
             alt="Logseq - Your joyful, private digital garden | Product Hunt" style="width: 250px; height: 54px;"
-            width="250" height="54" /></a>
+            width="250" height="54"/></a>
 </p>
 
 ## 🤔 Why Logseq?
@@ -74,7 +76,7 @@ Checkout our docs! [docs.logseq.com](https://docs.logseq.com/#/page/Contents) �
 Our top sponsors are shown below! [[Become a sponsor](https://opencollective.com/logseq#sponsor)]
 
 <a href="https://www.deta.sh/" target="_blank"><img width=200 height=100
-        src="https://uploads-ssl.webflow.com/5eb96efa78dc680fc15be3be/5ebd24f6cbf6e9ebd674656e_Logo.svg" /></a>
+        src="https://uploads-ssl.webflow.com/5eb96efa78dc680fc15be3be/5ebd24f6cbf6e9ebd674656e_Logo.svg"/></a>
 
 
 ## ✍️ Plugins documentation (Draft)
@@ -149,5 +151,17 @@ And here a list of some [good first issues](https://github.com/logseq/logseq/iss
 
 <br></br>
 
-## 🙏 Thanks
-[![JetBrains](docs/assets/jetbrains.svg)](https://www.jetbrains.com/?from=logseq)
+<h1 align="center"> Thanks to </h1>
+
+<p align="center">
+    <a href="https://jetbrains.com" alt="JetBrains">
+        <img src="docs/assets/jetbrains.svg" /></a>
+</p>
+
+<h1 align="center"> 🫶 Our Open Collective Backers 🫶 </h1>
+<p align="center">
+    <a href="https://opencollective.com/logseq" alt="Backers on Open Collective">
+        <img src="https://opencollective.com/logseq/tiers/sponsors.svg?avatarHeight=24&width=600"/></a>
+    <a href="https://opencollective.com/logseq" alt="Backers on Open Collective">
+        <img src="https://opencollective.com/logseq/tiers/backers.svg?avatarHeight=24&width=600"/></a>
+</p>
