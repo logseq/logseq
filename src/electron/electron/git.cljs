@@ -98,7 +98,9 @@
 
 (defn commit!
   [message]
-  (run-git! #js ["commit" "-m" message]))
+  (p/do!
+   (run-git! #js ["config" "core.quotepath" "false"])
+   (run-git! #js ["commit" "-m" message])))
 
 (defn add-all-and-commit!
   ([]
