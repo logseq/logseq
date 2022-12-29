@@ -518,7 +518,7 @@ export interface IAppProxy {
   onSidebarVisibleChanged: IUserHook<{ visible: boolean }>
 
   // internal
-  _installPluginHook: (pid: string, hook: string) => void
+  _installPluginHook: (pid: string, hook: string, opts?: any) => void
   _uninstallPluginHook: (pid: string, hookOrAll: string | boolean) => void
 }
 
