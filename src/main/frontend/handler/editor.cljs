@@ -3421,7 +3421,8 @@
     (->> (all-blocks-with-level {:page page
                                  :collapse? true})
          (map (comp gdom/getElementByClass str :block/uuid))
-         state/exit-editing-and-set-selected-blocks!)))
+         state/exit-editing-and-set-selected-blocks!))
+  (state/set-state! :selection/selected-all? true))
 
 (defn select-parent [e]
   (let [edit-input (some-> (state/get-edit-input-id) gdom/getElement)
@@ -3441,22 +3442,23 @@
       :else
       (do
         (util/stop e)
-        (if-let [block-id (some-> (first (state/get-selection-blocks))
-                                  (dom/attr "blockid")
-                                  uuid)]
-          (when-let [block (db/entity [:block/uuid block-id])]
-            (let [parent (:block/parent block)]
-              (cond
-                (= (state/get-current-page) (str (:block/uuid block)))
-                nil
+        (when-not (:selection/selected-all? @state/state)
+          (if-let [block-id (some-> (first (state/get-selection-blocks))
+                                    (dom/attr "blockid")
+                                    uuid)]
+            (when-let [block (db/entity [:block/uuid block-id])]
+              (let [parent (:block/parent block)]
+                (cond
+                  (= (state/get-current-page) (str (:block/uuid block)))
+                  nil
 
-                (and parent (:block/parent parent))
-                (state/exit-editing-and-set-selected-blocks! [(gdom/getElementByClass (:block/uuid parent))])
+                  (and parent (:block/parent parent))
+                  (state/exit-editing-and-set-selected-blocks! [(gdom/getElementByClass (:block/uuid parent))])
 
-                (:block/name parent)
-                ;; page block
-                (select-all-blocks! {:page (:block/name parent)}))))
-          (select-all-blocks! {}))))))
+                  (:block/name parent)
+                  ;; page block
+                  (select-all-blocks! {:page (:block/name parent)}))))
+            (select-all-blocks! {})))))))
 
 (defn escape-editing
   ([]

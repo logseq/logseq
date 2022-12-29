@@ -145,6 +145,7 @@
      ;; either :up or :down, defaults to down
      ;; used to determine selection direction when two or more blocks are selected
      :selection/direction                   :down
+     :selection/selected-all?               false
      :custom-context-menu/show?             false
      :custom-context-menu/links             nil
      :custom-context-menu/position          nil
@@ -967,7 +968,8 @@ Similar to re-frame subscriptions"
          :selection/mode false
          :selection/blocks nil
          :selection/direction :down
-         :selection/start-block nil))
+         :selection/start-block nil
+         :selection/selected-all? false))
 
 (defn get-selection-blocks
   []
