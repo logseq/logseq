@@ -3442,21 +3442,20 @@
         (if-let [block-id (some-> (first (state/get-selection-blocks))
                                   (dom/attr "blockid")
                                   uuid)]
-          (do
-            (when-let [block (db/entity [:block/uuid block-id])]
-             (let [parent (:block/parent block)]
-               (cond
-                 (= (state/get-current-page) (str (:block/uuid block)))
-                 nil
+          (when-let [block (db/entity [:block/uuid block-id])]
+            (let [parent (:block/parent block)]
+              (cond
+                (= (state/get-current-page) (str (:block/uuid block)))
+                nil
 
-                 (and parent (:block/parent parent))
-                 (state/exit-editing-and-set-selected-blocks! [(gdom/getElementByClass (:block/uuid parent))])
+                (and parent (:block/parent parent))
+                (state/exit-editing-and-set-selected-blocks! [(gdom/getElementByClass (:block/uuid parent))])
 
-                 (= (:block/name parent)
-                    (some-> (or (state/get-current-page) (date/journal-name))
-                            util/page-name-sanity-lc))
-                 ;; page block
-                 (select-all-blocks!)))))
+                (= (:block/name parent)
+                   (some-> (or (state/get-current-page) (date/journal-name))
+                           util/page-name-sanity-lc))
+                ;; page block
+                (select-all-blocks!))))
           (select-all-blocks!))))))
 
 (defn escape-editing
