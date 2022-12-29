@@ -75,6 +75,7 @@
    :editor/redo                    "Redo"
    :editor/insert-link             "HTML Link"
    :editor/select-all-blocks       "Select all blocks"
+   :editor/select-parent           "Select parent block"
    :editor/zoom-in                 "Zoom in editing block / Forwards otherwise"
    :editor/zoom-out                "Zoom out editing block / Backwards otherwise"
    :ui/toggle-brackets             "Toggle whether to display brackets"
