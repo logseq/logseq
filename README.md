@@ -151,17 +151,19 @@ And here a list of some [good first issues](https://github.com/logseq/logseq/iss
 
 <br></br>
 
-<h1 align="center"> Thanks to </h1>
+# 🙏 Thanks to
+<h2 align="center"> 💎 Our Open Collective Sponsors 💎 </h1>
+<p align="center">
+    <a href="https://opencollective.com/logseq" alt="Backers on Open Collective">
+        <img src="https://opencollective.com/logseq/tiers/sponsors.svg?avatarHeight=42&width=600"/></a>
+</p>
 
+<h2 align="center"> 🫶 Our Open Collective Backers 🫶 </h1>
+<p align="center">
+    <a href="https://opencollective.com/logseq" alt="Backers on Open Collective">
+        <img src="https://opencollective.com/logseq/tiers/backers.svg?avatarHeight=42&width=600"/></a>
+</p>
 <p align="center">
     <a href="https://jetbrains.com" alt="JetBrains">
         <img src="docs/assets/jetbrains.svg" /></a>
-</p>
-
-<h1 align="center"> 🫶 Our Open Collective Backers 🫶 </h1>
-<p align="center">
-    <a href="https://opencollective.com/logseq" alt="Backers on Open Collective">
-        <img src="https://opencollective.com/logseq/tiers/sponsors.svg?avatarHeight=24&width=600"/></a>
-    <a href="https://opencollective.com/logseq" alt="Backers on Open Collective">
-        <img src="https://opencollective.com/logseq/tiers/backers.svg?avatarHeight=24&width=600"/></a>
 </p>
