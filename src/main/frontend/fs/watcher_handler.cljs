@@ -131,7 +131,7 @@
             (let [delete-tx-data (->> (db/delete-files deleted-files)
                                       (concat (db/delete-blocks graph deleted-files nil))
                                       (remove nil?))]
-              (db/transact! graph delete-tx-data)))
+              (db/transact! graph delete-tx-data {:delete-files? true})))
           (doseq [file files]
             (when-let [_ext (util/get-file-ext file)]
               (->
