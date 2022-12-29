@@ -184,7 +184,7 @@
         large-graph? (> total 1000)
         *page-names (atom #{})
         *page-name->path (atom {})]
-    (when (seq delete-data) (db/transact! repo-url delete-data))
+    (when (seq delete-data) (db/transact! repo-url delete-data {:delete-files? true}))
     (state/set-current-repo! repo-url)
     (state/set-parsing-state! {:total (count supported-files)})
     ;; Synchronous for tests for not breaking anything
