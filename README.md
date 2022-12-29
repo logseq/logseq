@@ -1,10 +1,10 @@
-<h1 align="center"> Logseq </h1>
 <!-- logo -->
 
 <p align="center">
     <a href="https://logseq.com" alt="Logseq Website">
     <img src="https://raw.githubusercontent.com/logseq/logseq/master/resources/icon.png?sanitize=true" height="173"/></a>
 </p>
+<h1 align="center"> Logseq </h1>
 
 <!-- dev badges -->
 <p align="center">
