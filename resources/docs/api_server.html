@@ -1,4 +1,3 @@
-
 <!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>body {
   max-width: 980px;
   outline: 1300px solid #fff;
@@ -1068,28 +1067,28 @@ body .markdown-body
 .highlight .il{color:#009999}
 .highlight .gc{color:#999;background-color:#EAF2F5}
 </style><title>http_apis</title></head><body><article class="markdown-body"><h1 id="server-apis-for-logseq">Server APIs for Logseq<a class="headerlink" href="#server-apis-for-logseq" title="Permanent link"></a></h1>
-  <p>Server is running at <code>http://${HOST}:${PORT}</code></p>
-  <h2 id="available-apis">Available APIs<a class="headerlink" href="#available-apis" title="Permanent link"></a></h2>
+  <p>Logseq HTTP server is running at <code>http://${HOST}:${PORT}</code>.</p>
+  <h2 id="available-apis">Available API<a class="headerlink" href="#available-apis" title="Permanent link"></a></h2>
   <blockquote>
-    <p>🔐 For data security purposes, all API requests must provide a valid token by providing the <code>Authorization</code> field in the header. And, these tokens data can be configured on the client side.</p>
+    <p>🔐 All API requests must provide a valid token for data security purposes by providing the <code>Authorization</code> field in the header. Tokens can be configured in Logseq.</p>
   </blockquote>
-  <h3 id="post-api-invoker">[POST] <code>/api-invoker</code><a class="headerlink" href="#post-api-invoker" title="Permanent link"></a></h3>
-  <p>Invoke all APIs that provided by Logseq plugin SDK.</p>
+  <h3 id="post-api">[POST] <code>/api</code><a class="headerlink" href="#post-api" title="Permanent link"></a></h3>
+  <p>Invoke any APs that's provided by Logseq plugin SDK.</p>
   <ul>
     <li>
       <h4 id="request-body-content-type-applicationjson">Request Body (<code>Content-Type: application/json</code>)<a class="headerlink" href="#request-body-content-type-applicationjson" title="Permanent link"></a></h4>
       <ul>
         <li><code>method</code> {string} [required] pattern string as <code>logseq.Editor.getCurrentBlock</code>
-          You can get more valid method from <a href="https://plugins-doc.logseq.com/logseq/Editor/getCurrentBlock">https://plugins-doc.logseq.com/logseq/Editor/getCurrentBlock</a></li>
+          You can find more APIs from <a href="https://plugins-doc.logseq.com">https://plugins-doc.logseq.com</a></li>
         <li><code>args</code> {array} [optional] arguments list for method</li>
       </ul>
     </li>
     <li>
       <h4 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link"></a></h4>
       <div class="highlight"><pre><span class="c1">### Send POST request with json body</span>
-<span class="l l-Scalar l-Scalar-Plain">POST http://127.0.0.1:12315/api-invoker</span>
+<span class="l l-Scalar l-Scalar-Plain">POST http://127.0.0.1:12315/api</span>
 <span class="l l-Scalar l-Scalar-Plain">Content-Type</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">application/json</span>
-<span class="l l-Scalar l-Scalar-Plain">Authorization</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">your-valid-token-xxx</span>
+<span class="l l-Scalar l-Scalar-Plain">Authorization</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">Bearer your-valid-token-xxx</span>
 
 <span class="p p-Indicator">{</span>
   <span class="s">&quot;method&quot;</span><span class="p p-Indicator">:</span> <span class="s">&quot;logseq.Editor.getBlock&quot;</span><span class="p p-Indicator">,</span>
@@ -1099,9 +1098,9 @@ body .markdown-body
 <span class="p p-Indicator">}</span>
 
 <span class="c1">### show a message tip</span>
-<span class="l l-Scalar l-Scalar-Plain">POST http://127.0.0.1:12315/api-invoker</span>
+<span class="l l-Scalar l-Scalar-Plain">POST http://127.0.0.1:12315/api</span>
 <span class="l l-Scalar l-Scalar-Plain">Content-Type</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">application/json</span>
-<span class="l l-Scalar l-Scalar-Plain">Authorization</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">your-valid-token-xxx</span>
+<span class="l l-Scalar l-Scalar-Plain">Authorization</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">Bearer your-valid-token-xxx</span>
 
 <span class="p p-Indicator">{</span>
   <span class="s">&quot;method&quot;</span><span class="p p-Indicator">:</span> <span class="s">&quot;logseq.UI.showMsg&quot;</span><span class="p p-Indicator">,</span>
