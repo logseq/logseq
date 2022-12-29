@@ -351,41 +351,41 @@
   resolved "https://registry.yarnpkg.com/@gar/promisify/-/promisify-1.1.3.tgz#555193ab2e3bb3b6adc3d551c9c030d9e860daf6"
   integrity sha512-k2Ty1JcVojjJFwrg/ThKi2ujJ7XNLYaFGNB/bWT9wGR+oSMJHMa5w+CUq6p/pVrKeNNgA7pCqEcjSnHVoqJQFw==
 
-"@logseq/rsapi-darwin-arm64@0.0.57":
-  version "0.0.57"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-darwin-arm64/-/rsapi-darwin-arm64-0.0.57.tgz#fc8180a74da10d6830fe8e43961d605318b9659a"
-  integrity sha512-zH45lQXPEK21L69APZPNWiJ2OLtgEQhfNUDMQ8w0VzsN0Nt9L2UrmUXhogJpiJASKkolVdRRCGGYGce6AIddBQ==
+"@logseq/rsapi-darwin-arm64@0.0.59":
+  version "0.0.59"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-darwin-arm64/-/rsapi-darwin-arm64-0.0.59.tgz#3b478c1e045246a536446b39ee0df6943403ec8f"
+  integrity sha512-mi7Z8UVocVGayCB2kKUgq6MGRNI7BX9EZeTnf7JWRLdfVZe4Rf3FDe1Kr/zlY5lO27KYsPzqLC/Pw6IkQtZsvQ==
 
-"@logseq/rsapi-darwin-x64@0.0.57":
-  version "0.0.57"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-darwin-x64/-/rsapi-darwin-x64-0.0.57.tgz#df6d506fcabf3accb18e11164238b38e0182e355"
-  integrity sha512-XLVKrd2vGCZAx5ihae6v8b9qnSobMKlG8BBb5IssVSgjdJeeSSRlbgdSPWb45Rd/oIotlZ9dgFe2H/DfgE3KFw==
+"@logseq/rsapi-darwin-x64@0.0.59":
+  version "0.0.59"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-darwin-x64/-/rsapi-darwin-x64-0.0.59.tgz#7a3d746d4807523dfe0197658d1f1266c66534f3"
+  integrity sha512-hDf5QUa+vQRHJ7p0OBAREWYOwHepUpDUEIbyXhSzTb7g5vsr5yBEOygnRt1Jt6a1DfadMPDdrl925AaUrkZAjA==
 
-"@logseq/rsapi-linux-arm64-gnu@0.0.57":
-  version "0.0.57"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-linux-arm64-gnu/-/rsapi-linux-arm64-gnu-0.0.57.tgz#c9b947084a6375dcae47061ff90de9857371c78b"
-  integrity sha512-PPZ9/UJAniG4mB4nocEbwanYzlcdAPLR2VnJdsjbMTZLubtWzq3msXYqR2RXSUv20rbVW1qi55q/96poGg6zzg==
+"@logseq/rsapi-linux-arm64-gnu@0.0.59":
+  version "0.0.59"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-linux-arm64-gnu/-/rsapi-linux-arm64-gnu-0.0.59.tgz#58e83687912deae39e6e15e57093e558d80cf7ea"
+  integrity sha512-3kqeSsIjPgd+O/DvhsawJIXdIa4aPVxNtmQ/YJeyXV7Alx5jPY1kPaxKsZUl6h3qr8Zrr5/wTtg0pUS33BwHPg==
 
-"@logseq/rsapi-linux-x64-gnu@0.0.57":
-  version "0.0.57"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-linux-x64-gnu/-/rsapi-linux-x64-gnu-0.0.57.tgz#3f63b98644543c0b64582b4a332fdba70970abf2"
-  integrity sha512-7w16WRT9/6fyU9XXZMcu5Nt1Y1xDTeADpwjTMP+zNxs6k9fre+6tNLe6/2ZXLvF8Y7icsBlhmRrosyoLGl0CwA==
+"@logseq/rsapi-linux-x64-gnu@0.0.59":
+  version "0.0.59"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-linux-x64-gnu/-/rsapi-linux-x64-gnu-0.0.59.tgz#5dd228df20befbd642044d99e0a41df86d9cdda5"
+  integrity sha512-iBTxAlQNKX4g4AMJa2l4tOlActXchIFf0tFrNkSWKmyW1mi2AyQ78eObl90F9H1OAHbziOhOs+zzu8nZvJBIJQ==
 
-"@logseq/rsapi-win32-x64-msvc@0.0.57":
-  version "0.0.57"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi-win32-x64-msvc/-/rsapi-win32-x64-msvc-0.0.57.tgz#791657649afef003bb58b2eec317903bd23ff37f"
-  integrity sha512-YQ1MMlovvq+tE2vJy/xDBUTGEx/T/LAXCwYRq+R3LKjcSR10YVmtuj3UN2Ro2nMsXOU4CzvxFQKG/aLzgMU2Qg==
+"@logseq/rsapi-win32-x64-msvc@0.0.59":
+  version "0.0.59"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi-win32-x64-msvc/-/rsapi-win32-x64-msvc-0.0.59.tgz#3a44b310ad8fa725cd2d1cb6056dc5d66fa644b2"
+  integrity sha512-tupB5/uxcChl6PZO1Wb1g9w8MpiMArM9wu4d2b0KGTccOExKrMwZzKcusFfgWsCqwiIqF2ozBPVd8JKMnAd+yw==
 
-"@logseq/rsapi@0.0.57":
-  version "0.0.57"
-  resolved "https://registry.yarnpkg.com/@logseq/rsapi/-/rsapi-0.0.57.tgz#597292ac575208dc32af8a99059742ef6b39a5b3"
-  integrity sha512-W2zU2+Jg9F7tmFCLrnVAgdty9iaKHLjV+t6c38zgBo6JxHrQoApl8ejLECQ5V2ALahn4CJdlZTj7o0fZJB7SQQ==
+"@logseq/rsapi@0.0.59":
+  version "0.0.59"
+  resolved "https://registry.yarnpkg.com/@logseq/rsapi/-/rsapi-0.0.59.tgz#94b359237632279e2ccaf58fbbd563b0718307dc"
+  integrity sha512-m3Y4/k2VmyuLLrNo1EuSBOiNASXrZHtC8bsN2a/AyHFeFuCDThqiTNJ0g5VqvqeaQBBZBaIUawg3OKsmjkRHhQ==
   optionalDependencies:
-    "@logseq/rsapi-darwin-arm64" "0.0.57"
-    "@logseq/rsapi-darwin-x64" "0.0.57"
-    "@logseq/rsapi-linux-arm64-gnu" "0.0.57"
-    "@logseq/rsapi-linux-x64-gnu" "0.0.57"
-    "@logseq/rsapi-win32-x64-msvc" "0.0.57"
+    "@logseq/rsapi-darwin-arm64" "0.0.59"
+    "@logseq/rsapi-darwin-x64" "0.0.59"
+    "@logseq/rsapi-linux-arm64-gnu" "0.0.59"
+    "@logseq/rsapi-linux-x64-gnu" "0.0.59"
+    "@logseq/rsapi-win32-x64-msvc" "0.0.59"
 
 "@malept/cross-spawn-promise@^1.0.0", "@malept/cross-spawn-promise@^1.1.0":
   version "1.1.1"
