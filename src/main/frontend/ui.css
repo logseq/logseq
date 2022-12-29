@@ -116,6 +116,7 @@
         max-height: 85vh;
         padding: 2rem;
         width: auto;
+        min-width: 600px;
 
         .ls-card,
         .ls-search {
@@ -129,6 +130,10 @@
         .ls-search {
           width: var(--ls-main-content-max-width);
         }
+      }
+
+      @screen md {
+          min-width: 720px;
       }
     }
   }
