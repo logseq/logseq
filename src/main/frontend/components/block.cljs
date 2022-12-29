@@ -298,7 +298,7 @@
           (assoc :style {:width (:width metadata)}))
         {})
       [:div.asset-container {:key "resize-asset-container"}
-       [:img.rounded-sm.shadow-xl.relative
+       [:img.rounded-sm.relative
         (merge
          {:loading "lazy"
           :src     src
