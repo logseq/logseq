@@ -1,18 +1,19 @@
 <h1 align="center"> Logseq </h1>
 <!-- logo -->
 <p align="center">
-    <img src="https://raw.githubusercontent.com/logseq/logseq/master/resources/icon.png?sanitize=true" height="130">
+    <a href="https://logseq.com" alt="Logseq Website">
+    <img src="https://raw.githubusercontent.com/logseq/logseq/master/resources/icon.png?sanitize=true" height="173"/></a>
 </p>
 <!-- dev badges -->
 <p align="center">
     <a href="https://github.com/logseq/logseq/graphs/contributors" alt="Contributors">
-        <img src="https://img.shields.io/github/contributors/logseq/logseq?color=%2385c8c8&style=for-the-badge" /></a>
+        <img src="https://img.shields.io/github/contributors/logseq/logseq?color=%2385c8c8&style=for-the-badge"/></a>
     <a href="#🫶-support-logseq-development" alt="Backers on Open Collective">
-        <img src="https://img.shields.io/opencollective/backers/logseq?color=%2385c8c8&style=for-the-badge" /></a>
+        <img src="https://img.shields.io/opencollective/backers/logseq?color=%2385c8c8&style=for-the-badge"/></a>
     <a href="#💎-sponsors" alt="Sponsors on Open Collective">
-        <img src="https://img.shields.io/opencollective/sponsors/logseq?color=%2385c8c8&style=for-the-badge" /></a>
+        <img src="https://img.shields.io/opencollective/sponsors/logseq?color=%2385c8c8&style=for-the-badge"/></a>
     <a href="https://github.com/logseq/logseq/blob/master/LICENSE.md" alt="Activity">
-        <img src="https://img.shields.io/github/license/logseq/logseq?color=%2385c8c8&style=for-the-badge" /></a>
+        <img src="https://img.shields.io/github/license/logseq/logseq?color=%2385c8c8&style=for-the-badge"/></a>
     <a href="https://github.com/logseq/logseq/releases">
         <img src="https://img.shields.io/github/v/release/logseq/logseq?color=%2385c8c8&style=for-the-badge"
             alt="latest release version"></a>
