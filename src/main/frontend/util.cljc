@@ -81,32 +81,40 @@
        (sanitizeFilename (str s)))))
 
 #?(:cljs
-   (defn ios?
-     []
-     (utils/ios)))
+   (do
+     (defn- ios*?
+       []
+       (utils/ios))
+     (def ios? (memoize ios*?))))
 
 #?(:cljs
-   (defn safari?
-     []
-     (let [ua (string/lower-case js/navigator.userAgent)]
-       (and (string/includes? ua "webkit")
-            (not (string/includes? ua "chrome"))))))
+   (do
+     (defn- safari*?
+       []
+       (let [ua (string/lower-case js/navigator.userAgent)]
+         (and (string/includes? ua "webkit")
+              (not (string/includes? ua "chrome")))))
+     (def safari? (memoize safari*?))))
 
 #?(:cljs
-   (defn mobile?
-     "Triggering condition: Mobile phones
+   (do
+     (defn- mobile*?
+       "Triggering condition: Mobile phones
         *** Warning!!! ***
         For UX logic only! Don't use for FS logic
         iPad / Android Pad doesn't trigger!"
-     []
-     (when-not node-test?
-       (safe-re-find #"Mobi" js/navigator.userAgent))))
+       []
+       (when-not node-test?
+         (safe-re-find #"Mobi" js/navigator.userAgent)))
+     (def mobile? (memoize mobile*?))))
 
 #?(:cljs
-   (defn electron?
-     []
-     (when (and js/window (gobj/get js/window "navigator"))
-       (gstring/caseInsensitiveContains js/navigator.userAgent " electron"))))
+   (do
+     (defn- electron*?
+       []
+       (when (and js/window (gobj/get js/window "navigator"))
+         (gstring/caseInsensitiveContains js/navigator.userAgent " electron")))
+     (def electron? (memoize electron*?))))
 
 #?(:cljs
    (defn mocked-open-dir-path

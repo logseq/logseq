@@ -24,7 +24,7 @@
 
 (rum/defc toggle
   []
-  (when-not (util/mobile?)
+  (when-not (util/sm-breakpoint?)
     (ui/with-shortcut :ui/toggle-right-sidebar "left"
       [:button.button.icon.toggle-right-sidebar
        {:title "Toggle right sidebar"

@@ -43,7 +43,11 @@ export const ContextMenu = observer(function ContextMenu({
         }
       }}
     >
-      <ReactContextMenu.Trigger>{children}</ReactContextMenu.Trigger>
+      <ReactContextMenu.Trigger
+        disabled={app.editingShape && Object.keys(app.editingShape).length !== 0}
+      >
+        {children}
+      </ReactContextMenu.Trigger>
       <ReactContextMenu.Content
         className="tl-menu tl-context-menu"
         ref={rContent}
@@ -124,6 +128,22 @@ export const ContextMenu = observer(function ContextMenu({
               <ReactContextMenu.Separator className="menu-separator" />
             </>
           )}
+          {app.selectedShapes?.size > 0 && (
+            <>
+              <ReactContextMenu.Item
+                className="tl-menu-item"
+                onClick={() => runAndTransition(app.api.zoomToSelection)}
+              >
+                Zoom to fit
+                <div className="tl-menu-right-slot">
+                  <span className="keyboard-shortcut">
+                    <code>{MOD_KEY}</code> <code>⇧</code> <code>1</code>
+                  </span>
+                </div>
+              </ReactContextMenu.Item>
+              <ReactContextMenu.Separator className="menu-separator" />
+            </>
+          )}
           {(app.selectedShapesArray.some(s => s.type === 'group' || app.getParentGroup(s)) ||
             app.selectedShapesArray.length > 1) && (
             <>
@@ -132,6 +152,7 @@ export const ContextMenu = observer(function ContextMenu({
                   className="tl-menu-item"
                   onClick={() => runAndTransition(app.api.unGroup)}
                 >
+                  <TablerIcon className="tl-menu-icon" name="ungroup" />
                   Ungroup
                   <div className="tl-menu-right-slot">
                     <span className="keyboard-shortcut">
@@ -145,6 +166,7 @@ export const ContextMenu = observer(function ContextMenu({
                   className="tl-menu-item"
                   onClick={() => runAndTransition(app.api.doGroup)}
                 >
+                  <TablerIcon className="tl-menu-icon" name="group" />
                   Group
                   <div className="tl-menu-right-slot">
                     <span className="keyboard-shortcut">

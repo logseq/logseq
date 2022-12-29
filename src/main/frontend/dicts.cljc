@@ -109,7 +109,7 @@
         :page/open-with-default-app "Open with default app"
         :page/action-publish "Publish"
         :page/make-public "Make it public for publishing"
-        :page/version-history "Check page history"
+        :page/version-history "View page history"
         :page/open-backup-directory "Open page backups directory"
         :page/make-private "Make it private"
         :page/delete "Delete page"

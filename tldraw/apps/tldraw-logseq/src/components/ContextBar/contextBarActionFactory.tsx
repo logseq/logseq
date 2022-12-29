@@ -1,4 +1,4 @@
-import { Decoration, isNonNullable, validUUID } from '@tldraw/core'
+import { Decoration, isNonNullable } from '@tldraw/core'
 import { useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import React from 'react'
@@ -27,6 +27,7 @@ import {
   type ToggleGroupInputOption,
 } from '../inputs/ToggleGroupInput'
 import { ToggleInput } from '../inputs/ToggleInput'
+import { LogseqContext } from '../../lib/logseq-context'
 
 export const contextBarActionTypes = [
   // Order matters
@@ -62,10 +63,10 @@ export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
   ],
   youtube: ['YoutubeLink', 'Links'],
   iframe: ['IFrameSource', 'Links'],
-  box: ['Edit', 'TextStyle', 'Swatch', 'NoFill', 'StrokeType', 'Links'],
-  ellipse: ['Edit', 'TextStyle', 'Swatch', 'NoFill', 'StrokeType', 'Links'],
-  polygon: ['Edit', 'TextStyle', 'Swatch', 'NoFill', 'StrokeType', 'Links'],
-  line: ['Edit', 'TextStyle', 'Swatch', 'ArrowMode', 'Links'],
+  box: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
+  ellipse: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
+  polygon: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
+  line: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'ArrowMode', 'Links'],
   pencil: ['Swatch', 'Links'],
   highlighter: ['Swatch', 'Links'],
   text: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'AutoResizing', 'Links'],
@@ -85,8 +86,13 @@ function filterShapeByAction<S extends Shape>(shapes: Shape[], type: ContextBarA
 }
 
 const EditAction = observer(() => {
+  const {
+    handlers: { isWhiteboardPage, redirectToPage },
+  } = React.useContext(LogseqContext)
+
   const app = useApp<Shape>()
   const shape = filterShapeByAction(app.selectedShapesArray, 'Edit')[0]
+
   const iconName =
     ('label' in shape.props && shape.props.label) || ('text' in shape.props && shape.props.text)
       ? 'forms'
@@ -101,6 +107,10 @@ const EditAction = observer(() => {
         if (shape.props.type === 'logseq-portal') {
           let uuid = shape.props.pageId
           if (shape.props.blockType === 'P') {
+            if (isWhiteboardPage(uuid)) {
+              redirectToPage(uuid)
+            }
+
             const firstNonePropertyBlock = window.logseq?.api
               ?.get_page_blocks_tree?.(shape.props.pageId)
               .find(b => !('propertiesOrder' in b))
@@ -300,7 +310,12 @@ const NoFillAction = observer(() => {
   const noFill = shapes.every(s => s.props.noFill)
 
   return (
-    <ToggleInput tooltip="Fill" className="tl-button" pressed={noFill} onPressedChange={handleChange}>
+    <ToggleInput
+      tooltip="Fill"
+      className="tl-button"
+      pressed={noFill}
+      onPressedChange={handleChange}
+    >
       <TablerIcon name={noFill ? 'droplet-off' : 'droplet'} />
     </ToggleInput>
   )
