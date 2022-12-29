@@ -3,6 +3,7 @@
             [frontend.components.export :as export]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
+            [frontend.components.server :as server]
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
@@ -220,7 +221,18 @@
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))
                               (state/pub-event! [:go/search]))}
-              (ui/icon "search" {:size ui/icon-size})])))]]
+              (ui/icon "search" {:size ui/icon-size})])))
+
+      (when (mobile-util/native-platform?)
+        (if (or (state/home?) custom-home-page?)
+          left-menu
+          (ui/with-shortcut :go/backward "bottom"
+            [:button.it.navigation.nav-left.button.icon.opacity-70
+             {:title "Go back" :on-click #(js/window.history.back)}
+             (ui/icon "chevron-left" {:size 26})])))
+
+      (when (state/feature-http-server-enabled?)
+        (server/server-indicator (state/sub :electron/server)))]]
 
      [:div.r.flex.drag-region
       (when (and current-repo

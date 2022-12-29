@@ -161,6 +161,7 @@
      :electron/updater-pending?             false
      :electron/updater                      {}
      :electron/user-cfgs                    nil
+     :electron/server                       nil
 
      ;; assets
      :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)
@@ -1856,6 +1857,11 @@ Similar to re-frame subscriptions"
 (defn get-last-key-code
   []
   (:editor/last-key-code @state))
+
+(defn feature-http-server-enabled?
+  []
+  (and (developer-mode?)
+       (storage/get ::storage-spec/http-server-enabled)))
 
 (defn get-plugin-by-id
   [id]
