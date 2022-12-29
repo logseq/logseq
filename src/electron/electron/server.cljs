@@ -2,6 +2,7 @@
   (:require ["fastify" :as Fastify]
             ["electron" :refer [ipcMain]]
             ["fs-extra" :as fs-extra]
+            ["path" :as path]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -133,7 +134,7 @@
                       (.addHook "preHandler" api-pre-handler!)
                       (.post "/api-invoker" api-invoker-fn!)
                       (.get "/" (fn [_ ^js rep]
-                                  (let [html (fs-extra/readFileSync "./docs/api_server.html")
+                                  (let [html (fs-extra/readFileSync (.join path js/__dirname "./docs/api_server.html"))
                                         HOST (get-host)
                                         PORT (get-port)
                                         html (-> (str html)
