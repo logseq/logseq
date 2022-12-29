@@ -3223,9 +3223,10 @@
     [{:block a :level 1}
      {:block b :level 2}
      {:block e :level 2}]"
-  [{:keys [collapse? expanded? incremental? root-block]
+  [{:keys [collapse? expanded? incremental? root-block page]
     :or {collapse? false expanded? false incremental? true root-block nil}}]
-  (when-let [page (or (state/get-current-page)
+  (when-let [page (or page
+                      (state/get-current-page)
                       (date/today))]
     (let [block-id (or root-block (parse-uuid page))
           blocks (if block-id
@@ -3411,13 +3412,14 @@
       (expand-all! block-id))))
 
 (defn select-all-blocks!
-  []
+  [{:keys [page]}]
   (if-let [current-input-id (state/get-edit-input-id)]
     (let [input (gdom/getElement current-input-id)
           blocks-container (util/rec-get-blocks-container input)
           blocks (dom/by-class blocks-container "ls-block")]
       (state/exit-editing-and-set-selected-blocks! blocks))
-    (->> (all-blocks-with-level {:collapse? true})
+    (->> (all-blocks-with-level {:page page
+                                 :collapse? true})
          (map (comp gdom/getElementByClass str :block/uuid))
          state/exit-editing-and-set-selected-blocks!)))
 
@@ -3451,12 +3453,10 @@
                 (and parent (:block/parent parent))
                 (state/exit-editing-and-set-selected-blocks! [(gdom/getElementByClass (:block/uuid parent))])
 
-                (= (:block/name parent)
-                   (some-> (or (state/get-current-page) (date/journal-name))
-                           util/page-name-sanity-lc))
+                (:block/name parent)
                 ;; page block
-                (select-all-blocks!))))
-          (select-all-blocks!))))))
+                (select-all-blocks! {:page (:block/name parent)}))))
+          (select-all-blocks! {}))))))
 
 (defn escape-editing
   ([]
