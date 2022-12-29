@@ -14,7 +14,7 @@
 (defonce ^:private *win (atom nil))
 (defonce ^:private *server (atom nil))
 
-(defn get-host [] (or (cfgs/get-item :server/host) "0.0.0.0"))
+(defn get-host [] (or (cfgs/get-item :server/host) "127.0.0.1"))
 (defn get-port [] (or (cfgs/get-item :server/port) 12315))
 
 (defonce *state
