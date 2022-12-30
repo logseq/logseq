@@ -1319,46 +1319,48 @@
 
 (defn- macro-video-cp
   [_config arguments]
-  (when-let [url (first arguments)]
-    (let [results (text-util/get-matched-video url)
-          src (match results
-                     [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
-                     (if (= (count id) 11) ["youtube-player" id] url)
+  (if (gp-util/url? (first arguments))
+    (when-let [url (first arguments)]
+      (let [results (text-util/get-matched-video url)
+            src (match results
+                  [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
+                  (if (= (count id) 11) ["youtube-player" id] url)
 
-                     [_ _ _ "youtube-nocookie.com" _ id _]
-                     (str "https://www.youtube-nocookie.com/embed/" id)
+                  [_ _ _ "youtube-nocookie.com" _ id _]
+                  (str "https://www.youtube-nocookie.com/embed/" id)
 
-                     [_ _ _ "loom.com" _ id _]
-                     (str "https://www.loom.com/embed/" id)
+                  [_ _ _ "loom.com" _ id _]
+                  (str "https://www.loom.com/embed/" id)
 
-                     [_ _ _ (_ :guard #(string/ends-with? % "vimeo.com")) _ id _]
-                     (str "https://player.vimeo.com/video/" id)
+                  [_ _ _ (_ :guard #(string/ends-with? % "vimeo.com")) _ id _]
+                  (str "https://player.vimeo.com/video/" id)
 
-                     [_ _ _ "bilibili.com" _ id & query]
-                     (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1"
-                          (when-let [page (second query)]
-                            (str "&page=" page)))
+                  [_ _ _ "bilibili.com" _ id & query]
+                  (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1"
+                       (when-let [page (second query)]
+                         (str "&page=" page)))
 
-                     :else
-                     url)]
-      (if (and (coll? src)
-               (= (first src) "youtube-player"))
-        (youtube/youtube-video (last src))
-        (when src
-          (let [width (min (- (util/get-width) 96) 560)
-                height (int (* width (/ (if (string/includes? src "player.bilibili.com")
-                                          360 315)
-                                        560)))]
-            [:iframe
-             {:allow-full-screen true
-              :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-              :framespacing "0"
-              :frame-border "no"
-              :border "0"
-              :scrolling "no"
-              :src src
-              :width width
-              :height height}]))))))
+                  :else
+                  url)]
+        (if (and (coll? src)
+                 (= (first src) "youtube-player"))
+          (youtube/youtube-video (last src))
+          (when src
+            (let [width (min (- (util/get-width) 96) 560)
+                  height (int (* width (/ (if (string/includes? src "player.bilibili.com")
+                                            360 315)
+                                          560)))]
+              [:iframe
+               {:allow-full-screen true
+                :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+                :framespacing "0"
+                :frame-border "no"
+                :border "0"
+                :scrolling "no"
+                :src src
+                :width width
+                :height height}])))))
+    (ui/block-error "Invalid URL" {})))
 
 (defn- macro-else-cp
   [name config arguments]
