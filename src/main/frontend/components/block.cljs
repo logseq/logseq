@@ -1360,8 +1360,8 @@
                 :src src
                 :width width
                 :height height}]))))
-      (ui/block-error "Invalid URL" {})) 
-    (ui/block-error "URL is empty" {})))
+      (ui/block-error "Invalid URL" {:content "Click here to enter a valid URL"})) 
+    (ui/block-error "Empty URL" {:content "Click here to enter a valid URL"})))
 
 (defn- macro-else-cp
   [name config arguments]
