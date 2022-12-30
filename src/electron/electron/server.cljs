@@ -14,7 +14,7 @@
 (defonce ^:private *win (atom nil))
 (defonce ^:private *server (atom nil))
 
-(defn get-host [] (or (cfgs/get-item :server/host) "0.0.0.0"))
+(defn get-host [] (or (cfgs/get-item :server/host) "127.0.0.1"))
 (defn get-port [] (or (cfgs/get-item :server/port) 12315))
 
 (defonce *state
@@ -69,11 +69,12 @@
 
 (defn- validate-auth-token
   [token]
-  (when-let [valid-tokens (cfgs/get-item :server/tokens)]
-    (when (or (string/blank? token)
-              (not (some #(or (= % token)
-                              (= (:value %) token)) valid-tokens)))
-      (throw (js/Error. "Access Deny!")))))
+  (let [token (string/replace token "Bearer " "")]
+    (when-let [valid-tokens (cfgs/get-item :server/tokens)]
+      (when (or (string/blank? token)
+                (not (some #(or (= % token)
+                                (= (:value %) token)) valid-tokens)))
+        (throw (js/Error. "Access Deny!"))))))
 
 (defn- api-pre-handler!
   [^js req ^js rep callback]
@@ -98,7 +99,7 @@
        (utils/send-to-renderer @*win :invokeLogseqAPI {:syncId sid :method method :args args})
        (.handleOnce ipcMain (str ::sync! sid) ret-handle)))))
 
-(defn- api-invoker-fn!
+(defn- api-handler!
   [^js req ^js rep]
   (if-let [^js body (.-body req)]
     (if-let [method (resolve-real-api-method (.-method body))]
@@ -132,7 +133,7 @@
               ;; hooks & routes
               _     (doto s
                       (.addHook "preHandler" api-pre-handler!)
-                      (.post "/api-invoker" api-invoker-fn!)
+                      (.post "/api" api-handler!)
                       (.get "/" (fn [_ ^js rep]
                                   (let [html (fs-extra/readFileSync (.join path js/__dirname "./docs/api_server.html"))
                                         HOST (get-host)

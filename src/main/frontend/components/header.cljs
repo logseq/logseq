@@ -223,15 +223,7 @@
                               (state/pub-event! [:go/search]))}
               (ui/icon "search" {:size ui/icon-size})])))
 
-      (when (mobile-util/native-platform?)
-        (if (or (state/home?) custom-home-page?)
-          left-menu
-          (ui/with-shortcut :go/backward "bottom"
-            [:button.it.navigation.nav-left.button.icon.opacity-70
-             {:title "Go back" :on-click #(js/window.history.back)}
-             (ui/icon "chevron-left" {:size 26})])))
-
-      (when (state/feature-http-server-enabled?)
+       (when (state/feature-http-server-enabled?)
         (server/server-indicator (state/sub :electron/server)))]]
 
      [:div.r.flex.drag-region
