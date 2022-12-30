@@ -157,16 +157,20 @@
            (map string/capitalize)
            (string/join " ")))
 
+
 (defn distinct-by
-  "Copy of frontend.util/distinct-by. Too basic to couple to main app"
-  [f col]
-  (reduce
-   (fn [acc x]
-     (if (some #(= (f x) (f %)) acc)
-       acc
-       (vec (conj acc x))))
-   []
-   col))
+  "Copy from medley"
+  [f coll]
+  (let [step (fn step [xs seen]
+               (lazy-seq
+                ((fn [[x :as xs] seen]
+                   (when-let [s (seq xs)]
+                     (let [fx (f x)]
+                       (if (contains? seen fx)
+                         (recur (rest s) seen)
+                         (cons x (step (rest s) (conj seen fx)))))))
+                 xs seen)))]
+    (step (seq coll) #{})))
 
 (defn normalize-format
   [format]

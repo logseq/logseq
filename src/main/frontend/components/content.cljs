@@ -14,7 +14,6 @@
             [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -188,7 +187,7 @@
           {:key      "Open in sidebar"
            :on-click (fn [_e]
                        (editor-handler/open-block-in-sidebar! block-id))}
-          "Open in sidebar"
+          (t :content/open-in-sidebar)
           ["⇧" "click"])
 
          [:hr.menu-separator]
@@ -197,14 +196,14 @@
           {:key      "Copy block ref"
            :on-click (fn [_e]
                        (editor-handler/copy-block-ref! block-id block-ref/->block-ref))}
-          "Copy block ref"
+          (t :content/copy-block-ref)
           nil)
 
          (ui/menu-link
           {:key      "Copy block embed"
            :on-click (fn [_e]
                        (editor-handler/copy-block-ref! block-id #(util/format "{{embed ((%s))}}" %)))}
-          "Copy block embed"
+          (t :content/copy-block-emebed)
           nil)
 
           ;; TODO Logseq protocol mobile support
@@ -354,38 +353,36 @@
                             block-id (d/attr target "blockid")
                             {:keys [block block-ref]} (state/sub :block-ref/context)
                             {:keys [page]} (state/sub :page-title/context)]
-                        ;; TODO: Find a better way to handle this on whiteboards
-                        (when-not (whiteboard-handler/inside-portal? target)
-                          (cond
-                            page
-                            (do
-                              (common-handler/show-custom-context-menu!
-                               e
-                               (page-title-custom-context-menu-content page))
-                              (state/set-state! :page-title/context nil))
-
-                            block-ref
-                            (do
-                              (common-handler/show-custom-context-menu!
-                               e
-                               (block-ref-custom-context-menu-content block block-ref))
-                              (state/set-state! :block-ref/context nil))
-
-                            (and (state/selection?) (not (d/has-class? target "bullet")))
+                        (cond
+                          page
+                          (do
                             (common-handler/show-custom-context-menu!
                              e
-                             (custom-context-menu-content))
+                             (page-title-custom-context-menu-content page))
+                            (state/set-state! :page-title/context nil))
 
-                            (and block-id (parse-uuid block-id))
-                            (let [block (.closest target ".ls-block")]
-                              (when block
-                                (util/select-highlight! [block]))
-                              (common-handler/show-custom-context-menu!
-                               e
-                               (block-context-menu-content target (uuid block-id))))
+                          block-ref
+                          (do
+                            (common-handler/show-custom-context-menu!
+                             e
+                             (block-ref-custom-context-menu-content block block-ref))
+                            (state/set-state! :block-ref/context nil))
 
-                            :else
-                            nil)))))))
+                          (and (state/selection?) (not (d/has-class? target "bullet")))
+                          (common-handler/show-custom-context-menu!
+                           e
+                           (custom-context-menu-content))
+
+                          (and block-id (parse-uuid block-id))
+                          (let [block (.closest target ".ls-block")]
+                            (when block
+                              (util/select-highlight! [block]))
+                            (common-handler/show-custom-context-menu!
+                             e
+                             (block-context-menu-content target (uuid block-id))))
+
+                          :else
+                          nil))))))
   [id {:keys [hiccup]}]
   [:div {:id id}
    (if hiccup

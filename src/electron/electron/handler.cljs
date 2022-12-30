@@ -27,6 +27,7 @@
             [electron.file-sync-rsapi :as rsapi]
             [electron.backup-file :as backup-file]
             [cljs.reader :as reader]
+            [electron.server :as server]
             [electron.find-in-page :as find]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
@@ -677,6 +678,15 @@
 
 (defmethod handle :clear-find-in-page [^js win [_]]
   (find/clear! win))
+
+(defmethod handle :server/load-state []
+  (server/load-state-to-renderer!))
+
+(defmethod handle :server/do [^js _win [_ action]]
+  (server/do-server! action))
+
+(defmethod handle :server/set-config [^js _win [_ config]]
+  (server/set-config! config))
 
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]

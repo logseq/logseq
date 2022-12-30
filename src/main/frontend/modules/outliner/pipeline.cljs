@@ -82,8 +82,9 @@
         (when-not importing?
           (react/refresh! repo tx-report'))
 
-        (doseq [p (seq pages)]
-          (updated-page-hook tx-report p))
+        (when-not (:delete-files? tx-meta)
+          (doseq [p (seq pages)]
+            (updated-page-hook tx-report p)))
 
         (when (and state/lsp-enabled? (seq blocks) (not importing?))
           (state/pub-event! [:plugin/hook-db-tx

@@ -22,7 +22,8 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user]
             [frontend.state :as state]
-            [frontend.ui :as ui]))
+            [frontend.ui :as ui]
+            [promesa.core :as p]))
 
 
 (defn persist-dbs!
@@ -210,8 +211,29 @@
                      ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage
                      ;; No db cache persisting ensured. Should be handled by the caller
                      (fn [repo]
-                       (ui-handler/open-new-window! repo))))
+                       (ui-handler/open-new-window! repo)))
 
+  (js/window.apis.on "invokeLogseqAPI"
+                     (fn [^js data]
+                       (let [sync-id (.-syncId data)
+                             method  (.-method data)
+                             args    (.-args data)
+                             ret-fn! #(ipc/invoke (str :electron.server/sync! sync-id) %)]
+
+                         (try
+                           (println "invokeLogseqAPI:" method)
+                           (let [^js apis (aget js/window.logseq "api")]
+                             (when-not (aget apis method)
+                               (throw (js/Error. (str "MethodNotExist:" method))))
+                             (-> (p/promise (apply js-invoke apis method args))
+                                 (p/then #(ret-fn! %))
+                                 (p/catch #(ret-fn! {:error %}))))
+                           (catch js/Error e
+                             (ret-fn! {:error (.-message e)}))))))
+
+  (js/window.apis.on "syncAPIServerState"
+                     (fn [^js data]
+                       (state/set-state! :electron/server (bean/->clj data)))))
 
 (defn listen!
   []
