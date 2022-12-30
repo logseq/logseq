@@ -1315,8 +1315,8 @@
 
 (defn- macro-video-cp
   [_config arguments]
-  (if (gp-util/url? (first arguments))
-    (when-let [url (first arguments)]
+  (if-let [url (first arguments)]
+    (if (gp-util/url? url)
       (let [results (text-util/get-matched-video url)
             src (match results
                   [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
@@ -1355,8 +1355,9 @@
                 :scrolling "no"
                 :src src
                 :width width
-                :height height}])))))
-    (ui/block-error "Invalid URL" {})))
+                :height height}]))))
+      (ui/block-error "Invalid URL" {})) 
+    (ui/block-error "URL is empty" {})))
 
 (defn- macro-else-cp
   [name config arguments]
