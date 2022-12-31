@@ -17,6 +17,7 @@ Use it to organize your todo list, to write your journals, or to record your uni
 <a href="https://www.producthunt.com/posts/logseq?utm_source=badge-review&utm_medium=badge&utm_souce=badge-logseq#discussion-body" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/review.svg?post_id=298158&theme=light" alt="Logseq - Your joyful, private digital garden | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
 
 ## [Download our free Desktop app](https://github.com/logseq/logseq/releases)
+
 [Sponsor our contributors on Open Collective](https://opencollective.com/logseq), Logseq will move to Stripe later!
 
 ## Why Logseq?
@@ -25,7 +26,7 @@ Use it to organize your todo list, to write your journals, or to record your uni
 
 The server will never store or analyze your private notes. Your data are plain text files and we currently support both Markdown and Emacs Org mode (more to be added soon).
 
-In the unlikely event that the website is down or cannot be maintained, your data is, and will always be yours.
+In the unlikely event that the website is down or cannot be maintained, your data is, and will always be, yours.
 
 ![Image of logseq](https://cdn.logseq.com/%2F8b9a461d-437e-4ca5-a2da-18b51077b5142020_07_25_Screenshot%202020-07-25%2013-29-49%20%2B0800.png?Expires=4749255017&Signature=Qbx6jkgAytqm6nLxVXQQW1igfcf~umV1OcG6jXUt09TOVhgXyA2Z5jHJ3AGJASNcphs31pZf4CjFQ5mRCyVKw6N8wb8Nn-MxuTJl0iI8o-jLIAIs9q1v-2cusCvuFfXH7bq6ir8Lpf0KYAprzuZ00FENin3dn6RBW35ENQwUioEr5Ghl7YOCr8bKew3jPV~OyL67MttT3wJig1j3IC8lxDDT8Ov5IMG2GWcHERSy00F3mp3tJtzGE17-OUILdeuTFz6d-NDFAmzB8BebiurYz0Bxa4tkcdLUpD5ToFHU08jKzZExoEUY8tvaZ1-t7djmo3d~BAXDtlEhC2L1YC2aVQ__&Key-Pair-Id=APKAJE5CCD6X7MP6PTEA)
 
@@ -35,8 +36,8 @@ Our top sponsors are shown below! [[Become a sponsor](https://opencollective.com
 
 <a href="https://www.deta.sh/" target="_blank"><img width=200 height=100 src="https://uploads-ssl.webflow.com/5eb96efa78dc680fc15be3be/5ebd24f6cbf6e9ebd674656e_Logo.svg" /></a>
 
-
 ## Plugins documentation (Draft)
+
 The plugins documentation is at https://logseq.github.io/plugins. Any feedback would be greatly appreciated!
 
 ## Feature requests
@@ -49,6 +50,7 @@ Please go to https://discuss.logseq.com/new-topic?category=feature-requests.
 2. Start writing and have fun!
 
 ## FAQ
+
 Please go to https://docs.logseq.com/#/page/faq.
 
 ## Credits
@@ -81,18 +83,20 @@ The following is for developers and designers who want to build and run Logseq l
 We have [a dedicated overview page](https://github.com/logseq/logseq/blob/master/CODEBASE_OVERVIEW.md) for Logseq's codebase overview and [a development practices page](docs/dev-practices.md).
 
 ## Set up development environment
-* For setting up web app / desktop app development environment on macOS / Linux, please refer to [Develop Logseq](docs/develop-logseq.md).
 
-* For Windows users, please refer to [Develop Logseq on Windows](docs/develop-logseq-on-windows.md) in addition.
+- For setting up web app / desktop app development environment on macOS / Linux, please refer to [Develop Logseq](docs/develop-logseq.md).
+
+- For Windows users, please refer to [Develop Logseq on Windows](docs/develop-logseq-on-windows.md) in addition.
 
 There are more guides in [docs/](docs/), e.g. the [Guide for contributing to translations](docs/contributing-to-translations.md) and the [Docker web app guide](docs/docker-web-app-guide.md)
 
 ## How to contribute with a PR
+
 If you would like to contribute by solving an open issue, please fork this repository and then create a branch for the fix.
 
 Once you push your code to your fork, you'll be able to open a PR into Logseq repository. For more info you can follow this guide from [GitHub docs](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork)
 
-And here a list of some [good first issues](https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)!
+And here is a list of some [good first issues](https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)!
 
 ## Thanks
 
