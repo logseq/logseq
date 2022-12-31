@@ -598,15 +598,21 @@
 
 (def ^:export insert_block
   (fn [block-uuid-or-page-name content ^js opts]
-    (let [{:keys [before sibling focus isPageBlock customUUID properties]} (bean/->clj opts)
-          page-name              (and isPageBlock block-uuid-or-page-name)
+    (when (string/blank? block-uuid-or-page-name)
+      (throw (js/Error. "Page title or block UUID shouldn't be empty.")))
+    (let [{:keys [before sibling focus customUUID properties]} (bean/->clj opts)
+          [page-name block-uuid] (if (util/uuid-string? block-uuid-or-page-name)
+                                   [nil (uuid block-uuid-or-page-name)]
+                                   [block-uuid-or-page-name nil])
+          page-name (when page-name (util/page-name-sanity-lc page-name))
+          _ (when (and page-name (not (db/entity [:block/name page-name])))
+              (page-handler/create! block-uuid-or-page-name {:create-first-block? false}))
           custom-uuid            (or customUUID (:id properties))
           custom-uuid            (when custom-uuid (uuid-or-throw-error custom-uuid))
           edit-block?            (if (nil? focus) true focus)
           _                      (when (and custom-uuid (db-model/query-block-by-uuid custom-uuid))
                                    (throw (js/Error.
                                            (util/format "Custom block UUID already exists (%s)." custom-uuid))))
-          block-uuid             (if isPageBlock nil (uuid block-uuid-or-page-name))
           block-uuid'            (if (and (not sibling) before block-uuid)
                                    (let [block       (db/entity [:block/uuid block-uuid])
                                          first-child (db-model/get-by-parent-&-left (db/get-db)
