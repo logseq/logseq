@@ -1013,7 +1013,7 @@
   (ipc/ipc :httpRequestAbort req-id))
 
 ;; search
-(defn search
+(defn ^:export search
   [q]
   (search-handler/search q))
 
