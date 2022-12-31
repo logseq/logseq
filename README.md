@@ -147,7 +147,7 @@ create a branch for the fix.
 Once you push your code to your fork, you'll be able to open a PR into Logseq repository. For
 more info you can follow this guide from [GitHub docs](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork)
 
-And here a list of some [good first issues](https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)!
+And here is a list of some [good first issues](https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)!
 
 <br></br>
 
