@@ -833,7 +833,7 @@
       (let [block'   (if page? (second-child-of-block block) (first-child-of-block block))
             sibling? (and page? (not (nil? block')))
             opts     (bean/->clj opts)
-            opts     (merge opts {:isPageBlock (and page? (not sibling?)) :sibling sibling? :before sibling?})
+            opts     (merge opts {:sibling sibling? :before sibling?})
             src      (if sibling? (str (:block/uuid block')) uuid-or-page-name)]
         (insert_block src content (bean/->js opts))))))
 
@@ -849,7 +849,7 @@
       (let [block'   (last-child-of-block block)
             sibling? (not (nil? block'))
             opts     (bean/->clj opts)
-            opts     (merge opts {:isPageBlock (and page? (not sibling?)) :sibling sibling?}
+            opts     (merge opts {:sibling sibling?}
                             (when sibling? {:before false}))
             src      (if sibling? (str (:block/uuid block')) uuid-or-page-name)]
         (insert_block src content (bean/->js opts))))))
