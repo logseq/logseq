@@ -40,7 +40,8 @@
             [frontend.version :as fv]
             [frontend.handler.shell :as shell]
             [frontend.modules.layout.core]
-            [frontend.handler.code :as code-handler]))
+            [frontend.handler.code :as code-handler]
+            [frontend.handler.search :as search-handler]))
 
 ;; helpers
 (defn- normalize-keyword-for-json
@@ -1010,6 +1011,11 @@
 (defn ^:export http_request_abort
   [req-id]
   (ipc/ipc :httpRequestAbort req-id))
+
+;; search
+(defn search
+  [q]
+  (search-handler/search q))
 
 ;; helpers
 (defn ^:export query_element_by_id
