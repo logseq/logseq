@@ -23,10 +23,10 @@
   [{:keys [id shortcut] :as cmd} chosen?]
   (let [first-shortcut (first (string/split shortcut #" \| "))
         desc (translate t cmd)]
-    [:div.inline-grid.grid-cols-4.gap-x-4.w-full
+    [:div.inline-grid.grid-cols-4.items-center.w-full
      {:class (when chosen? "chosen")}
      [:span.col-span-3 desc]
-     [:div.col-span-1.justify-end.tip.flex
+     [:div.col-span-1.flex.justify-end.tip
       (when (and (keyword? id) (namespace id))
         [:code.opacity-40.bg-transparent (namespace id)])
       (when-not (string/blank? first-shortcut)
@@ -40,7 +40,7 @@
   (let [input (::input state)]
     [:div.cp__palette.cp__palette-main
      [:div.input-wrap
-      [:input.cp__palette-input.w-full
+      [:input.cp__palette-input.w-full.h-full
        {:type        "text"
         :placeholder (t :command-palette/prompt)
         :auto-focus  true
