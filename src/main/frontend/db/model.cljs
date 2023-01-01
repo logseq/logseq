@@ -1753,6 +1753,7 @@ independent of format as format specific heading characters are stripped"
 (defn get-whiteboard-id-nonces
   [repo page-name]
   (->> (get-page-blocks-no-cache repo page-name {:keys [:block/uuid :block/properties]})
+       (filter #(:logseq.tldraw.shape (:block/properties %)))
        (map (fn [{:block/keys [uuid properties]}]
               {:id (str uuid)
                :nonce (get-in properties [:logseq.tldraw.shape :nonce])}))))
