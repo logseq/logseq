@@ -302,7 +302,7 @@
                              [])
               add-or-modify-files (some->>
                                    (concat modify-files add-files)
-                                   (gp-util/remove-nils))
+                                   (remove nil?))
               options {:delete-files (concat delete-files delete-pages)
                        :delete-blocks delete-blocks
                        :re-render? true}]

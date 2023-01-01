@@ -93,8 +93,7 @@
    (transact! repo-url tx-data nil))
   ([repo-url tx-data tx-meta]
    (when-not config/publishing?
-     (let [tx-data (->> (gp-util/remove-nils tx-data)
-                        (remove nil?))]
+     (let [tx-data (gp-util/fast-remove-nils tx-data)]
        (when (seq tx-data)
          (when-let [conn (conn/get-db repo-url false)]
            (if tx-meta
