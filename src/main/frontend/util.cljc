@@ -1230,14 +1230,15 @@
 #?(:cljs
    (defn- get-dom-top
      [node]
-     (gobj/get (.getBoundingClientRect node) "top")))
+     (when node
+       (gobj/get (.getBoundingClientRect node) "top"))))
 
 #?(:cljs
    (defn sort-by-height
      [elements]
      (sort (fn [x y]
              (< (get-dom-top x) (get-dom-top y)))
-           elements)))
+           (remove nil? elements))))
 
 #?(:cljs
    (defn calc-delta-rect-offset
