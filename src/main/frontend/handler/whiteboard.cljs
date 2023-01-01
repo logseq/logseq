@@ -17,7 +17,6 @@
             [promesa.core :as p]
             [goog.object :as gobj]
             [clojure.set :as set]
-            [clojure.core.async :as async]
             [clojure.string :as string]
             [cljs-bean.core :as bean]))
 
@@ -147,7 +146,7 @@
         new-shapes (.-shapes tl-page)
         shapes-index (map #(gobj/get % "id") new-shapes)
         upsert-shapes (->> (set/difference new-id-nonces db-id-nonces)
-                           (map (fn [{:keys [id nonce]}]
+                           (map (fn [{:keys [id]}]
                                   (-> (.-serialized ^js (.getShapeById tl-page id))
                                       js->clj-keywordize)))
                            (set))
@@ -409,14 +408,13 @@
         (.updateBindings tl-page (bean/->js bindings))))))
 
 (defn undo!
-  [{:keys [txs tx-meta]}]
+  [{:keys [tx-meta]}]
   (history/pause-listener!)
   (try
     (when-let [app (state/active-tldraw-app)]
-      (let [{:keys [page-name deleted-shapes new-shapes changed-shapes prev-changed-blocks]} (:data tx-meta)
+      (let [{:keys [deleted-shapes new-shapes changed-shapes prev-changed-blocks]} (:data tx-meta)
             whiteboard-op (:whiteboard/op tx-meta)
-            ^js api (.-api app)
-            tl-page ^js (second (first (.-pages app)))]
+            ^js api (.-api app)]
         (when api
           (case whiteboard-op
             :group
@@ -441,7 +439,7 @@
   (history/resume-listener!))
 
 (defn redo!
-  [{:keys [txs tx-meta]}]
+  [{:keys [tx-meta]}]
   (history/pause-listener!)
   (try
     (when-let [app (state/active-tldraw-app)]

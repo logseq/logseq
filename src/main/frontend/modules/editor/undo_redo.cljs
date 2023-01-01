@@ -139,7 +139,7 @@
 
 (defn listen-db-changes!
   [{:keys [tx-data tx-meta] :as tx-report}]
-  (when (and (not (empty? tx-data))
+  (when (and (seq tx-data)
              (not (or (:undo? tx-meta)
                       (:redo? tx-meta)))
              (not @*pause-listener)

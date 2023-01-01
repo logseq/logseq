@@ -10,7 +10,6 @@
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
             [frontend.components.whiteboard :as whiteboard]
-            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
