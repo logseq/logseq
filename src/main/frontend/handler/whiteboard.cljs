@@ -33,58 +33,6 @@
         additional-props (gp-whiteboard/with-whiteboard-block-props block page-name)]
     (merge block additional-props)))
 
-(defn- tldr-page->blocks-tx [page-name tldr-data]
-  (let [page-name (util/page-name-sanity-lc page-name)
-        page-entity (model/get-page page-name)
-        page-block (merge {:block/name page-name
-                           :block/type "whiteboard"
-                           :block/properties {:ls-type :whiteboard-page
-                                              :logseq.tldraw.page (dissoc tldr-data :shapes)}}
-                          (when page-entity (select-keys page-entity [:block/created-at])))
-        ;; todo: use get-paginated-blocks instead?
-        existing-blocks (model/get-page-blocks-no-cache (state/get-current-repo)
-                                                        page-name
-                                                        {:pull-keys '[:db/id
-                                                                      :block/uuid
-                                                                      :block/properties [:ls-type]
-                                                                      :block/created-at
-                                                                      :block/updated-at
-                                                                      {:block/parent [:block/uuid]}]})
-        id->block (zipmap (map :block/uuid existing-blocks) existing-blocks)
-        shapes (:shapes tldr-data)
-        ;; we should maintain the order of the shapes in the page
-        ;; bring back/forward is depending on this ordering
-        blocks (map
-                (fn [shape]
-                  (let [block (shape->block shape page-name)]
-                    (merge block
-                           (select-keys (id->block (:block/uuid block))
-                                        [:block/created-at :block/updated-at])))) shapes)
-        block-ids (->> shapes
-                       (map (fn [shape] (when (= (:blockType shape) "B")
-                                          (uuid (:pageId shape)))))
-                       (concat (map :block/uuid blocks))
-                       (remove nil?)
-                       (set))
-        ;; delete blocks when all of the following are false
-        ;; - the block is not in the new blocks list
-        ;; - the block's parent is not in the new block list
-        ;; - the block is not a shape block
-        delete-blocks (filterv (fn [block]
-                                 (not
-                                  (or (block-ids (:block/uuid block))
-                                      (block-ids (:block/uuid (:block/parent block)))
-                                      (not (gp-whiteboard/shape-block? block)))))
-                               existing-blocks)
-        ;; always recalcuate refs for now.
-        ;; todo: optimize in frontend.modules.outliner.pipeline/compute-block-path-refs?
-        refs-tx (mapcat (fn [m] [[:db/retract (:db/id m) :block/path-refs]
-                                 [:db/retract (:db/id m) :block/refs]]) existing-blocks)
-        delete-blocks-tx (mapv (fn [s] [:db/retractEntity (:db/id s)]) delete-blocks)
-        page-and-blocks (->> (cons page-block blocks)
-                             (map outliner/block-with-timestamps))]
-    (concat refs-tx page-and-blocks delete-blocks-tx)))
-
 (defn- get-whiteboard-clj [page-name]
   (when (model/page-exists? page-name)
     (let [page-block (model/get-page page-name)
@@ -116,12 +64,6 @@
                              {:id id
                               :name (:block/name page-block)
                               :shapes shapes})]})))
-
-(defn transact-tldr! [page-name tldr]
-  (let [{:keys [pages assets]} (js->clj tldr :keywordize-keys true)
-        page (first pages)
-        tx (tldr-page->blocks-tx page-name (assoc page :assets assets))]
-    (db-utils/transact! tx)))
 
 (defn build-page-block
   [page-name tldraw-page assets shapes-index]
@@ -230,17 +172,21 @@
         (state/set-state! :whiteboard/pending-tx-data {})
         (db-utils/transact! repo tx-data' metadata'')))))
 
-(defn get-default-tldr
-  [page-id]
-  {:currentPageId page-id,
-   :selectedIds [],
-   :pages [{:id page-id
-            :name page-id
-            :ls-type :whiteboard-page
-            :shapes []
-            :bindings {}
-            :nonce 1}]
-   :assets []})
+(defn get-default-new-whiteboard-tx
+  [page-name id]
+  [#:block{:name page-name,
+           :type "whiteboard",
+           :properties
+           {:ls-type :whiteboard-page,
+            :logseq.tldraw.page
+            {:id id,
+             :name page-name,
+             :ls-type :whiteboard-page,
+             :bindings {},
+             :nonce 1,
+             :assets []}},
+           :updated-at (util/time-ms),
+           :created-at (util/time-ms)}])
 
 (defn get-whiteboard-entity [page-name]
   (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)]))
@@ -250,17 +196,15 @@
    (create-new-whiteboard-page! nil))
   ([name]
    (let [uuid (or (and name (parse-uuid name)) (d/squuid))
-         name (or name (str uuid))
-         tldr (get-default-tldr (str uuid))]
-     (transact-tldr! name (get-default-tldr (str uuid)))
+         name (or name (str uuid))]
+     (db/transact! (get-default-new-whiteboard-tx name (str uuid)))
      (let [entity (get-whiteboard-entity name)
            tx (assoc (select-keys entity [:db/id])
                      :block/uuid uuid)]
        (db-utils/transact! [tx])
        (let [page-entity (get-whiteboard-entity name)]
          (when (and page-entity (nil? (:block/file page-entity)))
-           (outliner-file/sync-to-file page-entity))))
-     tldr)))
+           (outliner-file/sync-to-file page-entity)))))))
 
 (defn create-new-whiteboard-and-redirect!
   ([]
