@@ -530,8 +530,6 @@
                           :editor/copy
                           :editor/copy-text
                           :editor/cut
-                          :editor/undo
-                          :editor/redo
                           :command/toggle-favorite])
      (with-meta {:before m/enable-when-not-component-editing!}))
 
@@ -541,6 +539,8 @@
                           :editor/select-all-blocks
                           :editor/zoom-in
                           :editor/zoom-out
+                          :editor/undo
+                          :editor/redo
                           :ui/toggle-brackets
                           :go/search-in-page
                           :go/search
