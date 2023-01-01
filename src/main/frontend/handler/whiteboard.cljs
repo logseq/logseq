@@ -184,6 +184,7 @@
                        :changed-shapes changed-shapes
                        :prev-changed-blocks prev-changed-blocks}}}))
 
+(defonce *last-shapes-nonce (atom {}))
 (defn transact-tldr-delta! [page-name ^js app]
   (let [tl-page ^js (second (first (.-pages app)))
         shapes (.-shapes ^js tl-page)
@@ -191,8 +192,10 @@
                                   {:id (.-id shape)
                                    :nonce (.-nonce shape)}) shapes))
         repo (state/get-current-repo)
-        db-id-nonces (set (->> (model/get-whiteboard-id-nonces repo page-name)
-                               (map #(update % :id str))))
+        db-id-nonces (or
+                      (get-in @*last-shapes-nonce [repo page-name])
+                      (set (->> (model/get-whiteboard-id-nonces repo page-name)
+                                (map #(update % :id str)))))
         {:keys [page-block upserted-blocks delete-blocks metadata]}
         (compute-tx app tl-page new-id-nonces db-id-nonces page-name)
         tx-data (concat delete-blocks [page-block] upserted-blocks)
@@ -216,6 +219,7 @@
         metadata' (if (seq (concat upserted-blocks delete-blocks))
                     metadata'
                     (assoc metadata :undo? true))]
+    (swap! *last-shapes-nonce assoc-in [repo page-name] new-id-nonces)
     (if (contains? #{:new-arrow} (:whiteboard/op metadata'))
       (state/set-state! :whiteboard/pending-tx-data
                         {:tx-data tx-data
