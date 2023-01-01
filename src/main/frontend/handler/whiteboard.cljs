@@ -179,7 +179,8 @@
                            (map with-timestamps))
      :delete-blocks deleted-shapes-tx
      :metadata {:whiteboard/transact? true
-                :data {:deleted-shapes deleted-shapes
+                :data {:page-name page-name
+                       :deleted-shapes deleted-shapes
                        :new-shapes created-shapes
                        :changed-shapes changed-shapes
                        :prev-changed-blocks prev-changed-blocks}}}))
@@ -400,16 +401,22 @@
   [^js api ids]
   (apply (.-selectShapes api) ids))
 
+(defn update-bindings!
+  [^js tl-page page-name]
+  (when-let [page (db/entity [:block/name page-name])]
+    (let [bindings (get-in page [:block/properties :logseq.tldraw.page :bindings])]
+      (when (seq bindings)
+        (.updateBindings tl-page (bean/->js bindings))))))
+
 (defn undo!
   [{:keys [txs tx-meta]}]
   (history/pause-listener!)
   (try
     (when-let [app (state/active-tldraw-app)]
-      (let [{:keys [deleted-shapes new-shapes changed-shapes prev-changed-blocks]} (:data tx-meta)
+      (let [{:keys [page-name deleted-shapes new-shapes changed-shapes prev-changed-blocks]} (:data tx-meta)
             whiteboard-op (:whiteboard/op tx-meta)
-            ^js api (.-api app)]
-        (prn "undo")
-        (util/pprint tx-meta)
+            ^js api (.-api app)
+            tl-page ^js (second (first (.-pages app)))]
         (when api
           (case whiteboard-op
             :group
@@ -435,16 +442,15 @@
 
 (defn redo!
   [{:keys [txs tx-meta]}]
-  (prn "redo! here")
   (history/pause-listener!)
   (try
     (when-let [app (state/active-tldraw-app)]
-      (let [{:keys [deleted-shapes new-shapes changed-shapes]} (:data tx-meta)
+      (let [{:keys [page-name deleted-shapes new-shapes changed-shapes]} (:data tx-meta)
             whiteboard-op (:whiteboard/op tx-meta)
             ^js api (.-api app)
             tl-page ^js (second (first (.-pages app)))]
-        (prn {:redo tx-meta})
         (when api
+          (update-bindings! tl-page page-name)
           (case whiteboard-op
             :group
             (do
@@ -458,16 +464,9 @@
               (when (seq deleted-shapes)
                 (delete-shapes! api deleted-shapes))
               (when (seq new-shapes)
-                (prn "create new-shapes: "
-                     new-shapes)
-                (prn {:whiteboard-op whiteboard-op})
                 (create-shapes! api new-shapes))
               (when (seq changed-shapes)
-                (update-shapes! api changed-shapes))
-              (when (= :new-arrow whiteboard-op)
-                (let [changed-ids (mapcat :id [deleted-shapes new-shapes changed-shapes])]
-                  (prn {:changed-ids changed-ids})
-                  (.cleanup tl-page (bean/->js changed-ids)))))))))
+                (update-shapes! api changed-shapes)))))))
     (catch :default e
       (js/console.error e)))
   (history/resume-listener!))
