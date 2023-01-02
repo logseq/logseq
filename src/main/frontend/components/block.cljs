@@ -648,7 +648,7 @@
                                          (->>
                                           (for [page (string/split page-original-name #"/")]
                                             (when (and (string? page) page)
-                                              (page-reference false page {} nil)))
+                                              (page-reference false page {:preview? true} nil)))
                                           (interpose [:span.mx-2.opacity-30 "/"]))]
                                         [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
                                                                  page-original-name
