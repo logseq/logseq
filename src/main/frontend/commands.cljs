@@ -294,7 +294,7 @@
     ;; Allow user to modify or extend, should specify how to extend.
 
     (state/get-commands)
-    (state/get-plugins-commands))
+    (state/get-plugins-slash-commands))
    (remove nil?)
    (util/distinct-by-last-wins first)))
 

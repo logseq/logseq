@@ -5,8 +5,10 @@
             ["@sentry/react" :as Sentry]
             [frontend.mobile.util :as mobile-util]))
 
+(goog-define SENTRY-DSN "")
+
 (def config
-  {:dsn "https://636e9174ffa148c98d2b9d3369661683@o416451.ingest.sentry.io/5311485"
+  {:dsn SENTRY-DSN
    :release (util/format "logseq%s@%s" (cond
                                          (mobile-util/native-android?) "-android"
                                          (mobile-util/native-ios?) "-ios"
@@ -44,7 +46,7 @@
                  event)})
 
 (defn init []
-  (when-not config/dev?
+  (when (and (not config/dev?) (not-empty SENTRY-DSN))
     (let [config (clj->js config)]
       (Sentry/init config))))
 

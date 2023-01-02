@@ -2,11 +2,12 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater] :as updater]
-            [electron.utils :refer [*win mac? linux? dev? get-win-from-sender restore-user-fetch-agent
+            [electron.utils :refer [*win mac? linux? dev? get-win-from-sender
                                     decode-protected-assets-schema-path get-graph-name send-to-renderer]
              :as utils]
             [electron.url :refer [logseq-url-handler]]
             [electron.logger :as logger]
+            [electron.server :as server]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -300,7 +301,7 @@
                    _ (reset! *win win)]
                (logger/info (str "Logseq App(" (.getVersion app) ") Starting... "))
 
-               (restore-user-fetch-agent)
+               (utils/<restore-proxy-settings)
 
                (js-utils/disableXFrameOptions win)
 
@@ -315,10 +316,11 @@
                           (let [t1 (setup-updater! win)
                                 t2 (setup-app-manager! win)
                                 t3 (handler/set-ipc-handler! win)
+                                t4 (server/setup! win)
                                 tt (exceptions/setup-exception-listeners!)]
 
                             (vreset! *teardown-fn
-                                     #(doseq [f [t0 t1 t2 t3 tt]]
+                                     #(doseq [f [t0 t1 t2 t3 t4 tt]]
                                         (and f (f)))))))
 
                ;; setup effects

@@ -216,7 +216,9 @@
           (do (<! (timeout 1000))
               (recur))
           (do (.send ws "PING")
-              (<! (timeout 30000))
+              ;; aws apigateway websocket
+              ;; Idle Connection Timeout: 10min
+              (<! (timeout (* 5 60 1000)))
               (recur)))))))
 
 (defn- ws-stop! [*ws]

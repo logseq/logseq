@@ -515,6 +515,23 @@
                     :on-click #(js/logseq.api.relaunch)
            :small? true :intent "logseq")]])]))
 
+(rum/defc http-server-enabled-switcher
+  [t]
+  (let [[value _] (rum/use-state (boolean (storage/get ::storage-spec/http-server-enabled)))
+        [on? set-on?] (rum/use-state value)
+        on-toggle #(let [v (not on?)]
+                     (set-on? v)
+                     (storage/set ::storage-spec/http-server-enabled v))]
+    [:div.flex.items-center
+     (ui/toggle on? on-toggle true)
+     (when (not= (boolean value) on?)
+       [:div.relative.opacity-70
+        [:span.absolute.whitespace-nowrap
+         {:style {:top -18 :left 10}}
+         (ui/button (t :plugin/restart)
+                    :on-click #(js/logseq.api.relaunch)
+                    :small? true :intent "logseq")]])]))
+
 (rum/defc flashcards-enabled-switcher
   [enable-flashcards?]
   (ui/toggle enable-flashcards?
@@ -524,10 +541,13 @@
              true))
 
 (rum/defc user-proxy-settings
-  [{:keys [protocol host port] :as agent-opts}]
-  (ui/button [:span
-              (when-let [e (and protocol host port (str protocol "://" host ":" port))]
-                [:strong.pr-1 e])
+  [{:keys [type protocol host port] :as agent-opts}]
+  (ui/button [:span.flex.items-center
+              [:strong.pr-1
+               (case type
+                 "system" "System Default"
+                 "direct" "Direct"
+                 (and protocol host port (str protocol "://" host ":" port)))]
               (ui/icon "edit")]
              :small? true
              :on-click #(state/set-sub-modal!
@@ -538,6 +558,11 @@
   (row-with-button-action
    {:left-label (t :settings-page/plugin-system)
     :action (plugin-enabled-switcher t)}))
+
+(defn http-server-switcher-row []
+  (row-with-button-action
+   {:left-label "HTTP APIs server"
+    :action (http-server-enabled-switcher t)}))
 
 (defn flashcards-switcher-row [enable-flashcards?]
   (row-with-button-action
@@ -692,7 +717,10 @@
             :on-key-press  (fn [e]
                              (when (= "Enter" (util/ekey e))
                                (update-home-page e)))}]]]])
-     (when (and (util/electron?) config/feature-plugin-system-on?) (plugin-system-switcher-row))
+     (when (and (util/electron?) config/feature-plugin-system-on?)
+       (plugin-system-switcher-row))
+     (when (and (util/electron?) (state/developer-mode?))
+       (http-server-switcher-row))
      (flashcards-switcher-row enable-flashcards?)
      (zotero-settings-row)
      (when-not web-platform?

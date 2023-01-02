@@ -15,6 +15,7 @@
             [frontend.components.plugins :as plugin]
             [frontend.components.search :as component-search]
             [frontend.components.shell :as shell]
+            [frontend.components.command-palette :as command-palette]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -40,7 +41,9 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.shell :as shell-handler]
             [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.handler.command-palette :as cp]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
             [frontend.mobile.graph-picker :as graph-picker]
@@ -462,6 +465,8 @@
     (when (mobile-util/native-ios?)
       (reset! util/keyboard-height keyboard-height)
       (set! (.. main-node -style -marginBottom) (str keyboard-height "px"))
+      (when-let [^js html (js/document.querySelector ":root")]
+        (.setProperty (.-style html) "--ls-native-kb-height" (str keyboard-height "px")))
       (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
         (set! (.. left-sidebar-node -style -bottom) (str keyboard-height "px")))
       (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
@@ -482,6 +487,8 @@
     (when (= (state/sub :editor/record-status) "RECORDING")
       (state/set-state! :mobile/show-recording-bar? false))
     (when (mobile-util/native-ios?)
+      (when-let [^js html (js/document.querySelector ":root")]
+        (.removeProperty (.-style html) "--ls-native-kb-height"))
       (when-let [card-preview-el (js/document.querySelector ".cards-review")]
         (set! (.. card-preview-el -style -marginBottom) "0px"))
       (when-let [card-preview-el (js/document.querySelector ".encryption-password")]
@@ -703,6 +710,12 @@
                   opts))
    {:center? true :close-btn? false :close-backdrop? false}))
 
+(defmethod handle :modal/command-palette [_]
+  (state/set-modal!
+   #(command-palette/command-palette {:commands (cp/get-commands)})
+   {:fullscreen? false
+    :close-btn?  false}))
+
 (defmethod handle :journal/insert-template [[_ page-name]]
   (let [page-name (util/page-name-sanity-lc page-name)]
     (when-let [page (db/pull [:block/name page-name])]
@@ -913,6 +926,10 @@
                                 [:p (.-message error)]]))))]
                        [:p "Don't forget to re-index your graph when all the conflicts are resolved."]]
                       :status :error}]))
+
+(defmethod handle :run/cli-command [[_ command content]]
+  (when (and command (not (string/blank? content)))
+    (shell-handler/run-cli-command-wrapper! command content)))
 
 (defn run!
   []

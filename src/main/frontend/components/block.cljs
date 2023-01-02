@@ -298,7 +298,7 @@
           (assoc :style {:width (:width metadata)}))
         {})
       [:div.asset-container {:key "resize-asset-container"}
-       [:img.rounded-sm.shadow-xl.relative
+       [:img.rounded-sm.relative
         (merge
          {:loading "lazy"
           :src     src
@@ -530,27 +530,28 @@
 (defn open-page-ref
   [e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?]
   (util/stop e)
-  (cond
-    (gobj/get e "shiftKey")
-    (when-let [page-entity (db/entity [:block/name redirect-page-name])]
-      (state/sidebar-add-block!
-       (state/get-current-repo)
-       (:db/id page-entity)
-       :page))
+  (when (not (util/right-click? e))
+    (cond
+      (gobj/get e "shiftKey")
+      (when-let [page-entity (db/entity [:block/name redirect-page-name])]
+        (state/sidebar-add-block!
+         (state/get-current-repo)
+         (:db/id page-entity)
+         :page))
 
-    (whiteboard-handler/inside-portal? (.-target e))
-    (whiteboard-handler/add-new-block-portal-shape!
-     page-name
-     (whiteboard-handler/closest-shape (.-target e)))
+      (whiteboard-handler/inside-portal? (.-target e))
+      (whiteboard-handler/add-new-block-portal-shape!
+       page-name
+       (whiteboard-handler/closest-shape (.-target e)))
 
-    whiteboard-page?
-    (route-handler/redirect-to-whiteboard! page-name)
+      whiteboard-page?
+      (route-handler/redirect-to-whiteboard! page-name)
 
-    (not= redirect-page-name page-name)
-    (route-handler/redirect-to-page! redirect-page-name)
+      (not= redirect-page-name page-name)
+      (route-handler/redirect-to-page! redirect-page-name)
 
-    :else
-    (state/pub-event! [:page/create page-name-in-block]))
+      :else
+      (state/pub-event! [:page/create page-name-in-block])))
   (when (and contents-page?
              (util/mobile?)
              (state/get-left-sidebar-open?))
@@ -2236,6 +2237,7 @@
   (let [{:block/keys [title body] :as block} (if (:block/title block) block
                                                  (merge block (block/parse-title-and-body uuid format pre-block? content)))
         collapsed? (util/collapsed? block)
+        plugin-slotted? (and config/lsp-enabled? (state/slot-hook-exist? uuid))
         block-ref? (:block-ref? config)
         stop-events? (:stop-events? config)
         block-ref-with-title? (and block-ref? (seq title))
@@ -2274,13 +2276,14 @@
         [:div.warning.text-sm
          "Large block will not be editable or searchable to not slow down the app, please use another editor to edit this block."])
       [:div.flex.flex-row.justify-between.block-content-inner
-       [:div.flex-1.w-full
-        (cond
-          (seq title)
-          (build-block-title config block)
+       (when-not plugin-slotted?
+         [:div.flex-1.w-full
+          (cond
+            (seq title)
+            (build-block-title config block)
 
-          :else
-          nil)]
+            :else
+            nil)])
 
        (clock-summary-cp block body)]
 
@@ -2306,18 +2309,24 @@
                  (not= block-type :whiteboard-shape))
         (properties-cp config block))
 
-      (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
-        (when (and (not block-ref-with-title?)
-                   (seq body)
-                   (or (not title-collapse-enabled?)
-                       (and title-collapse-enabled? (not collapsed?))))
-         [:div.block-body
-          ;; TODO: consistent id instead of the idx (since it could be changed later)
-          (let [body (block/trim-break-lines! (:block/body block))]
-            (for [[idx child] (medley/indexed body)]
-              (when-let [block (markup-element-cp config child)]
-                (rum/with-key (block-child block)
-                  (str uuid "-" idx)))))]))
+      (if plugin-slotted?
+        [:div.block-slotted-body
+         (plugins/hook-block-slot
+          :block-content-slotted
+          (-> block (dissoc :block/children :block/page)))]
+
+        (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
+          (when (and (not block-ref-with-title?)
+                     (seq body)
+                     (or (not title-collapse-enabled?)
+                         (and title-collapse-enabled? (not collapsed?))))
+            [:div.block-body
+             ;; TODO: consistent id instead of the idx (since it could be changed later)
+             (let [body (block/trim-break-lines! (:block/body block))]
+               (for [[idx child] (medley/indexed body)]
+                 (when-let [block (markup-element-cp config child)]
+                   (rum/with-key (block-child block)
+                                 (str uuid "-" idx)))))])))
 
       (case (:block/warning block)
         :multiple-blocks
@@ -2378,7 +2387,8 @@
                                string/trim
                                block-ref/block-ref?)]
     (if (and edit? editor-box)
-      [:div.editor-wrapper {:id editor-id}
+      [:div.editor-wrapper
+       {:id editor-id}
        (ui/catch-error
         (ui/block-error "Something wrong in the editor" {})
         (editor-box {:block block
@@ -3606,8 +3616,8 @@
            (fn []
              (let [alias? (:block/alias? page)
                    page (db/entity (:db/id page))
-                   page-blocks' (tree/non-consecutive-blocks->vec-tree page-blocks)
-                   parent-blocks (group-by :block/parent page-blocks')]
+                   ;; FIXME: parents need to be sorted
+                   parent-blocks (group-by :block/parent page-blocks)]
                [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                             (:ref? config)
                             (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
@@ -3617,10 +3627,10 @@
                   (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
                  (for [[parent blocks] parent-blocks]
                    (let [blocks' (map #(update % :block/children (fn [col]
-                                                                   (tree/non-consecutive-blocks->vec-tree col 2))) blocks)]
+                                                                   (tree/non-consecutive-blocks->vec-tree col))) blocks)]
                      (rum/with-key
-                      (breadcrumb-with-container blocks' config)
-                      (:db/id parent))))
+                       (breadcrumb-with-container blocks' config)
+                       (:db/id parent))))
                  {:debug-id page})])))))]
 
      (and (:group-by-page? config)

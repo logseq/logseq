@@ -241,6 +241,9 @@
    :editor/select-all-blocks       {:binding "mod+shift+a"
                                     :fn      editor-handler/select-all-blocks!}
 
+   :editor/select-parent           {:binding "mod+a"
+                                    :fn      editor-handler/select-parent}
+
    :editor/zoom-in                 {:binding (if mac? "mod+." "alt+right")
                                     :fn      editor-handler/zoom-in!}
 
@@ -257,7 +260,7 @@
 
    :go/search                      {:binding "mod+k"
                                     :fn      #(do
-                                                (editor-handler/escape-editing)
+                                                (editor-handler/escape-editing false)
                                                 (route-handler/go-to-search! :global))}
 
    :go/electron-find-in-page       {:binding "mod+f"
@@ -301,7 +304,7 @@
    :command-palette/toggle         {:binding "mod+shift+p"
                                     :fn      #(do
                                                 (editor-handler/escape-editing)
-                                                (state/toggle! :ui/command-palette-open?))}
+                                                (state/pub-event! [:modal/command-palette]))}
 
    :graph/export-as-html           {:fn #(export-handler/export-repo-as-html!
                                           (state/get-current-repo))
@@ -499,8 +502,7 @@
 
     :shortcut.handler/editor-global
     (->
-     (build-category-map [:command/run
-                          :command-palette/toggle
+     (build-category-map [
                           :graph/export-as-html
                           :graph/open
                           :graph/remove
@@ -519,6 +521,7 @@
                           :editor/open-edit
                           :editor/select-block-up
                           :editor/select-block-down
+                          :editor/select-parent
                           :editor/delete-selection
                           :editor/expand-block-children
                           :editor/collapse-block-children
@@ -548,7 +551,9 @@
                           :go/forward
                           :search/re-index
                           :sidebar/open-today-page
-                          :sidebar/clear])
+                          :sidebar/clear
+                          :command/run
+                          :command-palette/toggle])
      (with-meta {:before m/prevent-default-behavior}))
 
     :shortcut.handler/misc
@@ -600,6 +605,7 @@
     :editor/indent
     :editor/outdent
     :editor/select-all-blocks
+    :editor/select-parent
     :go/search
     :go/search-in-page
     :go/electron-find-in-page
@@ -677,6 +683,7 @@
    :shortcut.category/block-selection
    [:editor/open-edit
     :editor/select-all-blocks
+    :editor/select-parent
     :editor/select-block-up
     :editor/select-block-down
     :editor/delete-selection]

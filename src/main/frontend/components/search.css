@@ -16,6 +16,14 @@
   padding-right: 12px;
 }
 
+.ls-search {
+  @apply flex flex-col overflow-auto;
+
+  > .search-results-wrap {
+    @apply flex-1 overflow-auto h-full;
+  }
+}
+
 .search-item svg {
   transform: scale(0.8);
 }

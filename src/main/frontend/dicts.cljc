@@ -109,7 +109,7 @@
         :page/open-with-default-app "Open with default app"
         :page/action-publish "Publish"
         :page/make-public "Make it public for publishing"
-        :page/version-history "Check page history"
+        :page/version-history "View page history"
         :page/open-backup-directory "Open page backups directory"
         :page/make-private "Make it private"
         :page/delete "Delete page"
@@ -3884,7 +3884,7 @@
         :help/community "Discord community"
         :help/awesome-logseq "Awesome Logseq"
         :help/shortcuts "キーボードショートカット"
-        :help/shortcuts-triggers "Triggers"
+        :help/shortcuts-triggers "トリガー"
         :help/shortcut "ショートカット"
         :help/slash-autocomplete "スラッシュで自動補完"
         :help/block-content-autocomplete "ブロックコンテンツの自動補完"
@@ -3986,6 +3986,13 @@
         :text/image "画像"
         :asset/confirm-delete "この {1} を削除してもよろしいですか？"
         :asset/physical-delete "ファイルも削除します（元に戻せないことにご注意ください）"
+        :color/gray "グレー"
+        :color/red "赤"
+        :color/yellow "黄"
+        :color/green "緑"
+        :color/blue "青"
+        :color/purple "紫"
+        :color/pink "ピンク"
         :content/copy "コピー"
         :content/cut "カット"
         :content/make-todos "Make {1}s"
@@ -4072,6 +4079,9 @@
         :graph/save "保存中..."
         :graph/save-success "保存に成功しました"
         :graph/save-error "保存に失敗しました"
+        :graph/all-graphs "全グラフ"
+        :graph/local-graphs "ローカルグラフ"
+        :graph/remote-graphs "リモートグラフ"
         :cards-view "カードを見る"
         :publishing "パブリッシング"
         :export "エクスポート"
@@ -4116,6 +4126,10 @@
         :white "ライト"
         :dark "ダーク"
         :remove-background "背景を消去"
+        :remove-heading "見出しを消去"
+        :heading "見出し {1}"
+        :auto-heading "自動見出し"
+        :not-available-in-mode "{1} モードでは利用できません"
         :open "開く"
         :open-a-directory "ローカルディレクトリを開く"
         :user/delete-account "アカウント削除"
@@ -4520,6 +4534,7 @@
         :on-boarding/new-graph-desc-5 "/logseq - yapılandırma, custom.css ve bazı meta veriler saklanır."
         :on-boarding/welcome-whiteboard-modal-title "Düşünceleriniz için yeni bir tuval."
         :on-boarding/welcome-whiteboard-modal-description "Beyaz tahtalar, fikir üretme ve düzenleme için harika bir araçtır. Şimdi bilgi tabanınızdaki düşüncelerinizi ya da yenilerini birbirleriyle yan yana getirerek, bağlantı kurabilir, ilişkilendirebilir ve yeni yöntemlerle anlayabilirsiniz."
+        :on-boarding/welcome-whiteboard-modal-skip "Atla"
         :on-boarding/welcome-whiteboard-modal-start "Beyaz tahtaya başla"
         :on-boarding/tour-whiteboard-home "{1} Beyaz tahtalarınız için giriş sayfasıdır"
         :on-boarding/tour-whiteboard-home-description "Beyaz tahtalar uygulamada kendi bölümlerine sahiptir ve onları bir bakışta görebilir, kolayca yenilerini oluşturabilir veya silebilirsiniz."
@@ -4632,6 +4647,7 @@
         :file/last-modified-at "Son değiştirilme tarihi"
         :file/no-data "Veri yok"
         :file/format-not-supported ".{1} biçimi desteklenmiyor."
+        :file/validate-existing-file-error "Sayfa, başka bir dosyayla zaten var: {1}, geçerli dosya: {2}. Lütfen bunlardan yalnızca birini saklayın ve grafınız için yeniden dizin oluşturun."
         :file-rn/re-index "Dosyalar yeniden adlandırıldıktan ve diğer cihazlarla eşitledikten sonra yeniden dizin oluşturma önerilir."
         :file-rn/need-action "Yeni biçime uyması için dosya yeniden adlandırma eylemleri önerilir. Yeniden adlandırılan dosyalar eşitlendiğinde tüm cihazlarda yeniden dizin oluşturma gerekir."
         :file-rn/or-select-actions " veya aşağıdaki dosyaları tek tek yeniden adlandırın, ardından "
@@ -4924,7 +4940,8 @@
 
         :conversion/non-desktop "Eski sürümlerdeki graf dizininin yeni biçime dönüştürülmesi gerekiyor.
           Lütfen dönüştürmeyi yapmak için masaüstü uygulamasını kullanın."
-        :conversion/write-filename-format "Gelen dosyalar için biçimi uygula"}
+        :conversion/write-filename-format "Gelen dosyalar için biçimi uygula"
+        :notification/clear-all "Tümünü temizle"}
 
    :ko {:tutorial/text #?(:cljs (rc/inline "tutorial-ko.md")
                           :default "tutorial-ko.md")

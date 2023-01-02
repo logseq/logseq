@@ -219,14 +219,16 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     bindings: Record<string, TLBinding>
   }) => {
     const commonBounds = BoundsUtils.getCommonBounds(
-      shapes.map(shape => ({
-        minX: shape.point?.[0] ?? point[0],
-        minY: shape.point?.[1] ?? point[1],
-        width: shape.size?.[0] ?? 4,
-        height: shape.size?.[1] ?? 4,
-        maxX: (shape.point?.[0] ?? point[0]) + (shape.size?.[0] ?? 4),
-        maxY: (shape.point?.[1] ?? point[1]) + (shape.size?.[1] ?? 4),
-      }))
+      shapes
+        .filter(s => s.type !== 'group')
+        .map(shape => ({
+          minX: shape.point?.[0] ?? point[0],
+          minY: shape.point?.[1] ?? point[1],
+          width: shape.size?.[0] ?? 4,
+          height: shape.size?.[1] ?? 4,
+          maxX: (shape.point?.[0] ?? point[0]) + (shape.size?.[0] ?? 4),
+          maxY: (shape.point?.[1] ?? point[1]) + (shape.size?.[1] ?? 4),
+        }))
     )
 
     const clonedShapes = shapes.map(shape => {
@@ -242,9 +244,9 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
 
     clonedShapes.forEach(s => {
       if (s.children && s.children?.length > 0) {
-        s.children = s.children.map(oldId => {
-          return clonedShapes[shapes.findIndex(s => s.id === oldId)].id
-        })
+        s.children = s.children
+          .map(oldId => clonedShapes[shapes.findIndex(s => s.id === oldId)]?.id)
+          .filter(isNonNullable)
       }
     })
 

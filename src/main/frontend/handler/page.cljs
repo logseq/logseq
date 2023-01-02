@@ -275,24 +275,25 @@
                       (str lhs new-tag)))))
 
 (defn- replace-property-ref!
-  [content old-name new-name]
+  [content old-name new-name format]
   (let [new-name (keyword (string/replace (string/lower-case new-name) #"\s+" "-"))
-        old-property (str old-name gp-property/colons)
-        new-property (str (name new-name) gp-property/colons)]
+        org-format? (= :org format)
+        old-property (if org-format? (gp-property/colons-org old-name) (str old-name gp-property/colons))
+        new-property (if org-format? (gp-property/colons-org (name new-name)) (str (name new-name) gp-property/colons))]
     (util/replace-ignore-case content old-property new-property)))
 
 (defn- replace-old-page!
   "Unsanitized names"
-  [content old-name new-name]
+  [content old-name new-name format]
   (when (and (string? content) (string? old-name) (string? new-name))
     (-> content
         (replace-page-ref! old-name new-name)
         (replace-tag-ref! old-name new-name)
-        (replace-property-ref! old-name new-name))))
+        (replace-property-ref! old-name new-name format))))
 
 (defn- walk-replace-old-page!
   "Unsanitized names"
-  [form old-name new-name]
+  [form old-name new-name format]
   (walk/postwalk (fn [f]
                    (cond
                      (and (vector? f)
@@ -305,7 +306,7 @@
                      (string? f)
                      (if (= f old-name)
                        new-name
-                       (replace-old-page! f old-name new-name))
+                       (replace-old-page! f old-name new-name format))
 
                      (and (keyword f) (= (name f) old-name))
                      (keyword (string/replace (string/lower-case new-name) #"\s+" "-"))
@@ -404,11 +405,11 @@
         page-ids (->> (map (fn [b]
                              {:db/id (:db/id (:block/page b))}) blocks)
                       (set))
-        tx       (->> (map (fn [{:block/keys [uuid content properties] :as block}]
-                             (let [content    (let [content' (replace-old-page! content old-original-name new-name)]
+        tx       (->> (map (fn [{:block/keys [uuid content properties format] :as block}]
+                             (let [content    (let [content' (replace-old-page! content old-original-name new-name format)]
                                                 (when-not (= content' content)
                                                   content'))
-                                   properties (let [properties' (walk-replace-old-page! properties old-original-name new-name)]
+                                   properties (let [properties' (walk-replace-old-page! properties old-original-name new-name format)]
                                                 (when-not (= properties' properties)
                                                   properties'))]
                                (when (or content properties)

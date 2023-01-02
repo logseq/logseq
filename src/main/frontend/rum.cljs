@@ -12,10 +12,7 @@
 (defn kebab-case->camel-case
   "Converts from kebab case to camel case, eg: on-click to onClick"
   [input]
-  (let [words (s/split input #"-")
-        capitalize (->> (rest words)
-                        (map #(apply str (s/upper-case (first %)) (rest %))))]
-    (apply str (first words) capitalize)))
+  (s/replace input #"-([a-z])" (fn [[_ c]] (s/upper-case c))))
 
 (defn map-keys->camel-case
   "Stringifys all the keys of a cljs hashmap and converts them

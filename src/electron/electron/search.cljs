@@ -5,7 +5,8 @@
             ["better-sqlite3" :as sqlite3]
             [clojure.string :as string]
             ["electron" :refer [app]]
-            [electron.logger :as logger]))
+            [electron.logger :as logger]
+            [medley.core :as medley]))
 
 (defonce databases (atom nil))
 
@@ -240,13 +241,7 @@
 
 (defn distinct-by
   [f col]
-  (reduce
-   (fn [acc x]
-     (if (some #(= (f x) (f %)) acc)
-       acc
-       (vec (conj acc x))))
-   []
-   col))
+  (medley/distinct-by f (seq col)))
 
 (defn search-blocks
   ":page - the page to specificly search on"

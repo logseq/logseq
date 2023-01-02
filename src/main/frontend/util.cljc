@@ -27,7 +27,8 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [clojure.core.async :as async]
-            [cljs.core.async.impl.channels :refer [ManyToManyChannel]]))
+            [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
+            [medley.core :as medley]))
   (:require
    [clojure.pprint]
    [clojure.string :as string]
@@ -80,32 +81,40 @@
        (sanitizeFilename (str s)))))
 
 #?(:cljs
-   (defn ios?
-     []
-     (utils/ios)))
+   (do
+     (defn- ios*?
+       []
+       (utils/ios))
+     (def ios? (memoize ios*?))))
 
 #?(:cljs
-   (defn safari?
-     []
-     (let [ua (string/lower-case js/navigator.userAgent)]
-       (and (string/includes? ua "webkit")
-            (not (string/includes? ua "chrome"))))))
+   (do
+     (defn- safari*?
+       []
+       (let [ua (string/lower-case js/navigator.userAgent)]
+         (and (string/includes? ua "webkit")
+              (not (string/includes? ua "chrome")))))
+     (def safari? (memoize safari*?))))
 
 #?(:cljs
-   (defn mobile?
-     "Triggering condition: Mobile phones
+   (do
+     (defn- mobile*?
+       "Triggering condition: Mobile phones
         *** Warning!!! ***
         For UX logic only! Don't use for FS logic
         iPad / Android Pad doesn't trigger!"
-     []
-     (when-not node-test?
-       (safe-re-find #"Mobi" js/navigator.userAgent))))
+       []
+       (when-not node-test?
+         (safe-re-find #"Mobi" js/navigator.userAgent)))
+     (def mobile? (memoize mobile*?))))
 
 #?(:cljs
-   (defn electron?
-     []
-     (when (and js/window (gobj/get js/window "navigator"))
-       (gstring/caseInsensitiveContains js/navigator.userAgent " electron"))))
+   (do
+     (defn- electron*?
+       []
+       (when (and js/window (gobj/get js/window "navigator"))
+         (gstring/caseInsensitiveContains js/navigator.userAgent " electron")))
+     (def electron? (memoize electron*?))))
 
 #?(:cljs
    (defn mocked-open-dir-path
@@ -471,30 +480,17 @@
   [s substr]
   (string/starts-with? s substr))
 
-(defn distinct-by
-  [f col]
-  (reduce
-   (fn [acc x]
-     (if (some #(= (f x) (f %)) acc)
-       acc
-       (vec (conj acc x))))
-   []
-   col))
 
-(defn distinct-by-last-wins
-  [f col]
-  (reduce
-   (fn [acc x]
-     (if (some #(= (f x) (f %)) acc)
-       (mapv
-        (fn [v]
-          (if (= (f x) (f v))
-            x
-            v))
-        acc)
-       (vec (conj acc x))))
-   []
-   col))
+#?(:cljs
+   (defn distinct-by
+     [f col]
+     (medley/distinct-by f (seq col))))
+
+#?(:cljs
+   (defn distinct-by-last-wins
+     [f col]
+     {:pre [(sequential? col)]}
+     (reverse (distinct-by f (reverse col)))))
 
 (defn get-git-owner-and-repo
   [repo-url]
@@ -1040,7 +1036,7 @@
 
 #?(:clj
    (defmacro with-time
-     "Evaluates expr and prints the time it took. 
+     "Evaluates expr and prints the time it took.
       Returns the value of expr and the spent time of float number in msecs."
      [expr]
      `(let [start# (cljs.core/system-time)
