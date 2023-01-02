@@ -14,7 +14,6 @@
             [cljs.reader :as reader]
             [clojure.core.async :as async]
             [clojure.string :as string]
-            [clojure.string :as str]
             [electron.backup-file :as backup-file]
             [electron.configs :as cfgs]
             [electron.file-sync-rsapi :as rsapi]
@@ -29,8 +28,7 @@
             [electron.state :as state]
             [electron.utils :as utils]
             [electron.window :as win]
-            [promesa.core :as p]
-            [datascript.impl.entity :as e]))
+            [promesa.core :as p]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -186,7 +184,7 @@
  ;; Message parsed as "Error: $ERROR_CODE$: $REASON$, function '$$'"
  (re-matches #"(?:\w+\: )(.+)(?::)(.+)(?:, \w+ ')(.+)(?:')")
  rest
- (#(str (str/capitalize (second %)) " for path: " (nth % 2) " (Code: " (first %) ")"))))
+ (#(str (string/capitalize (second %)) " for path: " (nth % 2) " (Code: " (first %) ")"))))
 
 (defmethod handle :openDir [^js window _messages]
   (logger/info ::open-dir "open folder selection dialog")
