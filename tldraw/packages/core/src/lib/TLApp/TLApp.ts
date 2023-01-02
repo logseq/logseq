@@ -69,7 +69,6 @@ export class TLApp<
     if (Shapes) this.registerShapes(Shapes)
     if (Tools) this.registerTools(Tools)
     this.history.resume()
-    if (serializedApp) this.history.deserialize(serializedApp)
     this.api = new TLApi(this)
     makeObservable(this)
     this.notify('mount', null)
@@ -250,7 +249,6 @@ export class TLApp<
   /* -------------------------------------------------- */
 
   loadDocumentModel(model: TLDocumentModel<S>): this {
-    this.history.deserialize(model)
     if (model.assets && model.assets.length > 0) this.addAssets(model.assets)
 
     return this
