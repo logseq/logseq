@@ -1035,6 +1035,7 @@ export class TLApp<
 
     // Switch to select on right click to enable contextMenu state
     if (e.button === 2 && !this.editingShape) {
+      e.preventDefault()
       this.transition('select')
       return
     }
