@@ -11,7 +11,7 @@
 (defn updated-page-hook
   [tx-report page]
   (when-not (get-in tx-report [:tx-meta :created-from-journal-template?])
-    (file/sync-to-file page)))
+    (file/sync-to-file page (:outliner-op (:tx-meta tx-report)))))
 
 ;; TODO: it'll be great if we can calculate the :block/path-refs before any
 ;; outliner transaction, this way we can group together the real outliner tx
