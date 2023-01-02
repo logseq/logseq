@@ -169,13 +169,14 @@ And here is a list of some [good first issues](https://github.com/logseq/logseq/
     <a href="https://opencollective.com/logseq" alt="Backers on Open Collective">
         <img src="https://opencollective.com/logseq/tiers/backers.svg?avatarHeight=38&width=600"/></a>
 </p>
-<p align="center">
-    <a href="https://jetbrains.com" alt="JetBrains">
-        <img src="docs/assets/jetbrains.svg"/></a>
-</p>
 
 ## 🌟 Our Contributors
 <p align="center">
     <a href="https://github.com/logseq/logseq/graphs/contributors">
         <img src="https://contrib.rocks/image?repo=logseq/logseq&max=300&columns=14" width="600"/></a>
+</p>
+
+<p align="center">
+    <a href="https://jetbrains.com" alt="JetBrains">
+        <img src="docs/assets/jetbrains.svg"/></a>
 </p>
