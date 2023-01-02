@@ -497,7 +497,7 @@
     [:div.cp__palette.cp__palette-main
      [:div.ls-search.p-2.md:p-0
       [:div.input-wrap
-      [:input.cp__palette-input.w-full
+      [:input.cp__palette-input.w-full.h-full
        {:type          "text"
         :auto-focus    true
         :placeholder   (case search-mode
