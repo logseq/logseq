@@ -1,34 +1,36 @@
 (ns electron.handler
   "This ns starts the event handling for the electron main process and defines
   all the application-specific event types"
-  (:require ["electron" :refer [ipcMain dialog app autoUpdater shell]]
-            [cljs-bean.core :as bean]
-            ["fs" :as fs]
-            ["buffer" :as buffer]
-            ["fs-extra" :as fs-extra]
-            ["path" :as path]
-            ["os" :as os]
-            ["diff-match-patch" :as google-diff]
-            ["/electron/utils" :as js-utils]
+  (:require ["/electron/utils" :as js-utils]
             ["abort-controller" :as AbortController]
-            [electron.shell :as shell]
-            [electron.fs-watcher :as watcher]
-            [electron.configs :as cfgs]
-            [promesa.core :as p]
-            [clojure.string :as string]
-            [electron.utils :as utils]
-            [electron.logger :as logger]
-            [electron.state :as state]
-            [clojure.core.async :as async]
-            [electron.search :as search]
-            [electron.git :as git]
-            [electron.plugin :as plugin]
-            [electron.window :as win]
-            [electron.file-sync-rsapi :as rsapi]
-            [electron.backup-file :as backup-file]
+            ["buffer" :as buffer]
+            ["diff-match-patch" :as google-diff]
+            ["electron" :refer [app autoUpdater dialog ipcMain shell]]
+            ["fs" :as fs]
+            ["fs-extra" :as fs-extra]
+            ["os" :as os]
+            ["path" :as path]
+            [cljs-bean.core :as bean]
             [cljs.reader :as reader]
+            [clojure.core.async :as async]
+            [clojure.string :as string]
+            [clojure.string :as str]
+            [electron.backup-file :as backup-file]
+            [electron.configs :as cfgs]
+            [electron.file-sync-rsapi :as rsapi]
+            [electron.find-in-page :as find]
+            [electron.fs-watcher :as watcher]
+            [electron.git :as git]
+            [electron.logger :as logger]
+            [electron.plugin :as plugin]
+            [electron.search :as search]
             [electron.server :as server]
-            [electron.find-in-page :as find]))
+            [electron.shell :as shell]
+            [electron.state :as state]
+            [electron.utils :as utils]
+            [electron.window :as win]
+            [promesa.core :as p]
+            [datascript.impl.entity :as e]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -177,12 +179,28 @@
           result (get (js->clj result) "filePaths")]
     (p/resolved (first result))))
 
-(defmethod handle :openDir [^js _window _messages]
+(defn- pretty-print-js-error [e]
+(->>
+ e
+ str
+ ;; Message parsed as "Error: $ERROR_CODE$: $REASON$, function '$$'"
+ (re-matches #"(?:\w+\: )(.+)(?::)(.+)(?:, \w+ ')(.+)(?:')")
+ rest
+ (#(str (str/capitalize (second %)) " for path: " (nth % 2) " (Code: " (first %) ")"))))
+
+(defmethod handle :openDir [^js window _messages]
   (logger/info ::open-dir "open folder selection dialog")
   (p/let [path (open-dir-dialog)]
     (logger/debug ::open-dir {:path path})
     (if path
-      (p/resolved (bean/->js (get-files path)))
+      (try
+        (p/resolved (bean/->js (get-files path)))
+        (catch js/Error e 
+          (do
+            (utils/send-to-renderer window "notification" {:type "error"
+                                                           :payload (str "Opening the specified directory failed.\n" (pretty-print-js-error e))})
+            (p/rejected e))))
+
       (p/rejected (js/Error "path empty")))))
 
 (defmethod handle :getFiles [_window [_ path]]
