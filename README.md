@@ -10,6 +10,15 @@
     A privacy-first, open-source platform for knowledge management and collaboration
 </h4>
 
+
+<div align="center">
+    <a href="https://logseq.com">Home Page</a> |
+    <a href="https://blog.logseq.com/">Blog</a> |
+    <a href="https://docs.logseq.com/">Documentation</a> | 
+    <a href="https://trello.com/b/8txSM12G/roadmap">Roadmap</a>
+</div>
+<br></br>
+
 <p align="center">
     <a href="https://github.com/logseq/logseq/releases/latest/">
         <img src="https://img.shields.io/badge/Download_Logseq-100000?style=for-the-badge&logo=flatpak&logoColor=white&labelColor=002b36&color=85c8c8"
