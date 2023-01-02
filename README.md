@@ -1,10 +1,33 @@
 <!-- logo -->
-
 <p align="center">
     <a href="https://logseq.com" alt="Logseq Website">
     <img src="https://raw.githubusercontent.com/logseq/logseq/master/resources/icon.png?sanitize=true" height="173"/></a>
 </p>
+
 <h1 align="center"> Logseq </h1>
+
+<h4 align="center">
+    A privacy-first, open-source platform for knowledge management and collaboration
+</h4>
+
+<p align="center">
+    <a href="https://github.com/logseq/logseq/releases/latest/">
+        <img src="https://img.shields.io/badge/Download_Logseq-100000?style=for-the-badge&logo=flatpak&logoColor=white&labelColor=002b36&color=85c8c8"
+            alt="Download Logseq"/></a>
+</p>
+
+<!-- social badges -->
+<p align="center">
+    <a href="https://discuss.logseq.com">
+        <img src="https://img.shields.io/badge/forum-Logseq-blue.svg?&color=%2385c8c8&logo=discourse&logoColor=%2385c8c8&style=for-the-badge"
+            alt="forum"></a>
+    <a href="https://discord.gg/KpN4eHY">
+        <img src="https://img.shields.io/discord/725182569297215569?color=%2385c8c8&label=Discord&logo=discord&logoColor=%2385c8c8&style=for-the-badge"
+            alt="chat on Discord"></a>
+    <a href="https://twitter.com/intent/follow?screen_name=logseq">
+        <img src="https://img.shields.io/twitter/follow/logseq?color=%2385c8c8&label=%40logseq&logo=twitter&logoColor=%2385c8c8&style=for-the-badge"
+            alt="follow on Twitter"></a>
+</p>
 
 <!-- dev badges -->
 <p align="center">
@@ -20,49 +43,32 @@
         <img src="https://img.shields.io/github/v/release/logseq/logseq?color=%2385c8c8&style=for-the-badge"
             alt="latest release version"></a>
 </p>
-<!-- social badges -->
-<p align="center">
-    <a href="https://discuss.logseq.com">
-        <img src="https://img.shields.io/badge/forum-Logseq-blue.svg?&color=%2385c8c8&logo=discourse&logoColor=%2385c8c8&style=for-the-badge"
-            alt="forum"></a>
-    <a href="https://discord.gg/KpN4eHY">
-        <img src="https://img.shields.io/discord/725182569297215569?color=%2385c8c8&label=Discord&logo=discord&logoColor=%2385c8c8&style=for-the-badge"
-            alt="chat on Discord"></a>
-    <a href="https://twitter.com/intent/follow?screen_name=logseq">
-        <img src="https://img.shields.io/twitter/follow/logseq?color=%2385c8c8&label=%40logseq&logo=twitter&logoColor=%2385c8c8&style=for-the-badge"
-            alt="follow on Twitter"></a>
-</p>
 
-<p align="center">
-    A local-first, non-linear, outliner notebook for organizing and sharing your personal knowledge base
-    <br></br>
-    Use it to organize your todo list, to write your journals, or to record your unique life
-    <br></br>
-    <a href="https://github.com/logseq/logseq/releases">
-        <img src="https://img.shields.io/github/downloads/logseq/logseq/total?color=85c8c8&label=Download%20Logseq%20Desktop%20App&style=for-the-badge"
-            alt="Download Logseq"></a>
-    <br></br>
-    <a href="https://www.producthunt.com/posts/logseq?utm_source=badge-review&utm_medium=badge&utm_souce=badge-logseq#discussion-body"
-        target="_blank"><img
-            src="https://api.producthunt.com/widgets/embed-image/v1/review.svg?post_id=298158&theme=dark"
-            alt="Logseq - Your joyful, private digital garden | Product Hunt" style="width: 250px; height: 54px;"
-            width="250" height="54"/></a>
-</p>
+<br></br>
 
 ## 🤔 Why Logseq?
+<a href="https://www.producthunt.com/posts/logseq?utm_source=badge-review&utm_medium=badge&utm_souce=badge-logseq#discussion-body"
+    target="_blank"><img
+        src="https://api.producthunt.com/widgets/embed-image/v1/review.svg?post_id=298158&theme=dark"
+        align="right"
+        alt="Logseq - Your joyful, private digital garden | Product Hunt" style="width: 250px; height: 54px;"
+        width="250" height="54"/></a>
+
 [Logseq](https://logseq.com) is a platform for knowledge management and collaboration. It focuses on privacy, longevity,
 and [user control](https://www.gnu.org/philosophy/free-sw.en.html).
-
 The server will **never** store or analyze your private notes. Your data are plain text files and we currently support both
 Markdown and Emacs Org mode (more to be added soon). In the unlikely event that the website is down or cannot be maintained, your data is, and will always be yours.
 
 ![Image of logseq](https://cdn.logseq.com/%2F8b9a461d-437e-4ca5-a2da-18b51077b5142020_07_25_Screenshot%202020-07-25%2013-29-49%20%2B0800.png?Expires=4749255017&Signature=Qbx6jkgAytqm6nLxVXQQW1igfcf~umV1OcG6jXUt09TOVhgXyA2Z5jHJ3AGJASNcphs31pZf4CjFQ5mRCyVKw6N8wb8Nn-MxuTJl0iI8o-jLIAIs9q1v-2cusCvuFfXH7bq6ir8Lpf0KYAprzuZ00FENin3dn6RBW35ENQwUioEr5Ghl7YOCr8bKew3jPV~OyL67MttT3wJig1j3IC8lxDDT8Ov5IMG2GWcHERSy00F3mp3tJtzGE17-OUILdeuTFz6d-NDFAmzB8BebiurYz0Bxa4tkcdLUpD5ToFHU08jKzZExoEUY8tvaZ1-t7djmo3d~BAXDtlEhC2L1YC2aVQ__&Key-Pair-Id=APKAJE5CCD6X7MP6PTEA)
 
 
+<a href="https://github.com/logseq/logseq/releases/latest/">
+        <img src="https://img.shields.io/badge/Download_Logseq-100000?style=for-the-badge&logo=flatpak&logoColor=white&labelColor=002b36&color=85c8c8"
+            align="right"
+            alt="Download Logseq"/></a>
+
 ## How can I use it?
-1. <a href="https://github.com/logseq/logseq/releases">
-    <img src="https://img.shields.io/github/downloads/logseq/logseq/total?color=85c8c8&label=Download%20Logseq%20Desktop%20App"
-        alt="Download Logseq"></a>
+1. [Download logseq](https://github.com/logseq/logseq/releases/latest)
 2. Start writing and have fun! 🎉
 
 Checkout our docs! [docs.logseq.com](https://docs.logseq.com/#/page/Contents) 👀
