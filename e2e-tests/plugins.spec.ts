@@ -50,8 +50,15 @@ test('exported host apis', async ({ page }) => {
   await expect(pluginFlag.locator('text=Plugins')).toBeVisible()
   await expect(pluginFlag.locator('text=Settings')).toBeVisible()
 
+  await page.locator('text=goto-today').click()
+  await page.locator('body').click()
+
+  const goToToday = page.locator('#logseq-journals-calendar--goto-today').locator('a.button')
+  await expect(goToToday).toBeVisible()
+  await goToToday.click()
+
   // TODO: debug
-  await expect(page.locator('.just-test-wait')).toBeVisible()
+  await expect(page.locator('body[data-page="page"]')).toBeVisible()
 })
 
 /**
