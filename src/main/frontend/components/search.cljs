@@ -370,7 +370,7 @@
                  [{:type :graph-add-filter}]
                  result)
         repo (state/get-current-repo)]
-    [:div
+    [:div.results-inner
      (ui/auto-complete
       result
       {:class "search-results"
