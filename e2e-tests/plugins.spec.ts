@@ -6,17 +6,15 @@ test('enabled plugin system default', async ({ page }) => {
 
   const pluginEnabled = await callAPI('get_state_from_store', 'plugin/enabled')
   await expect(pluginEnabled).toBe(true)
-})
-
-test('exported host apis', async ({ page }) => {
-  const callAPI = callPageAPI.bind(null, page)
 
   expect(await page.evaluate(`typeof logseq.api.get_current_graph`))
     .toBe('function')
 
   const currentGraph = await callAPI('get_current_graph')
   expect(Object.keys(currentGraph)).toEqual(['url', 'name', 'path'])
+})
 
+test('play a plugin<logseq-journals-calendar> from the Marketplace', async ({ page }) => {
   await page.keyboard.press('t+p')
   const searchInput = page.locator('.search-ctls .form-input')
   await searchInput.type('journals')
