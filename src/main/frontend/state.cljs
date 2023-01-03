@@ -145,6 +145,7 @@
      ;; either :up or :down, defaults to down
      ;; used to determine selection direction when two or more blocks are selected
      :selection/direction                   :down
+     :selection/selected-all?               false
      :custom-context-menu/show?             false
      :custom-context-menu/links             nil
      :custom-context-menu/position          nil
@@ -160,6 +161,7 @@
      :electron/updater-pending?             false
      :electron/updater                      {}
      :electron/user-cfgs                    nil
+     :electron/server                       nil
 
      ;; assets
      :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)
@@ -633,6 +635,7 @@ Similar to re-frame subscriptions"
 (defn- get-selected-block-ids
   [blocks]
   (->> blocks
+       (remove nil?)
        (keep #(when-let [id (dom/attr % "blockid")]
                 (uuid id)))
        (distinct)))
@@ -950,7 +953,7 @@ Similar to re-frame subscriptions"
    (set-selection-blocks! blocks :down))
   ([blocks direction]
    (when (seq blocks)
-     (let [blocks (util/sort-by-height blocks)]
+     (let [blocks (util/sort-by-height (remove nil? blocks))]
        (swap! state assoc
              :selection/mode true
              :selection/blocks blocks
@@ -966,11 +969,13 @@ Similar to re-frame subscriptions"
          :selection/mode false
          :selection/blocks nil
          :selection/direction :down
-         :selection/start-block nil))
+         :selection/start-block nil
+         :selection/selected-all? false))
 
 (defn get-selection-blocks
   []
-  (:selection/blocks @state))
+  (->> (:selection/blocks @state)
+       (remove nil?)))
 
 (defn get-selection-block-ids
   []
@@ -1852,6 +1857,11 @@ Similar to re-frame subscriptions"
 (defn get-last-key-code
   []
   (:editor/last-key-code @state))
+
+(defn feature-http-server-enabled?
+  []
+  (and (developer-mode?)
+       (storage/get ::storage-spec/http-server-enabled)))
 
 (defn get-plugin-by-id
   [id]

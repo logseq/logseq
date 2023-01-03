@@ -187,7 +187,7 @@
           {:key      "Open in sidebar"
            :on-click (fn [_e]
                        (editor-handler/open-block-in-sidebar! block-id))}
-          "Open in sidebar"
+          (t :content/open-in-sidebar)
           ["⇧" "click"])
 
          [:hr.menu-separator]
@@ -196,14 +196,14 @@
           {:key      "Copy block ref"
            :on-click (fn [_e]
                        (editor-handler/copy-block-ref! block-id block-ref/->block-ref))}
-          "Copy block ref"
+          (t :content/copy-block-ref)
           nil)
 
          (ui/menu-link
           {:key      "Copy block embed"
            :on-click (fn [_e]
                        (editor-handler/copy-block-ref! block-id #(util/format "{{embed ((%s))}}" %)))}
-          "Copy block embed"
+          (t :content/copy-block-emebed)
           nil)
 
           ;; TODO Logseq protocol mobile support
