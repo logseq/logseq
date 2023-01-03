@@ -648,9 +648,9 @@
                                          (->>
                                           (for [namespace-page (gp-util/split-namespace-pages page-original-name)]
                                             (when (and (string? namespace-page) namespace-page)
-                                              (let [label (second (gp-util/split-last "/" namespace-page))]
+                                              (let [label (second (gp-util/split-last model/ns-char namespace-page))]
                                                 (page-reference false namespace-page {:preview? true} label))))
-                                          (interpose [:span.mx-2.opacity-30 "/"]))]
+                                          (interpose [:span.mx-2.opacity-30 model/ns-char]))]
                                         [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
                                                                  page-original-name
                                                                  [:span
