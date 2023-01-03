@@ -29,6 +29,7 @@
        {:class        (util/classnames [{:form-input (not (contains? #{:color :range} input-as))}])
         :type         (name input-as)
         :defaultValue (or val default)
+        :on-key-down  #(.stopPropagation %)
         :on-change    (debounce #(update-setting! key (util/evalue %)) 1000)}])]])
 
 (rum/defc render-item-toggle
@@ -87,19 +88,19 @@
 
 (rum/defc settings-container
   [schema ^js pl]
-  (let [^js _settings (.-settings pl)
+  (let [^js plugin-settings (.-settings pl)
         pid (.-id pl)
-        [settings, set-settings] (rum/use-state (bean/->clj (.toJSON _settings)))
-        update-setting! (fn [k v] (.set _settings (name k) (bean/->js v)))]
+        [settings, set-settings] (rum/use-state (bean/->clj (.toJSON plugin-settings)))
+        update-setting! (fn [k v] (.set plugin-settings (name k) (bean/->js v)))]
 
     (rum/use-effect!
-      (fn []
-        (let [on-change (fn [^js s]
-                          (when-let [s (bean/->clj s)]
-                            (set-settings s)))]
-          (.on _settings "change" on-change)
-          #(.off _settings "change" on-change)))
-      [pid])
+     (fn []
+       (let [on-change (fn [^js s]
+                         (when-let [s (bean/->clj s)]
+                           (set-settings s)))]
+         (.on plugin-settings "change" on-change)
+         #(.off plugin-settings "change" on-change)))
+     [pid])
 
     (if (seq schema)
       [:div.cp__plugins-settings-inner

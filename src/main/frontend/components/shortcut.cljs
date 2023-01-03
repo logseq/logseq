@@ -48,7 +48,7 @@
 (rum/defc shortcut-col [k binding configurable? action-name]
   (let [conflict?         (dh/potential-conflict? k)
         displayed-binding (dh/binding-for-display k binding)
-        disabled?         (clojure.string/includes? displayed-binding "system default")]
+        disabled?         (str/includes? displayed-binding "system default")]
     (if (not configurable?)
       [:td.text-right displayed-binding]
       [:td.text-right
@@ -79,7 +79,7 @@
          [:th.text-right]]]
        [:tbody
         (map (fn [[k {:keys [binding]}]]
-               [:tr {:key k}
+               [:tr {:key (str k)}
                 [:td.text-left (t (dh/decorate-namespace k))]
                 (shortcut-col k binding configurable? (t (dh/decorate-namespace k)))])
           (dh/binding-by-category name))]]])))
@@ -168,9 +168,10 @@
         list)]]))
 
 (rum/defc shortcut
-  []
+  [{:keys [show-title?]
+    :or {show-title? true}}]
   [:div
-   [:h1.title (t :help/shortcut-page-title)]
+   (when show-title? [:h1.title (t :help/shortcut-page-title)])
    (trigger-table)
    (markdown-and-orgmode-syntax)
    (shortcut-table :shortcut.category/basics true)

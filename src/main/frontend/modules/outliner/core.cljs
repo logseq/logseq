@@ -48,7 +48,7 @@
      db/pull
      block)))
 
-(defn- block-with-timestamps
+(defn block-with-timestamps
   [block]
   (let [updated-at (util/time-ms)
         block (cond->
@@ -158,12 +158,24 @@
                                       db-schema/retract-attributes)))))
 
         (when-let [e (:block/page block-entity)]
-          (let [m {:db/id (:db/id e)
+          (let [m' {:db/id (:db/id e)
                    :block/updated-at (util/time-ms)}
-                m (if (:block/created-at e)
-                    m
-                    (assoc m :block/created-at (util/time-ms)))]
-            (swap! txs-state conj m))
+                m' (if (:block/created-at e)
+                    m'
+                    (assoc m' :block/created-at (util/time-ms)))
+                m' (if (or (:block/pre-block? block-entity)
+                           (:block/pre-block? m))
+                     (let [properties (:block/properties m)
+                           alias (set (:alias properties))
+                           tags (set (:tags properties))
+                           alias (map (fn [p] {:block/name (util/page-name-sanity-lc p)}) alias)
+                           tags (map (fn [p] {:block/name (util/page-name-sanity-lc p)}) tags)]
+                       (assoc m'
+                              :block/alias alias
+                              :block/tags tags
+                              :block/properties properties))
+                     m')]
+            (swap! txs-state conj m'))
           (remove-orphaned-page-refs! (:db/id block-entity) txs-state old-refs new-refs)))
 
       (swap! txs-state conj (dissoc m :db/other-tx))
@@ -194,8 +206,16 @@
                                                  (assoc :block/left parent))))
                                            immediate-children)))
                     txs))
-                txs)]
-      (swap! txs-state concat txs)
+                txs)
+          page-tx (let [block (db/entity [:block/uuid block-id])]
+                    (when (:block/pre-block? block)
+                      (let [id (:db/id (:block/page block))]
+                        [[:db/retract id :block/properties]
+                         [:db/retract id :block/properties-order]
+                         [:db/retract id :block/properties-text-values]
+                         [:db/retract id :block/alias]
+                         [:db/retract id :block/tags]])))]
+      (swap! txs-state concat txs page-tx)
       block-id))
 
   (-get-children [this]
@@ -247,9 +267,28 @@
           (recur (rest blocks) (first blocks))
           matched)))))
 
-(defn- compute-block-parent
-  [block parent target-block prev-hop top-level? sibling? get-new-id]
+(defn- get-id
+  [x]
   (cond
+    (map? x)
+    (:db/id x)
+
+    (vector? x)
+    (second x)
+
+    :else
+    x))
+
+(defn- compute-block-parent
+  [block parent target-block prev-hop top-level? sibling? get-new-id outliner-op replace-empty-target? idx]
+  (cond
+    ;; replace existing block
+    (and (= outliner-op :paste)
+         replace-empty-target?
+         (string/blank? (:block/content target-block))
+         (zero? idx))
+    (get-id (:block/parent target-block))
+
     prev-hop
     (:db/id (:block/parent prev-hop))
 
@@ -435,7 +474,7 @@
                                                  (not= (:block/parent block) (:block/parent target-block)))
                            prev-hop (if outdented-block? (find-outdented-block-prev-hop block blocks) nil)
                            left-exists-in-blocks? (contains? ids (:db/id (:block/left block)))
-                           parent (compute-block-parent block parent target-block prev-hop top-level? sibling? get-new-id)
+                           parent (compute-block-parent block parent target-block prev-hop top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
                            left (compute-block-left blocks block left target-block prev-hop idx replace-empty-target? left-exists-in-blocks? get-new-id)]
                        (cond->
                          (merge block {:block/uuid uuid
@@ -462,7 +501,7 @@
       `replace-empty-target?`: If the `target-block` is an empty block, whether
                                to replace it, it defaults to be `false`.
     ``"
-  [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target?]}]
+  [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target?] :as opts}]
   {:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]}
   (let [target-block' (db/pull (:db/id target-block))
@@ -491,8 +530,12 @@
         tx (insert-blocks-aux blocks' target-block' insert-opts)]
     (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/left b)))) tx)
       (do
-        (state/pub-event! [:instrument {:type :outliner/invalid-structure
-                                        :payload {:data (mapv #(dissoc % :block/content) tx)}}])
+        (state/pub-event! [:capture-error {:error "Outliner invalid structure"
+                                           :payload {:type :outliner/invalid-structure
+                                                     :blocks blocks
+                                                     :target-block target-block'
+                                                     :opt opts
+                                                     :data (mapv #(dissoc % :block/content) tx)}}])
         (throw (ex-info "Invalid outliner data"
                         {:opts insert-opts
                          :tx (vec tx)

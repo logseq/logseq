@@ -1,4 +1,5 @@
 (ns frontend.fs.watcher-handler
+  "Main ns that handles file watching events from electron's main process"
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
@@ -6,15 +7,19 @@
             [frontend.handler.editor :as editor]
             [frontend.handler.file :as file-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util.block-ref :as block-ref]
+            [frontend.mobile.util :as mobile-util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.state :as state]
-            [frontend.encrypt :as encrypt]
-            [frontend.fs :as fs]))
+            [frontend.fs :as fs]
+            [frontend.fs.capacitor-fs :as capacitor-fs]
+            [frontend.util.fs :as fs-util]
+            [frontend.util :as util]
+            [clojure.set :as set]))
 
 ;; all IPC paths must be normalized! (via gp-util/path-normalize)
 
@@ -24,7 +29,7 @@
     (doseq [block-id (block-ref/get-all-block-ref-ids content)]
       (when-let [block (try
                          (model/get-block-by-uuid block-id)
-                         (catch js/Error _e
+                         (catch :default _e
                            nil))]
         (let [id-property (:id (:block/properties block))]
           (when-not (= (str id-property) (str block-id))
@@ -45,16 +50,18 @@
     (db/set-file-last-modified-at! repo path mtime)))
 
 (defn handle-changed!
-  [type {:keys [dir path content stat] :as payload}]
+  [type {:keys [dir path content stat global-dir] :as payload}]
   (when dir
     (let [path (gp-util/path-normalize path)
-          repo (config/get-local-repo dir)
-          pages-metadata-path (config/get-pages-metadata-path)
+          path (if (mobile-util/native-platform?)
+                 (capacitor-fs/normalize-file-protocol-path nil path)
+                 path)
+          ;; Global directory events don't know their originating repo so we rely
+          ;; on the client to correctly identify it
+          repo (if global-dir (state/get-current-repo) (config/get-local-repo dir))
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
-      (when (and (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
-                 (not (encrypt/content-encrypted? content))
-                 (not (:encryption/graph-parsing? @state/state)))
+      (when (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
         (cond
           (and (= "unlinkDir" type) dir)
           (state/pub-event! [:graph/dir-gone dir])
@@ -66,8 +73,7 @@
           nil
 
           (and (= "add" type)
-               (not= (string/trim content) (string/trim db-content))
-               (not= path pages-metadata-path))
+               (not= (string/trim content) (string/trim db-content)))
           (let [backup? (not (string/blank? db-content))]
             (handle-add-and-change! repo path content db-content mtime backup?))
 
@@ -77,7 +83,7 @@
 
           (and (= "change" type)
                (not= (string/trim content) (string/trim db-content))
-               (not= path pages-metadata-path))
+               (not (gp-config/local-asset? (string/replace-first path dir ""))))
           (when-not (and
                      (string/includes? path (str "/" (config/get-journals-directory) "/"))
                      (or
@@ -85,34 +91,21 @@
                          (string/trim (or (state/get-default-journal-template) "")))
                       (= (string/trim content) "-")
                       (= (string/trim content) "*")))
-            (handle-add-and-change! repo path content db-content mtime true))
+            (handle-add-and-change! repo path content db-content mtime (not global-dir))) ;; no backup for global dir
 
           (and (= "unlink" type)
                (db/file-exists? repo path))
           (p/let [dir-exists? (fs/file-exists? dir "")]
-            (when dir-exists?
-              (when-let [page-name (db/get-file-page path)]
-                (println "Delete page: " page-name ", file path: " path ".")
-                (page-handler/delete! page-name #() :delete-file? false))))
+                 (when dir-exists?
+                   (when-let [page-name (db/get-file-page path)]
+                     (println "Delete page: " page-name ", file path: " path ".")
+                     (page-handler/delete! page-name #() :delete-file? false))))
 
           (and (contains? #{"add" "change" "unlink"} type)
                (string/ends-with? path "logseq/custom.css"))
           (do
             (println "reloading custom.css")
             (ui-handler/add-style-if-exists!))
-
-          ;; When metadata is added to watcher, update timestamps in db accordingly
-          ;; This event is not triggered on re-index
-          ;; Persistent metadata is gold standard when db is offline, so it's forced
-          (and (contains? #{"add"} type)
-               (= path pages-metadata-path))
-          (p/do! (repo-handler/update-pages-metadata! repo content true))
-
-          ;; Change is triggered by external changes, so update to the db
-          ;; Don't forced update when db is online, but resolving conflicts
-          (and (contains? #{"change"} type)
-               (= path pages-metadata-path))
-          (p/do! (repo-handler/update-pages-metadata! repo content false))
 
           (contains? #{"add" "change" "unlink"} type)
           nil
@@ -123,3 +116,34 @@
 
       ;; return nil, otherwise the entire db will be transfered by ipc
       nil)))
+
+(defn load-graph-files!
+  [graph]
+  (when graph
+    (let [dir (config/get-repo-dir graph)
+          db-files (->> (db/get-files graph)
+                        (map first)
+                        (filter #(string/starts-with? % (config/get-repo-dir graph))))]
+      (p/let [files (fs/readdir dir :path-only? true)
+              files (remove #(fs-util/ignored-path? dir %) files)]
+        (let [deleted-files (set/difference (set db-files) (set files))]
+          (when (seq deleted-files)
+            (let [delete-tx-data (->> (db/delete-files deleted-files)
+                                      (concat (db/delete-blocks graph deleted-files nil))
+                                      (remove nil?))]
+              (db/transact! graph delete-tx-data {:delete-files? true})))
+          (doseq [file files]
+            (when-let [_ext (util/get-file-ext file)]
+              (->
+               (p/let [content (fs/read-file dir file)
+                       stat (fs/stat dir file)
+                       type (if (db/file-exists? graph file)
+                              "change"
+                              "add")]
+                 (handle-changed! type
+                                  {:dir dir
+                                   :path file
+                                   :content content
+                                   :stat stat}))
+               (p/catch (fn [error]
+                          (js/console.dir error)))))))))))

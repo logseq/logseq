@@ -1,4 +1,4 @@
-(ns frontend.handler.history
+(ns ^:no-doc frontend.handler.history
   (:require [frontend.db :as db]
             [frontend.handler.editor :as editor]
             [frontend.modules.editor.undo-redo :as undo-redo]

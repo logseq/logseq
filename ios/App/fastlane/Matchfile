@@ -1,0 +1,13 @@
+git_url("https://github.com/logseq/certificates.git")
+
+storage_mode("git")
+
+type("appstore") # The default type, can be: appstore, adhoc, enterprise or development
+
+app_identifier(["com.logseq.logseq", "com.logseq.logseq.ShareViewController"])
+# username("user@fastlane.tools") # Your Apple Developer Portal username
+
+# For all available options run `fastlane match --help`
+# Remove the # in the beginning of the line to enable the other options
+
+# The docs are available on https://docs.fastlane.tools/actions/match

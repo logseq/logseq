@@ -30,7 +30,7 @@ Then open the browser <http://localhost:3001>.
 yarn release
 ```
 
-The released files will be at `resources/` directory.
+The released files will be at `static/` directory.
 
 ## Desktop app development
 
@@ -55,7 +55,8 @@ yarn dev-electron-app
 Alternatively, run `bb dev:electron-start` to do this step with one command. To
 download bb, see https://github.com/babashka/babashka#installation.
 
-3. (Optional) Update dependencies if your are updating from an old branch
+3. (Optional) Update dependencies if `resources/package.json` has changed since
+the last time you used dev Logseq.
 
 ```bash
 # pull new changes

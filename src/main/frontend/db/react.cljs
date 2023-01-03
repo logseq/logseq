@@ -33,10 +33,6 @@
 ;; ::refs
 ;; get BLOCKS referencing PAGE or BLOCK
 (s/def ::refs (s/tuple #(= ::refs %) int?))
-;; ::refs-count
-;; get refs count
-(s/def ::refs-count int?)
-
 ;; custom react-query
 (s/def ::custom any?)
 
@@ -46,7 +42,6 @@
                                 :journals ::journals
                                 :page<-pages ::page<-pages
                                 :refs ::refs
-                                :refs-count ::refs-count
                                 :custom ::custom))
 
 (s/def ::affected-keys (s/coll-of ::react-query-keys))
@@ -116,7 +111,7 @@
 
 (defn add-q!
   [k query time inputs result-atom transform-fn query-fn inputs-fn]
-  (let [time' (int (util/safe-parse-float time))]
+  (let [time' (int (util/safe-parse-float time))] ;; for robustness. `time` should already be float
     (swap! query-state assoc k {:query query
                                :query-time time'
                                :inputs inputs
@@ -179,7 +174,7 @@
                                                 (apply d/q query db inputs))
 
                                               kv?
-                                              (d/entity db (last k))
+                                              (db-utils/entity db (last k))
 
                                               (seq inputs)
                                               (apply d/q query db inputs)
@@ -216,7 +211,7 @@
 
 (defn- get-block-parents
   [db id]
-  (let [get-parent (fn [id] (:db/id (:block/parent (d/entity db id))))]
+  (let [get-parent (fn [id] (:db/id (:block/parent (db-utils/entity db id))))]
     (loop [result [id]
            id id]
       (if-let [parent (get-parent id)]
@@ -240,7 +235,10 @@
   (let [blocks (->> (filter (fn [datom] (contains? #{:block/left :block/parent :block/page} (:a datom))) tx-data)
                     (map :v)
                     (distinct))
-        refs (->> (filter (fn [datom] (contains? #{:block/refs :block/path-refs} (:a datom))) tx-data)
+        refs (->> (filter (fn [datom]
+                            (when (contains? #{:block/refs :block/path-refs} (:a datom))
+                              (not= (:v datom)
+                                    (:db/id (:block/page (db-utils/entity (:e datom))))))) tx-data)
                   (map :v)
                   (distinct))
         other-blocks (->> (filter (fn [datom] (= "block" (namespace (:a datom)))) tx-data)
@@ -259,10 +257,9 @@
                                          (:db/id (:block/page block)))
                                 blocks [[::block (:db/id block)]]
                                 path-refs (:block/path-refs block)
-                                path-refs' (mapcat (fn [ref]
-                                                     [
-                                                      ;; [::refs-count (:db/id ref)]
-                                                      [::refs (:db/id ref)]]) path-refs)
+                                path-refs' (keep (fn [ref]
+                                                   (when-not (= (:db/id ref) page-id)
+                                                     [::refs (:db/id ref)])) path-refs)
                                 page-blocks (when page-id
                                               [[::page-blocks page-id]])]
                             (concat blocks page-blocks path-refs')))
@@ -270,9 +267,7 @@
 
                        (mapcat
                         (fn [ref]
-                          [
-                           ;; [::refs-count (:db/id entity)]
-                           [::refs ref]])
+                          [[::refs ref]])
                         refs)
 
                        (when-let [current-page-id (:db/id (get-current-page))]
@@ -353,7 +348,7 @@
                        (if (and custom? (not custom-query?))
                          (async/put! (state/get-reactive-custom-queries-chan) [f query])
                          (f)))
-                     (catch js/Error e
+                     (catch :default e
                        (js/console.error e)))))))))))))
 
 (defn set-key-value
@@ -383,7 +378,7 @@
             (do
               (async/<! (async/timeout 2000))
               (async/put! chan [f query])))
-          (catch js/Error error
+          (catch :default error
             (let [type :custom-query/failed]
               (js/console.error (str type "\n" query))
               (js/console.error error)))))

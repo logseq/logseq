@@ -5,7 +5,7 @@
             ["fs-extra" :as fs-extra]))
 
 (def backup-dir "logseq/bak")
-(def version-file-dir "version-files/local")
+(def version-file-dir "logseq/version-files/local")
 
 (defn- get-backup-dir*
   [repo relative-path bak-dir]

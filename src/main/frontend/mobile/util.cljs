@@ -1,8 +1,10 @@
 (ns frontend.mobile.util
-  (:require ["@capacitor/core" :refer [Capacitor registerPlugin]]
+  (:require ["@capacitor/core" :refer [Capacitor registerPlugin ^js Plugins]]
             ["@capacitor/splash-screen" :refer [SplashScreen]]
+            ["@logseq/capacitor-file-sync" :refer [FileSync]]
             [clojure.string :as string]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [goog.object :as gobj]))
 
 (defn platform []
   (.getPlatform Capacitor))
@@ -24,11 +26,11 @@
 (defonce folder-picker (registerPlugin "FolderPicker"))
 (when (native-ios?)
   (defonce ios-utils (registerPlugin "Utils"))
-  (defonce ios-file-container (registerPlugin "FileContainer"))
-  (defonce file-sync (registerPlugin "FileSync")))
+  (defonce ios-file-container (registerPlugin "FileContainer")))
 
-;; NOTE: both iOS and android share the same FsWatcher API
+;; NOTE: both iOS and android share the same API
 (when (native-platform?)
+  (defonce file-sync FileSync)
   (defonce fs-watcher (registerPlugin "FsWatcher")))
 
 (defn hide-splash []
@@ -50,6 +52,8 @@
          [414 896] "iPhone11"
          [428 926] "iPhone13ProMax"
          [476 847] "iPhone7Plus"
+         [393 852] "iPhone14Pro"
+         [430 932] "iPhone14ProMax"
          [744 1133] "iPadmini8.3"
          [768 1024] "iPad9.7"
          [810 1080] "iPad10.2"
@@ -90,3 +94,9 @@
   [path]
   (string/includes? path "iCloud~com~logseq~logseq"))
 
+(defn app-active?
+  "Whether the app is active. This function returns a promise."
+  []
+  (let [app ^js (gobj/get Plugins "App")]
+    (p/let [state (.getState app)]
+      (gobj/get state "isActive"))))

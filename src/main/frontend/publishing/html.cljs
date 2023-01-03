@@ -1,4 +1,4 @@
-(ns frontend.publishing.html
+(ns ^:no-doc frontend.publishing.html
   (:require-macros [hiccups.core])
   (:require [frontend.state :as state]
             [frontend.util :as util]
@@ -19,6 +19,7 @@
              :name "viewport"}]
            [:link {:type "text/css", :href "static/css/tabler-icons.min.css", :rel "stylesheet"}]
            [:link {:type "text/css", :href "static/css/style.css", :rel "stylesheet"}]
+           [:link {:type "text/css", :href "static/css/custom.css", :rel "stylesheet"}]
            [:link {:type "text/css", :href "static/css/export.css", :rel "stylesheet"}]
            [:link
             {:href icon

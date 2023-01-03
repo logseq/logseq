@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.color-level {
+  background-color: var(--color-level-1);
+}
+
+.color-level .color-level {
+  background-color: var(--color-level-2);
+}
+
+.color-level .color-level .color-level {
+  background-color: var(--color-level-3);
+}
+
+.color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-4);
+}
+
+.color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-5);
+}
+
+.color-level .color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-3);
+}
+
+.color-level .color-level .color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-4);
+}
+
+.color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level {
+  background-color: var(--color-level-5);
+}
+
+.color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level {
+  background-color: var(--color-level-3);
+}
+
+.color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level {
+  background-color: var(--color-level-4);
+}
+
+.color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level
+  .color-level {
+  background-color: var(--color-level-5);
+}

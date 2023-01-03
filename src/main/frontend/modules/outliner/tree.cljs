@@ -2,7 +2,8 @@
   (:require [frontend.db :as db]
             [frontend.db.model :as model]
             [clojure.string :as string]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]))
 
 (defprotocol INode
   (-get-id [this])
@@ -28,7 +29,8 @@
   [blocks root]
   (let [id-map (fn [m] {:db/id (:db/id m)})
         root (id-map root)
-        parent-blocks (group-by :block/parent blocks)
+        blocks (remove gp-whiteboard/shape-block? blocks)
+        parent-blocks (group-by :block/parent blocks) ;; exclude whiteboard shapes
         sort-fn (fn [parent]
                   (db/sort-by-left (get parent-blocks parent) parent))
         block-children (fn block-children [parent level]
@@ -39,7 +41,7 @@
                                   (assoc m
                                          :block/level level
                                          :block/children children)))
-                           (sort-fn parent)))]
+                              (sort-fn parent)))]
     (block-children root 1)))
 
 (defn- get-root-and-page
@@ -66,7 +68,7 @@
                  root-block (assoc root-block :block/children result)]
              [root-block])))))))
 
-(defn- tree [parent->children root]
+(defn- tree [parent->children root default-level]
   (let [root-id (:db/id root)
         nodes (fn nodes [parent-id level]
                 (mapv (fn [b]
@@ -79,26 +81,38 @@
                         (-> (get parent->children parent)
                             (model/try-sort-by-left parent)))))
         children (nodes root-id 1)
-        root' (assoc root :block/level 1)]
+        root' (assoc root :block/level (or default-level 1))]
     (if (seq children)
       (assoc root' :block/children children)
       root')))
 
+(defn block-entity->map
+  [e]
+  {:db/id (:db/id e)
+   :block/uuid (:block/uuid e)
+   :block/parent {:db/id (:db/id (:block/parent e))}
+   :block/left {:db/id (:db/id (:block/left e))}
+   :block/page (:block/page e)
+   :block/refs (:block/refs e)
+   :block/children (:block/children e)})
+
+(defn filter-top-level-blocks
+  [blocks]
+  (let [id->blocks (zipmap (map :db/id blocks) blocks)]
+    (filter #(nil?
+              (id->blocks
+               (:db/id (:block/parent (id->blocks (:db/id %)))))) blocks)))
+
 (defn non-consecutive-blocks->vec-tree
   "`blocks` need to be in the same page."
-  [blocks]
-  (let [blocks (map (fn [e] {:db/id (:db/id e)
-                             :block/uuid (:block/uuid e)
-                             :block/parent {:db/id (:db/id (:block/parent e))}
-                             :block/left {:db/id (:db/id (:block/left e))}
-                             :block/page {:db/id (:db/id (:block/page e))}}) blocks)
-        parent->children (group-by :block/parent blocks)
-        id->blocks (zipmap (map :db/id blocks) blocks)
-        top-level-blocks (filter #(nil?
-                                   (id->blocks
-                                    (:db/id (:block/parent (id->blocks (:db/id %)))))) blocks)
-        top-level-blocks' (model/try-sort-by-left top-level-blocks (:block/parent (first top-level-blocks)))]
-    (map #(tree parent->children %) top-level-blocks')))
+  ([blocks]
+   (non-consecutive-blocks->vec-tree blocks 1))
+  ([blocks default-level]
+   (let [blocks (map block-entity->map blocks)
+         top-level-blocks (filter-top-level-blocks blocks)
+         top-level-blocks' (model/try-sort-by-left top-level-blocks (:block/parent (first top-level-blocks)))
+         parent->children (group-by :block/parent blocks)]
+     (map #(tree parent->children % (or default-level 1)) top-level-blocks'))))
 
 (defn- sort-blocks-aux
   [parents parent-groups]

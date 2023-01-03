@@ -6,7 +6,6 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [frontend.state :as state]
             [frontend.date :as date]
             [frontend.db.model :as model]
             [frontend.db.query-react :as query-react]
@@ -39,11 +38,7 @@
 ;; project (block, TBD)
 
 ;; Sort by (field, asc/desc):
-
-;; created_at
-;; last_modified_at
-
-;; (sort-by last_modified_at asc)
+;; (sort-by created-at asc)
 
 ;; (between -7d +7d)
 
@@ -152,13 +147,16 @@
 
       :else
       (->> clauses
-           (map (fn [result]
-                  (if (list? result)
-                    result
-                    (let [result (if (vector? (ffirst result))
-                                   (apply concat result)
-                                   result)]
-                      (cons 'and (seq result))))))
+           (mapcat (fn [result]
+                     (cond
+                       ;; rule like (task ?b #{"NOW"})
+                       (list? result)
+                       [result]
+                       ;; datalog clause like [[?b :block/uuid]]
+                       (vector? result)
+                       result
+                       :else
+                       [(cons 'and (seq result))])))
            (apply list fe)))
 
     :else
@@ -235,12 +233,25 @@
     (= 4 (count e))
     (build-between-three-arg e)))
 
+
+(defn parse-property-value
+  "Parses non-string property values or any page-ref like values"
+  [v]
+  (let [result (if-some [res (text/parse-non-string-property-value v)]
+                 res
+                 (if (string/starts-with? v "#")
+                   (subs v 1)
+                   (or (page-ref/get-page-name v) v)))]
+    (if (string? result)
+      (string/trim result)
+      result)))
+
 (defn- build-property-two-arg
   [e]
   (let [k (string/replace (name (nth e 1)) "_" "-")
         v (nth e 2)
         v (if-not (nil? v)
-            (text/parse-property k v (state/get-config))
+            (parse-property-value (str v))
             v)
         v (if (coll? v) (first v) v)]
     {:query (list 'property '?b (keyword k) v)
@@ -285,7 +296,7 @@
   (let [[k v] (rest e)
         k (string/replace (name k) "_" "-")]
     (if (some? v)
-      (let [v' (text/parse-property k v (state/get-config))
+      (let [v' (parse-property-value (str v))
             val (if (coll? v') (first v') v')]
         {:query (list 'page-property '?p (keyword k) val)
          :rules [:page-property]})
@@ -313,33 +324,24 @@
   (when-let [num (second e)]
     (when (integer? num)
       (reset! sample num)
-      {:query [['?p :block/uuid]]})))
+      ;; blank b/c this post-process filter doesn't effect query
+      {})))
 
 (defn- build-sort-by
   [e sort-by_]
-  (let [[k order] (rest e)
-             order (if (and order (contains? #{:asc :desc}
-                                             (keyword (string/lower-case (name order)))))
-                     (keyword (string/lower-case (name order)))
-                     :desc)
-             k (-> (string/lower-case (name k))
-                   (string/replace "_" "-"))
-             get-value (cond
-                         (= k "created-at")
-                         :block/created-at
-
-                         (= k "updated-at")
-                         :block/updated-at
-
-                         :else
-                         #(get-in % [:block/properties k]))
-             comp (if (= order :desc) >= <=)]
-         (reset! sort-by_
-                 (fn [result]
-                   (->> result
-                        flatten
-                        (sort-by get-value comp))))
-         nil))
+  (let [[k order*] (map keyword (rest e))
+        order (if (contains? #{:asc :desc} order*)
+                order*
+                :desc)
+        comp (if (= order :desc) >= <=)]
+    (reset! sort-by_
+            (fn sort-results [result]
+              ;; first because there is one binding result in query-wrapper
+              (sort-by #(-> % first (get-in [:block/properties k]))
+                       comp
+                       result)))
+    ;; blank b/c this post-process filter doesn't effect query
+    {}))
 
 (defn- build-page
   [e]
@@ -385,7 +387,7 @@ Some bindings in this fn:
          page-ref? (page-ref/page-ref? e)]
      (when (or (and page-ref?
                     (not (contains? #{'page-property 'page-tags} (:current-filter env))))
-               (contains? #{'between 'property 'todo 'task 'priority 'sort-by 'page} fe)
+               (contains? #{'between 'property 'todo 'task 'priority 'page} fe)
                (and (not page-ref?) (string? e)))
        (reset! blocks? true))
      (cond
@@ -579,6 +581,10 @@ Some bindings in this fn:
                             query-opts
                             (when sort-by
                               {:transform-fn sort-by})))))))
+
+(defn query-contains-filter?
+  [query filter-name]
+  (string/includes? query (str "(" filter-name)))
 
 (comment
   ;; {{query (and (page-property foo bar) [[hello]])}}

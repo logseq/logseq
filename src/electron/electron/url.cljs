@@ -8,16 +8,17 @@
 
 ;; Keep same as main/frontend.util.url
 (def decode js/decodeURI)
-(def decode-param js/decodeURIComponent)
 
 (defn get-URL-decoded-params
   "Get decoded URL parameters from parsed js/URL.
-   `nil` for non-existing keys."
-  [^js parsed-url keys]
+   `nil` for non-existing keys.
+   URL.searchParams are already decoded:
+   https://developer.mozilla.org/en-US/docs/Web/API/URL/searchParams"
+  [^js/URL parsed-url keys]
   (let [params (.-searchParams parsed-url)]
     (map (fn [key]
            (when-let [value (.get params key)]
-             (decode-param value)))
+             value))
          keys)))
 
 (defn graph-identifier-error-handler
@@ -59,14 +60,24 @@
 
 (defn- x-callback-url-handler
   "win - a window used for fallback (main window is prefered)"
-  [^js win parsed-url]
+  [^js win ^js/URL parsed-url]
   (let [action (.-pathname parsed-url)]
     (cond
+      ;; url:     (string) Page url
+      ;; title:   (stirng) Page title
+      ;; content: (string) Highlighted text
+      ;; page:    (string) Page name to insert to, use "TODAY" to insert to today page
+      ;; append:  (bool)   Append to the end of the page, default to false(current editing position)
       (= action "/quickCapture")
-      (let [[url title content] (get-URL-decoded-params parsed-url ["url" "title" "content"])]
+      (let [[url title content page append] (get-URL-decoded-params parsed-url ["url" "title" "content" "page" "append"])]
         (send-to-focused-renderer "quickCapture" {:url url
                                                   :title title
-                                                  :content content} win))
+                                                  :content content
+                                                  :page page
+                                                  :append (if (nil? append)
+                                                            append
+                                                            (= append "true"))}
+                                  win))
 
       :else
       (send-to-focused-renderer "notification" {:type "error"

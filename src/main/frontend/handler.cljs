@@ -1,10 +1,15 @@
 (ns frontend.handler
+  "Main ns that handles application startup. Closest ns that we have to a
+  system. Contains a couple of small system components"
   (:require [cljs.reader :refer [read-string]]
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [electron.listener :as el]
+            [frontend.components.block :as block]
+            [frontend.components.editor :as editor]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
+            [frontend.components.whiteboard :as whiteboard]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
@@ -21,19 +26,21 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.handler.global-config :as global-config-handler]
+            [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.outliner.datascript :as outliner-db]
+            [frontend.modules.outliner.file :as file]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
-            [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [logseq.db.schema :as db-schema]
             [promesa.core :as p]))
 
 (defn set-global-error-notification!
@@ -58,7 +65,6 @@
               (when (and (not (state/nfs-refreshing?))
                          (not (contains? (:file/unlinked-dirs @state/state)
                                          (config/get-repo-dir repo))))
-
                 ;; Don't create the journal file until user writes something
                 (page-handler/create-today-journal!))))]
     (f)
@@ -67,58 +73,50 @@
 (defn- instrument!
   []
   (let [total (srs/get-srs-cards-total)]
-    (state/set-state! :srs/cards-due-count total)
-    (state/pub-event! [:instrument {:type :flashcards/count
-                                    :payload {:total (or total 0)}}])
-    (state/pub-event! [:instrument {:type :blocks/count
-                                    :payload {:total (db/blocks-count)}}])))
-
-(defn store-schema!
-  []
-  (storage/set :db-schema (assoc db-schema/schema
-                                 :db/version db-schema/version)))
+    (state/set-state! :srs/cards-due-count total)))
 
 (defn restore-and-setup!
-  [repos old-db-schema]
-  (-> (db/restore!
-       {:repos repos}
-       old-db-schema
-       (fn [repo]
-         (file-handler/restore-config! repo)))
-      (p/then
-       (fn []
-         ;; try to load custom css only for current repo
-         (ui-handler/add-style-if-exists!)
+  [repos]
+  (when-let [repo (or (state/get-current-repo) (:url (first repos)))]
+    (-> (db/restore! repo)
+        (p/then
+         (fn []
+           ;; try to load custom css only for current repo
+           (ui-handler/add-style-if-exists!)
 
-         ;; install after config is restored
-         (shortcut/unlisten-all)
-         (shortcut/refresh!)
+           (->
+            (p/do! (repo-config-handler/start {:repo repo})
+                   (when (config/global-config-enabled?)
+                     (global-config-handler/start {:repo repo}))
+                   (when (config/plugin-config-enabled?) (plugin-config-handler/start)))
+            (p/finally
+              (fn []
+                ;; install after config is restored
+                (shortcut/refresh!)
 
-         (cond
-           (and (not (seq (db/get-files config/local-repo)))
-                ;; Not native local directory
-                (not (some config/local-db? (map :url repos)))
-                (not (mobile-util/native-platform?)))
-           ;; will execute `(state/set-db-restoring! false)` inside
-           (repo-handler/setup-local-repo-if-not-exists!)
+                (cond
+                  (and (not (seq (db/get-files config/local-repo)))
+                       ;; Not native local directory
+                       (not (some config/local-db? (map :url repos)))
+                       (not (mobile-util/native-platform?)))
+                  ;; will execute `(state/set-db-restoring! false)` inside
+                  (repo-handler/setup-local-repo-if-not-exists!)
 
-           :else
-           (state/set-db-restoring! false))))
-      (p/then
-       (fn []
-         (js/console.log "db restored, setting up repo hooks")
-         (store-schema!)
+                  :else
+                  (state/set-db-restoring! false)))))))
+        (p/then
+         (fn []
+           (js/console.log "db restored, setting up repo hooks")
 
-         (state/pub-event! [:modal/nfs-ask-permission])
+           (state/pub-event! [:modal/nfs-ask-permission])
 
-         (page-handler/init-commands!)
+           (page-handler/init-commands!)
 
-         (watch-for-date!)
-         (file-handler/watch-for-current-graph-dir!)
-         (state/pub-event! [:graph/ready (state/get-current-repo)])
-         (state/pub-event! [:graph/restored (state/get-current-repo)])))
-      (p/catch (fn [error]
-                 (log/error :exception error)))))
+           (watch-for-date!)
+           (file-handler/watch-for-current-graph-dir!)
+           (state/pub-event! [:graph/restored (state/get-current-repo)])))
+        (p/catch (fn [error]
+                   (log/error :exception error))))))
 
 (defn- handle-connection-change
   [e]
@@ -158,6 +156,7 @@
               (js/window.location.reload)))
      2000)))
 
+;; FIXME: Another get-repos implementation at src\main\frontend\handler\repo.cljs
 (defn- get-repos
   []
   (p/let [nfs-dbs (db-persist/get-all-graphs)]
@@ -169,6 +168,7 @@
       (do (notification/show! ["DB version is not compatible, please clear cache then re-add your graph back."
                                (ui/button
                                 (t :settings-page/clear-cache)
+                                :class    "ui__modal-enter"
                                 :class    "text-sm p-1"
                                 :on-click clear-cache!)] :error false)
           {:url config/local-repo
@@ -185,6 +185,9 @@
   []
   (state/set-page-blocks-cp! page/page-blocks-cp)
   (state/set-component! :block/linked-references reference/block-linked-references)
+  (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
+  (state/set-component! :block/single-block block/single-block-cp)
+  (state/set-component! :editor/box editor/box)
   (command-palette/register-global-shortcut-commands))
 
 (reset! db/*db-listener outliner-db/after-transact-pipelines)
@@ -192,38 +195,46 @@
 (defn start!
   [render]
   (set-global-error-notification!)
-  (let [db-schema (storage/get :db-schema)]
-    (register-components-fns!)
-    (state/set-db-restoring! true)
-    (render)
-    (i18n/start)
-    (instrument/init)
-    (set-network-watcher!)
+  (register-components-fns!)
+  (user-handler/restore-tokens-from-localstorage)
+  (state/set-db-restoring! true)
+  (render)
+  (i18n/start)
+  (instrument/init)
+  (state/set-online! js/navigator.onLine)
+  (set-network-watcher!)
 
-    (util/indexeddb-check?
-     (fn [_error]
-       (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
-       (state/set-indexedb-support! false)))
+  (util/indexeddb-check?
+   (fn [_error]
+     (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
+     (state/set-indexedb-support! false)))
+  (idb/start)
 
-    (react/run-custom-queries-when-idle!)
+  (react/run-custom-queries-when-idle!)
 
-    (events/run!)
+  (events/run!)
 
-    (p/let [repos (get-repos)]
-      (state/set-repos! repos)
-      (restore-and-setup! repos db-schema)
-      (when (mobile-util/native-platform?)
-        (p/do! (mobile-util/hide-splash))))
+  (-> (p/let [repos (get-repos)
+              _ (state/set-repos! repos)
+              _ (restore-and-setup! repos)]
+        (when (mobile-util/native-platform?)
+          (p/do!
+           (mobile-util/hide-splash)
+           (state/restore-mobile-theme!))))
+      (p/catch (fn [e]
+                 (js/console.error "Error while restoring repos: " e)))
+      (p/finally (fn []
+                   (state/set-db-restoring! false))))
 
-    (db/run-batch-txs!)
-    (file-handler/run-writes-chan!)
-    (when config/dev?
-      (enable-datalog-console))
-    (when (util/electron?)
-      (el/listen!))
-    (persist-var/load-vars)
-    (user-handler/refresh-tokens-loop)
-    (js/setTimeout instrument! (* 60 1000))))
+  (db/run-batch-txs!)
+  (file/<ratelimit-file-writes!)
+
+  (when config/dev?
+    (enable-datalog-console))
+  (when (util/electron?)
+    (el/listen!))
+  (persist-var/load-vars)
+  (js/setTimeout instrument! (* 60 1000)))
 
 (defn stop! []
   (prn "stop!"))

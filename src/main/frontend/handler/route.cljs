@@ -1,14 +1,16 @@
 (ns frontend.handler.route
+  "Provides fns used for routing throughout the app"
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.handler.ui :as ui-handler]
+            [frontend.db.model :as model]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.search :as search-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
-            [logseq.graph-parser.text :as text]
             [frontend.util :as util]
+            [logseq.graph-parser.text :as text]
             [reitit.frontend.easy :as rfe]))
 
 (defn redirect!
@@ -35,8 +37,36 @@
   []
   (redirect! {:to :graph}))
 
+(defn redirect-to-all-graphs
+  []
+  (redirect! {:to :repos}))
+
+(defn redirect-to-whiteboard-dashboard!
+  []
+  (redirect! {:to :whiteboards}))
+
+;; Named block links only works on web (and publishing)
+(if util/web-platform?
+  (defn- default-page-route [page-name-or-block-uuid]
+    ;; Only query if in a block context
+    (let [block (when (uuid? page-name-or-block-uuid)
+                  (model/get-block-by-uuid page-name-or-block-uuid))]
+      (if (get-in block [:block/properties :heading])
+        {:to :page-block
+         :path-params {:name (get-in block [:block/page :block/name])
+                       :block-route-name (model/heading-content->route-name (:block/content block))}}
+        {:to :page
+         :path-params {:name (if (string? page-name-or-block-uuid)
+                               (util/page-name-sanity-lc page-name-or-block-uuid)
+                               (str page-name-or-block-uuid))}})))
+
+  (defn- default-page-route [page-name]
+    {:to :page
+     :path-params {:name (str page-name)}}))
+
 (defn redirect-to-page!
-  "Must ensure `page-name` is dereferenced (not an alias), or it will create a wrong new page with that name (#3511)."
+  "Must ensure `page-name` is dereferenced (not an alias), or it will create a
+  wrong new page with that name (#3511). page-name can be a block name or uuid"
   ([page-name]
    (redirect-to-page! page-name {}))
   ([page-name {:keys [anchor push click-from-recent?]
@@ -44,13 +74,23 @@
    (recent-handler/add-page-to-recent! (state/get-current-repo) page-name
                                        click-from-recent?)
    (let [m (cond->
-             {:to :page
-              :path-params {:name (str page-name)}}
-             anchor
-             (assoc :query-params {:anchor anchor})
-             push
-             (assoc :push push))]
+            (default-page-route page-name)
+            anchor
+            (assoc :query-params {:anchor anchor})
+            push
+            (assoc :push push))]
      (redirect! m))))
+
+(defn redirect-to-whiteboard!
+  ([name]
+   (redirect-to-whiteboard! name nil))
+  ([name {:keys [block-id]}]
+   (recent-handler/add-page-to-recent! (state/get-current-repo) name false)
+   (if (= name (state/get-current-whiteboard))
+     (state/focus-whiteboard-shape block-id)
+     (redirect! {:to :whiteboard
+                 :path-params {:name (str name)}
+                 :query-params (merge {:block-id block-id})}))))
 
 (defn get-title
   [name path-params]
@@ -135,6 +175,13 @@
   (when search-mode
     (state/set-search-mode! search-mode))
   (state/pub-event! [:go/search]))
+
+(defn sidebar-journals!
+  []
+  (state/sidebar-add-block!
+   (state/get-current-repo)
+   (:db/id (db/get-page (date/today)))
+   :page))
 
 (defn go-to-journals!
   []

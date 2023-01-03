@@ -12,8 +12,13 @@
   (when-let [current-repo (state/get-current-repo)]
     [:div.export
      [:h1.title "Export"]
-
      [:ul.mr-1
+      [:li.mb-4
+       [:a.font-medium {:on-click #(export/export-repo-as-edn-v2! current-repo)}
+        (t :export-edn)]]
+      [:li.mb-4
+       [:a.font-medium {:on-click #(export/export-repo-as-json-v2! current-repo)}
+        (t :export-json)]]
       (when (util/electron?)
         [:li.mb-4
          [:a.font-medium {:on-click #(export/export-repo-as-html! current-repo)}
@@ -25,12 +30,6 @@
         [:li.mb-4
          [:a.font-medium {:on-click #(export/export-repo-as-opml! current-repo)}
           (t :export-opml)]])
-      [:li.mb-4
-       [:a.font-medium {:on-click #(export/export-repo-as-edn-v2! current-repo)}
-        (t :export-edn)]]
-      [:li.mb-4
-       [:a.font-medium {:on-click #(export/export-repo-as-json-v2! current-repo)}
-        (t :export-json)]]
       (when-not (mobile-util/native-platform?)
        [:li.mb-4
         [:a.font-medium {:on-click #(export/export-repo-as-roam-json! current-repo)}
@@ -70,7 +69,7 @@
           :html (export/export-blocks-as-html current-repo root-block-ids)
           (export/export-blocks-as-markdown current-repo root-block-ids text-indent-style (into [] text-remove-options)))]
     [:div.export.resize
-     [:div
+     [:div.flex
       {:class "mb-2"}
       (ui/button "Text"
                  :class "mr-4 w-20"

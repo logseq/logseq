@@ -1,4 +1,4 @@
-(ns frontend.ui.date-picker
+(ns ^:no-doc frontend.ui.date-picker
   (:require [cljs-time.core       :refer [after? before? day day-of-week days first-day-of-the-month minus month months plus year]]
             [cljs-time.format     :refer [formatter unparse]]
             [frontend.modules.shortcut.core :as shortcut]

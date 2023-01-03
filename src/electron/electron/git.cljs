@@ -2,14 +2,15 @@
   (:require ["dugite" :refer [GitProcess]]
             [goog.object :as gobj]
             [electron.state :as state]
-            [electron.utils :refer [logger] :as utils]
+            [electron.utils :as utils]
+            [electron.logger :as logger]
             [promesa.core :as p]
             [clojure.string :as string]
             ["fs-extra" :as fs]
             ["path" :as path]
             ["os" :as os]))
 
-(def log-error (partial (.-error logger) "[Git]"))
+(def log-error (partial logger/error "[Git]"))
 
 (defn get-graph-git-dir
   []
@@ -45,7 +46,7 @@
   (try
     (let [p (.join path (state/get-graph-path) ".git")]
       (.isDirectory (fs/statSync p)))
-    (catch js/Error _e
+    (catch :default _e
       nil)))
 
 (defn remove-dot-git-file!
@@ -65,7 +66,7 @@
                      (string/includes? content ".logseq/")
                      (not (fs/existsSync dir-path)))
             (fs/unlinkSync p)))))
-    (catch js/Error e
+    (catch :default e
       (log-error e))))
 
 (defn init!

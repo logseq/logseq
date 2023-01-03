@@ -1,4 +1,5 @@
 (ns frontend.external.roam
+  "Provides roam import by implementing the external protocol"
   (:require [cljs-bean.core :as bean]
             [frontend.external.protocol :as protocol]
             [frontend.date :as date]

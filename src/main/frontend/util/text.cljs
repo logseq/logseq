@@ -1,4 +1,6 @@
 (ns frontend.util.text
+  "Misc low-level utility text fns that are useful across features or don't have
+  a good ns to be in yet"
   (:require [clojure.string :as string]
             [goog.string :as gstring]
             [frontend.util :as util]))
@@ -66,7 +68,7 @@
       result)))
 
 (defn surround-by?
-  "`pos` must be surrounded by `before` and `and` in string `value`, e.g. ((|))"
+  "`pos` must be surrounded by `before` and `end` in string `value`, e.g. ((|))"
   [value pos before end]
   (let [start-pos (if (= :start before) 0 (- pos (count before)))
         end-pos (if (= :end end) (count value) (+ pos (count end)))]
@@ -97,7 +99,7 @@
        acc))))
 
 (defn wrapped-by?
-  "`pos` must be wrapped by `before` and `and` in string `value`, e.g. ((a|b))"
+  "`pos` must be wrapped by `before` and `end` in string `value`, e.g. ((a|b))"
   [value pos before end]
   ;; Increment 'before' matches by (length of before string - 0.5) to make them be just before the cursor position they precede.
   ;; Increment 'after' matches by 0.5 to make them be just after the cursor position they follow.
@@ -115,6 +117,26 @@
                  (vec (take-last 2 (conj acc k)))))
              []
              ks))))
+
+(defn cut-by
+  "Cut string by specifid wrapping symbols, only match the first occurrence.
+     value - string to cut
+     before - cutting symbol (before)
+     end - cutting symbol (end)"
+  [value before end]
+  (let [b-pos (string/index-of value before)
+        b-len (count before)]
+    (if b-pos
+      (let [b-cut (subs value 0 b-pos)
+            m-cut (subs value (+ b-pos b-len))
+            e-len (count end)
+            e-pos (string/index-of m-cut end)]
+        (if e-pos
+          (let [e-cut (subs m-cut (+ e-pos e-len))
+                m-cut (subs m-cut 0 e-pos)]
+            [b-cut m-cut e-cut])
+          [b-cut m-cut nil]))
+      [value nil nil])))
 
 (defn get-graph-name-from-path
   [path]

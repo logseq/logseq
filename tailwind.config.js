@@ -1,16 +1,49 @@
 const colors = require('tailwindcss/colors')
 
+function exposeColorsToCssVars ({ addBase, theme }) {
+  function extractColorVars (colorObj, colorGroup = '') {
+    return Object.keys(colorObj).reduce((vars, colorKey) => {
+      const value = colorObj[colorKey]
+
+      const newVars =
+        typeof value === 'string'
+          ? { [`--color${colorGroup}-${colorKey}`]: value }
+          : extractColorVars(value, `-${colorKey}`)
+
+      return { ...vars, ...newVars }
+    }, {})
+  }
+
+  addBase({
+    ':root': extractColorVars(theme('colors')),
+  })
+}
+
 module.exports = {
-  mode: 'jit',
-  purge: [
+  darkMode: 'class',
+  content: [
     './src/**/*.js',
     './src/**/*.cljs',
-    './resources/**/*.html',
+    './resources/**/*.html'
   ],
-  plugins: [require('@tailwindcss/ui')],
-  darkMode: 'class',
+  safelist: [
+    'bg-black', 'bg-white',
+    { pattern: /bg-(gray|red|yellow|green|blue|orange|indigo|rose|purple|pink)-(100|200|300|400|500|600|700|800|900)/ },
+    { pattern: /text-(gray|red|yellow|green|blue|orange|indigo|rose|purple|pink)-(100|200|300|400|500|600|700|800|900)/ },
+    { pattern: /columns-([1-9]|1[0-2])|(auto|3xs|2xs|xs|sm|md|lg|xl)|([2-7]xl)/ }
+  ],
+  plugins: [
+    require('@tailwindcss/forms'),
+    require('@tailwindcss/typography'),
+    require('@tailwindcss/aspect-ratio'),
+    require('@tailwindcss/line-clamp'),
+    exposeColorsToCssVars
+  ],
   theme: {
     extend: {
+      fontSize: {
+        '2xs': ['0.625rem', '0.875rem']
+      },
       animation: {
         'spin-reverse': 'spin 2s linear infinite reverse',
       },
@@ -30,7 +63,7 @@ module.exports = {
       current: 'currentColor',
       black: colors.black,
       white: colors.white,
-      gray: colors.trueGray,
+      gray: colors.neutral,
       green: colors.green,
       blue: colors.blue,
       indigo: {
@@ -48,7 +81,9 @@ module.exports = {
       red: colors.red,
       yellow: colors.amber,
       orange: colors.orange,
-      rose: colors.rose
+      rose: colors.rose,
+      purple: colors.purple,
+      pink: colors.pink
     }
   }
 }

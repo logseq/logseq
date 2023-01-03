@@ -2,8 +2,12 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater] :as updater]
-            [electron.utils :refer [*win mac? linux? dev? logger get-win-from-sender restore-user-fetch-agent get-graph-name]]
+            [electron.utils :refer [*win mac? linux? dev? get-win-from-sender
+                                    decode-protected-assets-schema-path get-graph-name send-to-renderer]
+             :as utils]
             [electron.url :refer [logseq-url-handler]]
+            [electron.logger :as logger]
+            [electron.server :as server]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -18,11 +22,12 @@
             [electron.git :as git]
             [electron.window :as win]
             [electron.exceptions :as exceptions]
-            ["/electron/utils" :as utils]))
+            ["/electron/utils" :as js-utils]))
 
 ;; Keep same as main/frontend.util.url
 (defonce LSP_SCHEME "logseq")
 (defonce FILE_LSP_SCHEME "lsp")
+(defonce FILE_ASSETS_SCHEME "assets")
 (defonce LSP_PROTOCOL (str FILE_LSP_SCHEME "://"))
 (defonce PLUGIN_URL (str LSP_PROTOCOL "logseq.io/"))
 (defonce STATIC_URL (str LSP_PROTOCOL "logseq.com/"))
@@ -39,14 +44,13 @@
   ;; manual/auto updater
   (when-not linux?
     (init-updater {:repo   "logseq/logseq"
-                   :logger logger
                    :win    win})))
 
 (defn open-url-handler
   "win - the main window instance (first renderer process)
    url - the input URL"
   [win url]
-  (.info logger "open-url" (str {:url url}))
+  (logger/info "open-url" {:url url})
 
   (let [parsed-url (js/URL. url)
         url-protocol (.-protocol parsed-url)]
@@ -57,11 +61,12 @@
   (.setAsDefaultProtocolClient app LSP_SCHEME)
 
   (.registerFileProtocol
-   protocol "assets"
+   protocol FILE_ASSETS_SCHEME
    (fn [^js request callback]
      (let [url (.-url request)
-           path (string/replace url "assets://" "")
-           path (js/decodeURI path)]
+           url (decode-protected-assets-schema-path url)
+           path (js/decodeURI url)
+           path (string/replace path "assets://" "")]
        (callback #js {:path path}))))
 
   (.registerFileProtocol
@@ -74,25 +79,24 @@
                       [STATIC_URL js/__dirname])
 
            path' (.-pathname url')
-           path' (js/decodeURIComponent path')
+           path' (utils/safe-decode-uri-component path')
            path' (.join path ROOT path')]
 
        (callback #js {:path path'}))))
 
   #(do
      (.unregisterProtocol protocol FILE_LSP_SCHEME)
-     (.unregisterProtocol protocol "assets")))
+     (.unregisterProtocol protocol FILE_ASSETS_SCHEME)))
 
 (defn- handle-export-publish-assets [_event html custom-css-path export-css-path repo-path asset-filenames output-path]
   (p/let [app-path (. app getAppPath)
-          asset-filenames (js->clj asset-filenames)
+          asset-filenames (->> (js->clj asset-filenames) (remove nil?))
           root-dir (or output-path (handler/open-dir-dialog))]
     (when root-dir
       (let [static-dir (path/join root-dir "static")
             assets-from-dir (path/join repo-path "assets")
             assets-to-dir (path/join root-dir "assets")
-            index-html-path (path/join root-dir "index.html")
-            export-or-custom-css-path (if (fs/existsSync export-css-path) export-css-path custom-css-path)]
+            index-html-path (path/join root-dir "index.html")]
         (p/let [_ (. fs ensureDir static-dir)
                 _ (. fs ensureDir assets-to-dir)
                 _ (p/all (concat
@@ -106,17 +110,21 @@
                              (-> (. fs copy (path/join assets-from-dir filename) (path/join assets-to-dir filename))
                                  (p/catch
                                   (fn [e]
-                                    (println (str "Failed to copy " (path/join assets-from-dir filename) " to " (path/join assets-to-dir filename)))
-                                    (js/console.error e)))))
+                                    (logger/error "Failed to copy"
+                                            (str {:from (path/join assets-from-dir filename)
+                                                  :to (path/join assets-to-dir filename)})
+                                            e)))))
                            asset-filenames)
 
                           (map
                            (fn [part]
                              (. fs copy (path/join app-path part) (path/join static-dir part)))
                            ["css" "fonts" "icons" "img" "js"])))
-                export-css (. fs readFile export-or-custom-css-path)
-                _ (. fs writeFile (path/join static-dir "css" "export.css") export-css)
-                js-files ["main.js" "code-editor.js" "excalidraw.js"]
+                export-css (if (fs/existsSync export-css-path) (. fs readFile export-css-path) "")
+                _ (. fs writeFile (path/join static-dir "css" "export.css")  export-css)
+                custom-css (if (fs/existsSync custom-css-path) (. fs readFile custom-css-path) "")
+                _ (. fs writeFile (path/join static-dir "css" "custom.css") custom-css)
+                js-files ["main.js" "code-editor.js" "excalidraw.js" "tldraw.js"]
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" file)))
                               js-files))
@@ -130,8 +138,12 @@
                 ;; TODO: ugly, replace with ls-files and filter with ".map"
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" (str file ".map"))))
-                              ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
-          (. dialog showMessageBox (clj->js {:message (str "Export public pages and publish assets to " root-dir " successfully")})))))))
+                              ["main.js" "code-editor.js" "excalidraw.js"]))]
+
+          (send-to-renderer
+           :notification
+           {:type "success"
+            :payload (str "Export public pages and publish assets to " root-dir " successfully 🎉")}))))))
 
 (defn setup-app-manager!
   [^js win]
@@ -164,16 +176,16 @@
                (fn [_ type & args]
                  (try
                    (js-invoke app type args)
-                   (catch js/Error e
-                     (js/console.error e)))))
+                   (catch :default e
+                     (logger/error (str call-app-channel " " e))))))
 
       (.handle call-win-channel
                (fn [^js e type & args]
                  (let [win (get-win-from-sender e)]
                    (try
                      (js-invoke win type args)
-                     (catch js/Error e
-                       (js/console.error e)))))))
+                     (catch :default e
+                       (logger/error (str call-win-channel " " e))))))))
 
     #(do (clear-win-effects!)
          (.removeHandler ipcMain toggle-win-channel)
@@ -206,7 +218,10 @@
                                             (p/let [graph-name (get-graph-name (state/get-graph-path))
                                                     _ (handler/broadcast-persist-graph! graph-name)]
                                               (handler/open-new-window!)))
-                                   :accelerator "CommandOrControl+N"}
+                                   :accelerator (if mac?
+                                                  "CommandOrControl+N"
+                                                  ;; Avoid conflict with `Control+N` shortcut to move down in the text editor on Windows/Linux
+                                                  "Shift+CommandOrControl+N")}
                                   (if mac?
                                     {:role "close"}
                                     {:role "quit"})]}
@@ -256,7 +271,12 @@
         protocol (bean/->js [{:scheme     LSP_SCHEME
                               :privileges privileges}
                              {:scheme     FILE_LSP_SCHEME
-                              :privileges privileges}]))
+                              :privileges privileges}
+                             {:scheme     FILE_ASSETS_SCHEME
+                              :privileges {:standard        false
+                                           :secure          false
+                                           :bypassCSP       false
+                                           :supportFetchAPI false}}]))
 
       (set-app-menu!)
       (setup-deeplink!)
@@ -267,22 +287,23 @@
                (win/switch-to-window! window))))
 
       (.on app "window-all-closed" (fn []
+                                     (logger/debug "window-all-closed" "Quiting...")
                                      (try
                                        (fs-watcher/close-watcher!)
                                        (search/close!)
-                                       (catch js/Error e
-                                         (js/console.error e)))
+                                       (catch :default e
+                                         (logger/error "window-all-closed" e)))
                                      (.quit app)))
       (.on app "ready"
            (fn []
              (let [t0 (setup-interceptor! app)
                    ^js win (win/create-main-window)
                    _ (reset! *win win)]
-               (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
+               (logger/info (str "Logseq App(" (.getVersion app) ") Starting... "))
 
-               (restore-user-fetch-agent)
+               (utils/<restore-proxy-settings)
 
-               (utils/disableXFrameOptions win)
+               (js-utils/disableXFrameOptions win)
 
                (search/ensure-search-dir!)
 
@@ -295,10 +316,11 @@
                           (let [t1 (setup-updater! win)
                                 t2 (setup-app-manager! win)
                                 t3 (handler/set-ipc-handler! win)
+                                t4 (server/setup! win)
                                 tt (exceptions/setup-exception-listeners!)]
 
                             (vreset! *teardown-fn
-                                     #(doseq [f [t0 t1 t2 t3 tt]]
+                                     #(doseq [f [t0 t1 t2 t3 t4 tt]]
                                         (and f (f)))))))
 
                ;; setup effects
@@ -311,6 +333,7 @@
                                   (when @*quit-dirty? ;; when not updating
                                     (.preventDefault e)
                                     (let [web-contents (. win -webContents)]
+                                      (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents))
                                       (.send web-contents "persistent-dbs"))
                                     (async/go
                                       (let [_ (async/<! state/persistent-dbs-chan)]
@@ -337,9 +360,9 @@
                (.on app "activate" #(when @*win (.show win)))))))))
 
 (defn start []
-  (js/console.log "Main - start")
+  (logger/debug "Main - start")
   (when @*setup-fn (@*setup-fn)))
 
 (defn stop []
-  (js/console.log "Main - stop")
+  (logger/debug "Main - stop")
   (when @*teardown-fn (@*teardown-fn)))

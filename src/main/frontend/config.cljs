@@ -1,12 +1,13 @@
 (ns frontend.config
+  "App config and fns built on top of configuration"
   (:require [clojure.set :as set]
             [clojure.string :as string]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
-            [shadow.resource :as rc]
-            [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
-            [frontend.mobile.util :as mobile-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [shadow.resource :as rc]))
 
 (goog-define DEV-RELEASE false)
 (defonce dev-release? DEV-RELEASE)
@@ -15,46 +16,59 @@
 (goog-define PUBLISHING false)
 (defonce publishing? PUBLISHING)
 
+(goog-define REVISION "unknown")
+(defonce revison REVISION)
+
 (reset! state/publishing? publishing?)
 
-(def test? false)
+(goog-define TEST false)
+(def test? TEST)
 
-;; prod env
-;; (goog-define FILE-SYNC-PROD? true)
-;; (goog-define LOGIN-URL
-;;              "https://logseq.auth.us-east-1.amazoncognito.com/login?client_id=7ns5v1pu8nrbs04rvdg67u4a7c&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
-;; (goog-define API-DOMAIN "api-prod.logseq.com")
-;; (goog-define WS-URL "wss://b2rp13onu2.execute-api.us-east-1.amazonaws.com/production?graphuuid=%s")
+(goog-define ENABLE-FILE-SYNC-PRODUCTION false)
 
-;; dev env
-(goog-define FILE-SYNC-PROD? false)
-(goog-define LOGIN-URL
-             "https://logseq-test2.auth.us-east-2.amazoncognito.com/login?client_id=3ji1a0059hspovjq5fhed3uil8&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
-(goog-define API-DOMAIN "api.logseq.com")
-(goog-define WS-URL "wss://og96xf1si7.execute-api.us-east-2.amazonaws.com/production?graphuuid=%s")
+(if ENABLE-FILE-SYNC-PRODUCTION
+  (do (def FILE-SYNC-PROD? true)
+      (def LOGIN-URL
+        "https://logseq-prod.auth.us-east-1.amazoncognito.com/login?client_id=3c7np6bjtb4r1k1bi9i049ops5&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
+      (def API-DOMAIN "api.logseq.com")
+      (def WS-URL "wss://ws.logseq.com/file-sync?graphuuid=%s"))
 
-;; feature flags
-(goog-define ENABLE-FILE-SYNC false)
-(defonce enable-file-sync? (or ENABLE-FILE-SYNC dev?)) ;; always enable file-sync when dev
+  (do (def FILE-SYNC-PROD? false)
+      (def LOGIN-URL
+        "https://logseq-test2.auth.us-east-2.amazoncognito.com/login?client_id=3ji1a0059hspovjq5fhed3uil8&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
+      (def API-DOMAIN "api-dev.logseq.com")
+      (def WS-URL "wss://ws-dev.logseq.com/file-sync?graphuuid=%s")))
+
+;; Feature flags
+;; =============
 
 (goog-define ENABLE-PLUGINS true)
-(defonce enable-plugins? ENABLE-PLUGINS)
+(defonce feature-plugin-system-on? ENABLE-PLUGINS)
 
-(swap! state/state assoc :plugin/enabled enable-plugins?)
+;; Desktop only as other platforms requires better understanding of their
+;; multi-graph workflows and optimal place for a "global" dir
+(def global-config-enabled? util/electron?)
+
+;; User level configuration for whether plugins are enabled
+(defonce lsp-enabled?
+         (and (util/electron?)
+              (not (false? feature-plugin-system-on?))
+              (state/lsp-enabled?-or-theme)))
+
+(defn plugin-config-enabled?
+  []
+  (and lsp-enabled? (global-config-enabled?)))
 
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
+
+;; ============
 
 (def app-name "logseq")
 (def website
   (if dev?
     "http://localhost:3000"
     (util/format "https://%s.com" app-name)))
-
-(def api
-  (if dev?
-    "http://localhost:3000/api/v1/"
-    (str website "/api/v1/")))
 
 (def asset-domain (util/format "https://asset.%s.com"
                                app-name))
@@ -76,18 +90,46 @@
 (def markup-formats
   #{:org :md :markdown :asciidoc :adoc :rst})
 
-(defn doc-formats
-  []
+(def doc-formats
   #{:doc :docx :xls :xlsx :ppt :pptx :one :pdf :epub})
 
-(def audio-formats #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
+(def image-formats
+  #{:png :jpg :jpeg :bmp :gif :webp :svg})
+
+(def audio-formats
+  #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
+
+(def video-formats
+  #{:mp4 :webm :mov})
 
 (def media-formats (set/union (gp-config/img-formats) audio-formats))
 
-(def html-render-formats
-  #{:adoc :asciidoc})
+(defn extname-of-supported?
+  ([input] (extname-of-supported?
+            input
+            [image-formats doc-formats audio-formats
+             video-formats markup-formats
+             (gp-config/text-formats)]))
+  ([input formats]
+   (when-let [input (some->
+                     (cond-> input
+                       (and (string? input)
+                            (not (string/blank? input)))
+                       (string/replace-first "." ""))
+                     (util/safe-lower-case)
+                     (keyword))]
+     (some
+      (fn [s]
+        (contains? s input))
+      formats))))
 
 (def mobile?
+  "Triggering condition: Mobile phones
+   *** Warning!!! ***
+   For UX logic only! Don't use for FS logic
+   iPad / Android Pad doesn't trigger!
+
+   Same as config/mobile?"
   (when-not util/node-test?
     (util/safe-re-find #"Mobi" js/navigator.userAgent)))
 
@@ -232,6 +274,7 @@
 
 (defonce default-journals-directory "journals")
 (defonce default-pages-directory "pages")
+(defonce default-whiteboards-directory "whiteboards")
 
 (defn get-pages-directory
   []
@@ -241,22 +284,24 @@
   []
   (or (state/get-journals-directory) default-journals-directory))
 
+(defn get-whiteboards-directory
+  []
+  (or (state/get-whiteboards-directory) default-whiteboards-directory))
+
 (defonce local-repo "local")
 
 (defn demo-graph?
+  "Demo graph or nil graph?"
   ([]
    (demo-graph? (state/get-current-repo)))
   ([graph]
-   (= graph local-repo)))
+   (or (nil? graph) (= graph local-repo))))
 
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")
 (def custom-css-file "custom.css")
 (def export-css-file "export.css")
 (def custom-js-file "custom.js")
-(def metadata-file "metadata.edn")
-(def pages-metadata-file "pages-metadata.edn")
-
 (def config-default-content (rc/inline "config.edn"))
 
 (defonce idb-db-prefix "logseq-db/")
@@ -298,6 +343,25 @@
          (->> (take-last 2 (string/split repo-url #"/"))
               (string/join "_")))))
 
+(defn get-string-repo-dir
+  [repo-dir]
+  (if (mobile-util/native-ios?)
+    (str (if (mobile-util/iCloud-container-path? repo-dir)
+           "iCloud"
+           (cond (mobile-util/native-iphone?)
+                 "On My iPhone"
+
+                 (mobile-util/native-ipad?)
+                 "On My iPad"
+
+                 :else
+                 "Local"))
+         (->> (string/split repo-dir "Documents/")
+              last
+              gp-util/safe-decode-uri-component
+              (str "/" (string/capitalize app-name) "/")))
+    (get-repo-dir repo-dir)))
+
 (defn get-repo-path
   [repo-url path]
   (if (and (or (util/electron?) (mobile-util/native-platform?))
@@ -305,7 +369,7 @@
     path
     (util/node-path.join (get-repo-dir repo-url) path)))
 
-;; FIXME: There is another get-file-path at src/main/frontend/fs/capacitor_fs.cljs
+;; FIXME: There is another normalize-file-protocol-path at src/main/frontend/fs/capacitor_fs.cljs
 (defn get-file-path
   "Normalization happens here"
   [repo-url relative-path]
@@ -323,7 +387,7 @@
 
                  (and (mobile-util/native-ios?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)]
-                   (str dir relative-path))
+                   (util/safe-path-join dir relative-path))
 
                  (and (mobile-util/native-android?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)
@@ -340,34 +404,21 @@
                  relative-path)]
       (and (not-empty path) (gp-util/path-normalize path)))))
 
+;; NOTE: js/encodeURIComponent cannot be used here
 (defn get-page-file-path
   "Get the path to the page file for the given page. This is used when creating new files."
   [repo-url sub-dir page-name ext]
   (let [page-basename (if (mobile-util/native-platform?)
-                        (util/url-encode page-name)
+                        (js/encodeURI page-name)
                         page-name)]
     (get-file-path repo-url (str sub-dir "/" page-basename "." ext))))
 
-(defn get-config-path
+(defn get-repo-config-path
   ([]
-   (get-config-path (state/get-current-repo)))
+   (get-repo-config-path (state/get-current-repo)))
   ([repo]
    (when repo
      (get-file-path repo (str app-name "/" config-file)))))
-
-(defn get-metadata-path
-  ([]
-   (get-metadata-path (state/get-current-repo)))
-  ([repo]
-   (when repo
-     (get-file-path repo (str app-name "/" metadata-file)))))
-
-(defn get-pages-metadata-path
-  ([]
-   (get-pages-metadata-path (state/get-current-repo)))
-  ([repo]
-   (when repo
-     (get-file-path repo (str app-name "/" pages-metadata-file)))))
 
 (defn get-custom-css-path
   ([]
@@ -395,6 +446,12 @@
     (string/replace
      source "../assets" (util/format "%s://%s/assets" protocol (get-repo-dir (state/get-current-repo))))))
 
+(defn get-current-repo-assets-root
+  []
+  (when-let [repo-root (and (local-db? (state/get-current-repo))
+                            (get-repo-dir (state/get-current-repo)))]
+    (util/node-path.join repo-root "assets")))
+
 (defn get-custom-js-path
   ([]
    (get-custom-js-path (state/get-current-repo)))
@@ -405,4 +462,4 @@
 
 (defn get-block-hidden-properties
   []
-  (get-in @state/state [:config (state/get-current-repo) :block-hidden-properties]))
+  (:block-hidden-properties (state/get-config)))

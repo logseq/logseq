@@ -10,3 +10,11 @@
   padding-left: 0.5rem;
   align-items: center;
 }
+
+.references-blocks .breadcrumb {
+  margin-left: 1.5rem;
+}
+
+.ls-filters {
+    max-width: 704px;
+}

@@ -1,4 +1,5 @@
 (ns frontend.db.persist
+  "Handles operations to persisting db to disk or indexedDB"
   (:require [frontend.util :as util]
             [frontend.idb :as idb]
             [frontend.config :as config]

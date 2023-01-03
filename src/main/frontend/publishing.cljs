@@ -1,19 +1,25 @@
 (ns frontend.publishing
+  "Entry ns for publishing build. Handles primary publishing app behaviors"
   (:require [frontend.state :as state]
             [datascript.core :as d]
             [frontend.db :as db]
             [logseq.db.schema :as db-schema]
             [rum.core :as rum]
-            [frontend.handler.route :as route]
+            [frontend.handler.route :as route-handler]
             [frontend.page :as page]
             [frontend.util :as util]
             [frontend.routes :as routes]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]
             [cljs.reader :as reader]
-            [frontend.components.page :as component-page]
+            [frontend.components.block :as block]
+            [frontend.components.editor :as editor]
+            [frontend.components.page :as page-component]
+            [frontend.components.reference :as reference]
+            [frontend.components.whiteboard :as whiteboard]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.handler.events :as events]))
+            [frontend.handler.events :as events]
+            [frontend.handler.command-palette :as command-palette]))
 
 ;; The publishing site should be as thin as possible.
 ;; Both files and git libraries can be removed.
@@ -50,7 +56,7 @@
   []
   (rfe/start!
    (rf/router routes/routes {})
-   route/set-route-match!
+   route-handler/set-route-match!
    ;; set to false to enable HistoryAPI
    {:use-fragment true}))
 
@@ -61,7 +67,12 @@
 
 (defn- register-components-fns!
   []
-  (state/set-page-blocks-cp! component-page/page-blocks-cp))
+  (state/set-page-blocks-cp! page-component/page-blocks-cp)
+  (state/set-component! :block/linked-references reference/block-linked-references)
+  (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
+  (state/set-component! :block/single-block block/single-block-cp)
+  (state/set-component! :editor/box editor/box)
+  (command-palette/register-global-shortcut-commands))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads

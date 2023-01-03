@@ -1,4 +1,5 @@
 (ns frontend.debug
+  "Macros that are useful for debugging"
   (:refer-clojure :rename {defn core-defn}))
 
 (defmacro defn [name & fdecl]

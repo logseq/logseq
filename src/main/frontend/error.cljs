@@ -1,4 +1,5 @@
 (ns frontend.error
+  "Error related utility fns"
   (:require [clojure.string :as string]))
 
 (def ignored

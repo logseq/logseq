@@ -1,0 +1,86 @@
+# This workflow build iOS App as a .ipa file and upload it to TestFlight.
+
+name: Build-iOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      git-ref:
+        description: "Release Git Ref (Which branch or tag to build?)"
+        required: true
+        default: "master"
+
+env:
+  CLOJURE_VERSION: '1.10.1.763'
+  NODE_VERSION: '16'
+  JAVA_VERSION: '11'
+
+jobs:
+  build-app:
+    runs-on: macos-latest
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.git-ref }}
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Cache clojure deps
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: ${{ runner.os }}-clojure-lib-${{ hashFiles('**/deps.edn') }}
+
+      - name: Setup clojure
+        uses: DeLaGuardo/setup-clojure@10.1
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+
+      - name: Setup build tools
+        run: brew install fastlane
+
+      - name: Set Build Environment Variables
+        run: |
+          echo "ENABLE_FILE_SYNC_PRODUCTION=true" >> $GITHUB_ENV
+
+      - name: Compile CLJS
+        run: yarn install && yarn release-app
+        env:
+          LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
+          LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
+
+      - name: Sync static build files
+        run: rsync -avz --exclude node_modules --exclude '*.js.map' --exclude android ./static/ ./public/static/
+
+      - name: Prepare iOS build
+        run: npx cap sync ios
+
+      - name: Build and upload iOS app
+        run: fastlane beta
+        working-directory: ./ios/App
+        env:
+          APP_STORE_CONNECT_API_KEY_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY }}
+          APP_STORE_CONNECT_API_KEY_IS_KEY_CONTENT_BASE64: true
+          SLACK_URL: ${{ secrets.SLACK_URL }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+
+      - name: Save Static File
+        uses: actions/upload-artifact@v3
+        with:
+          name: static
+          path: static

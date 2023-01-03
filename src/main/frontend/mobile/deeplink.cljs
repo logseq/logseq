@@ -1,6 +1,7 @@
 (ns frontend.mobile.deeplink
   (:require
    [clojure.string :as string]
+   [goog :refer [Uri]]
    [frontend.config :as config]
    [frontend.db.model :as db-model]
    [frontend.handler.editor :as editor-handler]
@@ -14,10 +15,10 @@
 (def *link-to-another-graph (atom false))
 
 (defn deeplink [url]
-  (let [parsed-url (js/URL. url)
-        hostname (.-hostname parsed-url)
-        pathname (.-pathname parsed-url)
-        search-params (.-searchParams parsed-url)
+  (let [^js/Uri parsed-url (.parse Uri url)
+        hostname (.getDomain parsed-url)
+        pathname (.getPath parsed-url)
+        search-params (.getQueryData parsed-url)
         current-repo-url (state/get-current-repo)
         get-graph-name-fn #(-> (text-util/get-graph-name-from-path %)
                                (string/split "/")
@@ -30,7 +31,7 @@
         repo-names (map #(get-graph-name-fn %) repos)]
     (cond
       (= hostname "auth-callback")
-      (when-let [code (.get search-params  "code")]
+      (when-let [code (.get search-params "code")]
         (user-handler/login-callback code))
 
       (= hostname "graph")

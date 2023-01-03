@@ -1,4 +1,5 @@
 (ns frontend.db
+  "Main entry ns for db related fns"
   (:require [clojure.core.async :as async]
             [datascript.core :as d]
             [logseq.db.schema :as db-schema]
@@ -13,7 +14,6 @@
             [frontend.db.migrate :as db-migrate]
             [frontend.namespaces :refer [import-vars]]
             [frontend.state :as state]
-            [frontend.config :as config]
             [frontend.util :as util]
             [promesa.core :as p]
             [electron.ipc :as ipc]))
@@ -38,17 +38,17 @@
 
  [frontend.db.model
   blocks-count blocks-count-cache clean-export! delete-blocks get-pre-block
-  delete-file-blocks! delete-page-blocks delete-files delete-pages-by-files
+  delete-files delete-pages-by-files
   filter-only-public-pages-and-blocks get-all-block-contents get-all-tagged-pages
   get-all-templates get-block-and-children get-block-by-uuid get-block-children sort-by-left
   get-block-parent get-block-parents parents-collapsed? get-block-referenced-blocks get-all-referenced-blocks-uuid
   get-block-children-ids get-block-immediate-children get-block-page
   get-custom-css get-date-scheduled-or-deadlines
-  get-file-blocks get-file-last-modified-at get-file get-file-page get-file-page-id file-exists?
-  get-files get-files-blocks get-files-full get-journals-length
+  get-file-last-modified-at get-file get-file-page get-file-page-id file-exists?
+  get-files get-files-blocks get-files-full get-journals-length get-pages-with-file
   get-latest-journals get-page get-page-alias get-page-alias-names get-paginated-blocks
   get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-properties
-  get-page-referenced-blocks get-page-referenced-blocks-full get-page-referenced-pages get-page-unlinked-references get-page-referenced-blocks-no-cache
+  get-page-referenced-blocks get-page-referenced-blocks-full get-page-referenced-pages get-page-unlinked-references
   get-all-pages get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
   journal-page? page-alias-set pull-block
   set-file-last-modified-at! page-empty? page-exists? page-empty-or-dummy? get-alias-source-page
@@ -115,15 +115,13 @@
 
 ;; only save when user's idle
 
-(def *db-listener (atom nil))
+(defonce *db-listener (atom nil))
 
 (defn- repo-listen-to-tx!
   [repo conn]
   (d/listen! conn :persistence
              (fn [tx-report]
-               (when (and
-                      (not config/publishing?)
-                      (not (:new-graph? (:tx-meta tx-report)))) ; skip initial txs
+               (when (not (:new-graph? (:tx-meta tx-report))) ; skip initial txs
                  (if (util/electron?)
                    (when-not (:dbsync? (:tx-meta tx-report))
                      ;; sync with other windows if needed
@@ -160,7 +158,7 @@
           _ (swap! conns assoc db-name db-conn)
           _ (when stored
               (let [stored-db (try (string->db stored)
-                                   (catch js/Error _e
+                                   (catch :default _e
                                      (js/console.warn "Invalid graph cache")
                                      (d/empty-db db-schema/schema)))
                     attached-db (d/db-with stored-db
@@ -179,12 +177,9 @@
     (restore-graph-from-text! repo stored)))
 
 (defn restore!
-  [{:keys [repos]} _old-db-schema restore-config-handler]
-  (let [repo (or (state/get-current-repo) (:url (first repos)))]
-    (when repo
-      (p/let [_ (restore-graph! repo)]
-        (restore-config-handler repo)
-        (listen-and-persist! repo)))))
+  [repo]
+  (p/let [_ (restore-graph! repo)]
+    (listen-and-persist! repo)))
 
 (defn run-batch-txs!
   []

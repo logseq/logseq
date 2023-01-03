@@ -1,4 +1,5 @@
 (ns frontend.spec
+  "Clojure spec related setup and helpers"
   (:require [cljs.spec.alpha :as s]
             [frontend.config :as config]
             [lambdaisland.glogi :as log]

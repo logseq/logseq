@@ -5,6 +5,8 @@ const { ipcRenderer, contextBridge, shell, clipboard, webFrame } = require('elec
 const IS_MAC = process.platform === 'darwin'
 const IS_WIN32 = process.platform === 'win32'
 
+const ALLOWED_EXTERNAL_PROTOCOLS = ['https:', 'http:', 'mailto:', 'zotero:', 'file:']
+
 function getFilePathFromClipboard () {
   if (IS_WIN32) {
     const rawFilePath = clipboard.read('FileNameW')
@@ -63,6 +65,10 @@ contextBridge.exposeInMainWorld('apis', {
   },
 
   async openExternal (url, options) {
+    const protocol = new URL(url).protocol
+    if (!ALLOWED_EXTERNAL_PROTOCOLS.includes(protocol)) {
+      throw new Error('illegal protocol')
+    }
     await shell.openExternal(url, options)
   },
 
@@ -72,7 +78,7 @@ contextBridge.exposeInMainWorld('apis', {
 
   showItemInFolder (fullpath) {
     if (IS_WIN32) {
-      shell.openPath(path.dirname(fullpath))
+      shell.openPath(path.dirname(fullpath).replaceAll("/", "\\"))
     } else {
       shell.showItemInFolder(fullpath)
     }
@@ -110,11 +116,7 @@ contextBridge.exposeInMainWorld('apis', {
 
     const dest = path.join(repoPathRoot, to)
     const assetsRoot = path.dirname(dest)
-
-    if (!/assets$/.test(assetsRoot)) {
-      throw new Error('illegal assets dirname')
-    }
-
+    
     await fs.promises.mkdir(assetsRoot, { recursive: true })
 
     from = from && decodeURIComponent(from || getFilePathFromClipboard())
@@ -166,6 +168,10 @@ contextBridge.exposeInMainWorld('apis', {
 
   setZoomFactor (factor) {
     webFrame.setZoomFactor(factor)
+  },
+
+  setZoomLevel (level) {
+    webFrame.setZoomLevel(level)
   },
 
   isAbsolutePath: path.isAbsolute.bind(path)

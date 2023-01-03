@@ -28,7 +28,8 @@ const consoleLogWatcher = (msg: ConsoleMessage) => {
   expect(text, logs).not.toMatch(/^(Failed to|Uncaught)/)
 
   // youtube video
-  if (!text.match(/^Error with Permissions-Policy header: Unrecognized feature/)) {
+  // Error with Permissions-Policy header: Origin trial controlled feature not enabled: 'ch-ua-reduced'.
+  if (!text.match(/^Error with Permissions-Policy header:/)) {
     expect(text, logs).not.toMatch(/^Error/)
   }
 
@@ -69,6 +70,16 @@ base.beforeAll(async () => {
   console.log("Test start with:", info)
 
   page = await electronApp.firstWindow()
+
+  // inject testing flags
+  await page.evaluate(
+    () => {
+      Object.assign(window, {
+        __E2E_TESTING__: true,
+      })
+    },
+  )
+
   // Direct Electron console to watcher
   page.on('console', consoleLogWatcher)
   page.on('crash', () => {
@@ -106,6 +117,19 @@ base.beforeEach(async () => {
   if (page) {
     await page.keyboard.press('Escape')
     await page.keyboard.press('Escape')
+
+    /*
+    const locator = page.locator('.notification-close-button').first()
+    while (await locator.isVisible()) {
+      locator.click() // ignore error
+    }
+    */
+    await expect(page.locator('.notification-close-button')).not.toBeVisible()
+
+    const rightSidebar = page.locator('.cp__right-sidebar-inner')
+    if (await rightSidebar.isVisible()) {
+      await page.click('button.toggle-right-sidebar', {delay: 100})
+    }
   }
 })
 
@@ -113,6 +137,8 @@ base.afterAll(async () => {
   // if (electronApp) {
   //  await electronApp.close()
   //}
+  // use .dump as extension to avoid unfolded when zip by github
+  await context.tracing.stop({ path: `e2e-dump/trace-${Date.now()}.zip.dump` });
 })
 
 // hijack electron app into the test context
@@ -179,8 +205,14 @@ export const test = base.extend<LogseqFixtures>({
         await page.waitForSelector(`.ls-block.selected >> nth=${total - 1}`, { timeout: 1000 })
       },
       escapeEditing: async (): Promise<void> => {
-        await page.keyboard.press('Escape')
-        await page.keyboard.press('Escape')
+        const blockEdit = page.locator('.ls-block textarea >> nth=0')
+        while (await blockEdit.isVisible()) {
+          await page.keyboard.press('Escape')
+        }
+        const blockSelect = page.locator('.ls-block.selected')
+        while (await blockSelect.isVisible()) {
+          await page.keyboard.press('Escape')
+        }
       },
       activeEditing: async (nth: number): Promise<void> => {
         await page.waitForSelector(`.ls-block >> nth=${nth}`, { timeout: 1000 })

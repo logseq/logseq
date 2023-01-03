@@ -1,0 +1,153 @@
+/**
+ * This file is managed manually by Webfont app.
+ * Steps:
+ *  - download the zip from Webfont app
+ *  - get the tabler-icons-extension.woff2 and replace the one in fonts/tabler-icons-extension.woff2
+ *  - update the tie-xxx css rules
+ */
+
+ @font-face {
+  font-family: 'tabler-icons-extension';
+  src: url('../fonts/tabler-icons-extension.woff2?mxgthk') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+}
+
+.tie {
+  display: inline-block;
+  font-family: "tabler-icons-extension" !important;
+  font-style: normal !important;
+  font-weight: normal !important;
+  font-variant: normal !important;
+  text-transform: none !important;
+  speak: none;
+  line-height: 1;
+  vertical-align: -.125em;
+  text-rendering: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.tie-add-link::before {
+  content: "\ea01";
+}
+
+.tie-app-feature::before {
+  content: "\ea02";
+}
+
+.tie-block::before {
+  content: "\ea03";
+}
+
+.tie-block-search::before {
+  content: "\ea04";
+}
+
+.tie-cloud-exclamation::before {
+  content: "\ea05";
+}
+
+.tie-connector::before {
+  content: "\ea06";
+}
+
+.tie-group::before {
+  content: "\ea07";
+}
+
+.tie-h-auto::before {
+  content: "\ea08";
+}
+
+.tie-heading-off::before {
+  content: "\ea09";
+}
+
+.tie-internal-link::before {
+  content: "\ea0a";
+}
+
+.tie-link-to-block::before {
+  content: "\ea0b";
+}
+
+.tie-link-to-page::before {
+  content: "\ea0c";
+}
+
+.tie-link-to-whiteboard::before {
+  content: "\ea0d";
+}
+
+.tie-move-to-sidebar-right::before {
+  content: "\ea0e";
+}
+
+.tie-new-block::before {
+  content: "\ea0f";
+}
+
+.tie-new-page::before {
+  content: "\ea10";
+}
+
+.tie-new-whiteboard::before {
+  content: "\ea11";
+}
+
+.tie-new-whiteboard-element::before {
+  content: "\ea12";
+}
+
+.tie-object-compact::before {
+  content: "\ea13";
+}
+
+.tie-object-expanded::before {
+  content: "\ea14";
+}
+
+.tie-open-as-page::before {
+  content: "\ea15";
+}
+
+.tie-page::before {
+  content: "\ea16";
+}
+
+.tie-page-search::before {
+  content: "\ea17";
+}
+
+.tie-references-hide::before {
+  content: "\ea18";
+}
+
+.tie-references-show::before {
+  content: "\ea19";
+}
+
+.tie-select-cursor::before {
+  content: "\ea1a";
+}
+
+.tie-text::before {
+  content: "\ea1b";
+}
+
+.tie-ungroup::before {
+  content: "\ea1c";
+}
+
+.tie-whiteboard::before {
+  content: "\ea1d";
+}
+
+.tie-whiteboard-element::before {
+  content: "\ea1e";
+}
+
+.tie-whiteboard-search::before {
+  content: "\ea1f";
+}

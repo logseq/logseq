@@ -1,6 +1,7 @@
 import path from 'path/path.js'
 
 // TODO split the capacitor abilities to a separate file for capacitor APIs
+import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { Clipboard as CapacitorClipboard } from '@capacitor/clipboard'
 
@@ -244,9 +245,8 @@ export const getClipText = (cb, errorHandler) => {
   })
 }
 
-// TODO split the capacitor clipboard to a separate file for capacitor APIs
 export const writeClipboard = ({text, html}) => {
-    if (typeof navigator.permissions == "undefined") {
+    if (Capacitor.isNativePlatform()) {
         CapacitorClipboard.write({ string: text });
         return
     }
@@ -314,13 +314,19 @@ export const nodePath = Object.assign({}, path, {
 
   join (input, ...paths) {
     let orURI = null
+    const s = [
+      'file://', 'http://',
+      'https://', 'content://'
+    ]
 
-    try {
-      orURI = new URL(input)
-      input = input.replace(orURI.protocol + '//', '')
-        .replace(orURI.protocol, '')
-        .replace(/^\/+/, '/')
-    } catch (_e) {}
+    if (s.some(p => input.startsWith(p))) {
+      try {
+        orURI = new URL(input)
+        input = input.replace(orURI.protocol + '//', '')
+          .replace(orURI.protocol, '')
+          .replace(/^\/+/, '/')
+      } catch (_e) {}
+    }
 
     input = path.join(input, ...paths)
 
