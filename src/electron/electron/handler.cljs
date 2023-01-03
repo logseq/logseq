@@ -177,14 +177,19 @@
           result (get (js->clj result) "filePaths")]
     (p/resolved (first result))))
 
-(defn- pretty-print-js-error [e]
-(->>
- e
- str
- ;; Message parsed as "Error: $ERROR_CODE$: $REASON$, function '$$'"
- (re-matches #"(?:\w+\: )(.+)(?::)(.+)(?:, \w+ ')(.+)(?:')")
- rest
- (#(str (string/capitalize (second %)) " for path: " (nth % 2) " (Code: " (first %) ")"))))
+(defn- pretty-print-js-error
+  "Converts file related JS Error messages to a human readable format.
+   Ex.:
+   Error: EACCES: permission denied, scandir '/tmp/test'
+   Permission denied for path: '/tmp/test' (Code: EACCES)"
+  [e]
+  (->>
+   e
+   str
+   ;; Message parsed as "Error: $ERROR_CODE$: $REASON$, function $PATH$"
+   (re-matches #"(?:Error\: )(.+)(?:\: )(.+)(?:, \w+ )('.+')")
+   rest
+   (#(str (string/capitalize (second %)) " for path: " (nth % 2) " (Code: " (first %) ")"))))
 
 (defmethod handle :openDir [^js window _messages]
   (logger/info ::open-dir "open folder selection dialog")
