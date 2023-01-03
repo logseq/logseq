@@ -2,6 +2,9 @@
 
 This page describes development practices for this codebase.
 
+## Auto-formatting
+`cljfmt` is a common formatter used for Clojure, analogous to Prettier for other languages. While we do not format/indent consistently with `cljfmt` across the whole codebase, we recommend that you do so for code that you change/add. You can do so easily with the [Calva](https://marketplace.visualstudio.com/items?itemName=betterthantomorrow.calva) extension in VSCode: It will (mostly) indent your code correctly as you type, and you can move your cursor to the start of the line(s) you've written and press `Tab` to auto-indent all clojure forms nested under the one starting on the current line.
+
 ## Linting
 
 Most of our linters require babashka. Before running them, please install
