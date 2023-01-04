@@ -168,14 +168,14 @@ And here is a list of some [good first issues](https://github.com/logseq/logseq/
 # 🙏 Thanks to
 ## 💎 Our Open Collective Sponsors
 <p align="center">
-    <a href="https://opencollective.com/logseq" alt="Backers on Open Collective">
+    <a href="https://opencollective.com/logseq" alt="Sponsors on Open Collective">
         <img src="https://opencollective.com/logseq/tiers/sponsors.svg?avatarHeight=42&width=600"/></a>
 </p>
 
 ## 🫶 Our Backers
 <p align="center">
     <a href="https://opencollective.com/logseq" alt="Backers on Open Collective">
-        <img src="https://opencollective.com/logseq/tiers/backers.svg?avatarHeight=38&width=600"/></a>
+        <img src="https://opencollective.com/logseq/tiers/backers.svg?avatarHeight=24&width=600"/></a>
 </p>
 
 ## 🌟 Our Contributors
