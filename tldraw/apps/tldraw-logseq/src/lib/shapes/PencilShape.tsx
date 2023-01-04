@@ -119,7 +119,6 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
     )
   })
 
-
   @computed get scaleLevel() {
     return this.props.scaleLevel ?? 'md'
   }
