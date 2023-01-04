@@ -82,6 +82,7 @@
                         (model/query-block-by-uuid (parse-uuid block-uuid))))
    :getBlockPageName #(:block/name (model/get-block-page (state/get-current-repo) (parse-uuid %)))
    :isWhiteboardPage model/whiteboard-page?
+   :isMobile util/mobile?
    :saveAsset save-asset-handler
    :makeAssetUrl editor-handler/make-asset-url
    :addNewWhiteboard (fn [page-name]
