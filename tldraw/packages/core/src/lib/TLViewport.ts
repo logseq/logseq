@@ -133,9 +133,7 @@ export class TLViewport {
     return this
   }
 
-  /**
-   * Animate the camera to the given position
-   */
+  /** Animate the camera to the given position */
   animateCamera = ({ point, zoom }: { point: number[]; zoom: number }) => {
     return this.animateToViewport({
       minX: -point[0],
