@@ -74,7 +74,7 @@
       (when (or (string/blank? token)
                 (not (some #(or (= % token)
                                 (= (:value %) token)) valid-tokens)))
-        (throw (js/Error. "Access Deny!"))))))
+        (throw (js/Error. "Access Denied!"))))))
 
 (defn- api-pre-handler!
   [^js req ^js rep callback]

@@ -643,13 +643,14 @@
                                                :font-weight    500
                                                :max-height     600
                                                :padding-bottom 64}}
-                                      (if (and (string? page-original-name) (string/includes? page-original-name "/"))
+                                      (if (and (string? page-original-name) (text/namespace-page? page-original-name))
                                         [:div.my-2
                                          (->>
-                                          (for [page (string/split page-original-name #"/")]
-                                            (when (and (string? page) page)
-                                              (page-reference false page {} nil)))
-                                          (interpose [:span.mx-2.opacity-30 "/"]))]
+                                          (for [namespace-page (gp-util/split-namespace-pages page-original-name)]
+                                            (when (and (string? namespace-page) namespace-page)
+                                              (let [label (second (gp-util/split-last model/ns-char namespace-page))]
+                                                (page-reference false namespace-page {:preview? true} label))))
+                                          (interpose [:span.mx-2.opacity-30 model/ns-char]))]
                                         [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
                                                                  page-original-name
                                                                  [:span
