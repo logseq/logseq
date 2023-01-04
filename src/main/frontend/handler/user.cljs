@@ -156,7 +156,7 @@
             (#(state/pub-event! [:user/fetch-info-and-graphs])))
         (debug/pprint "login-callback" resp)))))
 
-(defn login-with-username-password-e2e
+(defn ^:export login-with-username-password-e2e
   [username password client-id client-secret]
   (let [text-encoder (new js/TextEncoder)
         key          (.encode text-encoder client-secret)
@@ -180,7 +180,7 @@
               refresh-token (get-in body ["AuthenticationResult" "RefreshToken"])]
           (set-token-to-localstorage! id-token access-token refresh-token)
           {:id-token id-token :access-token access-token :refresh-token refresh-token})))))
-(set! js/window -login-with-username-password-e2e login-with-username-password-e2e)
+
 (defn logout []
   (clear-tokens)
   (state/pub-event! [:user/logout]))
