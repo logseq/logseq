@@ -680,12 +680,8 @@
       children)))
 
 (rum/defc page-cp
-  "The page components
-
-   Accepts {:block/name sanitized / unsanitized page-name}
-
-   Configurable keys: 
-   
+  "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
+   Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [{:keys [html-export? redirect-page-name label children contents-page? preview?] :as config} page]
   (when-let [page-name-in-block (:block/name page)]
@@ -755,11 +751,7 @@
       (draw-component {:file file :block-uuid block-uuid}))))
 
 (rum/defc page-reference < rum/reactive
-  "Component for page reference, if there is existing page reference, will render the reference.
-   
-   Arguments:
-   
-   `config`: will be passed as first argument to `page-cp`"
+  "Component for page reference"
   [html-export? s {:keys [nested-link? id] :as config} label]
   (let [show-brackets? (state/show-brackets?)
         block-uuid (:block/uuid config)
