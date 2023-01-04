@@ -180,7 +180,7 @@
               access-token  (get-in body ["AuthenticationResult" "AccessToken"])
               id-token      (get-in body ["AuthenticationResult" "IdToken"])
               refresh-token (get-in body ["AuthenticationResult" "RefreshToken"])]
-          (set-token-to-localstorage! id-token access-token refresh-token)
+          (set-tokens! id-token access-token refresh-token)
           (state/pub-event! [:user/fetch-info-and-graphs])
           {:id-token id-token :access-token access-token :refresh-token refresh-token})))))
 
