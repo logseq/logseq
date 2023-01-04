@@ -9,7 +9,8 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [cljs-http.client :as http]
-            [cljs.core.async :as async :refer [go <!]]))
+            [cljs.core.async :as async :refer [go <!]]
+            [goog.crypt :as crypt]))
 
 (defn set-preferred-format!
   [format]
@@ -154,6 +155,31 @@
             (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $)))
             (#(state/pub-event! [:user/fetch-info-and-graphs])))
         (debug/pprint "login-callback" resp)))))
+
+(defn login-with-username-password-e2e
+  [username password client-id client-secret]
+  (let [text-encoder (new js/TextEncoder)
+        key          (.encode text-encoder client-secret)
+        hasher       (new crypt/Sha256)
+        hmacer       (new crypt/Hmac hasher key)
+        secret-hash  (.encodeByteArray ^js crypt/base64 (.getHmac hmacer (str username client-id)))
+        payload      {"AuthParameters" {"USERNAME"    username,
+                                        "PASSWORD"    password,
+                                        "SECRET_HASH" secret-hash}
+                      "AuthFlow"       "USER_PASSWORD_AUTH",
+                      "ClientId"       client-id}
+        headers      {"X-Amz-Target" "AWSCognitoIdentityProviderService.InitiateAuth",
+                      "Content-Type" "application/x-amz-json-1.1"}]
+    (go
+      (let [resp (<! (http/post config/COGNITO-IDP {:headers headers
+                                                    :body    (js/JSON.stringify (clj->js payload))}))]
+        (assert (= 200 (:status resp)))
+        (let [body          (js->clj (js/JSON.parse (:body resp)))
+              access-token  (get-in body ["AuthenticationResult" "AccessToken"])
+              id-token      (get-in body ["AuthenticationResult" "IdToken"])
+              refresh-token (get-in body ["AuthenticationResult" "RefreshToken"])]
+          (set-token-to-localstorage! id-token access-token refresh-token)
+          {:id-token id-token :access-token access-token :refresh-token refresh-token})))))
 
 (defn logout []
   (clear-tokens)
