@@ -104,11 +104,13 @@ test('cleanup the shapes', async ({ page }) => {
 
 test('zoom in', async ({ page }) => {
   await page.click('#tl-zoom-in')
+  await page.waitForTimeout(2000) // Wait for zoom to adjust
   await expect(page.locator('#tl-zoom')).toContainText('125%')
 })
 
 test('zoom out', async ({ page }) => {
   await page.click('#tl-zoom-out')
+  await page.waitForTimeout(2000)
   await expect(page.locator('#tl-zoom')).toContainText('100%')
 })
 
