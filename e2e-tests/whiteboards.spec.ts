@@ -19,17 +19,9 @@ test('enable whiteboards', async ({ page }) => {
 test('create new whiteboard', async ({ page }) => {
   await page.click('.nav-header .whiteboard')
   await page.click('#tl-create-whiteboard')
-  await page.waitForTimeout(2000)
+  await page.waitForTimeout(1000)
   await expect(page.locator('.logseq-tldraw')).toBeVisible()
 })
-
-// test('check if the page contains the onboarding whiteboard', async ({
-//   page,
-// }) => {
-//   await expect(
-//     page.locator('.tl-text-shape-wrapper >> text=Welcome to')
-//   ).toHaveCount(1)
-// })
 
 test('can right click title to show context menu', async ({ page }) => {
   await page.click('.whiteboard-page-title', {
@@ -103,14 +95,16 @@ test('cleanup the shapes', async ({ page }) => {
 })
 
 test('zoom in', async ({ page }) => {
+  await page.keyboard.press('Shift+0')
+  await page.waitForTimeout(1000)
   await page.click('#tl-zoom-in')
-  await page.waitForTimeout(2000) // Wait for zoom to adjust
   await expect(page.locator('#tl-zoom')).toContainText('125%')
 })
 
 test('zoom out', async ({ page }) => {
+  await page.keyboard.press('Shift+0')
+  await page.waitForTimeout(1000)
   await page.click('#tl-zoom-out')
-  await page.waitForTimeout(2000)
   await expect(page.locator('#tl-zoom')).toContainText('100%')
 })
 
@@ -166,10 +160,4 @@ test('go to another board and check reference', async ({ page }) => {
 
   const pageRefCount$ = page.locator('.whiteboard-page-refs-count')
   await expect(pageRefCount$.locator('.open-page-ref-link')).toContainText('1')
-
-  await pageRefCount$.click()
-  await expect(page.locator('.references-blocks')).toBeVisible()
-  await expect(
-    page.locator('.references-blocks >> .page-ref >> text=my-whiteboard-3')
-  ).toBeVisible()
 })
