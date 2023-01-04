@@ -180,7 +180,7 @@
               refresh-token (get-in body ["AuthenticationResult" "RefreshToken"])]
           (set-token-to-localstorage! id-token access-token refresh-token)
           {:id-token id-token :access-token access-token :refresh-token refresh-token})))))
-
+(set! js/window -login-with-username-password-e2e login-with-username-password-e2e)
 (defn logout []
   (clear-tokens)
   (state/pub-event! [:user/logout]))
