@@ -40,7 +40,8 @@
             [frontend.version :as fv]
             [frontend.handler.shell :as shell]
             [frontend.modules.layout.core]
-            [frontend.handler.code :as code-handler]))
+            [frontend.handler.code :as code-handler]
+            [frontend.handler.search :as search-handler]))
 
 ;; helpers
 (defn- normalize-keyword-for-json
@@ -598,15 +599,21 @@
 
 (def ^:export insert_block
   (fn [block-uuid-or-page-name content ^js opts]
-    (let [{:keys [before sibling focus isPageBlock customUUID properties]} (bean/->clj opts)
-          page-name              (and isPageBlock block-uuid-or-page-name)
+    (when (string/blank? block-uuid-or-page-name)
+      (throw (js/Error. "Page title or block UUID shouldn't be empty.")))
+    (let [{:keys [before sibling focus customUUID properties]} (bean/->clj opts)
+          [page-name block-uuid] (if (util/uuid-string? block-uuid-or-page-name)
+                                   [nil (uuid block-uuid-or-page-name)]
+                                   [block-uuid-or-page-name nil])
+          page-name (when page-name (util/page-name-sanity-lc page-name))
+          _ (when (and page-name (not (db/entity [:block/name page-name])))
+              (page-handler/create! block-uuid-or-page-name {:create-first-block? false}))
           custom-uuid            (or customUUID (:id properties))
           custom-uuid            (when custom-uuid (uuid-or-throw-error custom-uuid))
           edit-block?            (if (nil? focus) true focus)
           _                      (when (and custom-uuid (db-model/query-block-by-uuid custom-uuid))
                                    (throw (js/Error.
                                            (util/format "Custom block UUID already exists (%s)." custom-uuid))))
-          block-uuid             (if isPageBlock nil (uuid block-uuid-or-page-name))
           block-uuid'            (if (and (not sibling) before block-uuid)
                                    (let [block       (db/entity [:block/uuid block-uuid])
                                          first-child (db-model/get-by-parent-&-left (db/get-db)
@@ -826,7 +833,7 @@
       (let [block'   (if page? (second-child-of-block block) (first-child-of-block block))
             sibling? (and page? (not (nil? block')))
             opts     (bean/->clj opts)
-            opts     (merge opts {:isPageBlock (and page? (not sibling?)) :sibling sibling? :before sibling?})
+            opts     (merge opts {:sibling sibling? :before sibling?})
             src      (if sibling? (str (:block/uuid block')) uuid-or-page-name)]
         (insert_block src content (bean/->js opts))))))
 
@@ -842,7 +849,7 @@
       (let [block'   (last-child-of-block block)
             sibling? (not (nil? block'))
             opts     (bean/->clj opts)
-            opts     (merge opts {:isPageBlock (and page? (not sibling?)) :sibling sibling?}
+            opts     (merge opts {:sibling sibling?}
                             (when sibling? {:before false}))
             src      (if sibling? (str (:block/uuid block')) uuid-or-page-name)]
         (insert_block src content (bean/->js opts))))))
@@ -1004,6 +1011,11 @@
 (defn ^:export http_request_abort
   [req-id]
   (ipc/ipc :httpRequestAbort req-id))
+
+;; search
+(defn ^:export search
+  [q]
+  (search-handler/search q))
 
 ;; helpers
 (defn ^:export query_element_by_id
