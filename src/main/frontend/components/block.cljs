@@ -685,7 +685,7 @@
 
    Configurable keys: 
    
-   - `:preview?`: Is this component under preview mode? (If true, page-preview-trigger won't be registered to this page-cp)"
+   - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [{:keys [html-export? redirect-page-name label children contents-page? preview?] :as config} page]
   (when-let [page-name-in-block (:block/name page)]
     (let [page-name-in-block (gp-util/remove-boundary-slashes page-name-in-block)
