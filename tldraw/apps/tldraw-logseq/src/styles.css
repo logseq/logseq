@@ -79,6 +79,10 @@ html[data-theme='light'] {
   }
 }
 
+.tl-container {
+  overflow: hidden;
+}
+
 .tl-menu-item {
   @apply flex items-center pl-10 pr-4 py-1 text-sm relative !important;
 
