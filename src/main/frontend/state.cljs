@@ -953,7 +953,7 @@ Similar to re-frame subscriptions"
    (set-selection-blocks! blocks :down))
   ([blocks direction]
    (when (seq blocks)
-     (let [blocks (util/sort-by-height blocks)]
+     (let [blocks (util/sort-by-height (remove nil? blocks))]
        (swap! state assoc
              :selection/mode true
              :selection/blocks blocks

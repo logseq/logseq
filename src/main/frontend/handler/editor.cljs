@@ -3426,7 +3426,8 @@
 
 (defn select-parent [e]
   (let [edit-input (some-> (state/get-edit-input-id) gdom/getElement)
-        edit-block (state/get-edit-block)]
+        edit-block (state/get-edit-block)
+        target-element (.-nodeName (.-target e))]
     (cond
       ;; editing block fully selected
       (and edit-block edit-input
@@ -3437,6 +3438,10 @@
          [(gdom/getElementByClass (str (:block/uuid edit-block)))]))
 
       edit-block
+      nil
+
+      ;; Focusing other input element, e.g. when editing page title.
+      (contains? #{"INPUT" "TEXTAREA"} target-element)
       nil
 
       :else

@@ -224,7 +224,7 @@
                            (println "invokeLogseqAPI:" method)
                            (let [^js apis (aget js/window.logseq "api")]
                              (when-not (aget apis method)
-                               (throw (js/Error. (str "MethodNotExist:" method))))
+                               (throw (js/Error. (str "MethodNotExist: " method))))
                              (-> (p/promise (apply js-invoke apis method args))
                                  (p/then #(ret-fn! %))
                                  (p/catch #(ret-fn! {:error %}))))
