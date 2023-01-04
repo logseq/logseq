@@ -10,6 +10,8 @@
             [cljs-time.coerce :as tc]
             [cljs-http.client :as http]
             [cljs.core.async :as async :refer [go <!]]
+            [goog.crypt.Sha256]
+            [goog.crypt.Hmac]
             [goog.crypt :as crypt]))
 
 (defn set-preferred-format!
@@ -179,6 +181,7 @@
               id-token      (get-in body ["AuthenticationResult" "IdToken"])
               refresh-token (get-in body ["AuthenticationResult" "RefreshToken"])]
           (set-token-to-localstorage! id-token access-token refresh-token)
+          (state/pub-event! [:user/fetch-info-and-graphs])
           {:id-token id-token :access-token access-token :refresh-token refresh-token})))))
 
 (defn logout []
