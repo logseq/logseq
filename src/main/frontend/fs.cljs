@@ -57,9 +57,12 @@
   [dir & {:keys [path-only?]}]
   (p/let [result (protocol/readdir (get-fs dir) dir)
           result (bean/->clj result)]
-    (if (and path-only? (map? (first result)))
-      (map :uri result)
-      result)))
+    (let [result (if (and path-only? (map? (first result)))
+                   (map :uri result)
+                   result)]
+      (if (and (map? (first result)) (:uri (first result)))
+        (map #(update % :uri gp-util/path-normalize) result)
+        (map gp-util/path-normalize result)))))
 
 (defn unlink!
   "Should move the path to logseq/recycle instead of deleting it."

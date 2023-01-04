@@ -3,6 +3,7 @@ const extendedIcons = [
   'block-search',
   'block',
   'connector',
+  'group',
   'internal-link',
   'link-to-block',
   'link-to-page',
@@ -17,6 +18,7 @@ const extendedIcons = [
   'references-show',
   'select-cursor',
   'text',
+  'ungroup',
   'whiteboard-element',
   'whiteboard',
 ]

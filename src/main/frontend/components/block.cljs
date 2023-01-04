@@ -298,7 +298,7 @@
           (assoc :style {:width (:width metadata)}))
         {})
       [:div.asset-container {:key "resize-asset-container"}
-       [:img.rounded-sm.shadow-xl.relative
+       [:img.rounded-sm.relative
         (merge
          {:loading "lazy"
           :src     src
@@ -530,27 +530,28 @@
 (defn open-page-ref
   [e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?]
   (util/stop e)
-  (cond
-    (gobj/get e "shiftKey")
-    (when-let [page-entity (db/entity [:block/name redirect-page-name])]
-      (state/sidebar-add-block!
-       (state/get-current-repo)
-       (:db/id page-entity)
-       :page))
+  (when (not (util/right-click? e))
+    (cond
+      (gobj/get e "shiftKey")
+      (when-let [page-entity (db/entity [:block/name redirect-page-name])]
+        (state/sidebar-add-block!
+         (state/get-current-repo)
+         (:db/id page-entity)
+         :page))
 
-    (whiteboard-handler/inside-portal? (.-target e))
-    (whiteboard-handler/add-new-block-portal-shape!
-     page-name
-     (whiteboard-handler/closest-shape (.-target e)))
+      (whiteboard-handler/inside-portal? (.-target e))
+      (whiteboard-handler/add-new-block-portal-shape!
+       page-name
+       (whiteboard-handler/closest-shape (.-target e)))
 
-    whiteboard-page?
-    (route-handler/redirect-to-whiteboard! page-name)
+      whiteboard-page?
+      (route-handler/redirect-to-whiteboard! page-name)
 
-    (not= redirect-page-name page-name)
-    (route-handler/redirect-to-page! redirect-page-name)
+      (not= redirect-page-name page-name)
+      (route-handler/redirect-to-page! redirect-page-name)
 
-    :else
-    (state/pub-event! [:page/create page-name-in-block]))
+      :else
+      (state/pub-event! [:page/create page-name-in-block])))
   (when (and contents-page?
              (util/mobile?)
              (state/get-left-sidebar-open?))
@@ -642,13 +643,14 @@
                                                :font-weight    500
                                                :max-height     600
                                                :padding-bottom 64}}
-                                      (if (and (string? page-original-name) (string/includes? page-original-name "/"))
+                                      (if (and (string? page-original-name) (text/namespace-page? page-original-name))
                                         [:div.my-2
                                          (->>
-                                          (for [page (string/split page-original-name #"/")]
-                                            (when (and (string? page) page)
-                                              (page-reference false page {} nil)))
-                                          (interpose [:span.mx-2.opacity-30 "/"]))]
+                                          (for [namespace-page (gp-util/split-namespace-pages page-original-name)]
+                                            (when (and (string? namespace-page) namespace-page)
+                                              (let [label (second (gp-util/split-last model/ns-char namespace-page))]
+                                                (page-reference false namespace-page {:preview? true} label))))
+                                          (interpose [:span.mx-2.opacity-30 model/ns-char]))]
                                         [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
                                                                  page-original-name
                                                                  [:span
