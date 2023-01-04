@@ -205,7 +205,7 @@ model.
 
 ## Auto-formatting
 
-Currently the codebase is not formatted/indented consistently. We loosely follow https://github.com/bbatsov/clojure-style-guide. [cljfmt](https://cljdoc.org/d/cljfmt/cljfmt/0.9.0/doc/readme) is a common formatter used for Clojure, analogous to Prettier for other languages. You can do so easily with the [Calva](https://marketplace.visualstudio.com/items?itemName=betterthantomorrow.calva) extension in [VSCode](https://code.visualstudio.com/): It will (mostly) indent your code correctly as you type, and you can move your cursor to the start of the line(s) you've written and press `Tab` to auto-indent all Clojure forms nested under the one starting on the current line.
+Currently the codebase is not formatted/indented consistently. We loosely follow https://github.com/bbatsov/clojure-style-guide. [cljfmt](https://cljdoc.org/d/cljfmt/) is a common formatter used for Clojure, analogous to Prettier for other languages. You can do so easily with the [Calva](https://marketplace.visualstudio.com/items?itemName=betterthantomorrow.calva) extension in [VSCode](https://code.visualstudio.com/): It will (mostly) indent your code correctly as you type, and you can move your cursor to the start of the line(s) you've written and press `Tab` to auto-indent all Clojure forms nested under the one starting on the current line.
 
 ## Development Tools
 
