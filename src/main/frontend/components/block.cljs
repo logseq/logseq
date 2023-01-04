@@ -754,6 +754,11 @@
       (draw-component {:file file :block-uuid block-uuid}))))
 
 (rum/defc page-reference < rum/reactive
+  "Component for page reference, if there is existing page reference, will render the reference.
+   
+   Arguments:
+   
+   `config`: will be passed as first argument to `page-cp`"
   [html-export? s {:keys [nested-link? id] :as config} label]
   (let [show-brackets? (state/show-brackets?)
         block-uuid (:block/uuid config)
