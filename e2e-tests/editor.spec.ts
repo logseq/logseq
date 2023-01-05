@@ -597,7 +597,7 @@ test('should not erase typed text when expanding block quickly after typing #389
   )
 })
 
-test('should keep correct undo and redo seq',async({page,block}) => {
+test('should keep correct undo and redo seq after indenting or outdenting the block #7615',async({page,block}) => {
   await createRandomPage(page)
 
   await block.mustFill("foo")
