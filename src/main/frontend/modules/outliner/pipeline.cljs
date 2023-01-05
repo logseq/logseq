@@ -89,7 +89,7 @@
         (when (and state/lsp-enabled?
                    (seq blocks)
                    (not importing?)
-                   (<= (count blocks) 100))
+                   (<= (count blocks) 1000))
           (state/pub-event! [:plugin/hook-db-tx
                              {:blocks  blocks
                               :tx-data (:tx-data tx-report)
