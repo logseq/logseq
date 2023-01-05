@@ -680,7 +680,9 @@
       children)))
 
 (rum/defc page-cp
-  "Accepts {:block/name sanitized / unsanitized page-name}"
+  "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
+   Keys for `config`:
+   - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [{:keys [html-export? redirect-page-name label children contents-page? preview?] :as config} page]
   (when-let [page-name-in-block (:block/name page)]
     (let [page-name-in-block (gp-util/remove-boundary-slashes page-name-in-block)
@@ -749,6 +751,7 @@
       (draw-component {:file file :block-uuid block-uuid}))))
 
 (rum/defc page-reference < rum/reactive
+  "Component for page reference"
   [html-export? s {:keys [nested-link? id] :as config} label]
   (let [show-brackets? (state/show-brackets?)
         block-uuid (:block/uuid config)
@@ -1511,9 +1514,10 @@
       (= name "embed")
       (macro-embed-cp config arguments)
 
-      (and config/lsp-enabled? (= name "renderer"))
-      (when-let [block-uuid (str (:block/uuid config))]
-        (plugins/hook-ui-slot :macro-renderer-slotted (assoc options :uuid block-uuid)))
+      (= name "renderer")
+      (when config/lsp-enabled?
+        (when-let [block-uuid (str (:block/uuid config))]
+          (plugins/hook-ui-slot :macro-renderer-slotted (assoc options :uuid block-uuid))))
 
       (get @macro/macros name)
       ((get @macro/macros name) config options)
