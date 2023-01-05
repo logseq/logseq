@@ -86,7 +86,10 @@
           (doseq [p (seq pages)]
             (updated-page-hook tx-report p)))
 
-        (when (and state/lsp-enabled? (seq blocks) (not importing?))
+        (when (and state/lsp-enabled?
+                   (seq blocks)
+                   (not importing?)
+                   (<= (count blocks) 100))
           (state/pub-event! [:plugin/hook-db-tx
                              {:blocks  blocks
                               :tx-data (:tx-data tx-report)
