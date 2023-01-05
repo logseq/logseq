@@ -1613,7 +1613,7 @@
             (instance? ExceptionInfo r) r
             @*paused                    {:pause true}
             :else
-            (let [latest-txid (apply max (map #(.-txid ^FileTxn %) filetxns))]
+            (let [latest-txid (apply max @*txid (map #(.-txid ^FileTxn %) filetxns))]
               ;; update local-txid
               (when (and *txid (number? latest-txid))
                 (reset! *txid latest-txid)
@@ -2687,7 +2687,7 @@
   (schedule [this next-state args reason]
     {:pre [(s/valid? ::state next-state)]}
     (println "[SyncManager" graph-uuid "]"
-             (and state (name state)) "->" (and next-state (name next-state)) :reason reason :now (tc/to-string (t/now)))
+             (and state (name state)) "->" (and next-state (name next-state)) :reason reason :local-txid @*txid :now (tc/to-string (t/now)))
     (set! state next-state)
     (swap! *sync-state sync-state--update-state next-state)
     (go
