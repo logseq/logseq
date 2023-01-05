@@ -89,9 +89,7 @@
 
 (defn ^:export should-exec-plugin-hook
   [pid hook]
-  (let [hooks (:plugin/installed-hooks @state/state)]
-    (or (nil? (seq hooks))
-        (contains? (get hooks hook) (keyword pid)))))
+  (plugin-handler/plugin-hook-installed? pid hook))
 
 ;; base
 (defn ^:export get_state_from_store
