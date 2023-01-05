@@ -154,5 +154,6 @@
         "pixi-graph-fork/@pixi/settings": "6.2.0",
         "pixi-graph-fork/@pixi/mixin-get-child-by-name": "6.2.0",
         "pixi-graph-fork/@pixi/math": "6.2.0"
-    }
+    },
+    "packageManager": "yarn@1.22.19"
 }
