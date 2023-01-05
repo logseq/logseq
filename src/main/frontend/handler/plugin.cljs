@@ -490,11 +490,10 @@
 
 (defn hook-plugin-block-changes
   [{:keys [blocks tx-data tx-meta]}]
-
-  (doseq [b blocks
-          :let [tx-data' (group-by first tx-data)
-                type     (str "block:" (:block/uuid b))]]
-    (hook-plugin-db type {:block b :tx-data (get tx-data' (:db/id b)) :tx-meta tx-meta})))
+  (let [tx-data' (group-by first tx-data)]
+    (doseq [b blocks]
+      (let [type (str "block:" (:block/uuid b))]
+        (hook-plugin-db type {:block b :tx-data (get tx-data' (:db/id b)) :tx-meta tx-meta})))))
 
 (defn hook-plugin-block-slot
   [block payload]
