@@ -1613,7 +1613,7 @@
             (instance? ExceptionInfo r) r
             @*paused                    {:pause true}
             :else
-            (let [latest-txid (apply max @*txid (map #(.-txid ^FileTxn %) filetxns))]
+            (let [latest-txid (apply max (and *txid @*txid) (map #(.-txid ^FileTxn %) filetxns))]
               ;; update local-txid
               (when (and *txid (number? latest-txid))
                 (reset! *txid latest-txid)
@@ -2222,7 +2222,7 @@
   if local-txid != remote-txid, return {:need-sync-remote true}"))
 
 (defrecord ^:large-vars/cleanup-todo
-  Remote->LocalSyncer [user-uuid graph-uuid base-path repo *txid *sync-state remoteapi
+  Remote->LocalSyncer [user-uuid graph-uuid base-path repo *txid origin-txid *sync-state remoteapi
                        ^:mutable local->remote-syncer *stopped *paused]
   Object
   (set-local->remote-syncer! [_ s] (set! local->remote-syncer s))
@@ -2459,7 +2459,9 @@
 
 (defrecord ^:large-vars/cleanup-todo
   Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state remoteapi
-                       ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan *stopped *paused
+                       ^:mutable rate *txid
+                       origin-txid      ; origin-txid is txid at sync-start point, used by <get-deletion-log
+                       ^:mutable remote->local-syncer stop-chan *stopped *paused
                        ;; control chans
                        private-immediately-local->remote-chan private-recent-edited-chan]
   Object
@@ -2588,7 +2590,7 @@
     (go
       (let [remote-all-files-meta-c      (<get-remote-all-files-meta remoteapi graph-uuid)
             local-all-files-meta-c       (<get-local-all-files-meta rsapi graph-uuid base-path)
-            deletion-logs-c              (<get-deletion-logs remoteapi graph-uuid @*txid)
+            deletion-logs-c              (<get-deletion-logs remoteapi graph-uuid origin-txid)
             remote-all-files-meta-or-exp (<! remote-all-files-meta-c)
             deletion-logs-or-exp         (<! deletion-logs-c)]
         (cond
@@ -2678,7 +2680,7 @@
   SyncManager [user-uuid graph-uuid base-path *sync-state
                ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer remoteapi
                ^:mutable ratelimit-local-changes-chan
-               *txid ^:mutable state ^:mutable remote-change-chan ^:mutable *ws *stopped? *paused?
+               *txid origin-txid ^:mutable state ^:mutable remote-change-chan ^:mutable *ws *stopped? *paused?
                ^:mutable ops-chan
                ;; control chans
                private-full-sync-chan private-remote->local-sync-chan
@@ -3038,6 +3040,7 @@
 
 (defn sync-manager [user-uuid graph-uuid base-path repo txid *sync-state]
   (let [*txid (atom txid)
+        origin-txid txid
         *stopped? (volatile! false)
         *paused? (volatile! false)
         remoteapi-with-stop (->RemoteAPI *stopped?)
@@ -3047,16 +3050,16 @@
                                                     (if (mobile-util/native-platform?)
                                                       2000
                                                       10000)
-                                                    *txid nil (chan) *stopped? *paused?
+                                                    *txid origin-txid nil (chan) *stopped? *paused?
                                                     (chan 1) (chan 1))
         remote->local-syncer (->Remote->LocalSyncer user-uuid graph-uuid base-path
-                                                    repo *txid *sync-state remoteapi-with-stop
+                                                    repo *txid origin-txid *sync-state remoteapi-with-stop
                                                     nil *stopped? *paused?)]
     (.set-remote->local-syncer! local->remote-syncer remote->local-syncer)
     (.set-local->remote-syncer! remote->local-syncer local->remote-syncer)
     (swap! *sync-state sync-state--update-current-syncing-graph-uuid graph-uuid)
     (->SyncManager user-uuid graph-uuid base-path *sync-state local->remote-syncer remote->local-syncer remoteapi-with-stop
-                   nil *txid nil nil nil *stopped? *paused? nil (chan 1) (chan 1) (chan 1) (chan 1))))
+                   nil *txid origin-txid nil nil nil *stopped? *paused? nil (chan 1) (chan 1) (chan 1) (chan 1))))
 
 (defn sync-manager-singleton
   [user-uuid graph-uuid base-path repo txid *sync-state]
