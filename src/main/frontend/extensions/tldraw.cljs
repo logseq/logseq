@@ -37,6 +37,10 @@
                     {:end-separator? (gobj/get props "endSeparator")
                      :level-limit (gobj/get props "levelLimit" 3)}))
 
+(rum/defc tweet
+  [props]
+  (ui/tweet-embed (gobj/get props "tweetId")))
+
 (rum/defc block-reference
   [props]
   (block/block-reference {} (gobj/get props "blockId") nil))
@@ -71,6 +75,7 @@
 (def tldraw-renderers {:Page page-cp
                        :Block block-cp
                        :Breadcrumb breadcrumb
+                       :Tweet tweet
                        :PageName page-name-link
                        :BacklinksCount references-count
                        :BlockReference block-reference})

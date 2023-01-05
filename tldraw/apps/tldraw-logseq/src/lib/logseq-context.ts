@@ -19,6 +19,9 @@ export interface LogseqContextValue {
       levelLimit?: number
       endSeparator?: boolean
     }>
+    Tweet: React.FC<{
+      tweetId: string
+    }>
     PageName: React.FC<{
       pageName: string
     }>

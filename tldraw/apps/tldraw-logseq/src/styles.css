@@ -901,10 +901,18 @@ html[data-theme='dark'] {
 }
 
 .tl-youtube-link,
+.tl-twitter-link,
 .tl-iframe-src {
   @apply rounded-lg px-2 py-1;
   color: var(--ls-primary-text-color);
   box-shadow: 0 0 0 1px var(--ls-secondary-border-color);
+}
+
+.logseq-tldraw {
+  .twitter-tweet,
+  iframe {
+    margin: 0 !important;
+  }
 }
 
 .tl-hitarea-stroke {

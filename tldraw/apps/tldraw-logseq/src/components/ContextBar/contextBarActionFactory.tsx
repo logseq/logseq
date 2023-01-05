@@ -14,6 +14,7 @@ import type {
   Shape,
   TextShape,
   YouTubeShape,
+  TweetShape,
 } from '../../lib'
 import { Button } from '../Button'
 import { TablerIcon } from '../icons'
@@ -39,6 +40,7 @@ export const contextBarActionTypes = [
   'ScaleLevel',
   'TextStyle',
   'YoutubeLink',
+  'TwitterLink',
   'IFrameSource',
   'LogseqPortalViewMode',
   'ArrowMode',
@@ -46,7 +48,7 @@ export const contextBarActionTypes = [
 ] as const
 
 type ContextBarActionType = typeof contextBarActionTypes[number]
-const singleShapeActions: ContextBarActionType[] = ['Edit', 'YoutubeLink', 'IFrameSource', 'Links']
+const singleShapeActions: ContextBarActionType[] = ['Edit', 'YoutubeLink', 'TwitterLink', 'IFrameSource', 'Links']
 
 const contextBarActionMapping = new Map<ContextBarActionType, React.FC>()
 
@@ -62,6 +64,7 @@ export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
     'Links',
   ],
   youtube: ['YoutubeLink', 'Links'],
+  tweet: ['TwitterLink', 'Links'],
   iframe: ['IFrameSource', 'Links'],
   box: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
   ellipse: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
@@ -296,6 +299,33 @@ const YoutubeLinkAction = observer(() => {
   )
 })
 
+const TwitterLinkAction = observer(() => {
+  const app = useApp<Shape>()
+  const shape = filterShapeByAction<TweetShape>(app.selectedShapesArray, 'TwitterLink')[0]
+  const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    shape.onTwitterLinkChange(e.target.value)
+    app.persist()
+  }, [])
+
+  return (
+    <span className="flex gap-3">
+      <TextInput
+        title="Twitter Link"
+        className="tl-twitter-link"
+        value={`${shape.props.url}`}
+        onChange={handleChange}
+      />
+      <Button
+        tooltip="Open Twitter Link"
+        type="button"
+        onClick={() => window.logseq?.api?.open_external_link?.(shape.props.url)}
+      >
+        <TablerIcon name="external-link" />
+      </Button>
+    </span>
+  )
+})
+
 const NoFillAction = observer(() => {
   const app = useApp<Shape>()
   const shapes = filterShapeByAction<BoxShape | PolygonShape | EllipseShape>(
@@ -511,6 +541,7 @@ contextBarActionMapping.set('AutoResizing', AutoResizingAction)
 contextBarActionMapping.set('LogseqPortalViewMode', LogseqPortalViewModeAction)
 contextBarActionMapping.set('ScaleLevel', ScaleLevelAction)
 contextBarActionMapping.set('YoutubeLink', YoutubeLinkAction)
+contextBarActionMapping.set('TwitterLink', TwitterLinkAction)
 contextBarActionMapping.set('IFrameSource', IFrameSourceAction)
 contextBarActionMapping.set('NoFill', NoFillAction)
 contextBarActionMapping.set('Swatch', SwatchAction)
