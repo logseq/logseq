@@ -63,8 +63,11 @@ Logseq is a **comprehensive tool for knowledge management** and collaboration th
 In addition to its core features, Logseq has a growing ecosystem of plugins and themes that enable a wide range of workflows and customization options. Mobile apps are also available, providing access to most features from the desktop application.
 
 Whether you're a student, a professional, or simply someone who values a clear and organized approach to managing your ideas and notes, Logseq is an excellent choice for **improving your knowledge management** and collaboration skills.
+
+<br></br>
 ![Image of logseq](https://user-images.githubusercontent.com/25513724/210489520-873e7cf0-3219-4f62-aca5-9f1eb3b0f2ee.png)
 
+<br></br>
 
 <a href="https://github.com/logseq/logseq/releases/latest/">
         <img src="https://img.shields.io/badge/Download_Logseq-100000?style=for-the-badge&logo=flatpak&logoColor=white&labelColor=002b36&color=85c8c8"
