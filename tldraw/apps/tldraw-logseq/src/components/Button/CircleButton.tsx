@@ -30,7 +30,7 @@ export const CircleButton = ({
       data-recently-changed={recentlyChanged}
       style={style}
       className="tl-circle-button"
-      onMouseDown={onClick}
+      onPointerDown={onClick}
     >
       <div className="tl-circle-button-icons-wrapper" data-icons-count={otherIcon ? 2 : 1}>
         {otherIcon && <TablerIcon name={otherIcon} />}
