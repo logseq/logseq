@@ -1700,16 +1700,18 @@
 
 
 (defn- <file-change-event=>recent-remote->local-file-item
+  "return nil when related local files not found"
   [graph-uuid ^FileChangeEvent e]
   (go
     (let [tp (case (.-type e)
                ("add" "change") :update
                "unlink" :delete)
           path (relative-path e)]
-      {:remote->local-type tp
-       :checksum (if (= tp :delete) nil
-                                    (val (first (<! (get-local-files-checksum graph-uuid (.-dir e) [path])))))
-       :path path})))
+      (when-let [path-etag-entry (first (<! (get-local-files-checksum graph-uuid (.-dir e) [path])))]
+        {:remote->local-type tp
+         :checksum (if (= tp :delete) nil
+                       (val path-etag-entry))
+         :path path}))))
 
 (defn- distinct-file-change-events-xf
   "transducer.
@@ -2476,9 +2478,10 @@
                    (string/starts-with? (str "file://" (.-dir e)) base-path)) ; valid path prefix
                (not (ignored? e))     ;not ignored
                ;; download files will also trigger file-change-events, ignore them
-               (not (contains? (:recent-remote->local-files @*sync-state)
-                               (<! (<file-change-event=>recent-remote->local-file-item
-                                    graph-uuid e))))))))
+               (when-some [recent-remote->local-file-item
+                           (<! (<file-change-event=>recent-remote->local-file-item
+                                graph-uuid e))]
+                 (not (contains? (:recent-remote->local-files @*sync-state) recent-remote->local-file-item)))))))
 
   (set-remote->local-syncer! [_ s] (set! remote->local-syncer s))
 
