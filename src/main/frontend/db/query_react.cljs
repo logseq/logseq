@@ -34,28 +34,31 @@
      (some-> (or (state/get-current-page)
                  (:page (state/get-default-home))
                  (date/today)) string/lower-case)
-     (= :current-block input)
+     (and current-block-uuid (= :current-block input))
      (:db/id (db-utils/entity [:block/uuid current-block-uuid]))
-     (= :parent-block input)
+     (and current-block-uuid (= :parent-block input))
      (:db/id (model/get-block-parent current-block-uuid))
-
+     ;; :3d-before-ms
      (and (keyword? input)
-          (util/safe-re-find #"^\d+d(-before-ms)?$" (name input)))
+          (re-find #"^\d+d(-before-ms)?$" (name input)))
      (let [input (name input)
            days (parse-long (re-find #"^\d+" input))]
        (util/date-at-local-ms (t/minus (t/today) (t/days days)) 0 0 0 0))
+     ;; :3d-after-ms
      (and (keyword? input)
-          (util/safe-re-find #"^\d+d(-after-ms)?$" (name input)))
+          (re-find #"^\d+d(-after-ms)?$" (name input)))
      (let [input (name input)
            days (parse-long (re-find #"^\d+" input))]
        (util/date-at-local-ms (t/plus (t/today) (t/days days)) 24 0 0 0))
+     ;; :3d-before
      (and (keyword? input)
-          (util/safe-re-find #"^\d+d(-before)?$" (name input)))
+          (re-find #"^\d+d(-before)?$" (name input)))
      (let [input (name input)
            days (parse-long (re-find #"^\d+" input))]
        (date->int (t/minus (t/today) (t/days days))))
+     ;; :3d-after
      (and (keyword? input)
-          (util/safe-re-find #"^\d+d(-after)?$" (name input)))
+          (re-find #"^\d+d(-after)?$" (name input)))
      (let [input (name input)
            days (parse-long (re-find #"^\d+" input))]
        (date->int (t/plus (t/today) (t/days days))))
