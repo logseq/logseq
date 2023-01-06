@@ -1146,7 +1146,7 @@
           (get-resp-json-body resp)
           (let [exp (ex-info "request failed"
                              {:err          resp
-                              :body         (get-resp-json-body resp)
+                              :body         (:body resp)
                               :api-name     api-name
                               :request-body body})]
             (fire-file-sync-storage-exceed-limit-event! exp)
