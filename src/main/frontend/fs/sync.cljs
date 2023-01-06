@@ -3213,11 +3213,8 @@
 (add-watch app-state-changed-cursor "sync"
            (fn [_ _ _ {:keys [is-active?]}]
              (cond
-               (mobile-util/native-android?)
-               ;; TODO: support background task on Android
-               (restart-if-stopped! is-active?)
-
-               (mobile-util/native-ios?)
+               (or (mobile-util/native-android?)
+                   (mobile-util/native-ios?))
                (let [*task-id (atom nil)]
                  (if is-active?
                    (restart-if-stopped! is-active?)
