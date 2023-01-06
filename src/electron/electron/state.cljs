@@ -15,10 +15,10 @@
 
          ;; window -> current graph
          :window/graph {}
-         
+
          ;; job to do when persistGraph is done on renderer
          :window/once-persist-done nil
-         
+
          ;; job to do when graph is loaded on renderer
          :window/once-graph-ready nil}))
 

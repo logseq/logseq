@@ -8,7 +8,8 @@
             [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defn add [page-name type item]
   (go
@@ -41,8 +42,8 @@
 
 (defn handle-command-zotero
   [id page-name]
-  (state/set-editor-show-zotero! false)
-  (editor-handler/insert-command! id (str "[[" page-name "]]") nil {}))
+  (state/clear-editor-action!)
+  (editor-handler/insert-command! id (page-ref/->page-ref page-name) nil {}))
 
 (defn- create-abstract-note!
   [page-name abstract-note]
@@ -68,30 +69,30 @@
           :or {insert-command? true notification? true}}]
    (go
      (let [{:keys [page-name properties abstract-note]} (extractor/extract item)]
+       (when-not (str/blank? page-name)
+         (if (db/page-exists? (str/lower-case page-name))
+           (if (setting/setting :overwrite-mode?)
+             (page-handler/delete!
+              page-name
+              (fn [] (create-page page-name properties)))
+             (editor-handler/api-insert-new-block!
+              ""
+              {:page       page-name
+               :properties properties}))
+           (create-page page-name properties))
 
-       (if (db/page-exists? (str/lower-case page-name))
-         (if (setting/setting :overwrite-mode?)
-           (page-handler/delete!
-            page-name
-            (fn [] (create-page page-name properties)))
-           (editor-handler/api-insert-new-block!
-            ""
-            {:page       page-name
-             :properties properties}))
-         (create-page page-name properties))
+         (create-abstract-note! page-name abstract-note)
 
-       (create-abstract-note! page-name abstract-note)
+         (<! (add page-name :attachments item))
 
-       (<! (add page-name :attachments item))
+         (<! (add page-name :notes item))
 
-       (<! (add page-name :notes item))
+         (when insert-command?
+           (handle-command-zotero block-dom-id page-name)
+           (editor-handler/save-current-block!))
 
-       (when insert-command?
-         (handle-command-zotero block-dom-id page-name)
-         (editor-handler/save-current-block!))
-
-       (when notification?
-         (notification/show! (str "Successfully added zotero item to page " page-name) :success))))))
+         (when notification?
+           (notification/show! (str "Successfully added zotero item to page " page-name) :success)))))))
 
 (defn add-all [progress]
   (go

@@ -38,7 +38,7 @@ class LSPluginCaller extends EventEmitter {
     payload: any,
     actor?: DeferredActor
   ) => Promise<any>
-  private _callUserModel?: (type: string, payload: any) => Promise<any>
+  private _callUserModel?: (type: string, ...payloads: any[]) => Promise<any>
 
   private _debugTag = ''
 
@@ -72,7 +72,7 @@ class LSPluginCaller extends EventEmitter {
     let syncGCTimer: any = 0
     let syncTag = 0
     const syncActors = new Map<number, DeferredActor>()
-    const readyDeferred = deferred(1000 * 5)
+    const readyDeferred = deferred(1000 * 60)
 
     const model: any = this._extendUserModel({
       [LSPMSG_READY]: async (baseInfo) => {
@@ -205,8 +205,13 @@ class LSPluginCaller extends EventEmitter {
     return this._call?.call(this, type, payload, actor)
   }
 
-  async callUserModel(type: string, payload: any = {}) {
-    return this._callUserModel?.call(this, type, payload)
+  async callUserModel(type: string, ...args: any[]) {
+    return this._callUserModel?.apply(this, [type, ...args])
+  }
+
+  async callUserModelAsync(type: string, ...args: any[]) {
+    type = AWAIT_LSPMSGFn(type)
+    return this._callUserModel?.apply(this, [type, ...args])
   }
 
   // run in host
@@ -235,12 +240,21 @@ class LSPluginCaller extends EventEmitter {
       const mainLayoutInfo = (await this._pluginLocal._loadLayoutsData())?.$$0
       if (mainLayoutInfo) {
         cnt.dataset.inited_layout = 'true'
-        const { width, height, left, top } = mainLayoutInfo
+        let { width, height, left, top, vw, vh } = mainLayoutInfo
+
+        left = Math.max(left, 0)
+        left = (typeof vw === 'number') ?
+          `${Math.min(left * 100 / vw, 99)}%` : `${left}px`
+
+        // 45 is height of headbar
+        top = Math.max(top, 45)
+        top = (typeof vh === 'number') ?
+          `${Math.min(top * 100 / vh, 99)}%` : `${top}px`
+
         Object.assign(cnt.style, {
           width: width + 'px',
           height: height + 'px',
-          left: left + 'px',
-          top: top + 'px',
+          left, top
         })
       }
     } catch (e) {
@@ -266,7 +280,8 @@ class LSPluginCaller extends EventEmitter {
     return new Promise((resolve, reject) => {
       timer = setTimeout(() => {
         reject(new Error(`handshake Timeout`))
-      }, 3 * 1000) // 3secs
+        pt.destroy()
+      }, 4 * 1000) // 4 secs
 
       handshake
         .then((refChild: ParentAPI) => {
@@ -278,10 +293,11 @@ class LSPluginCaller extends EventEmitter {
             debug(`[user -> *host] `, type, payload)
 
             this._pluginLocal?.emit(type, payload || {})
+            this._pluginLocal?.caller.emit(type, payload || {})
           })
 
           this._call = async (...args: any) => {
-            // parent all will get message before handshaked
+            // parent all will get message before handshake
             await refChild.call(LSPMSGFn(pl.id), {
               type: args[0],
               payload: Object.assign(args[1] || {}, {
@@ -290,12 +306,14 @@ class LSPluginCaller extends EventEmitter {
             })
           }
 
-          this._callUserModel = async (type, payload: any) => {
+          this._callUserModel = async (type, ...payloads: any[]) => {
             if (type.startsWith(FLAG_AWAIT)) {
-              // TODO: attach payload with method call
-              return await refChild.get(type.replace(FLAG_AWAIT, ''))
+              return await refChild.get(
+                type.replace(FLAG_AWAIT, ''),
+                ...payloads
+              )
             } else {
-              refChild.call(type, payload)
+              refChild.call(type, payloads?.[0])
             }
           }
 

@@ -36,47 +36,47 @@
   }
 
   .asset-container {
-    display: inline-block;
-    position: relative;
+    @apply relative inline-block;
+
     margin-top: 0.5rem;
 
-    .ctl {
-      position: absolute;
-      top: 0;
-      right: 0;
-      padding: 5px;
-      z-index: 1;
-      display: none;
+    .asset-overlay {
+      @apply inset-0 absolute p-2;
 
-      > a {
-        padding: 3px;
-        border-radius: 4px;
-        opacity: 0.4;
-        user-select: none;
-        background: var(--ls-primary-background-color);
+      opacity: 0;
+      transition: opacity 300ms;
+      background-image: linear-gradient(var(--ls-primary-background-color), transparent);
+      pointer-events: none;
+    }
 
-        &.delete {
-          svg {
-            color: var(--ls-primary-text-color);
+    .asset-action-bar {
+      @apply top-0 left-0 w-full flex absolute items-start justify-between px-1;
 
-            opacity: 0.5;
-            font-weight: normal;
-          }
-        }
+      transition: opacity 300ms;
+      opacity: 0;
+      color: var(--ls-primary-text-color);
+    }
 
-        &:hover {
-          opacity: 1;
-        }
+    .asset-action-btn {
+      @apply m-1 p-1 rounded truncate;
 
-        &:active {
-          opacity: 1;
-        }
+      opacity: 0.8;
+      user-select: none;
+
+      &:hover,
+      &:active {
+        opacity: 1;
       }
     }
 
-    &:hover {
-      .ctl {
-        display: flex;
+    &:hover,
+    &:focus {
+      .asset-overlay {
+        opacity: 0.9;
+      }
+
+      .asset-action-bar {
+        opacity: 1;
       }
     }
   }
@@ -116,7 +116,7 @@
 .block-body ul,
 .block-body ol,
 .block-body dl {
-  margin-bottom: 0em;
+  margin-bottom: 0;
 
   > li {
     margin: 0;
@@ -137,6 +137,7 @@
 
 .block-children-container {
   position: relative;
+  margin-left: 29px;
 }
 
 .block-children-left-border {
@@ -150,6 +151,7 @@
   background-color: transparent;
   position: absolute;
   border-radius: 2px;
+  opacity: 0.6;
 }
 
 .block-children-left-border:hover {
@@ -170,6 +172,11 @@
   }
 }
 
+.block-control-wrap {
+  height: 24px;
+  margin-top: 0;
+}
+
 .block-control, .block-control:hover {
   text-decoration: none;
   cursor: default;
@@ -177,8 +184,9 @@
   min-width: 22px;
   min-height: 22px;
   padding: 2px;
-  color: initial;
+  color: var(--ls-secondary-text-color);
   user-select: none;
+  opacity: .4;
 
   .control-hide {
     display: none;
@@ -186,40 +194,30 @@
 }
 
 .block-left-menu {
-    background-color: var(--ls-secondary-background-color);
-    background: linear-gradient(90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%);
-    
-    .commands-button {
-        overflow: hidden;
-        max-width: 40px;
-        text-align: center;
-        margin: auto 0;
+  background-color: var(--ls-secondary-background-color);
+  background: linear-gradient(90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%);
 
-        .indent {
-            opacity: 30%;
-        }
+  .commands-button {
+    @apply overflow-hidden flex max-w-[40px];
+
+    .indent {
+      @apply flex items-center w-full justify-center opacity-30;
     }
+  }
 }
 
 .block-right-menu {
-    background-color: var(--ls-secondary-background-color);
-    /* background: linear-gradient(-90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%); */
+  background-color: var(--ls-secondary-background-color);
+  /* background: linear-gradient(-90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%); */
 
-    .commands-button {
-        overflow: hidden;
-        text-align: center;
-        margin: auto 0;
+  .commands-button {
+    @apply overflow-hidden flex flex-nowrap;
 
-        .outdent {
-            margin: 0 12px;
-            opacity: 30%;
-        }
-
-        .more {
-            margin: 0 12px;
-            opacity: 30%;
-        }
+    .outdent, .more {
+      @apply flex items-center justify-center
+      overflow-hidden opacity-30 m-0 w-[40px];
     }
+  }
 }
 
 .block-ref {
@@ -279,16 +277,16 @@
   }
 
   &.is-doc {
-      &:before {
-          content: "[[📜";
-          opacity: .7;
-          margin-right: 4px;
-      }
+    &:before {
+      content: "[[📜";
+      opacity: .7;
+      margin-right: 4px;
+    }
 
-      &:after {
-          content: "]]";
-          opacity: .7;
-      }
+    &:after {
+      content: "]]";
+      opacity: .7;
+    }
   }
 }
 
@@ -318,9 +316,9 @@
   padding: 2px 4px;
   opacity: 0.7;
   font-size: 85%;
-  margin: 0 2px 0 0px;
+  margin: 0 2px 0 0;
   font-weight: 650;
-  border: 0px;
+  border: 0;
 }
 
 .marker-switch {
@@ -335,6 +333,7 @@
   min-height: 24px;
   padding: 2px 0;
   border-bottom: 1px solid transparent;
+  transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 
   &.selected {
     border-bottom-color: var(--ls-primary-background-color);
@@ -342,10 +341,6 @@
     &:last-child {
       border-bottom-color: transparent;
     }
-  }
-
-  img {
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   }
 }
 
@@ -369,14 +364,14 @@
 
 .ls-block h3,
 .editor-inner .h3.uniline-block {
-  font-size: 1.17em;
-  min-height: 1.17em;
+  font-size: 1.2em;
+  min-height: 1.2em;
 }
 
 .ls-block h4,
 .editor-inner .h4.uniline-block {
-  font-size: 1.12em;
-  min-height: 1.12em;
+  font-size: 1em;
+  min-height: 1em;
 }
 
 .ls-block h5,
@@ -400,7 +395,8 @@
 .ls-block :is(h1, h2),
 .editor-inner .uniline-block:is(.h1, .h2) {
   border-bottom: 1px solid var(--ls-quaternary-background-color);
-  margin: 0.4em 0 0;
+  margin: 0.125em 0;
+  padding-bottom: 0.125em;
 }
 
 .block-ref .ls-block :is(h1, h2),
@@ -413,86 +409,80 @@
   font-size: 1rem;
 }
 
-.document-mode .ls-block h1,
-.document-mode .editor-inner .h1 {
-  margin: 0.67em 0;
-}
+.document-mode {
+  & .ls-block h1,
+  & .editor-inner .h1 {
+    margin: 0.67em 0;
+  }
 
-.document-mode .ls-block h2,
-.document-mode .editor-inner .h2 {
-  margin: 0.75em 0;
-}
+  & .ls-block h2,
+  & .editor-inner .h2 {
+    margin: 0.75em 0;
+  }
 
-.document-mode .ls-block h3,
-.document-mode .editor-inner .h3 {
-  margin: 0.83em 0;
-}
+  & .ls-block h3,
+  & .editor-inner .h3 {
+    margin: 0.83em 0;
+  }
 
-.document-mode .ls-block h4,
-.document-mode .editor-inner .h4 {
-  margin: 1.12em 0;
-}
+  & .ls-block h4,
+  & .editor-inner .h4 {
+    margin: 1.12em 0;
+  }
 
-.document-mode .ls-block h5,
-.document-mode .editor-inner .h5 {
-  margin: 1.5em 0;
-}
+  & .ls-block h5,
+  & .editor-inner .h5 {
+    margin: 1.5em 0;
+  }
 
-.document-mode .ls-block h6,
-.document-mode .editor-inner .h6 {
-  margin: 1.67em 0;
-}
-
-.document-mode .block-children {
-  border-left: 0px solid;
-}
-
-.document-mode .ls-block {
-  margin-bottom: 1rem;
+  & .ls-block h6,
+  & .editor-inner .h6 {
+    margin: 1.67em 0;
+  }
 }
 
 .color-level {
   background-color: var(--color-level-1);
-}
 
-.color-level .color-level {
-  background-color: var(--color-level-2);
-}
+  & .color-level {
+    background-color: var(--color-level-2);
 
-.color-level .color-level .color-level {
-  background-color: var(--color-level-3);
-}
+    & .color-level {
+      background-color: var(--color-level-3);
 
-.color-level .color-level .color-level .color-level {
-  background-color: var(--color-level-4);
-}
+      & .color-level {
+        background-color: var(--color-level-4);
 
-.color-level .color-level .color-level .color-level .color-level {
-  background-color: var(--color-level-5);
-}
+        & .color-level {
+          background-color: var(--color-level-5);
 
-.color-level .color-level .color-level .color-level .color-level .color-level {
-  background-color: var(--color-level-3);
-}
+          & .color-level {
+            background-color: var(--color-level-6);
 
-.color-level .color-level .color-level .color-level .color-level .color-level .color-level {
-  background-color: var(--color-level-4);
-}
+            & .color-level {
+              background-color: var(--color-level-4);
 
-.color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
-  background-color: var(--color-level-5);
-}
+              & .color-level {
+                background-color: var(--color-level-5);
 
-.color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
-  background-color: var(--color-level-3);
-}
+                & .color-level {
+                  background-color: var(--color-level-6);
 
-.color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
-  background-color: var(--color-level-4);
-}
+                  & .color-level {
+                    background-color: var(--color-level-4);
 
-.color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
-  background-color: var(--color-level-5);
+                    & .color-level {
+                      background-color: var(--color-level-6);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 .bullet-container {
@@ -528,15 +518,23 @@ a:hover > .bullet-container {
   background-color: var(--ls-block-bullet-border-color, #ced9e0);
 }
 
-.doc-mode {
+.content.doc-mode {
   margin-left: -16px;
 
   .block-children-left-border {
     display: none;
   }
 
+  .block-children {
+    border-left: none;
+  }
+
   .hide-inner-bullet .bullet {
     display: none;
+  }
+
+  .block-children-container {
+    margin-left: 18px;
   }
 }
 
@@ -612,7 +610,12 @@ a.cloze-revealed {
 }
 
 .page-property-key {
+  @apply font-medium whitespace-nowrap;
   color: var(--ls-secondary-text-color);
+}
+
+.page-property-key:hover {
+  background-color: var(--ls-selection-background-color);
 }
 
 .block-parents a {
@@ -630,24 +633,24 @@ a.cloze-revealed {
 }
 
 html.is-native-ios {
-    audio {
-        width: 100%;
-        max-width: 350px;
-    }
+  audio {
+    width: 100%;
+    max-width: 350px;
+  }
 }
 
 html:not(.is-mac) {
-    body[data-active-keystroke="Control"] {
-        .block-content {
-            cursor: pointer;
-        }
+  body[data-active-keystroke="Control"] {
+    .block-content {
+      cursor: pointer;
     }
+  }
 }
 
 html.is-mac {
-    body[data-active-keystroke="Meta"] {
-        .block-content {
-            cursor: pointer;
-        }
+  body[data-active-keystroke="Meta"] {
+    .block-content {
+      cursor: pointer;
     }
+  }
 }

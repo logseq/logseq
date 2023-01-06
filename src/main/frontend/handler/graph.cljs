@@ -1,4 +1,5 @@
 (ns frontend.handler.graph
+  "Provides util handler fns for graph view"
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [frontend.db :as db]
@@ -81,7 +82,7 @@
      :links links}))
 
 (defn build-global-graph
-  [theme {:keys [journal? orphan-pages? builtin-pages?]}]
+  [theme {:keys [journal? orphan-pages? builtin-pages? excluded-pages?]}]
   (let [dark? (= "dark" theme)
         current-page (or (:block/name (db/get-current-page)) "")]
     (when-let [repo (state/get-current-repo)]
@@ -90,18 +91,22 @@
             namespaces (db/get-all-namespace-relation repo)
             tags (set (map second tagged-pages))
             full-pages (db/get-all-pages repo)
-            get-original-name (fn [p] (or (:block/original-name p) (:block/name p)))
-            all-pages (map get-original-name full-pages)
+            all-pages (map db/get-original-name full-pages)
             page-name->original-name (zipmap (map :block/name full-pages) all-pages)
             pages-after-journal-filter (if-not journal?
                                          (remove :block/journal? full-pages)
                                          full-pages)
+
+           pages-after-exclude-filter (cond->> pages-after-journal-filter
+                                        (not excluded-pages?)
+                                        (remove (fn [p] (=  true (:exclude-from-graph-view (:block/properties p))))))
+
             links (concat (seq relation)
                           (seq tagged-pages)
                           (seq namespaces))
             linked (set (flatten links))
             build-in-pages (set (map string/lower-case default-db/built-in-pages-names))
-            nodes (cond->> (map :block/name pages-after-journal-filter)
+            nodes (cond->> (map :block/name pages-after-exclude-filter)
                     (not builtin-pages?)
                     (remove (fn [p] (contains? build-in-pages (string/lower-case p))))
                     (not orphan-pages?)
@@ -116,7 +121,7 @@
           :page-name->original-name page-name->original-name})))))
 
 (defn build-page-graph
-  [page theme]
+  [page theme show-journal]
   (let [dark? (= "dark" theme)]
     (when-let [repo (state/get-current-repo)]
       (let [page (util/page-name-sanity-lc page)
@@ -124,7 +129,7 @@
             tags (:tags (:block/properties page-entity))
             tags (remove #(= page %) tags)
             ref-pages (db/get-page-referenced-pages repo page)
-            mentioned-pages (db/get-pages-that-mentioned-page repo page)
+            mentioned-pages (db/get-pages-that-mentioned-page repo page show-journal)
             namespaces (db/get-all-namespace-relation repo)
             links (concat
                    namespaces
@@ -144,7 +149,7 @@
                                  (let [ref-pages (-> (map first (db/get-page-referenced-pages repo page))
                                                      (set)
                                                      (set/intersection other-pages))
-                                       mentioned-pages (-> (map first (db/get-pages-that-mentioned-page repo page))
+                                       mentioned-pages (-> (map first (db/get-pages-that-mentioned-page repo page show-journal))
                                                            (set)
                                                            (set/intersection other-pages))]
                                    (concat
@@ -164,9 +169,7 @@
                        (distinct))
             nodes (build-nodes dark? page links (set tags) nodes namespaces)
             full-pages (db/get-all-pages repo)
-            get-original-name (fn [p] (or (:block/original-name p)
-                                         (:block/name p)))
-            all-pages (map get-original-name full-pages)
+            all-pages (map db/get-original-name full-pages)
             page-name->original-name (zipmap (map :block/name full-pages) all-pages)]
         (normalize-page-name
          {:nodes nodes

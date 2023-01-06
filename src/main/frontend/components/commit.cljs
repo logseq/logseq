@@ -29,7 +29,7 @@
                       :on-enter (fn []
                                   (commit-and-push!)))))
   [state _close-fn]
-  [:div.w-full.mx-auto.sm:max-w-lg.sm:w-96 {:style {:padding "48px 0"}}
+  [:div.w-full.mx-auto {:style {:padding "48px 0"}}
    [:div.sm:flex.sm:items-start
     [:div.mt-3.text-center.sm:mt-0.sm:text-left.mb-2
      [:h3#modal-headline.text-lg.leading-6.font-medium

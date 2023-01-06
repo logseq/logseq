@@ -24,7 +24,7 @@ export class LSPluginExperiments {
     )
   }
 
-  private invokeExperMethod(type: string, ...args: Array<any>) {
+  public invokeExperMethod(type: string, ...args: Array<any>) {
     const host = this.ensureHostScope()
     type = safeSnakeCase(type)?.toLowerCase()
     return host.logseq.api['exper_' + type]?.apply(host, args)
@@ -60,7 +60,7 @@ export class LSPluginExperiments {
   }
 
   registerExtensionsEnhancer<T = any>(
-    type: 'katex',
+    type: 'katex' | 'codemirror',
     enhancer: (v: T) => Promise<any>
   ) {
     const host = this.ensureHostScope()

@@ -10,7 +10,7 @@
             [frontend.debug :as debug]
             [frontend.extensions.sci :as sci]
             [frontend.state :as state]
-            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.util :as util]
             [frontend.date :as date]
             [lambdaisland.glogi :as log]))
@@ -60,21 +60,12 @@
            days (parse-long (re-find #"^\d+" input))]
        (date->int (t/plus (t/today) (t/days days))))
 
-     (and (string? input) (text/page-ref? input))
-     (-> (text/page-ref-un-brackets! input)
-         (string/lower-case))
+    (and (string? input) (page-ref/page-ref? input))
+    (-> (page-ref/get-page-name input)
+        (string/lower-case))
 
-     :else
-     input)))
-
-(defn- remove-nested-children-blocks
-  [blocks]
-  (let [ids (set (map :db/id blocks))]
-    (->> blocks
-         (remove
-          (fn [block]
-            (let [id (:db/id (:block/parent block))]
-              (contains? ids id)))))))
+    :else
+    input)))
 
 (defn custom-query-result-transform
   [query-result remove-blocks q]
@@ -88,28 +79,26 @@
                                               (contains? remove-blocks (:block/uuid h)))
                                             result))
                                   result)]
-                     (some->> result
-                              remove-nested-children-blocks
-                              (model/sort-by-left-recursive)
-                              (model/with-pages)))
+                     (model/with-pages result))
                    result)
-          result-transform-fn (:result-transform q)
-          repo (state/get-current-repo)]
-      (if-let [result-transform (if (keyword? result-transform-fn) (state/sub [:config repo :query/result-transforms result-transform-fn]) result-transform-fn)]
+          result-transform-fn (:result-transform q)]
+      (if-let [result-transform (if (keyword? result-transform-fn)
+                                  (get-in (state/sub-config) [:query/result-transforms result-transform-fn])
+                                  result-transform-fn)]
         (if-let [f (sci/eval-string (pr-str result-transform))]
           (try
             (sci/call-fn f result)
-            (catch js/Error e
+            (catch :default e
               (log/error :sci/call-error e)
               result))
           result)
         result))
-    (catch js/Error e
+    (catch :default e
       (log/error :query/failed e))))
 
 (defn- resolve-query
   [query]
-  (let [page-ref? #(and (string? %) (text/page-ref? %))]
+  (let [page-ref? #(and (string? %) (page-ref/page-ref? %))]
     (walk/postwalk
      (fn [f]
        (cond
@@ -128,7 +117,7 @@
          (let [[x y] (rest f)
                [page-ref sym] (if (page-ref? x) [x y] [y x])
                page-ref (string/lower-case page-ref)]
-           (list 'contains? sym (text/page-ref-un-brackets! page-ref)))
+           (list 'contains? sym (page-ref/get-page-name page-ref)))
 
          (and (vector? f)
               (= (first f) 'page-property)
@@ -140,7 +129,8 @@
 
 (defn react-query
   [repo {:keys [query inputs rules] :as query'} query-opts]
-  (let [pprint (if config/dev? (fn [_] nil) debug/pprint)]
+  (let [pprint (if config/dev? debug/pprint (fn [_] nil))
+        start-time (.now js/performance)]
     (pprint "================")
     (pprint "Use the following to debug your datalog queries:")
     (pprint query')
@@ -151,7 +141,8 @@
                          rules
                          (conj rules))
           repo (or repo (state/get-current-repo))
-          k [:custom query']]
+          k [:custom (or (:query-string query') query')]]
       (pprint "inputs (post-resolution):" resolved-inputs)
       (pprint "query-opts:" query-opts)
+      (pprint (str "time elapsed: " (.toFixed (- (.now js/performance) start-time) 2) "ms"))
       (apply react/q repo k query-opts query inputs))))

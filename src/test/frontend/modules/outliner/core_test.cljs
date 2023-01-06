@@ -10,10 +10,10 @@
             [clojure.walk :as walk]
             [logseq.graph-parser.block :as gp-block]
             [datascript.core :as d]
-            [frontend.test.helper :as helper]
+            [frontend.test.helper :as test-helper]
             [clojure.set :as set]))
 
-(def test-db helper/test-db)
+(def test-db test-helper/test-db)
 
 (use-fixtures :each
   fixtures/load-test-env
@@ -70,10 +70,11 @@
 
 (defn transact-tree!
   [tree]
-  (db/transact! test-db (concat [{:db/id 1
-                                  :block/uuid 1
-                                  :block/name "Test page"}]
-                                (build-blocks tree))))
+  (let [blocks (build-blocks tree)]
+    (db/transact! test-db (concat [{:db/id 1
+                                    :block/uuid 1
+                                    :block/name "Test page"}]
+                                  blocks))))
 
 (def tree
   [[22 [[2 [[3 [[4]
@@ -215,6 +216,37 @@
       (outliner-core/indent-outdent-blocks! [(get-block 13) (get-block 14)] false))
     (is (= [2 12 13 14 16] (get-children 22)))))
 
+(deftest test-fix-top-level-blocks
+  (testing "no need to fix"
+    (let [blocks [{:block/uuid #uuid "62aa668b-e258-445d-aef6-5510054ff495",
+                   :block/properties {},
+                   :block/left #:db{:id 144},
+                   :block/format :markdown,
+                   :block/level 1,
+                   :block/content "a",
+                   :db/id 145,
+                   :block/parent #:db{:id 144},
+                   :block/page #:db{:id 144}}
+                  {:block/uuid #uuid "62aa668d-65d1-440c-849b-a0717f691193",
+                   :block/properties {},
+                   :block/left #:db{:id 145},
+                   :block/format :markdown,
+                   :block/level 1,
+                   :block/content "b",
+                   :db/id 146,
+                   :block/parent #:db{:id 144},
+                   :block/page #:db{:id 144}}
+                  {:block/uuid #uuid "62aa668e-f866-48ee-b8fe-737e101c548d",
+                   :block/properties {},
+                   :block/left #:db{:id 146},
+                   :block/format :markdown,
+                   :block/level 1,
+                   :block/content "c",
+                   :db/id 147,
+                   :block/parent #:db{:id 144},
+                   :block/page #:db{:id 144}}]]
+      (= blocks (outliner-core/fix-top-level-blocks blocks)))))
+
 (deftest test-outdent-blocks
   (testing "
   [1 [[2 [[3]
@@ -297,6 +329,37 @@
       (is (= [3 6 18 21 9] (get-children 2)))
 
       (is (= [19 20] (get-children 18))))))
+
+(deftest test-paste-into-empty-block
+  (testing "
+    Paste a block into the first block (its content is empty)
+    [[22 [[2 [[3 [[4]
+                [5]]]
+            [6 [[7 [[8]]]]]
+            [9 [[10]
+                [11]]]]]
+        [12 [[13]
+             [14]
+             [15]]]
+        [16 [[17]]]]]]
+ "
+    (transact-tree! tree)
+    (db/transact! test-db [{:block/uuid 22
+                            :block/content ""}])
+    (let [target-block (get-block 22)]
+      (outliner-tx/transact!
+        {:graph test-db}
+        (outliner-core/insert-blocks! [{:block/left [:block/uuid 1]
+                                        :block/content "test"
+                                        :block/parent [:block/uuid 1]
+                                        :block/page 1}]
+                                      target-block
+                                      {:sibling? false
+                                       :outliner-op :paste
+                                       :replace-empty-target? true}))
+      (is (= "test" (:block/content (get-block 22))))
+      (is (= [22] (get-children 1)))
+      (is (= [2 12 16] (get-children 22))))))
 
 (deftest test-batch-transact
   (testing "add 4, 5 after 2 and delete 3"
@@ -416,7 +479,9 @@
 (defn transact-random-tree!
   []
   (let [tree (gen-safe-tree)]
-    (transact-tree! tree)))
+    (if (seq tree)
+      (transact-tree! tree)
+      (transact-random-tree!))))
 
 (defn get-datoms
   []
@@ -458,9 +523,6 @@
                                   (set/union old (set (map :block/uuid blocks)))))
           (insert-blocks! blocks (get-random-block)))
         (let [total (get-blocks-count)]
-          ;; (when (not= total (count @*random-blocks))
-          ;;   (defonce wrong-db (db/get-db test-db))
-          ;;   (defonce random-blocks @*random-blocks))
           (is (= total (count @*random-blocks))))))))
 
 (deftest ^:long random-deletes
@@ -518,16 +580,17 @@
           *random-blocks (atom c1)]
       (dotimes [_i 100]
         ;; (prn "Random move indent/outdent: " i)
-        (let [blocks (gen-blocks)]
+        (let [new-blocks (gen-blocks)]
           (swap! *random-blocks (fn [old]
-                                  (set/union old (set (map :block/uuid blocks)))))
-          (insert-blocks! blocks (get-random-block)))
-        (let [blocks (get-random-successive-blocks)]
-          (when (seq blocks)
-            (outliner-tx/transact! {:graph test-db}
-              (outliner-core/indent-outdent-blocks! blocks (gen/generate gen/boolean)))
-            (let [total (get-blocks-count)]
-              (is (= total (count @*random-blocks))))))))))
+                                  (set/union old (set (map :block/uuid new-blocks)))))
+          (insert-blocks! new-blocks (get-random-block))
+          (let [blocks (get-random-successive-blocks)
+                indent? (gen/generate gen/boolean)]
+            (when (seq blocks)
+              (outliner-tx/transact! {:graph test-db}
+                (outliner-core/indent-outdent-blocks! blocks indent?))
+              (let [total (get-blocks-count)]
+                (is (= total (count @*random-blocks)))))))))))
 
 (deftest ^:long random-mixed-ops
   (testing "Random mixed operations"
@@ -590,10 +653,75 @@
                                                                            :use-cache? false})))
                total))))))
 
+(deftest test-non-consecutive-blocks->vec-tree
+  (let [blocks [{:block/page #:db{:id 2313},
+                 :block/uuid #uuid "62f49b4c-f9f0-4739-9985-8bd55e4c68d4",
+                 :block/parent #:db{:id 2313},
+                 :db/id 2315}
+                {:block/page #:db{:id 2313},
+                 :block/uuid #uuid "62f49b4c-aa84-416e-9554-b486b4e59b1b",
+                 :block/parent #:db{:id 2315},
+                 :db/id 2316}
+                {:block/page #:db{:id 2313},
+                 :block/uuid #uuid "62f49b4c-f80c-49b4-ae83-f78c4520c071",
+                 :block/parent #:db{:id 2316},
+                 :db/id 2317}
+                {:block/page #:db{:id 2313},
+                 :block/uuid #uuid "62f49b4c-8f5b-4a04-b749-68d34b28bcf2",
+                 :block/parent #:db{:id 2317},
+                 :db/id 2318}
+                {:block/page #:db{:id 2313},
+                 :block/uuid #uuid "62f4b8c1-a99b-434f-84c3-011d6afc48ba",
+                 :block/parent #:db{:id 2315},
+                 :db/id 2333}
+                {:block/page #:db{:id 2313},
+                 :block/uuid #uuid "62f4b8c6-072e-4133-90e2-0591021a7fea",
+                 :block/parent #:db{:id 2333},
+                 :db/id 2334}]]
+    (= (tree/non-consecutive-blocks->vec-tree blocks)
+       '({:db/id 2315,
+          :block/uuid #uuid "62f49b4c-f9f0-4739-9985-8bd55e4c68d4",
+          :block/parent #:db{:id 2313},
+          :block/page #:db{:id 2313},
+          :block/level 1,
+          :block/children
+          [{:db/id 2316,
+            :block/uuid #uuid "62f49b4c-aa84-416e-9554-b486b4e59b1b",
+            :block/parent #:db{:id 2315},
+            :block/page #:db{:id 2313},
+            :block/level 2,
+            :block/children
+            [{:db/id 2317,
+              :block/uuid #uuid "62f49b4c-f80c-49b4-ae83-f78c4520c071",
+              :block/parent #:db{:id 2316},
+              :block/page #:db{:id 2313},
+              :block/level 3,
+              :block/children
+              [{:db/id 2318,
+                :block/uuid #uuid "62f49b4c-8f5b-4a04-b749-68d34b28bcf2",
+                :block/parent #:db{:id 2317},
+                :block/page #:db{:id 2313},
+                :block/level 4}]}]}
+           {:db/id 2333,
+            :block/uuid #uuid "62f4b8c1-a99b-434f-84c3-011d6afc48ba",
+            :block/parent #:db{:id 2315},
+            :block/page #:db{:id 2313},
+            :block/level 2,
+            :block/children
+            [{:db/id 2334,
+              :block/uuid #uuid "62f4b8c6-072e-4133-90e2-0591021a7fea",
+              :block/parent #:db{:id 2333},
+              :block/page #:db{:id 2313},
+              :block/level 3}]}]}))))
+
 (comment
   (dotimes [i 5]
     (do
       (frontend.test.fixtures/reset-datascript test-db)
-      (cljs.test/run-tests))
-    )
+      (cljs.test/run-tests)))
+
+  (do
+    (frontend.test.fixtures/reset-datascript test-db)
+    (cljs.test/test-vars [#'test-paste-first-empty-block]))
+
   )

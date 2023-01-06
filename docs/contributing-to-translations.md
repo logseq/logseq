@@ -67,9 +67,9 @@ you're hoping to have this list drop to zero.
 
 Almost all translations are pretty quick. The only exceptions to this are the keys `:tutorial/text` and `:tutorial/dummy-notes`. These reference files that are part of the onboarding tutorial. Most languages don't have this translated. If you are willing to do this, we would be happy to have this translated.
 
-## Fix Mistakes
+## Fix Untranslated
 
-There is a lot to translate and sometimes we make mistakes. For example, we may leave a string untranslated. To see what translation keys are still left in English:
+There is a lot to translate and sometimes we forget to translate a string. To see what translation keys are still left in English:
 
 ```
 $ bb lang:duplicates
@@ -82,8 +82,11 @@ Keys with duplicate values found:
 |                               :no |               No |
 ```
 
-Sometimes, we typo the translation key. If that happens, the github CI job will
-detect this error and helpfully show you what was typoed.
+## Fix Mistakes
+
+Sometimes, we typo the translation key. If that happens, the github CI step of
+`bb lang:invalid-translations` will detect this error and helpfully show you
+what was typoed.
 
 ## Add a Language
 

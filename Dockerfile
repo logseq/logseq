@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install ca-certificates && \
 WORKDIR /data/
 
 # Build for static resources
-RUN git clone https://github.com/logseq/logseq.git &&  cd /data/logseq && yarn && yarn release && mv ./static ./public && rm -r ./public/workspaces
+RUN git clone https://github.com/logseq/logseq.git &&  cd /data/logseq && yarn && yarn release && mv ./static ./public
 
 # Web App Runner image
 FROM nginx:stable-alpine

@@ -1,0 +1,20 @@
+.cp__filters-input {
+  background-color: var(--ls-primary-background-color);
+  padding: 0.5rem;
+  outline: none;
+}
+
+.cp__filters-input-panel {
+  background-color: var(--ls-primary-background-color);
+  border-radius: 0.25rem;
+  padding-left: 0.5rem;
+  align-items: center;
+}
+
+.references-blocks .breadcrumb {
+  margin-left: 1.5rem;
+}
+
+.ls-filters {
+    max-width: 704px;
+}

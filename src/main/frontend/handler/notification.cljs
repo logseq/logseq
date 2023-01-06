@@ -1,4 +1,5 @@
 (ns frontend.handler.notification
+  "Provides notification related functionality"
   (:require [frontend.state :as state]
             [frontend.util :as util]))
 
@@ -12,6 +13,8 @@
   (state/set-state! :notification/contents nil))
 
 (defn show!
+  ([content]
+   (show! content :info true nil 2000))
   ([content status]
    (show! content status true nil 1500))
   ([content status clear?]

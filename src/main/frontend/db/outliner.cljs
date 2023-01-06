@@ -1,11 +1,12 @@
 (ns frontend.db.outliner
+  "Db related fns for the outliner module"
   (:require [datascript.core :as d]))
 
 (defn get-by-id
   [conn id]
   (try
     (d/pull @conn '[*] id)
-    (catch js/Error _e nil)))
+    (catch :default _e nil)))
 
 ;; key [:block/children parent-id]
 

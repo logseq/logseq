@@ -12,6 +12,7 @@
         android:theme="@style/AppTheme">
 
         <activity
+            android:exported="true"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:name="com.logseq.app.MainActivity"
             android:label="@string/title_activity_main"
@@ -30,6 +31,13 @@
                 <data android:mimeType="image/*" />
                 <data android:mimeType="application/*" />
                 <data android:mimeType="video/*" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="logseq" android:host="auth-callback" />
             </intent-filter>
 
         </activity>

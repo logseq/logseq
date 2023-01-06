@@ -3,7 +3,7 @@
             [clojure.string :as string]
             ;; NOTE: Always use production build of excalidraw
             ;; See-also: https://github.com/excalidraw/excalidraw/pull/3330
-            ["@excalidraw/excalidraw/dist/excalidraw.production.min" :as Excalidraw]
+            ["@excalidraw/excalidraw/dist/excalidraw.production.min" :refer [Excalidraw serializeAsJSON]]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
@@ -15,18 +15,18 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.object :as gobj]
+            [goog.functions :refer [debounce]]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]))
 
-(def excalidraw (r/adapt-class (gobj/get Excalidraw "default")))
-(def serialize-as-json (gobj/get Excalidraw "serializeAsJSON"))
+(def excalidraw (r/adapt-class Excalidraw))
 
 (defn from-json
   [text]
   (when-not (string/blank? text)
     (try
       (js/JSON.parse text)
-      (catch js/Error e
+      (catch :default e
         (println "from json error:")
         (js/console.dir e)
         (notification/show!
@@ -49,14 +49,28 @@
         (recur (.-parentNode el))))
     state))
 
+(defn excalidraw-theme [ui-theme]
+  ;; One of these constants are meant to be used as a 'theme' argument for escalidraw:
+  ;; https://github.com/excalidraw/excalidraw/blob/master/src/constants.ts#L75
+  ;; But they are missing from the prod build of excalidraw we're using.
+  ;; They map to "light" and "dark", happens that :ui/theme uses same values, so we are safe to pass it directly, for now.
+  ;; Escalidraw may migrate to different values for these constants in future versions,
+  ;; so, in order to not watch out for it every time we bump a new version we better migrate to constants as soon as they appear in a prod build.
+  ui-theme)
+
 (rum/defcs draw-inner < rum/reactive
   (rum/local 800 ::draw-width)
   (rum/local true ::zen-mode?)
   (rum/local false ::view-mode?)
   (rum/local false ::grid-mode?)
   (rum/local nil ::elements)
-  {:did-mount update-draw-content-width
-   :did-update update-draw-content-width}
+  (rum/local nil ::resize-observer)
+  {:did-mount (fn [state]
+                (reset! (::resize-observer state) (js/ResizeObserver. (debounce #(reset! (::draw-width state) 0) 300)))
+                (.observe @(::resize-observer state) (ui/main-node))
+                (update-draw-content-width state))
+   :did-update update-draw-content-width
+   :will-unmount (fn [state] (.disconnect @(::resize-observer state)))}
   [state data option]
   (let [*draw-width (get state ::draw-width)
         *zen-mode? (get state ::zen-mode?)
@@ -75,7 +89,7 @@
         [:a.mr-2 {:on-click #(swap! *view-mode? not)}
          (util/format "View Mode (%s)" (if @*view-mode? "ON" "OFF"))]
         [:a.mr-2 {:on-click #(swap! *grid-mode? not)}
-         (util/format "Grid Mode (%s)" (if @*view-mode? "ON" "OFF"))]
+         (util/format "Grid Mode (%s)" (if @*grid-mode? "ON" "OFF"))]
         [:a.mr-2 {:on-click #(when-let [block (db/pull [:block/uuid block-uuid])]
                                (editor-handler/edit-block! block :max block-uuid))}
          "Edit Block"]]
@@ -100,12 +114,13 @@
                               (reset! *elements elements->clj)
                               (draw/save-excalidraw!
                                file
-                               (serialize-as-json elements app-state))))))
-           
+                               (serializeAsJSON elements app-state))))))
+
            :zen-mode-enabled @*zen-mode?
            :view-mode-enabled @*view-mode?
            :grid-mode-enabled @*grid-mode?
-           :initial-data data}))]])))
+           :initial-data data
+           :theme (excalidraw-theme (state/sub :ui/theme))}))]])))
 
 (rum/defcs draw-container < rum/reactive
   {:init (fn [state]

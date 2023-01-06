@@ -1,4 +1,5 @@
 (ns frontend.handler.query
+  "Provides util handler fns for query"
   (:require [clojure.walk :as walk]))
 
 (defn normalize-query-function

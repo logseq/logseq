@@ -95,7 +95,7 @@
 
        [:span.animate-spin-reverse {:style {:visibility (if is-searching "visible"  "hidden")}}  svg/refresh]]]
 
-     [:div.h-2.text-sm.text-red-400.mb-2 (if search-error (str "Search error: " search-error) "")]
+     [:div.h-2.text-sm.text-error.mb-2 (if search-error (str "Search error: " search-error) "")]
 
      [:div
       (map
@@ -107,14 +107,14 @@
          :on-click
          (fn []
            (set! (.-scrollTop (.-parentNode (gdom/getElement "zotero-search"))) 0)
-           (go (<! (search-fn prev-search-term prev-page))))))
+           (search-fn prev-search-term prev-page))))
       (when-not (str/blank? next-page)
         (ui/button
          "next"
          :on-click
          (fn []
            (set! (.-scrollTop (.-parentNode (gdom/getElement "zotero-search"))) 0)
-           (go (<! (search-fn prev-search-term next-page))))))]]))
+           (search-fn prev-search-term next-page))))]]))
 
 (rum/defcs user-or-group-setting <
   (rum/local (setting/setting :type-id) ::type-id)
@@ -154,7 +154,7 @@
          (not (re-matches #"^\d+$" (str @(::type-id state)))))
      (ui/admonition
       :warning
-      [:p.text-red-500
+      [:p.text-error
        "User ID is different from username and can be found on the "
        [:a {:href "https://www.zotero.org/settings/keys" :target "_blank"}
         "https://www.zotero.org/settings/keys"]
@@ -176,7 +176,7 @@
    (when (setting/setting :overwrite-mode?)
      (ui/admonition
       :warning
-      [:p.text-red-500
+      [:p.text-error
        "Dangerous! This will delete and recreate Zotero existing page! Make sure to backup your notes first in case something goes wrong. Make sure you don't put any personal item in previous Zotero page and it's OK to overwrite the page!"]))])
 
 (rum/defc attachment-setting <
@@ -328,8 +328,8 @@
 
      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
       [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
-       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-720.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type "button"
+       (ui/button
+         "Submit"
          :class "ui__modal-enter"
          :on-click (fn []
                      (let [profile-name (str/trim @input)]
@@ -337,8 +337,7 @@
                          (p/let [_ (setting/add-profile profile-name)
                                  _ (setting/set-profile profile-name)]
                            (reset! profile* profile-name)))
-                       (state/close-modal!)))}
-        "Submit"]]
+                       (state/close-modal!))))]
       [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
        [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
         {:type "button"
@@ -348,10 +347,10 @@
 (rum/defc zotero-profile-selector <
   rum/reactive
   [profile*]
-  [:div.row
-   [:label.mr-32 {:for "profile-select"} "Choose a profile:"]
-   [:span.justify-evenly
-    [:select
+  [:div.flex.flex-row.mb-4.items-center
+   [:label.title.mr-32 {:for "profile-select"} "Choose a profile:"]
+   [:div.flex.flex-row.ml-4
+    [:select.ml-1
      {:value @profile*
       :on-change
       (fn [e]

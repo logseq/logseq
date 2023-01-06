@@ -1,7 +1,8 @@
 (ns frontend.components.theme
   (:require [frontend.extensions.pdf.highlights :as pdf]
             [frontend.config :as config]
-            [frontend.handler.plugin :refer [lsp-enabled?] :as plugin-handler]
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.ui :as ui]
@@ -9,11 +10,12 @@
             [frontend.state :as state]
             [frontend.components.settings :as settings]
             [frontend.rum :refer [use-mounted]]
+            [frontend.storage :as storage]
             [rum.core :as rum]))
 
 (rum/defc container
-  [{:keys [t route theme on-click current-repo nfs-granted? db-restoring?
-           settings-open? sidebar-open? system-theme? sidebar-blocks-len]} child]
+  [{:keys [route theme on-click current-repo nfs-granted? db-restoring?
+           settings-open? sidebar-open? system-theme? sidebar-blocks-len onboarding-state preferred-language]} child]
   (let [mounted-fn (use-mounted)
         [restored-sidebar? set-restored-sidebar?] (rum/use-state false)]
 
@@ -25,8 +27,12 @@
           (.add cls "dark")
           (.remove cls "dark"))
         (ui/apply-custom-theme-effect! theme)
-        (plugin-handler/hook-plugin-app :theme-mode-changed {:mode theme} nil))
+        (plugin-handler/hook-plugin-app :theme-mode-changed {:mode theme}))
      [theme])
+
+    (rum/use-effect!
+     #(let [doc js/document.documentElement]
+        (.setAttribute doc "lang" preferred-language)))
 
     (rum/use-effect!
      #(when (and restored-sidebar?
@@ -36,13 +42,17 @@
      [sidebar-open? restored-sidebar? sidebar-blocks-len])
 
     (rum/use-effect!
-     #(when lsp-enabled?
-        (plugin-handler/setup-install-listener! t))
-     [t])
+     #(when config/lsp-enabled?
+        (plugin-handler/setup-install-listener!)
+        (plugin-config-handler/setup-install-listener!)
+        (plugin-handler/load-plugin-preferences)
+        (fn []
+          (js/window.apis.removeAllListeners "lsp-installed")))
+     [])
 
     (rum/use-effect!
      (fn []
-       (ui-handler/add-style-if-exists!)
+       (ui-handler/reset-custom-css!)
        (pdf/reset-current-pdf!)
        (plugin-handler/hook-plugin-app :current-graph-changed {}))
      [current-repo])
@@ -67,10 +77,10 @@
                     config/publishing?
                     ;; other graphs exists
                     (seq repos))
-            (route-handler/redirect! {:to :repo-add})
-            (do
-              (ui-handler/restore-right-sidebar-state!)
-              (set-restored-sidebar? true))))))
+             (route-handler/redirect! {:to :repo-add})
+             (do
+               (ui-handler/restore-right-sidebar-state!)
+               (set-restored-sidebar? true))))))
      [db-restoring?])
 
     (rum/use-effect!
@@ -83,6 +93,10 @@
        (when settings-open?
          (fn [] [:div.settings-modal (settings/settings)])))
      [settings-open?])
+
+    (rum/use-effect!
+     #(storage/set :file-sync/onboarding-state onboarding-state)
+     [onboarding-state])
 
     [:div
      {:class    (util/classnames

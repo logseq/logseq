@@ -11,6 +11,7 @@
    [goog.dom :as gdom]
    [goog.object :as gobj]
    [rum.core :as rum]
+   [logseq.graph-parser.util.block-ref :as block-ref]
    [frontend.mobile.util :as mobile-util]))
 
 (defn- action-command
@@ -51,19 +52,12 @@
           (.scrollBy (util/app-scroll-container-node) #js {:top (- 10 delta)})))
       [:div.action-bar
        [:div.action-bar-commands
-        (when-not (= (:block/format block) :org)
-          (action-command "heading" "Heading"
-                          #(let [properties (:block/properties block)
-                                 heading?   (true? (:heading properties))]
-                             (if heading?
-                               (editor-handler/remove-block-property! uuid :heading)
-                               (editor-handler/set-block-property! uuid :heading true)))))
         (action-command "infinity" "Card" #(srs/make-block-a-card! (:block/uuid block)))
         (action-command "copy" "Copy" #(editor-handler/copy-selection-blocks false))
         (action-command "cut" "Cut" #(editor-handler/cut-selection-blocks true))
         (action-command "trash" "Delete" #(editor-handler/delete-block-aux! block true))
         (action-command "registered" "Copy ref"
-                        (fn [_event] (editor-handler/copy-block-ref! uuid #(str "((" % "))"))))
+                        (fn [_event] (editor-handler/copy-block-ref! uuid block-ref/->block-ref)))
         (action-command "link" "Copy url"
                         (fn [_event] (let [current-repo (state/get-current-repo)
                                            tap-f (fn [block-id]
@@ -74,5 +68,3 @@
                           (fn [_event]
                             (let [current-repo (state/get-current-repo)]
                               (state/sidebar-add-block! current-repo uuid :block-ref)))))]])))
-
-

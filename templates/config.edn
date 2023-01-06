@@ -12,7 +12,7 @@
  :preferred-workflow :now
 
  ;; The app will ignore those directories or files.
- ;; E.g. "/archived" "/test.md"
+ ;; E.g. :hidden ["/archived" "/test.md" "../assets/archived"]
  :hidden []
 
  ;; When creating the new journal page, the app will use your template if there is one.
@@ -24,7 +24,24 @@
  ;; Default is true, you can also toggle this via setting page
  :ui/enable-tooltip? true
 
+ ;; Show brackets around page references
+ ;; :ui/show-brackets? true
+
+ ;; Enable Block timestamp
  :feature/enable-block-timestamps? false
+
+ ;; Enable remove accents when searching.
+ ;; After toggle this option, please remember to rebuild your search index by press (cmd+c cmd+s).
+ :feature/enable-search-remove-accents? true
+
+ ;; Enable journals
+ ;; :feature/enable-journals? true
+
+ ;; Enable flashcards
+ ;; :feature/enable-flashcards? true
+
+ ;; Disable Built-in Scheduled and deadline Query
+ ;; :feature/disable-scheduled-and-deadline-query? true
 
  ;; Specify the date on which the week starts.
  ;; Goes from 0 to 6 (Monday to Sunday), default to 6
@@ -36,6 +53,15 @@
  ;; https://github.com/logseq/awesome-logseq#css-themes
  ;; Example:
  ;; :custom-css-url "@import url('https://cdn.jsdelivr.net/gh/dracula/logseq@master/custom.css');"
+
+ ;; Set Bullet indentation when exporting
+ ;; default option: tab
+ ;; Possible options are for `:sidebar` are
+ ;; 1. `:eight-spaces` as eight spaces
+ ;; 2. `:four-spaces` as four spaces
+ ;; 3. `:two-spaces` as two spaces
+ ;; :export/bullet-indentation :tab
+
 
  ;; When :all-pages-public? true, export repo would export all pages within that repo.
  ;; Regardless of whether you've set any page to public or not.
@@ -71,15 +97,10 @@
  ;; For more, see https://github.com/logseq/logseq/issues/672
  ;; :org-mode/insert-file-link? true
 
- ;; If you prefer to use the file name as the page title
- ;; instead of the first heading's title
- ;; the only option for now is `file`
- ;; :page-name-order "file"
-
  ;; Setup custom shortcuts under `:shortcuts` key
  ;; Syntax:
  ;; 1. `+` means keys pressing simultaneously. eg: `ctrl+shift+a`
- ;; 2. ` ` empty space between keys represents key chords. eg: `t s` means press `s` follow by `t`
+ ;; 2. ` ` empty space between keys represents key chords. eg: `t s` means press `t` followed by `s`
  ;; 3. `mod` means `Ctrl` for Windows/Linux  and `Command` for Mac
  ;; 4. use `false` to disable particular shortcut
  ;; 4. you can define multiple bindings for one action, eg `["ctrl+j" "down"]`
@@ -102,18 +123,22 @@
  ;; Set this to `true` so that it's the same behaviour as the usual outliner mode.
  :shortcut/doc-mode-enter-for-new-block? false
 
+ ;; Block content larger than `block/content-max-length` will not be searchable
+ ;; or editable for performance.
+ :block/content-max-length 10000
+
  ;; Whether to show command doc on hover
  :ui/show-command-doc? true
 
  ;; Whether to show empty bullets for non-document mode (the default mode)
  :ui/show-empty-bullets? false
 
- ;; Pre-defined :view function to use in Query
+ ;; Pre-defined :view function to use with advanced queries
  :query/views
  {:pprint
   (fn [r] [:pre.code (pprint r)])}
 
- ;; Pre-defined :result-transform function to use in Query
+ ;; Pre-defined :result-transform function for use with advanced queries
  :query/result-transforms
  {:sort-by-priority
   (fn [result] (sort-by (fn [h] (get h :block/priority "Z")) result))}
@@ -145,7 +170,7 @@
             :where
             [?h :block/marker ?marker]
             [(contains? #{"NOW" "LATER" "TODO"} ?marker)]
-            [?h :block/ref-pages ?p]
+            [?h :block/page ?p]
             [?p :block/journal? true]
             [?p :block/journal-day ?d]
             [(> ?d ?start)]
@@ -153,8 +178,13 @@
     :inputs [:today :7d-after]
     :collapsed? false}]}
 
- ;; Add your own commands to speedup.
- ;; E.g. [["js" "Javascript"]]
+ ;; Add your own commands to slash menu to speedup.
+ ;; E.g.
+ ;; :commands
+ ;; [
+ ;; ["js" "Javascript"]
+ ;; ["md" "Markdown"]
+ ;; ]
  :commands
  []
 
@@ -167,9 +197,9 @@
 
  ;; Macros replace texts and will make you more productive.
  ;; For example:
- ;; Add this to the macros below:
+ ;; Change the :macros value below to:
  ;; {"poem" "Rose is $1, violet's $2. Life's ordered: Org assists you."}
- ;; input "{{{poem red,blue}}}"
+ ;; input "{{poem red,blue}}"
  ;; becomes
  ;; Rose is red, violet's blue. Life's ordered: Org assists you.
  :macros {}
@@ -187,7 +217,8 @@
 
  :ref/linked-references-collapsed-threshold 50
 
- :favorites ["How to take dummy notes?"]
+ ;; Favorites to list on the left sidebar
+ :favorites []
 
  ;; any number between 0 and 1 (the greater it is the faster the changes of the next-interval of card reviews) (default 0.5)
  ;; :srs/learning-fraction 0.5
@@ -196,8 +227,23 @@
  ;; :srs/initial-interval 4
 
  ;; hide specific properties for blocks
- ;; E.g. #{:created-at :updated-at}
+ ;; E.g. :block-hidden-properties #{:created-at :updated-at}
  ;; :block-hidden-properties #{}
+
+ ;; Enable all your properties to have corresponding pages
+ :property-pages/enabled? true
+
+ ;; Properties to exclude from having property pages
+ ;; E.g.:property-pages/excludelist #{:duration :author}
+ ;; :property-pages/excludelist
+
+ ;; By default, property value separated by commas will not be treated as
+ ;; page references. You can add properties to enable it.
+ ;; E.g. :property/separated-by-commas #{:alias :tags}
+ ;; :property/separated-by-commas #{}
+
+ ;; Properties that are ignored when parsing property values for references
+ ;; :ignored-page-references-keywords #{"author" "startup"}
 
  ;; logbook setup
  ;; :logbook/settings
@@ -208,15 +254,25 @@
 
  ;; Mobile photo uploading setup
  ;; :mobile/photo
- ;; {:allow-editing? true}
+ ;; {:allow-editing? true
+ ;;  :quality          80}
+
+ ;; Mobile features options
+ ;; Gestures
+ ;; :mobile
+ ;; {:gestures/disabled-in-block-with-tags ["kanban"]}
 
  ;; Extra CodeMirror options
+ ;; See https://codemirror.net/5/doc/manual.html#config for possible options
  ;; :editor/extra-codemirror-options {:keyMap "emacs" :lineWrapping true}
 
- ;; ignore #+keyword: for parsing page references in orgmode
- ;; :ignored-page-references-keywords #{"author" "startup"}
+ ;; Enable logical outdenting
+ ;; :editor/logical-outdenting? true
 
- ;; Quick capture templates on mobile for recieving contents from other apps.
+ ;; Enable preferring pasting file from clipboard
+ ;; :editor/preferred-pasting-file? true
+
+ ;; Quick capture templates for receiving contents from other apps.
  ;; Each template contains three elements {time}, {text} and {url}, which can be auto-expanded
  ;; by received contents from other apps. Note: the {} cannot be omitted.
  ;; - {time}: capture time
@@ -225,6 +281,37 @@
  ;; You can also reorder them, or even only use one or two of them in the template.
  ;; You can also insert or format any text in the template as shown in the following examples.
  ;; :quick-capture-templates
- ;; {:text "[[quick capture]] **{time}**: \n - {text} from {url}"
- ;;  :media "[[quick capture]] **{time}**: \n - {url}"}
+ ;; {:text "[[quick capture]] **{time}**: {text} from {url}"
+ ;;  :media "[[quick capture]] **{time}**: {url}"}
+
+ ;; Quick capture options
+ ;; :quick-capture-options {:insert-today? false :redirect-page? false}
+
+ ;; File sync options
+ ;; Ignore these files when syncing, regexp is supported.
+ ;; :file-sync/ignore-files []
+
+ ;; dwim (do what I mean) for Enter key when editing.
+ ;; Context-awareness of Enter key makes editing more easily
+ ; :dwim/settings {
+ ;   :admonition&src?  true
+ ;   :markup?          false
+ ;   :block-ref?       true
+ ;   :page-ref?        true
+ ;   :properties?      true
+ ;   :list?            true
+ ; }
+
+ ;; Decide the way to escape the special characters in the page title.
+ ;; Warning:
+ ;;   This is a dangerous operation. If you want to change the setting,
+ ;;   should access the setting `Filename format` and follow the instructions.
+ ;;   Or you have to rename all the affected files manually then re-index on all
+ ;;   clients after the files are synced. Wrong handling may cause page titles
+ ;;   containing special characters to be messy.
+ ;; Available values:
+ ;;   :file/name-format :triple-lowbar
+ ;;     ;use triple underscore `___` for slash `/` in page title
+ ;;     ;use Percent-encoding for other invalid characters
+ :file/name-format :triple-lowbar
  }

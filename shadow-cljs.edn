@@ -3,8 +3,9 @@
  :nrepl {:port 8701}
 
  ;; "." for /static
- :dev-http {3001 ["static" "."]
-            3002 ["public/workspaces" "."]}
+ :dev-http {3001 ["static" "."]}
+
+ :js-options {:js-package-dirs ["node_modules" "tldraw/apps"]}
 
  :builds
  {:app {:target        :browser
@@ -15,12 +16,13 @@
                         :code-editor
                         {:entries    [frontend.extensions.code]
                          :depends-on #{:main}}
-                        :age-encryption
-                        {:entries    [frontend.extensions.age-encryption]
-                         :depends-on #{:main}}
                         :excalidraw
                         {:entries    [frontend.extensions.excalidraw]
-                         :depends-on #{:main}}}
+                         :depends-on #{:main}}
+                        :tldraw
+                        {:entries    [frontend.extensions.tldraw]
+                         :depends-on #{:main}}
+                        }
         :output-dir       "./static/js"
         :asset-path       "/static/js"
         :release          {:asset-path "https://asset.logseq.com/static/js"}
@@ -31,12 +33,19 @@
                                                 "externs.js"]
                            :warnings           {:fn-deprecated false
                                                 :redef false}}
-        :closure-defines  {goog.debug.LOGGING_ENABLED      true}
+        :build-hooks      [(shadow.hooks/git-revision-hook "--long --always --dirty")]
+        :closure-defines  {goog.debug.LOGGING_ENABLED       true
+                           frontend.modules.instrumentation.sentry/SENTRY-DSN #shadow/env "LOGSEQ_SENTRY_DSN"
+                           frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"
+                           frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS" :as :bool :default true]
+                           frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
+                           frontend.config/TEST #shadow/env ["LOGSEQ_CI" :as :bool :default false]
+                           frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]} ;; set by git-revision-hook
 
         ;; NOTE: electron, browser/mobile-app use different asset-paths.
         ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
         ;;   For electron devs, assets are located in ./js(via relative path).
-        ; :dev      {:asset-path "./js"}
+        ;; :dev      {:asset-path "./js"}
         :devtools {:before-load frontend.core/stop  ;; before live-reloading any code call this function
                    :after-load  frontend.core/start ;; after live-reloading finishes call this function
                    :watch-path  "/static"
@@ -64,7 +73,7 @@
          :devtools        {:enabled false}
          ;; disable :static-fns to allow for with-redefs and repl development
          :compiler-options {:static-fns false}
-         :main            frontend.test.node-test-runner/main}
+         :main            frontend.test.frontend-node-test-runner/main}
 
   :publishing {:target        :browser
                :module-loader true
@@ -74,12 +83,13 @@
                                :code-editor
                                {:entries    [frontend.extensions.code]
                                 :depends-on #{:main}}
-                               :age-encryption
-                               {:entries    [frontend.extensions.age-encryption]
-                                :depends-on #{:main}}
                                :excalidraw
                                {:entries    [frontend.extensions.excalidraw]
-                                :depends-on #{:main}}}
+                                :depends-on #{:main}}
+                               :tldraw
+                               {:entries    [frontend.extensions.tldraw]
+                                :depends-on #{:main}}
+                               }
                :output-dir       "./static/js/publishing"
                :asset-path       "static/js"
                :closure-defines  {frontend.config/PUBLISHING true
@@ -93,16 +103,4 @@
                :devtools         {:before-load frontend.core/stop
                                   :after-load  frontend.core/start
                                   :preloads    [devtools.preload]}}
-
-  :cards {:target     nubank.workspaces.shadow-cljs.target
-          :ns-regexp  "(test|cards)$"
-          :output-dir "./public/workspaces/static/js/workspaces"
-          :asset-path "/static/js/workspaces"
-          :preloads   [] ;; optional, list namespaces to be pre loaded
-          :devtools   {:after-load  nubank.workspaces.core/after-load
-                       :loader-mode :eval
-                       :watch-path  "/static"
-                       :watch-dir   "static"
-                       :preloads    [devtools.preload
-                                     shadow.remote.runtime.cljs.browser]}
-          :modules    {:main {:entries [workspaces.main]}}}}}
+  }}

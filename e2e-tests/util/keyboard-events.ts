@@ -1,4 +1,4 @@
-/*** 
+/***
  * Author: Junyi Du <junyi@logseq.com>
  * References:
  * https://stackoverflow.com/questions/8892238/detect-keyboard-layout-with-javascript
@@ -243,7 +243,7 @@ export let macos_pinyin_selecting_candidate_double_left_square_bracket: Recorded
       "repeat": false,
       "isComposing": true
     },
-    "latency": 627
+    "latency": 200
   },
   {
     "event_type": "keyup",
@@ -353,7 +353,7 @@ export let macos_pinyin_selecting_candidate_double_left_square_bracket: Recorded
   {
     "event_type": "compositionend",
     "event": {},
-    "latency": 968
+    "latency": 200
   }
 ]
 
@@ -426,7 +426,7 @@ export let win10_RIME_selecting_candidate_double_left_square_bracket: RecordedEv
       "repeat": false,
       "isComposing": true
     },
-    "latency": 237
+    "latency": 200
   },
   {
     "event_type": "keyup",
@@ -461,6 +461,6 @@ export let win10_RIME_selecting_candidate_double_left_square_bracket: RecordedEv
   {
     "event_type": "compositionend",
     "event": {},
-    "latency": 1479
+    "latency": 200
   }
 ]

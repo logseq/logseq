@@ -1,11 +1,13 @@
 (ns frontend.util.text
+  "Misc low-level utility text fns that are useful across features or don't have
+  a good ns to be in yet"
   (:require [clojure.string :as string]
             [goog.string :as gstring]
             [frontend.util :as util]))
 
 (defonce between-re #"\(between ([^\)]+)\)")
 
-(def bilibili-regex #"^((?:https?:)?//)?((?:www).)?((?:bilibili.com))(/(?:video/)?)([\w-]+)(\S+)?$")
+(def bilibili-regex #"^((?:https?:)?//)?((?:www).)?((?:bilibili.com))(/(?:video/)?)([\w-]+)(\?p=(\d+))?(\S+)?$")
 (def loom-regex #"^((?:https?:)?//)?((?:www).)?((?:loom.com))(/(?:share/|embed/))([\w-]+)(\S+)?$")
 (def vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com))(/(?:video/)?)([\w-]+)(\S+)?$")
 (def youtube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be|y2u.be|youtube-nocookie.com))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)([\S^\?]+)?$")
@@ -59,13 +61,14 @@
         result (reduce (fn [acc line]
                          (let [new-pos (+ acc (count line))]
                            (if (>= new-pos pos)
-                             (reduced line)
+                             (reduced {:line line
+                                       :start-pos acc})
                              (inc new-pos)))) 0 lines)]
-    (when (string? result)
+    (when (map? result)
       result)))
 
 (defn surround-by?
-  "`pos` must be surrounded by `before` and `and` in string `value`, e.g. ((|))"
+  "`pos` must be surrounded by `before` and `end` in string `value`, e.g. ((|))"
   [value pos before end]
   (let [start-pos (if (= :start before) 0 (- pos (count before)))
         end-pos (if (= :end end) (count value) (+ pos (count end)))]
@@ -86,20 +89,24 @@
 
 (defn get-string-all-indexes
   "Get all indexes of `value` in the string `s`."
-  [s value]
-  (loop [acc []
-         i 0]
-    (if-let [i (string/index-of s value i)]
-      (recur (conj acc i) (+ i (count value)))
-      acc)))
+  [s value {:keys [before?] :or {before? true}}]
+  (if (= value "")
+    (if before? [0] [(count s)]) ;; Hack: this prevents unnecessary work in wrapped-by?
+    (loop [acc []
+          i 0]
+     (if-let [i (string/index-of s value i)]
+       (recur (conj acc i) (+ i (count value)))
+       acc))))
 
 (defn wrapped-by?
-  "`pos` must be wrapped by `before` and `and` in string `value`, e.g. ((a|b))"
+  "`pos` must be wrapped by `before` and `end` in string `value`, e.g. ((a|b))"
   [value pos before end]
-  (let [before-matches (->> (get-string-all-indexes value before)
-                            (map (fn [i] [i :before])))
-        end-matches (->> (get-string-all-indexes value end)
-                         (map (fn [i] [i :end])))
+  ;; Increment 'before' matches by (length of before string - 0.5) to make them be just before the cursor position they precede.
+  ;; Increment 'after' matches by 0.5 to make them be just after the cursor position they follow.
+  (let [before-matches (->> (get-string-all-indexes value before {:before? true})
+                            (map (fn [i] [(+ i (- (count before) 0.5)) :before])))
+        end-matches (->> (get-string-all-indexes value end {:before? false})
+                         (map (fn [i] [(+ i 0.5) :end])))
         indexes (sort-by first (concat before-matches end-matches [[pos :between]]))
         ks (map second indexes)
         q [:before :between :end]]
@@ -111,6 +118,26 @@
              []
              ks))))
 
+(defn cut-by
+  "Cut string by specifid wrapping symbols, only match the first occurrence.
+     value - string to cut
+     before - cutting symbol (before)
+     end - cutting symbol (end)"
+  [value before end]
+  (let [b-pos (string/index-of value before)
+        b-len (count before)]
+    (if b-pos
+      (let [b-cut (subs value 0 b-pos)
+            m-cut (subs value (+ b-pos b-len))
+            e-len (count end)
+            e-pos (string/index-of m-cut end)]
+        (if e-pos
+          (let [e-cut (subs m-cut (+ e-pos e-len))
+                m-cut (subs m-cut 0 e-pos)]
+            [b-cut m-cut e-cut])
+          [b-cut m-cut nil]))
+      [value nil nil])))
+
 (defn get-graph-name-from-path
   [path]
   (when (string? path)
@@ -120,7 +147,3 @@
             (string/join "/" parts)
             (last parts))
           js/decodeURI))))
-
-(defn extract-all-block-refs
-  [content]
-  (map second (re-seq #"\(\(([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\)\)" content)))

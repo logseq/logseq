@@ -1,4 +1,4 @@
-(ns frontend.handler.export
+(ns ^:no-doc frontend.handler.export
   (:require ["@capacitor/filesystem" :refer [Encoding Filesystem]]
             [cljs.pprint :as pprint]
             [clojure.set :as s]
@@ -23,6 +23,9 @@
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.graph-parser.property :as gp-property]
             [promesa.core :as p]
             [frontend.handler.notification :as notification])
   (:import
@@ -85,6 +88,7 @@
     (let [[db asset-filenames]           (if (state/all-pages-public?)
                                            (db/clean-export! db)
                                            (db/filter-only-public-pages-and-blocks db))
+          asset-filenames (remove nil? asset-filenames)
           db-str       (db/db->string db)
           state        (select-keys @state/state
                                     [:ui/theme
@@ -159,11 +163,8 @@
                              (= "embed" (some-> (:name (second i))
                                                 (string/lower-case)))
                              (some-> (:arguments (second i))
-                                     (first)
-                                     (string/starts-with? "[["))
-                             (some-> (:arguments (second i))
-                                     (first)
-                                     (string/ends-with? "]]")))
+                                     first
+                                     page-ref/page-ref?))
                         (let [arguments (:arguments (second i))
                               page-ref (first arguments)
                               page-name (-> page-ref
@@ -188,15 +189,9 @@
                                                 (string/lower-case)))
                              (some-> (:arguments (second i))
                                      (first)
-                                     (string/starts-with? "(("))
-                             (some-> (:arguments (second i))
-                                     (first)
-                                     (string/ends-with? "))")))
+                                     block-ref/string-block-ref?))
                         (let [arguments (:arguments (second i))
-                              block-ref (first arguments)
-                              block-uuid (-> block-ref
-                                             (subs 2)
-                                             (#(subs % 0 (- (count %) 2))))]
+                              block-uuid (block-ref/get-string-block-ref-id (first arguments))]
                           (conj! result block-uuid)
                           i)
                         :else
@@ -451,6 +446,15 @@
        x))
    vec-tree))
 
+(defn- safe-keywordize
+  [block]
+  (update block :block/properties
+          (fn [properties]
+            (when (seq properties)
+              (->> (filter (fn [[k _v]]
+                             (gp-property/valid-property-name? (str k))) properties)
+                   (into {}))))))
+
 (defn- blocks [db]
   {:version 1
    :blocks
@@ -467,17 +471,18 @@
                              name
                              {:transform? false})
                      blocks' (map (fn [b]
-                                    (if (seq (:block/properties b))
-                                      (update b :block/content
-                                              (fn [content] (property/remove-properties (:block/format b) content)))
-                                      b)) blocks)
-                     children (outliner-tree/blocks->vec-tree blocks' name)]
-                 (assoc page :block/children children))))
+                                    (let [b' (if (seq (:block/properties b))
+                                               (update b :block/content
+                                                       (fn [content] (property/remove-properties (:block/format b) content)))
+                                               b)]
+                                      (safe-keywordize b'))) blocks)
+                     children (outliner-tree/blocks->vec-tree blocks' name)
+                     page' (safe-keywordize page)]
+                 (assoc page' :block/children children))))
         (nested-select-keys
          [:block/id
           :block/page-name
           :block/properties
-          :block/heading-level
           :block/format
           :block/children
           :block/content]))})

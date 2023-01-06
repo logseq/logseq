@@ -9,5 +9,6 @@
 #import <Capacitor/Capacitor.h>
 
 CAP_PLUGIN(Utils, "Utils",
-           CAP_PLUGIN_METHOD(isZoomed, CAPPluginReturnPromise);
-           )
+    CAP_PLUGIN_METHOD(isZoomed, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(getDocumentRoot, CAPPluginReturnPromise);
+)

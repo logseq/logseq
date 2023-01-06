@@ -1,4 +1,4 @@
-(ns frontend.diff
+(ns ^:no-doc frontend.diff
   (:require [clojure.string :as string]
             ["diff" :as jsdiff]
             [goog.object :as gobj]
@@ -47,7 +47,7 @@
 
                       :else
                       (recur r1 t2 (inc i1) i2))))
-            current-line (text-util/get-current-line-by-pos markup pos)]
+            current-line (:line (text-util/get-current-line-by-pos markup pos))]
         (cond
           (= (util/nth-safe markup pos)
              (util/nth-safe markup (inc pos))
@@ -68,6 +68,6 @@
 
           :else
           pos))
-      (catch js/Error e
+      (catch :default e
         (log/error :diff/find-position {:error e})
         (count markup)))))

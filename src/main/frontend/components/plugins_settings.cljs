@@ -17,6 +17,7 @@
   [val {:keys [key type title default description inputAs]} update-setting!]
 
   [:div.desc-item.as-input
+   {:data-key key}
    [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
 
    [:label.form-control
@@ -24,10 +25,11 @@
 
     (let [input-as (util/safe-lower-case (or inputAs (name type)))
           input-as (if (= input-as "string") :text (keyword input-as))]
-      [:input
+      [(if (= input-as :textarea) :textarea :input)
        {:class        (util/classnames [{:form-input (not (contains? #{:color :range} input-as))}])
         :type         (name input-as)
         :defaultValue (or val default)
+        :on-key-down  #(.stopPropagation %)
         :on-change    (debounce #(update-setting! key (util/evalue %)) 1000)}])]])
 
 (rum/defc render-item-toggle
@@ -35,6 +37,7 @@
 
   (let [val (if (boolean? val) val (boolean default))]
     [:div.desc-item.as-toggle
+     {:data-key key}
      [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
 
      [:label.form-control
@@ -51,6 +54,7 @@
                               :selected (contains? vals v)}) enumChoices)
         picker (keyword enumPicker)]
     [:div.desc-item.as-enum
+     {:data-key key}
      [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
 
      [:div.form-control
@@ -68,27 +72,35 @@
   [_val {:keys [key title description _default]} pid]
 
   [:div.desc-item.as-object
+   {:data-key key}
    [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
 
    [:div.form-control
     [:small.pl-1.flex-1 description]
     [:div.pl-1 (edit-settings-file pid nil)]]])
 
+(rum/defc render-item-heading
+  [{:keys [key title]}]
+
+  [:div.heading-item
+   {:data-key key}
+   [:h2 title]])
+
 (rum/defc settings-container
   [schema ^js pl]
-  (let [^js _settings (.-settings pl)
+  (let [^js plugin-settings (.-settings pl)
         pid (.-id pl)
-        [settings, set-settings] (rum/use-state (bean/->clj (.toJSON _settings)))
-        update-setting! (fn [k v] (.set _settings (name k) (bean/->js v)))]
+        [settings, set-settings] (rum/use-state (bean/->clj (.toJSON plugin-settings)))
+        update-setting! (fn [k v] (.set plugin-settings (name k) (bean/->js v)))]
 
     (rum/use-effect!
-      (fn []
-        (let [on-change (fn [^js s]
-                          (when-let [s (bean/->clj s)]
-                            (set-settings s)))]
-          (.on _settings "change" on-change)
-          #(.off _settings "change" on-change)))
-      [pid])
+     (fn []
+       (let [on-change (fn [^js s]
+                         (when-let [s (bean/->clj s)]
+                           (set-settings s)))]
+         (.on plugin-settings "change" on-change)
+         #(.off plugin-settings "change" on-change)))
+     [pid])
 
     (if (seq schema)
       [:div.cp__plugins-settings-inner
@@ -107,6 +119,7 @@
            #{:boolean} (render-item-toggle val desc update-setting!)
            #{:enum} (render-item-enum val desc update-setting!)
            #{:object} (render-item-object val desc pid)
+           #{:heading} (render-item-heading desc)
 
            [:p (str "#Not Handled#" key)]))]
 

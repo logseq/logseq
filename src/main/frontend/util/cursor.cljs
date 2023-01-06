@@ -1,4 +1,4 @@
-(ns frontend.util.cursor
+(ns ^:no-doc frontend.util.cursor
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.util :as util]
@@ -39,8 +39,8 @@
                  (util/nth-safe pos)
                  mock-char-pos
                  (assoc :rect rect))
-         (catch :default _e
-           (js/console.log "index error" _e)
+         (catch :default e
+           (js/console.log "index error" e)
            {:pos pos
             :rect rect
             :left js/Number.MAX_SAFE_INTEGER
@@ -111,17 +111,18 @@
 (defn beginning-of-line?
   [input]
   (let [[content pos] (get-input-content&pos input)]
-    (or (zero? pos)
-        (when-let [pre-char (subs content (dec pos) pos)]
-          (= pre-char \newline)))))
+    (when content
+      (or (zero? pos)
+         (when-let [pre-char (subs content (dec pos) pos)]
+           (= pre-char \newline))))))
 
 (defn move-cursor-to-line-end
   [input]
   (move-cursor-to input (line-end-pos input)))
 
-(defn move-cursor-to-line-beginning
-  [input]
-  (move-cursor-to input (line-beginning-pos input)))
+;; (defn move-cursor-to-line-beginning
+;;   [input]
+;;   (move-cursor-to input (line-beginning-pos input)))
 
 (defn move-cursor-to-end
   [input]

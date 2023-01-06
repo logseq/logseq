@@ -38,11 +38,18 @@ export interface Block {
   selectionEnd(): Promise<number>;
 }
 
+export interface autocompleteMenu {
+  // Expect or wait for autocomplete menu to be or become visible
+  expectVisible(modalName?: string): Promise<void>
+  // Expect or wait for autocomplete menu to be or become hidden
+  expectHidden(modalName?: string): Promise<void>
+}
+
 export interface LogseqFixtures {
   page: Page;
   block: Block;
+  autocompleteMenu: autocompleteMenu;
   context: BrowserContext;
   app: ElectronApplication;
   graphDir: string;
 }
-

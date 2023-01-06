@@ -1,4 +1,4 @@
-(ns frontend.handler.block
+(ns ^:no-doc frontend.handler.block
   (:require
    [clojure.set :as set]
    [clojure.string :as string]
@@ -20,58 +20,6 @@
 (defn long-page?
   [repo page-id]
   (>= (db/get-page-blocks-count repo page-id) db-model/initial-blocks-length))
-
-(defn get-block-refs-with-children
-  [block]
-  (->>
-   (tree-seq :block/refs
-             :block/children
-             block)
-   (mapcat :block/refs)
-   (distinct)))
-
-(defn filter-blocks
-  [repo ref-blocks filters group-by-page?]
-  (let [ref-pages-ids (->> (if group-by-page?
-                             (mapcat last ref-blocks)
-                             ref-blocks)
-                           (mapcat (fn [b] (get-block-refs-with-children b)))
-                           (concat (when group-by-page? (map first ref-blocks)))
-                           (distinct)
-                           (map :db/id)
-                           (remove nil?))
-        ref-pages (db/pull-many repo '[:db/id :block/name] ref-pages-ids)
-        ref-pages (zipmap (map :block/name ref-pages) (map :db/id ref-pages))
-        exclude-ids (->> (map (fn [page] (get ref-pages page)) (get filters false))
-                         (remove nil?)
-                         (set))
-        include-ids (->> (map (fn [page] (get ref-pages page)) (get filters true))
-                         (remove nil?)
-                         (set))]
-    (if (empty? filters)
-      ref-blocks
-      (let [filter-f (fn [ref-blocks]
-                       (cond->> ref-blocks
-                         (seq exclude-ids)
-                         (remove (fn [block]
-                                   (let [ids (set (concat (map :db/id (get-block-refs-with-children block))
-                                                          [(:db/id (:block/page block))]))]
-                                     (seq (set/intersection exclude-ids ids)))))
-
-                         (seq include-ids)
-                         (remove (fn [block]
-                                   (let [page-block-id (:db/id (:block/page block))
-                                         ids (set (map :db/id (get-block-refs-with-children block)))]
-                                     (if (and (contains? include-ids page-block-id)
-                                              (= 1 (count include-ids)))
-                                       (not= page-block-id (first include-ids))
-                                       (empty? (set/intersection include-ids (set (conj ids page-block-id))))))))))]
-        (if group-by-page?
-          (->> (map (fn [[p ref-blocks]]
-                      [p (filter-f ref-blocks)]) ref-blocks)
-               (remove #(empty? (second %))))
-          (->> (filter-f ref-blocks)
-               (remove nil?)))))))
 
 ;; TODO: reduced version
 (defn- walk-block
@@ -138,8 +86,8 @@
 (defn indent-outdent-block!
   [block direction]
   (outliner-tx/transact!
-   {:outliner-op :move-blocks}
-   (outliner-core/indent-outdent-blocks! [block] (= direction :right))))
+    {:outliner-op :move-blocks}
+    (outliner-core/indent-outdent-blocks! [block] (= direction :right))))
 
 (defn select-block!
   [block-uuid]
@@ -150,22 +98,34 @@
 (def *swipe (atom nil))
 (def *touch-start (atom nil))
 
+(defn- target-disable-swipe?
+  [target]
+  (let [user-defined-tags (get-in (state/get-config)
+                                  [:mobile :gestures/disabled-in-block-with-tags])]
+    (or (.closest target ".dsl-query")
+        (.closest target ".drawer")
+        (.closest target ".draw-wrap")
+        (some #(.closest target (util/format "[data-refs-self*=%s]" %))
+              user-defined-tags))))
+
 (defn on-touch-start
   [event uuid]
-  (let [input (state/get-input)
+  (let [target (.-target event)
+        input (state/get-input)
         input-id (state/get-edit-input-id)
         selection-type (.-type (.getSelection js/document))]
     (reset! *touch-start (js/Date.now))
     (when-not (and input
                    (string/ends-with? input-id (str uuid)))
       (state/clear-edit!))
-    (when (not= selection-type "Range")
-      (when-let [touches (.-targetTouches event)]
-        (when (= (.-length touches) 1)
-          (let [touch (aget touches 0)
-                x (.-clientX touch)
-                y (.-clientY touch)]
-            (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil})))))))
+    (when-not (target-disable-swipe? target)
+      (when (not= selection-type "Range")
+        (when-let [touches (.-targetTouches event)]
+          (when (= (.-length touches) 1)
+            (let [touch (aget touches 0)
+                  x (.-clientX touch)
+                  y (.-clientY touch)]
+              (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil}))))))))
 
 (defn on-touch-move
   [event block uuid edit? *show-left-menu? *show-right-menu?]
@@ -197,8 +157,8 @@
               (let [{:keys [x0 y0]} @*swipe
                     dx (- tx x0)
                     dy (- ty y0)]
-                (when (and (< (. js/Math abs dy) 20)
-                           (> (. js/Math abs dx) 10))
+                (when (and (< (. js/Math abs dy) 30)
+                           (> (. js/Math abs dx) 30))
                   (let [left (gdom/getElement (str "block-left-menu-" uuid))
                         right (gdom/getElement (str "block-right-menu-" uuid))]
 
@@ -274,7 +234,7 @@
 
             :else
             nil))
-        (catch js/Error e
+        (catch :default e
           (js/console.error e))
         (finally
           (reset! *show-left-menu? false)
@@ -282,9 +242,52 @@
           (reset! *swipe nil))))))
 
 (defn on-touch-cancel
-  [_event *show-left-menu? *show-right-menu?]
+  [*show-left-menu? *show-right-menu?]
   (reset! *show-left-menu? false)
   (reset! *show-right-menu? false)
   (reset! *swipe nil))
 
+(defn get-blocks-refed-pages
+  [aliases [block & children]]
+  (let [children-refs (mapcat :block/refs children)
+        refs (->>
+              (:block/path-refs block)
+              (concat children-refs)
+              (remove #(aliases (:db/id %))))]
+    (keep (fn [ref]
+            (when (:block/name ref)
+              {:db/id (:db/id ref)
+               :block/name (:block/name ref)
+               :block/original-name (:block/original-name ref)})) refs)))
 
+(defn filter-blocks
+  [ref-blocks filters]
+  (if (empty? filters)
+    ref-blocks
+    (let [exclude-ids (->> (keep (fn [page] (:db/id (db/entity [:block/name (util/page-name-sanity-lc page)]))) (get filters false))
+                           (set))
+          include-ids (->> (keep (fn [page] (:db/id (db/entity [:block/name (util/page-name-sanity-lc page)]))) (get filters true))
+                           (set))]
+      (cond->> ref-blocks
+        (seq exclude-ids)
+        (remove (fn [block]
+                  (let [ids (set (map :db/id (:block/path-refs block)))]
+                    (seq (set/intersection exclude-ids ids)))))
+
+        (seq include-ids)
+        (filter (fn [block]
+                  (let [ids (set (map :db/id (:block/path-refs block)))]
+                    (set/subset? include-ids ids))))))))
+
+(defn get-filtered-ref-blocks-with-parents
+  [all-ref-blocks filtered-ref-blocks]
+  (when (seq filtered-ref-blocks)
+    (let [id->block (zipmap (map :db/id all-ref-blocks) all-ref-blocks)
+          get-parents (fn [block]
+                        (loop [block block
+                               result [block]]
+                          (let [parent (id->block (:db/id (:block/parent block)))]
+                            (if (and parent (not= (:db/id parent) (:db/id block)))
+                              (recur parent (conj result parent))
+                              result))))]
+      (distinct (mapcat get-parents filtered-ref-blocks)))))

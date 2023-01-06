@@ -1,7 +1,6 @@
-(ns frontend.handler.history
+(ns ^:no-doc frontend.handler.history
   (:require [frontend.db :as db]
             [frontend.handler.editor :as editor]
-            [frontend.handler.ui :as ui-handler]
             [frontend.modules.editor.undo-redo :as undo-redo]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -9,7 +8,6 @@
 
 (defn restore-cursor!
   [{:keys [last-edit-block container pos]}]
-  (ui-handler/re-render-root!)
   (when (and container last-edit-block)
     #_:clj-kondo/ignore
     (when-let [container (gdom/getElement container)]
@@ -23,6 +21,7 @@
   [e]
   (util/stop e)
   (state/set-editor-op! :undo)
+  (state/clear-editor-action!)
   (editor/save-current-block!)
   (let [{:keys [editor-cursor]} (undo-redo/undo)]
     (restore-cursor! editor-cursor))
@@ -32,6 +31,7 @@
   [e]
   (util/stop e)
   (state/set-editor-op! :redo)
+  (state/clear-editor-action!)
   (let [{:keys [editor-cursor]} (undo-redo/redo)]
     (restore-cursor! editor-cursor))
   (state/set-editor-op! nil))

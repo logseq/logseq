@@ -10,7 +10,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defonce default-timestamp-value {:time ""
                                   :repeater {}})
@@ -82,7 +83,6 @@
   (reset! *timestamp default-timestamp-value)
   (reset! *show-time? false)
   (reset! *show-repeater? false)
-  (state/set-timestamp-block! nil)
   (state/set-state! :date-picker/date nil))
 
 (defn- on-submit
@@ -105,8 +105,7 @@
     (when show?
       (reset! show? false)))
   (clear-timestamp!)
-  (state/set-editor-show-date-picker! false)
-  (commands/restore-state false))
+  (commands/restore-state))
 
 (rum/defc time-repeater < rum/reactive
   (mixins/event-mixin
@@ -131,23 +130,21 @@
 (rum/defc date-picker < rum/reactive
   {:init (fn [state]
            (let [ts (last (:rum/args state))]
+             (clear-timestamp!)
              (if ts
                (reset! *timestamp ts)
                (reset! *timestamp {:time ""
                                    :repeater {}}))
              (when-not (:date-picker/date @state/state)
-               (state/set-state! :date-picker/date (t/today))))
-           state)
-   :will-unmount (fn [state]
-                   (clear-timestamp!)
-                   state)}
+               (state/set-state! :date-picker/date (get ts :date (t/today)))))
+           state)}
   [id format _ts]
   (let [current-command @commands/*current-command
         deadline-or-schedule? (and current-command
                                    (contains? #{"deadline" "scheduled"}
                                               (string/lower-case current-command)))
         date (state/sub :date-picker/date)]
-    (when (state/sub :editor/show-date-picker?)
+    (when (= :datepicker (state/sub :editor/action))
       [:div#date-time-picker.flex.flex-row {:on-click (fn [e] (util/stop e))
                                             :on-mouse-down (fn [e] (.stopPropagation e))}
        (ui/datepicker
@@ -161,10 +158,10 @@
              (when-not deadline-or-schedule?
                ;; similar to page reference
                (editor-handler/insert-command! id
-                                               (util/format "[[%s]]" journal)
+                                               (page-ref/->page-ref journal)
                                                format
-                                               nil)
-               (state/set-editor-show-date-picker! false)
+                                               {:command :page-ref})
+               (state/clear-editor-action!)
                (reset! commands/*current-command nil))))})
        (when deadline-or-schedule?
          (time-repeater))])))

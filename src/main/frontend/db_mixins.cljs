@@ -1,4 +1,5 @@
 (ns frontend.db-mixins
+  "Rum mixins that depend on db"
   (:require [frontend.db.react :as react]))
 
 (def query

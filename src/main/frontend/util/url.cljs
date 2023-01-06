@@ -1,4 +1,5 @@
 (ns frontend.util.url
+  "Util fns related to protocol url"
   (:require [frontend.db.conn :as db-conn]))
 
 ;; Keep same as electron/electron.core

@@ -23,15 +23,20 @@
            {:d
             "M64.177 100.069a7.889 7.889 0 01-5.6-2.316l-55.98-55.98a7.92 7.92 0 010-11.196c3.086-3.085 8.105-3.092 11.196 0l50.382 50.382 50.382-50.382a7.92 7.92 0 0111.195 0c3.086 3.086 3.092 8.104 0 11.196l-55.98 55.98a7.892 7.892 0 01-5.595 2.316z"}]])
 
-(defonce loading
-         [:svg.h-5.w-5.animate-spin
-          {:version  "1.1"
+
+(defn loader-fn [opts]
+  [:svg.animate-spin
+   (merge {:version  "1.1"
            :view-box "0 0 24 24"
            :fill     "none"
+           :class    "w-5 h-5"
            :display  "inline-block"}
-          [:circle.opacity-25 {:cx 12 :cy 12 :r 10 :stroke "currentColor" :stroke-width 4}]
-          [:path.opacity-75 {:fill "currentColor"
-                             :d    "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"}]])
+          opts)
+   [:circle.opacity-25 {:cx 12 :cy 12 :r 10 :stroke "currentColor" :stroke-width 4}]
+   [:path.opacity-75 {:fill "currentColor"
+                      :d    "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"}]])
+
+(defonce loading (loader-fn nil))
 
 (defn- hero-icon
   ([d]
@@ -54,8 +59,7 @@
 (def folder (hero-icon "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"))
 (def settings-sm [:svg {:viewBox "0 0 20 20", :fill "currentColor", :height "20", :width "20"}
                   [:path {:fill-rule "evenodd", :d "M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z", :clip-rule "evenodd"}]])
-(def trash-sm [:svg {:viewBox "0 0 20 20", :fill "currentColor", :height "16", :width "16"}
-               [:path {:fill-rule "evenodd", :d "M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z", :clip-rule "evenodd"}]])
+
 (def external-link
   [:svg {:fill   "none", :view-box "0 0 24 24", :height "21", :width "21"
          :stroke "currentColor"}
@@ -66,7 +70,7 @@
      :d               "M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"}]])
 (rum/defc note
   []
-  [:svg.h-8.w-8.svg-shadow.note
+  [:svg.h-8.w-8.note
    {:view-box "0 0 512 512"
     :fill     "currentColor"}
    [:path
@@ -84,20 +88,18 @@
 
 (rum/defc important
   []
-  [:svg.h-8.w-8.svg-shadow.important
+  [:svg.h-8.w-8.important
    {:view-box "0 0 512 512"
-    :fill     "currentColor"
-    :color    "#bf0000"}
+    :fill     "var(--ls-error-color)"}
    [:path
     {:d
      "M504 256c0 136.997-111.043 248-248 248S8 392.997 8 256C8 119.083 119.043 8 256 8s248 111.083 248 248zm-248 50c-25.405 0-46 20.595-46 46s20.595 46 46 46 46-20.595 46-46-20.595-46-46-46zm-43.673-165.346l7.418 136c.347 6.364 5.609 11.346 11.982 11.346h48.546c6.373 0 11.635-4.982 11.982-11.346l7.418-136c.375-6.874-5.098-12.654-11.982-12.654h-63.383c-6.884 0-12.356 5.78-11.981 12.654z"}]])
 
 (rum/defc caution
   []
-  [:svg.h-8.w-8.svg-shadow.caution
+  [:svg.h-8.w-8.caution
    {:view-box "0 0 384 512"
-    :fill     "currentColor"
-    :color    "#bf3400"}
+    :fill     "var(--ls-warning-color)"}
    [:path
     {:d
      "M216 23.86c0-23.8-30.65-32.77-44.15-13.04C48 191.85 224 200 224 288c0 35.63-29.11 64.46-64.85 63.99-35.17-.45-63.15-29.77-63.15-64.94v-85.51c0-21.7-26.47-32.23-41.43-16.5C27.8 213.16 0 261.33 0 320c0 105.87 86.13 192 192 192s192-86.13 192-192c0-170.29-168-193-168-296.14z"}]])
@@ -106,11 +108,10 @@
   ([]
    (warning nil))
   ([opts]
-   [:svg.h-8.w-8.svg-shadow.warning
+   [:svg.h-8.w-8.warning
     (merge
       {:view-box "0 0 576 512"
-       :fill     "currentColor"
-       :color    "#bf6900"}
+       :fill     "var(--ls-warning-color)"}
       opts)
     [:path
      {:d
@@ -165,25 +166,26 @@
     {:d         "M0 384.662V127.338c0-17.818 21.543-26.741 34.142-14.142l128.662 128.662c7.81 7.81 7.81 20.474 0 28.284L34.142 398.804C21.543 411.404 0 402.48 0 384.662z"
      :fill-rule "evenodd"}]])
 
-(rum/defc logo
-  [_dark?]
-  [:svg
-   {:fill "currentColor", :view-box "0 0 21 21", :height "21", :width "21"}
-   [:ellipse
-    {:transform
-         "matrix(0.987073 0.160274 -0.239143 0.970984 11.7346 2.59206)"
-     :ry "2.04373"
-     :rx "3.29236"}]
-   [:ellipse
-    {:transform
-         "matrix(-0.495846 0.868411 -0.825718 -0.564084 3.97209 5.54515)"
-     :ry "3.37606"
-     :rx "2.95326"}]
-   [:ellipse
-    {:transform
-         "matrix(0.987073 0.160274 -0.239143 0.970984 13.0843 14.72)"
-     :ry "6.13006"
-     :rx "7.78547"}]])
+(defn logo
+  ([] (logo 20))
+  ([size]
+   [:svg
+    {:fill "currentColor", :view-box "0 0 21 21", :height size, :width size}
+    [:ellipse
+     {:transform
+      "matrix(0.987073 0.160274 -0.239143 0.970984 11.7346 2.59206)"
+      :ry "2.04373"
+      :rx "3.29236"}]
+    [:ellipse
+     {:transform
+      "matrix(-0.495846 0.868411 -0.825718 -0.564084 3.97209 5.54515)"
+      :ry "3.37606"
+      :rx "2.95326"}]
+    [:ellipse
+     {:transform
+      "matrix(0.987073 0.160274 -0.239143 0.970984 13.0843 14.72)"
+      :ry "6.13006"
+      :rx "7.78547"}]]))
 
 (def page
   [:svg.h-5.w-4 {:viewBox "0 0 24 24", :fill "none", :xmlns "http://www.w3.org/2000/svg"}
@@ -203,8 +205,7 @@
   [:svg.h-5.w-5
    {:view-box "0 0 20 20", :fill "currentColor"}
    [:path
-    {:d
-                "M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
+    {:d "M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
      :clip-rule "evenodd"
      :fill-rule "evenodd"}]])
 
@@ -218,6 +219,16 @@
      :stroke-linejoin "round",
      :stroke-linecap  "round"}]])
 
+
+(defn search2
+  ([] (search2 nil))
+  ([size]
+   [:svg
+    {:viewBox "0 0 20 20" :width size :height size :fill "currentColor"}
+    [:path
+     {:d         "M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
+      :clip-rule "evenodd"
+      :fill-rule "evenodd"}]]))
 
 (defn github
   ([] (github nil))
@@ -247,7 +258,7 @@
     [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7"}]]))
 
 (defn icon-area
-  ([] icon-area 16)
+  ([] (icon-area 16))
   ([size]
    [:svg {:viewBox "0 0 1024 1024" :version "1.1" :width size :height size :stroke "currentColor"}
     [:path {:d "M844.992 115.008H179.008c-35.328 0-64 28.672-64 64v665.984c0 35.328 28.672 64 64 64h665.984c35.328 0 64-28.672 64-64V179.008c0-35.328-28.672-64-64-64zM364.672 844.992H217.6L844.992 217.6v147.072l-480.32 480.32z m480.32-401.152v147.2l-254.016 253.952H443.84l401.152-401.152z m-187.648-264.832h147.072l-625.408 625.408V657.28l478.336-478.336zM179.008 578.112V431.04l252.032-252.032h147.136L179.008 578.112z m172.864-399.104l-172.864 172.8v-172.8h172.864z m318.272 665.984l174.848-174.848v174.848h-174.848z" :fill "currentColor"}]]))
@@ -352,16 +363,6 @@
     [:line {:x1 "12" :y1 "5" :x2 "12" :y2 "19"}]
     [:line {:x1 "16" :y1 "15" :x2 "12" :y2 "19"}]
     [:line {:x1 "8" :y1 "15" :x2 "12" :y2 "19"}]]))
-
-(defn maximize
-  ([] (maximize 16))
-  ([size]
-   [:svg.icon {:width size :height size :viewBox "0 0 24 24" :stroke-width "2" :stroke "currentColor" :fill "none" :stroke-linecap "round" :stroke-linejoin "round"}
-    [:path {:stroke "none" :d "M0 0h24v24H0z" :fill "none"}]
-    [:path {:d "M4 8v-2a2 2 0 0 1 2 -2h2"}]
-    [:path {:d "M4 16v2a2 2 0 0 0 2 2h2"}]
-    [:path {:d "M16 4h2a2 2 0 0 1 2 2v2"}]
-    [:path {:d "M16 20h2a2 2 0 0 0 2 -2v-2"}]]))
 
 (defn help-circle
   ([] (help-circle 16))

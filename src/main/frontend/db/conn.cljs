@@ -13,10 +13,11 @@
 
 (defn get-repo-path
   [url]
-  (if (util/starts-with? url "http")
-    (->> (take-last 2 (string/split url #"/"))
-         (string/join "/"))
-    url))
+  (when url
+    (if (util/starts-with? url "http")
+      (->> (take-last 2 (string/split url #"/"))
+           (string/join "/"))
+      url)))
 
 (defn get-repo-name
   [repo]

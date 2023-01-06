@@ -1,4 +1,4 @@
-(ns frontend.regex
+(ns ^:no-doc frontend.regex
   (:require [clojure.string :as string]))
 
 (def re-specials #"([\-\/\\\^\$\*\+\?\.\(\)\|\[\]\{\}])")

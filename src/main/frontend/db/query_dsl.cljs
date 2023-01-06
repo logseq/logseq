@@ -6,7 +6,6 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [frontend.state :as state]
             [frontend.date :as date]
             [frontend.db.model :as model]
             [frontend.db.query-react :as query-react]
@@ -14,6 +13,7 @@
             [logseq.db.rules :as rules]
             [frontend.template :as template]
             [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.util.text :as text-util]
             [frontend.util :as util]))
 
@@ -38,11 +38,7 @@
 ;; project (block, TBD)
 
 ;; Sort by (field, asc/desc):
-
-;; created_at
-;; last_modified_at
-
-;; (sort-by last_modified_at asc)
+;; (sort-by created-at asc)
 
 ;; (between -7d +7d)
 
@@ -60,8 +56,8 @@
       (= "tomorrow" input)
       (db-utils/date->int (t/plus (t/today) (t/days 1)))
 
-      (text/page-ref? input)
-      (let [input (-> (text/page-ref-un-brackets! input)
+      (page-ref/page-ref? input)
+      (let [input (-> (page-ref/get-page-name input)
                       (string/replace ":" "")
                       (string/capitalize))]
         (when (date/valid-journal-title? input)
@@ -92,8 +88,8 @@
       (= "tomorrow" input)
       (tc/to-long (t/plus (t/today) (t/days 1)))
 
-      (text/page-ref? input)
-      (let [input (-> (text/page-ref-un-brackets! input)
+      (page-ref/page-ref? input)
+      (let [input (-> (page-ref/get-page-name input)
                       (string/replace ":" "")
                       (string/capitalize))]
         (when (date/valid-journal-title? input)
@@ -151,13 +147,16 @@
 
       :else
       (->> clauses
-           (map (fn [result]
-                  (if (list? result)
-                    result
-                    (let [result (if (vector? (ffirst result))
-                                   (apply concat result)
-                                   result)]
-                      (cons 'and (seq result))))))
+           (mapcat (fn [result]
+                     (cond
+                       ;; rule like (task ?b #{"NOW"})
+                       (list? result)
+                       [result]
+                       ;; datalog clause like [[?b :block/uuid]]
+                       (vector? result)
+                       result
+                       :else
+                       [(cons 'and (seq result))])))
            (apply list fe)))
 
     :else
@@ -234,12 +233,25 @@
     (= 4 (count e))
     (build-between-three-arg e)))
 
+
+(defn parse-property-value
+  "Parses non-string property values or any page-ref like values"
+  [v]
+  (let [result (if-some [res (text/parse-non-string-property-value v)]
+                 res
+                 (if (string/starts-with? v "#")
+                   (subs v 1)
+                   (or (page-ref/get-page-name v) v)))]
+    (if (string? result)
+      (string/trim result)
+      result)))
+
 (defn- build-property-two-arg
   [e]
   (let [k (string/replace (name (nth e 1)) "_" "-")
         v (nth e 2)
         v (if-not (nil? v)
-            (text/parse-property k v (state/get-config))
+            (parse-property-value (str v))
             v)
         v (if (coll? v) (first v) v)]
     {:query (list 'property '?b (keyword k) v)
@@ -284,7 +296,7 @@
   (let [[k v] (rest e)
         k (string/replace (name k) "_" "-")]
     (if (some? v)
-      (let [v' (text/parse-property k v (state/get-config))
+      (let [v' (parse-property-value (str v))
             val (if (coll? v') (first v') v')]
         {:query (list 'page-property '?p (keyword k) val)
          :rules [:page-property]})
@@ -298,7 +310,7 @@
                (rest e))
         tags (map (comp string/lower-case name) tags)]
     (when (seq tags)
-      (let [tags (set (map (comp text/page-ref-un-brackets! string/lower-case name) tags))]
+      (let [tags (set (map (comp page-ref/get-page-name! string/lower-case name) tags))]
         {:query (list 'page-tags '?p tags)
          :rules [:page-tags]}))))
 
@@ -312,44 +324,35 @@
   (when-let [num (second e)]
     (when (integer? num)
       (reset! sample num)
-      {:query [['?p :block/uuid]]})))
+      ;; blank b/c this post-process filter doesn't effect query
+      {})))
 
 (defn- build-sort-by
   [e sort-by_]
-  (let [[k order] (rest e)
-             order (if (and order (contains? #{:asc :desc}
-                                             (keyword (string/lower-case (name order)))))
-                     (keyword (string/lower-case (name order)))
-                     :desc)
-             k (-> (string/lower-case (name k))
-                   (string/replace "_" "-"))
-             get-value (cond
-                         (= k "created-at")
-                         :block/created-at
-
-                         (= k "updated-at")
-                         :block/updated-at
-
-                         :else
-                         #(get-in % [:block/properties k]))
-             comp (if (= order :desc) >= <=)]
-         (reset! sort-by_
-                 (fn [result]
-                   (->> result
-                        flatten
-                        (sort-by get-value comp))))
-         nil))
+  (let [[k order*] (map keyword (rest e))
+        order (if (contains? #{:asc :desc} order*)
+                order*
+                :desc)
+        comp (if (= order :desc) >= <=)]
+    (reset! sort-by_
+            (fn sort-results [result]
+              ;; first because there is one binding result in query-wrapper
+              (sort-by #(-> % first (get-in [:block/properties k]))
+                       comp
+                       result)))
+    ;; blank b/c this post-process filter doesn't effect query
+    {}))
 
 (defn- build-page
   [e]
-  (let [page-name (text/page-ref-un-brackets! (str (first (rest e))))
+  (let [page-name (page-ref/get-page-name! (str (first (rest e))))
         page-name (util/page-name-sanity-lc page-name)]
     {:query (list 'page '?b page-name)
      :rules [:page]}))
 
 (defn- build-namespace
   [e]
-  (let [page-name (text/page-ref-un-brackets! (str (first (rest e))))
+  (let [page-name (page-ref/get-page-name! (str (first (rest e))))
         page (util/page-name-sanity-lc page-name)]
     (when-not (string/blank? page)
       {:query (list 'namespace '?p page)
@@ -357,7 +360,7 @@
 
 (defn- build-page-ref
   [e]
-  (let [page-name (-> (text/page-ref-un-brackets! e)
+  (let [page-name (-> (page-ref/get-page-name! e)
                       (util/page-name-sanity-lc))]
     {:query (list 'page-ref '?b page-name)
      :rules [:page-ref]}))
@@ -381,10 +384,10 @@ Some bindings in this fn:
    ; {:post [(or (nil? %) (map? %))]}
    (let [fe (first e)
          fe (when fe (symbol (string/lower-case (name fe))))
-         page-ref? (text/page-ref? e)]
+         page-ref? (page-ref/page-ref? e)]
      (when (or (and page-ref?
                     (not (contains? #{'page-property 'page-tags} (:current-filter env))))
-               (contains? #{'between 'property 'todo 'task 'priority 'sort-by 'page} fe)
+               (contains? #{'between 'property 'todo 'task 'priority 'page} fe)
                (and (not page-ref?) (string? e)))
        (reset! blocks? true))
      (cond
@@ -442,20 +445,21 @@ Some bindings in this fn:
 
 (defn- pre-transform
   [s]
-  (some-> s
-          (string/replace text/page-ref-re "\"[[$1]]\"")
-          (string/replace text-util/between-re
-                          (fn [[_ x]]
-                            (->> (string/split x #" ")
-                                 (remove string/blank?)
-                                 (map (fn [x]
-                                        (if (or (contains? #{"+" "-"} (first x))
-                                                (and (util/safe-re-find #"\d" (first x))
-                                                     (some #(string/ends-with? x %) ["y" "m" "d" "h" "min"])))
-                                          (keyword (name x))
-                                          x)))
-                                 (string/join " ")
-                                 (util/format "(between %s)"))))))
+  (let [quoted-page-ref (str "\"" page-ref/left-brackets "$1" page-ref/right-brackets "\"")]
+    (some-> s
+            (string/replace page-ref/page-ref-re quoted-page-ref)
+            (string/replace text-util/between-re
+                            (fn [[_ x]]
+                              (->> (string/split x #" ")
+                                   (remove string/blank?)
+                                   (map (fn [x]
+                                          (if (or (contains? #{"+" "-"} (first x))
+                                                  (and (util/safe-re-find #"\d" (first x))
+                                                       (some #(string/ends-with? x %) ["y" "m" "d" "h" "min"])))
+                                            (keyword (name x))
+                                            x)))
+                                   (string/join " ")
+                                   (util/format "(between %s)")))))))
 
 (defn- add-bindings!
   [form q]
@@ -482,7 +486,7 @@ Some bindings in this fn:
       or?
       (cond
         (->> (flatten form)
-             (remove text/page-ref?)
+             (remove (every-pred string? page-ref/page-ref?))
              (some string?))            ; block full-text search
         (concat [['?b :block/content '?content]] [q])
 
@@ -499,7 +503,7 @@ Some bindings in this fn:
   [s]
   (when (and (string? s)
              (not (string/blank? s)))
-    (let [s (if (= \# (first s)) (util/format "[[%s]]" (subs s 1)) s)
+    (let [s (if (= \# (first s)) (page-ref/->page-ref (subs s 1)) s)
           form (some-> s
                        (pre-transform)
                        (reader/read-string))
@@ -528,19 +532,18 @@ Some bindings in this fn:
 ;; ========
 
 (defn query-wrapper
-  [where blocks?]
-  (let [q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
-            `[:find (~'pull ~'?b ~model/block-attrs)
+  [where {:keys [blocks? block-attrs]}]
+  (let [block-attrs (or block-attrs (butlast model/block-attrs))
+        q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
+            `[:find (~'pull ~'?b ~block-attrs)
               :in ~'$ ~'%
               :where]
             '[:find (pull ?p [*])
               :in $ %
-              :where])
-        result (if (coll? (first where))
-                 (apply conj q where)
-                 (conj q where))]
-    (prn "Datascript query: " result)
-    result))
+              :where])]
+    (if (coll? (first where))
+      (apply conj q where)
+      (conj q where))))
 
 (defn query
   "Runs a dsl query with query as a string. Primary use is from '{{query }}'"
@@ -548,7 +551,7 @@ Some bindings in this fn:
   (when (and (string? query-string) (not= "\"\"" query-string))
     (let [query-string' (template/resolve-dynamic-template! query-string)
           {:keys [query rules sort-by blocks? sample]} (parse query-string')]
-      (when-let [query' (some-> query (query-wrapper blocks?))]
+      (when-let [query' (some-> query (query-wrapper {:blocks? blocks?}))]
         (let [sort-by (or sort-by identity)
               random-samples (if @sample
                                (fn [col]
@@ -568,7 +571,7 @@ Some bindings in this fn:
   (when (seq (:query query-m))
     (let [query-string (template/resolve-dynamic-template! (pr-str (:query query-m)))
           {:keys [query sort-by blocks? rules]} (parse query-string)]
-      (when-let [query' (some-> query (query-wrapper blocks?))]
+      (when-let [query' (some-> query (query-wrapper {:blocks? blocks?}))]
         (query-react/react-query repo
                            (merge
                             query-m
@@ -578,6 +581,10 @@ Some bindings in this fn:
                             query-opts
                             (when sort-by
                               {:transform-fn sort-by})))))))
+
+(defn query-contains-filter?
+  [query filter-name]
+  (string/includes? query (str "(" filter-name)))
 
 (comment
   ;; {{query (and (page-property foo bar) [[hello]])}}
