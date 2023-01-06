@@ -2,11 +2,22 @@
 import { SvgPathUtils, TLDrawShape, TLDrawShapeProps, getComputedColor } from '@tldraw/core'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
-import { computed, makeObservable } from 'mobx'
+import { action, computed, makeObservable } from 'mobx'
+import type { SizeLevel } from '.'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
 export interface HighlighterShapeProps extends TLDrawShapeProps, CustomStyleProps {
   type: 'highlighter'
+  scaleLevel?: SizeLevel
+}
+
+const levelToScale = {
+  xs: 1,
+  sm: 1.6,
+  md: 2,
+  lg: 3.2,
+  xl: 4.8,
+  xxl: 6,
 }
 
 export class HighlighterShape extends TLDrawShape<HighlighterShapeProps> {
@@ -58,6 +69,18 @@ export class HighlighterShape extends TLDrawShape<HighlighterShapeProps> {
       </SVGContainer>
     )
   })
+
+  @computed get scaleLevel() {
+    return this.props.scaleLevel ?? 'md'
+  }
+
+  @action setScaleLevel = async (v?: SizeLevel) => {
+    this.update({
+      scaleLevel: v,
+      strokeWidth: levelToScale[v ?? 'md'],
+    })
+    this.onResetBounds()
+  }
 
   ReactIndicator = observer(() => {
     const { pointsPath } = this

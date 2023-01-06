@@ -737,6 +737,7 @@ export class LSPluginUser
 
               const type = `hook:${tag}:${safeSnakeCase(e)}`
               const handler = args[0]
+              const opts = args[1]
               caller[f](type, handler)
 
               const unlisten = () => {
@@ -747,7 +748,7 @@ export class LSPluginUser
               }
 
               if (!isOff) {
-                that.App._installPluginHook(pid, type)
+                that.App._installPluginHook(pid, type, opts)
               } else {
                 unlisten()
                 return

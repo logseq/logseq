@@ -370,7 +370,7 @@
                  [{:type :graph-add-filter}]
                  result)
         repo (state/get-current-repo)]
-    [:div
+    [:div.results-inner
      (ui/auto-complete
       result
       {:class "search-results"
@@ -554,7 +554,7 @@
                          [:span.pr-2 (ui/icon "puzzle")]
                          (:name v)
                          (when-let [result (and v (:result v))]
-                           (str " (" (count (:blocks result)) ")"))]
+                           (str " (" (apply + (map count ((juxt :blocks :pages :files) result))) ")"))]
                         :on-click #(reset! *active-engine-tab k))])])
 
        (if-not (nil? @*active-engine-tab)
