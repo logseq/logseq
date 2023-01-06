@@ -79,6 +79,7 @@ Whether you're a student, a professional, or simply someone who values a clear a
 
 Checkout our docs! [docs.logseq.com](https://docs.logseq.com/#/page/Contents) 👀
 
+        
 
 ## 🫶 Support Logseq Development
 
@@ -168,6 +169,7 @@ And here is a list of some [good first issues](https://github.com/logseq/logseq/
 <br></br>
 
 # 🙏 Thanks to
+<br></br>
 ## 💎 Our Open Collective Sponsors
 <p align="center">
     <a href="https://opencollective.com/logseq" alt="Sponsors on Open Collective">
@@ -186,7 +188,16 @@ And here is a list of some [good first issues](https://github.com/logseq/logseq/
         <img src="https://contrib.rocks/image?repo=logseq/logseq&max=300&columns=14" width="600"/></a>
 </p>
 
+
+        
 <p align="center">
     <a href="https://jetbrains.com" alt="JetBrains">
         <img src="docs/assets/jetbrains.svg"/></a>
 </p>
+
+<a href="https://www.producthunt.com/posts/logseq?utm_source=badge-review&utm_medium=badge&utm_souce=badge-logseq#discussion-body"
+    target="_blank"><img
+        src="https://api.producthunt.com/widgets/embed-image/v1/review.svg?post_id=298158&theme=dark"
+        align="right"
+        alt="Logseq - Your joyful, private digital garden | Product Hunt" style="width: 250px; height: 54px;"
+        width="250" height="54"/></a>
