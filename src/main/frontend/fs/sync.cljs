@@ -2663,20 +2663,22 @@
                 (recur fs)))
 
             ;; 2. upload local files
-            (loop [es-partitions change-events-partitions]
-              (if @*stopped
-                {:stop true}
-                (if (empty? es-partitions)
-                  {:succ true}
-                  (let [{:keys [succ need-sync-remote graph-has-been-deleted unknown stop] :as r}
-                        (<! (<sync-local->remote! this (first es-partitions)))]
-                    (s/assert ::sync-local->remote!-result r)
-                    (cond
-                      succ
-                      (recur (next es-partitions))
-                      (or need-sync-remote graph-has-been-deleted unknown stop) r)))))
-            ;; update *txid-for-get-deletion-log
-            (reset! *txid-for-get-deletion-log @*txid)))))))
+            (let [r (loop [es-partitions change-events-partitions]
+                      (if @*stopped
+                        {:stop true}
+                        (if (empty? es-partitions)
+                          {:succ true}
+                          (let [{:keys [succ need-sync-remote graph-has-been-deleted unknown stop] :as r}
+                                (<! (<sync-local->remote! this (first es-partitions)))]
+                            (s/assert ::sync-local->remote!-result r)
+                            (cond
+                              succ
+                              (recur (next es-partitions))
+                              (or need-sync-remote graph-has-been-deleted unknown stop) r)))))]
+              ;; update *txid-for-get-deletion-log
+              (reset! *txid-for-get-deletion-log @*txid)
+              r
+              )))))))
 
 ;;; ### put all stuff together
 
