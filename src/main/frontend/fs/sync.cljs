@@ -3215,8 +3215,11 @@
 (add-watch app-state-changed-cursor "sync"
            (fn [_ _ _ {:keys [is-active?]}]
              (cond
-               (or (mobile-util/native-android?)
-                   (mobile-util/native-ios?))
+               (mobile-util/native-android?)
+               (when-not is-active?
+                 (<sync-local->remote-now))
+
+               (mobile-util/native-ios?)
                (let [*task-id (atom nil)]
                  (if is-active?
                    (restart-if-stopped! is-active?)
