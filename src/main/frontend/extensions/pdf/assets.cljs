@@ -29,21 +29,20 @@
 
 (defn inflate-asset
   [original-path]
-  (let [filename (util/node-path.basename original-path)
+  (let [filename  (util/node-path.basename original-path)
         web-link? (string/starts-with? original-path "http")
-        ext-name (util/get-file-ext filename)
-        url (assets-handler/normalize-asset-resource-url original-path)]
-    (when-let [key
-               (if web-link?
-                 (str (hash url))
-                 (and
-                   (= ext-name "pdf")
-                   (subs filename 0 (- (count filename) 4))))]
-      {:key      key
-       :identity (subs key (- (count key) 15))
-       :filename filename
-       :url      url
-       :hls-file (str "assets/" key ".edn")
+        ext-name  (util/get-file-ext filename)
+        url       (assets-handler/normalize-asset-resource-url original-path)
+        filekey   (util/safe-sanitize-file-name (subs filename 0 (- (count filename) (inc (count ext-name)))))]
+    (when-let [key (and (not (string/blank? filekey))
+                        (if web-link?
+                          (str filekey "__" (hash url)) filekey))]
+
+      {:key           key
+       :identity      (subs key (- (count key) 15))
+       :filename      filename
+       :url           url
+       :hls-file      (str "assets/" key ".edn")
        :original-path original-path})))
 
 (defn resolve-area-image-file
