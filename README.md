@@ -10,7 +10,6 @@
     A privacy-first, open-source platform for knowledge management and collaboration
 </h4>
 
-
 <div align="center">
     <a href="https://logseq.com">Home Page</a> |
     <a href="https://blog.logseq.com/">Blog</a> |
@@ -56,17 +55,14 @@
 <br></br>
 
 ## 🤔 Why Logseq?
-<a href="https://www.producthunt.com/posts/logseq?utm_source=badge-review&utm_medium=badge&utm_souce=badge-logseq#discussion-body"
-    target="_blank"><img
-        src="https://api.producthunt.com/widgets/embed-image/v1/review.svg?post_id=298158&theme=dark"
-        align="right"
-        alt="Logseq - Your joyful, private digital garden | Product Hunt" style="width: 250px; height: 54px;"
-        width="250" height="54"/></a>
 
-[Logseq](https://logseq.com) is a platform for knowledge management and collaboration. It focuses on privacy, longevity,
-and [user control](https://www.gnu.org/philosophy/free-sw.en.html).
-The server will **never** store or analyze your private notes. Your data are plain text files and we currently support both
-Markdown and Emacs Org mode (more to be added soon). In the unlikely event that the website is down or cannot be maintained, your data is, and will always be yours.
+Logseq is a **comprehensive tool for knowledge management** and collaboration that helps you stay connected with the information that is most important to you. With support for multiple file formats including **Markdown** and **Emacs Org-mode**, and a range of features for structuring and organizing your notes, Logseq is a powerful and flexible choice for anyone looking to improve their knowledge management and collaboration skills.
+
+[Logseq](https://logseq.com) stores your notes locally on your device in plain text files, ensuring that your data is **private** and **secure**. The application also has a strong emphasis on [**user control**](https://www.gnu.org/philosophy/free-sw.en.html), allowing you to access and manage your notes with confidence.
+
+In addition to its core features, Logseq has a growing ecosystem of plugins and themes that enable a wide range of workflows and customization options. Mobile apps are also available, providing access to most features from the desktop application.
+
+Whether you're a student, a professional, or simply someone who values a clear and organized approach to managing your ideas and notes, Logseq is an excellent choice for **improving your knowledge management** and collaboration skills.
 ![Image of logseq](https://user-images.githubusercontent.com/25513724/210489520-873e7cf0-3219-4f62-aca5-9f1eb3b0f2ee.png)
 
 
@@ -75,7 +71,9 @@ Markdown and Emacs Org mode (more to be added soon). In the unlikely event that 
             align="right"
             alt="Download Logseq"/></a>
 
+
 ## How can I use it?
+
 1. [Download logseq](https://github.com/logseq/logseq/releases/latest)
 2. Start writing and have fun! 🎉
 
@@ -83,10 +81,12 @@ Checkout our docs! [docs.logseq.com](https://docs.logseq.com/#/page/Contents) �
 
 
 ## 🫶 Support Logseq Development
+
 [Sponsor our contributors on Open Collective](https://opencollective.com/logseq), Logseq will move to Stripe later!
 
 
 ## 💎 Sponsors
+
 Our top sponsors are shown below! [[Become a sponsor](https://opencollective.com/logseq#sponsor)]
 
 <a href="https://www.deta.sh/" target="_blank"><img width=200 height=100
@@ -96,10 +96,12 @@ Our top sponsors are shown below! [[Become a sponsor](https://opencollective.com
 ## ✍️ Plugins documentation (Draft)
 The plugins documentation is at <https://logseq.github.io/plugins>. Any feedback would be greatly appreciated!
 
+
 ## 💡 Feature requests
 
 Please share your ideas and feature requests in the [Logseq Forum: Feature
 Requests](https://discuss.logseq.com/new-topic?category=feature-requests) section
+
 
 ## 🧠 FAQ
 
