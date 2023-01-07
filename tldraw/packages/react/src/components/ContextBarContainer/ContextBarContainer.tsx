@@ -4,8 +4,6 @@ import { TLBounds, BoundsUtils, TLOffset } from '@tldraw/core'
 import { useRendererContext, useCounterScaledPosition } from '../../hooks'
 import type { TLReactShape } from '../../lib'
 
-const stopEventPropagation = (e: React.PointerEvent) => e.stopPropagation()
-
 export interface TLContextBarContainerProps<S extends TLReactShape> {
   shapes: S[]
   hidden: boolean
@@ -50,14 +48,7 @@ export const ContextBarContainer = observer(function ContextBarContainer<S exten
   }
 
   return (
-    <div
-      ref={rBounds}
-      className="tl-counter-scaled-positioned"
-      aria-label="context-bar-container"
-      onPointerMove={stopEventPropagation}
-      onPointerUp={stopEventPropagation}
-      onPointerDown={stopEventPropagation}
-    >
+    <div ref={rBounds} className="tl-counter-scaled-positioned" aria-label="context-bar-container">
       <ContextBar
         hidden={hidden}
         shapes={shapes}

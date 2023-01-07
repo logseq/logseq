@@ -1146,7 +1146,7 @@
           (get-resp-json-body resp)
           (let [exp (ex-info "request failed"
                              {:err          resp
-                              :body         (get-resp-json-body resp)
+                              :body         (:body resp)
                               :api-name     api-name
                               :request-body body})]
             (fire-file-sync-storage-exceed-limit-event! exp)
@@ -1613,7 +1613,7 @@
             (instance? ExceptionInfo r) r
             @*paused                    {:pause true}
             :else
-            (let [latest-txid (apply max (map #(.-txid ^FileTxn %) filetxns))]
+            (let [latest-txid (apply max (and *txid @*txid) (map #(.-txid ^FileTxn %) filetxns))]
               ;; update local-txid
               (when (and *txid (number? latest-txid))
                 (reset! *txid latest-txid)
@@ -1700,16 +1700,18 @@
 
 
 (defn- <file-change-event=>recent-remote->local-file-item
+  "return nil when related local files not found"
   [graph-uuid ^FileChangeEvent e]
   (go
     (let [tp (case (.-type e)
                ("add" "change") :update
                "unlink" :delete)
           path (relative-path e)]
-      {:remote->local-type tp
-       :checksum (if (= tp :delete) nil
-                                    (val (first (<! (get-local-files-checksum graph-uuid (.-dir e) [path])))))
-       :path path})))
+      (when-let [path-etag-entry (first (<! (get-local-files-checksum graph-uuid (.-dir e) [path])))]
+        {:remote->local-type tp
+         :checksum (if (= tp :delete) nil
+                       (val path-etag-entry))
+         :path path}))))
 
 (defn- distinct-file-change-events-xf
   "transducer.
@@ -2222,7 +2224,7 @@
   if local-txid != remote-txid, return {:need-sync-remote true}"))
 
 (defrecord ^:large-vars/cleanup-todo
-  Remote->LocalSyncer [user-uuid graph-uuid base-path repo *txid *sync-state remoteapi
+  Remote->LocalSyncer [user-uuid graph-uuid base-path repo *txid *txid-for-get-deletion-log *sync-state remoteapi
                        ^:mutable local->remote-syncer *stopped *paused]
   Object
   (set-local->remote-syncer! [_ s] (set! local->remote-syncer s))
@@ -2459,7 +2461,8 @@
 
 (defrecord ^:large-vars/cleanup-todo
   Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state remoteapi
-                       ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan *stopped *paused
+                       ^:mutable rate *txid *txid-for-get-deletion-log
+                       ^:mutable remote->local-syncer stop-chan *stopped *paused
                        ;; control chans
                        private-immediately-local->remote-chan private-recent-edited-chan]
   Object
@@ -2475,9 +2478,10 @@
                    (string/starts-with? (str "file://" (.-dir e)) base-path)) ; valid path prefix
                (not (ignored? e))     ;not ignored
                ;; download files will also trigger file-change-events, ignore them
-               (not (contains? (:recent-remote->local-files @*sync-state)
-                               (<! (<file-change-event=>recent-remote->local-file-item
-                                    graph-uuid e))))))))
+               (when-some [recent-remote->local-file-item
+                           (<! (<file-change-event=>recent-remote->local-file-item
+                                graph-uuid e))]
+                 (not (contains? (:recent-remote->local-files @*sync-state) recent-remote->local-file-item)))))))
 
   (set-remote->local-syncer! [_ s] (set! remote->local-syncer s))
 
@@ -2588,7 +2592,7 @@
     (go
       (let [remote-all-files-meta-c      (<get-remote-all-files-meta remoteapi graph-uuid)
             local-all-files-meta-c       (<get-local-all-files-meta rsapi graph-uuid base-path)
-            deletion-logs-c              (<get-deletion-logs remoteapi graph-uuid @*txid)
+            deletion-logs-c              (<get-deletion-logs remoteapi graph-uuid @*txid-for-get-deletion-log)
             remote-all-files-meta-or-exp (<! remote-all-files-meta-c)
             deletion-logs-or-exp         (<! deletion-logs-c)]
         (cond
@@ -2659,18 +2663,22 @@
                 (recur fs)))
 
             ;; 2. upload local files
-            (loop [es-partitions change-events-partitions]
-              (if @*stopped
-                {:stop true}
-                (if (empty? es-partitions)
-                  {:succ true}
-                  (let [{:keys [succ need-sync-remote graph-has-been-deleted unknown stop] :as r}
-                        (<! (<sync-local->remote! this (first es-partitions)))]
-                    (s/assert ::sync-local->remote!-result r)
-                    (cond
-                      succ
-                      (recur (next es-partitions))
-                      (or need-sync-remote graph-has-been-deleted unknown stop) r)))))))))))
+            (let [r (loop [es-partitions change-events-partitions]
+                      (if @*stopped
+                        {:stop true}
+                        (if (empty? es-partitions)
+                          {:succ true}
+                          (let [{:keys [succ need-sync-remote graph-has-been-deleted unknown stop] :as r}
+                                (<! (<sync-local->remote! this (first es-partitions)))]
+                            (s/assert ::sync-local->remote!-result r)
+                            (cond
+                              succ
+                              (recur (next es-partitions))
+                              (or need-sync-remote graph-has-been-deleted unknown stop) r)))))]
+              ;; update *txid-for-get-deletion-log
+              (reset! *txid-for-get-deletion-log @*txid)
+              r
+              )))))))
 
 ;;; ### put all stuff together
 
@@ -2678,7 +2686,8 @@
   SyncManager [user-uuid graph-uuid base-path *sync-state
                ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer remoteapi
                ^:mutable ratelimit-local-changes-chan
-               *txid ^:mutable state ^:mutable remote-change-chan ^:mutable *ws *stopped? *paused?
+               *txid *txid-for-get-deletion-log
+               ^:mutable state ^:mutable remote-change-chan ^:mutable *ws *stopped? *paused?
                ^:mutable ops-chan
                ;; control chans
                private-full-sync-chan private-remote->local-sync-chan
@@ -2687,7 +2696,7 @@
   (schedule [this next-state args reason]
     {:pre [(s/valid? ::state next-state)]}
     (println "[SyncManager" graph-uuid "]"
-             (and state (name state)) "->" (and next-state (name next-state)) :reason reason :now (tc/to-string (t/now)))
+             (and state (name state)) "->" (and next-state (name next-state)) :reason reason :local-txid @*txid :now (tc/to-string (t/now)))
     (set! state next-state)
     (swap! *sync-state sync-state--update-state next-state)
     (go
@@ -3038,6 +3047,7 @@
 
 (defn sync-manager [user-uuid graph-uuid base-path repo txid *sync-state]
   (let [*txid (atom txid)
+        *txid-for-get-deletion-log (atom txid)
         *stopped? (volatile! false)
         *paused? (volatile! false)
         remoteapi-with-stop (->RemoteAPI *stopped?)
@@ -3047,16 +3057,16 @@
                                                     (if (mobile-util/native-platform?)
                                                       2000
                                                       10000)
-                                                    *txid nil (chan) *stopped? *paused?
+                                                    *txid *txid-for-get-deletion-log nil (chan) *stopped? *paused?
                                                     (chan 1) (chan 1))
         remote->local-syncer (->Remote->LocalSyncer user-uuid graph-uuid base-path
-                                                    repo *txid *sync-state remoteapi-with-stop
+                                                    repo *txid *txid-for-get-deletion-log *sync-state remoteapi-with-stop
                                                     nil *stopped? *paused?)]
     (.set-remote->local-syncer! local->remote-syncer remote->local-syncer)
     (.set-local->remote-syncer! remote->local-syncer local->remote-syncer)
     (swap! *sync-state sync-state--update-current-syncing-graph-uuid graph-uuid)
     (->SyncManager user-uuid graph-uuid base-path *sync-state local->remote-syncer remote->local-syncer remoteapi-with-stop
-                   nil *txid nil nil nil *stopped? *paused? nil (chan 1) (chan 1) (chan 1) (chan 1))))
+                   nil *txid *txid-for-get-deletion-log nil nil nil *stopped? *paused? nil (chan 1) (chan 1) (chan 1) (chan 1))))
 
 (defn sync-manager-singleton
   [user-uuid graph-uuid base-path repo txid *sync-state]
@@ -3206,8 +3216,8 @@
            (fn [_ _ _ {:keys [is-active?]}]
              (cond
                (mobile-util/native-android?)
-               ;; TODO: support background task on Android
-               (restart-if-stopped! is-active?)
+               (when-not is-active?
+                 (<sync-local->remote-now))
 
                (mobile-util/native-ios?)
                (let [*task-id (atom nil)]

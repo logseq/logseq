@@ -51,10 +51,13 @@
    url - the input URL"
   [win url]
   (logger/info "open-url" {:url url})
-
-  (let [parsed-url (js/URL. url)
-        url-protocol (.-protocol parsed-url)]
-    (when (= (str LSP_SCHEME ":") url-protocol)
+  ;; https://github.com/electron-userland/electron-builder/issues/1552
+  ;; At macOS platform this is captured at 'open-url' event, we set it with deeplinkingUrl = url! (See // Protocol handler for osx)
+  ;; At win32 platform this is saved at process.argv together with other arguments. To get only the provided url, deeplinkingUrl = argv.slice(1). (See // Protocol handler for win32)
+  (when-let [parsed-url (try (js/URL. url)
+                             (catch :default e
+                               (logger/info "upon opening non-url" {:error e})))]
+    (when (= (str LSP_SCHEME ":") (.-protocol parsed-url))
       (logseq-url-handler win parsed-url))))
 
 (defn setup-interceptor! [^js app]
