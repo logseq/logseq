@@ -2,9 +2,7 @@
   "Some utils are required by other namespace in frontend.db package."
   (:require [datascript.core :as d]
             [frontend.state :as state]
-            [clojure.string :as string]
             [datascript.transit :as dt]
-            [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.config :as config]
             [logseq.graph-parser.util :as gp-util]))
@@ -42,11 +40,6 @@
 (defn get-max-tx-id
   [db]
   (:max-tx db))
-
-(defn date->int
-  [date]
-  (parse-long
-   (string/replace (date/ymd date) "/" "")))
 
 (defn entity
   "This function will return nil if passed `id-or-lookup-ref` is an integer and
