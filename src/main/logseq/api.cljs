@@ -80,8 +80,8 @@
         (js/console.error "[parse hiccup error]" e) input))))
 
 (defn ^:export install-plugin-hook
-  [pid hook]
-  (state/install-plugin-hook pid hook))
+  [pid hook ^js opts]
+  (state/install-plugin-hook pid hook (bean/->clj opts)))
 
 (defn ^:export uninstall-plugin-hook
   [pid hook-or-all]
@@ -89,9 +89,7 @@
 
 (defn ^:export should-exec-plugin-hook
   [pid hook]
-  (let [hooks (:plugin/installed-hooks @state/state)]
-    (or (nil? (seq hooks))
-        (contains? (get hooks hook) (keyword pid)))))
+  (plugin-handler/plugin-hook-installed? pid hook))
 
 ;; base
 (defn ^:export get_state_from_store
