@@ -7,7 +7,6 @@
             [cljs-time.format :as tf]
             [cljs-time.local :as tl]
             [frontend.state :as state]
-            [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.date-time-util :as date-time-util]
             [goog.object :as gobj]
@@ -83,28 +82,6 @@
 (defn get-date-time-string-4 []
   (tf/unparse custom-formatter-4 (tl/local-now)))
 
-(defn get-weekday
-  [date]
-  (.toLocaleString date "en-us" (clj->js {:weekday "long"})))
-
-(defn get-date
-  ([]
-   (get-date (js/Date.)))
-  ([date]
-   {:year (.getFullYear date)
-    :month (inc (.getMonth date))
-    :day (.getDate date)
-    :weekday (get-weekday date)}))
-
-(defn year-month-day-padded
-  ([]
-   (year-month-day-padded (get-date)))
-  ([date]
-   (let [{:keys [year month day]} date]
-     {:year year
-      :month (util/zero-pad month)
-      :day (util/zero-pad day)})))
-
 (defn journal-name
   ([]
    (journal-name (tl/local-now)))
@@ -137,15 +114,6 @@
 (defn yesterday
   []
   (journal-name (t/minus (t/today) (t/days 1))))
-
-(defn ymd
-  ([]
-   (ymd (js/Date.)))
-  ([date]
-   (ymd date "/"))
-  ([date sep]
-   (let [{:keys [year month day]} (year-month-day-padded (get-date date))]
-     (str year sep month sep day))))
 
 (defn get-local-date
   []
