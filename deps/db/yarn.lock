@@ -2,42 +2,14 @@
 # yarn lockfile v1
 
 
-"@logseq/nbb-logseq@^0.7.133":
-  version "0.7.133"
-  resolved "https://registry.yarnpkg.com/@logseq/nbb-logseq/-/nbb-logseq-0.7.133.tgz#793492c6f0bc3089f394795052ca0b8503018161"
-  integrity sha512-eraxs2j1HT4RjxYCB51Rlb3KBx5oihIKoFueB1QHZYnMOwPMLIn6iMzHvyGyEGweqp422PcdDXfK3Nl4iTw/wA==
+"@logseq/nbb-logseq@^1.1.157":
+  version "1.1.157"
+  resolved "https://registry.yarnpkg.com/@logseq/nbb-logseq/-/nbb-logseq-1.1.157.tgz#337be95156e5b22caf5533663ae8a5a79cc43fbd"
+  integrity sha512-cuutsKZDdg850qa6HquOTKKZ9WpWUjSozRdrfvI/2WIbAv2MVQKPQYtB03K55OW9i3D1K0jAwDM0xzGI2lWyFQ==
   dependencies:
-    import-meta-resolve "^1.1.1"
+    import-meta-resolve "^2.1.0"
 
-builtins@^4.0.0:
-  version "4.1.0"
-  resolved "https://registry.yarnpkg.com/builtins/-/builtins-4.1.0.tgz#1edd016dd91ce771a1ed6fc3b2b71fb918953250"
-  integrity sha512-1bPRZQtmKaO6h7qV1YHXNtr6nCK28k0Zo95KM4dXfILcZZwoHJBN1m3lfLv9LPkcOZlrSr+J1bzMaZFO98Yq0w==
-  dependencies:
-    semver "^7.0.0"
-
-import-meta-resolve@^1.1.1:
-  version "1.1.1"
-  resolved "https://registry.yarnpkg.com/import-meta-resolve/-/import-meta-resolve-1.1.1.tgz#244fd542fd1fae73550d4f8b3cde3bba1d7b2b18"
-  integrity sha512-JiTuIvVyPaUg11eTrNDx5bgQ/yMKMZffc7YSjvQeSMXy58DO2SQ8BtAf3xteZvmzvjYh14wnqNjL8XVeDy2o9A==
-  dependencies:
-    builtins "^4.0.0"
-
-lru-cache@^6.0.0:
-  version "6.0.0"
-  resolved "https://registry.yarnpkg.com/lru-cache/-/lru-cache-6.0.0.tgz#6d6fe6570ebd96aaf90fcad1dafa3b2566db3a94"
-  integrity sha512-Jo6dJ04CmSjuznwJSS3pUeWmd/H0ffTlkXXgwZi+eq1UCmqQwCh+eLsYOYCwY991i2Fah4h1BEMCx4qThGbsiA==
-  dependencies:
-    yallist "^4.0.0"
-
-semver@^7.0.0:
-  version "7.3.7"
-  resolved "https://registry.yarnpkg.com/semver/-/semver-7.3.7.tgz#12c5b649afdbf9049707796e22a4028814ce523f"
-  integrity sha512-QlYTucUYOews+WeEujDoEGziz4K6c47V/Bd+LjSSYcA94p+DmINdf7ncaUinThfvZyu13lN9OY1XDxt8C0Tw0g==
-  dependencies:
-    lru-cache "^6.0.0"
-
-yallist@^4.0.0:
-  version "4.0.0"
-  resolved "https://registry.yarnpkg.com/yallist/-/yallist-4.0.0.tgz#9bb92790d9c0effec63be73519e11a35019a3a72"
-  integrity sha512-3wdGidZyq5PB084XLES5TpOSRA3wjXAlIWMhum2kRcv/41Sn2emQ0dycQW4uZXLejwKvg6EsvbdlVL+FYEct7A==
+import-meta-resolve@^2.1.0:
+  version "2.2.1"
+  resolved "https://registry.yarnpkg.com/import-meta-resolve/-/import-meta-resolve-2.2.1.tgz#80fdeddbc15d7f3992c37425023ffb4aca7cb583"
+  integrity sha512-C6lLL7EJPY44kBvA80gq4uMsVFw5x3oSKfuMl1cuZ2RkI5+UJqQXgn+6hlUew0y4ig7Ypt4CObAAIzU53Nfpuw==

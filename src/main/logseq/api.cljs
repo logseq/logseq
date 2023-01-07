@@ -877,7 +877,7 @@
       (let [query           (cljs.reader/read-string query)
             resolved-inputs (map #(cond
                                     (string? %)
-                                    (some-> % (cljs.reader/read-string) (query-react/resolve-input))
+                                    (some->> % (cljs.reader/read-string) (query-react/resolve-input db))
 
                                     (fn? %)
                                     (fn [& args]

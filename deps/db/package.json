@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "devDependencies": {
-    "@logseq/nbb-logseq": "^0.7.133"
+    "@logseq/nbb-logseq": "^1.1.157"
   }
 }
