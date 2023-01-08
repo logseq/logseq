@@ -58,6 +58,7 @@
 
 #?(:cljs
    (defn safe-re-find
+     {:malli/schema [:=> [:cat :any :string] [:or :nil :string [:vector [:maybe :string]]]]}
      [pattern s]
      (when-not (string? s)
        ;; TODO: sentry
@@ -70,15 +71,26 @@
      (def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
      (defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
      (defn uuid-string?
+       {:malli/schema [:=> [:cat :string] :boolean]}
        [s]
-       (safe-re-find exactly-uuid-pattern s))
-     (defn check-password-strength [input]
+       (boolean (safe-re-find exactly-uuid-pattern s)))
+     (defn check-password-strength
+       {:malli/schema [:=> [:cat :string] [:maybe
+                                           [:map
+                                            [:contains [:sequential :string]]
+                                            [:length :int]
+                                            [:id :int]
+                                            [:value :string]]]]}
+       [input]
        (when-let [^js ret (and (string? input)
                                (not (string/blank? input))
                                (passwordStrength input))]
          (bean/->clj ret)))
-     (defn safe-sanitize-file-name [s]
+     (defn safe-sanitize-file-name
+       {:malli/schema [:=> [:cat :string] :string]}
+       [s]
        (sanitizeFilename (str s)))))
+
 
 #?(:cljs
    (do
@@ -248,9 +260,11 @@
     (str "0" n)
     (str n)))
 
+
 #?(:cljs
    (defn safe-parse-int
      "Use if arg could be an int or string. If arg is only a string, use `parse-long`."
+     {:malli/schema [:=> [:cat [:or :int :string]] :int]}
      [x]
      (if (string? x)
        (parse-long x)
@@ -259,10 +273,12 @@
 #?(:cljs
    (defn safe-parse-float
      "Use if arg could be a float or string. If arg is only a string, use `parse-double`"
+     {:malli/schema [:=> [:cat [:or :double :string]] :double]}
      [x]
      (if (string? x)
        (parse-double x)
        x)))
+
 
 #?(:cljs
    (defn debounce
