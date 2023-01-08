@@ -347,12 +347,12 @@
 (defn toggle-favorite! []
   ;; NOTE: in journals or settings, current-page is nil
   (when-let [page-name (state/get-current-page)]
-   (let [favorites  (:favorites (state/sub-config))
-         favorited? (contains? (set (map string/lower-case favorites))
-                               (string/lower-case page-name))]
-    (if favorited?
-      (unfavorite-page! page-name)
-      (favorite-page! page-name)))))
+    (let [favorites  (:favorites (state/sub-config))
+          favorited? (contains? (set (map string/lower-case favorites))
+                                (string/lower-case page-name))]
+      (if favorited?
+        (unfavorite-page! page-name)
+        (favorite-page! page-name)))))
 
 (defn delete!
   [page-name ok-handler & {:keys [delete-file?]
@@ -427,6 +427,41 @@
     (doseq [page-id page-ids]
       (outliner-file/sync-to-file page-id))))
 
+(defn- rename-update-namespace!
+  [page old-original-name new-name]
+  (println "--->" "start updating namespace")
+  (let [old-namespace? (text/namespace-page? old-original-name)
+        new-namespace? (text/namespace-page? new-name)
+        update-namespace! (fn [] (let [namespace (and (string/includes? new-name "/")
+                                                  (first (gp-util/split-last "/" new-name)))]
+                                   (when-not (string/blank? namespace) 
+                                     (create! namespace {:redirect? false}) ;; create parent page if not exist, namespace is handled in create! func
+                                     (let [namespace-block (db/pull [:block/name (gp-util/page-name-sanity-lc namespace)])
+                                           repo                (state/get-current-repo)
+                                           page-txs [{:db/id (:db/id page)
+                                                      :block/namespace (:db/id namespace-block)}]]
+                                       (d/transact! (db/get-db repo false) page-txs)))))
+        remove-namespace! (fn []
+                            (db/transact! [[:db/retract (:db/id page) :block/namespace]]))]
+    (js/console.log "namespace?" old-original-name "->" old-namespace?)
+    (js/console.log "namespace?" new-name "->" new-namespace?)
+
+    (when old-namespace?
+      (if new-namespace?
+        (do
+          (js/console.log "new is still namespace page")
+          (update-namespace!))
+
+        (do
+          (js/console.log "new is not namespace page anymore")
+          (remove-namespace!))))
+    
+    (when-not old-namespace?
+      (when new-namespace?
+        (println "to new namespace page")
+        (update-namespace!)))) 
+  (println "<---" "end updating namespace"))
+
 (defn- rename-page-aux
   "Only accepts unsanitized page names"
   [old-name new-name redirect?]
@@ -473,6 +508,9 @@
             (config-handler/set-config! :default-home (assoc home :page new-name))))
 
         (rename-update-refs! page old-original-name new-name)
+
+  ;; TODO add rename-update-namespace!
+        (rename-update-namespace! page old-original-name new-name)
 
         (outliner-file/sync-to-file page))
 
@@ -580,7 +618,12 @@
 
       (rename-update-refs! from-page
                            (util/get-page-original-name from-page)
-                           (util/get-page-original-name to-page)))
+                           (util/get-page-original-name to-page))
+
+      (rename-update-namespace! from-page
+                                (util/get-page-original-name from-page)
+                                (util/get-page-original-name to-page)))
+
 
     (delete! from-page-name nil)
 
@@ -592,30 +635,30 @@
   "Accepts unsanitized page names"
   ([old-name new-name] (rename! old-name new-name true))
   ([old-name new-name redirect?]
-    (let [repo          (state/get-current-repo)
-          old-name      (string/trim old-name)
-          new-name      (string/trim new-name)
-          old-page-name (util/page-name-sanity-lc old-name)
-          new-page-name (util/page-name-sanity-lc new-name)
-          name-changed? (not= old-name new-name)]
-      (if (and old-name
+   (let [repo          (state/get-current-repo)
+         old-name      (string/trim old-name)
+         new-name      (string/trim new-name)
+         old-page-name (util/page-name-sanity-lc old-name)
+         new-page-name (util/page-name-sanity-lc new-name)
+         name-changed? (not= old-name new-name)]
+     (if (and old-name
               new-name
               (not (string/blank? new-name))
               name-changed?)
-        (do
-          (cond
-            (= old-page-name new-page-name)
-            (rename-page-aux old-name new-name redirect?)
+       (do
+         (cond
+           (= old-page-name new-page-name)
+           (rename-page-aux old-name new-name redirect?)
 
-            (db/pull [:block/name new-page-name])
-            (merge-pages! old-page-name new-page-name)
+           (db/pull [:block/name new-page-name])
+           (merge-pages! old-page-name new-page-name)
 
-            :else
-            (rename-namespace-pages! repo old-name new-name))
-          (rename-nested-pages old-name new-name))
-        (when (string/blank? new-name)
-          (notification/show! "Please use a valid name, empty name is not allowed!" :error)))
-      (ui-handler/re-render-root!))))
+           :else
+           (rename-namespace-pages! repo old-name new-name))
+         (rename-nested-pages old-name new-name))
+       (when (string/blank? new-name)
+         (notification/show! "Please use a valid name, empty name is not allowed!" :error)))
+     (ui-handler/re-render-root!))))
 
 (defn- split-col-by-element
   [col element]
