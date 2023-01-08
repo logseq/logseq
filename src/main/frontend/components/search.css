@@ -20,7 +20,11 @@
   @apply flex flex-col overflow-auto;
 
   > .search-results-wrap {
-    @apply flex-1 overflow-auto h-full;
+    @apply flex flex-col flex-1 overflow-hidden h-full;
+
+    > .results-inner {
+      @apply h-full overflow-y-auto;
+    }
   }
 }
 
@@ -30,7 +34,7 @@
 
 .search-results-engines {
   &-tabs {
-    @apply flex list-none -mx-2 mb-2;
+    @apply flex list-none -mx-2 mb-2 px-2;
 
     background: var(--ls-primary-background-color);
 
@@ -43,6 +47,7 @@
         background: transparent;
         border-radius: 0;
         line-height: 1;
+        color: var(--ls-primary-text-color);
       }
 
       &.is-active .ui__button {

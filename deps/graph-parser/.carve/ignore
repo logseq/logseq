@@ -36,3 +36,5 @@ logseq.graph-parser.whiteboard/page-block->tldr-page
 logseq.graph-parser/get-blocks-to-delete
 ;; Future use & be unified with markdown colon
 logseq.graph-parser.property/colons-org
+;; API
+logseq.graph-parser.util.db/resolve-input

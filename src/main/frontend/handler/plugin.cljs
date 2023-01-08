@@ -358,6 +358,20 @@
   ([pid effect]
    (js/LSPluginCore.unregisterTheme (name pid) effect)))
 
+(defn get-installed-hooks
+  []
+  (:plugin/installed-hooks @state/state))
+
+(defn plugin-hook-installed?
+  [pid hook]
+  (when-let [hooks (and pid (get-installed-hooks))]
+    (contains? (get hooks hook) (keyword pid))))
+
+(defn db-block-hook-installed?
+  [uuid]
+  (when-let [hook (and uuid (str "hook:db:block_" (string/replace (str uuid) "-" "_")))]
+    (boolean (seq (get (get-installed-hooks) hook)))))
+
 (def *fenced-code-providers (atom #{}))
 
 (defn register-fenced-code-renderer
@@ -490,11 +504,12 @@
 
 (defn hook-plugin-block-changes
   [{:keys [blocks tx-data tx-meta]}]
-
-  (doseq [b blocks
-          :let [tx-data' (group-by first tx-data)
-                type     (str "block:" (:block/uuid b))]]
-    (hook-plugin-db type {:block b :tx-data (get tx-data' (:db/id b)) :tx-meta tx-meta})))
+  (let [tx-data' (group-by first tx-data)
+        blocks'  (filter #(when-let [uuid (:block/uuid %)]
+                            (db-block-hook-installed? uuid)) blocks)]
+    (doseq [b blocks']
+      (let [type (str "block:" (:block/uuid b))]
+        (hook-plugin-db type {:block b :tx-data (get tx-data' (:db/id b)) :tx-meta tx-meta})))))
 
 (defn hook-plugin-block-slot
   [block payload]

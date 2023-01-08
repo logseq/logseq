@@ -424,7 +424,7 @@ export const LogseqQuickSearch = observer(
                     }}
                     // we have to use mousedown && stop propagation EARLY, otherwise some
                     // default behavior of clicking the rendered elements will happen
-                    onMouseDownCapture={e => {
+                    onPointerDownCapture={e => {
                       if (onChosen()) {
                         e.stopPropagation()
                         e.preventDefault()
