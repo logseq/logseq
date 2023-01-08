@@ -500,7 +500,6 @@
 
         (rename-update-refs! page old-original-name new-name)
 
-  ;; TODO add rename-update-namespace!
         (rename-update-namespace! page old-original-name new-name)
 
         (outliner-file/sync-to-file page))
