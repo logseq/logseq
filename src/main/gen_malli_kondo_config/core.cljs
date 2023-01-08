@@ -1,4 +1,5 @@
 (ns gen-malli-kondo-config.core
+  "Used to generate kondo config from malli-schema"
   (:require-macros [gen-malli-kondo-config.collect :refer [collect-schema]])
   (:require [frontend.util]
             [frontend.util.list]
