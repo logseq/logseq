@@ -2,8 +2,7 @@
   (:require-macros [gen-malli-kondo-config.collect :refer [collect-schema]])
   (:require [frontend.util]
             [frontend.util.list]
-            [malli.clj-kondo :as mc]
-            [malli.dev.cljs :as md]))
+            [malli.clj-kondo :as mc]))
 
 
 (defn main [& _args]
