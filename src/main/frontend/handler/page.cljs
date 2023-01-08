@@ -428,14 +428,14 @@
       (outliner-file/sync-to-file page-id))))
 
 (defn- rename-update-namespace!
+  "update :block/namespace of the renamed block"
   [page old-original-name new-name]
-  (println "--->" "start updating namespace")
   (let [old-namespace? (text/namespace-page? old-original-name)
         new-namespace? (text/namespace-page? new-name)
         update-namespace! (fn [] (let [namespace (and (string/includes? new-name "/")
-                                                  (first (gp-util/split-last "/" new-name)))]
-                                   (when-not (string/blank? namespace) 
-                                     (create! namespace {:redirect? false}) ;; create parent page if not exist, namespace is handled in create! func
+                                                      (first (gp-util/split-last "/" new-name)))]
+                                   (when-not (string/blank? namespace)
+                                     (create! namespace {:redirect? false}) ;; create parent page if not exist, creation of namespace ref is handled in `create!`
                                      (let [namespace-block (db/pull [:block/name (gp-util/page-name-sanity-lc namespace)])
                                            repo                (state/get-current-repo)
                                            page-txs [{:db/id (:db/id page)
@@ -443,24 +443,15 @@
                                        (d/transact! (db/get-db repo false) page-txs)))))
         remove-namespace! (fn []
                             (db/transact! [[:db/retract (:db/id page) :block/namespace]]))]
-    (js/console.log "namespace?" old-original-name "->" old-namespace?)
-    (js/console.log "namespace?" new-name "->" new-namespace?)
 
     (when old-namespace?
       (if new-namespace?
-        (do
-          (js/console.log "new is still namespace page")
-          (update-namespace!))
+        (update-namespace!)
+        (remove-namespace!)))
 
-        (do
-          (js/console.log "new is not namespace page anymore")
-          (remove-namespace!))))
-    
     (when-not old-namespace?
       (when new-namespace?
-        (println "to new namespace page")
-        (update-namespace!)))) 
-  (println "<---" "end updating namespace"))
+        (update-namespace!)))))
 
 (defn- rename-page-aux
   "Only accepts unsanitized page names"
