@@ -70,8 +70,8 @@ export const shapeMapping: Record<ShapeType, ContextBarActionType[]> = {
   ellipse: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
   polygon: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'NoFill', 'StrokeType', 'Links'],
   line: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'ArrowMode', 'Links'],
-  pencil: ['Swatch', 'Links'],
-  highlighter: ['Swatch', 'Links'],
+  pencil: ['Swatch', 'Links', 'ScaleLevel'],
+  highlighter: ['Swatch', 'Links', 'ScaleLevel'],
   text: ['Edit', 'TextStyle', 'Swatch', 'ScaleLevel', 'AutoResizing', 'Links'],
   html: ['ScaleLevel', 'AutoResizing', 'Links'],
   image: ['Links'],
@@ -197,32 +197,36 @@ const LogseqPortalViewModeAction = observer(() => {
 })
 
 const ScaleLevelAction = observer(() => {
+  const {
+    handlers: { isMobile },
+  } = React.useContext(LogseqContext)
+
   const app = useApp<Shape>()
   const shapes = filterShapeByAction<LogseqPortalShape>(app.selectedShapesArray, 'ScaleLevel')
   const scaleLevel = new Set(shapes.map(s => s.scaleLevel)).size > 1 ? '' : shapes[0].scaleLevel
   const sizeOptions: SelectOption[] = [
     {
-      label: 'Extra Small',
+      label: isMobile() ? 'XS' : 'Extra Small',
       value: 'xs',
     },
     {
-      label: 'Small',
+      label: isMobile() ? 'SM' : 'Small',
       value: 'sm',
     },
     {
-      label: 'Medium',
+      label: isMobile() ? 'MD' : 'Medium',
       value: 'md',
     },
     {
-      label: 'Large',
+      label: isMobile() ? 'LG' : 'Large',
       value: 'lg',
     },
     {
-      label: 'Extra Large',
+      label: isMobile() ? 'XL' : 'Extra Large',
       value: 'xl',
     },
     {
-      label: 'Huge',
+      label: isMobile() ? 'XXL' : 'Huge',
       value: 'xxl',
     },
   ]
