@@ -4,7 +4,7 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.utils :as db-util]
+            [frontend.db.utils :as db-utils]
             [frontend.handler.draw :as draw]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
@@ -676,6 +676,6 @@
 
 (defn exec-plugin-simple-command!
   [pid {:keys [block-id] :as cmd} action]
-  (let [format (and block-id (:block/format (db-util/pull [:block/uuid block-id])))
+  (let [format (and block-id (:block/format (db-utils/pull [:block/uuid block-id])))
         inputs (vector (conj action (assoc cmd :pid pid)))]
     (handle-steps inputs format)))

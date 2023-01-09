@@ -670,6 +670,10 @@ Similar to re-frame subscriptions"
   []
   (:editor/logical-outdenting? (sub-config)))
 
+(defn show-full-blocks?
+  []
+  (:ui/show-full-blocks? (sub-config)))
+
 (defn preferred-pasting-file?
   []
   (:editor/preferred-pasting-file? (sub-config)))
@@ -1542,21 +1546,22 @@ Similar to re-frame subscriptions"
                 (update-vals engines #(assoc % :result nil)))))
 
 (defn install-plugin-hook
-  [pid hook]
-  (when-let [pid (keyword pid)]
-    (set-state!
+  ([pid hook] (install-plugin-hook pid hook true))
+  ([pid hook opts]
+   (when-let [pid (keyword pid)]
+     (set-state!
       [:plugin/installed-hooks hook]
-      (conj
-        ((fnil identity #{}) (get-in @state [:plugin/installed-hooks hook]))
-        pid)) true))
+      (assoc
+        ((fnil identity {}) (get-in @state [:plugin/installed-hooks hook]))
+        pid opts)) true)))
 
 (defn uninstall-plugin-hook
   [pid hook-or-all]
   (when-let [pid (keyword pid)]
     (if (nil? hook-or-all)
-      (swap! state update :plugin/installed-hooks #(update-vals % (fn [ids] (disj ids pid))))
+      (swap! state update :plugin/installed-hooks #(update-vals % (fn [ids] (dissoc ids pid))))
       (when-let [coll (get-in @state [:plugin/installed-hooks hook-or-all])]
-        (set-state! [:plugin/installed-hooks hook-or-all] (disj coll pid))))
+        (set-state! [:plugin/installed-hooks hook-or-all] (dissoc coll pid))))
     true))
 
 (defn slot-hook-exist?
