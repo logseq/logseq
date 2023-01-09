@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "devDependencies": {
-    "@logseq/nbb-logseq": "^0.7.133"
+    "@logseq/nbb-logseq": "^1.1.157"
   },
   "dependencies": {
-    "mldoc": "^1.4.9"
+    "mldoc": "^1.5.1"
   },
   "scripts": {
     "test": "nbb-logseq -cp src:test:../db/src -m logseq.graph-parser.nbb-test-runner/run-tests"
