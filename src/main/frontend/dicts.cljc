@@ -218,7 +218,7 @@
         :settings-page/spell-checker "Spell checker"
         :settings-page/auto-updater "Auto updater"
         :settings-page/disable-sentry "Send usage data and diagnostics to Logseq"
-        :settings-page/disable-sentry-desc "Logseq will never collect your local graph database or sell your data." 
+        :settings-page/disable-sentry-desc "Logseq will never collect your local graph database or sell your data."
         :settings-page/preferred-outdenting "Logical outdenting"
         :settings-page/show-full-blocks "Show all lines of a block reference"
         :settings-page/custom-date-format "Preferred date format"
@@ -1601,7 +1601,7 @@
            :file/name "文件名"
            :file/file "文件："
            :file/last-modified-at "最后更改于"
-           :file/no-data "没有数据" 
+           :file/no-data "没有数据"
            :file/validate-existing-file-error "页面已存在另一个文件: {1}, 当前文件: {2}. 请保留其中一个文件，然后重建当前图谱的索引。"
            :file-rn/re-index "重命名文件后，如果其他设备同步了改文件，强烈建议在同步成功后重新建立索引。"
            :file-rn/need-action "建议执行文件重命名操作以匹配新格式。当重命名的文件被同步后，请在所有设备上重新建立索引。"
@@ -3628,14 +3628,6 @@
         :settings-page/edit-global-config-edn "Editar config.edn global"
         :settings-page/sync "Sincronizar"
         :settings-page/tab-features "Recursos"
-
-
-
-
-
-
-
-
 
          :all-whiteboards "Todos os quadros brancos"
          :auto-heading "Título automático"
