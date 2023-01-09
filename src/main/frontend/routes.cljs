@@ -83,6 +83,10 @@
    ["/bug-report"
     {:name :bug-report
      :view bug-report/bug-report}]
+   
+    ["/bug-report-tool/:tool"
+     {:name :bug-report-tools
+      :view bug-report/bug-report-tool-route}]
 
    ["/all-journals"
     {:name :all-journals
