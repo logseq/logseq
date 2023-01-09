@@ -670,6 +670,10 @@ Similar to re-frame subscriptions"
   []
   (:editor/logical-outdenting? (sub-config)))
 
+(defn show-full-blocks?
+  []
+  (:ui/show-full-blocks? (sub-config)))
+
 (defn preferred-pasting-file?
   []
   (:editor/preferred-pasting-file? (sub-config)))
