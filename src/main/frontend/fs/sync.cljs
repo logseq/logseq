@@ -604,28 +604,29 @@
   keep this `FileMetadata` in result"
   [s1 s2]
   (reduce
-   (fn [result item]
-     (let [path (:path item)
-           encrypted-path (:encrypted-path item)
-           checksum (:etag item)
-           last-modified (:last-modified item)]
-       (if (some
-            #(cond
-               (not= encrypted-path (:encrypted-path %))
-               false
-               (= checksum (:etag %))
-               true
-               (>= last-modified (:last-modified %))
-               false
-               ;; these special files have higher priority in s1
-               (contains? higher-priority-remote-files path)
-               false
-               (< last-modified (:last-modified %))
-               true)
-            s2)
-         result
-         (conj result item))))
-   #{} s1))
+     (fn [result item]
+       (let [path (:path item)
+             lower-case-path (some-> path string/lower-case)
+             ;; encrypted-path (:encrypted-path item)
+             checksum (:etag item)
+             last-modified (:last-modified item)]
+         (if (some
+              #(cond
+                 (not= lower-case-path (some-> (:path %) string/lower-case))
+                 false
+                 (= checksum (:etag %))
+                 true
+                 (>= last-modified (:last-modified %))
+                 false
+                 ;; these special files have higher priority in s1
+                 (contains? higher-priority-remote-files path)
+                 false
+                 (< last-modified (:last-modified %))
+                 true)
+              s2)
+           result
+           (conj result item))))
+     #{} s1))
 
 (comment
  (defn map->FileMetadata [m]
@@ -1182,27 +1183,31 @@
 (defn- filter-case-different-same-files
   "filter case-different-but-same-name files, last-modified one wins"
   [file-meta-list encrypted-path->path-map]
-  (let [seen (volatile! {})
-        result-file-meta-list (transient [])]
-    (loop [[f & others] file-meta-list]
-      (let [origin-path (get encrypted-path->path-map (:encrypted-path f))
-            _ (assert (some? origin-path) f)
-            path (string/lower-case origin-path)
-            last-modified (:last-modified f)
-            last-modified-seen (get @seen path)]
-        (cond
-          (or (and path (nil? last-modified-seen))
-              (and path (some? last-modified-seen) (> last-modified last-modified-seen)))
-          ;; 1. not found in seen
-          ;; 2. found in seen, but current f wins
-          (do (conj! result-file-meta-list f)
-              (vswap! seen conj [path last-modified]))
+  (let [seen (volatile! {})]
+    (loop [result-file-meta-list (transient {})
+           [f & others] file-meta-list]
+      (if f
+        (let [origin-path (get encrypted-path->path-map (:encrypted-path f))
+              _ (assert (some? origin-path) f)
+              path (string/lower-case origin-path)
+              last-modified (:last-modified f)
+              last-modified-seen (get @seen path)]
+          (cond
+            (or (and path (nil? last-modified-seen))
+                (and path (some? last-modified-seen) (> last-modified last-modified-seen)))
+            ;; 1. not found in seen
+            ;; 2. found in seen, but current f wins
+            (do (vswap! seen conj [path last-modified])
+                (recur (conj! result-file-meta-list [path f]) others))
 
-          (and path (some? last-modified-seen) (<= last-modified last-modified-seen))
-          ;; found in seen, and seen-f has more recent last-modified epoch
-          nil)
-        (when others (recur others))))
-    (persistent! result-file-meta-list)))
+            (and path (some? last-modified-seen) (<= last-modified last-modified-seen))
+            ;; found in seen, and seen-f has more recent last-modified epoch
+            (recur result-file-meta-list others)
+
+            :else
+            (do (println :debug-filter-case-different-same-files:unreachable f path)
+                (recur result-file-meta-list others))))
+        (vals (persistent! result-file-meta-list))))))
 
 
 (extend-type RemoteAPI
@@ -1255,9 +1260,9 @@
                                   true
                                   (:txid %)
                                   nil)
-                 (filter-case-different-same-files
-                  (filter-files-with-unnormalized-path file-meta-list* encrypted-path->path-map)
-                  encrypted-path->path-map))))))))))
+                 (-> file-meta-list*
+                     (filter-files-with-unnormalized-path encrypted-path->path-map)
+                     (filter-case-different-same-files encrypted-path->path-map)))))))))))
 
   (<get-remote-files-meta [this graph-uuid filepaths]
     {:pre [(coll? filepaths)]}
@@ -2342,7 +2347,9 @@
               {:stop true})
           (let [remote-all-files-meta   remote-all-files-meta-or-exp
                 local-all-files-meta    (<! local-all-files-meta-c)
-                diff-remote-files       (diff-file-metadata-sets remote-all-files-meta local-all-files-meta)
+                {diff-remote-files :result elapsed-time :time}
+                (util/with-time (diff-file-metadata-sets remote-all-files-meta local-all-files-meta))
+                _ (println ::diff-file-metadata-sets-elapsed-time elapsed-time "ms")
                 recent-10-days-range    ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %)) (t/today))
                 sorted-diff-remote-files
                                         (sort-by
@@ -3325,5 +3332,4 @@
 (comment
  (def *x (atom nil))
  (add-tap (fn [v] (reset! *x v)))
-
  )
