@@ -2511,12 +2511,14 @@
                  true)
                (or (string/starts-with? (.-dir e) base-path)
                    (string/starts-with? (str "file://" (.-dir e)) base-path)) ; valid path prefix
-               (not (ignored? e))     ;not ignored
+               (not (ignored? e))       ;not ignored
                ;; download files will also trigger file-change-events, ignore them
-               (when-some [recent-remote->local-file-item
-                           (<! (<file-change-event=>recent-remote->local-file-item
-                                graph-uuid e))]
-                 (not (contains? (:recent-remote->local-files @*sync-state) recent-remote->local-file-item)))))))
+               (if (= "unlink" (:type e))
+                 true
+                 (when-some [recent-remote->local-file-item
+                             (<! (<file-change-event=>recent-remote->local-file-item
+                                  graph-uuid e))]
+                   (not (contains? (:recent-remote->local-files @*sync-state) recent-remote->local-file-item))))))))
 
   (set-remote->local-syncer! [_ s] (set! remote->local-syncer s))
 
@@ -2539,7 +2541,7 @@
        (fn [e]
          (go
            (and (rsapi-ready? rsapi graph-uuid)
-                 (<! (<fast-filter-e-fn e))
+                (<! (<fast-filter-e-fn e))
                 (do
                   (swap! *sync-state sync-state--add-queued-local->remote-files e)
                   (let [v (<! (<filter-local-changes-pred e base-path graph-uuid))]
