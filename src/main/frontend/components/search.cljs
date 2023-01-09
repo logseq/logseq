@@ -331,6 +331,8 @@
        nil)]))
 
 (rum/defc search-auto-complete
+  "has-more? - if the result is truncated
+   all? - if true, in show-more mode"
   [{:keys [engine pages files pages-content blocks has-more?] :as result} search-q all?]
   (let [pages (when-not all? (map (fn [page]
                                     (let [alias (model/get-redirect-page-name page)]
