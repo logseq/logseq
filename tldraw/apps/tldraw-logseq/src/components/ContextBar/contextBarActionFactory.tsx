@@ -90,7 +90,7 @@ function filterShapeByAction<S extends Shape>(shapes: Shape[], type: ContextBarA
 
 const EditAction = observer(() => {
   const {
-    handlers: { isWhiteboardPage, redirectToPage },
+    handlers: { isWhiteboardPage, redirectToPage, getRedirectPageName, insertFirstPageBlock },
   } = React.useContext(LogseqContext)
 
   const app = useApp<Shape>()
@@ -114,10 +114,17 @@ const EditAction = observer(() => {
               redirectToPage(uuid)
             }
 
-            const firstNonePropertyBlock = window.logseq?.api
-              ?.get_page_blocks_tree?.(shape.props.pageId)
-              .find(b => !('propertiesOrder' in b))
-            uuid = firstNonePropertyBlock.uuid
+            const pageId = getRedirectPageName(shape.props.pageId)
+            let pageBlocksTree = window.logseq?.api?.get_page_blocks_tree?.(pageId)
+
+            if (pageBlocksTree?.length === 0) {
+              insertFirstPageBlock(pageId)
+              pageBlocksTree = window.logseq?.api?.get_page_blocks_tree?.(pageId)
+            }
+
+            const firstNonePropertyBlock = pageBlocksTree?.find(b => !('propertiesOrder' in b)) || pageBlocksTree[0]
+
+            uuid = firstNonePropertyBlock?.uuid
           }
           window.logseq?.api?.edit_block?.(uuid)
         }
