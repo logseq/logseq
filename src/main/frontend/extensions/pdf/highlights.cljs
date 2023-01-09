@@ -227,6 +227,7 @@
         (fn [^js e]
           (when-let [^js dt (and id (.-dataTransfer e))]
             (reset! block/*dragging? true)
+            (pdf-assets/ensure-ref-block! (state/get-current-pdf) hl)
             (.setData dt "text/plain" (str "((" id "))"))))]
 
     [:div.extensions__pdf-hls-text-region
