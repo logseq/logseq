@@ -5,7 +5,8 @@
             [clojure.edn :as edn]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [logseq.graph-parser.log :as log]))
+            [logseq.graph-parser.log :as log]
+            [clojure.string :as s]))
 
 (defn safe-decode-uri-component
   [uri]
@@ -208,7 +209,9 @@
 
 (defn path->file-ext
   [path-or-file-name]
-  (last (split-last "." path-or-file-name)))
+  (if (s/includes? path-or-file-name "#")
+    (first (split-first "#" (last (split-last "." path-or-file-name))))
+    (last (split-last "." path-or-file-name))))
 
 (defn get-format
   [file]

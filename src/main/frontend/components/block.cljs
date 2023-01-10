@@ -78,7 +78,8 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [shadow.loader :as loader]))
+            [shadow.loader :as loader]
+            [clojure.string :as s]))
 
 (defn safe-read-string
   ([s]
@@ -364,7 +365,7 @@
             (ui/icon "maximize")]]])]))))
 
 (rum/defc audio-cp [src]
-  [:audio {:src src
+  [:audio {:src (s/replace-first src "assets://" "file://")
            :controls true
            :on-touch-start #(util/stop %)}])
 
