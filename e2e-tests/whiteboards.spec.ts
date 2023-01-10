@@ -95,15 +95,15 @@ test('cleanup the shapes', async ({ page }) => {
 })
 
 test('zoom in', async ({ page }) => {
-  await page.keyboard.press('Shift+0')
-  await page.waitForTimeout(1000)
+  await page.keyboard.press('Shift+0') // reset zoom
+  await page.waitForTimeout(1500) // wait for the zoom animation to finish
   await page.click('#tl-zoom-in')
   await expect(page.locator('#tl-zoom')).toContainText('125%')
 })
 
 test('zoom out', async ({ page }) => {
   await page.keyboard.press('Shift+0')
-  await page.waitForTimeout(1000)
+  await page.waitForTimeout(1500)
   await page.click('#tl-zoom-out')
   await expect(page.locator('#tl-zoom')).toContainText('100%')
 })
