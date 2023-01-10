@@ -100,7 +100,7 @@
 
   [:div.cp__handbooks-content
    [:div.pane-wrap
-    [:div.hd.flex.justify-between.select-none
+    [:div.hd.flex.justify-between.select-none.draggable-handle
 
      [:h1.text-lg.flex.items-center
       [:span.pr-2.flex.items-center.cursor-pointer
@@ -123,5 +123,3 @@
    [:div.ft
     [:h2.uppercase.opacity-60 "Related"]
     (related-topics)]])
-
-

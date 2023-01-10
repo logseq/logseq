@@ -1,14 +1,11 @@
 .cp__handbooks {
   &-content {
-    @apply px-4 py-2 flex flex-col justify-between;
+    @apply px-4 py-2 flex flex-col justify-between flex-1;
 
-    background-color: var(--ls-quaternary-background-color);
-    min-height: 780px;
-    max-width: 800px;
     -webkit-font-smoothing: antialiased;
 
     &-wrap {
-      max-height: 900px;
+      @apply flex justify-center flex-col flex-1;
     }
 
     .hd {
@@ -109,14 +106,17 @@
 
   &-popup {
     @apply fixed bottom-[60px] right-[26px] rounded-lg overflow-hidden
-    z-10 shadow-lg;
+    z-10 shadow-lg flex justify-center flex-col;
 
+    background-color: var(--ls-quaternary-background-color);
     border: 1px solid var(--ls-tertiary-background-color);
+    min-height: 780px;
+    width: 480px;
   }
 }
 
 html[data-theme="light"] {
-  .cp__handbooks-content {
+  .cp__handbooks-popup {
     background-color: var(--ls-primary-background-color);
 
     .search {
