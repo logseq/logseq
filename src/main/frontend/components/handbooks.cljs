@@ -2,6 +2,7 @@
   (:require [shadow.lazy :as lazy]
             [rum.core :as rum]
             [frontend.state :as state]
+            [frontend.modules.layout.core :as layout]
             [frontend.extensions.handbooks.core :as handbooks]))
 
 #_:clj-kondo/ignore
@@ -21,9 +22,21 @@
 (rum/defc handbooks-popup
   []
 
-  [:div.cp__handbooks-popup
-   [:div.cp__handbooks-content-wrap
-    (handbooks/content)]])
+  (let [popup-ref (rum/use-ref nil)]
+
+    (rum/use-effect!
+     (fn []
+       (when-let [^js popup-el (rum/deref popup-ref)]
+         (comp
+          (layout/setup-draggable-container! popup-el nil)
+          (layout/setup-resizable-container! popup-el nil))))
+     [])
+
+    [:div.cp__handbooks-popup
+     {:data-identity "logseq-handbooks"
+      :ref popup-ref}
+     [:div.cp__handbooks-content-wrap
+      (handbooks/content)]]))
 
 (defn toggle-handbooks
   []
