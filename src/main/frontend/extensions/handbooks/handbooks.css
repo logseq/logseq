@@ -1,27 +1,28 @@
 .cp__handbooks {
   &-content {
-    @apply px-6 py-2;
+    @apply px-5 py-2 flex flex-col justify-between;
 
     background-color: var(--ls-quaternary-background-color);
-    min-height: 600px;
+    min-height: 780px;
+    max-width: 800px;
     -webkit-font-smoothing: antialiased;
 
     &-wrap {
       @apply -m-8;
     }
 
-    > .hd {
+    .hd {
       @apply dark:text-white py-2;
     }
 
-    > .search {
+    .search {
       @apply flex rounded-lg mt-1.5;
 
-      border:3px solid var(--ls-primary-background-color);
+      border: 3px solid var(--ls-primary-background-color);
       background-color: var(--ls-primary-background-color);
 
       &:focus-within {
-        border:3px solid var(--ls-secondary-border-color);
+        border: 3px solid var(--ls-secondary-border-color);
       }
 
       > input {
@@ -30,15 +31,15 @@
       }
     }
 
-    > .pane {
+    .pane {
       @apply py-2 px-1 dark:text-gray-50;
-
-      > h2 {
-        @apply py-2 text-[16px];
-      }
     }
 
-    .topic-card {
+    .pane > h2, .ft > h2 {
+      @apply py-2 text-[16px] dark:text-gray-100;
+    }
+
+    .topic-card, .link-card {
       @apply text-sm p-2.5 rounded-lg cursor-pointer
       mb-2 active:opacity-90;
 
@@ -62,6 +63,10 @@
       }
     }
 
+    .link-card {
+      @apply dark:text-gray-100;
+    }
+
     .category-card {
       @apply flex-col flex rounded px-3 py-3 text-gray-50
       active:opacity-90 cursor-pointer;
@@ -77,6 +82,28 @@
 
     .categories-list {
       @apply grid grid-cols-2 gap-3;
+    }
+
+    .pane-topic-detail {
+      @apply flex flex-col h-full;
+
+      > h1 {
+        @apply pb-1;
+      }
+
+      > .demos {
+        img {
+          @apply w-full;
+        }
+      }
+
+      .content {
+        @apply overflow-hidden pt-1 leading-6;
+
+        &-wrap {
+          @apply flex flex-col justify-around;
+        }
+      }
     }
   }
 }

@@ -2,9 +2,52 @@
   (:require [rum.core :as rum]
             [frontend.ui :as ui]))
 
-(rum/defc pane-dashboard
+(rum/defc link-card
+  [opts child]
+
+  [:div.link-card
+   opts
+   child])
+
+(rum/defc pane-category-topics
   []
 
+  [:div.pane.pane-category-topics
+   [:div.topics-list
+    (take
+     3 (repeat
+        [:div.topic-card.flex
+         [:div.l "Cover"]
+         [:div.r.flex.flex-col
+          [:strong "Switching your notetaking process"]
+          [:span "What makes Logseq different from your previous tools?"]]]))
+
+    (take
+     3 (repeat
+        [:div.topic-card.flex
+         [:div.r.flex.flex-col
+          [:strong "Switching your notetaking process"]
+          [:span "What makes Logseq different from your previous tools?"]]]))]])
+
+(rum/defc pane-topic-detail
+  []
+
+  [:div.pane.pane-topic-detail
+   [:h1.text-2xl.pb-3.font-semibold "PDF Highlights"]
+
+   [:div.flex.demos
+    [:img {:src "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsPWsZWt-6pMQ7mZ-cGuHw2AsDhwxl3quWlA&usqp=CAU"}]]
+
+   [:div.content-wrap
+    [:div.content
+     "Lorem ipsum dolor sit amet consectetur. Congue vivamus libero consequat
+     tortor lacus nulla sit massa. Imperdiet nec bibendum amet turpis bibendum
+     consequat tortor lacus nulla sit massa. Imperdiet nec bibendum amet turpis bibendum
+     pellentesque. Egestas sit sed lectus dui suspendisse. Mi cursus pharetra
+     sit facilisi consectetur risus."]]])
+
+(rum/defc pane-dashboard
+  []
   [:div.pane.dashboard-pane
    [:h2 "Popular topics"]
    [:div.topics-list
@@ -31,24 +74,49 @@
      [:span "5 onboarding articles"]]
 
     [:div.category-card.bg-indigo-600
-     [:strong "Get started here"]
+     [:strong "Shortcuts"]
      [:span "5 onboarding articles"]]]])
+
+(rum/defc search-bar
+  []
+  [:div.search.relative
+   [:span.icon.absolute.opacity-90
+    {:style {:top 6 :left 7}}
+    (ui/icon "search" {:size 12})]
+   [:input {:placeholder "Search"
+            :auto-focus  true}]])
+
+(rum/defc related-topics
+  []
+  [:div.related-topics
+   (link-card {}
+              [:strong.text-md "How to do something?"])
+   (link-card {}
+              [:strong.text-md "How to do something?"])])
 
 (rum/defc content
   []
 
   [:div.cp__handbooks-content
-   [:div.hd.flex.justify-between
-    [:h1.text-lg "Handbooks"]]
+   [:div.pane-wrap
+    [:div.hd.flex.justify-between.select-none
+     [:h1.text-lg.flex.items-center
+      [:span.pr-2.flex.items-center.cursor-pointer
+       (ui/icon "chevron-left")]
+      [:span "Handbooks"]]]
 
-   [:div.search.relative
-    [:span.icon.absolute.opacity-90
-     {:style {:top 6 :left 7}}
-     (ui/icon "search" {:size 12})]
-    [:input {:placeholder "Search"
-             :auto-focus  true}]]
+    ;; search bar
+    (search-bar)
 
-   ;; entry pane
-   (pane-dashboard)])
+    ;; entry pane
+    (pane-dashboard)
+    ;(pane-category-topics)
+    ;(pane-topic-detail)
+    ]
+
+   ;; footer
+   [:div.ft
+    [:h2.uppercase.opacity-60 "Related"]
+    (related-topics)]])
 
 
