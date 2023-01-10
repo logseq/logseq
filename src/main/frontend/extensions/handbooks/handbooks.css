@@ -1,0 +1,77 @@
+.cp__handbooks {
+  &-content {
+    @apply px-6 py-2;
+
+    background-color: var(--ls-quaternary-background-color);
+    min-height: 600px;
+    -webkit-font-smoothing: antialiased;
+
+    &-wrap {
+      @apply -m-8;
+    }
+
+    > .hd {
+      @apply dark:text-white py-2;
+    }
+
+    > .search {
+      @apply flex rounded mt-1.5;
+
+      background-color: var(--ls-primary-background-color);
+
+      > input {
+        @apply text-sm w-full border-none py-2 pl-[22px] bg-transparent
+        focus:outline-0 dark:text-gray-100;
+      }
+    }
+
+    > .bd {
+      @apply py-2 px-1 dark:text-gray-50;
+
+      > h2 {
+        @apply py-2 text-[16px];
+      }
+    }
+
+    .topic-card {
+      @apply text-sm p-2.5 rounded-lg cursor-pointer
+      mb-2 active:opacity-90;
+
+      background-color: var(--ls-primary-background-color);
+      border: 1px solid var(--ls-border-color);
+
+      > .l {
+        @apply w-[64px] h-[48px] bg-yellow-50 rounded overflow-hidden;
+      }
+
+      > .r {
+        @apply pl-2.5 leading-none;
+
+        > strong {
+          @apply font-semibold text-[14px] py-1.5;
+        }
+
+        > span {
+          @apply text-xs opacity-40;
+        }
+      }
+    }
+
+    .category-card {
+      @apply flex-col flex rounded px-3 py-3 text-gray-50
+      active:opacity-90 cursor-pointer;
+
+      > strong {
+        @apply font-normal leading-tight;
+      }
+
+      > span {
+        @apply text-[11px] opacity-90 pt-1;
+      }
+    }
+
+    .categories-list {
+      @apply grid grid-cols-2 gap-3;
+    }
+  }
+}
