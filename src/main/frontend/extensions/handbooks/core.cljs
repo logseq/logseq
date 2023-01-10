@@ -1,6 +1,7 @@
 (ns frontend.extensions.handbooks.core
   (:require [rum.core :as rum]
-            [frontend.ui :as ui]))
+            [frontend.ui :as ui]
+            [frontend.state :as state]))
 
 (rum/defc link-card
   [opts child]
@@ -17,7 +18,7 @@
     (take
      3 (repeat
         [:div.topic-card.flex
-         [:div.l "Cover"]
+         [:div.l ""]
          [:div.r.flex.flex-col
           [:strong "Switching your notetaking process"]
           [:span "What makes Logseq different from your previous tools?"]]]))
@@ -54,7 +55,7 @@
     (take
      3 (repeat
         [:div.topic-card.flex
-         [:div.l "Cover"]
+         [:div.l ""]
          [:div.r.flex.flex-col
           [:strong "Switching your notetaking process"]
           [:span "What makes Logseq different from your previous tools?"]]]))]
@@ -100,10 +101,14 @@
   [:div.cp__handbooks-content
    [:div.pane-wrap
     [:div.hd.flex.justify-between.select-none
+
      [:h1.text-lg.flex.items-center
       [:span.pr-2.flex.items-center.cursor-pointer
        (ui/icon "chevron-left")]
-      [:span "Handbooks"]]]
+      [:span "Handbooks"]]
+
+     [:a {:on-click #(state/toggle! :ui/handbooks-open?)}
+      (ui/icon "x")]]
 
     ;; search bar
     (search-bar)

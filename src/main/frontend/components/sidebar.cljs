@@ -705,7 +705,7 @@
      [:div.inner
       {:title    (t :help-shortcut-title)
        :on-click (fn []
-                   (handbooks/open-handbooks))}
+                   (handbooks/toggle-handbooks))}
       "📙"]]))
 
 (rum/defcs ^:large-vars/cleanup-todo sidebar <
@@ -735,6 +735,7 @@
         sidebar-open?  (state/sub :ui/sidebar-open?)
         settings-open? (state/sub :ui/settings-open?)
         left-sidebar-open?  (state/sub :ui/left-sidebar-open?)
+        handbooks-open? (state/sub :ui/handbooks-open?)
         wide-mode? (state/sub :ui/wide-mode?)
         develop-mode? (state/sub :ui/developer-mode?)
         ls-block-hl-colored? (state/sub :pdf/block-highlight-colored?)
@@ -826,6 +827,8 @@
        (and (not config/mobile?)
             (not config/publishing?))
         [:<>
-         (when develop-mode?
+         (when handbooks-open?
+           (handbooks/handbooks-popup))
+         (when (and develop-mode? (false? handbooks-open?))
            (handbook-button))
          (help-button)])])))

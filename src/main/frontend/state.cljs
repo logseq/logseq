@@ -73,6 +73,7 @@
      :ui/navigation-item-collapsed?         {}
 
      ;; right sidebar
+     :ui/handbooks-open?                    true
      :ui/fullscreen?                        false
      :ui/settings-open?                     false
      :ui/sidebar-open?                      false

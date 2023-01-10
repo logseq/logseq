@@ -18,14 +18,13 @@
 ;    [:div.cp__handbooks-content
 ;     content]))
 
-(rum/defc handbooks
+(rum/defc handbooks-popup
   []
 
-  [:div.cp__handbooks-content-wrap
-   (handbooks/content)])
+  [:div.cp__handbooks-popup
+   [:div.cp__handbooks-content-wrap
+    (handbooks/content)]])
 
-(defn open-handbooks
+(defn toggle-handbooks
   []
-  (state/set-modal!
-   #(handbooks)
-   {:center? true}))
+  (state/toggle! :ui/handbooks-open?))

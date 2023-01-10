@@ -1,6 +1,6 @@
 .cp__handbooks {
   &-content {
-    @apply px-5 py-2 flex flex-col justify-between;
+    @apply px-4 py-2 flex flex-col justify-between;
 
     background-color: var(--ls-quaternary-background-color);
     min-height: 780px;
@@ -8,7 +8,7 @@
     -webkit-font-smoothing: antialiased;
 
     &-wrap {
-      @apply -m-8;
+      max-height: 900px;
     }
 
     .hd {
@@ -103,6 +103,27 @@
         &-wrap {
           @apply flex flex-col justify-around;
         }
+      }
+    }
+  }
+
+  &-popup {
+    @apply fixed bottom-[60px] right-[26px] rounded-lg overflow-hidden
+    z-10 shadow-lg;
+
+    border: 1px solid var(--ls-tertiary-background-color);
+  }
+}
+
+html[data-theme="light"] {
+  .cp__handbooks-content {
+    background-color: var(--ls-primary-background-color);
+
+    .search {
+      background-color: #f1f1f1;
+
+      &:focus-within {
+        background-color: transparent;
       }
     }
   }
