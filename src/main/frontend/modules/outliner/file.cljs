@@ -44,34 +44,37 @@
 
 
 (defn do-write-file!
-  [repo page-db-id]
+  [repo page-db-id outliner-op]
   (let [page-block (db/pull repo '[*] page-db-id)
         page-db-id (:db/id page-block)
         whiteboard? (= "whiteboard" (:block/type page-block))
-        blocks-count (model/get-page-blocks-count repo page-db-id)]
-    (if (or (and (> blocks-count 500)
-                 (not (state/input-idle? repo {:diff 3000}))) ;; long page
-            ;; when this whiteboard page is just being updated
-            (and whiteboard? (not (state/whiteboard-page-idle? repo page-block))))
-      (async/put! (state/get-file-write-chan) [repo page-db-id])
-      (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
-            blocks (model/get-page-blocks-no-cache repo (:block/name page-block) {:pull-keys pull-keys})
-            blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)]
-        (when-not (and (= 1 (count blocks))
-                       (string/blank? (:block/content (first blocks)))
-                       (nil? (:block/file page-block)))
-          (let [tree-or-blocks (if whiteboard? blocks
-                                   (tree/blocks->vec-tree repo blocks (:block/name page-block)))]
-            (if page-block
-              (file/save-tree! page-block tree-or-blocks)
-              (js/console.error (str "can't find page id: " page-db-id)))))))))
+        blocks-count (model/get-page-blocks-count repo page-db-id)
+        blocks-just-deleted? (and (zero? blocks-count)
+                                  (contains? #{:delete-blocks :move-blocks} outliner-op))]
+    (when (or (>= blocks-count 1) blocks-just-deleted?)
+      (if (or (and (> blocks-count 500)
+                   (not (state/input-idle? repo {:diff 3000}))) ;; long page
+              ;; when this whiteboard page is just being updated
+              (and whiteboard? (not (state/whiteboard-page-idle? repo page-block))))
+        (async/put! (state/get-file-write-chan) [repo page-db-id outliner-op])
+        (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
+              blocks (model/get-page-blocks-no-cache repo (:block/name page-block) {:pull-keys pull-keys})
+              blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)]
+          (when-not (and (= 1 (count blocks))
+                         (string/blank? (:block/content (first blocks)))
+                         (nil? (:block/file page-block)))
+            (let [tree-or-blocks (if whiteboard? blocks
+                                     (tree/blocks->vec-tree repo blocks (:block/name page-block)))]
+              (if page-block
+                (file/save-tree! page-block tree-or-blocks blocks-just-deleted?)
+                (js/console.error (str "can't find page id: " page-db-id))))))))))
 
 (defn write-files!
   [pages]
   (when (seq pages)
     (when-not config/publishing?
-      (doseq [[repo page-id] (set pages)]
-        (try (do-write-file! repo page-id)
+      (doseq [[repo page-id outliner-op] (set pages)]
+        (try (do-write-file! repo page-id outliner-op)
              (catch :default e
                (notification/show!
                 [:div
@@ -81,15 +84,17 @@
                (log/error :file/write-file-error {:error e})))))))
 
 (defn sync-to-file
-  [{page-db-id :db/id}]
-  (if (nil? page-db-id)
-    (notification/show!
-     "Write file failed, can't find the current page!"
-     :error)
-    (when-let [repo (state/get-current-repo)]
-      (if (:graph/importing @state/state) ; write immediately
-        (write-files! [[repo page-db-id]])
-        (async/put! (state/get-file-write-chan) [repo page-db-id (tc/to-long (t/now))])))))
+  ([page]
+   (sync-to-file page nil))
+  ([{page-db-id :db/id} outliner-op]
+   (if (nil? page-db-id)
+     (notification/show!
+      "Write file failed, can't find the current page!"
+      :error)
+     (when-let [repo (state/get-current-repo)]
+       (if (:graph/importing @state/state) ; write immediately
+         (write-files! [[repo page-db-id outliner-op]])
+         (async/put! (state/get-file-write-chan) [repo page-db-id outliner-op (tc/to-long (t/now))]))))))
 
 (def *writes-finished? (atom {}))
 
