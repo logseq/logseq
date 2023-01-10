@@ -502,6 +502,10 @@ html[data-theme='dark'] {
       background-color: var(--ls-secondary-background-color);
     }
   }
+
+  &-handbook-btn {
+    @apply bottom-16;
+  }
 }
 
 .cp__right-sidebar {

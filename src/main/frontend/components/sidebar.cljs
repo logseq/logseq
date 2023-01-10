@@ -12,6 +12,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
+            [frontend.components.handbooks :as handbooks]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -697,6 +698,16 @@
                    (state/sidebar-add-block! (state/get-current-repo) "help" :help))}
       "?"]]))
 
+(rum/defc handbook-button < rum/reactive
+  []
+  (when-not (state/sub :ui/sidebar-open?)
+    [:div.cp__sidebar-help-handbook-btn.cp__sidebar-help-btn
+     [:div.inner
+      {:title    (t :help-shortcut-title)
+       :on-click (fn []
+                   (handbooks/open-handbooks))}
+      "📙"]]))
+
 (rum/defcs ^:large-vars/cleanup-todo sidebar <
   (mixins/modal :modal/show?)
   rum/reactive
@@ -725,6 +736,7 @@
         settings-open? (state/sub :ui/settings-open?)
         left-sidebar-open?  (state/sub :ui/left-sidebar-open?)
         wide-mode? (state/sub :ui/wide-mode?)
+        develop-mode? (state/sub :ui/developer-mode?)
         ls-block-hl-colored? (state/sub :pdf/block-highlight-colored?)
         onboarding-state (state/sub :file-sync/onboarding-state)
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
@@ -813,4 +825,7 @@
       (when
        (and (not config/mobile?)
             (not config/publishing?))
-        (help-button))])))
+        [:<>
+         (when develop-mode?
+           (handbook-button))
+         (help-button)])])))
