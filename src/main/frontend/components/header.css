@@ -17,7 +17,7 @@
   > .l {
     @apply pl-2;
 
-    width: var(--ls-left-sidebar-width);
+    min-width: var(--ls-left-sidebar-width);
     height: 100%;
     align-items: center;
     transition: padding-left .2s;

@@ -24,11 +24,11 @@
   [input]
   (when input
     (walk/postwalk
-      (fn [a]
-        (cond
-          (keyword? a) (csk/->camelCase (name a))
-          (uuid? a) (str a)
-          :else a)) input)))
+     (fn [a]
+       (cond
+         (keyword? a) (csk/->camelCase (name a))
+         (uuid? a) (str a)
+         :else a)) input)))
 
 (defn invoke-exported-api
   [type & args]
@@ -71,42 +71,42 @@
   [refresh?]
   (if (or refresh? (nil? (:plugin/marketplace-pkgs @state/state)))
     (p/create
-      (fn [resolve reject]
-        (let [on-ok (fn [res]
-                      (if-let [res (and res (bean/->clj res))]
-                        (let [pkgs (:packages res)]
-                          (state/set-state! :plugin/marketplace-pkgs pkgs)
-                          (resolve pkgs))
-                        (reject nil)))]
-          (if (state/http-proxy-enabled-or-val?)
-            (-> (ipc/ipc :httpFetchJSON plugins-url)
-                (p/then on-ok)
-                (p/catch reject))
-            (util/fetch plugins-url on-ok reject)))))
+     (fn [resolve reject]
+       (let [on-ok (fn [res]
+                     (if-let [res (and res (bean/->clj res))]
+                       (let [pkgs (:packages res)]
+                         (state/set-state! :plugin/marketplace-pkgs pkgs)
+                         (resolve pkgs))
+                       (reject nil)))]
+         (if (state/http-proxy-enabled-or-val?)
+           (-> (ipc/ipc :httpFetchJSON plugins-url)
+               (p/then on-ok)
+               (p/catch reject))
+           (util/fetch plugins-url on-ok reject)))))
     (p/resolved (:plugin/marketplace-pkgs @state/state))))
 
 (defn load-marketplace-stats
   [refresh?]
   (if (or refresh? (nil? (:plugin/marketplace-stats @state/state)))
     (p/create
-      (fn [resolve reject]
-        (let [on-ok (fn [^js res]
-                      (if-let [res (and res (bean/->clj res))]
-                        (do
-                          (state/set-state!
-                           :plugin/marketplace-stats
-                           (into {} (map (fn [[k stat]]
-                                           [k (assoc stat
-                                                     :total_downloads
-                                                     (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))])
-                                         res)))
-                          (resolve nil))
-                        (reject nil)))]
-          (if (state/http-proxy-enabled-or-val?)
-            (-> (ipc/ipc :httpFetchJSON stats-url)
-                (p/then on-ok)
-                (p/catch reject))
-            (util/fetch stats-url on-ok reject)))))
+     (fn [resolve reject]
+       (let [on-ok (fn [^js res]
+                     (if-let [res (and res (bean/->clj res))]
+                       (do
+                         (state/set-state!
+                          :plugin/marketplace-stats
+                          (into {} (map (fn [[k stat]]
+                                          [k (assoc stat
+                                                    :total_downloads
+                                                    (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))])
+                                        res)))
+                         (resolve nil))
+                       (reject nil)))]
+         (if (state/http-proxy-enabled-or-val?)
+           (-> (ipc/ipc :httpFetchJSON stats-url)
+               (p/then on-ok)
+               (p/catch reject))
+           (util/fetch stats-url on-ok reject)))))
     (p/resolved nil)))
 
 (defn check-or-update-marketplace-plugin
@@ -114,31 +114,45 @@
   (when-not (and (:plugin/installing @state/state)
                  (not (plugin-common-handler/installed? id)))
     (p/catch
-      (p/then
-        (do (state/set-state! :plugin/installing pkg)
-            (p/catch
-              (load-marketplace-plugins false)
-              (fn [^js e]
-                (state/reset-all-updates-state)
-                (throw e))))
-        (fn [mfts]
+     (p/then
+      (do (state/set-state! :plugin/installing pkg)
+          (p/catch
+           (load-marketplace-plugins false)
+           (fn [^js e]
+             (state/reset-all-updates-state)
+             (throw e))))
+      (fn [mfts]
 
-          (let [mft (some #(when (= (:id %) id) %) mfts)]
-            ;;TODO: (throw (js/Error. [:not-found-in-marketplace id]))
-            (ipc/ipc :updateMarketPlugin (merge (dissoc pkg :logger) mft)))
-          true))
+        (let [mft (some #(when (= (:id %) id) %) mfts)]
+          ;;TODO: (throw (js/Error. [:not-found-in-marketplace id]))
+          (ipc/ipc :updateMarketPlugin (merge (dissoc pkg :logger) mft)))
+        true))
 
-      (fn [^js e]
-        (error-handler e)
-        (state/set-state! :plugin/installing nil)
-        (js/console.error e)))))
+     (fn [^js e]
+       (error-handler e)
+       (state/set-state! :plugin/installing nil)
+       (js/console.error e)))))
 
 (defn get-plugin-inst
-  [id]
+  [pid]
   (try
-    (js/LSPluginCore.ensurePlugin (name id))
+    (js/LSPluginCore.ensurePlugin (name pid))
     (catch :default _e
       nil)))
+
+(defn call-plugin-user-model!
+  [pid key args]
+  (when-let [^js pl (get-plugin-inst pid)]
+    (let [^js caller (.-caller pl)]
+      (.apply (.-callUserModelAsync caller) caller (bean/->js (list* (name key) args))))))
+
+(defn call-plugin-user-command!
+  [pid key args]
+  (when-let [commands (and key (seq (get (:plugin/simple-commands @state/state) (keyword pid))))]
+    (when-let [matched (medley/find-first #(= (:key (second %)) key) commands)]
+      (let [[_ cmd action pid] matched]
+        (state/pub-event!
+         [:exec-plugin-cmd {:type type :key key :pid pid :cmd (assoc cmd :args args) :action action}])))))
 
 (defn open-updates-downloading
   []
@@ -168,7 +182,7 @@
 
 (defn setup-install-listener!
   []
-  (let [channel (name :lsp-installed)
+  (let [channel  (name :lsp-installed)
         listener (fn [^js _ ^js e]
                    (js/console.debug :lsp-installed e)
 
@@ -205,7 +219,7 @@
                                           [(str (t :plugin/up-to-date) " :)") :success]
 
                                           [error-code :error])
-                             pending? (seq (:plugin/updates-pending @state/state))]
+                             pending?   (seq (:plugin/updates-pending @state/state))]
 
                          (if (and only-check pending?)
                            (state/consume-updates-coming-plugin payload false)
@@ -217,10 +231,10 @@
 
                              ;; notify human tips
                              (notification/show!
-                               (str
-                                 (if (= :error type) "[Error]" "")
-                                 (str "<" (:id payload) "> ")
-                                 msg) type)))
+                              (str
+                               (if (= :error type) "[Error]" "")
+                               (str "<" (:id payload) "> ")
+                               msg) type)))
 
                          (js/console.error payload))
 
@@ -272,18 +286,18 @@
                                    (get keybinding-mode-handler-map (keyword mode)))
                      :action     (fn []
                                    (state/pub-event!
-                                     [:exec-plugin-cmd {:type type :key key :pid pid :cmd cmd :action action}]))}]
+                                    [:exec-plugin-cmd {:type type :key key :pid pid :cmd cmd :action action}]))}]
     palette-cmd))
 
 (defn simple-cmd-keybinding->shortcut-args
   [pid key keybinding]
-  (let [id (keyword (str "plugin." pid "/" key))
+  (let [id      (keyword (str "plugin." pid "/" key))
         binding (:binding keybinding)
         binding (if util/mac?
                   (or (:mac keybinding) binding)
                   binding)
-        mode (or (:mode keybinding) :global)
-        mode (get keybinding-mode-handler-map (keyword mode))]
+        mode    (or (:mode keybinding) :global)
+        mode    (get keybinding-mode-handler-map (keyword mode))]
     [mode id {:binding binding}]))
 
 (defn register-plugin-simple-command
@@ -320,7 +334,7 @@
       (let [path [:plugin/installed-resources pid type]]
         (when (contains? #{:error nil} (get-in @state/state (conj path key)))
           (swap! state/state update-in path
-            (fnil assoc {}) key (merge opts {:pid pid}))
+                 (fnil assoc {}) key (merge opts {:pid pid}))
           true)))))
 
 (defn unregister-plugin-resources
@@ -344,13 +358,27 @@
   ([pid effect]
    (js/LSPluginCore.unregisterTheme (name pid) effect)))
 
+(defn get-installed-hooks
+  []
+  (:plugin/installed-hooks @state/state))
+
+(defn plugin-hook-installed?
+  [pid hook]
+  (when-let [hooks (and pid (get-installed-hooks))]
+    (contains? (get hooks hook) (keyword pid))))
+
+(defn db-block-hook-installed?
+  [uuid]
+  (when-let [hook (and uuid (str "hook:db:block_" (string/replace (str uuid) "-" "_")))]
+    (boolean (seq (get (get-installed-hooks) hook)))))
+
 (def *fenced-code-providers (atom #{}))
 
 (defn register-fenced-code-renderer
   [pid type {:keys [before subs render edit] :as _opts}]
   (when-let [key (and type (keyword type))]
     (register-plugin-resources pid :fenced-code-renderers
-      {:key key :edit edit :before before :subs subs :render render})
+                               {:key key :edit edit :before before :subs subs :render render})
     (swap! *fenced-code-providers conj pid)
     #(swap! *fenced-code-providers disj pid)))
 
@@ -366,7 +394,7 @@
   [pid type {:keys [enhancer] :as _opts}]
   (when-let [key (and type (keyword type))]
     (register-plugin-resources pid :extensions-enhancers
-       {:key key :enhancer enhancer})
+                               {:key key :enhancer enhancer})
     (swap! *extensions-enhancer-providers conj pid)
     #(swap! *extensions-enhancer-providers disj pid)))
 
@@ -411,11 +439,11 @@
     (when-not (string/blank? content)
       (let [content (if-not (string/blank? url)
                       (string/replace
-                        content #"!\[[^\]]*\]\((.*?)\s*(\"(?:.*[^\"])\")?\s*\)"
-                        (fn [[matched link]]
-                          (if (and link (not (string/starts-with? link "http")))
-                            (string/replace matched link (util/node-path.join url link))
-                            matched)))
+                       content #"!\[[^\]]*\]\((.*?)\s*(\"(?:.*[^\"])\")?\s*\)"
+                       (fn [[matched link]]
+                         (if (and link (not (string/starts-with? link "http")))
+                           (string/replace matched link (util/node-path.join url link))
+                           matched)))
                       content)]
         (format/to-html content :markdown (gp-mldoc/default-config :markdown))))
     (catch :default e
@@ -429,9 +457,9 @@
       ;; local
       (-> (p/let [content (invoke-exported-api "load_plugin_readme" url)
                   content (parse-user-md-content content item)]
-                 (and (string/blank? (string/trim content)) (throw nil))
-                 (state/set-state! :plugin/active-readme [content item])
-                 (state/set-sub-modal! (fn [_] (display))))
+            (and (string/blank? (string/trim content)) (throw nil))
+            (state/set-state! :plugin/active-readme [content item])
+            (state/set-sub-modal! (fn [_] (display))))
           (p/catch #(do (js/console.warn %)
                         (notification/show! "No README content." :warn))))
       ;; market
@@ -441,8 +469,8 @@
   []
   (when util/electron?
     (p/let [path (ipc/ipc "openDialog")]
-           (when-not (:plugin/selected-unpacked-pkg @state/state)
-             (state/set-state! :plugin/selected-unpacked-pkg path)))))
+      (when-not (:plugin/selected-unpacked-pkg @state/state)
+        (state/set-state! :plugin/selected-unpacked-pkg path)))))
 
 (defn reset-unpacked-state
   []
@@ -476,11 +504,17 @@
 
 (defn hook-plugin-block-changes
   [{:keys [blocks tx-data tx-meta]}]
+  (let [tx-data' (group-by first tx-data)
+        blocks'  (filter #(when-let [uuid (:block/uuid %)]
+                            (db-block-hook-installed? uuid)) blocks)]
+    (doseq [b blocks']
+      (let [type (str "block:" (:block/uuid b))]
+        (hook-plugin-db type {:block b :tx-data (get tx-data' (:db/id b)) :tx-meta tx-meta})))))
 
-  (doseq [b blocks
-          :let [tx-data' (group-by first tx-data)
-                type     (str "block:" (:block/uuid b))]]
-    (hook-plugin-db type {:block b :tx-data (get tx-data' (:db/id b)) :tx-meta tx-meta})))
+(defn hook-plugin-block-slot
+  [block payload]
+  (when-let [type (and block (str "slot:" (:block/uuid block)))]
+    (hook-plugin-editor type (merge payload block) nil)))
 
 (defn get-ls-dotdir-root
   []
@@ -533,11 +567,11 @@
 (defn- get-user-default-plugins
   []
   (p/catch
-    (p/let [files ^js (ipc/ipc "getUserDefaultPlugins")
-            files (js->clj files)]
-           (map #(hash-map :url %) files))
-    (fn [e]
-      (js/console.error e))))
+   (p/let [files ^js (ipc/ipc "getUserDefaultPlugins")
+           files (js->clj files)]
+     (map #(hash-map :url %) files))
+   (fn [e]
+     (js/console.error e))))
 
 (defn check-enabled-for-updates
   [theme?]

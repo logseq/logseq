@@ -45,6 +45,7 @@ export interface LogseqContextValue {
     queryBlockByUUID: (uuid: string) => any
     getBlockPageName: (uuid: string) => string
     isWhiteboardPage: (pageName: string) => boolean
+    isMobile: () => boolean
     saveAsset: (file: File) => Promise<string>
     makeAssetUrl: (relativeUrl: string) => string
     sidebarAddBlock: (uuid: string, type: 'block' | 'page') => void

@@ -370,7 +370,7 @@
                  [{:type :graph-add-filter}]
                  result)
         repo (state/get-current-repo)]
-    [:div
+    [:div.results-inner
      (ui/auto-complete
       result
       {:class "search-results"
@@ -378,7 +378,7 @@
        :on-shift-chosen #(search-on-shift-chosen repo search-q %)
        :item-render #(search-item-render search-q %)
        :on-chosen-open-link #(search-on-chosen-open-link repo search-q %)})
-     (when (and has-more? (util/electron?) (not all?))
+     (when (and has-more? (not all?))
        [:div.px-2.py-4.search-more
         [:a.text-sm.font-medium {:href (rfe/href :search {:q search-q})
                                  :on-click (fn []
@@ -411,7 +411,7 @@
                    :theme       "monospace"}
                   [:a.flex.fade-link.items-center
                    {:style {:margin-left 12}
-                    :on-click #(state/toggle! :ui/command-palette-open?)}
+                    :on-click #(state/pub-event! :modal/command-palette)}
                    (ui/icon "command" {:style {:font-size 20}})])])]]
    (let [recent-search (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
          pages (->> (db/get-key-value :recent/pages)
@@ -497,7 +497,7 @@
     [:div.cp__palette.cp__palette-main
      [:div.ls-search.p-2.md:p-0
       [:div.input-wrap
-      [:input.cp__palette-input.w-full
+      [:input.cp__palette-input.w-full.h-full
        {:type          "text"
         :auto-focus    true
         :placeholder   (case search-mode
@@ -554,7 +554,7 @@
                          [:span.pr-2 (ui/icon "puzzle")]
                          (:name v)
                          (when-let [result (and v (:result v))]
-                           (str " (" (count (:blocks result)) ")"))]
+                           (str " (" (apply + (map count ((juxt :blocks :pages :files) result))) ")"))]
                         :on-click #(reset! *active-engine-tab k))])])
 
        (if-not (nil? @*active-engine-tab)

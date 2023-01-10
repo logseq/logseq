@@ -27,6 +27,9 @@
  ;; Show brackets around page references
  ;; :ui/show-brackets? true
 
+ ;; Enable showing the body of blocks when referencing them.
+ :ui/show-full-blocks? false
+
  ;; Enable Block timestamp
  :feature/enable-block-timestamps? false
 

@@ -2492,9 +2492,14 @@
         {:block/keys [format uuid] :as block} (state/get-edit-block)
         id (state/get-edit-input-id)
         repo (state/get-current-repo)
+        editing-block (gdom/getElement (state/get-editing-block-dom-id))
         f (if up? util/get-prev-block-non-collapsed util/get-next-block-non-collapsed)
-        sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))]
-    (when sibling-block
+        sibling-block (f editing-block)
+        same-container? (when (and editing-block sibling-block)
+                          (->> [editing-block sibling-block]
+                               (map (fn [^js b] (.closest b ".blocks-container")))
+                               (apply =)))]
+    (when (and sibling-block same-container?)
       (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
         (let [content (:block/content block)
               value (state/get-edit-content)]
@@ -2720,16 +2725,9 @@
         ;; can't be deleted. Need to figure out why and find a better solution.
         (and (mobile-util/native-platform?)
              (= key "Backspace")
-             (zero? pos))
-        (do
-          (util/stop e)
-          (let [block (state/get-edit-block)
-                top-block? (= (:block/left block) (:block/page block))
-                root-block? (= (:block/container block) (str (:block/uuid block)))
-                repo (state/get-current-repo)]
-            (when (and (if top-block? (string/blank? value) true)
-                       (not root-block?))
-              (delete-block! repo false))))
+             (zero? pos)
+             (string/blank? (.toString (js/window.getSelection))))
+        (keydown-backspace-handler false e)
 
         (and (= key "#")
              (and (> pos 0)
@@ -3218,9 +3216,10 @@
     [{:block a :level 1}
      {:block b :level 2}
      {:block e :level 2}]"
-  [{:keys [collapse? expanded? incremental? root-block]
+  [{:keys [collapse? expanded? incremental? root-block page]
     :or {collapse? false expanded? false incremental? true root-block nil}}]
-  (when-let [page (or (state/get-current-page)
+  (when-let [page (or page
+                      (state/get-current-page)
                       (date/today))]
     (let [block-id (or root-block (parse-uuid page))
           blocks (if block-id
@@ -3406,15 +3405,58 @@
       (expand-all! block-id))))
 
 (defn select-all-blocks!
-  []
+  [{:keys [page]}]
   (if-let [current-input-id (state/get-edit-input-id)]
     (let [input (gdom/getElement current-input-id)
           blocks-container (util/rec-get-blocks-container input)
           blocks (dom/by-class blocks-container "ls-block")]
       (state/exit-editing-and-set-selected-blocks! blocks))
-    (->> (all-blocks-with-level {:collapse? true})
+    (->> (all-blocks-with-level {:page page
+                                 :collapse? true})
          (map (comp gdom/getElementByClass str :block/uuid))
-         state/exit-editing-and-set-selected-blocks!)))
+         state/exit-editing-and-set-selected-blocks!))
+  (state/set-state! :selection/selected-all? true))
+
+(defn select-parent [e]
+  (let [edit-input (some-> (state/get-edit-input-id) gdom/getElement)
+        edit-block (state/get-edit-block)
+        target-element (.-nodeName (.-target e))]
+    (cond
+      ;; editing block fully selected
+      (and edit-block edit-input
+           (= (util/get-selected-text) (.-value edit-input)))
+      (do
+        (util/stop e)
+        (state/exit-editing-and-set-selected-blocks!
+         [(gdom/getElementByClass (str (:block/uuid edit-block)))]))
+
+      edit-block
+      nil
+
+      ;; Focusing other input element, e.g. when editing page title.
+      (contains? #{"INPUT" "TEXTAREA"} target-element)
+      nil
+
+      :else
+      (do
+        (util/stop e)
+        (when-not (:selection/selected-all? @state/state)
+          (if-let [block-id (some-> (first (state/get-selection-blocks))
+                                    (dom/attr "blockid")
+                                    uuid)]
+            (when-let [block (db/entity [:block/uuid block-id])]
+              (let [parent (:block/parent block)]
+                (cond
+                  (= (state/get-current-page) (str (:block/uuid block)))
+                  nil
+
+                  (and parent (:block/parent parent))
+                  (state/exit-editing-and-set-selected-blocks! [(gdom/getElementByClass (:block/uuid parent))])
+
+                  (:block/name parent)
+                  ;; page block
+                  (select-all-blocks! {:page (:block/name parent)}))))
+            (select-all-blocks! {})))))))
 
 (defn escape-editing
   ([]

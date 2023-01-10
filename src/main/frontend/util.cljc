@@ -27,7 +27,8 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [clojure.core.async :as async]
-            [cljs.core.async.impl.channels :refer [ManyToManyChannel]]))
+            [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
+            [medley.core :as medley]))
   (:require
    [clojure.pprint]
    [clojure.string :as string]
@@ -80,32 +81,40 @@
        (sanitizeFilename (str s)))))
 
 #?(:cljs
-   (defn ios?
-     []
-     (utils/ios)))
+   (do
+     (defn- ios*?
+       []
+       (utils/ios))
+     (def ios? (memoize ios*?))))
 
 #?(:cljs
-   (defn safari?
-     []
-     (let [ua (string/lower-case js/navigator.userAgent)]
-       (and (string/includes? ua "webkit")
-            (not (string/includes? ua "chrome"))))))
+   (do
+     (defn- safari*?
+       []
+       (let [ua (string/lower-case js/navigator.userAgent)]
+         (and (string/includes? ua "webkit")
+              (not (string/includes? ua "chrome")))))
+     (def safari? (memoize safari*?))))
 
 #?(:cljs
-   (defn mobile?
-     "Triggering condition: Mobile phones
+   (do
+     (defn- mobile*?
+       "Triggering condition: Mobile phones
         *** Warning!!! ***
         For UX logic only! Don't use for FS logic
         iPad / Android Pad doesn't trigger!"
-     []
-     (when-not node-test?
-       (safe-re-find #"Mobi" js/navigator.userAgent))))
+       []
+       (when-not node-test?
+         (safe-re-find #"Mobi" js/navigator.userAgent)))
+     (def mobile? (memoize mobile*?))))
 
 #?(:cljs
-   (defn electron?
-     []
-     (when (and js/window (gobj/get js/window "navigator"))
-       (gstring/caseInsensitiveContains js/navigator.userAgent " electron"))))
+   (do
+     (defn- electron*?
+       []
+       (when (and js/window (gobj/get js/window "navigator"))
+         (gstring/caseInsensitiveContains js/navigator.userAgent " electron")))
+     (def electron? (memoize electron*?))))
 
 #?(:cljs
    (defn mocked-open-dir-path
@@ -471,30 +480,17 @@
   [s substr]
   (string/starts-with? s substr))
 
-(defn distinct-by
-  [f col]
-  (reduce
-   (fn [acc x]
-     (if (some #(= (f x) (f %)) acc)
-       acc
-       (vec (conj acc x))))
-   []
-   col))
 
-(defn distinct-by-last-wins
-  [f col]
-  (reduce
-   (fn [acc x]
-     (if (some #(= (f x) (f %)) acc)
-       (mapv
-        (fn [v]
-          (if (= (f x) (f v))
-            x
-            v))
-        acc)
-       (vec (conj acc x))))
-   []
-   col))
+#?(:cljs
+   (defn distinct-by
+     [f col]
+     (medley/distinct-by f (seq col))))
+
+#?(:cljs
+   (defn distinct-by-last-wins
+     [f col]
+     {:pre [(sequential? col)]}
+     (reverse (distinct-by f (reverse col)))))
 
 (defn get-git-owner-and-repo
   [repo-url]
@@ -766,13 +762,6 @@
   []
   #?(:cljs (tc/to-long (t/now))))
 
-;; Returns the milliseconds representation of the provided time, in the local timezone.
-;; For example, if you run this function at 10pm EDT in the EDT timezone on May 31st,
-;; it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00.
-#?(:cljs
-   (defn today-at-local-ms [hours mins secs millisecs]
-     (.setHours (js/Date. (.now js/Date)) hours mins secs millisecs)))
-
 (defn d
   [k f]
   (let [result (atom nil)]
@@ -1040,7 +1029,7 @@
 
 #?(:clj
    (defmacro with-time
-     "Evaluates expr and prints the time it took. 
+     "Evaluates expr and prints the time it took.
       Returns the value of expr and the spent time of float number in msecs."
      [expr]
      `(let [start# (cljs.core/system-time)
@@ -1456,3 +1445,23 @@
           (reset! last-mem ret)
           ret)
         @last-mem))))
+
+#?(:cljs
+   (do
+     (def ^:private app-wake-up-from-sleep-chan (async/chan 1))
+     (def app-wake-up-from-sleep-mult (async/mult app-wake-up-from-sleep-chan))
+     (defn <app-wake-up-from-sleep-loop
+       "start a async/go-loop to check the app awake from sleep.
+Use (async/tap `app-wake-up-from-sleep-mult`) to receive messages.
+Arg *stop: atom, reset to true to stop the loop"
+       [*stop]
+       (let [*last-activated-at (volatile! (tc/to-epoch (t/now)))]
+         (async/go-loop []
+           (if @*stop
+             (println :<app-wake-up-from-sleep-loop :stop)
+             (let [now-epoch (tc/to-epoch (t/now))]
+               (when (< @*last-activated-at (- now-epoch 10))
+                 (async/>! app-wake-up-from-sleep-chan {:last-activated-at @*last-activated-at :now now-epoch}))
+               (vreset! *last-activated-at now-epoch)
+               (async/<! (async/timeout 5000))
+               (recur))))))))

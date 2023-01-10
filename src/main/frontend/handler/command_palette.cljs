@@ -52,7 +52,6 @@
 
 (defn invoke-command [{:keys [action] :as cmd}]
   (add-history cmd)
-  (state/set-state! :ui/command-palette-open? false)
   (state/close-modal!)
   (action))
 
