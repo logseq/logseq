@@ -13,14 +13,14 @@
     "electron:make": "electron-forge make",
     "electron:make-macos-arm64": "electron-forge make --platform=darwin --arch=arm64",
     "electron:publish:github": "electron-forge publish",
-    "rebuild:all": "electron-rebuild -v 19.1.8 -f",
+    "rebuild:all": "electron-rebuild -v 20.3.8 -f",
     "postinstall": "install-app-deps"
   },
   "config": {
     "forge": "./forge.config.js"
   },
   "dependencies": {
-    "better-sqlite3": "7.4.5",
+    "better-sqlite3": "8.0.1",
     "chokidar": "^3.5.1",
     "dugite": "1.108.0",
     "electron-dl": "3.3.0",
@@ -44,19 +44,19 @@
     "command-exists": "1.2.9"
   },
   "devDependencies": {
-    "@electron-forge/cli": "^6.0.0-beta.57",
-    "@electron-forge/maker-deb": "^6.0.0-beta.57",
-    "@electron-forge/maker-dmg": "^6.0.0-beta.57",
-    "@electron-forge/maker-rpm": "^6.0.0-beta.57",
-    "@electron-forge/maker-squirrel": "^6.0.0-beta.57",
-    "@electron-forge/maker-zip": "^6.0.0-beta.57",
-    "electron": "19.1.8",
+    "@electron-forge/cli": "^6.0.4",
+    "@electron-forge/maker-deb": "^6.0.4",
+    "@electron-forge/maker-dmg": "^6.0.4",
+    "@electron-forge/maker-rpm": "^6.0.4",
+    "@electron-forge/maker-squirrel": "^6.0.4",
+    "@electron-forge/maker-zip": "^6.0.4",
+    "@electron/rebuild": "3.2.10",
+    "electron": "20.3.8",
     "electron-builder": "^22.11.7",
-    "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git",
-    "electron-rebuild": "3.2.5"
+    "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git"
   },
   "resolutions": {
-    "**/electron": "19.1.8",
+    "**/electron": "20.3.8",
     "**/node-gyp": "9.0.0"
   }
 }

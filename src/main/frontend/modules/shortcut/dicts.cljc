@@ -565,6 +565,8 @@
              :shortcut.category/navigating  "Navigation"
              :shortcut.category/others  "Autres"
              :shortcut.category/toggle  "Basculer"
+             :command.editor/select-parent "Sélectionnez le bloc parent"
+             :command.sidebar/close-top "Ferme l'élément supérieur dans la barre latérale droite"
              }
 
    :af      {:shortcut.category/formatting           "Formatering"
@@ -1020,7 +1022,14 @@
              :command.go/electron-find-in-page        "Procurar texto na página"
              :command.go/electron-jump-to-the-next    "Ir para a próxima correspondência da sua pesquisa"
              :command.go/electron-jump-to-the-previous "Voltar para a correspondência anterior da sua pesquisa"
-             :command.graph/re-index                  "Reindexar o grafo atual"}
+             :command.graph/re-index                  "Reindexar o grafo atual"
+             :command.editor/new-whiteboard           "Novo quadro branco"
+             :command.editor/select-parent            "Selecione o bloco pai"
+             :command.go/whiteboards                  "Ir para os quadros brancos"
+             :command.graph/export-as-html            "Exportar páginas de gráficos públicos como html"
+             :command.pdf/find                        "PDF: Pesquisar no documento PDF atual"
+             :command.sidebar/close-top               "Fechar item superior na barra lateral direita"
+             :command.ui/install-plugins-from-file    "Instalar plugins de plugins.edn"}
 
    :pt-BR   {:shortcut.category/formatting            "Formatação"
              :shortcut.category/basics                "Básico"
@@ -1144,7 +1153,15 @@
              :command.go/electron-find-in-page        "Localizar texto na página"
              :command.go/electron-jump-to-the-next    "Ir para a próxima correspondência da sua pesquisa"
              :command.go/electron-jump-to-the-previous "Voltar para a correspondência anterior da sua pesquisa"
-             :command.graph/re-index                  "Reindexar o grafo atual"}
+             :command.graph/re-index                  "Reindexar o grafo atual"
+             
+             :command.editor/new-whiteboard           "Novo quadro branco"
+             :command.editor/select-parent            "Selecione o bloco pai"
+             :command.go/whiteboards                  "Ir para os quadros brancos"
+             :command.graph/export-as-html            "Exportar páginas de gráficos públicos como html"
+             :command.pdf/find                        "PDF: Pesquisar no documento PDF atual"
+             :command.sidebar/close-top               "Fechar item superior na barra lateral direita"
+             :command.ui/install-plugins-from-file    "Instalar plugins de plugins.edn"}
 
    :ja      {:shortcut.category/formatting            "フォーマット"
              :shortcut.category/basics                "基本操作"
@@ -1522,7 +1539,8 @@
              :command.ui/install-plugins-from-file    "Eklentileri plugins.edn dosyasından yükleyin"
              :command.editor/toggle-open-blocks       "Açık blokları kapat/aç (tüm blokları daralt veya genişlet)"
              :command.ui/toggle-cards                 "Kartları aç/kapat"
-             :command.git/commit                      "Git commit mesajı"}
+             :command.git/commit                      "Git commit mesajı"
+             :command.editor/select-parent            "Ebeveyn bloğunu seçin"}
 
    :ko      {:shortcut.category/formatting             "포맷"
              :shortcut.category/basics                "기본 동작"
