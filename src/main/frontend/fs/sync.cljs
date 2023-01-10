@@ -2725,7 +2725,7 @@
                ^:mutable ratelimit-local-changes-chan
                *txid *txid-for-get-deletion-log
                ^:mutable state ^:mutable remote-change-chan ^:mutable *ws *stopped? *paused?
-               ^:mutable ops-chan
+               ^:mutable ops-chan ^:mutable app-awake-from-sleep-chan
                ;; control chans
                private-full-sync-chan private-remote->local-sync-chan
                private-remote->local-full-sync-chan private-pause-resume-chan]
@@ -2757,6 +2757,7 @@
 
   (start [this]
     (set! ops-chan (chan (async/dropping-buffer 10)))
+    (set! app-awake-from-sleep-chan (chan (async/sliding-buffer 1)))
     (set! *ws (atom nil))
     (set! remote-change-chan (ws-listen! graph-uuid *ws))
     (set! ratelimit-local-changes-chan (<ratelimit local->remote-syncer local-changes-revised-chan))
@@ -2765,6 +2766,7 @@
     (async/tap remote->local-sync-mult private-remote->local-sync-chan)
     (async/tap remote->local-full-sync-mult private-remote->local-full-sync-chan)
     (async/tap pause-resume-mult private-pause-resume-chan)
+    (async/tap util/app-wake-up-from-sleep-mult app-awake-from-sleep-chan)
     (go-loop []
       (let [{:keys [remote->local remote->local-full-sync local->remote-full-sync local->remote resume pause stop]}
             (async/alt!
@@ -2780,8 +2782,9 @@
                                                     vs     (cons v rest-v)]
                                                 (println "local changes:" vs)
                                                 {:local->remote vs})))
+              app-awake-from-sleep-chan {:remote->local true}
               (timeout (* 20 60 1000)) {:local->remote-full-sync true}
-              (timeout (* 5 60 1000)) {:remote->local true}
+              (timeout (* 10 60 1000)) {:remote->local true}
               :priority true)]
         (cond
           stop
@@ -3071,6 +3074,7 @@
         (async/untap remote->local-sync-mult private-remote->local-sync-chan)
         (async/untap remote->local-full-sync-mult private-remote->local-full-sync-chan)
         (async/untap pause-resume-mult private-pause-resume-chan)
+        (async/untap util/app-wake-up-from-sleep-mult app-awake-from-sleep-chan)
         (when ops-chan (async/close! ops-chan))
         (stop-local->remote! local->remote-syncer)
         (stop-remote->local! remote->local-syncer)
@@ -3104,7 +3108,7 @@
     (.set-local->remote-syncer! remote->local-syncer local->remote-syncer)
     (swap! *sync-state sync-state--update-current-syncing-graph-uuid graph-uuid)
     (->SyncManager user-uuid graph-uuid base-path *sync-state local->remote-syncer remote->local-syncer remoteapi-with-stop
-                   nil *txid *txid-for-get-deletion-log nil nil nil *stopped? *paused? nil (chan 1) (chan 1) (chan 1) (chan 1))))
+                   nil *txid *txid-for-get-deletion-log nil nil nil *stopped? *paused? nil nil (chan 1) (chan 1) (chan 1) (chan 1))))
 
 (defn sync-manager-singleton
   [user-uuid graph-uuid base-path repo txid *sync-state]

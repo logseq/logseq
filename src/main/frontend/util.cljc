@@ -1460,9 +1460,7 @@ Arg *stop: atom, reset to true to stop the loop"
            (if @*stop
              (println :<app-wake-up-from-sleep-loop :stop)
              (let [now-epoch (tc/to-epoch (t/now))]
-               (println :now (t/now))
                (when (< @*last-activated-at (- now-epoch 10))
-                 (println :wake {:last-activated-at @*last-activated-at :now now-epoch})
                  (async/>! app-wake-up-from-sleep-chan {:last-activated-at @*last-activated-at :now now-epoch}))
                (vreset! *last-activated-at now-epoch)
                (async/<! (async/timeout 5000))
