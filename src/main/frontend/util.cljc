@@ -1445,3 +1445,25 @@
           (reset! last-mem ret)
           ret)
         @last-mem))))
+
+#?(:cljs
+   (do
+     (def ^:private app-wake-up-from-sleep-chan (async/chan 1))
+     (def app-wake-up-from-sleep-mult (async/mult app-wake-up-from-sleep-chan))
+     (defn <app-wake-up-from-sleep-loop
+       "start a async/go-loop to check the app awake from sleep.
+Use (async/tap `app-wake-up-from-sleep-mult`) to receive messages.
+Arg *stop: atom, reset to true to stop the loop"
+       [*stop]
+       (let [*last-activated-at (volatile! (tc/to-epoch (t/now)))]
+         (async/go-loop []
+           (if @*stop
+             (println :<app-wake-up-from-sleep-loop :stop)
+             (let [now-epoch (tc/to-epoch (t/now))]
+               (println :now (t/now))
+               (when (< @*last-activated-at (- now-epoch 10))
+                 (println :wake {:last-activated-at @*last-activated-at :now now-epoch})
+                 (async/>! app-wake-up-from-sleep-chan {:last-activated-at @*last-activated-at :now now-epoch}))
+               (vreset! *last-activated-at now-epoch)
+               (async/<! (async/timeout 5000))
+               (recur))))))))
