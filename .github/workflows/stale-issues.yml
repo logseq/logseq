@@ -48,13 +48,6 @@ jobs:
 
             Thanks for your contributions to Logseq! If you have any other [**issues**](https://github.com/logseq/logseq/issues/new/choose) or [**feature requests**](https://discuss.logseq.com/c/feature-requests/), please don't hesitate to [let us know](https://github.com/logseq/logseq/issues/new/choose). We always welcome pull requests too!
 
-      - name: 'Print outputs'
-        run: |
-          for key in steps.stale_issues.outputs
-            do
-              printf '%s: %s\n' "${key}" "${steps.stale_issues.outputs[key]}"
-            done
-
       - name: '🧹 Close stale awaiting response issues'
         id: awaiting_issues
         uses: actions/stale@6f05e4244c9a0b2ed3401882b05d701dd0a7289b  # v7
@@ -83,9 +76,3 @@ jobs:
 
             Thanks for your contributions to Logseq! If you have any other [**issues**](https://github.com/logseq/logseq/issues/new/choose) or [**feature requests**](https://discuss.logseq.com/c/feature-requests/), please don't hesitate to [let us know](https://github.com/logseq/logseq/issues/new/choose). We always welcome pull requests too!
 
-      - name: 'Print outputs'
-        run: |
-          for key in steps.awaiting_issues.outputs
-            do
-              printf '%s: %s\n' "${key}" "${steps.awaiting_issues.outputs[key]}"
-            done

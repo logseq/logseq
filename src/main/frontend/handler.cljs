@@ -228,6 +228,7 @@
 
   (db/run-batch-txs!)
   (file/<ratelimit-file-writes!)
+  (util/<app-wake-up-from-sleep-loop (atom false))
 
   (when config/dev?
     (enable-datalog-console))
