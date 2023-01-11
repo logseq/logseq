@@ -223,9 +223,13 @@
         padding: 0;
         margin: 0;
 
+        li {
+          margin: 0;
+        }
+        
         a {
           width: 100%;
-          padding: 2px 24px;
+          padding: 4px 24px;
           transition: background-color .3s;
 
           .page-title {
