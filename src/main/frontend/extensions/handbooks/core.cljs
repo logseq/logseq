@@ -34,7 +34,7 @@
     (let [category (second pane-state)]
       (for [{:keys [title description cover] :as topic} (:children category)]
         [:div.topic-card.flex
-         {:key title
+         {:key      title
           :on-click #(nav! [:topic-detail topic (:title category)] pane-state)}
          (when cover
            [:div.l.flex.items-center
@@ -44,21 +44,20 @@
           [:span description]]]))]])
 
 (rum/defc pane-topic-detail
-  []
+  [_handbooks pane-state nav!]
 
-  [:div.pane.pane-topic-detail
-   [:h1.text-2xl.pb-3.font-semibold "PDF Highlights"]
+  (let [topic (second pane-state)]
+    [:div.pane.pane-topic-detail
+     [:h1.text-2xl.pb-3.font-semibold (:title topic)]
 
-   [:div.flex.demos
-    [:img {:src "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsPWsZWt-6pMQ7mZ-cGuHw2AsDhwxl3quWlA&usqp=CAU"}]]
+     ;; TODO: demo lists
+     (when-let [demo (first (:demos topic))]
+       [:div.flex.demos
+        [:img {:src (resolve-asset-url demo)}]])
 
-   [:div.content-wrap
-    [:div.content
-     "Lorem ipsum dolor sit amet consectetur. Congue vivamus libero consequat
-     tortor lacus nulla sit massa. Imperdiet nec bibendum amet turpis bibendum
-     consequat tortor lacus nulla sit massa. Imperdiet nec bibendum amet turpis bibendum
-     pellentesque. Egestas sit sed lectus dui suspendisse. Mi cursus pharetra
-     sit facilisi consectetur risus."]]])
+     [:div.content-wrap
+      [:div.content.markdown-body
+       {:dangerouslySetInnerHTML {:__html (:content topic)}}]]]))
 
 (rum/defc pane-dashboard
   [handbooks-data pane-state nav-to-pane!]
@@ -123,24 +122,27 @@
         [history-state, set-history-state!]
         (rum/use-state ())
 
-        reset-handbooks!  #(set-handbooks-state! {:status nil :data nil :error nil})
-        update-handbooks! #(set-handbooks-state! (fn [v] (merge v %)))
-        load-handbooks!   (fn []
-                            (reset-handbooks!)
-                            (update-handbooks! {:status :pending})
-                            (-> (p/let [^js res (js/fetch (str Handbooks_ENDPOINT "/handbooks.edn"))
-                                        data    (.text res)]
-                                  (update-handbooks! {:data (edn/read-string data)}))
-                                (p/catch #(update-handbooks! {:error (str %)}))
-                                (p/finally #(update-handbooks! {:status :completed}))))
+        reset-handbooks!     #(set-handbooks-state! {:status nil :data nil :error nil})
+        update-handbooks!    #(set-handbooks-state! (fn [v] (merge v %)))
+        load-handbooks!      (fn []
+                               (reset-handbooks!)
+                               (update-handbooks! {:status :pending})
+                               (-> (p/let [^js res (js/fetch (str Handbooks_ENDPOINT "/handbooks.edn"))
+                                           data    (.text res)]
+                                     (update-handbooks! {:data (edn/read-string data)}))
+                                   (p/catch #(update-handbooks! {:error (str %)}))
+                                   (p/finally #(update-handbooks! {:status :completed}))))
 
-        active-pane       (first active-pane0)
-        pane-render       (first (get panes-mapping active-pane))
-        dashboard?        (= :dashboard active-pane)
+        active-pane          (first active-pane0)
+        pane-render          (first (get panes-mapping active-pane))
+        dashboard?           (= :dashboard active-pane)
+        force-nav-dashboard! (fn []
+                               (set-active-pane0! [:dashboard])
+                               (set-history-state! '()))
 
-        handbooks-loaded? (and (not (empty? (:data handbooks-state)))
-                               (= :completed (:status handbooks-state)))
-        handbooks-data    (:data handbooks-state)]
+        handbooks-loaded?    (and (not (empty? (:data handbooks-state)))
+                                  (= :completed (:status handbooks-state)))
+        handbooks-data       (:data handbooks-state)]
 
     ;; load handbooks
     (rum/use-effect!
@@ -166,6 +168,10 @@
            [:span (or (last active-pane0) "Handbooks")]])]
 
        [:div.flex.items-center.space-x-3
+        (when (> (count history-state) 1)
+          [:a
+           {:on-click #(force-nav-dashboard!)}
+           (ui/icon "home")])
         [:a (ui/icon "settings")]
         [:a {:on-click #(state/toggle! :ui/handbooks-open?)}
          (ui/icon "x")]]]
@@ -190,9 +196,10 @@
             (fn [pane-state prev-state]
               (set-history-state!
                (conj (sequence history-state) prev-state))
-              (set-active-pane0! pane-state))))
+              (set-active-pane0! pane-state))))])]
 
-         ;; footer
-         [:div.ft
-          [:h2.uppercase.opacity-60 "Related"]
-          (related-topics)]])]]))
+     (when handbooks-loaded?
+       ;; footer
+       [:div.ft
+        [:h2.uppercase.opacity-60 "Related"]
+        (related-topics)])]))
