@@ -22,7 +22,9 @@
                              frontend.util/node-path.dirname
                              frontend.util/node-path.join
                              frontend.util/node-path.extname
-                             frontend.util/node-path.name]}
+                             frontend.util/node-path.name
+                             ;; frontend.pubs/def-mult-or-pub generate vars clj-kondo cannot resolve
+                             frontend.pubs]}
 
   :consistent-alias
   {:aliases {cljs.reader reader
@@ -116,7 +118,6 @@
            ;; src/main
            frontend.modules.outliner.datascript/auto-transact! clojure.core/let
            frontend.namespaces/import-vars potemkin/import-vars
-           frontend.pubs/def-mult-or-pub clojure.core/def
            ;; src/test
            frontend.test.helper/deftest-async clojure.test/deftest
            frontend.test.helper/with-reset cljs.test/async
