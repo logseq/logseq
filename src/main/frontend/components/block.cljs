@@ -2245,7 +2245,7 @@
         plugin-slotted? (and config/lsp-enabled? (state/slot-hook-exist? uuid))
         block-ref? (:block-ref? config)
         stop-events? (:stop-events? config)
-        block-ref-with-title? (and block-ref? (seq title))
+        block-ref-with-title? (and block-ref? (not (state/show-full-blocks?)) (seq title))
         block-type (or (:ls-type properties) :default)
         content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)

@@ -136,7 +136,7 @@
 (defn- remove-transit-ids [block] (dissoc block :db/id :block/file))
 
 (defn save-tree-aux!
-  [page-block tree]
+  [page-block tree blocks-just-deleted?]
   (let [page-block (db/pull (:db/id page-block))
         file-db-id (-> page-block :block/file :db/id)
         file-path (-> (db-utils/entity file-db-id) :file/path)]
@@ -146,17 +146,21 @@
                            (up/ugly-pr-str {:blocks tree
                                             :pages (list (remove-transit-ids page-block))})
                            (string/triml))
-                          (tree->file-content tree {:init-level init-level}))
-            files [[file-path new-content]]
-            repo (state/get-current-repo)]
-        (file-handler/alter-files-handler! repo files {} {}))
+                          (tree->file-content tree {:init-level init-level}))]
+        (if (and (string/blank? new-content)
+                 (not blocks-just-deleted?))
+          (state/pub-event! [:capture-error {:error (js/Error. "Empty content")
+                                             :payload {:file-path file-path}}])
+          (let [files [[file-path new-content]]
+                repo (state/get-current-repo)]
+            (file-handler/alter-files-handler! repo files {} {}))))
       ;; In e2e tests, "card" page in db has no :file/path
       (js/console.error "File path from page-block is not valid" page-block tree))))
 
 (defn save-tree!
-  [page-block tree]
+  [page-block tree blocks-just-deleted?]
   {:pre [(map? page-block)]}
-  (let [ok-handler #(save-tree-aux! page-block tree)
+  (let [ok-handler #(save-tree-aux! page-block tree blocks-just-deleted?)
         file (or (:block/file page-block)
                  (when-let [page (:db/id (:block/page page-block))]
                    (:block/file (db-utils/entity page))))]
