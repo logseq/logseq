@@ -1,7 +1,6 @@
 (ns frontend.db.query-react-test
   (:require [cljs.test :refer [deftest is use-fixtures]]
             [cljs-time.core :as t]
-            [clojure.pprint]
             [clojure.string :as string]
             [frontend.state :as state]
             [frontend.date :as date]
@@ -9,7 +8,6 @@
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [frontend.db.query-custom :as query-custom]
             [frontend.db.utils :as db-utils]
-            [frontend.db.react :as react]
             [goog.string :as gstring]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
@@ -19,21 +17,20 @@
   "Use custom-query over react-query for testing since it tests react-query and
 adds rules that users often use"
   [query & [opts]]
-  (react/clear-query-state!)
   (when-let [result (query-custom/custom-query test-helper/test-db query opts)]
     (map first (deref result))))
 
 (defn- blocks-created-between-inputs [a b]
-   (sort
-     (map #(-> % :block/content string/split-lines first)
-          (custom-query {:inputs [a b]
-                         :query '[:find (pull ?b [*])
-                                  :in $ ?start ?end
-                                  :where
-                                  [?b :block/content]
-                                  [?b :block/created-at ?timestamp]
-                                  [(>= ?timestamp ?start)]
-                                  [(<= ?timestamp ?end)]]}))))
+  (sort
+   (map #(-> % :block/content string/split-lines first)
+        (custom-query {:inputs [a b]
+                       :query '[:find (pull ?b [*])
+                                :in $ ?start ?end
+                                :where
+                                [?b :block/content]
+                                [?b :block/created-at ?timestamp]
+                                [(>= ?timestamp ?start)]
+                                [(<= ?timestamp ?end)]]}))))
 
 (defn- blocks-journaled-between-inputs [a b]
   (map :block/content (custom-query {:inputs [a b]
@@ -303,3 +300,24 @@ created-at:: %s"
 
     (is (= ["+1d"] (blocks-on-journal-page-from-block-with-content :query-page "+1d"))
         ":query-page resolves to the parent page when called from another page")))
+
+(deftest cache-input-for-page-inputs
+  (load-test-files [{:file/path "pages/content.md"
+                     :file/content
+                     "- 1 #item1
+- 2 #item2"}])
+
+  (letfn [(query-content-in-page [current-page]
+            (with-redefs [state/get-current-page (constantly current-page)]
+              (map :block/content
+                   (custom-query {:inputs [:current-page]
+                                  :query '[:find (pull ?b [*])
+                                           :in $ ?current-page
+                                           :where
+                                           [?p :page/name ?current-page]
+                                           [?b :block/ref-pages ?p]
+                                           [?b :block/page ?bp]
+                                           [?bp :page/name ?bp-name]]}))))]
+
+    (let [i1 (query-content-in-page "item1") i2 (query-content-in-page "item2")]
+      (is (not= i1 i2) ":current-page input is not corrected cached"))))
