@@ -8,9 +8,13 @@
             [frontend.handler.notification :as notification]
             [promesa.core :as p]))
 
+
+;; TODO how to parse file: 	getAsFile () => URL.createObjectURL (file)
+;; TODO how to collect data: Just parse into JSON or edn
+
 (defn retrieve-text-from-clipboard-blob [data]
   (let [type (.-type data)]
-    (if (string/includes? type "text/") ;; TODO regex
+    (if (string/includes? type "text/") ;; TODO regex MIME text
       (p/let [text (.text data)] [type text]) ;; process it
       (p/let [_ data] [type data]))))
 
@@ -35,9 +39,7 @@
 (rum/defc bug-report-tool-clipboard
   "bug report tool for clipboard"
   []
-  (let [[clipboard-text set-clipboard-text!] (rum/use-state "") ;; TODO not just these text, should display and collect any other text
-        [clipboard-html set-clipboard-html!] (rum/use-state "")
-        [result set-result!] (rum/use-state {}) ;; TODO use it
+  (let [[result set-result!] (rum/use-state {}) ;; TODO use it
         [step set-step!] (rum/use-state 0)
         on-click-read-data-from-clipboard! (fn []
                                              (-> (p/let [premission (js/navigator.permissions.query (clj->js {:name "clipboard-read"}))]
@@ -52,24 +54,24 @@
                                                             (-> blob-data
                                                                 (clj->js)
                                                                 (js/console.log))
-                                                            (set-step! 1)
 
                                                             (js/console.log (clj->js (parse-clipboard-obj-data blob-data "Blobs")))
                                                             (p/let [result (parse-clipboard-obj-data blob-data "Blobs")
                                                                     result (into {} result)]
                                                               (js/console.log (clj->js result))
-                                                              (set-result! result))))))
+                                                              (set-result! result)
+                                                              (set-step! 1))))))
                                                  (p/catch (fn [err] (notification/show! (str err))))))
 
         paste-handler! (fn [e]
                          (let [clipboard-data (.-clipboardData e)]
                         ;;    (js/console.log (.-items clipboard-data))
-                           (set-step! 1)
 
                            (p/let [result (parse-clipboard-obj-data clipboard-data "dataTransfer")
                                    result (into {} result)]
                              (js/console.log (clj->js result))
-                             (set-result! result))))
+                             (set-result! result)
+                             (set-step! 1))))
 
         reset-step! (fn [] ((set-step! 0)
                             (set-result! {})))]
@@ -99,18 +101,15 @@
          [:div "Something wrong, no problem, click the click to go back previous step"]
          (ui/button "Go back" :on-click reset-step!)]
 
-        ;; TODO table component
-        [:h2.text-xl "Result"]
-        [:div result]
-
-     ;; TODO refactor them to table cp
-        [:div "text"]
-        [:pre [:code clipboard-text]]
-        [:div "text/html"]
-        [:pre [:code clipboard-html]] ;; TODO height limit 
-        [:div "files"]
-     ;; TODO list thire brief info in text
-        [:pre [:code clipboard-html]]))]))
+    ;;     ;; TODO table component 
+        [:div "TODO: list parsed result"]
+        ;; TODO .types
+        ;; TODO type | getData(type)
+        [:div "---"]
+        [:div (str result)]
+        ;; TODO files
+        ;; TODO .files list
+        ))]))
 
 (rum/defc bug-report-tool-route
   [route-match]
