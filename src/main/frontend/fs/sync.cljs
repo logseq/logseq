@@ -27,6 +27,7 @@
             [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.encrypt :as encrypt]
+            [frontend.pubs :as pubs]
             [logseq.graph-parser.util :as gp-util]
             [medley.core :refer [dedupe-by]]
             [rum.core :as rum]
@@ -2766,7 +2767,7 @@
     (async/tap remote->local-sync-mult private-remote->local-sync-chan)
     (async/tap remote->local-full-sync-mult private-remote->local-full-sync-chan)
     (async/tap pause-resume-mult private-pause-resume-chan)
-    (async/tap util/app-wake-up-from-sleep-mult app-awake-from-sleep-chan)
+    (async/tap pubs/app-wake-up-from-sleep-mult app-awake-from-sleep-chan)
     (go-loop []
       (let [{:keys [remote->local remote->local-full-sync local->remote-full-sync local->remote resume pause stop]}
             (async/alt!
@@ -3074,7 +3075,7 @@
         (async/untap remote->local-sync-mult private-remote->local-sync-chan)
         (async/untap remote->local-full-sync-mult private-remote->local-full-sync-chan)
         (async/untap pause-resume-mult private-pause-resume-chan)
-        (async/untap util/app-wake-up-from-sleep-mult app-awake-from-sleep-chan)
+        (async/untap pubs/app-wake-up-from-sleep-mult app-awake-from-sleep-chan)
         (when ops-chan (async/close! ops-chan))
         (stop-local->remote! local->remote-syncer)
         (stop-remote->local! remote->local-syncer)

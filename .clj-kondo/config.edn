@@ -116,6 +116,7 @@
            ;; src/main
            frontend.modules.outliner.datascript/auto-transact! clojure.core/let
            frontend.namespaces/import-vars potemkin/import-vars
+           frontend.pubs/def-mult-or-pub clojure.core/def
            ;; src/test
            frontend.test.helper/deftest-async clojure.test/deftest
            frontend.test.helper/with-reset cljs.test/async
