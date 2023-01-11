@@ -184,25 +184,26 @@
   ([pdf hl] (ensure-ref-block! pdf hl nil))
   ([pdf-current {:keys [id content page properties]} insert-opts]
    (when-let [ref-page (and pdf-current (resolve-ref-page pdf-current))]
-     (if-let [ref-block (db-model/query-block-by-uuid id)]
-       (do
-         (println "[existed ref block]" ref-block)
-         ref-block)
-       (let [text       (:text content)
-             wrap-props #(if-let [stamp (:image content)]
-                           (assoc % :hl-type "area" :hl-stamp stamp) %)]
+     (let [ref-block (db-model/query-block-by-uuid id)]
+       (if-not (nil? (:block/content ref-block))
+         (do
+           (println "[existed ref block]" ref-block)
+           ref-block)
+         (let [text       (:text content)
+               wrap-props #(if-let [stamp (:image content)]
+                             (assoc % :hl-type "area" :hl-stamp stamp) %)]
 
-         (when (string? text)
-           (editor-handler/api-insert-new-block!
-            text (merge {:page        (:block/name ref-page)
-                         :custom-uuid id
-                         :properties  (wrap-props
-                                       {:ls-type  "annotation"
-                                        :hl-page  page
-                                        :hl-color (:color properties)
-                                        ;; force custom uuid
-                                        :id       (str id)})}
-                        insert-opts))))))))
+           (when (string? text)
+             (editor-handler/api-insert-new-block!
+              text (merge {:page        (:block/name ref-page)
+                           :custom-uuid id
+                           :properties  (wrap-props
+                                         {:ls-type  "annotation"
+                                          :hl-page  page
+                                          :hl-color (:color properties)
+                                          ;; force custom uuid
+                                          :id       (str id)})}
+                          insert-opts)))))))))
 
 (defn del-ref-block!
   [{:keys [id]}]
