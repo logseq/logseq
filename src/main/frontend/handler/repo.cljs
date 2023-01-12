@@ -24,7 +24,6 @@
             [promesa.core :as p]
             [shadow.resource :as rc]
             [frontend.db.persist :as db-persist]
-            [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.config :as gp-config]
             [electron.ipc :as ipc]
