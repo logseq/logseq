@@ -5,8 +5,7 @@
             [frontend.util :as util]
             [reitit.frontend.easy :as rfe]
             [clojure.string :as string]
-            [frontend.handler.notification :as notification]
-            [promesa.core :as p]))
+            [frontend.handler.notification :as notification]))
 
 (defn parse-clipboard-data-transfer
   "parse dataTransfer
