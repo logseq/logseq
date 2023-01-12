@@ -91,7 +91,7 @@
             :style    {:background-color (or color "#676767")}
             :on-click #(nav-to-pane! [:topics category title] pane-state)}
            [:strong title]
-           [:span (str (count children) " articles")]]))]]))
+           [:span (str (count children) " topics")]]))]]))
 
 (rum/defc pane-settings
   [dev-watch? set-dev-watch?]
