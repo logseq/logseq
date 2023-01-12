@@ -5,6 +5,8 @@
    [frontend.ui :as ui]
    [frontend.state :as state]
    [promesa.core :as p]
+   [camel-snake-kebab.core :as csk]
+   [frontend.util :as util]
    [clojure.edn :as edn]))
 
 (def Handbooks_ENDPOINT
@@ -26,22 +28,26 @@
    opts
    child])
 
+(rum/defc topic-card
+  [{:keys [key title description cover] :as topic} nav-fn!]
+  [:div.topic-card.flex
+   {:key      key
+    :on-click nav-fn!}
+   (when cover
+     [:div.l.flex.items-center
+      [:img {:src (resolve-asset-url cover)}]])
+   [:div.r.flex.flex-col
+    [:strong title]
+    [:span description]]])
+
 (rum/defc pane-category-topics
   [_handbooks-data pane-state nav!]
 
   [:div.pane.pane-category-topics
    [:div.topics-list
     (let [category (second pane-state)]
-      (for [{:keys [title description cover] :as topic} (:children category)]
-        [:div.topic-card.flex
-         {:key      title
-          :on-click #(nav! [:topic-detail topic (:title category)] pane-state)}
-         (when cover
-           [:div.l.flex.items-center
-            [:img {:src (resolve-asset-url cover)}]])
-         [:div.r.flex.flex-col
-          [:strong title]
-          [:span description]]]))]])
+      (for [topic (:children category)]
+        (topic-card topic #(nav! [:topic-detail topic (:title category)] pane-state))))]])
 
 (rum/defc pane-topic-detail
   [_handbooks pane-state nav!]
@@ -60,28 +66,30 @@
        {:dangerouslySetInnerHTML {:__html (:content topic)}}]]]))
 
 (rum/defc pane-dashboard
-  [handbooks-data pane-state nav-to-pane!]
-  [:div.pane.dashboard-pane
-   [:h2 "Popular topics"]
-   [:div.topics-list
-    (take
-     3 (repeat
-        [:div.topic-card.flex
-         [:div.l ""]
-         [:div.r.flex.flex-col
-          [:strong "Switching your notetaking process"]
-          [:span "What makes Logseq different from your previous tools?"]]]))]
+  [handbooks-nodes pane-state nav-to-pane!]
+  (when-let [root (get handbooks-nodes "__root")]
+    [:div.pane.dashboard-pane
+     (when-let [popular-topics (:popular-topics root)]
+       [:<>
+        [:h2 "Popular topics"]
+        [:div.topics-list
+         (for [topic-key popular-topics]
+           (when-let [topic (and (string? topic-key)
+                                 (->> (util/safe-lower-case topic-key)
+                                      (csk/->snake_case_string)
+                                      (get handbooks-nodes)))]
+             (topic-card topic #(nav-to-pane! [:topic-detail topic "Helps"] [:dashboard]))))]])
 
-   [:h2 "Help categories"]
-   [:div.categories-list
-    (let [categories (:children handbooks-data)]
-      (for [{:keys [title children color] :as category} categories]
-        [:div.category-card
-         {:key      title
-          :style    {:background-color (or color "#676767")}
-          :on-click #(nav-to-pane! [:topics category title] pane-state)}
-         [:strong title]
-         [:span (str (count children) " articles")]]))]])
+     [:h2 "Help categories"]
+     [:div.categories-list
+      (let [categories (:children root)]
+        (for [{:keys [key title children color] :as category} categories]
+          [:div.category-card
+           {:key      key
+            :style    {:background-color (or color "#676767")}
+            :on-click #(nav-to-pane! [:topics category title] pane-state)}
+           [:strong title]
+           [:span (str (count children) " articles")]]))]]))
 
 (rum/defc pane-settings
   []
@@ -119,6 +127,9 @@
         [handbooks-state, set-handbooks-state!]
         (rum/use-state nil)
 
+        [handbooks-nodes, set-handbooks-nodes!]
+        (rum/use-state nil)
+
         [history-state, set-history-state!]
         (rum/use-state ())
 
@@ -148,6 +159,14 @@
     (rum/use-effect!
      #(load-handbooks!)
      [])
+
+    (rum/use-effect!
+     (fn []
+       (when handbooks-data
+         (set-handbooks-nodes!
+          (->> (tree-seq map? :children handbooks-data)
+               (reduce #(assoc %1 (or (:key %2) "__root") %2) {})))))
+     [handbooks-data])
 
     [:div.cp__handbooks-content
      [:div.pane-wrap
@@ -191,7 +210,7 @@
          ;; entry pane
          (when pane-render
            (pane-render
-            handbooks-data
+            handbooks-nodes
             active-pane0
             (fn [pane-state prev-state]
               (set-history-state!
