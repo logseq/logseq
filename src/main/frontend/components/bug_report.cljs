@@ -108,7 +108,7 @@
    [:div.rounded-lg.bg-gray-200.p-8.mt-8
     [:h1.text-2xl "Is the bug you encountered related to these fields?"]
     [:div.opacity-60 "You can use these handy tools to give us additional information"]
-    (report-item-button "Clipboard"
+    (report-item-button "Clipboard helper"
                  "Inspect and collect clipboard data"
                  "clipboard"
                  {:on-click #(util/open-url (rfe/href :bug-report-tools {:tool "clipboard-data-inspector"}))})
@@ -116,4 +116,4 @@
     [:div.flex.flex-col
      [:h1.text-2xl "Or..."]
      [:div.opacity-60 "If there are no tools available for you to gather additional information, please report the bug directly"]
-     (report-item-button "Report bug" "Submit a bug report" "message-report" {:on-click #(util/open-url header/bug-report-url)})]]])
+     (report-item-button "Submit a bug report" "message-report" {:on-click #(util/open-url header/bug-report-url)})]]])
