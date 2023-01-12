@@ -1,10 +1,10 @@
-(ns frontend.pubs
+(ns frontend.pubsub
   "All mults and pubs are collected to this ns.
   vars with suffix '-mult' is a/Mult, use a/tap and a/untap on them. used by event subscribers
   vars with suffix '-pub' is a/Pub, use a/sub and a/unsub on them. used by event subscribers
   vars with suffix '-ch' is chan used by event publishers."
   {:clj-kondo/config {:linters {:unresolved-symbol {:level :off}}}}
-  #?(:cljs (:require-macros [frontend.pubs :refer [def-mult-or-pub chan-of]]))
+  #?(:cljs (:require-macros [frontend.pubsub :refer [def-mult-or-pub chan-of]]))
   (:require [clojure.core.async :as a :refer [chan mult pub]]
             [clojure.core.async.impl.protocols :as ap]
             [malli.core :as m]

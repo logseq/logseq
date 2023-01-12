@@ -29,7 +29,7 @@
             [clojure.core.async :as async]
             [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
             [medley.core :as medley]
-            [frontend.pubs :as pubs]))
+            [frontend.pubsub :as pubsub]))
   (:require
    [clojure.pprint]
    [clojure.string :as string]
@@ -1451,7 +1451,7 @@
    (do
      (defn <app-wake-up-from-sleep-loop
        "start a async/go-loop to check the app awake from sleep.
-Use (async/tap `pubs/app-wake-up-from-sleep-mult`) to receive messages.
+Use (async/tap `pubsub/app-wake-up-from-sleep-mult`) to receive messages.
 Arg *stop: atom, reset to true to stop the loop"
        [*stop]
        (let [*last-activated-at (volatile! (tc/to-epoch (t/now)))]
@@ -1460,7 +1460,7 @@ Arg *stop: atom, reset to true to stop the loop"
              (println :<app-wake-up-from-sleep-loop :stop)
              (let [now-epoch (tc/to-epoch (t/now))]
                (when (< @*last-activated-at (- now-epoch 10))
-                 (async/>! pubs/app-wake-up-from-sleep-ch {:last-activated-at @*last-activated-at :now now-epoch}))
+                 (async/>! pubsub/app-wake-up-from-sleep-ch {:last-activated-at @*last-activated-at :now now-epoch}))
                (vreset! *last-activated-at now-epoch)
                (async/<! (async/timeout 5000))
                (recur))))))))
