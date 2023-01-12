@@ -8,13 +8,6 @@
             [frontend.handler.notification :as notification]
             [promesa.core :as p]))
 
-
-;; TODO how to parse file: 	getAsFile () => URL.createObjectURL (file)
-;; TODO how to collect data: Just parse into JSON or edn
-
-;; TODO types vs files
-
-
 (defn parse-clipboard-data-transfer
   "parse dataTransfer
    
@@ -22,65 +15,67 @@
    
    output: {:types {:type :data} :items {:kind :type} :files {:name :size :type}}"
   [data]
-  (js/console.log "Parse starts..." (clj->js data))
-  (let [types (.-types data)
-        result (map (fn [type] [type (.getData data type)]) types)]
-    (js-debugger)
-    result))
+  (let [items (.-items data)
+        types (.-types data)
+        files (.-files data)]
+    (conj
+     {:items (->> items
+                  (map (fn [item] {:kind (.-kind item) :type (.-type item)}))
+                  (conj))}
+     {:types (->> types
+                  (map (fn [type] {:type type :data (.getData data type)}))
+                  (conj))}
+     {:files (->> files
+                  (map (fn [file] {:name (.-name file) :type (.-type file) :size (.-size file)}))
+                  (conj))})))
 
 (rum/defc bug-report-tool-clipboard
   "bug report tool for clipboard"
   []
-  (let [[result set-result!] (rum/use-state {}) ;; TODO use it
+  (let [[result set-result!] (rum/use-state {})
         [step set-step!] (rum/use-state 0)
         paste-handler! (fn [e]
-                         (let [clipboard-data (.-clipboardData e)]
-                           (let [result (parse-clipboard-data-transfer clipboard-data)
-                                 result (into {} result)]
-                             (js/console.log (clj->js result))
-                             (set-result! result)
-                             (set-step! 1))))
+                         (let [clipboard-data (.-clipboardData e)
+                               result (parse-clipboard-data-transfer clipboard-data)
+                               result (into {} result)]
+                           (set-result! result)
+                           (set-step! 1)))
+
+        copy-result-to-clipboard! (fn [result] (->>
+                                                (p/let [_ (js/navigator.clipboard.writeText result)]
+                                                  (notification/show! "Copied to clipboard!"))
+                                                (p/catch (fn [e] (notification/show! e)))))
 
         reset-step! (fn [] ((set-step! 0)
                             (set-result! {})))]
 
     (rum/use-effect!
      (fn []
-       (js/addEventListener "paste" paste-handler!)
-       #(js/removeEventListener "paste" paste-handler!))
+       (cond (= step 0) (js/addEventListener "paste" paste-handler!))
+       (fn [] (cond (= step 0) (js/removeEventListener "paste" paste-handler!))))
      [step]) ;; when step === 0
 
     [:div.flex.flex-col
      (when (= step 0)
        (list [:div.mx-auto "1. Press Ctrl+V / ⌘+V to inspect your clipboard data"]
              [:div.mx-auto "or click here to paste if you are using mobile phone"]
-            ;;  [:div.mx-auto (ui/button "Read data from clipboard" :on-click on-click-read-data-from-clipboard!)]
-
-             ;; TODO use a textarea to get paste from mobile
-             ))
+             ;; for mobile
+             [:input {:type "text"}]))
 
      (when (= step 1)
        (list
         [:div "Here is the data read from clipboard."]
         [:div.flex.justify-between.items-center.mt-2
          [:div "If it is Okay, you can click the button to copy the result to your clipboard"]
-         (ui/button "Copy the result" :on-click (fn [] (notification/show! "Succuessfully copied to clipboard!")))]
+         (ui/button "Copy the result" :on-click #(copy-result-to-clipboard! (js/JSON.stringify (clj->js result) nil 2)))]
         [:div.flex.justify-between.items-center.mt-2
-         [:div "Now you can report with the result pasted to your clipboard. Please paste the result to Additional Context. Thanks!"]
+         [:div "Now you can report with the result pasted to your clipboard. Please paste the result to Additional Context and state where you copied the original content from. Thanks!"]
          (ui/button "Create an issue" :href header/bug-report-url)]
         [:div.flex.justify-between.items-center.mt-2
-         [:div "Something wrong, no problem, click the click to go back previous step"]
+         [:div "Something wrong? No problem, click here to go to previous step."]
          (ui/button "Go back" :on-click reset-step!)]
 
-    ;;     ;; TODO table component 
-        [:div "TODO: list parsed result"]
-        ;; TODO .types
-        ;; TODO type | getData(type)
-        [:div "---"]
-        [:div (str result)]
-        ;; TODO files
-        ;; TODO .files list
-        ))]))
+        [:pre.whitespace-pre-wrap [:code (js/JSON.stringify (clj->js result) nil 2)]]))]))
 
 (rum/defc bug-report-tool-route
   [route-match]
