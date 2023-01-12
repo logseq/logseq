@@ -183,7 +183,7 @@
    Error: EACCES: permission denied, scandir '/tmp/test'
    Permission denied for path: '/tmp/test' (Code: EACCES)"
   [e]
-  (->>
+  (some->>
    e
    str
    ;; Message parsed as "Error: $ERROR_CODE$: $REASON$, function $PATH$"
@@ -201,7 +201,8 @@
         (catch js/Error e 
           (do
             (utils/send-to-renderer window "notification" {:type "error"
-                                                           :payload (str "Opening the specified directory failed.\n" (pretty-print-js-error e))})
+                                                           :payload (str "Opening the specified directory failed.\n"
+                                                                         (or (pretty-print-js-error e) (str "Unexpected error: " e)))})
             (p/rejected e))))
 
       (p/rejected (js/Error "path empty")))))
