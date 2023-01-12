@@ -61,20 +61,20 @@
              ;; for mobile
              [:input.form-input.is-large.transition.duration-150.ease-in-out {:type "text" :placeholder "Long press here to paste if you are on mobile"}]
              [:div.flex.justify-between.items-center.mt-2
-              [:div "Something wrong? No problem, click here to go to the previous step."]
+              [:div "Something wrong? No problem, click to go back to the previous step."]
               (ui/button "Go back" :on-click #(util/open-url (rfe/href :bug-report)))]))
 
      (when (= step 1)
        (list
         [:div "Here is the data read from clipboard."]
         [:div.flex.justify-between.items-center.mt-2
-         [:div "If it is Okay, click the button to copy the result to your clipboard."]
+         [:div "If this is okay to share, click the copy button."]
          (ui/button "Copy the result" :on-click #(copy-result-to-clipboard! (js/JSON.stringify (clj->js result) nil 2)))]
         [:div.flex.justify-between.items-center.mt-2
-         [:div "Now you can report the result pasted to your clipboard. Please paste the result to Additional Context and state where you copied the original content from. Thanks!"]
+         [:div "Now you can report the result pasted to your clipboard. Please paste the result in the 'Additional Context' section and state where you copied the original content from. Thanks!"]
          (ui/button "Create an issue" :href header/bug-report-url)]
         [:div.flex.justify-between.items-center.mt-2
-         [:div "Something wrong? No problem, click here to go to the previous step."]
+         [:div "Something wrong? No problem, click to go back to the previous step."]
          (ui/button "Go back" :on-click reset-step!)]
 
         [:pre.whitespace-pre-wrap [:code (js/JSON.stringify (clj->js result) nil 2)]]))]))
@@ -103,11 +103,10 @@
     [:div.flex.items-center.mb-2
      (ui/icon "bug")
      [:h1.text-3xl.ml-2 "Bug report"]]
-    [:div.opacity-60 "Oops, looks like something went wrong.."]
-    [:div.opacity-60 "Can you help us out by submitting a bug report? We'll get it sorted out as soon as we can"]]
+    [:div.opacity-60 "Can you help us out by submitting a bug report? We'll get it sorted out as soon as we can."]]
    [:div.cp__bug-report-reporter.rounded-lg.p-8.mt-8
-    [:h1.text-2xl "Is the bug you encountered related to these fields?"]
-    [:div.opacity-60 "You can use these handy tools to give us additional information"]
+    [:h1.text-2xl "Is the bug you encountered related to these features?"]
+    [:div.opacity-60 "You can use these handy tools to give us additional information."]
     (report-item-button "Clipboard helper"
                  "Inspect and collect clipboard data"
                  "clipboard"
@@ -115,5 +114,5 @@
     [:div.py-2] ;; divider
     [:div.flex.flex-col
      [:h1.text-2xl "Or..."]
-     [:div.opacity-60 "If there are no tools available for you to gather additional information, please report the bug directly"]
+     [:div.opacity-60 "If there are no tools available for you to gather additional information, please report the bug directly."]
      (report-item-button "Submit a bug report" "Help Make Logseq Better!" "message-report" {:on-click #(util/open-url header/bug-report-url)})]]])

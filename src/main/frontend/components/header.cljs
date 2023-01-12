@@ -70,6 +70,7 @@
     (str "https://github.com/logseq/logseq/issues/new?"
          "title=&"
          "template=bug_report.yaml&"
+         "labels=from:in-app&"
          "platform="
          (js/encodeURIComponent platform))))
 
