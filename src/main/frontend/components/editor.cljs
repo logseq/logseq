@@ -454,7 +454,7 @@
   (let [content (if content (str content) "")
         heading (-> block :block/properties :heading)
         heading (if (true? heading)
-                  (min (+ (:block/level block) 1) 6)
+                  (min (inc (:block/level block)) 6)
                   heading)]
     ;; as the function is binding to the editor content, optimization is welcome
     (js/console.log (:block/level block))
