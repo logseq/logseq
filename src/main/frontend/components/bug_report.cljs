@@ -58,7 +58,10 @@
        (list [:div.mx-auto "Press Ctrl+V / ⌘+V to inspect your clipboard data"]
              [:div.mx-auto "or click here to paste if you are using the mobile version"]
              ;; for mobile
-             [:input {:type "text"}]))
+             [:input.form-input.is-large.transition.duration-150.ease-in-out {:type "text" :placeholder "Long press here to paste if you are on mobile"}]
+             [:div.flex.justify-between.items-center.mt-2
+              [:div "Something wrong? No problem, click here to go to the previous step."]
+              (ui/button "Go back" :on-click #(util/open-url (rfe/href :bug-report)))]))
 
      (when (= step 1)
        (list
@@ -98,7 +101,7 @@
     [:div.opacity-60 "More information you feedback to us, more efficient we will fix that bug."]
     [:div.opacity-60 "You can use these handy tools to provide extra information to us."]
     [:div.flex.flex-col
-     [:a.flex.items-center.rounded-lg.bg-gray-300.p-2.my-2 {:on-click
+     [:a.flex.items-center.rounded-lg.bg-gray-300.px-4.py-2.my-2 {:on-click
                                                             #(util/open-url (rfe/href :bug-report-tools {:tool "clipboard-data-inspector"}))}
       [(ui/icon "clipboard")
        [:div.flex.flex-col.ml-2
@@ -108,6 +111,10 @@
     [:div.flex.flex-col
      [:h1.text-2xl "Or..."]
      [:div.opacity-60 "Directly report the bug if there is no tool for you to collect extra information."]
-     [:div.flex.mt-4.items-center
-      [:div.mr-2 "Click the button to report"]
-      (ui/button "Go" :href header/bug-report-url)]]]])
+     [:a.flex.items-center.rounded-lg.bg-gray-300.px-4.py-2.my-2 {:on-click
+                                                            #(util/open-url header/bug-report-url)}
+      [(ui/icon "message-report")
+       [:div.flex.flex-col.ml-2
+        [:div  "Report bug"]
+        [:div.opacity-60  "Write a bug report to us"]]]
+      ]]]])
