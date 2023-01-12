@@ -10,7 +10,7 @@
    [clojure.edn :as edn]))
 
 (def Handbooks_ENDPOINT
-  (if-not (state/developer-mode?)
+  (if (state/developer-mode?)
     "http://localhost:1337"
     "https://handbooks.pages.dev"))
 
@@ -41,29 +41,31 @@
     [:span description]]])
 
 (rum/defc pane-category-topics
-  [_handbooks-data pane-state nav!]
+  [handbook-nodes pane-state nav!]
 
   [:div.pane.pane-category-topics
    [:div.topics-list
-    (let [category (second pane-state)]
-      (for [topic (:children category)]
-        (topic-card topic #(nav! [:topic-detail topic (:title category)] pane-state))))]])
+    (let [category-key (:key (second pane-state))]
+      (when-let [category (get handbook-nodes category-key)]
+        (for [topic (:children category)]
+          (topic-card topic #(nav! [:topic-detail topic (:title category)] pane-state)))))]])
 
 (rum/defc pane-topic-detail
-  [_handbooks pane-state nav!]
+  [handbook-nodes pane-state nav!]
 
-  (let [topic (second pane-state)]
-    [:div.pane.pane-topic-detail
-     [:h1.text-2xl.pb-3.font-semibold (:title topic)]
+  (when-let [topic-key (:key (second pane-state))]
+    (when-let [topic (get handbook-nodes topic-key)]
+      [:div.pane.pane-topic-detail
+       [:h1.text-2xl.pb-3.font-semibold (:title topic)]
 
-     ;; TODO: demo lists
-     (when-let [demo (first (:demos topic))]
-       [:div.flex.demos
-        [:img {:src (resolve-asset-url demo)}]])
+       ;; TODO: demo lists
+       (when-let [demo (first (:demos topic))]
+         [:div.flex.demos
+          [:img {:src (resolve-asset-url demo)}]])
 
-     [:div.content-wrap
-      [:div.content.markdown-body
-       {:dangerouslySetInnerHTML {:__html (:content topic)}}]]]))
+       [:div.content-wrap
+        [:div.content.markdown-body
+         {:dangerouslySetInnerHTML {:__html (:content topic)}}]]])))
 
 (rum/defc pane-dashboard
   [handbooks-nodes pane-state nav-to-pane!]
@@ -92,26 +94,35 @@
            [:span (str (count children) " articles")]]))]]))
 
 (rum/defc pane-settings
-  []
+  [dev-watch? set-dev-watch?]
   [:div.pane.pane-settings
-   [:h1 "Settings content"]])
+   [:div.item
+    [:p.flex.items-center.space-x-3.mb-0
+     [:strong "Development watch"]
+     (ui/toggle dev-watch? #(set-dev-watch? (not dev-watch?)) true)]
+    [:small.opacity-30 (str "Resources from " Handbooks_ENDPOINT)]]])
 
 (rum/defc search-bar
-  []
-  [:div.search.relative
-   [:span.icon.absolute.opacity-90
-    {:style {:top 6 :left 7}}
-    (ui/icon "search" {:size 12})]
-   [:input {:placeholder "Search"
-            :auto-focus  true}]])
+  [active-pane]
+  (let [*input-ref (rum/use-ref nil)]
+
+    (rum/use-effect!
+     #(some-> (rum/deref *input-ref)
+              (.focus))
+     [active-pane])
+
+    [:div.search.relative
+     [:span.icon.absolute.opacity-90
+      {:style {:top 6 :left 7}}
+      (ui/icon "search" {:size 12})]
+     [:input {:placeholder "Search"
+              :auto-focus  true
+              :ref         *input-ref}]]))
 
 (rum/defc related-topics
   []
   [:div.related-topics
-   (link-card {}
-              [:strong.text-md "How to do something?"])
-   (link-card {}
-              [:strong.text-md "How to do something?"])])
+   (link-card {} [:strong.text-md "How to do something?"])])
 
 (def panes-mapping
   {:dashboard    [pane-dashboard]
@@ -133,16 +144,20 @@
         [history-state, set-history-state!]
         (rum/use-state ())
 
+        [dev-watch?, set-dev-watch?]
+        (rum/use-state (state/developer-mode?))
+
         reset-handbooks!     #(set-handbooks-state! {:status nil :data nil :error nil})
         update-handbooks!    #(set-handbooks-state! (fn [v] (merge v %)))
         load-handbooks!      (fn []
-                               (reset-handbooks!)
-                               (update-handbooks! {:status :pending})
-                               (-> (p/let [^js res (js/fetch (str Handbooks_ENDPOINT "/handbooks.edn"))
-                                           data    (.text res)]
-                                     (update-handbooks! {:data (edn/read-string data)}))
-                                   (p/catch #(update-handbooks! {:error (str %)}))
-                                   (p/finally #(update-handbooks! {:status :completed}))))
+                               (when-not (= :pending (:status handbooks-state))
+                                 (reset-handbooks!)
+                                 (update-handbooks! {:status :pending})
+                                 (-> (p/let [^js res (js/fetch (str Handbooks_ENDPOINT "/handbooks.edn"))
+                                             data    (.text res)]
+                                       (update-handbooks! {:data (edn/read-string data)}))
+                                     (p/catch #(update-handbooks! {:error (str %)}))
+                                     (p/finally #(update-handbooks! {:status :completed})))))
 
         active-pane          (first active-pane0)
         pane-render          (first (get panes-mapping active-pane))
@@ -153,12 +168,32 @@
 
         handbooks-loaded?    (and (not (empty? (:data handbooks-state)))
                                   (= :completed (:status handbooks-state)))
-        handbooks-data       (:data handbooks-state)]
+        handbooks-data       (:data handbooks-state)
+        nav-to-pane!         (fn [pane-state prev-state]
+                               (set-history-state!
+                                (conj (sequence history-state) prev-state))
+                               (set-active-pane0! pane-state))]
 
     ;; load handbooks
     (rum/use-effect!
      #(load-handbooks!)
      [])
+
+    (rum/use-effect!
+     (fn []
+       (let [*cnt-len (atom 0)
+             check!   (fn []
+                        (-> (p/let [^js res (js/fetch (str Handbooks_ENDPOINT "/handbooks.edn") #js{:method "HEAD"})]
+                              (when-let [cl (.get (.-headers res) "content-length")]
+                                (when (not= @*cnt-len cl)
+                                  (println "[Handbooks] dev reload!")
+                                  (load-handbooks!))
+                                (reset! *cnt-len cl)))
+                            (p/catch #(println "[Handbooks] dev check Error:" %))))
+             timer0   (if dev-watch?
+                        (js/setInterval check! 2000) 0)]
+         #(js/clearInterval timer0)))
+     [dev-watch?])
 
     (rum/use-effect!
      (fn []
@@ -188,11 +223,9 @@
 
        [:div.flex.items-center.space-x-3
         (when (> (count history-state) 1)
-          [:a
-           {:on-click #(force-nav-dashboard!)}
-           (ui/icon "home")])
-        [:a (ui/icon "settings")]
-        [:a {:on-click #(state/toggle! :ui/handbooks-open?)}
+          [:a.flex.items-center {:on-click #(force-nav-dashboard!)} (ui/icon "home")])
+        [:a.flex.items-center {:on-click #(nav-to-pane! [:settings nil "Settings"] active-pane0)} (ui/icon "settings")]
+        [:a.flex.items-center {:on-click #(state/toggle! :ui/handbooks-open?)}
          (ui/icon "x")]]]
 
       (when-not handbooks-loaded?
@@ -205,20 +238,23 @@
         [:<>
          ;; search bar
          (when (or dashboard? (= :topics active-pane))
-           (search-bar))
+           (search-bar active-pane))
 
          ;; entry pane
          (when pane-render
-           (pane-render
-            handbooks-nodes
-            active-pane0
-            (fn [pane-state prev-state]
-              (set-history-state!
-               (conj (sequence history-state) prev-state))
-              (set-active-pane0! pane-state))))])]
+           (apply pane-render
+                  (case active-pane
+                    :settings
+                    [dev-watch? set-dev-watch?]
+
+                    ;; default inputs
+                    [handbooks-nodes active-pane0 nav-to-pane!])))])]
 
      (when handbooks-loaded?
        ;; footer
        [:div.ft
-        [:h2.uppercase.opacity-60 "Related"]
-        (related-topics)])]))
+        [:p [:span.text-xs.opacity-40 "Join community for more help!"]]
+        (when (= :topic-detail active-pane)
+          [:<>
+           [:h2.uppercase.opacity-60 "Related"]
+           (related-topics)])])]))
