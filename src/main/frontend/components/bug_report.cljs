@@ -116,4 +116,4 @@
     [:div.flex.flex-col
      [:h1.text-2xl "Or..."]
      [:div.opacity-60 "If there are no tools available for you to gather additional information, please report the bug directly"]
-     (report-item-button "Submit a bug report" "" "message-report" {:on-click #(util/open-url header/bug-report-url)})]]])
+     (report-item-button "Submit a bug report" "Help Make Logseq Better!" "message-report" {:on-click #(util/open-url header/bug-report-url)})]]])
