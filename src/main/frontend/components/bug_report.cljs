@@ -9,9 +9,9 @@
 
 (defn parse-clipboard-data-transfer
   "parse dataTransfer
-   
+
    input: dataTransfer
-   
+
    output: {:types {:type :data} :items {:kind :type} :files {:name :size :type}}"
   [data]
   (let [items (.-items data)
@@ -44,8 +44,9 @@
                                     (util/copy-to-clipboard! result)
                                     (notification/show! "Copied to clipboard!"))
 
-        reset-step! (fn [] ((set-step! 0)
-                            (set-result! {})))]
+        reset-step! (fn []
+                      (set-step! 0)
+                      (set-result! {}))]
 
     (rum/use-effect!
      (fn []
@@ -88,7 +89,7 @@
        (clipboard-data-inspector))]))
 
 (rum/defc report-item-button
-  [title description icon-name {:keys [on-click]}] 
+  [title description icon-name {:keys [on-click]}]
    [:a.cp__bug-report-item-button.flex.items-center.px-4.py-2.my-2.rounded-lg {:on-click on-click}
     [(ui/icon icon-name)
      [:div.flex.flex-col.ml-2
