@@ -20,6 +20,7 @@
             [logseq.db.schema :as db-schema]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util.db :as db-util]
             [logseq.graph-parser.util :as gp-util]))
 
 ;; lazy loading
@@ -1048,7 +1049,7 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-journals-length
   []
-  (let [today (db-utils/date->int (js/Date.))]
+  (let [today (db-util/date->int (js/Date.))]
     (d/q '[:find (count ?page) .
            :in $ ?today
            :where
@@ -1065,7 +1066,7 @@ independent of format as format specific heading characters are stripped"
    (when (conn/get-db repo-url)
      (let [date (js/Date.)
            _ (.setDate date (- (.getDate date) (dec n)))
-           today (db-utils/date->int (js/Date.))]
+           today (db-util/date->int (js/Date.))]
        (->>
         (react/q repo-url [:frontend.db.react/journals] {:use-cache? false}
                  '[:find [(pull ?page [*]) ...]

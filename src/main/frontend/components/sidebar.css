@@ -223,9 +223,13 @@
         padding: 0;
         margin: 0;
 
+        li {
+          margin: 0;
+        }
+        
         a {
           width: 100%;
-          padding: 2px 24px;
+          padding: 4px 24px;
           transition: background-color .3s;
 
           .page-title {
@@ -267,6 +271,7 @@
     width: 100%;
     padding: 14px;
     background-image: linear-gradient(transparent, var(--ls-primary-background-color));
+    user-select: none;
 
     @screen sm {
       background-image: linear-gradient(transparent, var(--ls-secondary-background-color));
@@ -504,6 +509,7 @@ html[data-theme='dark'] {
   transition: width 0.3s;
   background-color: var(--ls-secondary-background-color, #d8e1e8);
   position: relative;
+  user-select: none;
 
   .resizer {
     @apply absolute top-0 bottom-0;

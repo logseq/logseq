@@ -49,8 +49,8 @@ export class TLViewport {
   }
 
   @action update = ({ point, zoom }: Partial<{ point: number[]; zoom: number }>): this => {
-    if (point !== undefined) this.camera.point = point
-    if (zoom !== undefined) this.camera.zoom = zoom
+    if (point !== undefined && !isNaN(point[0]) && !isNaN(point[1])) this.camera.point = point
+    if (zoom !== undefined && !isNaN(zoom)) this.camera.zoom = Math.min(4, Math.max(0.1, zoom))
     return this
   }
 
@@ -133,9 +133,7 @@ export class TLViewport {
     return this
   }
 
-  /**
-   * Animate the camera to the given position
-   */
+  /** Animate the camera to the given position */
   animateCamera = ({ point, zoom }: { point: number[]; zoom: number }) => {
     return this.animateToViewport({
       minX: -point[0],

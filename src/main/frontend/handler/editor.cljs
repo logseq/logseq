@@ -2725,16 +2725,9 @@
         ;; can't be deleted. Need to figure out why and find a better solution.
         (and (mobile-util/native-platform?)
              (= key "Backspace")
-             (zero? pos))
-        (do
-          (util/stop e)
-          (let [block (state/get-edit-block)
-                top-block? (= (:block/left block) (:block/page block))
-                root-block? (= (:block/container block) (str (:block/uuid block)))
-                repo (state/get-current-repo)]
-            (when (and (if top-block? (string/blank? value) true)
-                       (not root-block?))
-              (delete-block! repo false))))
+             (zero? pos)
+             (string/blank? (.toString (js/window.getSelection))))
+        (keydown-backspace-handler false e)
 
         (and (= key "#")
              (and (> pos 0)
@@ -3426,7 +3419,8 @@
 
 (defn select-parent [e]
   (let [edit-input (some-> (state/get-edit-input-id) gdom/getElement)
-        edit-block (state/get-edit-block)]
+        edit-block (state/get-edit-block)
+        target-element (.-nodeName (.-target e))]
     (cond
       ;; editing block fully selected
       (and edit-block edit-input
@@ -3437,6 +3431,10 @@
          [(gdom/getElementByClass (str (:block/uuid edit-block)))]))
 
       edit-block
+      nil
+
+      ;; Focusing other input element, e.g. when editing page title.
+      (contains? #{"INPUT" "TEXTAREA"} target-element)
       nil
 
       :else

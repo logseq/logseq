@@ -366,6 +366,12 @@
           logical-outdenting?
           config-handler/toggle-logical-outdenting!))
 
+(defn showing-full-blocks [t show-full-blocks?]
+  (toggle "show_full_blocks"
+          (t :settings-page/show-full-blocks)
+          show-full-blocks?
+          config-handler/toggle-show-full-blocks!))
+
 (defn preferred-pasting-file [t preferred-pasting-file?]
   (toggle "preferred_pasting_file"
           (t :settings-page/preferred-pasting-file)
@@ -607,6 +613,7 @@
         enable-timetracking? (state/enable-timetracking?)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)
+        show-full-blocks? (state/show-full-blocks?)
         preferred-pasting-file? (state/preferred-pasting-file?)
         enable-tooltip? (state/enable-tooltip?)
         enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
@@ -622,6 +629,7 @@
 
      (when (util/electron?) (switch-spell-check-row t))
      (outdenting-row t logical-outdenting?)
+     (showing-full-blocks t show-full-blocks?)
      (preferred-pasting-file t preferred-pasting-file?)
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (shortcut-tooltip-row t enable-shortcut-tooltip?))

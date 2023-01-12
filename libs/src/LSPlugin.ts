@@ -317,7 +317,7 @@ export interface IPluginSearchServiceHooks {
 
   onIndiceInit: (graph: string) => Promise<SearchIndiceInitStatus>
   onIndiceReset: (graph: string) => Promise<void>
-  onBlocksChanged: (graph: string, changes: { added: Array<SearchBlockItem>, removed: Array<BlockEntity> }) => Promise<void>
+  onBlocksChanged: (graph: string, changes: { added: Array<SearchBlockItem>, removed: Array<EntityID> }) => Promise<void>
   onGraphRemoved: (graph: string, opts?: {}) => Promise<any>
 }
 
@@ -518,7 +518,7 @@ export interface IAppProxy {
   onSidebarVisibleChanged: IUserHook<{ visible: boolean }>
 
   // internal
-  _installPluginHook: (pid: string, hook: string) => void
+  _installPluginHook: (pid: string, hook: string, opts?: any) => void
   _uninstallPluginHook: (pid: string, hookOrAll: string | boolean) => void
 }
 

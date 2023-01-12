@@ -152,8 +152,8 @@ To write a test that uses a datascript db:
 #### Performance tests
 To write a performance test:
 
-* Use `frontend.util/with-time-number` to get the time in ms. 
- 
+* Use `frontend.util/with-time-number` to get the time in ms.
+
 * Example:
   ```clojure
   (are [x timeout] (>= timeout (:time (util/with-time-number (block/normalize-block x true))))
@@ -202,6 +202,10 @@ and clojurescript. See `frontend.schema.handler.plugin-config` for an example.
 By following these conventions, these should also be usable by babashka. This is
 helpful as it allows for third party tools to be written with logseq's data
 model.
+
+## Auto-formatting
+
+Currently the codebase is not formatted/indented consistently. We loosely follow https://github.com/bbatsov/clojure-style-guide. [cljfmt](https://cljdoc.org/d/cljfmt/) is a common formatter used for Clojure, analogous to Prettier for other languages. You can do so easily with the [Calva](https://marketplace.visualstudio.com/items?itemName=betterthantomorrow.calva) extension in [VSCode](https://code.visualstudio.com/): It will (mostly) indent your code correctly as you type, and you can move your cursor to the start of the line(s) you've written and press `Tab` to auto-indent all Clojure forms nested under the one starting on the current line.
 
 ## Development Tools
 

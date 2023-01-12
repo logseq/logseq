@@ -34,6 +34,7 @@
                      {:plugins                 true ; pdf
                       :nodeIntegration         false
                       :nodeIntegrationInWorker false
+                      :sandbox                 false
                       :webSecurity             (not dev?)
                       :contextIsolation        true
                       :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
