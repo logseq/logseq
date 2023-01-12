@@ -457,7 +457,6 @@
                   (min (inc (:block/level block)) 6)
                   heading)]
     ;; as the function is binding to the editor content, optimization is welcome
-    (js/console.log (:block/level block))
     (str
      (if (or (> (.-length content) 1000)
              (string/includes? content "\n"))
