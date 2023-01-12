@@ -660,7 +660,9 @@
     (do
       (notification/show! [:div "Please add some content first."] :warning)
       (restore-state))
-    (state/set-editor-action! :datepicker)))
+    (do
+      (state/set-timestamp-block! nil)
+      (state/set-editor-action! :datepicker))))
 
 (defmethod handle-step :editor/click-hidden-file-input [[_ _input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]
