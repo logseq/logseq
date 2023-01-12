@@ -1913,14 +1913,12 @@
         bg-color (:background-color properties)
         ;; `heading-level` is for backward compatiblity, will remove it in later releases
         heading-level (:block/heading-level t)
-        heading (:heading properties)
-        heading (if heading
-                  (if (true? heading)
-                    (min (inc level) 6)
-                    heading)
-                  (and heading-level
-                       (<= heading-level 6)
-                       heading-level))
+        heading (or
+                 (and heading-level
+                      (<= heading-level 6)
+                      heading-level)
+                 (:heading properties))
+        heading (if (true? heading) (min (inc level) 6) heading)
         elem (if heading
                (keyword (str "h" heading
                              (when block-ref? ".inline")))
