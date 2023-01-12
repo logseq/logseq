@@ -27,6 +27,7 @@
   (text/remove-level-spaces content format (config/get-block-pattern format)))
 
 (defn search
+  "The aggretation of search results"
   ([q]
    (search (state/get-current-repo) q))
   ([repo q]

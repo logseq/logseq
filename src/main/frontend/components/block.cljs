@@ -2245,7 +2245,7 @@
         plugin-slotted? (and config/lsp-enabled? (state/slot-hook-exist? uuid))
         block-ref? (:block-ref? config)
         stop-events? (:stop-events? config)
-        block-ref-with-title? (and block-ref? (seq title))
+        block-ref-with-title? (and block-ref? (not (state/show-full-blocks?)) (seq title))
         block-type (or (:ls-type properties) :default)
         content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
@@ -2611,14 +2611,23 @@
    (editor-handler/unhighlight-blocks!)))
 
 (defn- block-drop
-  [event uuid target-block *move-to]
+  [^js event uuid target-block *move-to]
   (util/stop event)
   (when-not (dnd-same-block? uuid)
     (let [block-uuids (state/get-selection-block-ids)
           lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
           selected (db/pull-many (state/get-current-repo) '[*] lookup-refs)
-          blocks (if (seq selected) selected [@*dragging-block])]
-      (dnd/move-blocks event blocks target-block @*move-to)))
+          blocks (if (seq selected) selected [@*dragging-block])
+          blocks (remove-nils blocks)]
+      (if-not (seq blocks)
+        (when-let [text (.getData (.-dataTransfer event) "text/plain")]
+          (editor-handler/api-insert-new-block!
+           text
+           {:block-uuid  uuid
+            :edit-block? false
+            :sibling?    (= @*move-to :sibling)
+            :before?     (= @*move-to :top)}))
+        (dnd/move-blocks event blocks target-block @*move-to))))
   (block-drag-end event *move-to))
 
 (defn- block-mouse-over

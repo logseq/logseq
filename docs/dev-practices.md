@@ -11,8 +11,8 @@ this section, run `bb dev:lint`.
 ### Clojure code
 
 To lint:
-```
-clojure -M:clj-kondo --lint src
+```sh
+clojure -M:clj-kondo --parallel --lint src --cache false
 ```
 
 We lint our Clojure(Script) code with https://github.com/clj-kondo/clj-kondo/. If you need to configure specific linters, see [this documentation](https://github.com/clj-kondo/clj-kondo/blob/master/doc/linters.md). Where possible, a global linting configuration is used and namespace specific configuration is avoided.
@@ -27,7 +27,7 @@ There are outstanding linting items that are currently ignored to allow linting 
 We use https://github.com/borkdude/carve to detect unused vars in our codebase.
 
 To run this linter:
-```
+```sh
 bb lint:carve
 ```
 
@@ -35,7 +35,7 @@ By default, the script runs in CI mode which prints unused vars if they are
 found. The script can be run in an interactive mode which prompts for keeping
 (ignoring) an unused var or removing it. Run this mode with:
 
-```
+```sh
 bb lint:carve '{:interactive true}'
 ```
 
@@ -46,7 +46,7 @@ why a var is ignored to help others understand why it's unused.
 
 Large vars have a lot of complexity and make it hard for the team to maintain
 and understand them. To run this linter:
-```
+```sh
 bb lint:large-vars
 ```
 
@@ -55,7 +55,7 @@ To configure the linter, see the `[:tasks/config :large-vars]` path of bb.edn.
 ### Document namespaces
 
 Documentation helps teams share their knowledge and enables more individuals to contribute to the codebase. Documenting our namespaces is a good first step to improving our documentation. To run this linter:
-```
+```sh
 bb lint:ns-docstrings
 ```
 
@@ -83,7 +83,7 @@ We have unit and end to end tests.
 
 To run end to end tests
 
-``` bash
+```sh
 yarn electron-watch
 # in another shell
 yarn e2e-test # or npx playwright test
@@ -91,8 +91,9 @@ yarn e2e-test # or npx playwright test
 
 If e2e failed after first running:
 - `rm -rdf ~/.logseq`
+- `rm -rdf ~/.config/Logseq`
 - `rm -rdf <repo dir>/tmp/`  
-- `rm -rdf <appData dir>/Electron`  (Reference: https://www.electronjs.org/de/docs/latest/api/app#appgetpathname)
+- Windows: `rmdir /s %APPDATA%/Electron`  (Reference: https://www.electronjs.org/de/docs/latest/api/app#appgetpathname)
 
 If e2e tests fail, they can be debugged by examining a trace dump with [the
 playwright trace
@@ -212,3 +213,20 @@ Currently the codebase is not formatted/indented consistently. We loosely follow
 There are some babashka tasks under `nbb:` which are useful for inspecting
 database changes in realtime. See [these
 docs](https://github.com/logseq/bb-tasks#logseqbb-tasksnbbwatch) for more info.
+
+## FAQ
+
+If dev app launch failed after electron upgrade:
+```sh
+yarn
+yarn watch
+```
+In another window:
+```sh
+cd static
+yarn
+cd ..
+yarn dev-electron-app
+``` 
+and kill all electron process
+Then a normal start happens via `yarn dev-electron-app`
