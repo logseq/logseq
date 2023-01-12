@@ -1,10 +1,24 @@
 name: Bug Report
 description: Report a bug encountered while using Logseq
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you very much for opening a bug report with Logseq.
+
+        If you have a feature idea or need help, please go to [our Forum](https://discuss.logseq.com/) or [our Discord](https://discord.com/invite/KpN4eHY).
+  - type: checkboxes
+    id: confirm-search
+    attributes:
+      label: Search first
+      description: Please search [existing issues](https://github.com/logseq/logseq/issues) and the [Logseq Forum](https://discuss.logseq.com/) before reporting.
+      options:
+        - label: I searched and no similar issues were found
+          required: true
   - type: textarea
     id: problem
     attributes:
-      label: What happened?
+      label: What Happened?
       description: |
         Please provide as much info as possible. Not doing so may result in your bug not being addressed in a timely manner.
     validations:
@@ -31,33 +45,24 @@ body:
     validations:
       required: false
   - type: textarea
-    id: Screenshots
+    id: screenshots
     attributes:
       label: Screenshots
       description: |
-        If applicable, add screenshots to help explain your problem.
+        If applicable, add screenshots or screen recordings to help explain your problem.
     validations:
       required: false
   - type: textarea
-    id: desktop
+    id: platform
     attributes:
-      label: Desktop Platform Information
+      label: Desktop or Mobile Platform Information
       description: |
-        Would you mind to tell us the system information about your desktop platform?
+        Would you mind to tell us the system information about your desktop or mobile platform?
       placeholder: |
         OS version, Browser or App, Logseq App version
-        example: MacOS 12.2, App, v0.5.9
-    validations:
-      required: false
-  - type: textarea
-    id: mobile
-    attributes:
-      label: Mobile Platform Information
-      description: |
-        Would you mind to tell us the system information about your mobile platform?
-      placeholder: |
-        Device, OS version, Browser or App, Logseq App version
-        example: iPhone6, iOS8.1, App, v0.5.9
+        example: macOS 12.2, Desktop App v0.5.9
+        example: iPhone 12, iOS8.1, v0.5.9
+        example: Pixel XL, Android 12, v0.5.9
     validations:
       required: false
   - type: textarea
@@ -68,3 +73,11 @@ body:
         If applicable, add additional context to help explain your problem.
     validations:
       required: false
+
+  - type: checkboxes
+    id: ask-pr
+    attributes:
+      label: Are you willing to submit a PR?
+      description: Your contributions are greatly appreciated and play a vital role in helping to improve the project!
+      options:
+        - label: I'm willing to submit a PR (Thank you!)

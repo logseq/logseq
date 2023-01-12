@@ -1,4 +1,5 @@
-(ns logseq.graph-parser.utf8)
+(ns logseq.graph-parser.utf8
+  "Utf8 utilities used by the parser")
 
 (defonce encoder
   (js/TextEncoder. "utf-8"))

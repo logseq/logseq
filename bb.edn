@@ -1,16 +1,17 @@
 {:paths ["scripts/src" "src/main"]
  :deps
- {org.babashka/spec.alpha
-  {:git/url "https://github.com/babashka/spec.alpha"
-   :sha "1a841c4cc1d4f6dab7505a98ed2d532dd9d56b78"}
+ {metosin/malli
+  {:mvn/version "0.9.1"}
   logseq/bb-tasks
   #_{:local/root "../bb-tasks"}
   {:git/url "https://github.com/logseq/bb-tasks"
-   :git/sha "abb32ccd26405d56fd28a29d56f3cb902b8c4334"}
+   :git/sha "4295d5df0458cc06a09c5d506510ee49b785407d"}
   logseq/graph-parser
-  {:local/root "deps/graph-parser"}}
+  {:local/root "deps/graph-parser"}
+  org.clj-commons/digest
+  {:mvn/version "1.4.100"}}
  :pods
- {clj-kondo/clj-kondo {:version "2022.02.09"}
+ {clj-kondo/clj-kondo {:version "2022.10.05"}
   org.babashka/fswatcher {:version "0.0.3"}}
  :tasks
  {dev:desktop-watch
@@ -59,6 +60,12 @@
   dev:validate-local-storage
   logseq.tasks.spec/validate-local-storage
 
+  dev:validate-plugins-edn
+  logseq.tasks.malli/validate-plugins-edn
+
+  dev:validate-config-edn
+  logseq.tasks.malli/validate-config-edn
+
   dev:lint
   logseq.tasks.dev/lint
 
@@ -67,6 +74,9 @@
 
   lint:carve
   logseq.bb-tasks.lint.carve/-main
+
+  lint:ns-docstrings
+  logseq.bb-tasks.lint.ns-docstrings/-main
 
   nbb:watch
   logseq.bb-tasks.nbb.watch/watch
@@ -96,4 +106,10 @@
    ;; TODO: Address vars tagged with cleanup-todo. These
    ;; are left mostly because they are not high priority
    ;; or not well understood
-   :metadata-exceptions #{:large-vars/cleanup-todo}}}}
+   :metadata-exceptions #{:large-vars/cleanup-todo}}
+
+  :ns-docstrings
+  {:paths ["src/main"]
+   ;; Ignore namespaces that won't be helpful to document initially
+   ;; e.g. frontend.components.onboarding -> "Onboarding fns"
+   :ignore-regex "^(frontend.components|frontend.extensions|frontend.modules|frontend.mobile)"}}}

@@ -1,18 +1,14 @@
 (ns frontend.handler.common
+  "Common fns for handlers"
   (:require [cljs-bean.core :as bean]
             [cljs.reader :as reader]
             [clojure.string :as string]
-            [dommy.core :as d]
-            [frontend.config :as config]
             [frontend.date :as date]
-            [frontend.db :as db]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.property :as property]
             [goog.object :as gobj]
-            ["ignore" :as Ignore]
-            [lambdaisland.glogi :as log]
-            [borkdude.rewrite-edn :as rewrite]))
+            ["ignore" :as Ignore]))
 
 (defn copy-to-clipboard-without-id-property!
   [format raw-text html]
@@ -51,10 +47,6 @@
                 (hidden? path patterns))) files)
     files))
 
-(defn get-config
-  [repo-url]
-  (db/get-file repo-url (config/get-config-path)))
-
 (defn safe-read-string
   [content error-message-or-handler]
   (try
@@ -64,28 +56,6 @@
       (if (fn? error-message-or-handler)
         (error-message-or-handler e)
         (println error-message-or-handler))
-      {})))
-
-(defn read-config
-  [content]
-  (safe-read-string content
-                    (fn [_e]
-                      (state/pub-event! [:backup/broken-config (state/get-current-repo) content])
-                      (reader/read-string config/config-default-content))))
-
-(defn reset-config!
-  [repo-url content]
-  (when-let [content (or content (get-config repo-url))]
-    (let [config (read-config content)]
-      (state/set-config! repo-url config)
-      config)))
-
-(defn read-metadata!
-  [content]
-  (try
-    (reader/read-string content)
-    (catch :default e
-      (log/error :parse/metadata-failed e)
       {})))
 
 (defn get-page-default-properties
@@ -116,29 +86,8 @@
 
 (defn show-custom-context-menu! [e context-menu-content]
   (util/stop e)
-  (let [client-x (gobj/get e "clientX")
-        client-y (gobj/get e "clientY")
-        scroll-y (util/cur-doc-top)]
-    (state/show-custom-context-menu! context-menu-content)
-
-    ;; FIXME: use setTimeout here because rum renders lazily.
-    (js/setTimeout
-     (fn []
-       (when-let [context-menu (d/by-id "custom-context-menu")]
-        (d/set-style! context-menu
-                      :left (str client-x "px")
-                      :top (str (+ scroll-y client-y) "px"))))
-     10)))
-
-(defn parse-config
-  "Parse configuration from file `content` such as from config.edn."
-  [content]
-  (try
-    (rewrite/parse-string content)
-    (catch :default e
-      (log/error :parse/config-failed e)
-      (state/pub-event! [:backup/broken-config (state/get-current-repo) content])
-      (rewrite/parse-string config/config-default-content))))
+  (let [position [(gobj/get e "clientX") (gobj/get e "clientY")]]
+    (state/show-custom-context-menu! context-menu-content position)))
 
 (defn listen-to-scroll!
   [element]

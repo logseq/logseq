@@ -1,5 +1,5 @@
 (ns logseq.graph-parser.block
-  "Block related code needed for graph-parser"
+  "Given mldoc ast, prepares block data in preparation for db transaction"
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -10,7 +10,9 @@
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.graph-parser.util.page-ref :as page-ref]))
 
 (defn heading-block?
   [block]
@@ -49,25 +51,21 @@
 
                   (and
                    (= typ "Search")
-                   (text/page-ref? value)
+                   (page-ref/page-ref? value)
                    (text/page-ref-un-brackets! value))
 
                   (and
                    (= typ "Search")
                    (not (contains? #{\# \* \/ \[} (first value)))
+                   ;; FIXME: use `gp-util/get-format` instead
                    (let [ext (some-> (gp-util/get-file-ext value) keyword)]
                      (when (and (not (string/starts-with? value "http:"))
                                 (not (string/starts-with? value "https:"))
                                 (not (string/starts-with? value "file:"))
                                 (not (gp-config/local-asset? value))
-                                (or (= ext :excalidraw)
+                                (or (#{:excalidraw :tldr} ext)
                                     (not (contains? supported-formats ext))))
                        value)))
-
-                  (and
-                   (= typ "Complex")
-                   (= (:protocol value) "file")
-                   (:link value))
 
                   (and
                    (= typ "File")
@@ -91,7 +89,7 @@
 
                :else
                nil)]
-    (text/block-ref-un-brackets! page)))
+    (when page (or (block-ref/get-block-ref-id page) page))))
 
 (defn- get-block-reference
   [block]
@@ -111,9 +109,8 @@
                         (let [{:keys [name arguments]} (second block)]
                           (when (and (= name "embed")
                                      (string? (first arguments))
-                                     (string/starts-with? (first arguments) "((")
-                                     (string/ends-with? (first arguments) "))"))
-                            (subs (first arguments) 2 (- (count (first arguments)) 2))))
+                                     (block-ref/string-block-ref? (first arguments)))
+                            (block-ref/get-string-block-ref-id (first arguments))))
 
                         (and (vector? block)
                              (= "Link" (first block))
@@ -121,7 +118,9 @@
                         (if (= "id" (:protocol (second (:url (second block)))))
                           (:link (second (:url (second block))))
                           (let [id (second (:url (second block)))]
-                            (text/block-ref-un-brackets! id)))
+                            ;; these can be maps
+                            (when (string? id)
+                              (or (block-ref/get-block-ref-id id) id))))
 
                         :else
                         nil)]
@@ -143,94 +142,77 @@
 (defn- get-page-refs-from-property-names
   [properties {:property-pages/keys [enabled? excludelist]}]
   (if (contains? #{true nil} enabled?)
-    (some->> properties
-             (map (comp name first))
-             (remove string/blank?)
-             (remove (set (map name excludelist)))
-             ;; Remove built-in properties as we don't want pages
-             ;; created for them by default
-             (remove (set (map name (into (gp-property/editable-built-in-properties)
-                                          (gp-property/hidden-built-in-properties)))))
-             distinct)
+    (sequence
+     (comp (map (comp name first))
+           (remove string/blank?)
+           (remove (set (map name excludelist)))
+           ;; Remove built-in properties as we don't want pages
+           ;; created for them by default
+           (remove (into #{}
+                         (map name)
+                         (apply conj
+                                (gp-property/editable-built-in-properties)
+                                (gp-property/hidden-built-in-properties))))
+           (distinct))
+     properties)
     []))
 
 (defn- get-page-ref-names-from-properties
-  [format properties user-config]
+  [properties user-config]
   (let [page-refs (->>
                    properties
                    (remove (fn [[k _]]
                              (contains?
                               (set/union (apply disj
-                                           (gp-property/editable-built-in-properties)
-                                           gp-property/editable-linkable-built-in-properties)
+                                                (gp-property/editable-built-in-properties)
+                                                gp-property/editable-linkable-built-in-properties)
                                          (gp-property/hidden-built-in-properties))
                               (keyword k))))
+                   ;; get links ast
                    (map last)
-                   (map (fn [v]
-                          (cond
-                            (and (string? v)
-                                 (not (gp-mldoc/link? format v)))
-                            (let [v (string/trim v)
-                                  result (text/split-page-refs-without-brackets v {:un-brackets? false})]
-                              (if (coll? result)
-                                (map text/page-ref-un-brackets! result)
-                                []))
-
-                            (coll? v)
-                            (map (fn [s]
-                                   (when-not (and (string? v)
-                                                  (gp-mldoc/link? format v))
-                                     (text/page-ref-un-brackets! s))) v)
-
-                            :else
-                            nil)))
-                   (apply concat))
+                   (mapcat (or (:extract-refs-from-property-value-fn user-config)
+                               text/extract-refs-from-mldoc-ast))
+                   ;; comma separated collections
+                   (concat (->> (map second properties)
+                                (filter coll?)
+                                (apply concat))))
         page-refs-from-property-names (get-page-refs-from-property-names properties user-config)]
     (->> (concat page-refs page-refs-from-property-names)
          (remove string/blank?)
          distinct)))
 
-(defn- invalid-property-key?
-  [s]
-  (string/includes? s "`"))
-
 (defn extract-properties
-  [format properties user-config]
+  [properties user-config]
   (when (seq properties)
     (let [properties (seq properties)
-          properties (into {} properties)
-          page-refs (get-page-ref-names-from-properties format properties user-config)
+          *invalid-properties (atom #{})
           properties (->> properties
-                          (map (fn [[k v]]
-                                 (let [k (-> (string/lower-case (name k))
+                          (map (fn [[k v mldoc-ast]]
+                                 (let [k (if (or (keyword? k) (symbol? k))
+                                           (subs (str k) 1)
+                                           k)
+                                       k (-> (string/lower-case k)
                                              (string/replace " " "-")
-                                             (string/replace "_" "-")
-                                             (string/replace #"[\"|^|(|)|{|}]+" ""))]
-                                   (when-not (invalid-property-key? k)
-                                     (let [k (if (contains? #{"custom_id" "custom-id"} k)
-                                               "id"
-                                               k)
-                                           v (if (coll? v)
-                                               (remove string/blank? v)
-                                               (cond
-                                                 (string/blank? v)
-                                                 nil
-                                                 (and (= (keyword k) :file-path)
-                                                      (string/starts-with? v "file:"))
-                                                 v
-                                                 :else
-                                                 (text/parse-property format k v user-config)))
-                                           k (keyword k)
-                                           v (if (and
-                                                  (string? v)
-                                                  (contains? gp-property/editable-linkable-built-in-properties k))
-                                               (set [v])
-                                               v)
-                                           v (if (coll? v) (set v) v)]
-                                       [k v])))))
-                          (remove #(nil? (second %))))]
-      {:properties (into {} properties)
+                                             (string/replace "_" "-"))]
+                                   (if (gp-property/valid-property-name? (str ":" k))
+                                     (let [k' (keyword
+                                               (if (contains? #{"custom_id" "custom-id"} k)
+                                                 "id"
+                                                 k))
+                                           v' (text/parse-property k v mldoc-ast user-config)]
+                                       [k' v' mldoc-ast v])
+                                     (do (swap! *invalid-properties conj k)
+                                         nil)))))
+                          (remove #(nil? (second %))))
+          page-refs (get-page-ref-names-from-properties properties user-config)
+          properties-text-values (->> (map (fn [[k _v _refs original-text]] [k original-text]) properties)
+                                      (into {}))
+          properties (map (fn [[k v _]] [k v]) properties)
+          properties' (into {} properties)]
+      {:properties properties'
        :properties-order (map first properties)
+       :properties-text-values properties-text-values
+       :invalid-properties @*invalid-properties
        :page-refs page-refs})))
 
 (defn- paragraph-timestamp-block?
@@ -277,6 +259,7 @@
          [original-page-name (gp-util/page-name-sanity-lc original-page-name) day])
        [original-page-name page-name day]))))
 
+;; TODO: refactor
 (defn page-name->map
   "Create a page's map structure given a original page name (string).
    map as input is supported for legacy compatibility.
@@ -287,7 +270,8 @@
    with-timestamp?: assign timestampes to the map structure.
     Useful when creating new pages from references or namespaces,
     as there's no chance to introduce timestamps via editing in page"
-  [original-page-name with-id? db with-timestamp? date-formatter]
+  [original-page-name with-id? db with-timestamp? date-formatter
+   & {:keys [from-page]}]
   (cond
     (and original-page-name (string? original-page-name))
     (let [original-page-name (gp-util/remove-boundary-slashes original-page-name)
@@ -295,7 +279,7 @@
           namespace? (and (not (boolean (text/get-nested-page-name original-page-name)))
                           (text/namespace-page? original-page-name))
           page-entity (some-> db (d/entity [:block/name page-name]))
-          original-page-name (or (:block/original-name page-entity) original-page-name)]
+          original-page-name (or from-page (:block/original-name page-entity) original-page-name)]
       (merge
        {:block/name page-name
         :block/original-name original-page-name}
@@ -331,7 +315,7 @@
   (let [refs (->> (concat tags refs [marker priority])
                   (remove string/blank?)
                   (distinct))
-        refs (atom refs)]
+        *refs (atom refs)]
     (walk/prewalk
      (fn [form]
        ;; skip custom queries
@@ -339,29 +323,29 @@
                       (= (first form) "Custom")
                       (= (second form) "query"))
          (when-let [page (get-page-reference form supported-formats)]
-           (swap! refs conj page))
+           (swap! *refs conj page))
          (when-let [tag (get-tag form)]
            (let [tag (text/page-ref-un-brackets! tag)]
              (when (gp-util/tag-valid? tag)
-               (swap! refs conj tag))))
+               (swap! *refs conj tag))))
          form))
      (concat title body))
-    (let [refs (remove string/blank? @refs)
-          children-pages (->> (mapcat (fn [p]
+    (swap! *refs #(remove string/blank? %))
+    (let [children-pages (->> @*refs
+                              (mapcat (fn [p]
                                         (let [p (if (map? p)
                                                   (:block/original-name p)
                                                   p)]
                                           (when (string? p)
                                             (let [p (or (text/get-nested-page-name p) p)]
                                               (when (text/namespace-page? p)
-                                                (gp-util/split-namespace-pages p))))))
-                                      refs)
+                                                (gp-util/split-namespace-pages p)))))))
                               (remove string/blank?)
                               (distinct))
-          refs (->> (distinct (concat refs children-pages))
-                    (remove nil?))
-          refs (map (fn [ref] (page-name->map ref with-id? db true date-formatter)) refs)]
-      (assoc block :refs refs))))
+          refs' (->> (distinct (concat @*refs children-pages))
+                     (remove nil?)
+                     (map (fn [ref] (page-name->map ref with-id? db true date-formatter))))]
+      (assoc block :refs refs'))))
 
 (defn- with-block-refs
   [{:keys [title body] :as block}]
@@ -392,9 +376,58 @@
   [blocks]
   (map (fn [block]
          (if (map? block)
-           (block-keywordize (gp-util/remove-nils block))
+           (block-keywordize (gp-util/remove-nils-non-nested block))
            block))
        blocks))
+
+(defn- block-tags->pages
+  [{:keys [tags] :as block}]
+  (if (seq tags)
+    (assoc block :tags (map (fn [tag]
+                              (let [tag (text/page-ref-un-brackets! tag)]
+                                [:block/name (gp-util/page-name-sanity-lc tag)])) tags))
+    block))
+
+(defn- get-block-content
+  [utf8-content block format meta block-pattern]
+  (let [content (if-let [end-pos (:end_pos meta)]
+                  (utf8/substring utf8-content
+                                  (:start_pos meta)
+                                  end-pos)
+                  (utf8/substring utf8-content
+                                  (:start_pos meta)))
+        content (when content
+                  (let [content (text/remove-level-spaces content format block-pattern)]
+                    (if (or (:pre-block? block)
+                            (= (:format block) :org))
+                      content
+                      (gp-mldoc/remove-indentation-spaces content (inc (:level block)) false))))]
+    (if (= format :org)
+      content
+      (gp-property/->new-properties content))))
+
+(defn get-custom-id-or-new-id
+  [properties]
+  (or (when-let [custom-id (or (get-in properties [:properties :custom-id])
+                               (get-in properties [:properties :custom_id])
+                               (get-in properties [:properties :id]))]
+        ;; guard against non-string custom-ids
+        (when-let [custom-id (and (string? custom-id) (string/trim custom-id))]
+          (some-> custom-id parse-uuid)))
+      (d/squuid)))
+
+(defn get-page-refs-from-properties
+  [properties db date-formatter user-config]
+  (let [page-refs (get-page-ref-names-from-properties properties user-config)]
+    (map (fn [page] (page-name->map page true db true date-formatter)) page-refs)))
+
+(defn- with-page-block-refs
+  [block with-id? supported-formats db date-formatter]
+  (some-> block
+          (with-page-refs with-id? supported-formats db date-formatter)
+          with-block-refs
+          block-tags->pages
+          (update :refs (fn [col] (remove nil? col)))))
 
 (defn- with-path-refs
   [blocks]
@@ -443,59 +476,30 @@
                (conj acc (assoc block :block/path-refs path-ref-pages))
                parents)))))
 
-(defn- block-tags->pages
-  [{:keys [tags] :as block}]
-  (if (seq tags)
-    (assoc block :tags (map (fn [tag]
-                              (let [tag (text/page-ref-un-brackets! tag)]
-                                [:block/name (gp-util/page-name-sanity-lc tag)])) tags))
-    block))
+(defn- macro->block
+  "macro: {:name \"\" arguments [\"\"]}"
+  [macro]
+  {:db/ident (str (:name macro) " " (string/join " " (:arguments macro)))
+   :block/type "macro"
+   :block/properties {:logseq.macro-name (:name macro)
+                      :logseq.macro-arguments (:arguments macro)}})
 
-(defn- get-block-content
-  [utf8-content block format meta block-pattern]
-  (let [content (if-let [end-pos (:end_pos meta)]
-                  (utf8/substring utf8-content
-                                  (:start_pos meta)
-                                  end-pos)
-                  (utf8/substring utf8-content
-                                  (:start_pos meta)))
-        content (when content
-                  (let [content (text/remove-level-spaces content format block-pattern)]
-                    (if (or (:pre-block? block)
-                            (= (:format block) :org))
-                      content
-                      (gp-mldoc/remove-indentation-spaces content (inc (:level block)) false))))]
-    (if (= format :org)
-      content
-      (gp-property/->new-properties content))))
+(defn extract-macros-from-ast
+  [ast]
+  (let [*result (atom #{})]
+    (walk/postwalk
+     (fn [f]
+       (if (and (vector? f) (= (first f) "Macro"))
+         (do
+           (swap! *result conj (second f))
+           nil)
+         f))
+     ast)
+    (mapv macro->block @*result)))
 
-(defn- get-custom-id-or-new-id
-  [properties]
-  (or (when-let [custom-id (or (get-in properties [:properties :custom-id])
-                               (get-in properties [:properties :custom_id])
-                               (get-in properties [:properties :id]))]
-        ;; guard against non-string custom-ids
-        (when-let [custom-id (and (string? custom-id) (string/trim custom-id))]
-          (some-> custom-id parse-uuid)))
-      (d/squuid)))
-
-(defn get-page-refs-from-properties
-  [format properties db date-formatter user-config]
-  (let [page-refs (get-page-ref-names-from-properties format properties user-config)]
-    (map (fn [page] (page-name->map page true db true date-formatter)) page-refs)))
-
-(defn- with-page-block-refs
-  [block with-id? supported-formats db date-formatter]
-  (some-> block
-          (with-page-refs with-id? supported-formats db date-formatter)
-          with-block-refs
-          block-tags->pages
-          (update :refs (fn [col] (remove nil? col)))))
-
-(defn- with-pre-block-if-exists
+(defn with-pre-block-if-exists
   [blocks body pre-block-properties encoded-content {:keys [supported-formats db date-formatter user-config]}]
   (let [first-block (first blocks)
-        format (or (:block/format first-block) :markdown)
         first-block-start-pos (get-in first-block [:block/meta :start_pos])
 
         ;; Add pre-block
@@ -504,18 +508,27 @@
                  (cons
                   (merge
                    (let [content (utf8/substring encoded-content 0 first-block-start-pos)
-                         {:keys [properties properties-order]} pre-block-properties
+                         {:keys [properties properties-order properties-text-values invalid-properties]} pre-block-properties
                          id (get-custom-id-or-new-id {:properties properties})
-                         property-refs (->> (get-page-refs-from-properties format properties db date-formatter user-config)
+                         property-refs (->> (get-page-refs-from-properties
+                                             properties db date-formatter
+                                             (assoc user-config
+                                                    :extract-refs-from-property-value-fn
+                                                    (fn [refs]
+                                                      (when (coll? refs)
+                                                        refs))))
                                             (map :block/original-name))
                          block {:uuid id
                                 :content content
                                 :level 1
                                 :properties properties
-                                :properties-order properties-order
+                                :properties-order (vec properties-order)
+                                :properties-text-values properties-text-values
+                                :invalid-properties invalid-properties
                                 :refs property-refs
                                 :pre-block? true
                                 :unordered true
+                                :macros (extract-macros-from-ast body)
                                 :body body}
                          block (with-page-block-refs block false supported-formats db date-formatter)]
                      (block-keywordize block))
@@ -523,6 +536,15 @@
                   blocks)
                  blocks)]
     (with-path-refs blocks)))
+
+(defn- with-heading-property
+  [properties markdown-heading? size level]
+  (let [properties (if markdown-heading?
+                     (assoc properties :heading size)
+                     properties)]
+    (if (true? (:heading properties))
+      (assoc properties :heading (min 6 level))
+      properties)))
 
 (defn- construct-block
   [block properties timestamps body encoded-content format pos-meta with-id? {:keys [block-pattern supported-formats db date-formatter]}]
@@ -534,21 +556,22 @@
         markdown-heading? (and (:size block) (= :markdown format))
         block (if markdown-heading?
                 (assoc block
-                       :type :heading
-                       :level (if unordered? (:level block) 1)
-                       :heading-level (or (:size block) 6))
+                       :level (if unordered? (:level block) 1))
                 block)
         block (cond->
-                (assoc block
-                       :uuid id
-                       :refs ref-pages-in-properties
-                       :format format
-                       :meta pos-meta)
-                (seq (:properties properties))
-                (assoc :properties (:properties properties))
+                (-> (assoc block
+                           :uuid id
+                           :refs ref-pages-in-properties
+                           :format format
+                           :meta pos-meta)
+                    (dissoc :size))
+                (or (seq (:properties properties)) markdown-heading?)
+                (assoc :properties (with-heading-property (:properties properties) markdown-heading? (:size block) (:level block))
+                       :properties-text-values (:properties-text-values properties)
+                       :properties-order (vec (:properties-order properties)))
 
-                (seq (:properties-order properties))
-                (assoc :properties-order (:properties-order properties)))
+                (seq (:invalid-properties properties))
+                (assoc :invalid-properties (:invalid-properties properties)))
         block (if (get-in block [:properties :collapsed])
                 (-> (assoc block :collapsed? true)
                     (update :properties (fn [m] (dissoc m :collapsed)))
@@ -578,7 +601,7 @@
     `with-id?`: If `with-id?` equals to true, all the referenced pages will have new db ids.
     `format`: content's format, it could be either :markdown or :org-mode.
     `options`: Options supported are :user-config, :block-pattern :supported-formats,
-     :date-formatter and :db"
+               :extract-macros, :date-formatter and :db"
   [blocks content with-id? format {:keys [user-config] :as options}]
   {:pre [(seq blocks) (string? content) (boolean? with-id?) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)
@@ -602,12 +625,13 @@
                   (recur headings (rest blocks) timestamps' properties body))
 
                 (gp-property/properties-ast? block)
-                (let [properties (extract-properties format (second block) user-config)]
+                (let [properties (extract-properties (second block) (assoc user-config :format format))]
                   (recur headings (rest blocks) timestamps properties body))
 
                 (heading-block? block)
-                (let [block (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)]
-                  (recur (conj headings block) (rest blocks) {} {} []))
+                (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
+                      block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))]
+                  (recur (conj headings block'') (rest blocks) {} {} []))
 
                 :else
                 (recur headings (rest blocks) timestamps properties (conj body block))))
@@ -620,70 +644,75 @@
 
 (defn with-parent-and-left
   [page-id blocks]
-  (loop [blocks (map (fn [block] (assoc block :block/level-spaces (:block/level block))) blocks)
-         parents [{:page/id page-id     ; db id or a map {:block/name "xxx"}
-                   :block/level 0
-                   :block/level-spaces 0}]
-         result []]
-    (if (empty? blocks)
-      (map #(dissoc % :block/level-spaces) result)
-      (let [[block & others] blocks
-            level-spaces (:block/level-spaces block)
-            {:block/keys [uuid level parent] :as last-parent} (last parents)
-            parent-spaces (:block/level-spaces last-parent)
-            [blocks parents result]
-            (cond
-              (= level-spaces parent-spaces)        ; sibling
-              (let [block (assoc block
-                                 :block/parent parent
-                                 :block/left [:block/uuid uuid]
-                                 :block/level level)
-                    parents' (conj (vec (butlast parents)) block)
-                    result' (conj result block)]
-                [others parents' result'])
+  (let [[blocks other-blocks] (split-with
+                               (fn [b]
+                                 (not= "macro" (:block/type b)))
+                               blocks)
+        result (loop [blocks (map (fn [block] (assoc block :block/level-spaces (:block/level block))) blocks)
+                      parents [{:page/id page-id     ; db id or a map {:block/name "xxx"}
+                                :block/level 0
+                                :block/level-spaces 0}]
+                      result []]
+                 (if (empty? blocks)
+                   (map #(dissoc % :block/level-spaces) result)
+                   (let [[block & others] blocks
+                         level-spaces (:block/level-spaces block)
+                         {:block/keys [uuid level parent] :as last-parent} (last parents)
+                         parent-spaces (:block/level-spaces last-parent)
+                         [blocks parents result]
+                         (cond
+                           (= level-spaces parent-spaces)        ; sibling
+                           (let [block (assoc block
+                                              :block/parent parent
+                                              :block/left [:block/uuid uuid]
+                                              :block/level level)
+                                 parents' (conj (vec (butlast parents)) block)
+                                 result' (conj result block)]
+                             [others parents' result'])
 
-              (> level-spaces parent-spaces)         ; child
-              (let [parent (if uuid [:block/uuid uuid] (:page/id last-parent))
-                    block (cond->
-                            (assoc block
-                                  :block/parent parent
-                                  :block/left parent)
-                            ;; fix block levels with wrong order
-                            ;; For example:
-                            ;;   - a
-                            ;; - b
-                            ;; What if the input indentation is two spaces instead of 4 spaces
-                            (>= (- level-spaces parent-spaces) 1)
-                            (assoc :block/level (inc level)))
-                    parents' (conj parents block)
-                    result' (conj result block)]
-                [others parents' result'])
+                           (> level-spaces parent-spaces)         ; child
+                           (let [parent (if uuid [:block/uuid uuid] (:page/id last-parent))
+                                 block (cond->
+                                         (assoc block
+                                                :block/parent parent
+                                                :block/left parent)
+                                         ;; fix block levels with wrong order
+                                         ;; For example:
+                                         ;;   - a
+                                         ;; - b
+                                         ;; What if the input indentation is two spaces instead of 4 spaces
+                                         (>= (- level-spaces parent-spaces) 1)
+                                         (assoc :block/level (inc level)))
+                                 parents' (conj parents block)
+                                 result' (conj result block)]
+                             [others parents' result'])
 
-              (< level-spaces parent-spaces)
-              (cond
-                (some #(= (:block/level-spaces %) (:block/level-spaces block)) parents) ; outdent
-                (let [parents' (vec (filter (fn [p] (<= (:block/level-spaces p) level-spaces)) parents))
-                      left (last parents')
-                      blocks (cons (assoc (first blocks)
-                                          :block/level (dec level)
-                                          :block/left [:block/uuid (:block/uuid left)])
-                                   (rest blocks))]
-                  [blocks parents' result])
+                           (< level-spaces parent-spaces)
+                           (cond
+                             (some #(= (:block/level-spaces %) (:block/level-spaces block)) parents) ; outdent
+                             (let [parents' (vec (filter (fn [p] (<= (:block/level-spaces p) level-spaces)) parents))
+                                   left (last parents')
+                                   blocks (cons (assoc (first blocks)
+                                                       :block/level (dec level)
+                                                       :block/left [:block/uuid (:block/uuid left)])
+                                                (rest blocks))]
+                               [blocks parents' result])
 
-                :else
-                (let [[f r] (split-with (fn [p] (<= (:block/level-spaces p) level-spaces)) parents)
-                      left (first r)
-                      parent-id (if-let [block-id (:block/uuid (last f))]
-                                  [:block/uuid block-id]
-                                  page-id)
-                      block (cond->
-                              (assoc block
-                                     :block/parent parent-id
-                                     :block/left [:block/uuid (:block/uuid left)]
-                                     :block/level (:block/level left)
-                                     :block/level-spaces (:block/level-spaces left)))
+                             :else
+                             (let [[f r] (split-with (fn [p] (<= (:block/level-spaces p) level-spaces)) parents)
+                                   left (first r)
+                                   parent-id (if-let [block-id (:block/uuid (last f))]
+                                               [:block/uuid block-id]
+                                               page-id)
+                                   block (cond->
+                                           (assoc block
+                                                  :block/parent parent-id
+                                                  :block/left [:block/uuid (:block/uuid left)]
+                                                  :block/level (:block/level left)
+                                                  :block/level-spaces (:block/level-spaces left)))
 
-                      parents' (->> (concat f [block]) vec)
-                      result' (conj result block)]
-                  [others parents' result'])))]
-        (recur blocks parents result)))))
+                                   parents' (->> (concat f [block]) vec)
+                                   result' (conj result block)]
+                               [others parents' result'])))]
+                     (recur blocks parents result))))]
+    (concat result other-blocks)))

@@ -19,7 +19,7 @@ import {
   cleanInjectedScripts,
   safeSnakeCase,
   injectTheme,
-  cleanInjectedUI,
+  cleanInjectedUI, PluginLogger,
 } from './helpers'
 import * as pluginHelpers from './helpers'
 import Debug from 'debug'
@@ -132,49 +132,6 @@ class PluginSettings extends EventEmitter<'change' | 'reset'> {
   }
 }
 
-class PluginLogger extends EventEmitter<'change'> {
-  private _logs: Array<[type: string, payload: any]> = []
-
-  constructor(private readonly _tag: string) {
-    super()
-  }
-
-  write(type: string, payload: any[]) {
-    const msg = payload.reduce((ac, it) => {
-      if (it && it instanceof Error) {
-        ac += `${it.message} ${it.stack}`
-      } else {
-        ac += it.toString()
-      }
-      return ac
-    }, `[${this._tag}][${new Date().toLocaleTimeString()}] `)
-
-    this._logs.push([type, msg])
-    this.emit('change')
-  }
-
-  clear() {
-    this._logs = []
-    this.emit('change')
-  }
-
-  info(...args: any[]) {
-    this.write('INFO', args)
-  }
-
-  error(...args: any[]) {
-    this.write('ERROR', args)
-  }
-
-  warn(...args: any[]) {
-    this.write('WARN', args)
-  }
-
-  toJSON() {
-    return this._logs
-  }
-}
-
 interface UserPreferences {
   theme: LegacyTheme
   themes: {
@@ -194,7 +151,6 @@ interface PluginLocalOptions {
   mode: 'shadow' | 'iframe'
   settingsSchema?: SettingSchemaDesc[]
   settings?: PluginSettings
-  logger?: PluginLogger
   effect?: boolean
   theme?: boolean
 
@@ -437,9 +393,11 @@ class ExistedImportedPluginPackageError extends Error {
 /**
  * Host plugin for local
  */
-class PluginLocal extends EventEmitter<
-  'loaded' | 'unloaded' | 'beforeunload' | 'error' | string
-> {
+class PluginLocal extends EventEmitter<'loaded'
+  | 'unloaded'
+  | 'beforeunload'
+  | 'error'
+  | string> {
   private _sdk: Partial<PluginLocalSDKMetadata> = {}
   private _disposes: Array<() => Promise<any>> = []
   private _id: PluginLocalIdentity
@@ -448,6 +406,7 @@ class PluginLocal extends EventEmitter<
   private _localRoot?: string
   private _dotSettingsFile?: string
   private _caller?: LSPluginCaller
+  private _logger?: PluginLogger
 
   /**
    * @param _options
@@ -471,7 +430,7 @@ class PluginLocal extends EventEmitter<
 
   async _setupUserSettings(reload?: boolean) {
     const { _options } = this
-    const logger = (_options.logger = new PluginLogger('Loader'))
+    const logger = (this._logger = new PluginLogger('Loader'))
 
     if (_options.settings && !reload) {
       return
@@ -573,7 +532,7 @@ class PluginLocal extends EventEmitter<
     const localRoot = (this._localRoot = safetyPathNormalize(url))
     const logseq: Partial<LSPluginPkgConfig> = pkg.logseq || {}
 
-    // Pick legal attrs
+      // Pick legal attrs
     ;[
       'name',
       'author',
@@ -632,8 +591,8 @@ class PluginLocal extends EventEmitter<
 
     // Validate id
     const { registeredPlugins, isRegistering } = this._ctx
-    if (isRegistering && registeredPlugins.has(logseq.id)) {
-      throw new ExistedImportedPluginPackageError('prepare package Error')
+    if (isRegistering && registeredPlugins.has(this.id)) {
+      throw new ExistedImportedPluginPackageError('Registered plugin package Error')
     }
 
     return async () => {
@@ -681,10 +640,10 @@ class PluginLocal extends EventEmitter<
     <meta charset="UTF-8">
     <title>logseq plugin entry</title>
     ${
-      IS_DEV
-        ? `<script src="${sdkPathRoot}/lsplugin.user.js?v=${tag}"></script>`
-        : `<script src="https://cdn.jsdelivr.net/npm/@logseq/libs/dist/lsplugin.user.min.js?v=${tag}"></script>`
-    }
+        IS_DEV
+          ? `<script src="${sdkPathRoot}/lsplugin.user.js?v=${tag}"></script>`
+          : `<script src="https://cdn.jsdelivr.net/npm/@logseq/libs/dist/lsplugin.user.min.js?v=${tag}"></script>`
+      }
     
   </head>
   <body>
@@ -905,9 +864,9 @@ class PluginLocal extends EventEmitter<
 
       this._dispose(cleanInjectedScripts.bind(this))
     } catch (e) {
-      debug('[Load Plugin Error] ', e)
-      this.logger?.error(e)
+      this.logger?.error('[Load Plugin]', e, true)
 
+      this.dispose().catch(null)
       this._status = PluginLocalLoadStatus.ERROR
       this._loadErr = e
     } finally {
@@ -1044,11 +1003,15 @@ class PluginLocal extends EventEmitter<
   }
 
   get logger() {
-    return this.options.logger
+    return this._logger
   }
 
   get disabled() {
     return this.settings?.get('disabled')
+  }
+
+  get theme() {
+    return this.options.theme
   }
 
   get caller() {
@@ -1111,6 +1074,8 @@ class PluginLocal extends EventEmitter<
     json.usf = this.dotSettingsFile
     json.iir = this.isInstalledInDotRoot
     json.lsr = this._resolveResourceFullUrl('/')
+    json.settings = json.settings?.toJSON()
+
     return json
   }
 }
@@ -1119,24 +1084,22 @@ class PluginLocal extends EventEmitter<
  * Host plugin core
  */
 class LSPluginCore
-  extends EventEmitter<
-    | 'beforeenable'
+  extends EventEmitter<'beforeenable'
     | 'enabled'
     | 'beforedisable'
     | 'disabled'
     | 'registered'
     | 'error'
     | 'unregistered'
+    | 'ready'
     | 'themes-changed'
     | 'theme-selected'
     | 'reset-custom-theme'
     | 'settings-changed'
     | 'unlink-plugin'
     | 'beforereload'
-    | 'reloaded'
-  >
-  implements ILSPluginThemeManager
-{
+    | 'reloaded'>
+  implements ILSPluginThemeManager {
   private _isRegistering = false
   private _readyIndicator?: DeferredActor
   private readonly _hostMountedActor: DeferredActor = deferred()
@@ -1150,10 +1113,8 @@ class LSPluginCore
     externals: [],
   }
   private readonly _registeredThemes = new Map<PluginLocalIdentity, Theme[]>()
-  private readonly _registeredPlugins = new Map<
-    PluginLocalIdentity,
-    PluginLocal
-  >()
+  private readonly _registeredPlugins = new Map<PluginLocalIdentity,
+    PluginLocal>()
   private _currentTheme: {
     pid: PluginLocalIdentity
     opt: Theme | LegacyTheme
@@ -1229,21 +1190,22 @@ class LSPluginCore
       return
     }
 
-    const perfTable = new Map<
-      string,
-      { o: PluginLocal; s: number; e: number }
-    >()
+    const perfTable = new Map<string,
+      { o: PluginLocal; s: number; e: number }>()
     const debugPerfInfo = () => {
-      const data = Array.from(perfTable.values()).reduce((ac, it) => {
-        const { options, status, disabled } = it.o
+      const data: any = Array.from(perfTable.values()).reduce((ac, it) => {
+        const { id, options, status, disabled } = it.o
 
-        ac[it.o.id] = {
-          name: options.name,
-          entry: options.entry,
-          status: status,
-          enabled:
-            typeof disabled === 'boolean' ? (!disabled ? '🟢' : '⚫️') : '🔴',
-          perf: !it.e ? it.o.loadErr : `${(it.e - it.s).toFixed(2)}ms`,
+        if (disabled !== true &&
+          (options.entry || (!options.name && !options.entry))) {
+          ac[id] = {
+            name: options.name,
+            entry: options.entry,
+            status: status,
+            enabled:
+              typeof disabled === 'boolean' ? (!disabled ? '🟢' : '⚫️') : '🔴',
+            perf: !it.e ? it.o.loadErr : `${(it.e - it.s).toFixed(2)}ms`,
+          }
         }
 
         return ac
@@ -1263,7 +1225,26 @@ class LSPluginCore
 
       await this.loadUserPreferences()
 
-      const externals = new Set(this._userPreferences.externals)
+      let externals = new Set(this._userPreferences.externals)
+
+      // valid externals
+      if (externals?.size) {
+        try {
+          const validatedExternals: Record<string, boolean> = await invokeHostExportedApi(
+            'validate_external_plugins', [...externals]
+          )
+
+          externals = new Set([...Object.entries(validatedExternals)].reduce(
+            (a, [k, v]) => {
+              if (v) {
+                a.push(k)
+              }
+              return a
+            }, []))
+        } catch (e) {
+          console.error('[validatedExternals Error]', e)
+        }
+      }
 
       if (initial) {
         plugins = plugins.concat(
@@ -1289,9 +1270,11 @@ class LSPluginCore
         )
 
         const perfInfo = { o: pluginLocal, s: performance.now(), e: 0 }
-        perfTable.set(pluginLocal.id, perfInfo)
+        perfTable.set(url, perfInfo)
 
         await pluginLocal.load({ indicator: readyIndicator })
+
+        perfInfo.e = performance.now()
 
         const { loadErr } = pluginLocal
 
@@ -1308,8 +1291,6 @@ class LSPluginCore
             continue
           }
         }
-
-        perfInfo.e = performance.now()
 
         pluginLocal.settings?.on('change', (a) => {
           this.emit('settings-changed', pluginLocal.id, a)
@@ -1333,6 +1314,7 @@ class LSPluginCore
       console.error(e)
     } finally {
       this._isRegistering = false
+      this.emit('ready', perfTable)
       debugPerfInfo()
     }
   }
@@ -1416,8 +1398,15 @@ class LSPluginCore
       })
     }
 
+    const p = pid && this._registeredPlugins.get(pid)
+
+    if (p && !p.disabled && p.options.entry) {
+      act(p)
+      return
+    }
+
     for (const [_, p] of this._registeredPlugins) {
-      if (p.options.theme || p.disabled) {
+      if (!p.options.entry || p.disabled) {
         continue
       }
 
@@ -1506,6 +1495,16 @@ class LSPluginCore
     return this._registeredThemes
   }
 
+  get enabledPlugins() {
+    return [...this.registeredPlugins.entries()].reduce((a, b) => {
+      let p = b?.[1]
+      if (p?.disabled !== true) {
+        a.set(b?.[0], p)
+      }
+      return a
+    }, new Map())
+  }
+
   async registerTheme(id: PluginLocalIdentity, opt: Theme): Promise<void> {
     debug('Register theme #', id, opt)
 
@@ -1554,12 +1553,12 @@ class LSPluginCore
       await this.saveUserPreferences(
         theme.mode
           ? {
-              themes: {
-                ...this._userPreferences.themes,
-                mode: theme.mode,
-                [theme.mode]: theme,
-              },
-            }
+            themes: {
+              ...this._userPreferences.themes,
+              mode: theme.mode,
+              [theme.mode]: theme,
+            },
+          }
           : { theme: theme }
       )
     }

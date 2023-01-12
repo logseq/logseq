@@ -1,6 +1,5 @@
 (ns frontend.components.editor
   (:require [clojure.string :as string]
-            [goog.string :as gstring]
             [frontend.commands :as commands
              :refer [*first-command-group *matched-block-commands *matched-commands]]
             [frontend.components.block :as block]
@@ -12,9 +11,9 @@
             [frontend.db.model :as db-model]
             [frontend.extensions.zotero :as zotero]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
-            [frontend.handler.paste :as paste-handler]
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.paste :as paste-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
@@ -22,8 +21,10 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.keycode :as keycode]
-            [logseq.graph-parser.util :as gp-util]
             [goog.dom :as gdom]
+            [goog.string :as gstring]
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.util :as gp-util]
             [promesa.core :as p]
             [react-draggable]
             [rum.core :as rum]))
@@ -75,9 +76,8 @@
                                    (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
               (editor-handler/insert-command! id command-steps
                                               format
-                                              {:restore? restore-slash?})
-              (state/pub-event! [:instrument {:type :editor/command-triggered
-                                              :payload {:command command}}]))))
+                                              {:restore? restore-slash?
+                                               :command command}))))
         :class
         "black"}))))
 
@@ -90,14 +90,14 @@
        {:on-chosen (fn [chosen]
                      (editor-handler/insert-command! id (get (into {} matched) chosen)
                                                      format
-                                                     {:last-pattern commands/angle-bracket}))
+                                                     {:last-pattern commands/angle-bracket
+                                                      :command :block-commands}))
         :class     "black"}))))
 
 (defn- in-sidebar? [el]
   (not (.contains (.getElementById js/document "left-container") el)))
 
 (rum/defc page-search < rum/reactive
-  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   "Embedded page searching popup"
   [id format]
   (let [action (state/sub :editor/action)]
@@ -109,7 +109,7 @@
                 edit-content (or (state/sub [:editor/content id]) "")
                 sidebar? (in-sidebar? input)
                 q (or
-                   @editor-handler/*selected-text
+                   (editor-handler/get-selected-text)
                    (when (= action :page-search-hashtag)
                      (gp-util/safe-subs edit-content pos current-pos))
                    (when (> (count edit-content) current-pos)
@@ -148,7 +148,10 @@
               :item-render (fn [page-name chosen?]
                              [:div.preview-trigger-wrapper
                               (block/page-preview-trigger
-                               {:children        [:div (search/highlight-exact-query page-name q)]
+                               {:children
+                                [:div.flex
+                                 (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
+                                 (search/highlight-exact-query page-name q)]
                                 :open?           chosen?
                                 :manual?         true
                                 :fixed-position? true
@@ -158,26 +161,31 @@
               :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
               :class       "black"})))))))
 
+(defn- search-blocks!
+  [state result]
+  (let [[edit-block _ _ q] (:rum/args state)]
+    (p/let [matched-blocks (when-not (string/blank? q)
+                             (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
+      (reset! result matched-blocks))))
+
 (rum/defcs block-search-auto-complete < rum/reactive
   {:init (fn [state]
-           (assoc state ::result (atom nil)))
+           (let [result (atom nil)]
+             (search-blocks! state result)
+             (assoc state ::result result)))
    :did-update (fn [state]
-                 (let [result (::result state)
-                       [edit-block _ _ q] (:rum/args state)]
-                   (p/let [matched-blocks (when-not (string/blank? q)
-                                            (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
-                     (reset! result matched-blocks)))
+                 (search-blocks! state (::result state))
                  state)}
-  [state _edit-block input id q format]
+  [state _edit-block input id q format selected-text]
   (let [result (->> (rum/react (get state ::result))
                     (remove (fn [b] (string/blank? (:block/content (db-model/query-block-by-uuid (:block/uuid b)))))))
-        chosen-handler (editor-handler/block-on-chosen-handler input id q format)
+        chosen-handler (editor-handler/block-on-chosen-handler id q format selected-text)
         non-exist-block-handler (editor-handler/block-non-exist-handler input)]
     (ui/auto-complete
      result
      {:on-chosen   chosen-handler
       :on-enter    non-exist-block-handler
-      :empty-placeholder   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
+      :empty-placeholder   [:div.text-gray-500.text-sm.px-4.py-2 (t :editor/block-search)]
       :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
                      (let [page (or (:block/original-name page)
                                     (:block/name page))
@@ -187,11 +195,10 @@
                            content (:block/content block)]
                        (when-not (string/blank? content)
                          [:.py-2 (search/block-search-result-item repo uuid format content q :block)])))
-      :class       "black"})))
+      :class       "ac-block-search"})))
 
 (rum/defcs block-search < rum/reactive
   {:will-unmount (fn [state]
-                   (reset! editor-handler/*selected-text nil)
                    (state/clear-search-result!)
                    state)}
   [state id _format]
@@ -202,15 +209,15 @@
           current-pos (cursor/pos input)
           edit-content (state/sub [:editor/content id])
           edit-block (state/get-edit-block)
+          selected-text (editor-handler/get-selected-text)
           q (or
-             @editor-handler/*selected-text
+             selected-text
              (when (> (count edit-content) current-pos)
                (subs edit-content pos current-pos)))]
       (when input
-        (block-search-auto-complete edit-block input id q format)))))
+        (block-search-auto-complete edit-block input id q format selected-text)))))
 
 (rum/defc template-search < rum/reactive
-  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id _format]
   (let [pos (state/get-editor-last-pos)
         input (gdom/getElement id)]
@@ -234,7 +241,6 @@
           :class       "black"})))))
 
 (rum/defc property-search < rum/reactive
-  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id]
   (let [input (gdom/getElement id)]
     (when input
@@ -254,7 +260,6 @@
           :class       "black"})))))
 
 (rum/defc property-value-search < rum/reactive
-  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id]
   (let [property (:property (state/get-editor-action-data))
         input (gdom/getElement id)]
@@ -262,7 +267,8 @@
                (not (string/blank? property)))
       (let [current-pos (cursor/pos input)
             edit-content (state/sub [:editor/content id])
-            start-idx (string/last-index-of (subs edit-content 0 current-pos) "::")
+            start-idx (string/last-index-of (subs edit-content 0 current-pos)
+                                            gp-property/colons)
             q (or
                (when (>= current-pos (+ start-idx 2))
                  (subs edit-content (+ start-idx 2) current-pos))
@@ -296,8 +302,12 @@
                 (let [[_id on-submit] (:rum/args state)
                       command (:command (first input-option))]
                   (on-submit command @input-value))
-                (reset! input-value nil))))})))
-  [state _id on-submit]
+                (reset! input-value nil))))
+       ;; escape
+       27 (fn [_state _e]
+            (let [[id _on-submit on-cancel] (:rum/args state)]
+              (on-cancel id)))})))
+  [state _id on-submit _on-cancel]
   (when (= :input (state/sub :editor/action))
     (when-let [action-data (state/sub :editor/action-data)]
       (let [{:keys [pos options]} action-data
@@ -329,11 +339,15 @@
                  (on-submit command @input-value pos)))]))))))
 
 (rum/defc absolute-modal < rum/static
-  [cp set-default-width? {:keys [top left rect]}]
-  (let [max-height 370
-        max-width 300
-        offset-top 24
+  [cp modal-name set-default-width? {:keys [top left rect]}]
+  (let [vw-width js/window.innerWidth
         vw-height js/window.innerHeight
+        vw-max-width (- vw-width (:left rect))
+        vw-max-height (- vw-height (:top rect))
+        sm? (< vw-width 415)
+        max-height (min (- vw-max-height 20) 800)
+        max-width (if sm? 300 (min (max 400 (/ vw-max-width 2)) 600))
+        offset-top 24
         to-max-height (if (and (seq rect) (> vw-height max-height))
                         (let [delta-height (- vw-height (+ (:top rect) top offset-top))]
                           (if (< delta-height max-height)
@@ -374,6 +388,7 @@
                    {:left (if (or (nil? y-diff) (and y-diff (= y-diff 0))) left 0)})))]
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
      {:ref *el
+      :data-modal-name modal-name
       :class (if y-overflow-vh? "is-overflow-vh-y" "")
       :on-mouse-down (fn [e]
                        (.stopPropagation e))
@@ -381,13 +396,13 @@
      cp]))
 
 (rum/defc transition-cp < rum/reactive
-  [cp set-default-width?]
+  [cp modal-name set-default-width?]
   (when-let [pos (:pos (state/sub :editor/action-data))]
     (ui/css-transition
      {:class-names "fade"
       :timeout     {:enter 500
                     :exit  300}}
-     (absolute-modal cp set-default-width? pos))))
+     (absolute-modal cp modal-name set-default-width? pos))))
 
 (rum/defc image-uploader < rum/reactive
   [id format]
@@ -406,6 +421,7 @@
         [:div.flex.flex-row.align-center.rounded-md.shadow-sm.bg-base-2.px-1.py-1
          (ui/loading
           (util/format "Uploading %s%" (util/format "%2d" processing)))]
+        "upload-file"
         false)))])
 
 (defn- set-up-key-down!
@@ -416,11 +432,11 @@
    {:not-matched-handler (editor-handler/keydown-not-matched-handler format)}))
 
 (defn- set-up-key-up!
-  [state input input-id search-timeout]
+  [state input input-id]
   (mixins/on-key-up
    state
    {}
-   (editor-handler/keyup-handler state input input-id search-timeout)))
+   (editor-handler/keyup-handler state input input-id)))
 
 (def search-timeout (atom nil))
 
@@ -430,9 +446,7 @@
         input-id id
         input (gdom/getElement input-id)]
     (set-up-key-down! state format)
-    (set-up-key-up! state input input-id search-timeout)))
-
-(def starts-with? clojure.string/starts-with?)
+    (set-up-key-up! state input input-id)))
 
 (defn get-editor-style-class
   "Get textarea css class according to it's content"
@@ -448,17 +462,17 @@
      (case format
        :markdown
        (cond
-         (starts-with? content "# ") "h1"
-         (starts-with? content "## ") "h2"
-         (starts-with? content "### ") "h3"
-         (starts-with? content "#### ") "h4"
-         (starts-with? content "##### ") "h5"
-         (starts-with? content "###### ") "h6"
-         (and (starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
+         (string/starts-with? content "# ") "h1"
+         (string/starts-with? content "## ") "h2"
+         (string/starts-with? content "### ") "h3"
+         (string/starts-with? content "#### ") "h4"
+         (string/starts-with? content "##### ") "h5"
+         (string/starts-with? content "###### ") "h6"
+         (and (string/starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
          :else "normal-block")
        ;; other formats
        (cond
-         (and (starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
+         (and (string/starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
          :else "normal-block")))))
 
 (defn editor-row-height-unchanged?
@@ -476,7 +490,7 @@
    (fn [state]
      (when-not (:editor/on-paste? @state/state)
        (try (editor-handler/handle-last-input)
-            (catch js/Error _e
+            (catch :default _e
               nil)))
      (state/set-state! :editor/on-paste? false)
      state)}
@@ -498,16 +512,11 @@
          [:span {:id (str "mock-text_" idx)
                  :key idx} c])))])
 
-(rum/defc mock-textarea-wrapper < rum/reactive
-  []
-  (let [content (state/sub-edit-content)]
-    (mock-textarea content)))
-
 (rum/defc animated-modal < rum/reactive
-  [key component set-default-width?]
+  [modal-name component set-default-width?]
   (when-let [pos (:pos (state/get-editor-action-data))]
     (ui/css-transition
-     {:key key
+     {:key modal-name
       :class-names {:enter "origin-top-left opacity-0 transform scale-95"
                     :enter-done "origin-top-left transition opacity-100 transform scale-100"
                     :exit "origin-top-left transition opacity-0 transform scale-95"}
@@ -516,6 +525,7 @@
      (fn [_]
        (absolute-modal
         component
+        modal-name
         set-default-width?
         pos)))))
 
@@ -551,7 +561,9 @@
       (= :input action)
       (animated-modal "input" (input id
                                      (fn [command m]
-                                       (editor-handler/handle-command-input command id format m)))
+                                       (editor-handler/handle-command-input command id format m))
+                                     (fn []
+                                       (editor-handler/handle-command-input-close id)))
                       true)
 
       (= :zotero action)
@@ -562,7 +574,7 @@
 
 (rum/defcs box < rum/reactive
   {:init (fn [state]
-           (assoc state ::heading-level (:heading-level (first (:rum/args state)))
+           (assoc state
                   ::id (str (random-uuid))))
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))
@@ -571,7 +583,7 @@
   (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
   [state {:keys [format block]} id _config]
-  (let [content (state/sub-edit-content)
+  (let [content (state/sub-edit-content id)
         heading-class (get-editor-style-class content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
 
@@ -586,7 +598,7 @@
        :auto-focus        false
        :class             heading-class})
 
-     (mock-textarea-wrapper)
+     (mock-textarea content)
      (modals id format)
 
      (when format

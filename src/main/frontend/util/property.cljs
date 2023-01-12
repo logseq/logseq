@@ -7,6 +7,7 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property :refer [properties-start properties-end]]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.format.mldoc :as mldoc]
             [logseq.graph-parser.text :as text]
             [frontend.util.cursor :as cursor]))
@@ -44,7 +45,7 @@
   [line]
   (boolean
    (and (string? line)
-        (util/safe-re-find #"^\s?[^ ]+:: " line))))
+        (re-find (re-pattern (str "^\\s?[^ ]+" gp-property/colons " ")) line))))
 
 (defn front-matter-property?
   [line]
@@ -93,9 +94,10 @@
 (defn get-markdown-property-keys
   [content]
   (let [content-lines (string/split-lines content)
-        properties (filter #(re-matches #"^.+::\s*.+" %) content-lines)]
+        properties (filter #(re-matches (re-pattern (str "^.+" gp-property/colons "\\s*.+")) %)
+                           content-lines)]
     (when (seq properties)
-      (map #(->> (string/split % "::")
+      (map #(->> (string/split % gp-property/colons)
                  (remove string/blank?)
                  first
                  string/upper-case)
@@ -165,7 +167,7 @@
   [format properties]
   (when (seq properties)
     (let [org? (= format :org)
-          kv-format (if org? ":%s: %s" "%s:: %s")
+          kv-format (if org? ":%s: %s" (str "%s" gp-property/colons " %s"))
           full-format (if org? ":PROPERTIES:\n%s\n:END:" "%s\n")
           properties-content (->> (map (fn [[k v]] (util/format kv-format (name k) v)) properties)
                                   (string/join "\n"))]
@@ -202,7 +204,7 @@
             built-in-properties-area (map (fn [[k v]]
                                             (if org?
                                               (str ":" (name k) ": " v)
-                                              (str (name k) ":: " v))) properties)
+                                              (str (name k) gp-property/colons " " v))) properties)
             body (concat (if no-title? nil [title])
                          (when org? [properties-start])
                          built-in-properties-area
@@ -276,7 +278,7 @@
 
                     (not org?)
                     (let [exists? (atom false)
-                          sym (if front-matter? ": " ":: ")
+                          sym (if front-matter? ": " (str gp-property/colons " "))
                           new-property-s (str key sym value)
                           property-f (if front-matter? front-matter-property? simplified-property?)
                           groups (partition-by property-f lines)
@@ -324,7 +326,7 @@
                (some->>
                 (seq v)
                 (distinct)
-                (map (fn [item] (util/format "[[%s]]" (text/page-ref-un-brackets! item))))
+                (map (fn [item] (page-ref/->page-ref (text/page-ref-un-brackets! item))))
                 (string/join ", "))
                v)]
        (insert-property format content k v)))
@@ -344,7 +346,7 @@
                           (remove-f (fn [line]
                                       (let [s (string/triml (string/lower-case line))]
                                         (or (string/starts-with? s (str ":" key ":"))
-                                            (string/starts-with? s (str key ":: ")))))))]
+                                            (string/starts-with? s (str key gp-property/colons " ")))))))]
            (string/join "\n" lines)))))))
 
 (defn remove-id-property

@@ -1,10 +1,11 @@
-(ns frontend.handler.paste
+(ns ^:no-doc frontend.handler.paste
   (:require [frontend.state :as state]
             [frontend.db :as db]
             [frontend.format.block :as block]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.util.block-ref :as block-ref]
             [clojure.string :as string]
             [frontend.util :as util]
             [frontend.handler.editor :as editor-handler]
@@ -15,7 +16,6 @@
             ["/frontend/utils" :as utils]
             [frontend.commands :as commands]
             [cljs.core.match :refer [match]]
-            [logseq.graph-parser.text :as text]
             [frontend.handler.notification :as notification]
             [frontend.util.text :as text-util]
             [frontend.format.mldoc :as mldoc]
@@ -26,7 +26,7 @@
   (when-let [editing-block (state/get-edit-block)]
     (let [page-id (:db/id (:block/page editing-block))
           blocks (block/extract-blocks
-                  (mldoc/->edn text (gp-mldoc/default-config format)) text true format)
+                  (mldoc/->edn text (gp-mldoc/default-config format)) text format {})
           blocks' (gp-block/with-parent-and-left page-id blocks)]
       (editor-handler/paste-blocks blocks' {}))))
 
@@ -59,30 +59,53 @@
       (notification/show! (util/format "No macro is available for %s" url) :warning)
       nil)))
 
+(defn- try-parse-as-json
+  "Result is not only to be an Object.
+   Maybe JSON types like string, number, boolean, null, array"
+  [text]
+  (try (js/JSON.parse text)
+       (catch :default _ #js{})))
+
+(defn- get-whiteboard-tldr-from-text
+  [text]
+  (when-let [matched-text (util/safe-re-find #"<whiteboard-tldr>(.*)</whiteboard-tldr>"
+                                             (gp-util/safe-decode-uri-component text))]
+    (try-parse-as-json (second matched-text))))
+
 (defn- paste-copied-blocks-or-text
+  ;; todo: logseq/whiteboard-shapes is now text/html
   [text e html]
   (util/stop e)
   (let [copied-blocks (state/get-copied-blocks)
         input (state/get-input)
+        input-id (state/get-edit-input-id)
         text (string/replace text "\r\n" "\n") ;; Fix for Windows platform
+        shape-refs-text (when (and (not (string/blank? html))
+                                   (get-whiteboard-tldr-from-text html)) 
+                          ;; text should alway be prepared block-ref generated in tldr
+                          text)
         internal-paste? (and
                          (seq (:copy/blocks copied-blocks))
                          ;; not copied from the external clipboard
-                         (= text (:copy/content copied-blocks)))]
+                         (= (string/trimr text)
+                            (string/trimr (:copy/content copied-blocks))))]
     (if internal-paste?
       (let [blocks (:copy/blocks copied-blocks)]
         (when (seq blocks)
           (editor-handler/paste-blocks blocks {})))
       (let [{:keys [value]} (editor-handler/get-selection-and-format)]
         (cond
+          (not (string/blank? shape-refs-text))
+          (commands/simple-insert! input-id shape-refs-text nil)
+
           (and (or (gp-util/url? text)
                    (and value (gp-util/url? (string/trim value))))
                (not (string/blank? (util/get-selected-text))))
           (editor-handler/html-link-format! text)
 
-          (and (text/block-ref? text)
-               (editor-handler/wrapped-by? input "((" "))"))
-          (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil)
+          (and (block-ref/block-ref? text)
+               (editor-handler/wrapped-by? input block-ref/left-parens block-ref/right-parens))
+          (commands/simple-insert! input-id (block-ref/get-block-ref-id text) nil)
 
           :else
           ;; from external
@@ -95,7 +118,6 @@
                                              nil)))]
                             (if (string/blank? result) nil result))
                 text (or html-text text)
-                input-id (state/get-edit-input-id)
                 replace-text-f (fn []
                                  (commands/delete-selection! input-id)
                                  (commands/simple-insert! input-id text nil))]
@@ -126,10 +148,11 @@
   (utils/getClipText
    (fn [clipboard-data]
      (when-let [_ (state/get-input)]
-       (let [data (or (when (gp-util/url? clipboard-data)
-                        (wrap-macro-url clipboard-data))
-                      clipboard-data)]
-         (editor-handler/insert data true))))
+       (if (gp-util/url? clipboard-data)
+         (if (string/blank? (util/get-selected-text))
+           (editor-handler/insert (or (wrap-macro-url clipboard-data) clipboard-data) true)
+           (editor-handler/html-link-format! clipboard-data))
+         (editor-handler/insert clipboard-data true))))
    (fn [error]
      (js/console.error error))))
 
@@ -150,26 +173,30 @@
      (state/set-state! :editor/on-paste? true)
      (let [input (state/get-input)]
        (if raw-paste?
-        (utils/getClipText
-         (fn [clipboard-data]
-           (when-let [_ (state/get-input)]
-             (let [text (or (when (gp-util/url? clipboard-data)
-                              (wrap-macro-url clipboard-data))
-                            clipboard-data)]
-               (paste-text-or-blocks-aux input e text nil))))
-         (fn [error]
-           (js/console.error error)))
-        (let [clipboard-data (gobj/get e "clipboardData")
-              html (when-not raw-paste? (.getData clipboard-data "text/html"))
-              text (.getData clipboard-data "text")]
-          (if-not (string/blank? text)
-            (paste-text-or-blocks-aux input e text html)
-            (when id
-              (let [_handled
-                    (let [clipboard-data (gobj/get e "clipboardData")
-                          files (.-files clipboard-data)]
-                      (when-let [file (first files)]
-                        (when-let [block (state/get-edit-block)]
-                          (editor-handler/upload-asset id #js[file] (:block/format block)
-                                                       editor-handler/*asset-uploading? true))))]
-                (util/stop e))))))))))
+         (utils/getClipText
+          (fn [clipboard-data]
+            (when-let [_ (state/get-input)]
+              (let [text (or (when (gp-util/url? clipboard-data)
+                               (wrap-macro-url clipboard-data))
+                             clipboard-data)]
+                (paste-text-or-blocks-aux input e text nil))))
+          (fn [error]
+            (js/console.error error)))
+         (let [clipboard-data (gobj/get e "clipboardData")
+               html (when-not raw-paste? (.getData clipboard-data "text/html"))
+               text (.getData clipboard-data "text")
+               files (.-files clipboard-data)
+               paste-file-if-exist (fn []
+                                      (when id
+                                        (let [_handled
+                                              (let [clipboard-data (gobj/get e "clipboardData")
+                                                    files (.-files clipboard-data)]
+                                                (when-let [file (first files)]
+                                                  (when-let [block (state/get-edit-block)]
+                                                    (editor-handler/upload-asset id #js[file] (:block/format block)
+                                                                                 editor-handler/*asset-uploading? true))))]
+                                          (util/stop e))))]
+           (cond
+             (and (string/blank? text) (string/blank? html)) (paste-file-if-exist)
+             (and (seq files) (state/preferred-pasting-file?)) (paste-file-if-exist)
+             :else (paste-text-or-blocks-aux input e text html))))))))

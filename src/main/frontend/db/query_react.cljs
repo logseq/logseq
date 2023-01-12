@@ -1,64 +1,33 @@
 (ns frontend.db.query-react
   "Custom queries."
-  (:require [cljs-time.core :as t]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [clojure.walk :as walk]
             [frontend.config :as config]
+            [frontend.db.conn :as conn]
             [frontend.db.model :as model]
             [frontend.db.react :as react]
-            [frontend.db.utils :as db-utils :refer [date->int]]
+            [frontend.db.utils :as db-utils]
             [frontend.debug :as debug]
             [frontend.extensions.sci :as sci]
             [frontend.state :as state]
-            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util.db :as db-util]
+            [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.util :as util]
             [frontend.date :as date]
             [lambdaisland.glogi :as log]))
 
 (defn resolve-input
-  [input]
-  (cond
-    (= :right-now-ms input) (util/time-ms)
-    (= :start-of-today-ms input) (util/today-at-local-ms 0 0 0 0)
-    (= :end-of-today-ms input) (util/today-at-local-ms 24 0 0 0)
-
-    (= :today input)
-    (date->int (t/today))
-    (= :yesterday input)
-    (date->int (t/minus (t/today) (t/days 1)))
-    (= :tomorrow input)
-    (date->int (t/plus (t/today) (t/days 1)))
-    (= :current-page input)
-    (some-> (or (state/get-current-page)
-                (:page (state/get-default-home))
-                (date/today)) string/lower-case)
-
-    (and (keyword? input)
-         (util/safe-re-find #"^\d+d(-before)?$" (name input)))
-    (let [input (name input)
-          days (parse-long (re-find #"^\d+" input))]
-      (date->int (t/minus (t/today) (t/days days))))
-    (and (keyword? input)
-         (util/safe-re-find #"^\d+d(-after)?$" (name input)))
-    (let [input (name input)
-          days (parse-long (re-find #"^\d+" input))]
-      (date->int (t/plus (t/today) (t/days days))))
-
-    (and (string? input) (text/page-ref? input))
-    (-> (text/page-ref-un-brackets! input)
-        (string/lower-case))
-
-    :else
-    input))
-
-(defn- remove-nested-children-blocks
-  [blocks]
-  (let [ids (set (map :db/id blocks))]
-    (->> blocks
-         (remove
-          (fn [block]
-            (let [id (:db/id (:block/parent block))]
-              (contains? ids id)))))))
+  "Wrapper around db-util/resolve-input which provides editor-specific state"
+  ([db input]
+   (resolve-input db input {}))
+  ([db input opts]
+   (db-util/resolve-input db
+                          input
+                          (merge {:current-page-fn (fn []
+                                                     (or (state/get-current-page)
+                                                         (:page (state/get-default-home))
+                                                         (date/today)))}
+                                 opts))))
 
 (defn custom-query-result-transform
   [query-result remove-blocks q]
@@ -72,28 +41,26 @@
                                               (contains? remove-blocks (:block/uuid h)))
                                             result))
                                   result)]
-                     (some->> result
-                              remove-nested-children-blocks
-                              (model/sort-by-left-recursive)
-                              (model/with-pages)))
+                     (model/with-pages result))
                    result)
-          result-transform-fn (:result-transform q)
-          repo (state/get-current-repo)]
-      (if-let [result-transform (if (keyword? result-transform-fn) (state/sub [:config repo :query/result-transforms result-transform-fn]) result-transform-fn)]
+          result-transform-fn (:result-transform q)]
+      (if-let [result-transform (if (keyword? result-transform-fn)
+                                  (get-in (state/sub-config) [:query/result-transforms result-transform-fn])
+                                  result-transform-fn)]
         (if-let [f (sci/eval-string (pr-str result-transform))]
           (try
             (sci/call-fn f result)
-            (catch js/Error e
+            (catch :default e
               (log/error :sci/call-error e)
               result))
           result)
         result))
-    (catch js/Error e
+    (catch :default e
       (log/error :query/failed e))))
 
 (defn- resolve-query
   [query]
-  (let [page-ref? #(and (string? %) (text/page-ref? %))]
+  (let [page-ref? #(and (string? %) (page-ref/page-ref? %))]
     (walk/postwalk
      (fn [f]
        (cond
@@ -112,7 +79,7 @@
          (let [[x y] (rest f)
                [page-ref sym] (if (page-ref? x) [x y] [y x])
                page-ref (string/lower-case page-ref)]
-           (list 'contains? sym (text/page-ref-un-brackets! page-ref)))
+           (list 'contains? sym (page-ref/get-page-name page-ref)))
 
          (and (vector? f)
               (= (first f) 'page-property)
@@ -130,12 +97,15 @@
     (pprint "Use the following to debug your datalog queries:")
     (pprint query')
     (let [query (resolve-query query)
-          resolved-inputs (mapv resolve-input inputs)
+          current-block-uuid (:current-block-uuid query-opts)
+          repo (or repo (state/get-current-repo))
+          db (conn/get-db repo)
+          resolved-inputs (mapv #(resolve-input db % {:current-block-uuid current-block-uuid})
+                                inputs)
           inputs (cond-> resolved-inputs
                          rules
                          (conj rules))
-          repo (or repo (state/get-current-repo))
-          k [:custom query']]
+          k [:custom (or (:query-string query') query')]]
       (pprint "inputs (post-resolution):" resolved-inputs)
       (pprint "query-opts:" query-opts)
       (pprint (str "time elapsed: " (.toFixed (- (.now js/performance) start-time) 2) "ms"))

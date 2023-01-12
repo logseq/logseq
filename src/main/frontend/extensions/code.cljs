@@ -130,9 +130,8 @@
             [frontend.db :as db]
             [frontend.extensions.calc :as calc]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.file :as file-handler]
+            [frontend.handler.code :as code-handler]
             [frontend.state :as state]
-            [logseq.graph-parser.utf8 :as utf8]
             [frontend.util :as util]
             [frontend.config :as config]
             [goog.dom :as gdom]
@@ -146,52 +145,12 @@
 (def textarea-ref-name "textarea")
 (def codemirror-ref-name "codemirror-instance")
 
+;; export CodeMirror to global scope
+(set! js/window -CodeMirror cm)
+
 (defn- extra-codemirror-options []
   (get (state/get-config)
        :editor/extra-codemirror-options {}))
-
-(defn- save-file-or-block!
-  [editor textarea config state]
-  (.save editor)
-  (let [value (gobj/get textarea "value")
-        default-value (gobj/get textarea "defaultValue")]
-    (when (not= value default-value)
-      (cond
-        (:block/uuid config)
-        (let [block (db/pull [:block/uuid (:block/uuid config)])
-              content (:block/content block)
-              {:keys [start_pos end_pos]} (:pos_meta @(:code-options state))
-              offset (if (:block/pre-block? block) 0 2)
-              raw-content (utf8/encode content) ;; NOTE: :pos_meta is based on byte position
-              prefix (utf8/decode (.slice raw-content 0 (- start_pos offset)))
-              surfix (utf8/decode (.slice raw-content (- end_pos offset)))
-              new-content (if (string/blank? value)
-                            (str prefix surfix)
-                            (str prefix value "\n" surfix))]
-          (state/set-edit-content! (state/get-edit-input-id) new-content)
-          (editor-handler/save-block-if-changed! block new-content))
-
-        (:file-path config)
-        (let [path (:file-path config)
-              content (db/get-file path)
-              [_ id _ _ _] (:rum/args state)
-              value (some-> (gdom/getElement id)
-                            (gobj/get "value"))]
-          (when (and
-                 (not (string/blank? value))
-                 (not= (string/trim value) (string/trim content)))
-            (file-handler/alter-file (state/get-current-repo)
-                                     path
-                                     (str (string/trim value) "\n")
-                                     {:re-render-root? true})))
-
-        :else
-        nil))))
-
-(defn- save-file-or-block-when-blur-or-esc!
-  [editor textarea config state]
-  (state/set-block-component-editing-mode! false)
-  (save-file-or-block! editor textarea config state))
 
 (defn- text->cm-mode
   ([text]
@@ -212,7 +171,7 @@
 
 (defn render!
   [state]
-  (let [[config id attr _code theme] (:rum/args state)
+  (let [[config id attr _code theme user-options] (:rum/args state)
         default-open? (and (:editor/code-mode? @state/state)
                            (= (:block/uuid (state/get-edit-block))
                               (get-in config [:block :block/uuid])))
@@ -231,17 +190,18 @@
         cm-options (merge default-cm-options
                           (extra-codemirror-options)
                           {:mode mode
-                           :tabindex -1 ;; do not accept TAB-in, since TAB is bind globally
+                           :tabIndex -1 ;; do not accept TAB-in, since TAB is bind globally
                            :extraKeys #js {"Esc" (fn [cm]
                                                    ;; Avoid reentrancy
                                                    (gobj/set cm "escPressed" true)
-                                                   (save-file-or-block-when-blur-or-esc! cm textarea config state)
+                                                   (code-handler/save-code-editor!)
                                                    (when-let [block-id (:block/uuid config)]
                                                      (let [block (db/pull [:block/uuid block-id])]
                                                        (editor-handler/edit-block! block :max block-id))))}}
                           (when config/publishing?
                             {:readOnly true
-                             :cursorBlinkRate -1}))
+                             :cursorBlinkRate -1})
+                          user-options)
         editor (when textarea
                  (from-textarea textarea (clj->js cm-options)))]
     (when editor
@@ -254,11 +214,18 @@
                                    (reset! (:calc-atom state) (calc/eval-lines new-code))))))
         (.on editor "blur" (fn [cm e]
                              (when e (util/stop e))
-                             (when-not (gobj/get cm "escPressed")
-                               (save-file-or-block-when-blur-or-esc! editor textarea config state))
-                             (state/set-block-component-editing-mode! false)))
+                             (when (or
+                                    (= :file (state/get-current-route))
+                                    (not (gobj/get cm "escPressed")))
+                               (code-handler/save-code-editor!))
+                             (state/set-block-component-editing-mode! false)
+                             (state/set-state! :editor/code-block-context nil)))
         (.on editor "focus" (fn [_e]
-                              (state/set-block-component-editing-mode! true)))
+                              (state/set-block-component-editing-mode! true)
+                              (state/set-state! :editor/code-block-context
+                                                {:editor editor
+                                                 :config config
+                                                 :state state})))
         (.addEventListener element "mousedown"
                            (fn [e]
                              (util/stop e)
@@ -293,8 +260,12 @@
                 state)
    :did-update (fn [state]
                  (reset! (:code-options state) (last (:rum/args state)))
-                 state)
-   }
+                 (when-not (:file? (first (:rum/args state)))
+                   (let [code (nth (:rum/args state) 3)
+                         editor @(:editor-atom state)]
+                     (when (not= (.getValue editor) code)
+                       (.setValue editor code))))
+                 state)}
   [state _config id attr code _theme _options]
   [:div.extensions__code
    (when-let [mode (:data-lang attr)]

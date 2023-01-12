@@ -1,22 +1,11 @@
 (ns frontend.extensions.lightbox
   (:require [promesa.core :as p]
             [cljs-bean.core :as bean]
-            [frontend.loader :refer [load]]))
-
-(defn js-load$
-  [url]
-  (p/create
-    (fn [resolve]
-      (load url resolve))))
-
-(def JS_ROOT
-  (if (= js/location.protocol "file:")
-    "./js"
-    "./static/js"))
+            [frontend.util :as util]))
 
 (defn load-base-assets$
   []
-  (js-load$ (str JS_ROOT "/photoswipe.js")))
+  (util/js-load$ (str util/JS_ROOT "/photoswipe.js")))
 
 (defn preview-images!
   [images]

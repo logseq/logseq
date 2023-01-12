@@ -1,15 +1,18 @@
 (ns frontend.routes
-  (:require [frontend.components.home :as home]
-            [frontend.components.repo :as repo]
-            [frontend.components.file :as file]
+  "Defines routes for use with reitit router"
+  (:require [frontend.components.file :as file]
+            [frontend.components.home :as home]
+            [frontend.components.journal :as journal]
+            [frontend.components.onboarding.setups :as setups]
             [frontend.components.page :as page]
             [frontend.components.plugins :as plugins]
-            [frontend.components.journal :as journal]
+            [frontend.components.repo :as repo]
             [frontend.components.search :as search]
             [frontend.components.settings :as settings]
             [frontend.components.shortcut :as shortcut]
-            [frontend.components.onboarding.setups :as setups]
-            [frontend.extensions.zotero :as zotero]))
+            [frontend.components.whiteboard :as whiteboard] 
+            [frontend.extensions.zotero :as zotero]
+            [frontend.components.bug-report :as bug-report]))
 
 ;; http://localhost:3000/#?anchor=fn.1
 (def routes
@@ -20,6 +23,14 @@
    ["/graphs"
     {:name :repos
      :view repo/repos}]
+
+   ["/whiteboard/:name"
+    {:name :whiteboard
+     :view whiteboard/whiteboard-route}]
+
+   ["/whiteboards"
+    {:name :whiteboards
+     :view whiteboard/whiteboard-dashboard}]
 
    ["/repo/add"
     {:name :repo-add
@@ -39,6 +50,10 @@
 
    ["/page/:name"
     {:name :page
+     :view page/page}]
+
+   ["/page/:name/block/:block-route-name"
+    {:name :page-block
      :view page/page}]
 
    ["/all-pages"
@@ -64,6 +79,14 @@
    ["/import"
     {:name :import
      :view setups/importer}]
+   
+   ["/bug-report"
+    {:name :bug-report
+     :view bug-report/bug-report}]
+   
+    ["/bug-report-tool/:tool"
+     {:name :bug-report-tools
+      :view bug-report/bug-report-tool-route}]
 
    ["/all-journals"
     {:name :all-journals

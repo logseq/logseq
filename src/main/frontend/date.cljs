@@ -1,4 +1,5 @@
 (ns frontend.date
+  "Date related utility fns"
   (:require ["chrono-node" :as chrono]
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
@@ -6,7 +7,6 @@
             [cljs-time.format :as tf]
             [cljs-time.local :as tl]
             [frontend.state :as state]
-            [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.date-time-util :as date-time-util]
             [goog.object :as gobj]
@@ -42,7 +42,8 @@
      "EEEE, MM/dd/yyyy"
      "EEEE, yyyy/MM/dd"
      "dd-MM-yyyy"
-     "dd.MM.yyyy"
+     ;; This tyle will mess up other date formats like "2022-08" "2022Q4" "2022/10"
+     ;;  "dd.MM.yyyy"
      "MM/dd/yyyy"
      "MM-dd-yyyy"
      "MM_dd_yyyy"
@@ -66,7 +67,7 @@
     (->> (tf/parse (tf/formatters :date-time-no-ms) s)
         (t/to-default-time-zone)
         (tf/unparse (tf/formatter "MMM do, yyyy")))
-    (catch js/Error _e
+    (catch :default _e
       nil)))
 
 (def custom-formatter-2 (tf/formatter "yyyy-MM-dd-HH-mm-ss"))
@@ -81,40 +82,25 @@
 (defn get-date-time-string-4 []
   (tf/unparse custom-formatter-4 (tl/local-now)))
 
-(defn get-weekday
-  [date]
-  (.toLocaleString date "en-us" (clj->js {:weekday "long"})))
-
-(defn get-date
-  ([]
-   (get-date (js/Date.)))
-  ([date]
-   {:year (.getFullYear date)
-    :month (inc (.getMonth date))
-    :day (.getDate date)
-    :weekday (get-weekday date)}))
-
-(defn year-month-day-padded
-  ([]
-   (year-month-day-padded (get-date)))
-  ([date]
-   (let [{:keys [year month day]} date]
-     {:year year
-      :month (util/zero-pad month)
-      :day (util/zero-pad day)})))
-
 (defn journal-name
   ([]
    (journal-name (tl/local-now)))
   ([date]
-   (date-time-util/format date (state/get-date-formatter))))
+   (let [formatter (state/get-date-formatter)]
+     (try
+      (date-time-util/format date formatter)
+      (catch :default e
+        (log/error :parse-journal-date {:message  "Failed to parse date to journal name."
+                                        :date date
+                                        :format formatter})
+        (throw e))))))
 
 (defn journal-name-s [s]
   (try
     (journal-name (tf/parse (tf/formatter "yyyy-MM-dd") s))
-    (catch js/Error _e
-      (log/info :parse-journal-date {:message  "Unable to parse date to journal name, skipping."
-                                     :date-str s})
+    (catch :default _e
+      (log/error :parse-journal-date {:message  "Unable to parse date to journal name, skipping."
+                                      :date-str s})
       nil)))
 
 (defn today
@@ -128,15 +114,6 @@
 (defn yesterday
   []
   (journal-name (t/minus (t/today) (t/days 1))))
-
-(defn ymd
-  ([]
-   (ymd (js/Date.)))
-  ([date]
-   (ymd date "/"))
-  ([date sep]
-   (let [{:keys [year month day]} (year-month-day-padded (get-date date))]
-     (str year sep month sep day))))
 
 (defn get-local-date
   []
@@ -162,20 +139,27 @@
                  :minute "2-digit"
                  :hourCycle "h23"}))))
 
-(defn valid?
+(defn normalize-date
+  "Given raw date string, return a normalized date string at best effort.
+   Warning: this is a function with heavy cost (likely 50ms). Use with caution"
   [s]
   (some
    (fn [formatter]
      (try
        (tf/parse (tf/formatter formatter) s)
-       (catch js/Error _e
+       (catch :default _e
          false)))
    (journal-title-formatters)))
 
-(defn valid-journal-title?
+(defn normalize-journal-title
+  "Normalize journal title at best effort. Return nil if title is not a valid date"
   [title]
   (and title
-       (valid? (gp-util/capitalize-all title))))
+       (normalize-date (gp-util/capitalize-all title))))
+
+(defn valid-journal-title?
+  [title]
+  (boolean (normalize-journal-title title)))
 
 (defn journal-title->
   ([journal-title then-fn]

@@ -125,9 +125,13 @@
   [{:keys [tx-data tx-meta] :as tx-report}]
   (when-not (empty? tx-data)
     (reset-redo)
-    (let [updated-blocks (db-report/get-blocks tx-report)
-          entity {:blocks updated-blocks
-                  :txs tx-data
-                  :editor-cursor (:editor-cursor tx-meta)
-                  :pagination-blocks-range (get-in [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] @state/state)}]
-      (push-undo entity))))
+    (if (:compute-new-refs? tx-meta)
+      (let [[removed-e _prev-e] (pop-undo)
+            entity (update removed-e :txs concat tx-data)]
+        (push-undo entity))
+      (let [updated-blocks (db-report/get-blocks tx-report)
+            entity {:blocks updated-blocks
+                    :txs tx-data
+                    :editor-cursor (:editor-cursor tx-meta)
+                    :pagination-blocks-range (get-in [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] @state/state)}]
+       (push-undo entity)))))

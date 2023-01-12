@@ -1,21 +1,24 @@
 (ns frontend.format.block
   "Block code needed by app but not graph-parser"
-  (:require [clojure.string :as string]
-            [logseq.graph-parser.block :as gp-block]
+  (:require [cljs-time.format :as tf]
+            [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.format :as format]
-            [frontend.state :as state]
             [frontend.handler.notification :as notification]
-            ["@sentry/react" :as Sentry]
+            [frontend.state :as state]
+            [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.mldoc :as gp-mldoc]))
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [lambdaisland.glogi :as log]))
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
 and handles unexpected failure."
-  [blocks content with-id? format]
+  [blocks content format {:keys [with-id?]
+                          :or {with-id? true}}]
   (try
     (gp-block/extract-blocks blocks content with-id? format
                              {:user-config (state/get-config)
@@ -24,7 +27,9 @@ and handles unexpected failure."
                               :db (db/get-db (state/get-current-repo))
                               :date-formatter (state/get-date-formatter)})
     (catch :default e
-      (Sentry/captureException e)
+      (log/error :exception e)
+      (state/pub-event! [:capture-error {:error e
+                                         :payload {:type "Extract-blocks"}}])
       (notification/show! "An unexpected error occurred during block extraction." :error)
       [])))
 
@@ -35,28 +40,45 @@ and handles unexpected failure."
   ([original-page-name with-id? with-timestamp?]
    (gp-block/page-name->map original-page-name with-id? (db/get-db (state/get-current-repo)) with-timestamp? (state/get-date-formatter))))
 
+(defn- normalize-as-percentage
+  [block]
+  (some->> block
+           str
+           (re-matches #"(-?\d+\.?\d*)%")
+           second
+           (#(/ % 100))))
+
+(defn- normalize-as-date
+  [block]
+  (some->> block
+           str
+           date/normalize-date
+           (tf/unparse date/custom-formatter)))
+
+(defn normalize-block
+  "Normalizes supported formats such as dates and percentages.
+   Be careful, this function may harm query sort performance!
+   - nlp-date? - Enable NLP parsing on date items.
+       Requires heavy computation (see `normalize-as-date` for details)"
+  [block nlp-date?]
+  (->> [normalize-as-percentage (when nlp-date? normalize-as-date) identity]
+       (remove nil?)
+       (map #(% (if (set? block) (first block) block)))
+       (remove nil?)
+       (first)))
+
 (defn parse-block
   ([block]
    (parse-block block nil))
-  ([{:block/keys [uuid content page format] :as block} {:keys [with-id?]
+  ([{:block/keys [uuid content format] :as block} {:keys [with-id?]
                                                         :or {with-id? true}}]
    (when-not (string/blank? content)
      (let [block (dissoc block :block/pre-block?)
            ast (format/to-edn content format nil)
-           blocks (extract-blocks ast content with-id? format)
+           blocks (extract-blocks ast content format {:with-id? with-id?})
            new-block (first blocks)
-           parent-refs (->> (db/get-block-parent (state/get-current-repo) uuid)
-                            :block/path-refs
-                            (map :db/id))
-           {:block/keys [refs]} new-block
-           ref-pages (filter :block/name refs)
-           path-ref-pages (->> (concat ref-pages parent-refs [(:db/id page)])
-                               (remove nil?))
            block (cond->
-                   (merge
-                    block
-                    new-block
-                    {:block/path-refs path-ref-pages})
+                   (merge block new-block)
                    (> (count blocks) 1)
                    (assoc :block/warning :multiple-blocks))
            block (dissoc block :block/title :block/body :block/level)]
@@ -83,7 +105,7 @@ and handles unexpected failure."
                body (vec (if title (rest ast) ast))
                body (drop-while gp-property/properties-ast? body)
                result (cond->
-                        (if (seq body) {:block/body body} {})
+                       (if (seq body) {:block/body body} {})
                         title
                         (assoc :block/title title))]
            (state/add-block-ast-cache! block-uuid content result)

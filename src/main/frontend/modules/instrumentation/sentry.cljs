@@ -3,12 +3,12 @@
             [frontend.util :as util]
             [frontend.config :as config]
             ["@sentry/react" :as Sentry]
-            ["@sentry/tracing" :refer [BrowserTracing]]
-            ["posthog-js" :as posthog]
             [frontend.mobile.util :as mobile-util]))
 
+(goog-define SENTRY-DSN "")
+
 (def config
-  {:dsn "https://636e9174ffa148c98d2b9d3369661683@o416451.ingest.sentry.io/5311485"
+  {:dsn SENTRY-DSN
    :release (util/format "logseq%s@%s" (cond
                                          (mobile-util/native-android?) "-android"
                                          (mobile-util/native-ios?) "-ios"
@@ -16,13 +16,16 @@
                          version)
    :environment (if config/dev? "development" "production")
    :initialScope {:tags
-                  {:platform (cond
-                               (util/electron?) "electron"
-                               (mobile-util/native-platform?) "mobile"
-                               :else "web")
-                   :publishing config/publishing?}}
-   :integrations [(new posthog/SentryIntegration posthog "logseq" 5311485)
-                  (new BrowserTracing)]
+                  (merge
+                   (when (not-empty config/revison)
+                     {:revision config/revison})
+                   {:platform (cond
+                                (util/electron?) "electron"
+                                (mobile-util/native-platform?) "mobile"
+                                :else "web")
+                    :publishing config/publishing?})}
+   ;; :integrations [(new posthog/SentryIntegration posthog "logseq" 5311485)
+   ;;                (new BrowserTracing)]
    :debug config/dev?
    :tracesSampleRate 1.0
    :beforeSend (fn [^js event]
@@ -43,6 +46,11 @@
                  event)})
 
 (defn init []
-  (when-not config/dev?
+  (when (and (not config/dev?) (not-empty SENTRY-DSN))
     (let [config (clj->js config)]
       (Sentry/init config))))
+
+(defn set-user!
+  [id]
+  (Sentry/configureScope (fn [scope]
+                           (.setUser scope #js {:id id}))))

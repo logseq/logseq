@@ -1,4 +1,4 @@
-(ns frontend.fs.nfs
+(ns ^:no-doc frontend.fs.nfs
   (:require [frontend.fs.protocol :as protocol]
             [frontend.util :as util]
             [clojure.string :as string]
@@ -10,8 +10,7 @@
             [frontend.config :as config]
             [frontend.state :as state]
             [frontend.handler.notification :as notification]
-            ["/frontend/utils" :as utils]
-            [frontend.encrypt :as encrypt]))
+            ["/frontend/utils" :as utils]))
 
 ;; We need to cache the file handles in the memory so that
 ;; the browser will not keep asking permissions.
@@ -58,10 +57,7 @@
 (defn- contents-matched?
   [disk-content db-content]
   (when (and (string? disk-content) (string? db-content))
-    (if (encrypt/encrypted-db? (state/get-current-repo))
-      (p/let [decrypted-content (encrypt/decrypt disk-content)]
-        (= (string/trim decrypted-content) (string/trim db-content)))
-      (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
+    (p/resolved (= (string/trim disk-content) (string/trim db-content)))))
 
 (defrecord ^:large-vars/cleanup-todo Nfs []
   protocol/Fs
@@ -163,7 +159,6 @@
           (if file-handle
             (-> (p/let [local-file (.getFile file-handle)
                         local-content (.text local-file)
-                        pending-writes (state/get-write-chan-length)
                         ext (string/lower-case (util/get-file-ext path))
                         db-content (db/get-file repo path)
                         contents-matched? (contents-matched? local-content (or db-content ""))]
@@ -173,18 +168,13 @@
                          (not (:skip-compare? opts))
                          (not contents-matched?)
                          (not (contains? #{"excalidraw" "edn" "css"} ext))
-                         (not (string/includes? path "/.recycle/"))
-                         (zero? pending-writes))
-                      (p/let [local-content (encrypt/decrypt local-content)]
-                        (state/pub-event! [:file/not-matched-from-disk path local-content content]))
+                         (not (string/includes? path "/.recycle/")))
+                      (state/pub-event! [:file/not-matched-from-disk path local-content content])
                       (p/let [_ (verify-permission repo file-handle true)
                               _ (utils/writeFile file-handle content)
                               file (.getFile file-handle)]
                         (when file
-                          (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
-                                            (encrypt/decrypt content)
-                                            content)]
-                            (db/set-file-content! repo path content))
+                          (db/set-file-content! repo path content)
                           (nfs-saved-handler repo path file))))))
                 (p/catch (fn [e]
                            (js/console.error e))))
@@ -203,8 +193,11 @@
                              file (.getFile file-handle)]
                        (when file
                          (nfs-saved-handler repo path file)))
-                     (notification/show! (str "The file " path " already exists, please save your changes and click the refresh button to reload it.")
-                                         :warning)))
+                     (do
+                       (notification/show! (str "The file " path " already exists, please append the content if you need it.\n Unsaved content: \n" content)
+                                          :warning
+                                          false)
+                       (state/pub-event! [:file/alter repo path text]))))
                  (println "Error: directory handle not exists: " handle-path)))
              (p/catch (fn [error]
                         (println "Write local file failed: " {:path path})
@@ -231,12 +224,12 @@
            :file/size (get-attr "size")
            :file/type (get-attr "type")}))
       (p/rejected "File not exists")))
-  (open-dir [_this ok-handler]
+  (open-dir [_this _dir ok-handler]
     (utils/openDirectory #js {:recursive true}
                          ok-handler))
   (get-files [_this path-or-handle ok-handler]
     (utils/getFiles path-or-handle true ok-handler))
 
   ;; TODO:
-  (watch-dir! [_this _dir]
+  (watch-dir! [_this _dir _options]
     nil))

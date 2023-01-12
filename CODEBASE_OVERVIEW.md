@@ -24,7 +24,7 @@ For other tasks like bundling static resources and building the desktop app, whi
 
 [React](https://reactjs.org/) is a library for building data-driven UI declaratively. Comparing to the imperative ways (such as DOM manipulation or using jQuery), it's simpler and easier to code correctly.
 
-[Rum](https://github.com/tonsky/rum) is a React wrapper in ClojureScript. More than just providing the familiar React APIs, Rum adds many Clojure flavors to React, especially on the state management part. As a result, if you have experience with React, read Rum's [README]((https://github.com/tonsky/rum) before diving into the code.
+[Rum](https://github.com/tonsky/rum) is a React wrapper in ClojureScript. More than just providing the familiar React APIs, Rum adds many Clojure flavors to React, especially on the state management part. As a result, if you have experience with React, read Rum's [README](https://github.com/tonsky/rum) before diving into the code.
 
 ### DataScript
 

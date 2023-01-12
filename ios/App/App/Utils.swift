@@ -9,14 +9,26 @@ import Foundation
 import Capacitor
 
 @objc(Utils)
-public class Utils: CAPPlugin  {
-    
-    @objc func isZoomed(_ call: CAPPluginCall) {
-        
-        var isZoomed: Bool {
-            return UIScreen.main.scale < UIScreen.main.nativeScale
-        }
+public class Utils: CAPPlugin {
 
-        call.resolve(["isZoomed": isZoomed])
+  @objc func isZoomed(_ call: CAPPluginCall) {
+
+    var isZoomed: Bool {
+      UIScreen.main.scale < UIScreen.main.nativeScale
     }
- }
+
+    call.resolve(["isZoomed": isZoomed])
+  }
+
+  @objc func getDocumentRoot(_ call: CAPPluginCall) {
+    let doc = FileManager.default.urls(
+        for: .documentDirectory,
+        in: .userDomainMask).first
+
+    if doc != nil {
+      call.resolve(["documentRoot": doc!.path])
+    } else {
+      call.resolve(["documentRoot": ""])
+    }
+  }
+}

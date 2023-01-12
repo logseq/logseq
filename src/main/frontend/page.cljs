@@ -1,4 +1,5 @@
 (ns frontend.page
+  "Provides root component for both Logseq app and publishing build"
   (:require [rum.core :as rum]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -16,8 +17,9 @@
   []
   (try
     (comp
-     (ui/setup-active-keystroke!))
-    (catch js/Error _e
+     (ui/setup-active-keystroke!)
+     (ui/setup-viewport-listeners!))
+    (catch :default _e
       nil)))
 
 (rum/defc helpful-default-error-screen

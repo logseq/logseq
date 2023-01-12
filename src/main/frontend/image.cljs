@@ -1,7 +1,6 @@
 (ns frontend.image
+  "Image related utility fns"
   (:require ["/frontend/exif" :as exif]
-            [clojure.string :as string]
-            [frontend.date :as date]
             [goog.object :as gobj]))
 
 (defn reverse?
@@ -69,34 +68,3 @@
   (.createObjectURL (or (.-URL js/window)
                         (.-webkitURL js/window))
                     file))
-
-;; (defn build-image
-;;   []
-;;   (let [img (js/Image.)]
-;;     ))
-
-(defn upload
-  [files file-handler & {:keys [files-limit]
-                         :or {files-limit 1}}]
-  (doseq [file (take files-limit (array-seq files))]
-    (let [file-type (gobj/get file "type")
-          ymd (->> (vals (date/year-month-day-padded))
-                   (string/join "_"))
-          file-name (str ymd "_" (gobj/get file "name"))]
-      (when (= 0 (.indexOf file-type "image/"))
-        (file-handler file file-name file-type)
-        ;; (let [img (js/Image.)]
-        ;;   (set! (.-onload img)
-        ;;         (fn []
-        ;;           (get-orientation img
-        ;;                            (fn [^js off-canvas]
-        ;;                              (let [file-form-data ^js (js/FormData.)
-        ;;                                    data-url (.toDataURL off-canvas)
-        ;;                                    blob (blob/blob data-url)]
-        ;;                                (.append file-form-data "file" blob)
-        ;;                                (file-cb file file-form-data file-name file-type)))
-        ;;                            max-width
-        ;;                            max-height)))
-        ;;   (set! (.-src img)
-        ;;         (create-object-url file)))
-        ))))

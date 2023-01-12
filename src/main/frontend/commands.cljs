@@ -1,9 +1,10 @@
 (ns frontend.commands
+  "Provides functionality for commands and advanced commands"
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.utils :as db-util]
+            [frontend.db.utils :as db-utils]
             [frontend.handler.draw :as draw]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
@@ -17,6 +18,9 @@
             [frontend.util.property :as property]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.graph-parser.util.block-ref :as block-ref]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [promesa.core :as p]))
@@ -24,6 +28,7 @@
 ;; TODO: move to frontend.handler.editor.commands
 
 (defonce angle-bracket "<")
+(defonce hashtag "#")
 (defonce colon ":")
 (defonce *current-command (atom nil))
 
@@ -128,13 +133,11 @@
    [:editor/set-heading heading]
    [:editor/move-cursor-to-end]])
 
-(defn- markdown-headings
+(defn- headings
   []
-  (let [format (state/get-preferred-format)]
-    (when (= (name format) "markdown")
-      (mapv (fn [level]
-              (let [heading (str "h" level)]
-                [heading (->heading (apply str (repeat level "#")))])) (range 1 7)))))
+  (mapv (fn [level]
+          (let [heading (str "h" level)]
+            [heading (->heading level)])) (range 1 7)))
 
 (defonce *matched-commands (atom nil))
 (defonce *initial-commands (atom nil))
@@ -153,7 +156,7 @@
   ([type optional]
    (let [format (get (state/get-edit-block) :block/format)
          markdown-src? (and (= format :markdown)
-                       (= (string/lower-case type) "src"))
+                            (= (string/lower-case type) "src"))
          [left right] (cond
                         markdown-src?
                         ["```" "\n```"]
@@ -215,10 +218,10 @@
   (->>
    (concat
     ;; basic
-    [["Page reference" [[:editor/input "[[]]" {:backward-pos 2}]
+    [["Page reference" [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
                         [:editor/search-page]] "Create a backlink to a page"]
      ["Page embed" (embed-page) "Embed a page here"]
-     ["Block reference" [[:editor/input "(())" {:backward-pos 2}]
+     ["Block reference" [[:editor/input block-ref/left-and-right-parens {:backward-pos 2}]
                          [:editor/search-block :reference]] "Create a backlink to a block"]
      ["Block embed" (embed-block) "Embed a block here" "Embed a block here"]
      ["Link" (link-steps) "Create a HTTP link"]
@@ -234,11 +237,10 @@
 
        ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"]
 
-       (state/deprecated-logged?)
-       ["Upload an image" [[:editor/click-hidden-file-input :id]]]
+       ;; ["Upload an image" [[:editor/click-hidden-file-input :id]]]
        )]
 
-    (markdown-headings)
+    (headings)
 
     ;; time & date
 
@@ -274,14 +276,14 @@
      ["Draw" (fn []
                (let [file (draw/file-name)
                      path (str gp-config/default-draw-directory "/" file)
-                     text (util/format "[[%s]]" path)]
+                     text (page-ref/->page-ref path)]
                  (p/let [_ (draw/create-draw-with-default-content path)]
                    (println "draw file created, " path))
                  text)) "Draw a graph with Excalidraw"]
      ["Embed HTML " (->inline "html")]
 
      ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern (state/get-editor-command-trigger)
-                                                    :backward-pos 2}]]]
+                                                      :backward-pos 2}]]]
 
      ["Embed Youtube timestamp" [[:youtube/insert-timestamp]]]
 
@@ -292,7 +294,7 @@
     ;; Allow user to modify or extend, should specify how to extend.
 
     (state/get-commands)
-    (state/get-plugins-commands))
+    (state/get-plugins-slash-commands))
    (remove nil?)
    (util/distinct-by-last-wins first)))
 
@@ -320,7 +322,7 @@
 
 (defn insert!
   [id value
-   {:keys [last-pattern postfix-fn backward-pos forward-pos end-pattern backward-truncate-number]
+   {:keys [last-pattern postfix-fn backward-pos end-pattern backward-truncate-number command]
     :as _option}]
   (when-let [input (gdom/getElement id)]
     (let [last-pattern (when-not backward-truncate-number
@@ -333,19 +335,26 @@
                            (+ current-pos i)))
                        current-pos)
           orig-prefix (subs edit-content 0 current-pos)
+          postfix (subs edit-content current-pos)
+          postfix (if postfix-fn (postfix-fn postfix) postfix)
           space? (let [space? (when (and last-pattern orig-prefix)
                                 (let [s (when-let [last-index (string/last-index-of orig-prefix last-pattern)]
                                           (gp-util/safe-subs orig-prefix 0 last-index))]
                                   (not
                                    (or
+                                    (and (= :page-ref command)
+                                         (util/cjk-string? value)
+                                         (or (util/cjk-string? (str (last orig-prefix)))
+                                             (util/cjk-string? (str (first postfix)))))
                                     (and s
                                          (string/ends-with? s "(")
-                                         (or (string/starts-with? last-pattern "((")
-                                             (string/starts-with? last-pattern "[[")))
+                                         (or (string/starts-with? last-pattern block-ref/left-parens)
+                                             (string/starts-with? last-pattern page-ref/left-brackets)))
                                     (and s (string/starts-with? s "{{embed"))
+                                    (and s (= (last s) \#) (string/starts-with? last-pattern "[["))
                                     (and last-pattern
-                                         (or (string/ends-with? last-pattern "::")
-                                             (string/starts-with? last-pattern "::")))))))]
+                                         (or (string/ends-with? last-pattern gp-property/colons)
+                                             (string/starts-with? last-pattern gp-property/colons)))))))]
                    (if (and space? (string/starts-with? last-pattern "#[["))
                      false
                      space?))
@@ -362,8 +371,6 @@
 
                    :else
                    (util/replace-last last-pattern orig-prefix value space?))
-          postfix (subs edit-content current-pos)
-          postfix (if postfix-fn (postfix-fn postfix) postfix)
           new-value (cond
                       (string/blank? postfix)
                       prefix
@@ -377,11 +384,7 @@
                      (or backward-pos 0))]
       (when-not (string/blank? new-value)
         (state/set-block-content-and-last-pos! id new-value new-pos)
-        (cursor/move-cursor-to input
-                               (if (and (or backward-pos forward-pos)
-                                        (not= end-pattern "]]"))
-                                 new-pos
-                                 (inc new-pos)))))))
+        (cursor/move-cursor-to input new-pos)))))
 
 (defn simple-insert!
   [id value
@@ -578,10 +581,10 @@
 (defmethod handle-step :editor/insert-properties [[_ _] _format]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
-        (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
-              edit-content (gobj/get current-input "value")
-              new-value (property/insert-property format edit-content "" "")]
-          (state/set-edit-content! input-id new-value)))))
+      (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
+            edit-content (gobj/get current-input "value")
+            new-value (property/insert-property format edit-content "" "")]
+        (state/set-edit-content! input-id new-value)))))
 
 (defmethod handle-step :editor/move-cursor-to-properties [[_]]
   (when-let [input-id (state/get-edit-input-id)]
@@ -590,19 +593,33 @@
         (property/goto-properties-end format current-input)
         (cursor/move-cursor-backward current-input 3)))))
 
+(defonce markdown-heading-pattern #"^#+\s+")
+(defn set-markdown-heading
+  [content heading]
+  (let [heading-str (apply str (repeat heading "#"))]
+    (if (util/safe-re-find markdown-heading-pattern content)
+      (string/replace-first content
+                            markdown-heading-pattern
+                            (str heading-str " "))
+      (str heading-str " " (string/triml content)))))
+
+(defn clear-markdown-heading
+  [content]
+  [:pre (string? content)]
+  (string/replace-first content
+                        markdown-heading-pattern
+                        ""))
+
 (defmethod handle-step :editor/set-heading [[_ heading]]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
-      (let [edit-content (gobj/get current-input "value")
-            heading-pattern #"^#+\s+"
-            new-value (cond
-                        (util/safe-re-find heading-pattern edit-content)
-                        (string/replace-first edit-content
-                                              heading-pattern
-                                              (str heading " "))
-                        :else
-                        (str heading " " (string/triml edit-content)))]
-        (state/set-edit-content! input-id new-value)))))
+      (let [current-block (state/get-edit-block)
+            format (:block/format current-block)]
+        (if (= format :markdown)
+          (let [edit-content (gobj/get current-input "value")
+                new-content (set-markdown-heading edit-content heading)]
+            (state/set-edit-content! input-id new-content))
+          (state/pub-event! [:editor/set-org-mode-heading current-block heading]))))))
 
 (defmethod handle-step :editor/search-page [[_]]
   (state/set-editor-action! :page-search))
@@ -628,7 +645,7 @@
         macro (youtube/gen-youtube-ts-macro)]
     (when-let [input (gdom/getElement input-id)]
       (when macro
-       (util/insert-at-current-position! input (str macro " "))))))
+        (util/insert-at-current-position! input (str macro " "))))))
 
 (defmethod handle-step :youtube/insert-timestamp [[_]]
   (let [input-id (state/get-edit-input-id)
@@ -659,6 +676,6 @@
 
 (defn exec-plugin-simple-command!
   [pid {:keys [block-id] :as cmd} action]
-  (let [format (and block-id (:block/format (db-util/pull [:block/uuid block-id])))
+  (let [format (and block-id (:block/format (db-utils/pull [:block/uuid block-id])))
         inputs (vector (conj action (assoc cmd :pid pid)))]
     (handle-steps inputs format)))

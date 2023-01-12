@@ -1,4 +1,4 @@
-(ns frontend.handler.history
+(ns ^:no-doc frontend.handler.history
   (:require [frontend.db :as db]
             [frontend.handler.editor :as editor]
             [frontend.modules.editor.undo-redo :as undo-redo]
@@ -21,6 +21,7 @@
   [e]
   (util/stop e)
   (state/set-editor-op! :undo)
+  (state/clear-editor-action!)
   (editor/save-current-block!)
   (let [{:keys [editor-cursor]} (undo-redo/undo)]
     (restore-cursor! editor-cursor))
@@ -30,6 +31,7 @@
   [e]
   (util/stop e)
   (state/set-editor-op! :redo)
+  (state/clear-editor-action!)
   (let [{:keys [editor-cursor]} (undo-redo/redo)]
     (restore-cursor! editor-cursor))
   (state/set-editor-op! nil))

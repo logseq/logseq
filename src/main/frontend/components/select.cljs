@@ -17,13 +17,18 @@
             [reitit.frontend.easy :as rfe]))
 
 (rum/defc render-item
-  [{:keys [id value]} chosen?]
-  [:div.inline-grid.grid-cols-4.gap-x-4.w-full
-   {:class (when chosen? "chosen")}
-   [:span.col-span-3 value]
-   [:div.col-span-1.justify-end.tip.flex
-    (when id
-      [:code.opacity-20.bg-transparent id])]])
+  [result chosen?]
+  (if (map? result)
+    (let [{:keys [id value]} result]
+      [:div.inline-grid.grid-cols-4.gap-x-4.w-full
+       {:class (when chosen? "chosen")}
+       [:span.col-span-3 value]
+       [:div.col-span-1.justify-end.tip.flex
+        (when id
+          [:code.opacity-20.bg-transparent id])]])
+    [:div.inline-grid.grid-cols-4.gap-x-4.w-full
+     {:class (when chosen? "chosen")}
+     [:span.col-span-3 result]]))
 
 (rum/defcs select <
   (shortcut/disable-all-shortcuts)
@@ -31,28 +36,43 @@
   {:will-unmount (fn [state]
                    (state/set-state! [:ui/open-select] nil)
                    state)}
-  [state {:keys [items limit on-chosen empty-placeholder prompt-key]
+  [state {:keys [items limit on-chosen empty-placeholder
+                 prompt-key input-default-placeholder close-modal?
+                 extract-fn host-opts on-input input-opts
+                 item-cp transform-fn tap-*input-val]
           :or {limit 100
                prompt-key :select/default-prompt
-               empty-placeholder (fn [_t] [:div])}}]
+               empty-placeholder (fn [_t] [:div])
+               close-modal? true
+               extract-fn :value}}]
   (let [input (::input state)]
-    [:div.cp__select.cp__select-main
+    (when (fn? tap-*input-val)
+      (tap-*input-val input))
+    [:div.cp__select
+     (merge {:class "cp__select-main"} host-opts)
      [:div.input-wrap
       [:input.cp__select-input.w-full
-       {:type        "text"
-        :placeholder (t prompt-key)
-        :auto-focus  true
-        :value       @input
-        :on-change   (fn [e] (reset! input (util/evalue e)))}]]
+       (merge {:type        "text"
+               :placeholder (or input-default-placeholder (t prompt-key))
+               :auto-focus  true
+               :value       @input
+               :on-change   (fn [e]
+                              (let [v (util/evalue e)]
+                                (reset! input v)
+                                (and (fn? on-input) (on-input v))))}
+              input-opts)]]
 
      [:div.item-results-wrap
       (ui/auto-complete
-       (search/fuzzy-search items @input :limit limit :extract-fn :value)
-       {:item-render render-item
-        :class       "cp__select-results"
-        :on-chosen   (fn [x]
-                       (state/close-modal!)
-                       (on-chosen x))
+       (cond-> (search/fuzzy-search items @input :limit limit :extract-fn extract-fn)
+         (fn? transform-fn)
+         (transform-fn @input))
+
+       {:item-render       (or item-cp render-item)
+        :class             "cp__select-results"
+        :on-chosen         (fn [x]
+                             (when close-modal? (state/close-modal!))
+                             (on-chosen x))
         :empty-placeholder (empty-placeholder t)})]]))
 
 (defn select-config
