@@ -215,13 +215,14 @@ database changes in realtime. See [these
 docs](https://github.com/logseq/bb-tasks#logseqbb-tasksnbbwatch) for more info.
 
 ## FAQ
+
 If dev app launch failed after electron upgrade:
-```
+```sh
 yarn
 yarn watch
 ```
 In another window:
-```
+```sh
 cd static
 yarn
 cd ..
