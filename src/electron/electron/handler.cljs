@@ -38,21 +38,24 @@
 (defmethod handle :mkdir-recur [_window [_ dir]]
   (fs/mkdirSync dir #js {:recursive true}))
 
-;; {encoding: 'utf8', withFileTypes: true}
 (defn- readdir
-  [dir]
+  "Read directory recursively, return all filenames"
+  [root-dir]
   (->> (tree-seq
-        (fn [^js fpath]
-          (.isDirectory (fs/statSync fpath)))
-        (fn [dir]
-          (let [files (fs/readdirSync dir (clj->js {:withFileTypes true}))]
+        (fn [[is-dir _fpath]]
+          is-dir)
+        (fn [[_is-dir dir]]
+          (let [files (fs/readdirSync dir #js {:withFileTypes true})]
             (->> files
                  (remove #(.isSymbolicLink ^js %))
                  (remove #(string/starts-with? (.-name ^js %) "."))
-                 (map #(.join path dir (.-name %))))))
-        dir)
+                 (map #(do
+                         [(.isDirectory %)
+                          (.join path dir (.-name %))])))))
+        [true root-dir])
+       (filter (complement first))
+       (map second)
        (map utils/fix-win-path!)
-       (doall)
        (vec)))
 
 (defmethod handle :readdir [_window [_ dir]]

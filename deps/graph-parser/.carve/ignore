@@ -40,3 +40,5 @@ logseq.graph-parser.property/colons-org
 logseq.graph-parser.util.db/resolve-input
 ;; TODO: use fast-remove-nils instead
 logseq.graph-parser.util/remove-nils
+;; API
+logseq.graph-parser.text/get-file-basename
