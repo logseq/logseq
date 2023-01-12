@@ -41,10 +41,9 @@
                            (set-result! result)
                            (set-step! 1)))
 
-        copy-result-to-clipboard! (fn [result] (->>
-                                                (p/let [_ (js/navigator.clipboard.writeText result)]
-                                                  (notification/show! "Copied to clipboard!"))
-                                                (p/catch (fn [e] (notification/show! e)))))
+        copy-result-to-clipboard! (fn [result]
+                                    (util/copy-to-clipboard! result)
+                                    (notification/show! "Copied to clipboard!"))
 
         reset-step! (fn [] ((set-step! 0)
                             (set-result! {})))]
