@@ -3537,17 +3537,6 @@
     (first (:block/_parent (db/entity (:db/id block)))))
    (util/collapsed? block)))
 
-(defn set-heading!
-  [block-id format heading]
-  (if (or (true? heading) (not (= format :markdown)))
-    (do
-      (set-block-property! block-id "heading" heading)
-      (save-current-block!))
-    (let [repo (state/get-current-repo)
-          block (db/entity [:block/uuid block-id])
-          content' (commands/set-markdown-heading (:block/content block) heading)]
-      (save-block! repo block-id content'))))
-
 (defn remove-heading!
   [block-id format]
   (remove-block-property! block-id "heading")
@@ -3555,6 +3544,18 @@
     (let [repo (state/get-current-repo)
           block (db/entity [:block/uuid block-id])
           content' (commands/clear-markdown-heading (:block/content block))]
+      (save-block! repo block-id content'))))
+
+(defn set-heading!
+  [block-id format heading]
+  (remove-heading! block-id format)
+  (if (or (true? heading) (not (= format :markdown)))
+    (do
+      (set-block-property! block-id "heading" heading)
+      (save-current-block!))
+    (let [repo (state/get-current-repo)
+          block (db/entity [:block/uuid block-id])
+          content' (commands/set-markdown-heading (:block/content block) heading)]
       (save-block! repo block-id content'))))
 
 (defn block->data-transfer!
