@@ -310,8 +310,7 @@
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
         block (merge block
                      (block/parse-title-and-body uuid format pre-block? (:block/content block)))
-        properties (-> (:block/properties block)
-                       (dissoc :heading))
+        properties (:block/properties block)
         real-content (:block/content block)
         content (if (and (seq properties) real-content (not= real-content content))
                   (property/with-built-in-properties properties content format)
@@ -3542,8 +3541,8 @@
   [block-id format heading]
   (if (or (true? heading) (not (= format :markdown)))
     (do
-      (save-current-block!)
-      (set-block-property! block-id "heading" heading))
+      (set-block-property! block-id "heading" heading)
+      (save-current-block!))
     (let [repo (state/get-current-repo)
           block (db/entity [:block/uuid block-id])
           content' (commands/set-markdown-heading (:block/content block) heading)]
