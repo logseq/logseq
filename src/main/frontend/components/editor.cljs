@@ -555,6 +555,7 @@
       (= :property-value-search action)
       (animated-modal "property-value-search" (property-value-search id) true)
 
+      ;; date-picker in editing-mode
       (= :datepicker action)
       (animated-modal "date-picker" (datetime-comp/date-picker id format nil) false)
 

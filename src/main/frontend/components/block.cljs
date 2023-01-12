@@ -2101,10 +2101,13 @@
         [:button.p-1.mr-2 p])]
      [:code "Property name begins with a non-numeric character and can contain alphanumeric characters and . * + ! - _ ? $ % & = < >. If -, + or . are the first character, the second character (if any) must be non-numeric."]]))
 
-(rum/defcs timestamp-cp < rum/reactive
+(rum/defcs timestamp-cp
+  < rum/reactive
+  (rum/local false ::show-datepicker?)
   [state block typ ast]
-  (let [ts-block (state/sub :editor/set-timestamp-block)
-        active? #(= (get block :block/uuid) (get-in ts-block [:block :block/uuid]))]
+  (let [ts-block-id (state/sub [:editor/set-timestamp-block :block :block/uuid])
+        active? (= (get block :block/uuid) ts-block-id)
+        *show-datapicker? (get state ::show-datepicker?)]
     [:div.flex.flex-col.gap-4.timestamp
      [:div.text-sm.flex.flex-row
       [:div.opacity-50.font-medium.timestamp-label
@@ -2112,19 +2115,23 @@
       [:a.opacity-80.hover:opacity-100
        {:on-mouse-down (fn [e]
                          (util/stop e)
-                         (if (active?)
-                          (do
-                            (reset! commands/*current-command nil)
-                            (state/clear-editor-action!)
-                            (state/set-timestamp-block! nil))
+                         (state/clear-editor-action!)
+                         (editor-handler/escape-editing false)
+                         (if active?
                            (do
+                             (reset! *show-datapicker? false)
+                             (reset! commands/*current-command nil)
+                             (state/set-timestamp-block! nil))
+                           (do
+                             (reset! *show-datapicker? true)
                              (reset! commands/*current-command typ)
-                             (state/set-editor-action! :datepicker)
                              (state/set-timestamp-block! {:block block
                                                           :typ typ}))))}
        [:span.time-start "<"] [:time (repeated/timestamp->text ast)] [:span.time-stop ">"]]]
-     (when (active?)
-          (datetime-comp/date-picker nil nil (repeated/timestamp->map ast)))]))
+     ;; date-picker in rendering-mode
+     (if (and active? @*show-datapicker?)
+       (datetime-comp/date-picker nil nil (repeated/timestamp->map ast))
+       (reset! *show-datapicker? false))]))
 
 (defn- target-forbidden-edit?
   [target]

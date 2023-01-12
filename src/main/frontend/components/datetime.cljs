@@ -144,24 +144,23 @@
                                    (contains? #{"deadline" "scheduled"}
                                               (string/lower-case current-command)))
         date (state/sub :date-picker/date)]
-    (when (= :datepicker (state/sub :editor/action))
-      [:div#date-time-picker.flex.flex-row {:on-click (fn [e] (util/stop e))
-                                            :on-mouse-down (fn [e] (.stopPropagation e))}
-       (ui/datepicker
-        date
-        {:deadline-or-schedule? deadline-or-schedule?
-         :on-change
-         (fn [e date]
-           (util/stop e)
-           (let [date (t/to-default-time-zone date)
-                 journal (date/journal-name date)]
-             (when-not deadline-or-schedule?
+    [:div#date-time-picker.flex.flex-row {:on-click (fn [e] (util/stop e))
+                                          :on-mouse-down (fn [e] (.stopPropagation e))}
+     (ui/datepicker
+      date
+      {:deadline-or-schedule? deadline-or-schedule?
+       :on-change
+       (fn [e date]
+         (util/stop e)
+         (let [date (t/to-default-time-zone date)
+               journal (date/journal-name date)]
+           (when-not deadline-or-schedule?
                ;; similar to page reference
-               (editor-handler/insert-command! id
-                                               (page-ref/->page-ref journal)
-                                               format
-                                               {:command :page-ref})
-               (state/clear-editor-action!)
-               (reset! commands/*current-command nil))))})
-       (when deadline-or-schedule?
-         (time-repeater))])))
+             (editor-handler/insert-command! id
+                                             (page-ref/->page-ref journal)
+                                             format
+                                             {:command :page-ref})
+             (state/clear-editor-action!)
+             (reset! commands/*current-command nil))))})
+     (when deadline-or-schedule?
+       (time-repeater))]))
