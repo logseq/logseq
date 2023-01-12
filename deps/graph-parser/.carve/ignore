@@ -38,3 +38,5 @@ logseq.graph-parser/get-blocks-to-delete
 logseq.graph-parser.property/colons-org
 ;; API
 logseq.graph-parser.util.db/resolve-input
+;; API
+logseq.graph-parser.text/get-file-basename
