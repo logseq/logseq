@@ -103,18 +103,17 @@
     [:div.flex.items-center.mb-2
      (ui/icon "bug")
      [:h1.text-3xl.ml-2 "Bug report"]]
-    [:div.opacity-60 "We are sorry to hear that you have faced the bug 🐛"]
-    [:div.opacity-60 "But you can report it to us and we will try our best to fix it :)"]]
+    [:div.opacity-60 "Oops, looks like something went wrong.."]
+    [:div.opacity-60 "Can you help us out by submitting a bug report? We'll get it sorted out as soon as we can"]]
    [:div.rounded-lg.bg-gray-200.p-8.mt-8
-    [:h1.text-2xl "Does the bug you faced relate to these fields?"]
-    [:div.opacity-60 "More information you feedback to us, more efficient we will fix that bug."]
-    [:div.opacity-60 "You can use these handy tools to provide extra information to us."]
+    [:h1.text-2xl "Is the bug you encountered related to these fields?"]
+    [:div.opacity-60 "You can use these handy tools to give us additional information"]
     (report-item-button "Clipboard"
-                 "Inspect and collect clipboard data for us"
+                 "Inspect and collect clipboard data"
                  "clipboard"
                  {:on-click #(util/open-url (rfe/href :bug-report-tools {:tool "clipboard-data-inspector"}))})
     [:div.py-2] ;; divider
     [:div.flex.flex-col
      [:h1.text-2xl "Or..."]
-     [:div.opacity-60 "Directly report the bug if there is no tool for you to collect extra information."]
-     (report-item-button "Report bug" "Write a bug report to us" "message-report" {:on-click #(util/open-url header/bug-report-url)})]]])
+     [:div.opacity-60 "If there are no tools available for you to gather additional information, please report the bug directly"]
+     (report-item-button "Report bug" "Submit a bug report" "message-report" {:on-click #(util/open-url header/bug-report-url)})]]])
