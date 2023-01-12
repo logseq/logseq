@@ -212,3 +212,19 @@ Currently the codebase is not formatted/indented consistently. We loosely follow
 There are some babashka tasks under `nbb:` which are useful for inspecting
 database changes in realtime. See [these
 docs](https://github.com/logseq/bb-tasks#logseqbb-tasksnbbwatch) for more info.
+
+## FAQ
+If dev app launch failed after electron upgrade:
+```
+yarn
+yarn watch
+```
+In another window:
+```
+cd static
+yarn
+cd ..
+yarn dev-electron-app
+``` 
+and kill all electron process
+Then a normal start happens via `yarn dev-electron-app`

@@ -28,7 +28,7 @@
   (let [{:keys [where in]} (datalog-util/query-vec->map query)
         rules-found (datalog-util/find-rules-in-where where (-> rules/query-dsl-rules keys set))]
     (if (seq rules-found)
-      (if (= '% (last in))
+      (if (and (= '% (last in)) (vector? (last (:inputs query-m))))
         ;; Add to existing :inputs rules
         (update query-m
                 :inputs
@@ -46,9 +46,15 @@
             (update :query
                     (fn [q]
                       (if (contains? (set q) :in)
-                        (datalog-util/add-to-end-of-query-section q :in ['%])
+                        ;; only add '% if not already present
+                        (if (not (contains? (set q) '%))
+                          (datalog-util/add-to-end-of-query-section q :in ['%])
+                          q)
                         (into q [:in '$ '%]))))
-            (assoc :rules (mapv rules/query-dsl-rules rules-found))))
+            (update :rules
+                    (fn [rules]
+                      (into (or rules [])
+                            (mapv rules/query-dsl-rules rules-found))))))
       query-m)))
 
 (defn custom-query

@@ -2,6 +2,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.svg :as svg]
+            [frontend.components.block :as block]
             [frontend.context.i18n :refer [t]]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.pdf.utils :as pdf-utils]
@@ -93,11 +94,11 @@
   "The contextual menu which appears over a text selection and allows e.g. creating a highlight."
   [^js viewer
    {:keys [highlight point ^js selection]}
-   {:keys [clear-ctx-tip! add-hl! upd-hl! del-hl!]}]
+   {:keys [clear-ctx-menu! add-hl! upd-hl! del-hl!]}]
 
   (rum/use-effect!
    (fn []
-     (let [cb #(clear-ctx-tip!)]
+     (let [cb #(clear-ctx-menu!)]
        (js/setTimeout #(js/document.addEventListener "click" cb))
        #(js/document.removeEventListener "click" cb)))
    [])
@@ -158,7 +159,7 @@
 
                               (reset! *highlight-last-color (keyword action)))))
 
-                        (and clear? (js/setTimeout #(clear-ctx-tip!) 68))))]
+                        (and clear? (js/setTimeout #(clear-ctx-menu!) 68))))]
 
     (rum/use-effect!
      (fn []
@@ -208,43 +209,58 @@
      ]))
 
 (rum/defc pdf-highlights-text-region
-  [^js viewer vw-hl hl
-   {:keys [show-ctx-tip!]}]
+  [^js viewer vw-hl hl {:keys [show-ctx-menu!]}]
 
-  (let [{:keys [rects]} (:position vw-hl)
+  (let [{:keys [id]} hl
+        {:keys [rects]} (:position vw-hl)
         {:keys [color]} (:properties hl)
-        open-tip! (fn [^js/MouseEvent e]
-                    (.preventDefault e)
-                    (let [x (.-clientX e)
-                          y (.-clientY e)]
 
-                      (show-ctx-tip! viewer hl {:x x :y y})))]
+        open-ctx-menu!
+        (fn [^js/MouseEvent e]
+          (.preventDefault e)
+          (let [x (.-clientX e)
+                y (.-clientY e)]
+
+            (show-ctx-menu! viewer hl {:x x :y y})))
+
+        dragstart-handle!
+        (fn [^js e]
+          (when-let [^js dt (and id (.-dataTransfer e))]
+            (reset! block/*dragging? true)
+            (pdf-assets/ensure-ref-block! (state/get-current-pdf) hl)
+            (.setData dt "text/plain" (str "((" id "))"))))]
 
     [:div.extensions__pdf-hls-text-region
-     {:on-click        open-tip!
-      :on-context-menu open-tip!}
+     {:on-click        open-ctx-menu!
+      :on-context-menu open-ctx-menu!}
 
      (map-indexed
       (fn [idx rect]
         [:div.hls-text-region-item
-         {:key        idx
-          :style      rect
-          :data-color color}])
+         {:key           idx
+          :style         rect
+          :draggable     "true"
+          :on-drag-start dragstart-handle!
+          :data-color    color}])
       rects)]))
 
 (rum/defc ^:large-vars/cleanup-todo pdf-highlight-area-region
-  [^js viewer vw-hl hl
-   {:keys [show-ctx-tip! upd-hl!]}]
+  [^js viewer vw-hl hl {:keys [show-ctx-menu! upd-hl!]}]
 
-  (let [*el       (rum/use-ref nil)
-        *dirty    (rum/use-ref nil)
-        open-tip! (fn [^js/MouseEvent e]
-                    (.preventDefault e)
-                    (when-not (rum/deref *dirty)
-                      (let [x (.-clientX e)
-                            y (.-clientY e)]
+  (let [{:keys [id]} hl
+        *el    (rum/use-ref nil)
+        *dirty (rum/use-ref nil)
+        open-ctx-menu! (fn [^js/MouseEvent e]
+                         (.preventDefault e)
+                         (when-not (rum/deref *dirty)
+                           (let [x (.-clientX e)
+                                 y (.-clientY e)]
 
-                        (show-ctx-tip! viewer hl {:x x :y y}))))]
+                             (show-ctx-menu! viewer hl {:x x :y y}))))
+
+        dragstart-handle! (fn [^js e]
+                            (when-let [^js dt (and id (.-dataTransfer e))]
+                              (.setData dt "text/plain" (str "((" id "))"))))]
 
     ;; resizable
     (rum/use-effect!
@@ -331,8 +347,10 @@
          {:ref             *el
           :style           vw-bounding
           :data-color      color
-          :on-click        open-tip!
-          :on-context-menu open-tip!}]))))
+          :draggable       "true"
+          :on-drag-start   dragstart-handle!
+          :on-click        open-ctx-menu!
+          :on-context-menu open-ctx-menu!}]))))
 
 (rum/defc pdf-highlights-region-container
   "Displays the highlights over a pdf document."
@@ -349,7 +367,7 @@
        ))])
 
 (rum/defc ^:large-vars/cleanup-todo pdf-highlight-area-selection
-  [^js viewer {:keys [show-ctx-tip!]}]
+  [^js viewer {:keys [show-ctx-menu!]}]
 
   (let [^js viewer-clt          (.. viewer -viewer -classList)
         ^js cnt-el              (.-container viewer)
@@ -439,7 +457,7 @@
                                                      :properties {}}]
 
                                     ;; ctx tips
-                                    (show-ctx-tip! viewer hl point {:reset-fn #(reset-coords)})
+                                    (show-ctx-menu! viewer hl point {:reset-fn #(reset-coords)})
 
                                     ;; export area highlight
                                     ;;(dd "[selection end] :start"
@@ -481,17 +499,17 @@
         *mounted       (rum/use-ref false)
         [sel-state, set-sel-state!] (rum/use-state {:selection nil :range nil :collapsed nil :point nil})
         [highlights, set-highlights!] (rum/use-state initial-hls)
-        [tip-state, set-tip-state!] (rum/use-state {:highlight nil :vw-pos nil :selection nil :point nil :reset-fn nil})
+        [ctx-menu-state, set-ctx-menu-state!] (rum/use-state {:highlight nil :vw-pos nil :selection nil :point nil :reset-fn nil})
 
-        clear-ctx-tip! (rum/use-callback
-                        #(let [reset-fn (:reset-fn tip-state)]
-                           (set-tip-state! {})
+        clear-ctx-menu! (rum/use-callback
+                        #(let [reset-fn (:reset-fn ctx-menu-state)]
+                           (set-ctx-menu-state! {})
                            (and (fn? reset-fn) (reset-fn)))
-                        [tip-state])
+                        [ctx-menu-state])
 
-        show-ctx-tip!  (fn [^js viewer hl point & ops]
+        show-ctx-menu!  (fn [^js viewer hl point & ops]
                          (let [vw-pos (pdf-utils/scaled-to-vw-pos viewer (:position hl))]
-                           (set-tip-state! (apply merge (list* {:highlight hl :vw-pos vw-pos :point point} ops)))))
+                           (set-ctx-menu-state! (apply merge (list* {:highlight hl :vw-pos vw-pos :point point} ops)))))
 
         add-hl!        (fn [hl] (when (:id hl)
                                   ;; fix js object
@@ -603,7 +621,7 @@
 
            ;; show ctx menu
            (js/setTimeout (fn []
-                            (set-tip-state! {:highlight hl-fn
+                            (set-ctx-menu-state! {:highlight hl-fn
                                              :selection selection
                                              :point     point})))) 0))
 
@@ -621,7 +639,7 @@
 
                (rum/mount
                 (pdf-highlights-region-container
-                 viewer page-hls {:show-ctx-tip! show-ctx-tip!
+                 viewer page-hls {:show-ctx-menu! show-ctx-menu!
                                   :upd-hl!       upd-hl!})
 
                 hls-layer)))))
@@ -633,10 +651,10 @@
     [:div.extensions__pdf-highlights-cnt
 
      ;; hl context tip menu
-     (when-let [_hl (:highlight tip-state)]
+     (when-let [_hl (:highlight ctx-menu-state)]
        (js/ReactDOM.createPortal
-        (pdf-highlights-ctx-menu viewer tip-state
-                                 {:clear-ctx-tip! clear-ctx-tip!
+        (pdf-highlights-ctx-menu viewer ctx-menu-state
+                                 {:clear-ctx-menu! clear-ctx-menu!
                                   :add-hl!        add-hl!
                                   :del-hl!        del-hl!
                                   :upd-hl!        upd-hl!})
@@ -660,8 +678,8 @@
      ;; area selection container
      (pdf-highlight-area-selection
       viewer
-      {:clear-ctx-tip! clear-ctx-tip!
-       :show-ctx-tip!  show-ctx-tip!
+      {:clear-ctx-menu! clear-ctx-menu!
+       :show-ctx-menu!  show-ctx-menu!
        :add-hl!        add-hl!
        })]))
 
