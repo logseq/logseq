@@ -23,8 +23,8 @@
                              frontend.util/node-path.join
                              frontend.util/node-path.extname
                              frontend.util/node-path.name
-                             ;; frontend.pubs/def-mult-or-pub generate vars clj-kondo cannot resolve
-                             frontend.pubs]}
+                             ;; frontend.pubsub/def-mult-or-pub generate vars clj-kondo cannot resolve
+                             frontend.pubsub]}
 
   :consistent-alias
   {:aliases {cljs.reader reader
