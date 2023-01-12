@@ -22,6 +22,14 @@ adds rules that users often use"
   (when-let [result (query-custom/custom-query test-helper/test-db query opts)]
     (map first (deref result))))
 
+(defn- block-uuid [content]
+  (-> (db-utils/q '[:find (pull ?b [:block/uuid]) 
+                    :in $ ?content
+                    :where [?b :block/content ?content]] 
+                  content) 
+      ffirst 
+      :block/uuid))
+
 (deftest resolve-input-for-page-and-block-inputs
   (load-test-files [{:file/path "pages/page1.md"
                      :file/content
@@ -150,10 +158,120 @@ adds rules that users often use"
                 (custom-query {:inputs [:9d-before-journal-day :2d-after-journal-day] 
                                :query '[:find (pull ?b [*]) 
                                         :in $ ?before ?after 
-                                        :where [?b :block/page ?p] 
-                                               (between ?d ?before ?after)]}
+                                        :where (between ?b ?before ?after)]}
                               {:current-block-uuid block-uuid}))))
       ":9d-before-journal-day and :2d-after-journal-day can be used to create a date range"))
+
+(deftest resolve-input-for-week-queries 
+  (load-test-files [{:file/path "journals/2023_01_01.md" 
+                     :file/content "- sun 01"} 
+                    {:file/path "journals/2023_01_02.md" 
+                     :file/content "- mon 02"}
+                    {:file/path "journals/2023_01_07.md" 
+                     :file/content "- sat 07"}
+                    {:file/path "journals/2023_01_08.md" 
+                     :file/content "- sun 08"}
+                    {:file/path "journals/2023_01_12.md" 
+                     :file/content "- thu 12"}
+                    {:file/path "journals/2023_01_15.md" 
+                     :file/content "- sun 15"}
+                    {:file/path "journals/2023_01_16.md" 
+                     :file/content "- mon 16"}])
+
+  (with-redefs [t/today (constantly (t/date-time 2023 1 12))]
+    (is (= ["sun 08"]
+           (map :block/content
+                (custom-query {:inputs [:1w-before-sun]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?day
+                                        :where [?b :block/page ?p] 
+                                               [?p :page/journal-day ?d] 
+                                               [(= ?d ?day)]]}))))
+
+    (is (= ["sun 01"]
+           (map :block/content
+                (custom-query {:inputs [:1w-before-sun-us]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?day
+                                        :where [?b :block/page ?p] 
+                                               [?p :page/journal-day ?d] 
+                                               [(= ?d ?day)]]}))))
+
+    (is (= ["sun 01"]
+           (map :block/content
+                (custom-query {:inputs [:2w-before-sun]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?day
+                                        :where [?b :block/page ?p] 
+                                               [?p :page/journal-day ?d] 
+                                               [(= ?d ?day)]]}))))
+
+    (is (= ["sun 08" "sat 07" "mon 02"]
+           (map :block/content
+                (custom-query {:inputs [:1w-before-journal-day-mon :1w-before-journal-day-sun]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where (between ?b ?start ?end)]} 
+                              {:current-block-uuid (block-uuid "sun 15")})))
+        "return days between 02 and 08")
+
+    (is (= ["thu 12" "sun 08"]
+           (map :block/content
+                (custom-query {:inputs [:1w-before-journal-day-sun-us :1w-before-journal-day-sat-us]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where (between ?b ?start ?end)]} 
+                              {:current-block-uuid (block-uuid "sun 15")})))
+        "return days between 08 and 14"))
+
+  (with-redefs [t/today (constantly (t/date-time 2023 1 5))]
+    (is (= ["sun 15"]
+           (map :block/content
+                (custom-query {:inputs [:1w-after-sun]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?day
+                                        :where [?b :block/page ?p] 
+                                               [?p :page/journal-day ?d] 
+                                               [(= ?d ?day)]]}))))
+
+    (is (= ["sun 08"]
+           (map :block/content
+                (custom-query {:inputs [:1w-after-sun-us]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?day
+                                        :where [?b :block/page ?p] 
+                                               [?p :page/journal-day ?d] 
+                                               [(= ?d ?day)]]}))))
+
+    (is (= ["sun 15" "thu 12"]
+           (map :block/content
+                (custom-query {:inputs [:1w-after-journal-day-mon :1w-after-journal-day-sun]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where (between ?b ?start ?end)]}
+                              {:current-block-uuid (block-uuid "sun 08")})))
+        "returns days between 09 and 15")
+
+    (is (= ["mon 16" "sun 15"]
+           (map :block/content
+                (custom-query {:inputs [:1w-after-journal-day-sun-us :1w-after-journal-day-sat-us]
+                               :query '[:find (pull ?b [*])
+                                        :in $ ?start ?end
+                                        :where (between ?b ?start ?end)]}
+                              {:current-block-uuid (block-uuid "sun 08")})))
+        "returns days between 15 and 21")))
+
+    ; (is (= ["sun 1"]
+    ;        (map :block/content
+    ;             (custom-query {:inputs [:2w-before-sun]
+    ;                            :query '[:find (pull ?b [*])
+    ;                                     :in $ ?day
+    ;                                     :where [?b :block/page ?p] 
+    ;                                            [?p :page/journal-day ?d] 
+    ;                                            [(= ?d ?day)]]}
+    ;                           {:current-block-uuid (block-uuid "thu")}))))))
+                              
+  
           
 
 ;; These tests rely on seeding times

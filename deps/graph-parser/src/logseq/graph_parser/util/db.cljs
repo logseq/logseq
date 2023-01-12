@@ -2,6 +2,7 @@
   "Db util fns that are useful for the frontend and nbb-logseq. This may be used
   by the graph-parser soon but if not, it should be in its own library"
   (:require [cljs-time.core :as t]
+            [cljs-time.coerce :refer [to-date]]
             [logseq.graph-parser.date-time-util :as date-time-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [datascript.core :as d]
@@ -29,6 +30,24 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
     (t/date-time (parse-long (subs str 0 4))
                  (parse-long (subs str 4 6))
                  (parse-long (subs str 6 8)))))
+
+(defn get-short-weekday [& date]
+  (case (:weekday (apply date-time-util/get-date date))
+    "Monday"    "mon"
+    "Tuesday"   "tue"
+    "Wednesday" "wed"
+    "Thursday"  "thu"
+    "Friday"    "fri"
+    "Saturday"  "sat"
+    "Sunday"    "sun"))
+
+(defn days-between [next-day prev-day]
+  (- (case next-day "mon" 0 "tue" 1 "wed" 2 "thu" 3 "fri" 4 "sat" 5 "sun" 6)
+     (case prev-day "mon" 0 "tue" 1 "wed" 2 "thu" 3 "fri" 4 "sat" 5 "sun" 6)))
+
+(defn days-between-us [next-day prev-day]
+  (- (case next-day "sun" 0 "mon" 1 "tue" 2 "wed" 3 "thu" 4 "fri" 5 "sat" 6)
+     (case prev-day "sun" 0 "mon" 1 "tue" 2 "wed" 3 "thu" 4 "fri" 5 "sat" 6)))
 
 (defn resolve-input
   "Main fn for resolving advanced query :inputs"
@@ -68,6 +87,68 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
     (let [journal-day (-> (d/entity db [:block/uuid current-block-uuid]) :block/page :block/journal-day)
           days (parse-long (re-find #"^\d+" (name input)))
           date (int->date journal-day)]
+      (date->int (t/plus date (t/days days))))
+    ;; e.g. :1w-before-sun
+    (and (keyword? input) 
+         (re-find #"^\d+w-before-(mon|tue|wed|thu|fri|sat|sun)(-us)?$" (name input)))
+    (let [input (name input)
+          us? (re-find #"-us$" input)
+          weeks (parse-long (re-find #"^\d+" input))
+          current-day (get-short-weekday)
+          desired-day (if us? 
+                        (subs input (- (count input) 6) (- (count input) 3))
+                        (subs input (- (count input) 3)))
+          days (+ (* 7 weeks) 
+                  (if us? (days-between-us current-day desired-day)
+                          (days-between current-day desired-day)))]
+      (date->int (t/minus (t/today) (t/days days))))
+    ;; e.g. :1w-after-sun
+    (and (keyword? input) 
+         (re-find #"^\d+w-after-(mon|tue|wed|thu|fri|sat|sun)(-us)?$" (name input)))
+    (let [input (name input)
+          us? (re-find #"-us$" input)
+          weeks (parse-long (re-find #"^\d+" input))
+          current-day (get-short-weekday)
+          desired-day (if us? 
+                        (subs input (- (count input) 6) (- (count input) 3))
+                        (subs input (- (count input) 3)))
+          days (+ (* 7 weeks) 
+                  (if us? (days-between-us desired-day current-day)
+                          (days-between desired-day current-day)))]
+      (date->int (t/plus (t/today) (t/days days))))
+    ;; e.g. :1w-before-journal-day-sun
+    (and (keyword? input) 
+         (re-find #"^\d+w-before-journal-day-(mon|tue|wed|thu|fri|sat|sun)(-us)?$" (name input))
+         (some-> (d/entity db [:block/uuid current-block-uuid]) :block/page :block/journal-day))
+    (let [input (name input)
+          journal-day (-> (d/entity db [:block/uuid current-block-uuid]) :block/page :block/journal-day)
+          date (int->date journal-day)
+          us? (re-find #"-us$" input)
+          weeks (parse-long (re-find #"^\d+" input))
+          journal-day (get-short-weekday (to-date date))
+          desired-day (if us? 
+                        (subs input (- (count input) 6) (- (count input) 3))
+                        (subs input (- (count input) 3)))
+          days (+ (* 7 weeks) 
+                  (if us? (days-between-us journal-day desired-day)
+                          (days-between journal-day desired-day)))]
+      (date->int (t/minus date (t/days days))))
+    ;; e.g. :1w-after-journal-day-sun
+    (and (keyword? input) 
+         (re-find #"^\d+w-after-journal-day-(mon|tue|wed|thu|fri|sat|sun)(-us)?$" (name input))
+         (some-> (d/entity db [:block/uuid current-block-uuid]) :block/page :block/journal-day))
+    (let [input (name input)
+          journal-day (-> (d/entity db [:block/uuid current-block-uuid]) :block/page :block/journal-day)
+          date (int->date journal-day)
+          us? (re-find #"-us$" input)
+          weeks (parse-long (re-find #"^\d+" input))
+          journal-day (get-short-weekday (to-date date))
+          desired-day (if us? 
+                        (subs input (- (count input) 6) (- (count input) 3))
+                        (subs input (- (count input) 3)))
+          days (+ (* 7 weeks) 
+                  (if us? (days-between-us desired-day journal-day)
+                          (days-between desired-day journal-day)))]
       (date->int (t/plus date (t/days days))))
     ;; e.g. :3d-before
     (and (keyword? input)
