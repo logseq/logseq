@@ -87,6 +87,15 @@
        (= name "clipboard-data-inspector")
        (clipboard-data-inspector))]))
 
+(rum/defc report-item-button
+  [title description icon-name {:keys [on-click]}]
+  [:div.flex.flex-col
+   [:a.flex.items-center.rounded-lg.bg-gray-300.px-4.py-2.my-2 {:on-click on-click}
+    [(ui/icon icon-name)
+     [:div.flex.flex-col.ml-2
+      [:div title]
+      [:div.opacity-60 description]]]]])
+
 (rum/defc bug-report
   []
   [:div.flex.flex-col
@@ -100,21 +109,12 @@
     [:h1.text-2xl "Does the bug you faced relate to these fields?"]
     [:div.opacity-60 "More information you feedback to us, more efficient we will fix that bug."]
     [:div.opacity-60 "You can use these handy tools to provide extra information to us."]
-    [:div.flex.flex-col
-     [:a.flex.items-center.rounded-lg.bg-gray-300.px-4.py-2.my-2 {:on-click
-                                                            #(util/open-url (rfe/href :bug-report-tools {:tool "clipboard-data-inspector"}))}
-      [(ui/icon "clipboard")
-       [:div.flex.flex-col.ml-2
-        [:div  "Clipboard"]
-        [:div.opacity-60  "Inspect and collect clipboard data for us"]]]]]
+    (report-item-button "Clipboard"
+                 "Inspect and collect clipboard data for us"
+                 "clipboard"
+                 {:on-click #(util/open-url (rfe/href :bug-report-tools {:tool "clipboard-data-inspector"}))})
     [:div.py-2] ;; divider
     [:div.flex.flex-col
      [:h1.text-2xl "Or..."]
      [:div.opacity-60 "Directly report the bug if there is no tool for you to collect extra information."]
-     [:a.flex.items-center.rounded-lg.bg-gray-300.px-4.py-2.my-2 {:on-click
-                                                            #(util/open-url header/bug-report-url)}
-      [(ui/icon "message-report")
-       [:div.flex.flex-col.ml-2
-        [:div  "Report bug"]
-        [:div.opacity-60  "Write a bug report to us"]]]
-      ]]]])
+     (report-item-button "Report bug" "Write a bug report to us" "message-report" {:on-click #(util/open-url header/bug-report-url)})]]])
