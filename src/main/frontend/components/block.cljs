@@ -294,8 +294,8 @@
                          (js/setTimeout #(reset! *resizing-image? false) 200)))
           :onClick (fn [e]
                      (when @*resizing-image? (util/stop e)))}
-          (and (:width metadata) (not (util/mobile?)))
-          (assoc :style {:width (:width metadata)}))
+         (and (:width metadata) (not (util/mobile?)))
+         (assoc :style {:width (:width metadata)}))
         {})
       [:div.asset-container {:key "resize-asset-container"}
        [:img.rounded-sm.relative
@@ -713,8 +713,8 @@
   [config title path]
   (let [repo (state/get-current-repo)
         real-path-url (if (util/absolute-path? path)
-                    path
-                    (assets-handler/resolve-asset-real-path-url repo path))
+                       path
+                       (assets-handler/resolve-asset-real-path-url repo path))
         ext-name (util/get-file-ext path)
         title-or-path (cond
                         (string? title)
@@ -934,9 +934,9 @@
              inner)])
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (block-ref/->block-ref id)]))
-  [:span.warning.mr-1 {:title "Block ref invalid"}
-    (block-ref/->block-ref id)]
-))
+   [:span.warning.mr-1 {:title "Block ref invalid"}
+     (block-ref/->block-ref id)]))
+
 
 (defn inline-text
   ([format v]
@@ -1114,8 +1114,8 @@
         {:href      (str "file://" path)
          :data-href path
          :target    "_blank"}
-         title
-         (assoc :title title))
+        title
+        (assoc :title title))
        (map-inline config label)))
 
     :else
@@ -1208,8 +1208,8 @@
            (cond->
             {:href (ar-url->http-url href)
              :target "_blank"}
-             title
-             (assoc :title title))
+            title
+            (assoc :title title))
            (map-inline config label))
 
           :else
@@ -1218,8 +1218,8 @@
            (cond->
             {:href href
              :target "_blank"}
-             title
-             (assoc :title title))
+            title
+            (assoc :title title))
            (map-inline config label)))))))
 
 ;;;; Macro component render functions
@@ -2112,11 +2112,11 @@
                             (reset! commands/*current-command nil)
                             (state/clear-editor-action!)
                             (state/set-timestamp-block! nil))
-                           (do
-                             (reset! commands/*current-command typ)
-                             (state/set-editor-action! :datepicker)
-                             (state/set-timestamp-block! {:block block
-                                                          :typ typ}))))}
+                          (do
+                            (reset! commands/*current-command typ)
+                            (state/set-editor-action! :datepicker)
+                            (state/set-timestamp-block! {:block block
+                                                         :typ typ}))))}
        [:span.time-start "<"] [:time (repeated/timestamp->text ast)] [:span.time-stop ">"]]]
      (when (active?)
           (datetime-comp/date-picker nil nil (repeated/timestamp->map ast)))]))
@@ -2208,7 +2208,7 @@
              (and (not block-content?)
                   (seq (:block/children block))
                   (= move-to :nested)))
-          (dnd-separator move-to block-content?))))))
+         (dnd-separator move-to block-content?))))))
 
 (defn clock-summary-cp
   [block body]
@@ -2250,19 +2250,19 @@
         content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
                          :on-click
-                         :on-mouse-down ; TODO: it seems that Safari doesn't work well with on-mouse-down
-                         )
+                         :on-mouse-down) ; TODO: it seems that Safari doesn't work well with on-mouse-down
+                         
         attrs (cond->
                {:blockid       (str uuid)
                 :data-type (name block-type)
                 :style {:width "100%" :pointer-events (when stop-events? "none")}}
 
-                (not (string/blank? (:hl-color properties)))
-                (assoc :data-hl-color (:hl-color properties))
+               (not (string/blank? (:hl-color properties)))
+               (assoc :data-hl-color (:hl-color properties))
 
-                (not block-ref?)
-                (assoc mouse-down-key (fn [e]
-                                        (block-content-on-mouse-down e block block-id content edit-input-id))))]
+               (not block-ref?)
+               (assoc mouse-down-key (fn [e]
+                                       (block-content-on-mouse-down e block block-id content edit-input-id))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :on-mouse-up (fn [e]
@@ -2916,8 +2916,8 @@
          :li
          (cond->
           {:checked checked?}
-           number
-           (assoc :value number))
+          number
+          (assoc :value number))
          (vec-cat
           [(->elem
             :p
@@ -2978,10 +2978,10 @@
 (defn logbook-cp
   [log]
   (let [clocks (filter #(string/starts-with? % "CLOCK:") log)
-        clocks (reverse (sort-by str clocks))
+        clocks (reverse (sort-by str clocks))]
         ;; TODO: diplay states change log
         ; states (filter #(not (string/starts-with? % "CLOCK:")) log)
-        ]
+        
     (when (seq clocks)
       (let [tr (fn [elm cols] (->elem :tr
                                       (mapv (fn [col] (->elem elm col)) cols)))
@@ -3138,8 +3138,8 @@
                                                              (get-in config [:block :block/format] :markdown)
                                                              title)
                                 :else title)]
-           [:span.opacity-60.text-sm.ml-2.results-count
-            (str (count result) " results")]]
+            [:span.opacity-60.text-sm.ml-2.results-count
+             (str (count result) " results")]]
 
            ;;insert an "edit" button in the query view
            [:div.flex.items-center

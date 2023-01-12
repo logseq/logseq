@@ -544,10 +544,10 @@
             [:div
              [:p.text-sm.opacity-70.px-4
               (let [c1 (count (:nodes graph))
-                    s1 (if (> c1 1) "s" "")
+                    s1 (if (> c1 1) "s" "")]
                     ;; c2 (count (:links graph))
                     ;; s2 (if (> c2 1) "s" "")
-                    ]
+                    
                 ;; (util/format "%d page%s, %d link%s" c1 s1 c2 s2)
                 (util/format "%d page%s" c1 s1))]
              [:div.p-6
@@ -712,27 +712,27 @@
 
 (rum/defc page-graph-inner < rum/reactive
   [_page graph dark?]
-   (let [ show-journals-in-page-graph? (rum/react *show-journals-in-page-graph?) ]
-  [:div.sidebar-item.flex-col
-             [:div.flex.items-center.justify-between.mb-0
-              [:span (t :right-side-bar/show-journals)]
-              [:div.mt-1
-               (ui/toggle show-journals-in-page-graph? ;my-val;
-                           (fn []
-                             (let [value (not show-journals-in-page-graph?)]
-                               (reset! *show-journals-in-page-graph? value)
-                               ))
-                          true)]
-              ]
+  (let [ show-journals-in-page-graph? (rum/react *show-journals-in-page-graph?)]
+   [:div.sidebar-item.flex-col
+              [:div.flex.items-center.justify-between.mb-0
+               [:span (t :right-side-bar/show-journals)]
+               [:div.mt-1
+                (ui/toggle show-journals-in-page-graph? ;my-val;
+                            (fn []
+                              (let [value (not show-journals-in-page-graph?)]
+                                (reset! *show-journals-in-page-graph? value)))
+                               
+                           true)]]
+              
 
-   (graph/graph-2d {:nodes (:nodes graph)
-                    :links (:links graph)
-                    :width 600
-                    :height 600
-                    :dark? dark?
-                    :register-handlers-fn
-                    (fn [graph]
-                      (graph-register-handlers graph (atom nil) (atom nil) dark?))})]))
+    (graph/graph-2d {:nodes (:nodes graph)
+                     :links (:links graph)
+                     :width 600
+                     :height 600
+                     :dark? dark?
+                     :register-handlers-fn
+                     (fn [graph]
+                       (graph-register-handlers graph (atom nil) (atom nil) dark?))})]))
 
 (rum/defc page-graph < db-mixins/query rum/reactive
   []
@@ -779,8 +779,8 @@
   [:th
    {:class [(name key)]}
    [:a.fade-link {:on-click (fn []
-                    (reset! by-item key)
-                    (swap! desc? not))}
+                             (reset! by-item key)
+                             (swap! desc? not))}
     [:span.flex.items-center
      [:span.mr-1 title]
      (when (= @by-item key)

@@ -51,6 +51,7 @@ adds rules that users often use"
                                         :where [?b :block/parent ?current-block]]}
                               {:current-block-uuid block-uuid}))))
       ":current-block input resolves to current block's :db/id")
+  
   (is (= ["parent"]
          (let [block-uuid (-> (db-utils/q '[:find (pull ?b [:block/uuid])
                                             :where [?b :block/content "child 1"]])
@@ -88,7 +89,74 @@ adds rules that users often use"
                                         :where (between ?b ?start ?end)]}))))
       ":tomorrow and :Xd-after resolve to correct journal range"))
 
-;; These tests rely on seeding timestamps with properties. If this ability goes
+(deftest resolve-input-for-journal-day-inputs
+  (load-test-files [{:file/path "journals/2023_01_01.md" 
+                     :file/content "- b1"} 
+                    {:file/path "journals/2023_01_10.md" 
+                     :file/content "- b2"}
+                    {:file/path "journals/2023_01_12.md" 
+                     :file/content "- b3"}])
+  (is (= ["b2"] 
+         (let [block-uuid (-> (db-utils/q '[:find (pull ?b [:block/uuid]) 
+                                            :where [?b :block/content "b2"]]) 
+                              ffirst 
+                              :block/uuid)]
+           (map :block/content 
+                (custom-query {:inputs [:journal-day] 
+                               :query '[:find (pull ?b [*]) 
+                                        :in $ ?journal-day 
+                                        :where [?b :block/page ?p] 
+                                               [?p :page/journal-day ?d] 
+                                               [(= ?d ?journal-day)]]}
+                              {:current-block-uuid block-uuid}))))
+      ":journal-day input resolves to the journal of the provided block")
+
+  (is (= ["b1"] 
+         (let [block-uuid (-> (db-utils/q '[:find (pull ?b [:block/uuid]) 
+                                            :where [?b :block/content "b2"]]) 
+                              ffirst 
+                              :block/uuid)]
+           (map :block/content 
+                (custom-query {:inputs [:9d-before-journal-day] 
+                               :query '[:find (pull ?b [*]) 
+                                        :in $ ?day 
+                                        :where [?b :block/page ?p] 
+                                               [?p :page/journal-day ?d] 
+                                               [(= ?d ?day)]]}
+                              {:current-block-uuid block-uuid}))))
+      ":9d-before-journal-day resolved to the relative journal to the provided block")
+
+  (is (= ["b3"] 
+         (let [block-uuid (-> (db-utils/q '[:find (pull ?b [:block/uuid]) 
+                                            :where [?b :block/content "b2"]]) 
+                              ffirst 
+                              :block/uuid)]
+           (map :block/content 
+                (custom-query {:inputs [:2d-after-journal-day] 
+                               :query '[:find (pull ?b [*]) 
+                                        :in $ ?day 
+                                        :where [?b :block/page ?p] 
+                                               [?p :page/journal-day ?d] 
+                                               [(= ?d ?day)]]}
+                              {:current-block-uuid block-uuid}))))
+      ":2d-after-journal-day resolved to the relative journal to the provided block")
+
+  (is (= ["b3" "b2" "b1"]
+         (let [block-uuid (-> (db-utils/q '[:find (pull ?b [:block/uuid]) 
+                                            :where [?b :block/content "b2"]]) 
+                              ffirst 
+                              :block/uuid)]
+           (map :block/content 
+                (custom-query {:inputs [:9d-before-journal-day :2d-after-journal-day] 
+                               :query '[:find (pull ?b [*]) 
+                                        :in $ ?before ?after 
+                                        :where [?b :block/page ?p] 
+                                               (between ?d ?before ?after)]}
+                              {:current-block-uuid block-uuid}))))
+      ":9d-before-journal-day and :2d-after-journal-day can be used to create a date range"))
+          
+
+;; These tests rely on seeding times
 ;; away we could still test page-level timestamps
 (deftest resolve-input-for-timestamp-inputs
   (let [today-timestamp (db-util/date-at-local-ms 0 0 0 0)

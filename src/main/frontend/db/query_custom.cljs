@@ -13,14 +13,14 @@
   [l]
   (let [block-attrs (butlast model/block-attrs)]
     (walk/postwalk
-    (fn [f]
-      (if (and (list? f)
-               (= 'pull (first f))
-               (= '?b (second f))
-               (= '[*] (nth f 2)))
-        `(~'pull ~'?b ~block-attrs)
-        f))
-    l)))
+     (fn [f]
+       (if (and (list? f)
+                (= 'pull (first f))
+                (= '?b (second f))
+                (= '[*] (nth f 2)))
+         `(~'pull ~'?b ~block-attrs)
+         f))
+     l)))
 
 (defn- add-rules-to-query
   "Searches query's :where for rules and adds them to query if used"

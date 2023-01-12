@@ -22,6 +22,14 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
   (parse-long
    (string/replace (date-time-util/ymd date) "/" "")))
 
+(defn int->date 
+  "Given a journals page integer, returns its date object" 
+  [int]
+  (let [str (str int)]
+    (t/date-time (parse-long (subs str 0 4))
+                 (parse-long (subs str 4 6))
+                 (parse-long (subs str 6 8)))))
+
 (defn resolve-input
   "Main fn for resolving advanced query :inputs"
   [db input {:keys [current-block-uuid current-page-fn]
@@ -42,6 +50,25 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
     (date->int (t/minus (t/today) (t/days 1)))
     (= :tomorrow input)
     (date->int (t/plus (t/today) (t/days 1)))
+    (and (= :journal-day input) 
+         (some-> (d/entity db [:block/uuid current-block-uuid]) :block/page :block/journal-day))
+    (-> (d/entity db [:block/uuid current-block-uuid]) :block/page :block/journal-day)
+    ; e.g. :3d-before-journal-day
+    (and (keyword? input) 
+         (re-find #"^\d+d-before-journal(-day)$" (name input))
+         (some-> (d/entity db [:block/uuid current-block-uuid]) :block/page :block/journal-day))
+    (let [journal-day (-> (d/entity db [:block/uuid current-block-uuid]) :block/page :block/journal-day)
+          days (parse-long (re-find #"^\d+" (name input)))
+          date (int->date journal-day)]
+      (date->int (t/minus date (t/days days))))
+    ; e.g. :3d-after-journal-day
+    (and (keyword? input) 
+         (re-find #"^\d+d-after-journal(-day)$" (name input))
+         (some-> (d/entity db [:block/uuid current-block-uuid]) :block/page :block/journal-day))
+    (let [journal-day (-> (d/entity db [:block/uuid current-block-uuid]) :block/page :block/journal-day)
+          days (parse-long (re-find #"^\d+" (name input)))
+          date (int->date journal-day)]
+      (date->int (t/plus date (t/days days))))
     ;; e.g. :3d-before
     (and (keyword? input)
          (re-find #"^\d+d(-before)?$" (name input)))
