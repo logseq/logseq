@@ -12,6 +12,8 @@
 ;; TODO how to parse file: 	getAsFile () => URL.createObjectURL (file)
 ;; TODO how to collect data: Just parse into JSON or edn
 
+;; TODO types vs files
+
 (defn retrieve-text-from-clipboard-blob [data]
   (let [type (.-type data)]
     (if (string/includes? type "text/") ;; TODO regex MIME text
@@ -32,43 +34,17 @@
     (= data-type "dataTransfer") ;; from Ctrl+V
     (let [types (.-types data)
           result (map (fn [type] [type (.getData data type)]) types)]
-      (->> result
-           (map (fn [val] (p/let [] val)))
-           (p/all)))))
+      result)))
 
 (rum/defc bug-report-tool-clipboard
   "bug report tool for clipboard"
   []
   (let [[result set-result!] (rum/use-state {}) ;; TODO use it
         [step set-step!] (rum/use-state 0)
-        on-click-read-data-from-clipboard! (fn []
-                                             (-> (p/let [premission (js/navigator.permissions.query (clj->js {:name "clipboard-read"}))]
-                                                   (js/console.log premission)
-                                                   (when (= (.-state premission) "denied")
-                                                     (throw (js/Error "Premission denied")))
-                                                   (->  (p/let [clipboard-data (js/navigator.clipboard.read)]
-                                                          (js/console.log clipboard-data)
-                                                            ;; get ClipboardItems
-                                                          (p/let [types (.-types (first clipboard-data))
-                                                                  blob-data (p/all (map (fn [type] (p/let [_ (.getType (first clipboard-data) type)] _)) types))]
-                                                            (-> blob-data
-                                                                (clj->js)
-                                                                (js/console.log))
-
-                                                            (js/console.log (clj->js (parse-clipboard-obj-data blob-data "Blobs")))
-                                                            (p/let [result (parse-clipboard-obj-data blob-data "Blobs")
-                                                                    result (into {} result)]
-                                                              (js/console.log (clj->js result))
-                                                              (set-result! result)
-                                                              (set-step! 1))))))
-                                                 (p/catch (fn [err] (notification/show! (str err))))))
-
         paste-handler! (fn [e]
                          (let [clipboard-data (.-clipboardData e)]
-                        ;;    (js/console.log (.-items clipboard-data))
-
-                           (p/let [result (parse-clipboard-obj-data clipboard-data "dataTransfer")
-                                   result (into {} result)]
+                           (let [result (parse-clipboard-obj-data clipboard-data "dataTransfer")
+                                 result (into {} result)]
                              (js/console.log (clj->js result))
                              (set-result! result)
                              (set-step! 1))))
@@ -86,7 +62,10 @@
      (when (= step 0)
        (list [:div.mx-auto "1. Press Ctrl+V / ⌘+V to inspect your clipboard data"]
              [:div.mx-auto "or click this button"]
-             [:div.mx-auto (ui/button "Read data from clipboard" :on-click on-click-read-data-from-clipboard!)]))
+            ;;  [:div.mx-auto (ui/button "Read data from clipboard" :on-click on-click-read-data-from-clipboard!)]
+
+             ;; TODO use a textarea to get paste from mobile
+             ))
 
      (when (= step 1)
        (list
