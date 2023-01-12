@@ -88,13 +88,12 @@
        (clipboard-data-inspector))]))
 
 (rum/defc report-item-button
-  [title description icon-name {:keys [on-click]}]
-  [:div.cp__bug-report-item-button.flex.flex-col.rounded-lg
-   [:a.flex.items-center.px-4.py-2.my-2 {:on-click on-click}
+  [title description icon-name {:keys [on-click]}] 
+   [:a.cp__bug-report-item-button.flex.items-center.px-4.py-2.my-2.rounded-lg {:on-click on-click}
     [(ui/icon icon-name)
      [:div.flex.flex-col.ml-2
       [:div title]
-      [:div.opacity-60 description]]]]])
+      [:div.opacity-60 description]]]])
 
 (rum/defc bug-report
   []
