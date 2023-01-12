@@ -57,6 +57,8 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
     ;; page and block inputs
     (= :current-page input)
     (some-> (current-page-fn) string/lower-case)
+    (= :query-page input)
+    (some->> current-block-uuid (vector :block/uuid) (d/entity db) :block/page :block/name)
     (and current-block-uuid (= :current-block input))
     (:db/id (d/entity db [:block/uuid current-block-uuid]))
     (and current-block-uuid (= :parent-block input))

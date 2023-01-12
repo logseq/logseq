@@ -113,12 +113,12 @@
   [k query time inputs result-atom transform-fn query-fn inputs-fn]
   (let [time' (int (util/safe-parse-float time))] ;; for robustness. `time` should already be float
     (swap! query-state assoc k {:query query
-                               :query-time time'
-                               :inputs inputs
-                               :result result-atom
-                               :transform-fn transform-fn
-                               :query-fn query-fn
-                               :inputs-fn inputs-fn}))
+                                :query-time time'
+                                :inputs inputs
+                                :result result-atom
+                                :transform-fn transform-fn
+                                :query-fn query-fn
+                                :inputs-fn inputs-fn}))
   result-atom)
 
 (defn remove-q!
@@ -291,26 +291,26 @@
   (when (or skip-query-time-check?
             (<= (or query-time 0) 80))
     (let [new-result (->
-                     (cond
-                       query-fn
-                       (let [result (query-fn db tx result)]
-                         (if (coll? result)
-                           (doall result)
-                           result))
+                      (cond
+                        query-fn
+                        (let [result (query-fn db tx result)]
+                          (if (coll? result)
+                            (doall result)
+                            result))
 
-                       inputs-fn
-                       (let [inputs (inputs-fn)]
-                         (apply d/q query db inputs))
+                        inputs-fn
+                        (let [inputs (inputs-fn)]
+                          (apply d/q query db inputs))
 
-                       (keyword? query)
-                       (db-utils/get-key-value graph query)
+                        (keyword? query)
+                        (db-utils/get-key-value graph query)
 
-                       (seq inputs)
-                       (apply d/q query db inputs)
+                        (seq inputs)
+                        (apply d/q query db inputs)
 
-                       :else
-                       (d/q query db))
-                     transform-fn)]
+                        :else
+                        (d/q query db))
+                      transform-fn)]
      (when-not (= new-result result)
        (set-new-result! k new-result tx)))))
 

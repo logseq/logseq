@@ -105,8 +105,9 @@
           inputs (cond-> resolved-inputs
                          rules
                          (conj rules))
-          k [:custom (or (:query-string query') query')]]
+          k [:custom (or (:query-string query') query') resolved-inputs]]
       (pprint "inputs (post-resolution):" resolved-inputs)
       (pprint "query-opts:" query-opts)
+      (pprint "query-key:" k)
       (pprint (str "time elapsed: " (.toFixed (- (.now js/performance) start-time) 2) "ms"))
       (apply react/q repo k query-opts query inputs))))
