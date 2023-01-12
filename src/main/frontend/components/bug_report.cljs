@@ -14,27 +14,19 @@
 
 ;; TODO types vs files
 
-(defn retrieve-text-from-clipboard-blob [data]
-  (let [type (.-type data)]
-    (if (string/includes? type "text/") ;; TODO regex MIME text
-      (p/let [text (.text data)] [type text]) ;; process it
-      (p/let [_ data] [type data]))))
 
-(defn parse-clipboard-obj-data
-  "parse dataTransfer or Blobs"
-  [data data-type]
-  (js/console.log "Parse starts..." (clj->js data) data-type)
-  (cond
-    (= data-type "Blobs") ;; from clicking the button 
-    (->> data
-         (map retrieve-text-from-clipboard-blob)
-         ;; TODO process images
-         (p/all))
-
-    (= data-type "dataTransfer") ;; from Ctrl+V
-    (let [types (.-types data)
-          result (map (fn [type] [type (.getData data type)]) types)]
-      result)))
+(defn parse-clipboard-data-transfer
+  "parse dataTransfer
+   
+   input: dataTransfer
+   
+   output: {:types {:type :data} :items {:kind :type} :files {:name :size :type}}"
+  [data]
+  (js/console.log "Parse starts..." (clj->js data))
+  (let [types (.-types data)
+        result (map (fn [type] [type (.getData data type)]) types)]
+    (js-debugger)
+    result))
 
 (rum/defc bug-report-tool-clipboard
   "bug report tool for clipboard"
@@ -43,7 +35,7 @@
         [step set-step!] (rum/use-state 0)
         paste-handler! (fn [e]
                          (let [clipboard-data (.-clipboardData e)]
-                           (let [result (parse-clipboard-obj-data clipboard-data "dataTransfer")
+                           (let [result (parse-clipboard-data-transfer clipboard-data)
                                  result (into {} result)]
                              (js/console.log (clj->js result))
                              (set-result! result)
@@ -61,7 +53,7 @@
     [:div.flex.flex-col
      (when (= step 0)
        (list [:div.mx-auto "1. Press Ctrl+V / ⌘+V to inspect your clipboard data"]
-             [:div.mx-auto "or click this button"]
+             [:div.mx-auto "or click here to paste if you are using mobile phone"]
             ;;  [:div.mx-auto (ui/button "Read data from clipboard" :on-click on-click-read-data-from-clipboard!)]
 
              ;; TODO use a textarea to get paste from mobile
