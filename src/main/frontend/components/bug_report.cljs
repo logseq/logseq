@@ -89,8 +89,8 @@
 
 (rum/defc report-item-button
   [title description icon-name {:keys [on-click]}]
-  [:div.flex.flex-col
-   [:a.flex.items-center.rounded-lg.bg-gray-300.px-4.py-2.my-2 {:on-click on-click}
+  [:div.cp__bug-report-item-button.flex.flex-col.rounded-lg
+   [:a.flex.items-center.px-4.py-2.my-2 {:on-click on-click}
     [(ui/icon icon-name)
      [:div.flex.flex-col.ml-2
       [:div title]
@@ -105,7 +105,7 @@
      [:h1.text-3xl.ml-2 "Bug report"]]
     [:div.opacity-60 "Oops, looks like something went wrong.."]
     [:div.opacity-60 "Can you help us out by submitting a bug report? We'll get it sorted out as soon as we can"]]
-   [:div.rounded-lg.bg-gray-200.p-8.mt-8
+   [:div.cp__bug-report-reporter.rounded-lg.p-8.mt-8
     [:h1.text-2xl "Is the bug you encountered related to these fields?"]
     [:div.opacity-60 "You can use these handy tools to give us additional information"]
     (report-item-button "Clipboard helper"
