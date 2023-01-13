@@ -78,7 +78,7 @@
                                        :duration "d"}))}
        "Add repeater"])))
 
-(defn clear-timestamp!
+(defn- clear-timestamp!
   []
   (reset! *timestamp default-timestamp-value)
   (reset! *show-time? false)
@@ -86,6 +86,7 @@
   (state/set-state! :date-picker/date nil))
 
 (defn- on-submit
+  "Submit handler of date picker"
   [e]
   (when e (util/stop e))
   (let [{:keys [repeater] :as timestamp} @*timestamp
@@ -105,6 +106,7 @@
     (when show?
       (reset! show? false)))
   (clear-timestamp!)
+  (state/set-timestamp-block! nil)
   (commands/restore-state))
 
 (rum/defc time-repeater < rum/reactive
@@ -138,7 +140,7 @@
              (when-not (:date-picker/date @state/state)
                (state/set-state! :date-picker/date (get ts :date (t/today)))))
            state)}
-  [id format _ts]
+  [dom-id format _ts]
   (let [current-command @commands/*current-command
         deadline-or-schedule? (and current-command
                                    (contains? #{"deadline" "scheduled"}
@@ -154,9 +156,10 @@
          (util/stop e)
          (let [date (t/to-default-time-zone date)
                journal (date/journal-name date)]
+           ;; deadline-or-schedule? is handled in on-sumbit, not here
            (when-not deadline-or-schedule?
                ;; similar to page reference
-             (editor-handler/insert-command! id
+             (editor-handler/insert-command! dom-id
                                              (page-ref/->page-ref journal)
                                              format
                                              {:command :page-ref})
