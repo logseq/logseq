@@ -77,10 +77,13 @@ mistakes [as noted here](./contributing-to-translations.md#fix-mistakes).
 
 ## Testing
 
+Even though we have a nightly release channel, it's hard for testing users (thanks to the brave users!) to notice all issues in a limited time, as Logseq is covering so many features (and the hell of combinations) 
+The only solution is automatic end-to-end tests - adding tests for GUI software is always painful but necessary
 We have unit and end to end tests.
 
 ### End to End Tests
 
+https://github.com/logseq/logseq/pulls?q=E2E 
 To run end to end tests
 
 ```sh
@@ -95,11 +98,15 @@ If e2e failed after first running:
 - `rm -rdf <repo dir>/tmp/`  
 - Windows: `rmdir /s %APPDATA%/Electron`  (Reference: https://www.electronjs.org/de/docs/latest/api/app#appgetpathname)
 
-If e2e tests fail, they can be debugged by examining a trace dump with [the
+There's a `traceAll()` helper function to enable playwright trace file dump for specific test files https://github.com/logseq/logseq/pull/8332
+
+If e2e tests fail in the file, they can be debugged by examining a trace dump with [the
 playwright trace
-viewer](https://playwright.dev/docs/trace-viewer#recording-a-trace). Locally
-this will get dumped into e2e-dump/. On CI the trace file will be under
-Artifacts at the bottom of a run page e.g.
+viewer](https://playwright.dev/docs/trace-viewer#recording-a-trace). 
+
+Locally this will get dumped into e2e-dump/. 
+
+On CI the trace file will be under Artifacts at the bottom of a run page e.g.
 https://github.com/logseq/logseq/actions/runs/3574600322.
 
 ### Unit Testing
