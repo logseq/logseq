@@ -97,12 +97,17 @@
         text (repeated/timestamp-map->text timestamp)
         block-data (state/get-timestamp-block)
         {:keys [block typ show?]} block-data
+        editing-block-id (:block/uuid (state/get-edit-block))
         block-id (or (:block/uuid block)
-                     (:block/uuid (state/get-edit-block)))
+                     editing-block-id)
         typ (or @commands/*current-command typ)]
-    (editor-handler/set-block-timestamp! block-id
-                                         typ
-                                         text)
+    (if (and (state/editing?) (= editing-block-id block-id))
+      (editor-handler/set-editing-block-timestamp! typ
+                                                   text)
+      (editor-handler/set-block-timestamp! block-id
+                                           typ
+                                           text))
+
     (when show?
       (reset! show? false)))
   (clear-timestamp!)
