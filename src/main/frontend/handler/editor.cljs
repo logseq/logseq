@@ -2076,10 +2076,10 @@
 
                          :else
                          true)]
-         (save-current-block!)
          (outliner-tx/transact!
            {:outliner-op :insert-blocks
             :created-from-journal-template? journal?}
+           (save-current-block!)
            (let [result (outliner-core/insert-blocks! blocks'
                                                       target
                                                       (assoc opts
