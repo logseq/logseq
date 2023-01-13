@@ -25,6 +25,17 @@
               (-> path (string/replace-first "./" "")
                   (string/replace-first #"^/+" "")))))
 
+(defn inflate-assets-urls
+  [content]
+  (if-let [matches (and (not (string/blank? content))
+                        (re-seq #"src=\"([^\"]+)\"" content))]
+    (reduce
+     (fn [content matched]
+       (if-let [matched (second matched)]
+         (string/replace content matched (resolve-asset-url matched)) content))
+     content matches)
+    content))
+
 (rum/defc link-card
   [opts child]
 
@@ -57,7 +68,7 @@
            (:key topic)))))]])
 
 (rum/defc pane-topic-detail
-  [handbook-nodes pane-state nav!]
+  [handbook-nodes pane-state _nav!]
 
   (when-let [topic-key (:key (second pane-state))]
     (when-let [topic (get handbook-nodes topic-key)]
@@ -70,8 +81,9 @@
           [:img {:src (resolve-asset-url demo)}]])
 
        [:div.content-wrap
-        [:div.content.markdown-body
-         {:dangerouslySetInnerHTML {:__html (:content topic)}}]]])))
+        (when-let [content (:content topic)]
+          [:div.content.markdown-body
+           {:dangerouslySetInnerHTML {:__html (inflate-assets-urls content)}}])]])))
 
 (rum/defc pane-dashboard
   [handbooks-nodes pane-state nav-to-pane!]
