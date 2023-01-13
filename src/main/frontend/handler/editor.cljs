@@ -2681,6 +2681,7 @@
 (defn keydown-tab-handler
   [direction]
   (fn [e]
+    (save-current-block!)
     (cond
       (state/editing?)
       (when-not (state/get-editor-action)

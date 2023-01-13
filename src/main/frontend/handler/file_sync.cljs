@@ -145,23 +145,22 @@
                                      (apply path/join base-path))
             version-file-paths (<! (p->c (fs/readdir version-files-dir :path-only? true)))]
         (when-not (instance? ExceptionInfo version-file-paths)
-          (let [version-file-paths (remove #{version-files-dir} version-file-paths)]
-            (when (seq version-file-paths)
-              (->>
-               (mapv
-                (fn [path]
-                  (try
-                    (let [create-time
-                          (-> (path/parse path)
-                              (js->clj :keywordize-keys true)
-                              :name
-                              (#(tf/parse (tf/formatter "yyyy-MM-dd'T'HH_mm_ss.SSSZZ") %)))]
-                      {:create-time create-time :path path :relative-path (string/replace-first path base-path "")})
-                    (catch :default e
-                      (log/error :page-history/parse-format-error e)
-                      nil)))
-                version-file-paths)
-               (remove nil?)))))))))
+          (when (seq version-file-paths)
+            (->>
+             (mapv
+              (fn [path]
+                (try
+                  (let [create-time
+                        (-> (path/parse path)
+                            (js->clj :keywordize-keys true)
+                            :name
+                            (#(tf/parse (tf/formatter "yyyy-MM-dd'T'HH_mm_ss.SSSZZ") %)))]
+                    {:create-time create-time :path path :relative-path (string/replace-first path base-path "")})
+                  (catch :default e
+                    (log/error :page-history/parse-format-error e)
+                    nil)))
+              version-file-paths)
+             (remove nil?))))))))
 
 (defn fetch-page-file-versions [graph-uuid page]
   []
