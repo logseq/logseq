@@ -45,7 +45,7 @@
   [{:keys [num duration kind]}]
   (let [show? (rum/react *show-repeater?)]
     (if (or show? (and num duration kind))
-      [:div.w.full.flex.flex-row.justify-left {:style {:height 32}}
+      [:div.w.full.flex.flex-row.justify-left
        [:input#repeater-num.form-input.mt-1.w-8.px-1.sm:w-20.sm:px-2.text-center
         {:default-value num
          :on-change (fn [event]
