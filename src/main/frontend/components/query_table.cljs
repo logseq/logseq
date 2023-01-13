@@ -170,7 +170,9 @@
                               [:string (when-let [updated-at (:block/updated-at item)]
                                          (date/int->local-time-2 updated-at))]
 
-                              [:string (get-in item [:block/properties column])])]
+                              [:string (or (get-in item [:block/properties-text-values column])
+                                           ;; Fallback to property relationships for page blocks
+                                           (get-in item [:block/properties column]))])]
                   [:td.whitespace-nowrap {:on-mouse-down (fn [] (reset! select? false))
                                           :on-mouse-move (fn [] (reset! select? true))
                                           :on-mouse-up (fn []

@@ -146,7 +146,7 @@
         ;; refresh remote graph list by pub login event
         (when (user-uuid) (state/pub-event! [:user/fetch-info-and-graphs]))))))
 
-(defn login-callback [code]
+(defn ^:export login-callback [code]
   (state/set-state! [:ui/loading? :login] true)
   (go
     (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_callback?code=" code)

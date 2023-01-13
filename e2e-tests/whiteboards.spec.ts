@@ -105,7 +105,7 @@ test('zoom out', async ({ page }) => {
   await page.keyboard.press('Shift+0')
   await page.waitForTimeout(1500)
   await page.click('#tl-zoom-out')
-  await expect(page.locator('#tl-zoom')).toContainText('100%')
+  await expect(page.locator('#tl-zoom')).toContainText('80%')
 })
 
 test('open context menu', async ({ page }) => {
