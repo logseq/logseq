@@ -376,7 +376,7 @@
   [blocks]
   (map (fn [block]
          (if (map? block)
-           (block-keywordize (gp-util/remove-nils block))
+           (block-keywordize (gp-util/remove-nils-non-nested block))
            block))
        blocks))
 
