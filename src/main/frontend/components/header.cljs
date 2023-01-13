@@ -70,6 +70,7 @@
     (str "https://github.com/logseq/logseq/issues/new?"
          "title=&"
          "template=bug_report.yaml&"
+         "labels=from:in-app&"
          "platform="
          (js/encodeURIComponent platform))))
 
@@ -120,9 +121,7 @@
 
        {:title [:div.flex-row.flex.justify-between.items-center
                 [:span (t :help/bug)]]
-        :options {:href bug-report-url
-                  :title "Fire a bug report on Github"
-                  :target "_blank"}
+        :options {:href (rfe/href :bug-report)}
         :icon (ui/icon "bug")}
 
        (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
