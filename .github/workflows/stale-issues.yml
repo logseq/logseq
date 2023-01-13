@@ -29,7 +29,6 @@ jobs:
           operations-per-run: 100  # max num of ops per run
           stale-issue-label: ':status/automatic-stale'
           close-issue-label: ':status/automatic-closing'
-          # trunk-ignore(yamllint/line-length)
           exempt-issue-labels: ':status/hold, :status/WIP, :type/enhancement, type/can-be-reproduced, priority-A'
           remove-stale-when-updated: true
           stale-issue-message: |
@@ -45,6 +44,7 @@ jobs:
               - **Forum**: https://discuss.logseq.com
               - **Blog**: https://blog.logseq.com
               - **Docs**: https://docs.logseq.com
+              - **Discord**: [Logseq Community Server](https://discord.gg/KpN4eHY)
 
             Thanks for your contributions to Logseq! If you have any other [**issues**](https://github.com/logseq/logseq/issues/new/choose) or [**feature requests**](https://discuss.logseq.com/c/feature-requests/), please don't hesitate to [let us know](https://github.com/logseq/logseq/issues/new/choose). We always welcome pull requests too!
 
@@ -53,11 +53,12 @@ jobs:
         uses: actions/stale@6f05e4244c9a0b2ed3401882b05d701dd0a7289b  # v7
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          days-before-issue-stale: 40
-          days-before-close: 20
-          operations-per-run: 30  # max num of ops per run
+          days-before-issue-stale: 14
+          days-before-close: 14
+          operations-per-run: 100  # max num of ops per run
           stale-issue-label: ':status/automatic-stale'
           close-issue-label: ':status/automatic-closing'
+          exempt-issue-labels: ':status/hold, :status/WIP, type/can-be-reproduced, priority-A, :type/bug'
           only-labels: 'awaiting response'
           remove-stale-when-updated: true
           stale-issue-message: |
@@ -73,6 +74,30 @@ jobs:
               - **Forum**: https://discuss.logseq.com
               - **Blog**: https://blog.logseq.com
               - **Docs**: https://docs.logseq.com
+              - **Discord**: [Logseq Community Server](https://discord.gg/KpN4eHY)
 
             Thanks for your contributions to Logseq! If you have any other [**issues**](https://github.com/logseq/logseq/issues/new/choose) or [**feature requests**](https://discuss.logseq.com/c/feature-requests/), please don't hesitate to [let us know](https://github.com/logseq/logseq/issues/new/choose). We always welcome pull requests too!
 
+      - name: '🧹 Close feature requests and direct users to the forums'
+        id: feature_requests
+        uses: actions/stale@6f05e4244c9a0b2ed3401882b05d701dd0a7289b  # v7
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          days-before-issue-stale: 0
+          days-before-close: 1
+          operations-per-run: 100  # max num of ops per run
+          stale-issue-label: ':status/automatic-stale'
+          close-issue-label: ':status/automatic-closing'
+          only-labels: 'feature, :type/feature, :type/feature-request'
+          remove-stale-when-updated: true
+          close-issue-message: |
+            Hey there! 👋
+            Thanks for reaching out with your feature request. We appreciate your input! However, feature requests are better handled on our [Logseq Forum](https://discuss.logseq.com/c/feature-requests/) where users can discuss and vote on new features. Your input will help us prioritize and implement the most requested features.
+            Please note that this issue will be closed as feature requests are not accepted here on the issue tracker. We apologize for any inconvenience and hope to see you on our forum. Thanks for your support
+
+            Access additional [Logseq](https://logseq.com) 🚀 resources:
+              - **Discord**: [Logseq Community Server](https://discord.gg/KpN4eHY)
+              - **Blog**: https://blog.logseq.com
+              - **Docs**: https://docs.logseq.com
+
+            Thanks for your contributions to Logseq! If you have any other [**issues**](https://github.com/logseq/logseq/issues/new/choose) or [**feature requests**](https://discuss.logseq.com/c/feature-requests/), please don't hesitate to [let us know](https://github.com/logseq/logseq/issues/new/choose). We always welcome pull requests too!
