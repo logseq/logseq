@@ -12,6 +12,7 @@ test('enable whiteboards', async ({ page }) => {
   await page.click('#head .dropdown-wrapper >> text=Settings')
   await page.click('.settings-modal a[data-id=features]')
   await page.click('text=Whiteboards >> .. >> .ui__toggle')
+  await page.waitForTimeout(1000)
   await page.keyboard.press('Escape')
   await expect(page.locator('.nav-header .whiteboard')).toBeVisible()
 })
@@ -19,7 +20,7 @@ test('enable whiteboards', async ({ page }) => {
 test('create new whiteboard', async ({ page }) => {
   await page.click('.nav-header .whiteboard')
   await page.click('#tl-create-whiteboard')
-  await page.waitForTimeout(1000)
+  await page.waitForTimeout(1500)
   await expect(page.locator('.logseq-tldraw')).toBeVisible()
 })
 
