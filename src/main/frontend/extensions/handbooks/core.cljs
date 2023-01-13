@@ -7,17 +7,21 @@
    [promesa.core :as p]
    [camel-snake-kebab.core :as csk]
    [frontend.util :as util]
+   [frontend.storage :as storage]
    [clojure.edn :as edn]))
 
-(def Handbooks_ENDPOINT
-  (if (state/developer-mode?)
-    "http://localhost:1337"
-    "https://handbooks.pages.dev"))
+(defn get-handbooks-endpoint
+  [resource]
+  (str
+   (if (storage/get :handbooks-dev-watch?)
+     "http://localhost:1337"
+     "https://handbooks.pages.dev")
+   resource))
 
 (defn resolve-asset-url
   [path]
   (if (string/starts-with? path "http")
-    path (str Handbooks_ENDPOINT "/"
+    path (str (get-handbooks-endpoint "/")
               (-> path (string/replace-first "./" "")
                   (string/replace-first #"^/+" "")))))
 
@@ -48,7 +52,9 @@
     (let [category-key (:key (second pane-state))]
       (when-let [category (get handbook-nodes category-key)]
         (for [topic (:children category)]
-          (topic-card topic #(nav! [:topic-detail topic (:title category)] pane-state)))))]])
+          (rum/with-key
+           (topic-card topic #(nav! [:topic-detail topic (:title category)] pane-state))
+           (:key topic)))))]])
 
 (rum/defc pane-topic-detail
   [handbook-nodes pane-state nav!]
@@ -100,7 +106,7 @@
     [:p.flex.items-center.space-x-3.mb-0
      [:strong "Development watch"]
      (ui/toggle dev-watch? #(set-dev-watch? (not dev-watch?)) true)]
-    [:small.opacity-30 (str "Resources from " Handbooks_ENDPOINT)]]])
+    [:small.opacity-30 (str "Resources from " (get-handbooks-endpoint "/"))]]])
 
 (rum/defc search-bar
   [active-pane]
@@ -145,7 +151,7 @@
         (rum/use-state ())
 
         [dev-watch?, set-dev-watch?]
-        (rum/use-state (state/developer-mode?))
+        (rum/use-state (storage/get :handbooks-dev-watch?))
 
         reset-handbooks!     #(set-handbooks-state! {:status nil :data nil :error nil})
         update-handbooks!    #(set-handbooks-state! (fn [v] (merge v %)))
@@ -153,7 +159,7 @@
                                (when-not (= :pending (:status handbooks-state))
                                  (reset-handbooks!)
                                  (update-handbooks! {:status :pending})
-                                 (-> (p/let [^js res (js/fetch (str Handbooks_ENDPOINT "/handbooks.edn"))
+                                 (-> (p/let [^js res (js/fetch (get-handbooks-endpoint "/handbooks.edn"))
                                              data    (.text res)]
                                        (update-handbooks! {:data (edn/read-string data)}))
                                      (p/catch #(update-handbooks! {:error (str %)}))
@@ -162,6 +168,7 @@
         active-pane          (first active-pane0)
         pane-render          (first (get panes-mapping active-pane))
         dashboard?           (= :dashboard active-pane)
+        settings?            (= :settings active-pane)
         force-nav-dashboard! (fn []
                                (set-active-pane0! [:dashboard])
                                (set-history-state! '()))
@@ -183,7 +190,7 @@
      (fn []
        (let [*cnt-len (atom 0)
              check!   (fn []
-                        (-> (p/let [^js res (js/fetch (str Handbooks_ENDPOINT "/handbooks.edn") #js{:method "HEAD"})]
+                        (-> (p/let [^js res (js/fetch (get-handbooks-endpoint "/handbooks.edn") #js{:method "HEAD"})]
                               (when-let [cl (.get (.-headers res) "content-length")]
                                 (when (not= @*cnt-len cl)
                                   (println "[Handbooks] dev reload!")
@@ -228,13 +235,13 @@
         [:a.flex.items-center {:on-click #(state/toggle! :ui/handbooks-open?)}
          (ui/icon "x")]]]
 
-      (when-not handbooks-loaded?
+      (when (and (not settings?) (not handbooks-loaded?))
         [:div.flex.items-center.justify-center.pt-32
          (if-not (:error handbooks-state)
            (ui/loading "Loading ...")
            [:code (:error handbooks-state)])])
 
-      (when handbooks-loaded?
+      (when (or settings? handbooks-loaded?)
         [:<>
          ;; search bar
          (when (or dashboard? (= :topics active-pane))
@@ -245,7 +252,8 @@
            (apply pane-render
                   (case active-pane
                     :settings
-                    [dev-watch? set-dev-watch?]
+                    [dev-watch? #(do (set-dev-watch? %)
+                                     (storage/set :handbooks-dev-watch? %))]
 
                     ;; default inputs
                     [handbooks-nodes active-pane0 nav-to-pane!])))])]

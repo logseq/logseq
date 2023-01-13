@@ -134,4 +134,10 @@ html[data-theme="light"] {
       }
     }
   }
+
+  .cp__handbooks-content {
+    .hd {
+      background-color: var(--ls-primary-background-color);
+    }
+  }
 }
