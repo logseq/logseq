@@ -3065,7 +3065,8 @@
 (defn shortcut-up-down [direction]
   (fn [e]
     (when (and (not (auto-complete?))
-               (not (slide-focused?)))
+               (not (slide-focused?))
+               (not (state/get-timestamp-block)))
       (util/stop e)
       (cond
         (state/editing?)
@@ -3122,7 +3123,8 @@
 
 (defn shortcut-left-right [direction]
   (fn [e]
-    (when-not (auto-complete?)
+    (when (and (not (auto-complete?))
+               (not (state/get-timestamp-block)))
       (cond
         (state/editing?)
         (do

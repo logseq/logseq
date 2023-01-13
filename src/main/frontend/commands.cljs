@@ -655,8 +655,7 @@
 (defmethod handle-step :editor/show-date-picker [[_ type]]
   (if (and
        (contains? #{:scheduled :deadline} type)
-       (when-let [value (gobj/get (state/get-input) "value")]
-         (string/blank? value)))
+       (string/blank? (gobj/get (state/get-input) "value")))
     (do
       (notification/show! [:div "Please add some content first."] :warning)
       (restore-state))
