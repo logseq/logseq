@@ -1360,8 +1360,10 @@
                 :src src
                 :width width
                 :height height}]))))
-      (ui/block-error "Invalid URL" {:content "Click here to enter a valid URL"})) 
-    (ui/block-error "Empty URL" {:content "Click here to enter a valid URL"})))
+      [:span.warning.mr-1 {:title "Invalid URL"}
+       (str "{{video " url "}}")])
+    [:span.warning.mr-1 {:title "Empty URL"}
+     (str "{{video}}")]))
 
 (defn- macro-else-cp
   [name config arguments]
