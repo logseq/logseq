@@ -1562,7 +1562,7 @@
 
          ["Entity" e]
          [:span {:dangerouslySetInnerHTML
-                 {:__html (:html (security/sanitize-html e))}}]
+                 {:__html (security/sanitize-html (:html e))}}]
 
          ["Latex_Fragment" [display s]] ;display can be "Displayed" or "Inline"
          (if html-export?
