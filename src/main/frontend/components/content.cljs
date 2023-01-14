@@ -36,6 +36,12 @@
     "Cut"
     nil)
    (ui/menu-link
+    {:key      "delete"
+     :on-click #(do (editor-handler/delete-selection %)
+                    (state/hide-custom-context-menu!))}
+    "Delete"
+    nil)
+   (ui/menu-link
     {:key "copy"
      :on-click editor-handler/copy-selection-blocks}
     "Copy"
@@ -230,6 +236,12 @@
            :on-click (fn [_e]
                        (editor-handler/cut-block! block-id))}
           "Cut"
+          nil)
+
+         (ui/menu-link
+          {:key      "delete"
+           :on-click #(editor-handler/delete-block-aux! block true)}
+          "Delete"
           nil)
 
          [:hr.menu-separator]

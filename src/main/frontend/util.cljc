@@ -762,13 +762,6 @@
   []
   #?(:cljs (tc/to-long (t/now))))
 
-;; Returns the milliseconds representation of the provided time, in the local timezone.
-;; For example, if you run this function at 10pm EDT in the EDT timezone on May 31st,
-;; it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00.
-#?(:cljs
-   (defn today-at-local-ms [hours mins secs millisecs]
-     (.setHours (js/Date. (.now js/Date)) hours mins secs millisecs)))
-
 (defn d
   [k f]
   (let [result (atom nil)]
@@ -1452,3 +1445,23 @@
           (reset! last-mem ret)
           ret)
         @last-mem))))
+
+#?(:cljs
+   (do
+     (def ^:private app-wake-up-from-sleep-chan (async/chan 1))
+     (def app-wake-up-from-sleep-mult (async/mult app-wake-up-from-sleep-chan))
+     (defn <app-wake-up-from-sleep-loop
+       "start a async/go-loop to check the app awake from sleep.
+Use (async/tap `app-wake-up-from-sleep-mult`) to receive messages.
+Arg *stop: atom, reset to true to stop the loop"
+       [*stop]
+       (let [*last-activated-at (volatile! (tc/to-epoch (t/now)))]
+         (async/go-loop []
+           (if @*stop
+             (println :<app-wake-up-from-sleep-loop :stop)
+             (let [now-epoch (tc/to-epoch (t/now))]
+               (when (< @*last-activated-at (- now-epoch 10))
+                 (async/>! app-wake-up-from-sleep-chan {:last-activated-at @*last-activated-at :now now-epoch}))
+               (vreset! *last-activated-at now-epoch)
+               (async/<! (async/timeout 5000))
+               (recur))))))))
