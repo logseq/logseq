@@ -1660,11 +1660,11 @@
   [up?]
   (fn [event]
     (util/stop event)
+    (save-current-block!)
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
                        (outliner-tx/transact!
                         {:outliner-op :move-blocks}
-                        (save-current-block!)
                         (outliner-core/move-blocks-up-down! blocks up?))
                        (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
                          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})))]
@@ -2139,10 +2139,10 @@
   [node]
   (when-not (parent-is-page? node)
     (let [parent-node (tree/-get-parent node)]
+      (save-current-block!)
       (outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-       (save-current-block!)
        (outliner-core/move-blocks! [(:data node)] (:data parent-node) true)))))
 
 (defn- last-top-level-child?
@@ -2666,6 +2666,7 @@
 
 (defn indent-outdent
   [indent?]
+  (save-current-block!)
   (state/set-editor-op! :indent-outdent)
   (let [pos (some-> (state/get-input) cursor/pos)
         {:keys [block]} (get-state)]
@@ -2674,8 +2675,7 @@
       (outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-       (save-current-block!)
-       (outliner-core/indent-outdent-blocks! [block] indent?)))
+        (outliner-core/indent-outdent-blocks! [block] indent?)))
     (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler

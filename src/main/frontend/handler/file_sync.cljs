@@ -12,6 +12,7 @@
             [frontend.state :as state]
             [frontend.handler.user :as user]
             [frontend.fs :as fs]
+            [frontend.pubsub :as pubsub]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [frontend.storage :as storage]
@@ -197,7 +198,7 @@
 (defn setup-file-sync-event-listeners
   []
   (let [c     (async/chan 1)
-        p     sync/sync-events-publication
+        p     pubsub/sync-events-pub
         topics [:finished-local->remote :finished-remote->local :start]]
     (doseq [topic topics]
       (async/sub p topic c))
