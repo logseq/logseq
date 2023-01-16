@@ -3,10 +3,6 @@ import { test } from './fixtures'
 import { IsMac } from './utils'
 
 test('enable whiteboards', async ({ page }) => {
-  await page.addInitScript(()=>{
-    window.localStorage.setItem('ls-onboarding-whiteboard?', "true")
-  });
-
   await expect(page.locator('.nav-header .whiteboard')).toBeHidden()
   await page.click('#head .toolbar-dots-btn')
   await page.click('#head .dropdown-wrapper >> text=Settings')

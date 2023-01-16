@@ -131,6 +131,10 @@ base.beforeEach(async () => {
       await page.click('button.toggle-right-sidebar', {delay: 100})
     }
   }
+
+  await page.addInitScript(()=>{
+    window.localStorage.setItem('ls-onboarding-whiteboard?', "true")
+  });
 })
 
 base.afterAll(async () => {
