@@ -36,12 +36,14 @@ test('can right click title to show context menu', async ({ page }) => {
   await expect(page.locator('#custom-context-menu')).toHaveCount(0)
 })
 
-test('set whiteboard title', async ({ page }) => {
-  const title = 'my-whiteboard'
-  // Newly created whiteboard should have a default title
+test('newly created whiteboard should have a default title', async ({ page }) => {
   await expect(page.locator('.whiteboard-page-title .title')).toContainText(
     'Untitled'
   )
+})
+
+test('set whiteboard title', async ({ page }) => {
+  const title = 'my-whiteboard'
 
   await page.click('.whiteboard-page-title')
   await page.fill('.whiteboard-page-title input', title)
@@ -49,6 +51,10 @@ test('set whiteboard title', async ({ page }) => {
   await expect(page.locator('.whiteboard-page-title .title')).toContainText(
     title
   )
+})
+
+test('update whiteboard title', async ({ page }) => {
+  const title = 'my-whiteboard'
 
   await page.click('.whiteboard-page-title')
   await page.fill('.whiteboard-page-title input', title + '-2')
@@ -58,6 +64,7 @@ test('set whiteboard title', async ({ page }) => {
   await expect(page.locator('.ui__confirm-modal >> .headline')).toContainText(
     `Do you really want to change the page name to “${title}-2”?`
   )
+
   await page.click('.ui__confirm-modal button')
   await expect(page.locator('.whiteboard-page-title .title')).toContainText(
     title + '-2'
