@@ -68,7 +68,7 @@
   
   (testing "zotero imported file path"
     (are [item-key filename open] (= (extractor/zotero-imported-file-macro item-key filename) open)
-      "9AUD8MNT" a.pdf "{{zotero-imported-file 9AUD8MNT, \"a.pdf\"}}"))
+      "9AUD8MNT" "a.pdf" "{{zotero-imported-file 9AUD8MNT, \"a.pdf\"}}"))
 
   (testing "zotero linked file path"
     (are [path open] (= (extractor/zotero-linked-file-macro path) open)
