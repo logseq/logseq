@@ -68,12 +68,12 @@
   
   (testing "zotero imported file path"
     (are [item-key filename open] (= (extractor/zotero-imported-file-macro item-key filename) open)
-      "9AUD8MNT" "a.pdf" "{{zotero-imported-file \"9AUD8MNT\", \"a.pdf\"}}"))
+      "9AUD8MNT" a.pdf "{{zotero-imported-file 9AUD8MNT, \"a.pdf\"}}"))
 
   (testing "zotero linked file path"
     (are [path open] (= (extractor/zotero-linked-file-macro path) open)
       ;; TODO provide some real samples on multiple platforms
-      "attachments:abc/def/ghi.pdf" "{{zotero-linked-file \"abc/def/ghi.pdf\"}}"
+      "attachments:abc/def/ghi.pdf" "{{zotero-linked-file \"Aabc/def/ghi.pdf\"}}"
       ;; Chinese and blank
       "attachments:书籍/人民邮电出版社/NSCA-CPT美国国家体能协会私人教练认证指南 第2版.pdf" "{{zotero-linked-file \"书籍/人民邮电出版社/NSCA-CPT美国国家体能协会私人教练认证指南 第2版.pdf\"}}"))
 
