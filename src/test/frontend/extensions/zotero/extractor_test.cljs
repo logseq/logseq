@@ -66,10 +66,12 @@
       (testing "use parsed date when possible"
         (is (= "[[Mar 28th, 2011]]" (-> properties :date))))))
   
-  
-  
-  (testing "zotero path"
-    (are [x y] (= (extractor/zotero-linked-file-macro x) y)
+  (testing "zotero imported file path"
+    (are [item-key filename open] (= (extractor/zotero-imported-file-macro item-key filename) open)
+      "9AUD8MNT" "a.pdf" "{{zotero-imported-file \"9AUD8MNT\",\"a.pdf\"}}"))
+
+  (testing "zotero linked file path"
+    (are [path oepn] (= (extractor/zotero-linked-file-macro path) open)
       ;; TODO provide some real samples on multiple platforms
       "attachments:abc/def/ghi.pdf" "{{zotero-linked-file \"abc/def/ghi.pdf\"}}"
       ;; Chinese and blank
