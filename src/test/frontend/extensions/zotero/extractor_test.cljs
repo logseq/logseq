@@ -71,7 +71,7 @@
       "9AUD8MNT" "a.pdf" "{{zotero-imported-file \"9AUD8MNT\",\"a.pdf\"}}"))
 
   (testing "zotero linked file path"
-    (are [path oepn] (= (extractor/zotero-linked-file-macro path) open)
+    (are [path open] (= (extractor/zotero-linked-file-macro path) open)
       ;; TODO provide some real samples on multiple platforms
       "attachments:abc/def/ghi.pdf" "{{zotero-linked-file \"abc/def/ghi.pdf\"}}"
       ;; Chinese and blank
