@@ -225,7 +225,7 @@
         :settings-page/custom-date-format-warning "Re-index required! Existing journal references would be broken!"
         :settings-page/preferred-file-format "Preferred file format"
         :settings-page/preferred-workflow "Preferred workflow"
-        :settings-page/preferred-pasting-file "Preferred pasting file"
+        :settings-page/preferred-pasting-file "Prefer pasting file"
         :settings-page/enable-shortcut-tooltip "Enable shortcut tooltip"
         :settings-page/enable-timetracking "Timetracking"
         :settings-page/enable-tooltip "Tooltips"
